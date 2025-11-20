@@ -45,12 +45,24 @@ namespace ModularAudience.Forms.Modules
         private long loopBaseStartSamples;
         private long loopBaseEndSamples;
         private long loopFractionSamples;
+        private bool suppressSettingsCheckbox;
+        private readonly int designerFormWidth;
+        private readonly int designerClientWidth;
+        private readonly int designerWaveWidth;
 
         public TrackView(AudioObj audio)
         {
             this.InitializeComponent();
-            this.OriginalAudio = audio ?? throw new ArgumentNullException(nameof(audio));
-            this.Settings = new TrackViewSettings(this);
+            this.StartPosition = FormStartPosition.Manual;
+            this.designerFormWidth = this.Width;
+            this.designerClientWidth = this.ClientSize.Width;
+            this.designerWaveWidth = this.pictureBox_waveform.Width;
+            this.MaximumSize = new Size(this.designerFormWidth, int.MaxValue);
+            this.OriginalAudio = audio.Clone();
+            this.Settings = new TrackViewSettings(this)
+            {
+                Owner = this
+            };
 
             this.KeyPreview = true;
             this.KeyDown += this.TrackView_KeyDown;
@@ -64,13 +76,21 @@ namespace ModularAudience.Forms.Modules
 
             this.EnablePictureBoxDoubleBuffering();
             this.InitializeTrackControls();
+            this.ApplyInitialTrackSizing();
+            this.PositionSettingsWindow();
+            this.RecalculateLoopFraction();
+            this.ApplyLoopFractionToAudio();
 
             this.frameTimer = new Timer();
             this.UpdateFrameTimerInterval();
             this.frameTimer.Tick += async (_, __) => await this.FrameTickAsync();
             this.frameTimer.Start();
 
-            this.Shown += (_, __) => this.frameTimer.Start();
+            this.Shown += (_, __) =>
+            {
+                this.PositionSettingsWindow();
+                this.frameTimer.Start();
+            };
             this.VisibleChanged += (_, __) =>
             {
                 if (this.Visible)
@@ -83,10 +103,13 @@ namespace ModularAudience.Forms.Modules
                     this.CancelPendingRender();
                 }
             };
+            this.LocationChanged += (_, __) => this.PositionSettingsWindow();
+            this.SizeChanged += (_, __) => this.PositionSettingsWindow();
 
             this.FormClosing += async (s, e) =>
             {
                 e.Cancel = true;
+                this.Settings.Hide();
                 this.Hide();
                 this.frameTimer.Stop();
                 this.CancelPendingRender();
@@ -124,6 +147,60 @@ namespace ModularAudience.Forms.Modules
             this.pictureBox_waveform.MouseLeave += (_, __) => this.mouseOverWave = false;
 
             this.button_loop.MouseDown += (_, e) => this.ToggleLoop(e);
+        }
+
+        private void ApplyInitialTrackSizing()
+        {
+            int pictureHeight = Math.Max(1, this.pictureBox_waveform.Height);
+            int minWidth = pictureHeight; // enforce square minimum
+            long totalFrames = this.GetTotalFrames();
+            int baseSamplesPerPixel = 128;
+            this.samplesPerPixel = baseSamplesPerPixel;
+
+            int desiredWidth = totalFrames > 0
+                ? (int) Math.Ceiling(totalFrames / (double) this.samplesPerPixel)
+                : minWidth;
+
+            Rectangle workingArea = Screen.FromControl(this).WorkingArea;
+            int maxWidth = Math.Max(minWidth, Math.Min(this.designerWaveWidth, workingArea.Width - 20));
+            desiredWidth = Math.Clamp(desiredWidth, minWidth, maxWidth);
+
+            if (totalFrames > 0)
+            {
+                int requiredSamplesPerPixel = (int) Math.Ceiling(totalFrames / (double) Math.Max(1, desiredWidth));
+                this.samplesPerPixel = Math.Clamp(requiredSamplesPerPixel, MinSamplesPerPixel, MaxSamplesPerPixel);
+            }
+
+            this.ApplyWaveformWidth(desiredWidth);
+            this.UpdateOffsetScrollbar();
+            this.RequestWaveformRender();
+        }
+
+        private void ApplyWaveformWidth(int desiredWidth)
+        {
+            desiredWidth = Math.Max(1, desiredWidth);
+            int nonWaveWidth = Math.Max(0, this.designerClientWidth - this.designerWaveWidth);
+            int newClientWidth = desiredWidth + nonWaveWidth;
+            if (this.MinimumSize.Width > 0)
+            {
+                newClientWidth = Math.Max(this.MinimumSize.Width, newClientWidth);
+            }
+            newClientWidth = Math.Min(this.designerClientWidth, newClientWidth);
+            this.ClientSize = new Size(newClientWidth, this.ClientSize.Height);
+            this.pictureBox_waveform.Width = desiredWidth;
+            this.hScrollBar_offset.Left = this.pictureBox_waveform.Left;
+            this.hScrollBar_offset.Width = Math.Max(0, desiredWidth - 1);
+        }
+
+        private void PositionSettingsWindow()
+        {
+            if (this.Settings == null || this.Settings.IsDisposed)
+            {
+                return;
+            }
+
+            var location = new Point(this.Location.X + this.Width + 5, this.Location.Y);
+            this.Settings.Location = location;
         }
 
         internal void ApplySettingsAppearance()
@@ -557,6 +634,7 @@ namespace ModularAudience.Forms.Modules
 
         private void UpdateSelection()
         {
+            long previousSamples = this.GetCurrentSamplePosition();
             long start = Math.Min(this.selectStartFrame, this.selectEndFrame);
             long end = Math.Max(this.selectStartFrame, this.selectEndFrame);
             int channels = Math.Max(1, this.OriginalAudio.Channels);
@@ -571,6 +649,19 @@ namespace ModularAudience.Forms.Modules
                 this.OriginalAudio.SelectionEnd = -1;
             }
             this.RecalculateLoopFraction();
+            this.ApplyLoopFractionToAudio();
+            if (this.OriginalAudio.Playing)
+            {
+                bool snapped = this.EnsureLoopPosition(previousSamples, false);
+                if (snapped)
+                {
+                    this.AlignViewToCurrentPosition();
+                }
+                else
+                {
+                    this.RestoreLoopPlaybackPosition(previousSamples);
+                }
+            }
         }
 
         private async void button_playback_Click(object? sender, EventArgs e)
@@ -642,6 +733,7 @@ namespace ModularAudience.Forms.Modules
 
         private void ToggleLoop(MouseEventArgs? e)
         {
+            long previousSamples = this.GetCurrentSamplePosition();
             if (e != null && (ModifierKeys & Keys.Control) != 0)
             {
                 this.loopEnabled = false;
@@ -650,9 +742,11 @@ namespace ModularAudience.Forms.Modules
                 this.button_loop.ForeColor = Color.Black;
                 this.button_loop.Font = new Font("Segoe UI Symbol", 9f, FontStyle.Bold);
                 this.OriginalAudio.LoopEnabled = false;
+                this.RecalculateLoopFraction();
                 this.ApplyLoopFractionToAudio();
+                this.ReanchorPlaybackPosition(previousSamples);
                 this.AlignViewToCurrentPosition();
-                _ = this.RefreshWaveformAsync();
+                this.RequestWaveformRender();
                 return;
             }
 
@@ -660,7 +754,10 @@ namespace ModularAudience.Forms.Modules
             if (!this.loopEnabled)
             {
                 this.loopEnabled = true;
-                this.loopDenominator = 1;
+                if (this.loopDenominator <= 0)
+                {
+                    this.loopDenominator = 1;
+                }
                 this.button_loop.Font = new Font("Segoe UI Symbol", 7f, FontStyle.Bold);
             }
             else
@@ -676,93 +773,139 @@ namespace ModularAudience.Forms.Modules
             this.button_loop.ForeColor = Color.Green;
             this.RecalculateLoopFraction();
             this.ApplyLoopFractionToAudio();
-            this.ForceJumpIntoLoopIfNeeded();
-            this.AlignViewToLoopStart();
-            _ = this.RefreshWaveformAsync();
+            bool snapped = this.EnsureLoopPosition(previousSamples, true);
+            if (!snapped)
+            {
+                this.RestoreLoopPlaybackPosition(previousSamples);
+                this.AlignViewToCurrentPosition();
+            }
+            this.RequestWaveformRender();
         }
 
         private void RecalculateLoopFraction()
         {
-            if (!this.loopEnabled || this.loopDenominator <= 0)
-            {
-                this.loopBaseStartSamples = 0;
-                this.loopBaseEndSamples = 0;
-                this.loopFractionSamples = 0;
-                this.OriginalAudio.UpdateLoopFraction(0, 0, 0, false, false);
-                return;
-            }
-
             long totalSamples = this.OriginalAudio.Length;
             long regionStart = 0;
-            long regionEnd = totalSamples;
+            long regionEnd = Math.Max(1, totalSamples);
             if (this.OriginalAudio.SelectionStart >= 0 && this.OriginalAudio.SelectionEnd > this.OriginalAudio.SelectionStart)
             {
                 regionStart = this.OriginalAudio.SelectionStart;
                 regionEnd = Math.Min(totalSamples, this.OriginalAudio.SelectionEnd);
             }
-            long regionLen = Math.Max(1, regionEnd - regionStart);
-            long fraction = Math.Max(1, regionLen / this.loopDenominator);
+
             this.loopBaseStartSamples = regionStart;
-            this.loopBaseEndSamples = regionEnd;
-            this.loopFractionSamples = fraction;
-            this.OriginalAudio.UpdateLoopFraction(regionStart, regionEnd, fraction, true, true);
+            this.loopBaseEndSamples = Math.Max(regionStart + 1, regionEnd);
+
+            long regionLen = Math.Max(1, this.loopBaseEndSamples - this.loopBaseStartSamples);
+            if (this.loopEnabled && this.loopDenominator > 0)
+            {
+                this.loopFractionSamples = CalculateLoopFractionLength(regionLen);
+            }
+            else
+            {
+                this.loopFractionSamples = regionLen;
+            }
         }
 
         private void ApplyLoopFractionToAudio()
         {
-            long total = this.OriginalAudio.Length;
-            long baseStart = (this.OriginalAudio.SelectionStart >= 0 && this.OriginalAudio.SelectionEnd > this.OriginalAudio.SelectionStart) ? this.OriginalAudio.SelectionStart : 0;
-            long baseEnd = (this.OriginalAudio.SelectionStart >= 0 && this.OriginalAudio.SelectionEnd > this.OriginalAudio.SelectionStart) ? Math.Min(total, this.OriginalAudio.SelectionEnd) : total;
-            long fraction = (this.loopEnabled && this.loopDenominator > 0) ? Math.Max(1, (baseEnd - baseStart) / this.loopDenominator) : 0;
-            this.OriginalAudio.UpdateLoopFraction(baseStart, baseEnd, fraction, this.loopEnabled, true);
+            bool enableLoop = this.loopEnabled && this.loopDenominator > 0;
+            long baseStart = enableLoop ? this.loopBaseStartSamples : 0;
+            long baseEnd = enableLoop ? this.loopBaseEndSamples : this.OriginalAudio.Length;
+            long fraction = enableLoop ? Math.Max(1, this.loopFractionSamples) : 0;
+            this.OriginalAudio.UpdateLoopFraction(baseStart, baseEnd, fraction, enableLoop, false);
         }
 
-        private void ForceJumpIntoLoopIfNeeded()
+        private bool EnsureLoopPosition(long? sampleToCheck, bool snapViewToLoopStart)
         {
-            if (!this.loopEnabled)
+            if (!this.loopEnabled || this.loopDenominator <= 0)
             {
-                return;
+                return false;
             }
 
-            long total = this.OriginalAudio.Length;
-            long baseStart = (this.OriginalAudio.SelectionStart >= 0 && this.OriginalAudio.SelectionEnd > this.OriginalAudio.SelectionStart) ? this.OriginalAudio.SelectionStart : 0;
-            long baseEnd = (this.OriginalAudio.SelectionStart >= 0 && this.OriginalAudio.SelectionEnd > this.OriginalAudio.SelectionStart) ? Math.Min(total, this.OriginalAudio.SelectionEnd) : total;
-            if (baseEnd <= baseStart)
+            long loopStart = this.loopBaseStartSamples;
+            long loopEnd = Math.Min(this.loopBaseEndSamples, loopStart + Math.Max(1, this.loopFractionSamples));
+            if (loopEnd <= loopStart)
             {
-                return;
+                return false;
             }
 
-            long fractionLen = (baseEnd - baseStart) / Math.Max(1, this.loopDenominator);
-            fractionLen = Math.Max(1, fractionLen);
-            long loopEnd = Math.Min(baseStart + fractionLen, baseEnd);
             int channels = Math.Max(1, this.OriginalAudio.Channels);
-            long currentSamples = this.OriginalAudio.Position * channels;
-            if (currentSamples < baseStart || currentSamples >= loopEnd)
+            long currentSamples = sampleToCheck ?? this.GetCurrentSamplePosition();
+            if (currentSamples >= loopStart && currentSamples < loopEnd)
             {
-                this.OriginalAudio.JumpToSamples(baseStart);
-                long loopStartFrame = baseStart / channels;
-                long desiredOffset = loopStartFrame - this.GetCaretAnchorFrame();
-                desiredOffset = Math.Max(0, desiredOffset);
+                return false;
+            }
+
+            this.OriginalAudio.JumpToSamples(loopStart);
+            long loopStartFrame = loopStart / channels;
+            this.lastClickFrame = loopStartFrame;
+
+            if (snapViewToLoopStart)
+            {
+                long desiredOffset = Math.Max(0, loopStartFrame - this.GetCaretAnchorFrame());
                 this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
                 this.UpdateOffsetScrollbar();
             }
+
+            return true;
         }
 
-        private void AlignViewToLoopStart()
+        private long GetCurrentSamplePosition()
         {
-            if (!this.loopEnabled)
+            int channels = Math.Max(1, this.OriginalAudio.Channels);
+            return this.OriginalAudio.Position * channels;
+        }
+
+        private void RestoreLoopPlaybackPosition(long? sampleToRestore)
+        {
+            if (!sampleToRestore.HasValue || !this.loopEnabled || this.loopDenominator <= 0)
             {
                 return;
             }
 
-            long baseStart = this.OriginalAudio.SelectionStart >= 0 && this.OriginalAudio.SelectionEnd > this.OriginalAudio.SelectionStart
-                ? this.OriginalAudio.SelectionStart
-                : 0;
+            if (!this.OriginalAudio.Playing)
+            {
+                return;
+            }
+
+            long loopStart = this.loopBaseStartSamples;
+            long loopEnd = Math.Min(this.loopBaseEndSamples, loopStart + Math.Max(1, this.loopFractionSamples));
+            if (loopEnd <= loopStart)
+            {
+                return;
+            }
+
+            long desiredSamples = Math.Clamp(sampleToRestore.Value, loopStart, loopEnd - 1);
+            this.OriginalAudio.JumpToSamples(desiredSamples);
+        }
+
+        private void ReanchorPlaybackPosition(long sampleToRestore)
+        {
+            if (sampleToRestore < 0)
+            {
+                return;
+            }
+
+            this.OriginalAudio.JumpToSamples(sampleToRestore);
             int channels = Math.Max(1, this.OriginalAudio.Channels);
-            long startFrame = baseStart / channels;
-            long desiredOffset = Math.Max(0, startFrame - this.GetCaretAnchorFrame());
-            this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
-            this.UpdateOffsetScrollbar();
+            this.lastClickFrame = sampleToRestore / channels;
+        }
+
+        private long CalculateLoopFractionLength(long regionLength)
+        {
+            if (regionLength <= 0)
+            {
+                return 0;
+            }
+
+            if (this.loopDenominator <= 1)
+            {
+                return regionLength;
+            }
+
+            double fraction = Math.Ceiling(regionLength / (double) this.loopDenominator);
+            return Math.Max(1, (long) fraction);
         }
 
         private void AlignViewToCurrentPosition()
@@ -858,12 +1001,35 @@ namespace ModularAudience.Forms.Modules
 
         private void checkBox_settings_CheckedChanged(object? sender, EventArgs e)
         {
-            this.Settings.Visible = this.checkBox_settings.Checked;
-            if (this.Settings.Visible)
+            if (this.suppressSettingsCheckbox)
             {
-                this.Settings.Location = new Point(this.Location.X + this.Width + 5, this.Location.Y);
+                return;
             }
+
+            bool visible = this.checkBox_settings.Checked;
+            if (visible)
+            {
+                this.PositionSettingsWindow();
+                this.Settings.Show();
+            }
+            else
+            {
+                this.Settings.Hide();
+            }
+
             this.RequestWaveformRender();
+        }
+
+        internal void SyncSettingsCheckbox(bool visible)
+        {
+            if (this.checkBox_settings.Checked == visible)
+            {
+                return;
+            }
+
+            this.suppressSettingsCheckbox = true;
+            this.checkBox_settings.Checked = visible;
+            this.suppressSettingsCheckbox = false;
         }
 
         private void InvokeIfRequired(Action action)

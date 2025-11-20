@@ -31,6 +31,7 @@ namespace ModularAudience.Forms.Modules
         public TrackViewSettings(TrackView trackView)
         {
             this.InitializeComponent();
+            this.StartPosition = FormStartPosition.Manual;
             this.Track = trackView;
             this.numericUpDown_frameRate.Value = (decimal) WindowsScreenHelper.GetScreenRefreshRate();
             this.InitializeHandlers();
@@ -68,7 +69,8 @@ namespace ModularAudience.Forms.Modules
         private void InitializeHandlers()
         {
             this.Hide();
-            this.Location = new Point(this.Track.Location.X + this.Track.Width + 5, this.Track.Location.Y);
+            this.FormClosing += this.TrackViewSettings_FormClosing;
+            this.VisibleChanged += this.TrackViewSettings_VisibleChanged;
 
             this.button_colorWave.Click += this.button_colorWave_Click;
             this.button_colorBack.Click += this.button_colorBack_Click;
@@ -265,6 +267,17 @@ namespace ModularAudience.Forms.Modules
         private static Color GetNegativeColor(Color color)
         {
             return Color.FromArgb(color.A, 255 - color.R, 255 - color.G, 255 - color.B);
+        }
+
+        private void TrackViewSettings_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            e.Cancel = true;
+            this.Hide();
+        }
+
+        private void TrackViewSettings_VisibleChanged(object? sender, EventArgs e)
+        {
+            this.Track.SyncSettingsCheckbox(this.Visible);
         }
 
         internal static Color ColorFromHSV(float hue, float saturation, float value)

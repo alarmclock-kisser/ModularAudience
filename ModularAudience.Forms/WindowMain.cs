@@ -1,5 +1,6 @@
 using ModularAudience.Audio;
 using ModularAudience.Forms.Modules;
+using NAudience.Core;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 
@@ -18,6 +19,8 @@ namespace ModularAudience.Forms
         private static readonly Random ResourceRandom = new();
         private static readonly Size CollectionCascadeOffset = new(26, 28);
         private const int CollectionBaseMargin = 5;
+        private static readonly Padding TrackViewScreenMargin = new(20, 20, 20, 20);
+        private static readonly Size TrackViewSpacing = new(15, 12);
 
         public WindowMain()
         {
@@ -28,7 +31,7 @@ namespace ModularAudience.Forms
             TrackViews.ListChanged += this.TrackViews_ListChanged;
             CollectionViews.ListChanged += this.CollectionViews_ListChanged;
 
-            this.FormClosing += this.WindowMain_FormClosing; // neues zentrales Handling
+            this.FormClosing += this.WindowMain_FormClosing;
             this.checkBox_singleCollection.CheckedChanged += this.checkBox_singleCollection_CheckedChanged;
             this.LocationChanged += (_, __) => this.PositionCollectionViews();
             this.SizeChanged += (_, __) => this.PositionCollectionViews();
@@ -55,7 +58,7 @@ namespace ModularAudience.Forms
 
         private async void button_import_Click(object sender, EventArgs e)
         {
-            IEnumerable<string> filesToImport = Array.Empty<string>();
+            IEnumerable<string> filesToImport = [];
             bool fromResources = false;
 
             if (ModifierKeys.HasFlag(Keys.Alt))
@@ -185,7 +188,7 @@ namespace ModularAudience.Forms
                 this.AudioC.Audios.Remove(audio);
             }
 
-            this.PositionCollectionViews();
+            // Positioning happens per-view on add; keep global layout untouched here.
         }
 
         private void button_browse_Click(object sender, EventArgs e)
@@ -217,43 +220,76 @@ namespace ModularAudience.Forms
             }
         }
 
-        // Event for TrackViews ListChanged to make last TrackView order to other trackviews
+        // Event for TrackViews ListChanged to arrange TrackView windows in a grid
         private void TrackViews_ListChanged(object? sender, ListChangedEventArgs e)
         {
             if (e.ListChangedType == ListChangedType.ItemAdded)
             {
-                TrackView addedTrackView = TrackViews[e.NewIndex];
+                this.ReflowTrackViews();
+                TrackView newTrackView = TrackViews[e.NewIndex];
+                newTrackView.Show();
+            }
+            else if (e.ListChangedType == ListChangedType.ItemDeleted || e.ListChangedType == ListChangedType.Reset)
+            {
+                this.ReflowTrackViews();
+            }
+        }
 
-                // Try to position just beyond aligned with last trackview if not out of screen, then go one column right and start from top
-                if (TrackViews.Count > 1)
+        private void ReflowTrackViews()
+        {
+            if (TrackViews.Count == 0)
+            {
+                return;
+            }
+
+            Rectangle workingArea = Screen.FromControl(this).WorkingArea;
+            int originX = workingArea.Left + TrackViewScreenMargin.Left;
+            int originY = workingArea.Top + TrackViewScreenMargin.Top;
+            int currentX = originX;
+            int currentY = originY;
+            int columnWidth = 0;
+            int maxRight = workingArea.Right - TrackViewScreenMargin.Right;
+            int maxBottom = workingArea.Bottom - TrackViewScreenMargin.Bottom;
+
+            foreach (var view in TrackViews.Where(tv => tv != null && !tv.IsDisposed))
+            {
+                if (view == null || view.IsDisposed)
                 {
-                    addedTrackView = TrackViews[0];
-                    for (int i = 1; i < TrackViews.Count - 1; i++)
+                    continue;
+                }
+
+                view.StartPosition = FormStartPosition.Manual;
+                view.Location = new Point(currentX, currentY);
+
+                columnWidth = Math.Max(columnWidth, view.Width);
+                currentY += view.Height + TrackViewSpacing.Height;
+
+                bool exceedsBottom = currentY + view.Height > maxBottom;
+                if (exceedsBottom)
+                {
+                    currentX += columnWidth + TrackViewSpacing.Width;
+                    currentY = originY;
+                    columnWidth = 0;
+
+                    if (currentX + view.Width > maxRight)
                     {
-                        var tv = TrackViews[i];
-                        if (tv.Location.Y > addedTrackView.Location.Y)
-                        {
-                            addedTrackView = tv;
-                        }
+                        currentX = originX;
                     }
                 }
-
-                var newX = addedTrackView.Location.X;
-                var newY = addedTrackView.Location.Y + addedTrackView.Height + 5;
-                if (newY + addedTrackView.Height > Screen.PrimaryScreen?.WorkingArea.Height)
-                {
-                    newX += addedTrackView.Width + 5;
-                    newY = 0;
-                }
-
-                addedTrackView.Location = new Point(newX, newY);
-                addedTrackView.Show();
             }
         }
 
         private void CollectionViews_ListChanged(object? sender, ListChangedEventArgs e)
         {
-            this.PositionCollectionViews();
+            if (e.ListChangedType == ListChangedType.ItemAdded)
+            {
+                var addedView = CollectionViews[e.NewIndex];
+                this.PositionCollectionView(addedView);
+            }
+            else
+            {
+                this.PositionCollectionViews();
+            }
         }
 
         private void checkBox_singleCollection_CheckedChanged(object? sender, EventArgs e)
@@ -348,7 +384,7 @@ namespace ModularAudience.Forms
             // Genug Views bereitstellen
             while (CollectionViews.Count < maxNum)
             {
-                var emptyView = new AudioCollectionView(Array.Empty<NAudience.Core.AudioObj>());
+                var emptyView = new AudioCollectionView([]);
                 CollectionViews.Add(emptyView);
             }
 
@@ -404,6 +440,64 @@ namespace ModularAudience.Forms
                 var location = new Point(basePoint.X + offset.X, basePoint.Y + offset.Y);
                 view.Location = location;
             }
+        }
+
+        private void PositionCollectionView(AudioCollectionView? view)
+        {
+            if (view == null || view.IsDisposed)
+            {
+                return;
+            }
+
+            Rectangle workingArea = Screen.FromControl(this).WorkingArea;
+            AudioCollectionView? anchor = null;
+            foreach (var existing in CollectionViews)
+            {
+                if (existing == view)
+                {
+                    break;
+                }
+                if (existing != null && !existing.IsDisposed)
+                {
+                    anchor = existing;
+                }
+            }
+
+            Point basePoint = new(this.Location.X, this.Location.Y + this.Height + CollectionBaseMargin);
+            Point targetLocation;
+            if (anchor == null)
+            {
+                targetLocation = basePoint;
+            }
+            else
+            {
+                targetLocation = new Point(anchor.Location.X + CollectionCascadeOffset.Width, anchor.Location.Y + CollectionCascadeOffset.Height);
+                bool exceedsBottom = targetLocation.Y + view.Height > workingArea.Bottom;
+                if (exceedsBottom)
+                {
+                    targetLocation = new Point(anchor.Location.X + anchor.Width + CollectionCascadeOffset.Width, basePoint.Y);
+                }
+
+                bool exceedsRight = targetLocation.X + view.Width > workingArea.Right;
+                if (exceedsRight)
+                {
+                    targetLocation = basePoint;
+                }
+            }
+
+            view.StartPosition = FormStartPosition.Manual;
+            view.Location = targetLocation;
+        }
+
+        internal static void UpdateCollectionTag(AudioObj audio, AudioCollectionView targetView)
+        {
+            if (audio == null || targetView == null)
+            {
+                return;
+            }
+
+            int num = GetCollectionNumber(targetView);
+            _audioCollectionTags[audio.Id] = num;
         }
 
         private static string? TryGetRandomResourceFile()
