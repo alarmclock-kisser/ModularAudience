@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="ModularAudience.Audio/ModularAudience.Audio.csproj" />
+  <Project Path="ModularAudience.Forms/ModularAudience.Forms.csproj" />
+  <Project Path="MudularAudience/MudularAudience.csproj" />
+</Solution>
