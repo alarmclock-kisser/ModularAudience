@@ -14,6 +14,10 @@ namespace ModularAudience.Forms
 
         // Map AudioObj.Id -> Collection number (01-based) to restore distribution
         private static readonly Dictionary<Guid, int> _audioCollectionTags = new();
+        private static readonly HashSet<string> AllowedImportExtensions = new(StringComparer.OrdinalIgnoreCase) { ".wav", ".mp3", ".flac" };
+        private static readonly Random ResourceRandom = new();
+        private static readonly Size CollectionCascadeOffset = new(26, 28);
+        private const int CollectionBaseMargin = 5;
 
         public WindowMain()
         {
@@ -22,9 +26,12 @@ namespace ModularAudience.Forms
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, true);
 
             TrackViews.ListChanged += this.TrackViews_ListChanged;
+            CollectionViews.ListChanged += this.CollectionViews_ListChanged;
 
             this.FormClosing += this.WindowMain_FormClosing; // neues zentrales Handling
             this.checkBox_singleCollection.CheckedChanged += this.checkBox_singleCollection_CheckedChanged;
+            this.LocationChanged += (_, __) => this.PositionCollectionViews();
+            this.SizeChanged += (_, __) => this.PositionCollectionViews();
         }
 
         private async void WindowMain_FormClosing(object? sender, FormClosingEventArgs e)
@@ -53,18 +60,13 @@ namespace ModularAudience.Forms
 
             if (ModifierKeys.HasFlag(Keys.Alt))
             {
-                var resourcesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
-                string[] allowedExts = [".wav", ".mp3", ".flac"];
-                var resourceFiles = Directory.Exists(resourcesPath)
-                    ? Directory.GetFiles(resourcesPath).Where(f => allowedExts.Contains(Path.GetExtension(f).ToLowerInvariant())).ToArray()
-                    : Array.Empty<string>();
-                if (resourceFiles.Length <= 0)
+                string? resourceFile = TryGetRandomResourceFile();
+                if (resourceFile == null)
                 {
                     LogCollection.Log("No resource audio files found for import.");
                     return;
                 }
-                Random rand = new();
-                filesToImport = new[] { resourceFiles[rand.Next(resourceFiles.Length)] };
+                filesToImport = new[] { resourceFile };
                 fromResources = true;
             }
             else
@@ -89,7 +91,7 @@ namespace ModularAudience.Forms
 
         private async Task ImportAndPlaceAsync(IEnumerable<string> filePaths, bool fromResources)
         {
-            // Laden und Liste neu importierter Audios bestimmen ohne spätere Dispose
+            // Laden und Liste neu importierter Audios bestimmen ohne spï¿½tere Dispose
             var validPaths = filePaths.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
             if (validPaths.Count == 0)
             {
@@ -104,7 +106,7 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            // Logging nur für neu importierte
+            // Logging nur fï¿½r neu importierte
             foreach (var audio in importedAudios)
             {
                 LogCollection.Log(fromResources ? $"{audio.Name} imported from resources." : $"{audio.Name} imported.");
@@ -131,7 +133,7 @@ namespace ModularAudience.Forms
                     _audioCollectionTags[audio.Id] = 1;
                 }
                 first.Show();
-                // Nur Referenzen aus temporärem Loader entfernen, nicht disposen
+                // Nur Referenzen aus temporï¿½rem Loader entfernen, nicht disposen
                 foreach (var audio in importedAudios)
                 {
                     this.AudioC.Audios.Remove(audio);
@@ -177,11 +179,13 @@ namespace ModularAudience.Forms
                 newView.Show();
             }
 
-            // Entfernen aus temporärer Sammlung ohne Dispose (damit Views gültige Objekte behalten)
+            // Entfernen aus temporï¿½rer Sammlung ohne Dispose (damit Views gï¿½ltige Objekte behalten)
             foreach (var audio in importedAudios)
             {
                 this.AudioC.Audios.Remove(audio);
             }
+
+            this.PositionCollectionViews();
         }
 
         private void button_browse_Click(object sender, EventArgs e)
@@ -245,6 +249,11 @@ namespace ModularAudience.Forms
                 addedTrackView.Location = new Point(newX, newY);
                 addedTrackView.Show();
             }
+        }
+
+        private void CollectionViews_ListChanged(object? sender, ListChangedEventArgs e)
+        {
+            this.PositionCollectionViews();
         }
 
         private void checkBox_singleCollection_CheckedChanged(object? sender, EventArgs e)
@@ -312,6 +321,7 @@ namespace ModularAudience.Forms
             }
 
             baseView.Show();
+            this.PositionCollectionViews();
         }
 
         private void RebuildCollectionsFromTags()
@@ -349,7 +359,7 @@ namespace ModularAudience.Forms
                 cv.Hide();
             }
 
-            // Verteilen gemäß Tags
+            // Verteilen gemï¿½ï¿½ Tags
             foreach (var audio in allAudios)
             {
                 int num = 1;
@@ -368,6 +378,79 @@ namespace ModularAudience.Forms
                 {
                     cv.Show();
                 }
+            }
+
+            this.PositionCollectionViews();
+        }
+
+        private void PositionCollectionViews()
+        {
+            if (CollectionViews.Count == 0)
+            {
+                return;
+            }
+
+            Point basePoint = new(this.Location.X, this.Location.Y + this.Height + CollectionBaseMargin);
+            for (int i = 0; i < CollectionViews.Count; i++)
+            {
+                var view = CollectionViews[i];
+                if (view == null || view.IsDisposed)
+                {
+                    continue;
+                }
+
+                view.StartPosition = FormStartPosition.Manual;
+                var offset = new Point(CollectionCascadeOffset.Width * i, CollectionCascadeOffset.Height * i);
+                var location = new Point(basePoint.X + offset.X, basePoint.Y + offset.Y);
+                view.Location = location;
+            }
+        }
+
+        private static string? TryGetRandomResourceFile()
+        {
+            var candidates = new List<string>();
+            foreach (var root in EnumerateResourceRoots())
+            {
+                if (!Directory.Exists(root))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    candidates.AddRange(Directory
+                        .EnumerateFiles(root, "*.*", SearchOption.AllDirectories)
+                        .Where(f => AllowedImportExtensions.Contains(Path.GetExtension(f))));
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log($"Failed to scan resources at '{root}': {ex.Message}");
+                }
+            }
+
+            if (candidates.Count == 0)
+            {
+                return null;
+            }
+
+            lock (ResourceRandom)
+            {
+                return candidates[ResourceRandom.Next(candidates.Count)];
+            }
+        }
+
+        private static IEnumerable<string> EnumerateResourceRoots()
+        {
+            DirectoryInfo? current = new(AppDomain.CurrentDomain.BaseDirectory);
+            var yielded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            while (current != null)
+            {
+                string candidate = Path.Combine(current.FullName, "Resources");
+                if (yielded.Add(candidate))
+                {
+                    yield return candidate;
+                }
+                current = current.Parent;
             }
         }
     }

@@ -17,13 +17,14 @@ namespace ModularAudience.Forms
 
         public int AudioCount => this.AudioC.Audios.Count;
 
-		public AudioCollectionView(IEnumerable<AudioObj> audios)
+        public AudioCollectionView(IEnumerable<AudioObj> audios)
         {
             this.InitializeComponent();
+            this.StartPosition = FormStartPosition.Manual;
 
             this.Text = "Audio Collection #" + (WindowMain.CollectionViews.Count + 1).ToString("D2");
 
-			foreach (AudioObj audio in audios)
+            foreach (AudioObj audio in audios)
             {
                 this.AudioC.Audios.Add(audio);
             }
@@ -36,7 +37,7 @@ namespace ModularAudience.Forms
             this.listBox_audios.MouseDown += this.listBox_audios_MouseDown;
             this.listBox_audios.DoubleClick += this.listBox_audios_DoubleClick;
 
-			this.FormClosing += async (s, e) =>
+            this.FormClosing += async (s, e) =>
             {
                 e.Cancel = true;
                 this.Hide();

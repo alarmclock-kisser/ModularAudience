@@ -95,9 +95,9 @@ namespace NAudience.Core
                 return regions;
             }
 
-            int minDurationSamples = (int)(minDurationMs * this.SampleRate * this.Channels / 1000.0);
-            int maxDurationSamples = (int)(maxDurationMs * this.SampleRate * this.Channels / 1000.0);
-            int silenceWindowSamples = (int)(silenceWindowMs * this.SampleRate * this.Channels / 1000.0);
+            int minDurationSamples = (int) (minDurationMs * this.SampleRate * this.Channels / 1000.0);
+            int maxDurationSamples = (int) (maxDurationMs * this.SampleRate * this.Channels / 1000.0);
+            int silenceWindowSamples = (int) (silenceWindowMs * this.SampleRate * this.Channels / 1000.0);
 
             bool inSample = false;
             int sampleStart = 0;
@@ -253,7 +253,7 @@ namespace NAudience.Core
                 sumSquares += val * val;
             }
 
-            return (float)Math.Sqrt(sumSquares / count);
+            return (float) Math.Sqrt(sumSquares / count);
         }
 
         private AudioObj? ExtractRegion(int startSample, int endSample, string name)
@@ -276,7 +276,7 @@ namespace NAudience.Core
                 Channels = this.Channels,
                 BitDepth = this.BitDepth,
                 Length = length,
-                Duration = TimeSpan.FromSeconds(length / (double)(this.SampleRate * this.Channels)),
+                Duration = TimeSpan.FromSeconds(length / (double) (this.SampleRate * this.Channels)),
                 Bpm = this.Bpm,
                 Volume = this.Volume
             };
@@ -291,7 +291,7 @@ namespace NAudience.Core
                 return null;
             }
 
-            int silenceGapSamples = (int)(silenceGapMs * this.SampleRate * this.Channels / 1000.0);
+            int silenceGapSamples = (int) (silenceGapMs * this.SampleRate * this.Channels / 1000.0);
             int totalLength = regions.Sum(r => r.End - r.Start) + Math.Max(0, (regions.Count - 1) * silenceGapSamples);
             var paletteData = new float[totalLength];
 
@@ -320,7 +320,7 @@ namespace NAudience.Core
                 Channels = this.Channels,
                 BitDepth = this.BitDepth,
                 Length = totalLength,
-                Duration = TimeSpan.FromSeconds(totalLength / (double)(this.SampleRate * this.Channels)),
+                Duration = TimeSpan.FromSeconds(totalLength / (double) (this.SampleRate * this.Channels)),
                 Bpm = this.Bpm,
                 Volume = this.Volume
             };
