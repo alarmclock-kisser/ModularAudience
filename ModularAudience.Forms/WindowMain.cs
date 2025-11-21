@@ -2,18 +2,35 @@ using ModularAudience.Audio;
 using ModularAudience.Forms.Modules;
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 
 namespace ModularAudience.Forms
 {
     public partial class WindowMain : Form
     {
+        public static WindowMain? Instance { get; private set; }
+
         public readonly AudioCollection AudioC = new();
 
         internal static readonly BindingList<AudioCollectionView> CollectionViews = [];
         internal static readonly BindingList<TrackView> TrackViews = [];
+        private static TrackView? _lastSelectedTrackView = null;
+        internal static TrackView? LastSelectedTrackView
+        {
+            get => _lastSelectedTrackView;
+            set
+            {
+                if (!ReferenceEquals(_lastSelectedTrackView, value))
+                {
+                    _lastSelectedTrackView = value;
+                    UpdateTrackDependentUI();
+                }
+            }
+        }
 
         // Map AudioObj.Id -> Collection number (01-based) to restore distribution
-        private static readonly Dictionary<Guid, int> _audioCollectionTags = new();
+        private static readonly Dictionary<Guid, int> AudioCollectionTags = [];
         private static readonly HashSet<string> AllowedImportExtensions = new(StringComparer.OrdinalIgnoreCase) { ".wav", ".mp3", ".flac" };
         private static readonly Random ResourceRandom = new();
         private static readonly Size CollectionCascadeOffset = new(26, 28);
@@ -21,6 +38,7 @@ namespace ModularAudience.Forms
 
         public WindowMain()
         {
+            Instance = this;
             this.InitializeComponent();
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, true);
@@ -130,7 +148,7 @@ namespace ModularAudience.Forms
                 }
                 foreach (var audio in importedAudios)
                 {
-                    _audioCollectionTags[audio.Id] = 1;
+                    AudioCollectionTags[audio.Id] = 1;
                 }
                 first.Show();
                 // Nur Referenzen aus tempor�rem Loader entfernen, nicht disposen
@@ -151,7 +169,7 @@ namespace ModularAudience.Forms
                 int num = GetCollectionNumber(newView);
                 foreach (var audio in importedAudios)
                 {
-                    _audioCollectionTags[audio.Id] = num;
+                    AudioCollectionTags[audio.Id] = num;
                 }
                 newView.Show();
             }
@@ -162,7 +180,7 @@ namespace ModularAudience.Forms
                 foreach (var audio in importedAudios)
                 {
                     last.AudioC.Audios.Add(audio);
-                    _audioCollectionTags[audio.Id] = num;
+                    AudioCollectionTags[audio.Id] = num;
                 }
                 last.Show();
             }
@@ -174,7 +192,7 @@ namespace ModularAudience.Forms
                 int num = GetCollectionNumber(newView);
                 foreach (var audio in importedAudios)
                 {
-                    _audioCollectionTags[audio.Id] = num;
+                    AudioCollectionTags[audio.Id] = num;
                 }
                 newView.Show();
             }
@@ -302,7 +320,7 @@ namespace ModularAudience.Forms
                 int num = GetCollectionNumber(cv);
                 foreach (var audio in cv.AudioC.Audios.ToList())
                 {
-                    _audioCollectionTags[audio.Id] = num;
+                    AudioCollectionTags[audio.Id] = num;
                 }
             }
 
@@ -339,7 +357,7 @@ namespace ModularAudience.Forms
             }
 
             // Max Nummer bestimmen
-            int maxNum = _audioCollectionTags.Count > 0 ? _audioCollectionTags.Values.Max() : 1;
+            int maxNum = AudioCollectionTags.Count > 0 ? AudioCollectionTags.Values.Max() : 1;
             if (maxNum < 1)
             {
                 maxNum = 1;
@@ -363,7 +381,7 @@ namespace ModularAudience.Forms
             foreach (var audio in allAudios)
             {
                 int num = 1;
-                if (!_audioCollectionTags.TryGetValue(audio.Id, out num))
+                if (!AudioCollectionTags.TryGetValue(audio.Id, out num))
                 {
                     num = 1;
                 }
@@ -403,6 +421,33 @@ namespace ModularAudience.Forms
                 var offset = new Point(CollectionCascadeOffset.Width * i, CollectionCascadeOffset.Height * i);
                 var location = new Point(basePoint.X + offset.X, basePoint.Y + offset.Y);
                 view.Location = location;
+            }
+        }
+
+        private static void UpdateTrackDependentUI()
+        {
+            if (Instance == null)
+            {
+                return;
+            }
+
+            // Buttons aktivieren/deaktivieren
+            Instance.button_scanBpm.Enabled = LastSelectedTrackView != null;
+            Instance.button_scanTiming.Enabled = LastSelectedTrackView != null;
+            Instance.button_scanKey.Enabled = LastSelectedTrackView != null;
+
+            // Set scanned values to textboxes
+            if (LastSelectedTrackView != null)
+            {
+                Instance.textBox_scanBpmResult.Text = LastSelectedTrackView.OriginalAudio.ScannedBpm > 0 ? $"{LastSelectedTrackView.OriginalAudio.ScannedBpm:F3} BPM" : "";
+                Instance.textBox_scanTimingResult.Text = LastSelectedTrackView.OriginalAudio.ScannedTiming > 0.0f ? GetTimingString(LastSelectedTrackView.OriginalAudio.ScannedTiming) : "";
+                Instance.textBox_scanKeyResult.Text = !string.IsNullOrEmpty(LastSelectedTrackView.OriginalAudio.ScannedKey) ? LastSelectedTrackView.OriginalAudio.ScannedKey : "";
+            }
+            else
+            {
+                Instance.textBox_scanBpmResult.Text = "";
+                Instance.textBox_scanTimingResult.Text = "";
+                Instance.textBox_scanKeyResult.Text = "";
             }
         }
 
@@ -452,6 +497,68 @@ namespace ModularAudience.Forms
                 }
                 current = current.Parent;
             }
+        }
+
+        private async void button_scanBpm_Click(object sender, EventArgs e)
+        {
+            if (LastSelectedTrackView == null)
+            {
+                return;
+            }
+
+            double scannedBpm = await BeatScanner.ScanBpmAsync(LastSelectedTrackView.OriginalAudio);
+
+            this.textBox_scanBpmResult.Text = scannedBpm.ToString("F3") + " BPM";
+            LastSelectedTrackView.OriginalAudio.ScannedBpm = (float) scannedBpm;
+        }
+
+        private async void button_scanTiming_Click(object sender, EventArgs e)
+        {
+            if (LastSelectedTrackView == null)
+            {
+                return;
+            }
+
+            float scannedTiming = await BeatScanner.ScanTimingAsync(LastSelectedTrackView.OriginalAudio);
+
+            this.textBox_scanTimingResult.Text = GetTimingString(scannedTiming);
+            LastSelectedTrackView.OriginalAudio.ScannedTiming = scannedTiming;
+        }
+
+        private async void button_scanKey_Click(object sender, EventArgs e)
+        {
+            if (LastSelectedTrackView == null)
+            {
+                return;
+            }
+
+            string scannedKey = await BeatScanner.ScanKeyAsync(LastSelectedTrackView.OriginalAudio);
+            
+            this.textBox_scanKeyResult.Text = scannedKey;
+            LastSelectedTrackView.OriginalAudio.ScannedKey = scannedKey;
+        }
+
+        public static string GetTimingString(float timing)
+        {
+            if (timing <= 0f)
+                return "-";
+
+            // Standard: 4/4 als Basis
+            // timing = Bruchteil eines Takts (z.B. 0.25 = Viertel, 0.5 = Halbe, 1.0 = Ganze, 0.75 = punktierte Halbe, etc.)
+            // Wir suchen Nenner als Potenz von 2 (1, 2, 4, 8, 16, ...)
+            int maxDenominator = 64; // bis 1/64-Noten
+            for (int denom = 1; denom <= maxDenominator; denom *= 2)
+            {
+                float num = timing * denom * 4; // 4/4 als Basis
+                if (Math.Abs(num - MathF.Round(num)) < 0.0001f)
+                {
+                    int numerator = (int)MathF.Round(num);
+                    int denominator = denom * 4;
+                    return $"{numerator} / {denominator}";
+                }
+            }
+            // Fallback: Dezimalwert
+            return timing.ToString("0.###");
         }
     }
 }

@@ -57,6 +57,12 @@ namespace ModularAudience.Forms.Modules
 
             this.ApplySettingsAppearance();
 
+            // Setze LastSelectedTrackView bei Aktivierung, Fokus oder Klick auf die Form
+            this.Activated += (_, __) => SetAsLastSelected();
+            this.GotFocus += (_, __) => SetAsLastSelected();
+            this.MouseDown += (_, __) => SetAsLastSelected();
+            RegisterInteractionEvents(this);
+
             this.Text = "#" + WindowMain.TrackViews.Count.ToString("D2") + " - " + audio.Name;
             this.OriginalAudio.SelectionStart = -1;
             this.OriginalAudio.SelectionEnd = -1;
@@ -93,7 +99,33 @@ namespace ModularAudience.Forms.Modules
                 this.DisposeCurrentBitmap();
                 await this.StopPlaybackAsync().ConfigureAwait(false);
                 try { this.OriginalAudio.Dispose(); } catch { }
+                // Setze LastSelectedTrackView auf null, falls diese Instanz die aktuelle ist
+                if (WindowMain.LastSelectedTrackView == this)
+                {
+                    WindowMain.LastSelectedTrackView = null;
+                }
             };
+        }
+
+        // Rekursiv alle relevanten Controls für Interaktion registrieren
+        private void RegisterInteractionEvents(Control parent)
+        {
+            foreach (Control ctrl in parent.Controls)
+            {
+                ctrl.Click += (_, __) => SetAsLastSelected();
+                ctrl.GotFocus += (_, __) => SetAsLastSelected();
+                ctrl.MouseDown += (_, __) => SetAsLastSelected();
+                if (ctrl.HasChildren)
+                {
+                    RegisterInteractionEvents(ctrl);
+                }
+            }
+        }
+
+        // Setzt die aktuelle Instanz als zuletzt ausgewählte TrackView
+        private void SetAsLastSelected()
+        {
+            WindowMain.LastSelectedTrackView = this;
         }
 
         private void EnablePictureBoxDoubleBuffering()
@@ -666,9 +698,17 @@ namespace ModularAudience.Forms.Modules
             else
             {
                 int idx = Array.IndexOf(LoopSteps, this.loopDenominator);
-                if (idx < 0) idx = 0;
+                if (idx < 0)
+                {
+                    idx = 0;
+                }
+
                 idx = (idx + direction) % LoopSteps.Length;
-                if (idx < 0) idx += LoopSteps.Length;
+                if (idx < 0)
+                {
+                    idx += LoopSteps.Length;
+                }
+
                 this.loopDenominator = LoopSteps[idx];
             }
 

@@ -30,6 +30,9 @@ namespace NAudience.Core
         public float ScannedBpm { get; set; }
         public float Timing { get; set; } = 1.0f;
         public float ScannedTiming { get; set; } = 1.0f;
+        public string Key { get; set; } = string.Empty;
+        public string ScannedKey { get; set; } = string.Empty;
+
         public float Volume { get; set; } = 1.0f;
 
         // Playback & navigation state

@@ -1,350 +1,143 @@
-﻿using NAudience.Core;
-using MathNet.Numerics;
+﻿using MathNet.Numerics;
 using MathNet.Numerics.IntegralTransforms;
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
+using NAudience.Core;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ModularAudience.Audio
 {
     public static class BeatScanner
     {
-        public static async Task<double> ScanBpmAsync(AudioObj obj, int windowSize = 65536, int lookingRange = 2, int minBpm = 60, int maxBpm = 200, bool autoGetTiming = false)
+        public static async Task<double> ScanBpmAsync(AudioObj obj, int windowSize = 65536, int lookingRange = 2, int? minBpm = null, int? maxBpm = null, bool autoGetTiming = false)
         {
-            if (obj == null || obj.Data == null || obj.Data.Length <= 0)
-            {
-                return -1.0f;
-            }
-
             Stopwatch sw = Stopwatch.StartNew();
 
-            var monoData = await obj.GetCurrentWindowAsync(windowSize, lookingRange, true, true);
-
-            // Check if timing already scanned
-            float timing = 1.0f;
-            if (autoGetTiming)
+            try
             {
-                timing = await ScanTimingAsync(obj, windowSize, lookingRange);
+                if (obj == null || obj.Data == null || obj.Data.Length <= 0)
+                {
+                    return -1.0f;
+                }
+
+                // Use a wider window for BPM robustness when range is auto
+                int effectiveWindow = windowSize;
+                if (minBpm == null && maxBpm == null)
+                {
+                    // double the window to improve low-BPM sensitivity
+                    effectiveWindow = Math.Max(windowSize, 131072);
+                }
+
+                var monoData = await obj.GetCurrentWindowAsync(effectiveWindow, lookingRange, true, true);
+                if (monoData == null || monoData.Length == 0)
+                {
+                    return -1.0f;
+                }
+
+                // Optionally pre-scan timing to stabilize BPM selection (phase/measure bias)
+                float timing = 1.0f;
+                if (autoGetTiming)
+                {
+                    try { timing = await ScanTimingAsync(obj, windowSize, lookingRange); } catch { timing = 1.0f; }
+                }
+
+                // Auto-range if not provided
+                var (minEff, maxEff) = ResolveTempoBounds(minBpm, maxBpm, obj.ScannedBpm > 0 ? (double?) obj.ScannedBpm : null);
+
+                double bpm = await EstimateBpmAsync(monoData, obj.SampleRate, minEff, maxEff).ConfigureAwait(false);
+
+                sw.Stop();
+                obj["beatScan"] = (float) sw.Elapsed.TotalMilliseconds;
+
+                if (bpm <= 0.0)
+                {
+                    return -1.0f;
+                }
+
+                obj.ScannedBpm = (float) bpm;
+
+                return bpm * timing;
             }
-
-            double bpm = await EstimateBpmAsync(monoData, obj.SampleRate, minBpm, maxBpm);
-
-            sw.Stop();
-            obj["beatScan"] = (float) sw.Elapsed.TotalMilliseconds;
-
-            if (bpm <= 0.0)
+            catch (Exception ex)
             {
-                return -1.0f;
+                LogCollection.Log(ex);
+                return 0.0;
             }
-
-            obj.ScannedBpm = (float) bpm;
-
-            return bpm * timing;
+            finally
+            {
+                sw.Stop();
+                obj["BpmScan"] = sw.Elapsed.TotalMilliseconds;
+            }
         }
 
         public static async Task<float> ScanTimingAsync(AudioObj obj, int windowSize = 65536, int lookingRange = 2)
         {
-            if (obj == null || obj.Data == null || obj.Data.Length <= 0)
+            Stopwatch sw = Stopwatch.StartNew();
+
+            try
             {
-                return -1.0f;
-            }
-
-            var monoData = await obj.GetCurrentWindowAsync(windowSize, lookingRange, true, false);
-
-            float timing = await EstimateTimingAsync(monoData, obj.SampleRate);
-
-            obj.Timing = timing;
-
-            return timing;
-        }
-
-        internal static async Task<double> EstimateBpmAsync(float[] samples, int sampleRate, int minBpm = 60, int maxBpm = 200)
-        {
-            if (samples == null || samples.Length == 0 || sampleRate <= 0 || minBpm <= 0 || maxBpm <= minBpm)
-            {
-                return 0.0;
-            }
-
-            return await Task.Run(() =>
-            {
-                int n = samples.Length;
-
-                // 1) Vorverarbeitung: Hüllkurve/Onset-ähnliches Signal
-                //    Absolutwert -> schnelle & langsame gleitende Mittelwerte -> Halbwellendetektion
-                double[] abs = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    abs[i] = Math.Abs(samples[i]);
-                }
-
-                // Fenster für schnelle/slow MA (10ms/400ms, gekappt auf Datenlänge)
-                int fastWin = Math.Clamp(sampleRate / 100, 1, n);   // ~10 ms
-                int slowWin = Math.Clamp(sampleRate / 2, fastWin + 1, n); // ~0.5 s
-
-                double[] fast = new double[n];
-                double[] slow = new double[n];
-
-                // Rolling sums für O(n) Moving Average
-                double sumFast = 0, sumSlow = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    sumFast += abs[i];
-                    if (i >= fastWin)
-                    {
-                        sumFast -= abs[i - fastWin];
-                    }
-
-                    fast[i] = sumFast / Math.Min(i + 1, fastWin);
-
-                    sumSlow += abs[i];
-                    if (i >= slowWin)
-                    {
-                        sumSlow -= abs[i - slowWin];
-                    }
-
-                    slow[i] = sumSlow / Math.Min(i + 1, slowWin);
-                }
-
-                double[] novelty = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    novelty[i] = Math.Max(0.0, fast[i] - slow[i]);
-                }
-
-                // DC entfernen und auf Varianz normieren
-                double mean = novelty.Average();
-                double var = 0.0;
-                for (int i = 0; i < n; i++)
-                {
-                    novelty[i] -= mean;
-                    var += novelty[i] * novelty[i];
-                }
-                if (var <= 1e-12)
-                {
-                    return 0.0;
-                }
-
-                double invStd = 1.0 / Math.Sqrt(var / n);
-                for (int i = 0; i < n; i++)
-                {
-                    novelty[i] *= invStd;
-                }
-
-                // 2) Autokorrelation via FFT: r = IFFT(|FFT(x)|^2)
-                int L = 1;
-                while (L < 2 * n)
-                {
-                    L <<= 1;
-                }
-
-                var fft = new MathNet.Numerics.Complex32[L];
-                for (int i = 0; i < n; i++)
-                {
-                    fft[i] = new MathNet.Numerics.Complex32((float) novelty[i], 0f);
-                }
-
-                for (int i = n; i < L; i++)
-                {
-                    fft[i] = Complex32.Zero;
-                }
-
-                Fourier.Forward(fft, FourierOptions.Matlab);
-
-                for (int i = 0; i < L; i++)
-                {
-                    // |X|^2 = X * conj(X)
-                    var v = fft[i];
-                    fft[i] = new MathNet.Numerics.Complex32(v.Magnitude * v.Magnitude, 0f);
-                }
-
-                Fourier.Inverse(fft, FourierOptions.Matlab);
-
-                // Realteil, 0..n-1 relevant (lineare Autokorrelation)
-                double r0 = Math.Max(fft[0].Real, 1e-12f);
-                // 3) Lag-Suchbereich aus BPM-Grenzen
-                int minLag = (int) Math.Round(sampleRate * 60.0 / Math.Max(maxBpm, 1));
-                int maxLag = (int) Math.Round(sampleRate * 60.0 / Math.Max(minBpm, 1));
-                minLag = Math.Clamp(minLag, 1, n - 1);
-                maxLag = Math.Clamp(maxLag, minLag, n - 1);
-
-                // 4) Bestes Lag im Bereich wählen (größte normalisierte Autokorrelation)
-                int bestLag = -1;
-                double bestVal = double.NegativeInfinity;
-
-                for (int k = minLag; k <= maxLag; k++)
-                {
-                    double val = fft[k].Real / r0; // Normalisierung
-                    if (val > bestVal)
-                    {
-                        bestVal = val;
-                        bestLag = k;
-                    }
-                }
-
-                if (bestLag <= 0 || bestVal < 0.02) // zu schwaches Signal
-                {
-                    return 0.0;
-                }
-
-                // 5) Parabolische Interpolation um Maximum (Sub-Sample-Schätzung)
-                double lag = bestLag;
-                if (bestLag > minLag && bestLag < maxLag)
-                {
-                    double y1 = fft[bestLag - 1].Real;
-                    double y2 = fft[bestLag].Real;
-                    double y3 = fft[bestLag + 1].Real;
-                    double denom = (y1 - 2 * y2 + y3);
-                    if (Math.Abs(denom) > 1e-12)
-                    {
-                        double delta = 0.5 * (y1 - y3) / denom; // in [-1,1]
-                        delta = Math.Max(-1.0, Math.Min(1.0, delta));
-                        lag = bestLag + delta;
-                    }
-                }
-
-                // 6) BPM berechnen
-                double bpm = 60.0 * sampleRate / lag;
-
-                // Optional: auf Bereich [minBpm,maxBpm] falten (x2 / x0.5 Heuristik)
-                while (bpm < minBpm && bpm > 0)
-                {
-                    bpm *= 2.0;
-                }
-
-                while (bpm > maxBpm)
-                {
-                    bpm /= 2.0;
-                }
-
-                return (bpm >= minBpm && bpm <= maxBpm) ? bpm : 0.0;
-            });
-        }
-
-        internal static async Task<float> EstimateTimingAsync(float[] samples, int sampleRate)
-        {
-            if (samples == null || samples.Length == 0 || sampleRate <= 0)
-            {
-                return -1.0f;
-            }
-
-            return await Task.Run(() =>
-            {
-                int n = samples.Length;
-
-                // 1) Novelty (Onset-Hüllkurve)
-                double[] abs = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    abs[i] = Math.Abs(samples[i]);
-                }
-
-                int fastWin = Math.Clamp(sampleRate / 100, 1, n);        // ~10 ms
-                int slowWin = Math.Clamp(sampleRate / 2, fastWin + 1, n); // ~0.5 s
-
-                double[] fast = new double[n];
-                double[] slow = new double[n];
-                double sumFast = 0, sumSlow = 0;
-
-                for (int i = 0; i < n; i++)
-                {
-                    sumFast += abs[i];
-                    if (i >= fastWin)
-                    {
-                        sumFast -= abs[i - fastWin];
-                    }
-                    fast[i] = sumFast / Math.Min(i + 1, fastWin);
-
-                    sumSlow += abs[i];
-                    if (i >= slowWin)
-                    {
-                        sumSlow -= abs[i - slowWin];
-                    }
-                    slow[i] = sumSlow / Math.Min(i + 1, slowWin);
-                }
-
-                double[] novelty = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    novelty[i] = Math.Max(0.0, fast[i] - slow[i]);
-                }
-
-                double mean = novelty.Average();
-                double var = 0.0;
-                for (int i = 0; i < n; i++)
-                {
-                    novelty[i] -= mean;
-                    var += novelty[i] * novelty[i];
-                }
-                if (var <= 1e-12)
+                if (obj == null || obj.Data == null || obj.Data.Length <= 0)
                 {
                     return -1.0f;
                 }
 
-                double invStd = 1.0 / Math.Sqrt(var / n);
-                for (int i = 0; i < n; i++)
-                {
-                    novelty[i] *= invStd;
-                }
-
-                // 2) Beat-Lag via FFT-ACF
-                int L = 1;
-                while (L < 2 * n)
-                {
-                    L <<= 1;
-                }
-
-                var fft = new MathNet.Numerics.Complex32[L];
-                for (int i = 0; i < n; i++)
-                {
-                    fft[i] = new MathNet.Numerics.Complex32((float) novelty[i], 0f);
-                }
-                for (int i = n; i < L; i++)
-                {
-                    fft[i] = Complex32.Zero;
-                }
-
-                Fourier.Forward(fft, FourierOptions.Matlab);
-                for (int i = 0; i < L; i++)
-                {
-                    var v = fft[i];
-                    fft[i] = new MathNet.Numerics.Complex32(v.Magnitude * v.Magnitude, 0f);
-                }
-                Fourier.Inverse(fft, FourierOptions.Matlab);
-
-                double r0 = Math.Max(fft[0].Real, 1e-12f);
-                int minBpm = 50, maxBpm = 200;
-                int minLag = Math.Clamp((int) Math.Round(sampleRate * 60.0 / Math.Max(maxBpm, 1)), 1, n - 1);
-                int maxLag = Math.Clamp((int) Math.Round(sampleRate * 60.0 / Math.Max(minBpm, 1)), minLag, n - 1);
-
-                int bestLag = -1;
-                double bestVal = double.NegativeInfinity;
-                for (int k = minLag; k <= maxLag; k++)
-                {
-                    double val = fft[k].Real / r0;
-                    if (val > bestVal)
-                    {
-                        bestVal = val;
-                        bestLag = k;
-                    }
-                }
-                if (bestLag <= 0)
+                var monoData = await obj.GetCurrentWindowAsync(windowSize, lookingRange, true, false);
+                if (monoData == null || monoData.Length == 0 || obj.SampleRate <= 0)
                 {
                     return -1.0f;
                 }
 
-                int beatLag = bestLag; // in Samples
+                // Prefer BPM if already known to derive beatLag robustly
+                double bpmHint = obj.ScannedBpm > 0 ? obj.ScannedBpm : 0.0;
+                if (bpmHint <= 0.0)
+                {
+                    // Quick BPM estimation with generous bounds
+                    var (minEff, maxEff) = ResolveTempoBounds(null, null, null);
+                    try { bpmHint = await EstimateBpmAsync(monoData, obj.SampleRate, minEff, maxEff); } catch { bpmHint = 0.0; }
+                }
 
-                // 3) Beat-Stärken
-                int nBeats = Math.Max(0, n / beatLag);
+                // Compute spectral-flux novelty at moderate resolution for timing
+                int fftSize = ChooseFftSize(obj.SampleRate);
+                int hopSize = Math.Max(256, fftSize / 4);
+                var novelty = ComputeSpectralFluxNovelty(monoData, obj.SampleRate, fftSize, hopSize);
+                if (novelty.Length < 16)
+                {
+                    return -1.0f;
+                }
+
+                // Normalize novelty
+                NormalizeZeroMeanUnitVar(novelty);
+
+                // If BPM known, compute beatLag in novelty-frames domain
+                int noveltyRate = Math.Max(1, obj.SampleRate / hopSize);
+                int beatLag = -1;
+                if (bpmHint > 0)
+                {
+                    double lagF = (noveltyRate * 60.0) / bpmHint;
+                    beatLag = (int) Math.Round(lagF);
+                    // clamp
+                    beatLag = Math.Clamp(beatLag, 2, Math.Max(2, novelty.Length / 8));
+                }
+                else
+                {
+                    // fallback: take ACF peak in default range 50..200 bpm
+                    var acf = ComputeAcf(novelty);
+                    var (minEff, maxEff) = ResolveTempoBounds(null, null, null);
+                    beatLag = BestLagFromAcf(acf, noveltyRate, minEff, maxEff);
+                }
+
+                if (beatLag <= 0)
+                {
+                    return -1.0f;
+                }
+
+                // Derive periodic meter K using phase-binned beat strengths, same logic as before but on novelty
+                int n = novelty.Length;
+                int nBeats = Math.Max(0, n / Math.Max(1, beatLag));
                 if (nBeats < 4)
                 {
                     return -1.0f;
                 }
 
+                // Compute beat-strengths around each grid tick
                 double[] beatStrengths = new double[nBeats];
                 int half = Math.Max(1, beatLag / 4);
                 for (int b = 0; b < nBeats; b++)
@@ -360,12 +153,11 @@ namespace ModularAudience.Audio
                     beatStrengths[b] = sum / Math.Max(1, (e - a + 1));
                 }
 
-                // 4) Kandidaten scoren: Periodizität + Kontrast + Template-Korrelation (mit Phasen-Shift)
+                // Evaluate candidate meters
                 int[] candidates = [2, 3, 4, 5, 6, 7, 8, 9, 12];
                 var scoreByK = new Dictionary<int, (double score, double tplCorr)>();
                 int bestK = 4;
                 double bestScoreK = double.NegativeInfinity;
-
                 for (int idx = 0; idx < candidates.Length; idx++)
                 {
                     int K = candidates[idx];
@@ -374,97 +166,69 @@ namespace ModularAudience.Audio
                         continue;
                     }
 
-                    // Periodizität über Lag K
-                    double ac = 0.0;
-                    int c = 0;
-                    for (int i = 0; i + K < nBeats; i++)
-                    {
-                        ac += beatStrengths[i] * beatStrengths[i + K];
-                        c++;
-                    }
+                    // Periodicity
+                    double ac = 0.0; int c = 0;
+                    for (int i = 0; i + K < nBeats; i++) { ac += beatStrengths[i] * beatStrengths[i + K]; c++; }
                     if (c > 0)
                     {
                         ac /= c;
                     }
 
-                    // Phasenmittelwerte
-                    double[] phaseSum = new double[K];
-                    int[] phaseCnt = new int[K];
-                    for (int i = 0; i < nBeats; i++)
-                    {
-                        int r = i % K;
-                        phaseSum[r] += beatStrengths[i];
-                        phaseCnt[r]++;
-                    }
+                    // Phase averages
+                    double[] phaseSum = new double[K]; int[] phaseCnt = new int[K];
+                    for (int i = 0; i < nBeats; i++) { int r = i % K; phaseSum[r] += beatStrengths[i]; phaseCnt[r]++; }
                     double[] phaseAvg = new double[K];
                     for (int r = 0; r < K; r++)
                     {
                         phaseAvg[r] = phaseCnt[r] > 0 ? phaseSum[r] / phaseCnt[r] : 0.0;
                     }
 
-                    // Kontrast (Downbeat-Betonung)
                     double meanPhase = phaseAvg.Average();
                     double maxPhase = phaseAvg.Max();
                     double contrast = maxPhase - meanPhase;
 
-                    // Template-basiertes Matching (mit maximaler zirkularer Korrelation)
                     double[] tpl = BuildMeterTemplate(K);
                     double tplCorr = MaxCircularCorrelation(phaseAvg, tpl);
 
-                    // Bars-Abdeckung (mehr Bars => vertrauenswürdiger)
                     double nBars = (double) nBeats / K;
-                    double coverage = Math.Min(1.0, nBars / 4.0); // bis 4 Takte hochskalieren
+                    double coverage = Math.Min(1.0, nBars / 4.0);
 
-                    // Gewichte: Template etwas stärker, Kontrast etwas schwächer
                     double score = 0.55 * ac + 0.20 * contrast + 0.50 * tplCorr;
                     score *= (0.7 + 0.3 * coverage);
 
-                    // Subharmonik-Penalties/Boosts
                     if (K == 2)
                     {
-                        score *= 0.92;      // 2/4 leicht benachteiligen
+                        score *= 0.92;
                     }
 
                     if (K == 4)
                     {
-                        score *= 1.04;      // 4/4 leicht bevorzugen
+                        score *= 1.04;
                     }
 
                     if (K % 3 == 0)
                     {
-                        score *= 1.06;  // 3er-Gruppen (3/4, 6/8, 12/8) fördern
+                        score *= 1.06;
                     }
 
                     scoreByK[K] = (score, tplCorr);
-
-                    if (score > bestScoreK)
-                    {
-                        bestScoreK = score;
-                        bestK = K;
-                    }
+                    if (score > bestScoreK) { bestScoreK = score; bestK = K; }
                 }
 
-                // 4b) Harmonische Nachkorrektur:
-                // - 2/4 vs 4/4/8/12: bevorzuge den größeren K, wenn Score nah dran (<=12% schlechter)
-                // - 3/4 vs 6/8/12: bevorzuge den kleineren K, wenn Scores nah dran (<=12% schlechter)
+                // Harmonic preference as before
                 double relClose = 0.12;
-
                 int[] chain2 = [2, 4, 8, 12];
                 var present2 = chain2.Where(k => scoreByK.ContainsKey(k)).ToArray();
                 if (present2.Length > 0)
                 {
                     double maxInChain = present2.Max(k => scoreByK[k].score);
-                    // wähle größten K, der nahe am Max liegt
-                    int prefer = present2
-                        .Where(k => scoreByK[k].score >= maxInChain * (1.0 - relClose))
-                        .Max(); // größter K
+                    int prefer = present2.Where(k => scoreByK[k].score >= maxInChain * (1.0 - relClose)).Max();
                     if (scoreByK.ContainsKey(bestK) && present2.Contains(bestK))
                     {
                         bestK = prefer;
                     }
                     else if (!present2.Contains(bestK) && scoreByK.ContainsKey(prefer))
                     {
-                        // falls der globale Sieger nicht in der Kette ist, aber 2/4 Problem sichtbar: wenn 2 knapp vor 4 liegt -> auf 4 heben
                         if (scoreByK.ContainsKey(2) && scoreByK.ContainsKey(4) && scoreByK[4].score >= scoreByK[2].score * (1.0 - relClose))
                         {
                             bestK = 4;
@@ -477,30 +241,364 @@ namespace ModularAudience.Audio
                 if (present3.Length > 0)
                 {
                     double maxInChain = present3.Max(k => scoreByK[k].score);
-                    // wähle kleinsten K, der nahe am Max liegt (3 bevorzugen)
-                    int prefer = present3
-                        .Where(k => scoreByK[k].score >= maxInChain * (1.0 - relClose))
-                        .Min(); // kleinster K
+                    int prefer = present3.Where(k => scoreByK[k].score >= maxInChain * (1.0 - relClose)).Min();
                     if (present3.Contains(bestK))
                     {
                         bestK = prefer;
                     }
                 }
 
-                // 5) Normalisieren auf [0.125, 1.0]
-                double normalized;
-                if (bestK <= 4)
+                // Normalize to [0.125..1.0]
+                double normalized = bestK <= 4 ? bestK / 4.0 : (bestK <= 8 ? bestK / 8.0 : bestK / 12.0);
+                normalized = Math.Clamp(normalized, 0.125, 1.0);
+
+                // Persist timing
+                obj.Timing = (float) normalized;
+
+                return (float) normalized;
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log(ex);
+                return 0.0f;
+            }
+            finally
+            {
+                sw.Stop();
+                obj["TimingScan"] = sw.Elapsed.TotalMilliseconds;
+            }
+        }
+
+        public static async Task<string> ScanKeyAsync(AudioObj obj, int windowSize = 65536, int lookingRange = 2)
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+
+            try
+            {
+                if (obj == null || obj.Data == null || obj.Data.Length <= 0)
                 {
-                    normalized = bestK / 4.0;
+                    return "Unknown";
+                }
+
+                // 1) Mono-Fenster nahe aktueller Position holen
+                var monoData = await obj.GetCurrentWindowAsync(windowSize, lookingRange, true, false);
+                if (monoData == null || monoData.Length == 0)
+                {
+                    return "Unknown";
+                }
+
+                // 2) Parameter für STFT/Chromagram
+                int fs = Math.Max(1, obj.SampleRate);
+                int fftSize = ChooseFftSize(fs);
+                int hopSize = fftSize / 2; // 50% Overlap
+                double minFreq = 50.0;     // Hz
+                double maxFreq = Math.Min(5000.0, fs / 2.0 - 1.0); // Hz
+
+                // 3) Chroma (HPCP-ähnlich) berechnen (parallelisiert)
+                double[] chroma = await Task.Run(() =>
+                    ComputeChromaSTFT(monoData, fs, fftSize, hopSize, minFreq, maxFreq, harmonics: 5, whitening: true, perFrameNormalize: true)
+                ).ConfigureAwait(false);
+
+                // 4) Key mittels Krumhansl-Schmuckler Templates schätzen
+                var (keyIndex, isMinor, confidence) = EstimateKeyFromChroma(chroma);
+
+                // Optional: Metrik speichern
+                try { obj["KeyConfidence"] = confidence * 100.0; } catch { }
+
+                if (keyIndex < 0)
+                {
+                    return "Unknown";
+                }
+
+                return KeyNameFromIndex(keyIndex, isMinor);
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log(ex);
+                return string.Empty;
+            }
+            finally
+            {
+                sw.Stop();
+                obj["KeyScan"] = sw.Elapsed.TotalMilliseconds;
+            }
+        }
+
+
+
+        // --- Improved BPM estimator using spectral-flux novelty + ACF (auto-range aware) ---
+        internal static async Task<double> EstimateBpmAsync(float[] samples, int sampleRate, int minBpm, int maxBpm)
+        {
+            if (samples == null || samples.Length == 0 || sampleRate <= 0 || minBpm <= 0 || maxBpm <= minBpm)
+            {
+                return 0.0;
+            }
+
+            return await Task.Run(() =>
+            {
+                // Spectral-flux novelty
+                int fftSize = ChooseFftSize(sampleRate);
+                int hopSize = Math.Max(256, fftSize / 4);
+                var novelty = ComputeSpectralFluxNovelty(samples, sampleRate, fftSize, hopSize);
+                if (novelty.Length < 8)
+                {
+                    return 0.0;
+                }
+
+                // Normalize novelty
+                NormalizeZeroMeanUnitVar(novelty);
+
+                // ACF of novelty
+                var acf = ComputeAcf(novelty);
+                int noveltyRate = Math.Max(1, sampleRate / hopSize);
+
+                // Best lag selection with parabolic interpolation + harmonic disambiguation
+                int bestLag = BestLagFromAcf(acf, noveltyRate, minBpm, maxBpm);
+                if (bestLag <= 0)
+                {
+                    return 0.0;
+                }
+
+                double baseBpm = 60.0 * noveltyRate / bestLag;
+
+                // Harmonic check: consider x0.5 and x2 BPMs within bounds; choose with stronger peak
+                double bpmHalf = baseBpm / 2.0;
+                double bpmDouble = baseBpm * 2.0;
+                double bestBpm = baseBpm;
+                double bestPeak = PeakAtBpm(acf, noveltyRate, baseBpm);
+
+                void TryCandidate(double cand)
+                {
+                    if (cand < minBpm || cand > maxBpm)
+                    {
+                        return;
+                    }
+
+                    double pv = PeakAtBpm(acf, noveltyRate, cand);
+                    // prefer simpler (lower) BPM when peaks are close
+                    if (pv > bestPeak * 1.05 || (pv > bestPeak * 0.95 && cand < bestBpm))
+                    {
+                        bestPeak = pv;
+                        bestBpm = cand;
+                    }
+                }
+                TryCandidate(bpmHalf);
+                TryCandidate(bpmDouble);
+
+                // Light smoothing to common ranges (round to 0.1 bpm)
+                bestBpm = Math.Round(bestBpm * 10.0) / 10.0;
+                return bestBpm;
+            }).ConfigureAwait(false);
+        }
+
+        // Helpers for BPM and Timing
+        private static (int minBpm, int maxBpm) ResolveTempoBounds(int? minBpm, int? maxBpm, double? hint)
+        {
+            int minDefault = 50;
+            int maxDefault = 200;
+
+            int minEff = minBpm ?? 0;
+            int maxEff = maxBpm ?? 0;
+
+            if (minEff <= 0 && maxEff <= 0)
+            {
+                if (hint.HasValue && hint.Value > 0)
+                {
+                    // Use a band around hint
+                    double h = hint.Value;
+                    minEff = (int) Math.Max(30, Math.Round(h / 2.0));
+                    maxEff = (int) Math.Min(260, Math.Round(h * 2.0));
                 }
                 else
                 {
-                    normalized = bestK <= 8 ? bestK / 8.0 : bestK / 12.0;
+                    minEff = minDefault;
+                    maxEff = maxDefault;
+                }
+            }
+            else if (minEff <= 0)
+            {
+                minEff = Math.Max(30, (int) Math.Round((maxEff / 2.0)));
+            }
+            else if (maxEff <= 0)
+            {
+                maxEff = Math.Min(260, (int) Math.Round(minEff * 2.0));
+            }
+
+            if (minEff > maxEff)
+            {
+                (minEff, maxEff) = (maxEff, minEff);
+            }
+
+            // ensure reasonable span
+            if (maxEff - minEff < 10)
+            {
+                int pad = 5;
+                minEff = Math.Max(30, minEff - pad);
+                maxEff = Math.Min(260, maxEff + pad);
+            }
+
+            return (minEff, maxEff);
+        }
+
+        private static double[] ComputeSpectralFluxNovelty(float[] samples, int sampleRate, int fftSize, int hopSize)
+        {
+            int n = samples.Length;
+            if (n <= 0)
+            {
+                return Array.Empty<double>();
+            }
+
+            double[] window = HannWindow(fftSize);
+            int nFrames = 1 + Math.Max(0, (n - fftSize) / hopSize);
+            if (nFrames <= 1)
+            {
+                // Zero-pad
+                nFrames = 1;
+            }
+
+            double[] flux = new double[nFrames];
+            float[] prevMag = new float[fftSize / 2];
+
+            for (int f = 0; f < nFrames; f++)
+            {
+                int start = f * hopSize;
+                MathNet.Numerics.Complex32[] fft = new MathNet.Numerics.Complex32[fftSize];
+                for (int i = 0; i < fftSize; i++)
+                {
+                    float s = (start + i) < n ? samples[start + i] : 0f;
+                    fft[i] = new MathNet.Numerics.Complex32((float) (s * window[i]), 0f);
                 }
 
-                normalized = Math.Clamp(normalized, 0.125, 1.0);
-                return (float) normalized;
-            });
+                Fourier.Forward(fft, FourierOptions.Matlab);
+
+                double sumPos = 0.0;
+                int nyq = fftSize / 2;
+                for (int k = 1; k < nyq; k++)
+                {
+                    float mag = fft[k].Magnitude;
+                    float diff = mag - prevMag[k];
+                    if (diff > 0)
+                    {
+                        sumPos += diff;
+                    }
+
+                    prevMag[k] = mag;
+                }
+                flux[f] = sumPos;
+            }
+
+            // Post-process: log compression + high-pass (subtract moving average)
+            for (int i = 0; i < flux.Length; i++)
+            {
+                flux[i] = Math.Log10(1.0 + flux[i]);
+            }
+
+            int ma = Math.Max(1, flux.Length / 64);
+            double[] running = new double[flux.Length];
+            double acc = 0.0;
+            for (int i = 0; i < flux.Length; i++)
+            {
+                acc += flux[i];
+                if (i >= ma)
+                {
+                    acc -= flux[i - ma];
+                }
+
+                running[i] = acc / Math.Min(i + 1, ma);
+            }
+            for (int i = 0; i < flux.Length; i++)
+            {
+                flux[i] = Math.Max(0.0, flux[i] - running[i]);
+            }
+
+            return flux;
+        }
+
+        private static double[] ComputeAcf(double[] x)
+        {
+            int n = x.Length;
+            int L = 1; while (L < 2 * n)
+            {
+                L <<= 1;
+            }
+
+            var fft = new MathNet.Numerics.Complex32[L];
+            for (int i = 0; i < n; i++)
+            {
+                fft[i] = new MathNet.Numerics.Complex32((float) x[i], 0f);
+            }
+
+            for (int i = n; i < L; i++)
+            {
+                fft[i] = MathNet.Numerics.Complex32.Zero;
+            }
+
+            Fourier.Forward(fft, FourierOptions.Matlab);
+            for (int i = 0; i < L; i++) { var v = fft[i]; fft[i] = new MathNet.Numerics.Complex32(v.Magnitude * v.Magnitude, 0f); }
+            Fourier.Inverse(fft, FourierOptions.Matlab);
+            double r0 = Math.Max(fft[0].Real, 1e-12f);
+            double[] acf = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                acf[i] = fft[i].Real / r0;
+            }
+
+            return acf;
+        }
+
+        private static int BestLagFromAcf(double[] acf, int frameRate, int minBpm, int maxBpm)
+        {
+            if (acf == null || acf.Length < 4)
+            {
+                return -1;
+            }
+
+            int n = acf.Length;
+            int minLag = Math.Clamp((int) Math.Round(frameRate * 60.0 / Math.Max(maxBpm, 1)), 1, n - 1);
+            int maxLag = Math.Clamp((int) Math.Round(frameRate * 60.0 / Math.Max(minBpm, 1)), minLag, n - 1);
+
+            int bestLag = -1; double bestVal = double.NegativeInfinity;
+            for (int k = minLag; k <= maxLag; k++)
+            {
+                double val = acf[k];
+                if (val > bestVal)
+                {
+                    bestVal = val; bestLag = k;
+                }
+            }
+            if (bestLag <= 0)
+            {
+                return -1;
+            }
+
+            // Parabolic interpolation around bestLag
+            if (bestLag > minLag && bestLag < maxLag)
+            {
+                double y1 = acf[bestLag - 1];
+                double y2 = acf[bestLag];
+                double y3 = acf[bestLag + 1];
+                double denom = (y1 - 2 * y2 + y3);
+                if (Math.Abs(denom) > 1e-12)
+                {
+                    double delta = 0.5 * (y1 - y3) / denom;
+                    double lagF = Math.Clamp(bestLag + delta, minLag, maxLag);
+                    bestLag = (int) Math.Round(lagF);
+                }
+            }
+            return bestLag;
+        }
+
+        private static double PeakAtBpm(double[] acf, int frameRate, double bpm)
+        {
+            if (bpm <= 0)
+            {
+                return 0.0;
+            }
+
+            double lag = (frameRate * 60.0) / bpm;
+            int k = (int) Math.Round(lag);
+            k = Math.Clamp(k, 1, acf.Length - 1);
+            return Math.Max(0.0, acf[k]);
         }
 
         private static double[] BuildMeterTemplate(int K)
@@ -584,6 +682,249 @@ namespace ModularAudience.Audio
             }
 
             return sum / Math.Max(1, a.Length);
+        }
+
+        private static int ChooseFftSize(int sampleRate)
+        {
+            // Wähle FFT-Größe zwischen 4096..16384 abhängig von Fs (2er-Potenz)
+            int target = sampleRate <= 32000 ? 4096 : sampleRate <= 48000 ? 8192 : 16384;
+            return NextPow2(target);
+        }
+
+        private static int NextPow2(int n)
+        {
+            int p = 1;
+            while (p < n)
+            {
+                p <<= 1;
+            }
+
+            return p;
+        }
+
+        private static double[] HannWindow(int n)
+        {
+            double[] w = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                w[i] = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / Math.Max(1, (n - 1))));
+            }
+            return w;
+        }
+
+        private static double[] ComputeChromaSTFT(float[] mono, int sampleRate, int fftSize, int hopSize, double minFreq, double maxFreq, int harmonics = 4, bool whitening = true, bool perFrameNormalize = true)
+        {
+            if (mono.Length < fftSize)
+            {
+                // Zero-Pad auf fftSize
+                Array.Resize(ref mono, fftSize);
+            }
+
+            double[] window = HannWindow(fftSize);
+            int nFrames = 1 + (mono.Length - fftSize) / Math.Max(1, hopSize);
+            if (nFrames <= 0)
+            {
+                nFrames = 1;
+            }
+
+            // Globale Chromasumme
+            double[] chromaSum = new double[12];
+
+            // Parallelisierte Rahmenschleife mit Thread-lokalen Akkus
+            System.Threading.Tasks.Parallel.For(0, nFrames,
+                () => new double[12],
+                (frameIdx, state, localChroma) =>
+                {
+                    int start = frameIdx * hopSize;
+                    int end = Math.Min(start + fftSize, mono.Length);
+
+                    // Fenster kopieren und fenstern
+                    MathNet.Numerics.Complex32[] fft = new MathNet.Numerics.Complex32[fftSize];
+                    for (int i = 0; i < fftSize; i++)
+                    {
+                        float s = (start + i) < mono.Length ? mono[start + i] : 0f;
+                        fft[i] = new MathNet.Numerics.Complex32((float) (s * window[i]), 0f);
+                    }
+
+                    // FFT
+                    Fourier.Forward(fft, FourierOptions.Matlab);
+
+                    // Magnituden -> Pitch-Classes (HPCP-ähnlich)
+                    // Einfaches Whitening: Frequenzgewichtung ~ sqrt(f) gegen 1/f-Spektralschräge
+                    int nyq = fftSize / 2;
+                    for (int k = 1; k < nyq; k++)
+                    {
+                        double freq = (double) k * sampleRate / fftSize;
+                        if (freq < minFreq || freq > maxFreq)
+                        {
+                            continue;
+                        }
+
+                        double mag2 = fft[k].Magnitude * fft[k].Magnitude;
+                        if (whitening)
+                        {
+                            mag2 *= Math.Sqrt(Math.Max(1e-9, freq));
+                        }
+
+                        // Harmonics summieren (verteilte Zuordnung auf Pitch-Classes)
+                        for (int h = 1; h <= Math.Max(1, harmonics); h++)
+                        {
+                            double fH = freq * h;
+                            if (fH > maxFreq)
+                            {
+                                break;
+                            }
+
+                            // MIDI (A4=440Hz -> 69)
+                            double midi = 69.0 + 12.0 * Math.Log(fH / 440.0, 2.0);
+                            int mLow = (int) Math.Floor(midi);
+                            int mHigh = mLow + 1;
+                            double wHigh = midi - mLow;
+                            double wLow = 1.0 - wHigh;
+
+                            int pcLow = ((mLow % 12) + 12) % 12;
+                            int pcHigh = ((mHigh % 12) + 12) % 12;
+
+                            // Gewichte mit 1/h abschwächen
+                            double contrib = mag2 / h;
+                            localChroma[pcLow] += contrib * wLow;
+                            localChroma[pcHigh] += contrib * wHigh;
+                        }
+                    }
+
+                    // Per-Frame Normalisierung (Robustheit)
+                    if (perFrameNormalize)
+                    {
+                        NormalizeVectorInPlace(localChroma);
+                    }
+
+                    return localChroma;
+                },
+                localChroma =>
+                {
+                    lock (chromaSum)
+                    {
+                        for (int i = 0; i < 12; i++)
+                        {
+                            chromaSum[i] += localChroma[i];
+                        }
+                    }
+                }
+            );
+
+            // Mittelwert über Frames
+            for (int i = 0; i < 12; i++)
+            {
+                chromaSum[i] = Math.Max(0.0, chromaSum[i]);
+            }
+            NormalizeVectorInPlace(chromaSum);
+
+            return chromaSum;
+        }
+
+        private static void NormalizeVectorInPlace(double[] v)
+        {
+            double sum = 0.0;
+            for (int i = 0; i < v.Length; i++)
+            {
+                if (double.IsFinite(v[i]))
+                {
+                    sum += Math.Abs(v[i]);
+                }
+            }
+            if (sum <= 1e-12)
+            {
+                return;
+            }
+
+            for (int i = 0; i < v.Length; i++)
+            {
+                v[i] = v[i] / sum;
+            }
+        }
+
+        private static (int key, bool isMinor, double confidence) EstimateKeyFromChroma(double[] chroma)
+        {
+            if (chroma == null || chroma.Length != 12)
+            {
+                return (-1, false, 0.0);
+            }
+
+            // Krumhansl Templates
+            double[] majorTpl = NormalizeTemplate(new double[] { 6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88 });
+            double[] minorTpl = NormalizeTemplate(new double[] { 6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17 });
+
+            int bestKey = -1;
+            bool bestIsMinor = false;
+            double bestScore = double.NegativeInfinity;
+            double secondBest = double.NegativeInfinity;
+
+            for (int shift = 0; shift < 12; shift++)
+            {
+                double scoreMaj = Dot(chroma, Rotate(majorTpl, shift));
+                if (scoreMaj > bestScore)
+                {
+                    secondBest = bestScore;
+                    bestScore = scoreMaj;
+                    bestKey = shift;
+                    bestIsMinor = false;
+                }
+                else if (scoreMaj > secondBest)
+                {
+                    secondBest = scoreMaj;
+                }
+
+                double scoreMin = Dot(chroma, Rotate(minorTpl, shift));
+                if (scoreMin > bestScore)
+                {
+                    secondBest = bestScore;
+                    bestScore = scoreMin;
+                    bestKey = shift;
+                    bestIsMinor = true;
+                }
+                else if (scoreMin > secondBest)
+                {
+                    secondBest = scoreMin;
+                }
+            }
+
+            double confidence = bestScore > 0 ? Math.Max(0.0, (bestScore - Math.Max(0.0, secondBest)) / Math.Max(1e-9, bestScore)) : 0.0;
+
+            return (bestKey, bestIsMinor, confidence);
+        }
+
+        private static double[] NormalizeTemplate(double[] tpl)
+        {
+            double sum = tpl.Sum();
+            if (sum <= 1e-12)
+            {
+                return tpl;
+            }
+
+            double[] r = new double[tpl.Length];
+            for (int i = 0; i < tpl.Length; i++)
+            {
+                r[i] = tpl[i] / sum;
+            }
+            return r;
+        }
+
+        private static double Dot(double[] a, double[] b)
+        {
+            double s = 0.0;
+            for (int i = 0; i < a.Length; i++)
+            {
+                s += a[i] * b[i];
+            }
+            return s;
+        }
+
+        private static string KeyNameFromIndex(int key, bool isMinor)
+        {
+            // 0=C, 1=C#, ..., 11=B
+            string[] names = new[] { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+            string root = names[((key % 12) + 12) % 12];
+            return isMinor ? $"{root} minor" : $"{root} major";
         }
     }
 }
