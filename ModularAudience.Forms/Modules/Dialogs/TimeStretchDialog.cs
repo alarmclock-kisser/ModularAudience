@@ -29,6 +29,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.numericUpDown_chunkSize.Tag = (int) this.numericUpDown_chunkSize.Value;
             this.numericUpDown_initialBpm.Value = this.Track.Bpm > 0 ? (decimal) this.Track.Bpm : this.Track.ScannedBpm > 30 ? (decimal) this.Track.ScannedBpm : 120;
+            this.numericUpDown_threads.Maximum = Math.Max(Environment.ProcessorCount, 1);
+            this.numericUpDown_threads.Value = Math.Max(Environment.ProcessorCount - 1, 1);
+            
 
             this.FormClosing += this.TimeStretchDialog_FormClosing;
         }
@@ -94,7 +97,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     (double) this.numericUpDown_stretchFactor.Value,
                     keepData: false,
                     normalize: 1.0f,
-                    maxWorkers: null,
+                    maxWorkers: (int) this.numericUpDown_threads.Value,
                     progress: progress);
 
                 await this.trackView.ApplyStretchedAudioAsync(result);

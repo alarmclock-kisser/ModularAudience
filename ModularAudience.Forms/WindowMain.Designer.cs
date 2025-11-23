@@ -37,6 +37,7 @@
             this.button_scanTiming = new Button();
             this.textBox_scanKeyResult = new TextBox();
             this.button_scanKey = new Button();
+            this.button_timeStretch = new Button();
             this.SuspendLayout();
             // 
             // button_import
@@ -135,11 +136,22 @@
             this.button_scanKey.UseVisualStyleBackColor = true;
             this.button_scanKey.Click += this.button_scanKey_Click;
             // 
+            // button_timeStretch
+            // 
+            this.button_timeStretch.Location = new Point(511, 12);
+            this.button_timeStretch.Name = "button_timeStretch";
+            this.button_timeStretch.Size = new Size(90, 23);
+            this.button_timeStretch.TabIndex = 9;
+            this.button_timeStretch.Text = "Time Stretch";
+            this.button_timeStretch.UseVisualStyleBackColor = true;
+            this.button_timeStretch.Click += this.button_timeStretch_Click;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(704, 321);
+            this.Controls.Add(this.button_timeStretch);
             this.Controls.Add(this.textBox_scanKeyResult);
             this.Controls.Add(this.button_scanKey);
             this.Controls.Add(this.textBox_scanTimingResult);
@@ -166,5 +178,6 @@
         private Button button_scanTiming;
         private TextBox textBox_scanKeyResult;
         private Button button_scanKey;
+        private Button button_timeStretch;
     }
 }

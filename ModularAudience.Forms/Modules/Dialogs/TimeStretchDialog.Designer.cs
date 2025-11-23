@@ -41,11 +41,14 @@
             this.label_info_overlap = new Label();
             this.numericUpDown_overlap = new NumericUpDown();
             this.progressBar_stretching = new ProgressBar();
+            this.label_info_threads = new Label();
+            this.numericUpDown_threads = new NumericUpDown();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_initialBpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_targetBpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_stretchFactor).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_chunkSize).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_overlap).BeginInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_threads).BeginInit();
             this.SuspendLayout();
             // 
             // numericUpDown_initialBpm
@@ -183,11 +186,30 @@
             this.progressBar_stretching.Style = ProgressBarStyle.Continuous;
             this.progressBar_stretching.TabIndex = 12;
             // 
+            // label_info_threads
+            // 
+            this.label_info_threads.AutoSize = true;
+            this.label_info_threads.Location = new Point(377, 9);
+            this.label_info_threads.Name = "label_info_threads";
+            this.label_info_threads.Size = new Size(49, 15);
+            this.label_info_threads.TabIndex = 14;
+            this.label_info_threads.Text = "Threads";
+            // 
+            // numericUpDown_threads
+            // 
+            this.numericUpDown_threads.Location = new Point(377, 27);
+            this.numericUpDown_threads.Maximum = new decimal(new int[] { 0, 0, 0, 0 });
+            this.numericUpDown_threads.Name = "numericUpDown_threads";
+            this.numericUpDown_threads.Size = new Size(75, 23);
+            this.numericUpDown_threads.TabIndex = 13;
+            // 
             // TimeStretchDialog
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(464, 201);
+            this.Controls.Add(this.label_info_threads);
+            this.Controls.Add(this.numericUpDown_threads);
             this.Controls.Add(this.progressBar_stretching);
             this.Controls.Add(this.label_info_overlap);
             this.Controls.Add(this.numericUpDown_overlap);
@@ -208,6 +230,7 @@
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_stretchFactor).EndInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_chunkSize).EndInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_overlap).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_threads).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -227,5 +250,7 @@
         private Label label_info_overlap;
         private NumericUpDown numericUpDown_overlap;
         private ProgressBar progressBar_stretching;
+        private Label label_info_threads;
+        private NumericUpDown numericUpDown_threads;
     }
 }

@@ -152,6 +152,8 @@
             this.Controls.Add(this.button_loop);
             this.Controls.Add(this.button_playback);
             this.Controls.Add(this.button_pause);
+            this.MaximumSize = new Size(8192, 236);
+            this.MinimumSize = new Size(400, 236);
             this.Name = "TrackView";
             this.Text = "#00 - No Track Loaded";
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_waveform).EndInit();

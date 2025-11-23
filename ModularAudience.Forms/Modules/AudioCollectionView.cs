@@ -108,14 +108,10 @@ namespace ModularAudience.Forms
                         AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
                         if (selectedAudio != null)
                         {
-                            var result = MessageBox.Show($"Are you sure you want to delete '{selectedAudio.Name}'?", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                            if (result == DialogResult.Yes)
-                            {
-                                await this.AudioC.RemoveAsync(selectedAudio.Id);
-                                this.listBox_audios.DataSource = null;
-                                this.listBox_audios.DataSource = this.AudioC.Audios;
-                                this.listBox_audios.DisplayMember = "Name";
-                            }
+                            await this.AudioC.RemoveAsync(selectedAudio.Id);
+                            this.listBox_audios.DataSource = null;
+                            this.listBox_audios.DataSource = this.AudioC.Audios;
+                            this.listBox_audios.DisplayMember = "Name";
                         }
                     };
                     contextMenu.Items.AddRange([renameItem, deleteItem]);

@@ -314,11 +314,11 @@ namespace ModularAudience.Forms
         {
             if (this.checkBox_singleCollection.Checked)
             {
-                MergeCollectionsToSingle();
+                this.MergeCollectionsToSingle();
             }
             else
             {
-                RebuildCollectionsFromTags();
+                this.RebuildCollectionsFromTags();
             }
         }
 
@@ -515,7 +515,7 @@ namespace ModularAudience.Forms
             }
 
             int num = GetCollectionNumber(targetView);
-            _audioCollectionTags[audio.Id] = num;
+            AudioCollectionTags[audio.Id] = num;
         }
 
         private static void UpdateTrackDependentUI()
@@ -627,7 +627,7 @@ namespace ModularAudience.Forms
             }
 
             string scannedKey = await BeatScanner.ScanKeyAsync(LastSelectedTrackView.OriginalAudio);
-            
+
             this.textBox_scanKeyResult.Text = scannedKey;
             LastSelectedTrackView.OriginalAudio.ScannedKey = scannedKey;
         }
@@ -646,13 +646,25 @@ namespace ModularAudience.Forms
                 float num = timing * denom * 4; // 4/4 als Basis
                 if (Math.Abs(num - MathF.Round(num)) < 0.0001f)
                 {
-                    int numerator = (int)MathF.Round(num);
+                    int numerator = (int) MathF.Round(num);
                     int denominator = denom * 4;
                     return $"{numerator} / {denominator}";
                 }
             }
             // Fallback: Dezimalwert
             return timing.ToString("0.###");
+        }
+
+        private void button_timeStretch_Click(object sender, EventArgs e)
+        {
+            if (LastSelectedTrackView == null || LastSelectedTrackView.IsDisposed)
+            {
+                MessageBox.Show(this, "No track selected.", "Time Stretch", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using var dlg = new ModularAudience.Forms.Modules.Dialogs.TimeStretchDialog(LastSelectedTrackView);
+            dlg.ShowDialog(this);
         }
     }
 }

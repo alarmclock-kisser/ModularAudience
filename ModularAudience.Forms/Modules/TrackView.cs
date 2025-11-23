@@ -46,7 +46,6 @@ namespace ModularAudience.Forms.Modules
         private long loopBaseEndSamples;
         private long loopFractionSamples;
         private bool suppressSettingsCheckbox;
-        private readonly int designerFormWidth;
         private readonly int designerClientWidth;
         private readonly int designerWaveWidth;
 
@@ -54,10 +53,8 @@ namespace ModularAudience.Forms.Modules
         {
             this.InitializeComponent();
             this.StartPosition = FormStartPosition.Manual;
-            this.designerFormWidth = this.Width;
             this.designerClientWidth = this.ClientSize.Width;
             this.designerWaveWidth = this.pictureBox_waveform.Width;
-            this.MaximumSize = new Size(this.designerFormWidth, int.MaxValue);
             this.OriginalAudio = audio.Clone();
             this.Settings = new TrackViewSettings(this)
             {
@@ -70,10 +67,11 @@ namespace ModularAudience.Forms.Modules
             this.ApplySettingsAppearance();
 
             // Setze LastSelectedTrackView bei Aktivierung, Fokus oder Klick auf die Form
-            this.Activated += (_, __) => SetAsLastSelected();
-            this.GotFocus += (_, __) => SetAsLastSelected();
-            this.MouseDown += (_, __) => SetAsLastSelected();
-            RegisterInteractionEvents(this);
+            this.Activated += (_, __) => this.SetAsLastSelected();
+            this.GotFocus += (_, __) => this.SetAsLastSelected();
+            this.MouseDown += (_, __) => this.SetAsLastSelected();
+            this.RegisterInteractionEvents(this);
+            this.SizeChanged += TrackView_SizeChanged;
 
             this.Text = "#" + WindowMain.TrackViews.Count.ToString("D2") + " - " + audio.Name;
             this.OriginalAudio.SelectionStart = -1;
@@ -135,12 +133,12 @@ namespace ModularAudience.Forms.Modules
         {
             foreach (Control ctrl in parent.Controls)
             {
-                ctrl.Click += (_, __) => SetAsLastSelected();
-                ctrl.GotFocus += (_, __) => SetAsLastSelected();
-                ctrl.MouseDown += (_, __) => SetAsLastSelected();
+                ctrl.Click += (_, __) => this.SetAsLastSelected();
+                ctrl.GotFocus += (_, __) => this.SetAsLastSelected();
+                ctrl.MouseDown += (_, __) => this.SetAsLastSelected();
                 if (ctrl.HasChildren)
                 {
-                    RegisterInteractionEvents(ctrl);
+                    this.RegisterInteractionEvents(ctrl);
                 }
             }
         }
@@ -212,16 +210,22 @@ namespace ModularAudience.Forms.Modules
         {
             desiredWidth = Math.Max(1, desiredWidth);
             int nonWaveWidth = Math.Max(0, this.designerClientWidth - this.designerWaveWidth);
-            int newClientWidth = desiredWidth + nonWaveWidth;
-            if (this.MinimumSize.Width > 0)
-            {
-                newClientWidth = Math.Max(this.MinimumSize.Width, newClientWidth);
-            }
-            newClientWidth = Math.Min(this.designerClientWidth, newClientWidth);
+
+            int chromeWidth = Math.Max(0, this.Width - this.ClientSize.Width);
+            int minClientWidth = this.MinimumSize.Width > 0
+                ? Math.Max(1, this.MinimumSize.Width - chromeWidth)
+                : 1;
+            int maxClientWidth = this.MaximumSize.Width > 0
+                ? Math.Max(minClientWidth, this.MaximumSize.Width - chromeWidth)
+                : int.MaxValue;
+
+            int newClientWidth = Math.Clamp(desiredWidth + nonWaveWidth, minClientWidth, maxClientWidth);
             this.ClientSize = new Size(newClientWidth, this.ClientSize.Height);
-            this.pictureBox_waveform.Width = desiredWidth;
+
+            int availableWidth = Math.Max(1, newClientWidth - nonWaveWidth);
+            this.pictureBox_waveform.Width = availableWidth;
             this.hScrollBar_offset.Left = this.pictureBox_waveform.Left;
-            this.hScrollBar_offset.Width = Math.Max(0, desiredWidth - 1);
+            this.hScrollBar_offset.Width = Math.Max(0, availableWidth);
         }
 
         private void PositionSettingsWindow()
@@ -309,7 +313,7 @@ namespace ModularAudience.Forms.Modules
                 current = TimeSpan.FromSeconds(frame / (double) sampleRate);
                 this.textBox_time.ForeColor = Color.Black;
             }
-            this.textBox_time.Text = current.ToString("c");
+            this.textBox_time.Text = string.Format("{0}:{1:D2}:{2:D2}.{3:D3}", (int) current.TotalHours, current.Minutes, current.Seconds, current.Milliseconds);
         }
 
         private async Task RefreshWaveformAsync()
@@ -790,7 +794,7 @@ namespace ModularAudience.Forms.Modules
                 {
                     this.loopDenominator = 1;
                 }
-                this.button_loop.Font = new Font("Segoe UI Symbol", 7f, FontStyle.Bold);
+                this.button_loop.Font = new Font("Segoe UI Symbol", 6f, FontStyle.Bold);
             }
             else
             {
@@ -839,7 +843,7 @@ namespace ModularAudience.Forms.Modules
             long regionLen = Math.Max(1, this.loopBaseEndSamples - this.loopBaseStartSamples);
             if (this.loopEnabled && this.loopDenominator > 0)
             {
-                this.loopFractionSamples = CalculateLoopFractionLength(regionLen);
+                this.loopFractionSamples = this.CalculateLoopFractionLength(regionLen);
             }
             else
             {
@@ -993,6 +997,20 @@ namespace ModularAudience.Forms.Modules
             return (float) Math.Clamp(px / width, 0.0, 1.0);
         }
 
+        private void TrackView_SizeChanged(object? sender, EventArgs e)
+        {
+            int left = this.pictureBox_waveform.Left;
+            int nonWaveWidth = Math.Max(0, this.designerClientWidth - this.designerWaveWidth);
+            int desiredWidth = Math.Max(1, this.ClientSize.Width - nonWaveWidth);
+
+            this.pictureBox_waveform.Width = desiredWidth;
+            this.hScrollBar_offset.Left = left;
+            this.hScrollBar_offset.Width = Math.Max(0, desiredWidth);
+
+            this.UpdateOffsetScrollbar();
+            this.RequestWaveformRender();
+        }
+
         private async Task StopPlaybackAsync()
         {
             var cts = Interlocked.Exchange(ref this.playbackCts, null);
@@ -1087,6 +1105,71 @@ namespace ModularAudience.Forms.Modules
             {
                 try { action(); } catch { }
             }
+        }
+
+        public async Task ApplyStretchedAudioAsync(AudioObj result)
+        {
+            if (result == null)
+            {
+                return;
+            }
+
+            await this.StopPlaybackAsync();
+            this.CancelPendingRender();
+
+            var original = this.OriginalAudio;
+            float[] newData = result.Data ?? Array.Empty<float>();
+            original.Data = newData;
+            original.SampleRate = result.SampleRate;
+            original.Channels = result.Channels;
+            original.BitDepth = result.BitDepth;
+            original.Bpm = result.Bpm;
+            original.ScannedBpm = result.ScannedBpm;
+            original.ScannedTiming = result.ScannedTiming;
+            original.ScannedKey = result.ScannedKey;
+            original.Timing = result.Timing;
+            original.Volume = result.Volume;
+            original.ChunkSize = result.ChunkSize;
+            original.OverlapSize = result.OverlapSize;
+            original.StretchFactor = result.StretchFactor;
+            original.SampleTag = result.SampleTag;
+            original.ScrollOffset = 0;
+            original.StartingOffset = 0;
+            original.SelectionStart = -1;
+            original.SelectionEnd = -1;
+            original.LoopEnabled = false;
+
+            long sampleCount = newData.LongLength;
+            original.Length = sampleCount;
+            int channels = Math.Max(1, original.Channels);
+            int sampleRate = Math.Max(1, original.SampleRate);
+            original.Duration = TimeSpan.FromSeconds(sampleCount / (double) (sampleRate * channels));
+
+            original.Metrics.Clear();
+            foreach (var metric in result.Metrics)
+            {
+                original.Metrics[metric.Key] = metric.Value;
+            }
+
+            this.OriginalAudio.SetPosition(0);
+            this.offsetFrames = 0;
+            this.lastClickFrame = 0;
+            this.selectStartFrame = -1;
+            this.selectEndFrame = -1;
+            this.pendingSelect = false;
+            this.dragSelecting = false;
+            this.loopEnabled = false;
+            this.loopDenominator = 0;
+            this.loopFractionSamples = 0;
+            this.button_loop.Text = "↺";
+            this.button_loop.ForeColor = Color.Black;
+            this.button_loop.Font = new Font("Segoe UI Symbol", 9f, FontStyle.Bold);
+
+            this.RecalculateLoopFraction();
+            this.ApplyLoopFractionToAudio();
+            this.UpdateOffsetScrollbar();
+            await this.RefreshWaveformAsync();
+            this.UpdateTimeDisplay();
         }
     }
 }
