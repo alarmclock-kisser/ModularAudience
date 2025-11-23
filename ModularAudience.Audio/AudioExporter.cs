@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.IO;
 using NAudience.Core;
 using NAudio.Wave;
 
@@ -9,7 +10,7 @@ namespace ModularAudience.Audio
         // Fields
         public string ExportDirectory { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CSharpSamplesCutter", "Breakbot404_Exports");
 
-        public readonly Dictionary<string, int[]> AvailableExportFormats = new()
+        public static readonly Dictionary<string, int[]> AvailableExportFormats = new()
         {
             { ".wav", new[] { 8, 16, 24 } },
             { ".mp3", new[] { 24, 64, 96, 128, 192, 256, 320 } }
@@ -102,24 +103,40 @@ namespace ModularAudience.Audio
             return outFile;
         }
 
-        public async Task<string?> ExportWavAsync(AudioObj audio, int bitDepth = 24, string? outDir = null, bool writeBpmTag = true)
+        public async Task<string?> ExportWavAsync(AudioObj audio, int bitDepth = 24, string? outDir = null, bool writeBpmTag = true, string? customFilePath = null)
         {
             if (audio.Data == null || audio.Data.Length == 0)
             {
                 return "AudioObj data was null or empty";
             }
 
-            if (string.IsNullOrEmpty(outDir))
+            string? targetDirectory = outDir;
+            string finalPath;
+
+            if (!string.IsNullOrEmpty(customFilePath))
             {
-                outDir = this.ExportDirectory;
+                finalPath = Path.ChangeExtension(customFilePath, ".wav");
+                targetDirectory = Path.GetDirectoryName(finalPath);
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(targetDirectory))
+                {
+                    targetDirectory = this.ExportDirectory;
+                }
+
+                string baseFileName = $"{audio.Name.Replace("▶ ", "").Replace("|| ", "")}{(audio.Bpm > 10 ? (" [" + audio.Bpm.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) + "]") : "")}".Trim();
+                finalPath = Path.Combine(targetDirectory!, $"{baseFileName}.wav");
             }
 
-            string baseFileName = $"{audio.Name.Replace("▶ ", "").Replace("|| ", "")}{(audio.Bpm > 10 ? (" [" + audio.Bpm.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) + "]") : "")}".Trim();
-            string finalPath = Path.Combine(outDir, $"{baseFileName}.wav");
-
-            if (!Directory.Exists(outDir))
+            if (string.IsNullOrEmpty(targetDirectory))
             {
-                return "Out directory does not exist: " + outDir;
+                return "Out directory does not exist: (null)";
+            }
+
+            if (!Directory.Exists(targetDirectory))
+            {
+                Directory.CreateDirectory(targetDirectory);
             }
 
             Stopwatch sw = Stopwatch.StartNew();

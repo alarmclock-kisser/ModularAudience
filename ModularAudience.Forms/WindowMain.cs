@@ -3,6 +3,7 @@ using ModularAudience.Forms.Modules;
 using NAudience.Core;
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
@@ -38,6 +39,7 @@ namespace ModularAudience.Forms
         private const int CollectionBaseMargin = 5;
         private static readonly Padding TrackViewScreenMargin = new(20, 20, 20, 20);
         private static readonly Size TrackViewSpacing = new(15, 12);
+        private bool suppressExportFormatEvent;
 
         public WindowMain()
         {
@@ -53,6 +55,9 @@ namespace ModularAudience.Forms
             this.checkBox_singleCollection.CheckedChanged += this.checkBox_singleCollection_CheckedChanged;
             this.LocationChanged += (_, __) => this.PositionCollectionViews();
             this.SizeChanged += (_, __) => this.PositionCollectionViews();
+
+            this.InitializeExportControls();
+            UpdateTrackDependentUI();
         }
 
         private async void WindowMain_FormClosing(object? sender, FormClosingEventArgs e)
@@ -209,6 +214,87 @@ namespace ModularAudience.Forms
             // Positioning happens per-view on add; keep global layout untouched here.
         }
 
+        private void InitializeExportControls()
+        {
+            var orderedFormats = AudioExporter.AvailableExportFormats.Keys
+                .OrderBy(f => f.Equals(".wav", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ThenBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            this.comboBox_exportFormat.BeginUpdate();
+            this.comboBox_exportFormat.Items.Clear();
+            foreach (var format in orderedFormats)
+            {
+                this.comboBox_exportFormat.Items.Add(format);
+            }
+            this.comboBox_exportFormat.EndUpdate();
+
+            if (orderedFormats.Count == 0)
+            {
+                this.comboBox_exportFormat.SelectedIndex = -1;
+                this.comboBox_exportBits.Items.Clear();
+                this.comboBox_exportBits.SelectedIndex = -1;
+                return;
+            }
+
+            string defaultFormat = orderedFormats.FirstOrDefault(f => f.Equals(".wav", StringComparison.OrdinalIgnoreCase)) ?? orderedFormats[0];
+
+            this.suppressExportFormatEvent = true;
+            this.comboBox_exportFormat.SelectedItem = defaultFormat;
+            this.suppressExportFormatEvent = false;
+
+            this.UpdateExportBitOptions(selectMiddleOnChange: true);
+        }
+
+        private void UpdateExportBitOptions(bool selectMiddleOnChange = false)
+        {
+            if (AudioExporter.AvailableExportFormats.Count == 0)
+            {
+                this.comboBox_exportBits.Items.Clear();
+                this.comboBox_exportBits.SelectedIndex = -1;
+                return;
+            }
+
+            string? selectedFormat = this.comboBox_exportFormat.SelectedItem as string;
+            if (string.IsNullOrWhiteSpace(selectedFormat) || !AudioExporter.AvailableExportFormats.ContainsKey(selectedFormat))
+            {
+                string fallback = AudioExporter.AvailableExportFormats.Keys.First();
+                this.suppressExportFormatEvent = true;
+                this.comboBox_exportFormat.SelectedItem = fallback;
+                this.suppressExportFormatEvent = false;
+                selectedFormat = fallback;
+            }
+
+            if (!AudioExporter.AvailableExportFormats.TryGetValue(selectedFormat!, out var bitOptions) || bitOptions.Length == 0)
+            {
+                this.comboBox_exportBits.Items.Clear();
+                this.comboBox_exportBits.SelectedIndex = -1;
+                return;
+            }
+
+            int? preferredBit = null;
+            int middleIndex = Math.Clamp(bitOptions.Length / 2, 0, bitOptions.Length - 1);
+            int middleBit = bitOptions[middleIndex];
+            if (!selectMiddleOnChange && this.comboBox_exportBits.SelectedItem is int existing && bitOptions.Contains(existing))
+            {
+                preferredBit = existing;
+            }
+            else
+            {
+                preferredBit = middleBit;
+            }
+
+            this.comboBox_exportBits.BeginUpdate();
+            this.comboBox_exportBits.Items.Clear();
+            this.comboBox_exportBits.Items.AddRange(bitOptions.Cast<object>().ToArray());
+            this.comboBox_exportBits.EndUpdate();
+
+            if (preferredBit.HasValue)
+            {
+                this.comboBox_exportBits.SelectedItem = preferredBit.Value;
+            }
+        }
+
         private void button_browse_Click(object sender, EventArgs e)
         {
             string workingDir = this.AudioC.WorkingDirectory;
@@ -261,14 +347,13 @@ namespace ModularAudience.Forms
             }
 
             Rectangle workingArea = Screen.FromControl(this).WorkingArea;
-            int originX = workingArea.Left + TrackViewScreenMargin.Left;
-            int originY = workingArea.Top + TrackViewScreenMargin.Top;
-            int currentX = originX;
-            int currentY = originY;
+            int currentX = workingArea.Left;
+            int currentY = workingArea.Top;
             int columnWidth = 0;
             int maxRight = workingArea.Right - TrackViewScreenMargin.Right;
             int maxBottom = workingArea.Bottom - TrackViewScreenMargin.Bottom;
 
+            bool isFirst = true;
             foreach (var view in TrackViews.Where(tv => tv != null && !tv.IsDisposed))
             {
                 if (view == null || view.IsDisposed)
@@ -277,21 +362,32 @@ namespace ModularAudience.Forms
                 }
 
                 view.StartPosition = FormStartPosition.Manual;
+
                 view.Location = new Point(currentX, currentY);
 
                 columnWidth = Math.Max(columnWidth, view.Width);
-                currentY += view.Height + TrackViewSpacing.Height;
+
+                if (isFirst)
+                {
+                    // Nach der ersten View direkt darunter ansetzen, ohne zusätzlichen Margin
+                    currentY += view.Height + TrackViewSpacing.Height;
+                    isFirst = false;
+                }
+                else
+                {
+                    currentY += view.Height + TrackViewSpacing.Height;
+                }
 
                 bool exceedsBottom = currentY + view.Height > maxBottom;
                 if (exceedsBottom)
                 {
                     currentX += columnWidth + TrackViewSpacing.Width;
-                    currentY = originY;
+                    currentY = workingArea.Top;
                     columnWidth = 0;
 
                     if (currentX + view.Width > maxRight)
                     {
-                        currentX = originX;
+                        currentX = workingArea.Left;
                     }
                 }
             }
@@ -529,6 +625,11 @@ namespace ModularAudience.Forms
             Instance.button_scanBpm.Enabled = LastSelectedTrackView != null;
             Instance.button_scanTiming.Enabled = LastSelectedTrackView != null;
             Instance.button_scanKey.Enabled = LastSelectedTrackView != null;
+            Instance.button_timeStretch.Enabled = LastSelectedTrackView != null;
+            Instance.button_export.Enabled = LastSelectedTrackView != null;
+            Instance.comboBox_exportFormat.Enabled = LastSelectedTrackView != null;
+            Instance.comboBox_exportBits.Enabled = LastSelectedTrackView != null;
+            Instance.button_autoSamples.Enabled = LastSelectedTrackView != null;
 
             // Set scanned values to textboxes
             if (LastSelectedTrackView != null)
@@ -666,5 +767,168 @@ namespace ModularAudience.Forms
             using var dlg = new ModularAudience.Forms.Modules.Dialogs.TimeStretchDialog(LastSelectedTrackView);
             dlg.ShowDialog(this);
         }
+
+        private async void button_export_Click(object sender, EventArgs e)
+        {
+            if (LastSelectedTrackView == null || LastSelectedTrackView.IsDisposed)
+            {
+                MessageBox.Show(this, "No track selected.", "Export Audio", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            bool ctrlFlag = ModifierKeys.HasFlag(Keys.Control);
+            string formatKey = NormalizeFormatExtension(this.comboBox_exportFormat.SelectedItem as string);
+            string normalizedFormat = formatKey.TrimStart('.');
+            int bits = ResolveBitSelection(formatKey, this.comboBox_exportBits.SelectedItem);
+
+            string exportFilePath = this.AudioC.ExportPath;
+            if (ctrlFlag)
+            {
+                SaveFileDialog saveFileDialog = new()
+                {
+                    Filter = $"{normalizedFormat.ToUpperInvariant()} files|*{formatKey}",
+                    FileName = Path.GetFileName(exportFilePath),
+                    InitialDirectory = Path.GetDirectoryName(exportFilePath) ?? this.AudioC.ExportPath,
+                    OverwritePrompt = true,
+                    Title = "Select Export File Location",
+                    DefaultExt = normalizedFormat
+                };
+
+                if (saveFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    exportFilePath = saveFileDialog.FileName;
+                }
+                else
+                {
+                    return;
+                }
+            }
+
+            string? resultPath;
+            if (normalizedFormat.Equals("mp3", StringComparison.OrdinalIgnoreCase))
+            {
+                resultPath = await this.AudioC.Exporter.ExportMp3Async(LastSelectedTrackView.OriginalAudio, bits, Environment.ProcessorCount - 1, exportFilePath);
+            }
+            else
+            {
+                resultPath = await this.AudioC.Exporter.ExportWavAsync(LastSelectedTrackView.OriginalAudio, bits, exportFilePath);
+            }
+
+            if (string.IsNullOrEmpty(resultPath))
+            {
+                MessageBox.Show(this, "Export failed.", "Export Audio", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            else
+            {
+                MessageBox.Show(this, $"Exported to:\n{resultPath}", "Export Audio", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        private static string NormalizeFormatExtension(string? formatCandidate)
+        {
+            if (string.IsNullOrWhiteSpace(formatCandidate))
+            {
+                return ".wav";
+            }
+
+            string normalized = formatCandidate.Trim();
+            if (!normalized.StartsWith(".", StringComparison.Ordinal))
+            {
+                normalized = "." + normalized;
+            }
+
+            return normalized.ToLowerInvariant();
+        }
+
+        private static int ResolveBitSelection(string formatKey, object? selectedBit)
+        {
+            if (selectedBit is int bitValue)
+            {
+                return bitValue;
+            }
+
+            if (AudioExporter.AvailableExportFormats.TryGetValue(formatKey, out var bits) && bits.Length > 0)
+            {
+                if (formatKey.Equals(".wav", StringComparison.OrdinalIgnoreCase) && bits.Contains(24))
+                {
+                    return 24;
+                }
+
+                return bits[0];
+            }
+
+            var fallback = AudioExporter.AvailableExportFormats.FirstOrDefault();
+            if (fallback.Value != null && fallback.Value.Length > 0)
+            {
+                return fallback.Value[0];
+            }
+
+            return 16;
+        }
+
+        private void comboBox_exportFormat_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (this.suppressExportFormatEvent)
+            {
+                return;
+            }
+
+            this.UpdateExportBitOptions(selectMiddleOnChange: true);
+        }
+
+        // Fügt eine Hilfsmethode zum sicheren Ausführen von Aktionen im UI-Thread hinzu
+        internal static void InvokeIfRequired(Action action)
+        {
+            if (Instance == null || Instance.IsDisposed)
+                return;
+
+            if (Instance.InvokeRequired)
+            {
+                try { Instance.BeginInvoke(action); } catch { }
+            }
+            else
+            {
+                try { action(); } catch { }
+            }
+        }
+
+        private void button_autoSamples_Click(object sender, EventArgs e)
+        {
+            if (LastSelectedTrackView == null || LastSelectedTrackView.IsDisposed)
+            {
+                MessageBox.Show(this, "No track selected.", "Auto Samples", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using var dlg = new ModularAudience.Forms.Modules.Dialogs.AutoSamplesDialog(LastSelectedTrackView.OriginalAudio);
+            dlg.ShowDialog(this);
+
+            if (dlg.DialogResult != DialogResult.OK || dlg.ResultSamples.Count == 0)
+            {
+                return;
+            }
+
+            var samples = dlg.ResultSamples.ToList();
+            AudioCollectionView collection = new(samples);
+            CollectionViews.Add(collection);
+            int num = GetCollectionNumber(collection);
+            foreach (var audio in samples)
+            {
+                AudioCollectionTags[audio.Id] = num;
+            }
+            collection.Show();
+        }
+
+        private void button_newBag_Click(object sender, EventArgs e)
+        {
+            AudioCollectionView collection = new([]);
+            CollectionViews.Add(collection);
+            collection.Show();
+		}
     }
 }
+
+
+
+
+

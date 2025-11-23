@@ -14,7 +14,7 @@ namespace ModularAudience.Audio
     public class AudioCollection
     {
         // Fields
-        public string WorkingDirectory { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CSharpSamplesCutter");
+        public string WorkingDirectory { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "ModularAudience");
         public string ImportDirectory { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
         public readonly BindingList<AudioObj> Audios = [];
         public readonly ConcurrentDictionary<Guid, CancellationToken> PlaybackCancellationTokens = [];
@@ -34,8 +34,8 @@ namespace ModularAudience.Audio
         public readonly AudioExporter Exporter;
 
         // Lambda
-        public string ExportPath => Path.Combine(this.WorkingDirectory, "CSharpSamplesCutter_Exports");
-        public string RecordPath => Path.Combine(this.WorkingDirectory, "CSharpSamplesCutter_Records");
+        public string ExportPath => Path.Combine(this.WorkingDirectory, "_Exports");
+        public string RecordPath => Path.Combine(this.WorkingDirectory, "_Records");
         public int Count => this.Audios.Count;
         public IEnumerable<Guid> Ids => this.Audios.Select(a => a.Id);
         public IEnumerable<Guid> Playing => this.Audios.Where(a => a.Playing).Select(a => a.Id);
@@ -283,8 +283,8 @@ namespace ModularAudience.Audio
         // Export
         public async Task<string?> ExportAsync(Guid id, string format = ".wav", int bits = 24)
         {
-            format = this.Exporter.AvailableExportFormats.ContainsKey(format) ? format : ".wav";
-            bits = this.Exporter.AvailableExportFormats[format].Contains(bits) ? bits : this.Exporter.AvailableExportFormats[format].Last();
+            format = AudioExporter.AvailableExportFormats.ContainsKey(format) ? format : ".wav";
+            bits = AudioExporter.AvailableExportFormats[format].Contains(bits) ? bits : AudioExporter.AvailableExportFormats[format].Last();
             var audio = this[id];
             if (audio != null)
             {
@@ -297,8 +297,8 @@ namespace ModularAudience.Audio
 
         public async Task<IEnumerable<string>> ExportManyAsync(IEnumerable<Guid> ids, string format = ".wav", int bits = 24)
         {
-            format = this.Exporter.AvailableExportFormats.ContainsKey(format) ? format : ".wav";
-            bits = this.Exporter.AvailableExportFormats[format].Contains(bits) ? bits : this.Exporter.AvailableExportFormats[format].Last();
+            format = AudioExporter.AvailableExportFormats.ContainsKey(format) ? format : ".wav";
+            bits = AudioExporter.AvailableExportFormats[format].Contains(bits) ? bits : AudioExporter.AvailableExportFormats[format].Last();
 
             var tasks = ids.Select(id =>
             {

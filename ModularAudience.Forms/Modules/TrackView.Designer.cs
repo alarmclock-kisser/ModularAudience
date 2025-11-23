@@ -28,6 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
+            this.components = new System.ComponentModel.Container();
             this.button_loop = new Button();
             this.button_playback = new Button();
             this.button_pause = new Button();
@@ -37,6 +38,9 @@
             this.label_volume = new Label();
             this.textBox_time = new TextBox();
             this.checkBox_settings = new CheckBox();
+            this.contextMenu_waveform = new ContextMenuStrip(this.components);
+            this.menuItem_copySelection = new ToolStripMenuItem();
+            this.menuItem_removeSelection = new ToolStripMenuItem();
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_waveform).BeginInit();
             this.SuspendLayout();
             // 
@@ -82,6 +86,7 @@
             // 
             this.pictureBox_waveform.BackColor = Color.White;
             this.pictureBox_waveform.BorderStyle = BorderStyle.Fixed3D;
+            this.pictureBox_waveform.ContextMenuStrip = this.contextMenu_waveform;
             this.pictureBox_waveform.Location = new Point(123, 12);
             this.pictureBox_waveform.Name = "pictureBox_waveform";
             this.pictureBox_waveform.Size = new Size(929, 160);
@@ -137,6 +142,27 @@
             this.checkBox_settings.UseVisualStyleBackColor = true;
             this.checkBox_settings.CheckedChanged += this.checkBox_settings_CheckedChanged;
             // 
+            // contextMenu_waveform
+            // 
+            this.contextMenu_waveform.Items.AddRange(new ToolStripItem[] { this.menuItem_copySelection, this.menuItem_removeSelection });
+            this.contextMenu_waveform.Name = "contextMenu_waveform";
+            this.contextMenu_waveform.Size = new Size(176, 48);
+            this.contextMenu_waveform.Opening += this.contextMenu_waveform_Opening;
+            // 
+            // menuItem_copySelection
+            // 
+            this.menuItem_copySelection.Name = "menuItem_copySelection";
+            this.menuItem_copySelection.Size = new Size(175, 22);
+            this.menuItem_copySelection.Text = "Copy Selection";
+            this.menuItem_copySelection.Click += this.menuItem_copySelection_Click;
+            // 
+            // menuItem_removeSelection
+            // 
+            this.menuItem_removeSelection.Name = "menuItem_removeSelection";
+            this.menuItem_removeSelection.Size = new Size(175, 22);
+            this.menuItem_removeSelection.Text = "Remove Selection";
+            this.menuItem_removeSelection.Click += this.menuItem_removeSelection_Click;
+            // 
             // TrackView
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
@@ -172,5 +198,8 @@
         private Label label_volume;
         private TextBox textBox_time;
         private CheckBox checkBox_settings;
+        private ContextMenuStrip contextMenu_waveform;
+        private ToolStripMenuItem menuItem_copySelection;
+        private ToolStripMenuItem menuItem_removeSelection;
     }
 }

@@ -445,7 +445,7 @@ namespace ModularAudience.Audio
             int n = samples.Length;
             if (n <= 0)
             {
-                return Array.Empty<double>();
+                return [];
             }
 
             double[] window = HannWindow(fftSize);

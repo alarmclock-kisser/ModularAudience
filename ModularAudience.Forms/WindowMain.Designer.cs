@@ -38,6 +38,11 @@
             this.textBox_scanKeyResult = new TextBox();
             this.button_scanKey = new Button();
             this.button_timeStretch = new Button();
+            this.button_export = new Button();
+            this.comboBox_exportFormat = new ComboBox();
+            this.comboBox_exportBits = new ComboBox();
+            this.button_autoSamples = new Button();
+            this.button_newBag = new Button();
             this.SuspendLayout();
             // 
             // button_import
@@ -146,11 +151,67 @@
             this.button_timeStretch.UseVisualStyleBackColor = true;
             this.button_timeStretch.Click += this.button_timeStretch_Click;
             // 
+            // button_export
+            // 
+            this.button_export.BackColor = Color.FromArgb(  192,   255,   255);
+            this.button_export.Location = new Point(12, 228);
+            this.button_export.Name = "button_export";
+            this.button_export.Size = new Size(75, 23);
+            this.button_export.TabIndex = 10;
+            this.button_export.Text = "Export";
+            this.button_export.UseVisualStyleBackColor = false;
+            this.button_export.Click += this.button_export_Click;
+            // 
+            // comboBox_exportFormat
+            // 
+            this.comboBox_exportFormat.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.comboBox_exportFormat.FormattingEnabled = true;
+            this.comboBox_exportFormat.Location = new Point(93, 229);
+            this.comboBox_exportFormat.Name = "comboBox_exportFormat";
+            this.comboBox_exportFormat.Size = new Size(80, 23);
+            this.comboBox_exportFormat.TabIndex = 11;
+            this.comboBox_exportFormat.SelectedIndexChanged += this.comboBox_exportFormat_SelectedIndexChanged;
+            // 
+            // comboBox_exportBits
+            // 
+            this.comboBox_exportBits.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.comboBox_exportBits.FormattingEnabled = true;
+            this.comboBox_exportBits.Location = new Point(179, 229);
+            this.comboBox_exportBits.Name = "comboBox_exportBits";
+            this.comboBox_exportBits.Size = new Size(60, 23);
+            this.comboBox_exportBits.TabIndex = 12;
+            // 
+            // button_autoSamples
+            // 
+            this.button_autoSamples.Location = new Point(511, 41);
+            this.button_autoSamples.Name = "button_autoSamples";
+            this.button_autoSamples.Size = new Size(90, 23);
+            this.button_autoSamples.TabIndex = 13;
+            this.button_autoSamples.Text = "Auto Samples";
+            this.button_autoSamples.UseVisualStyleBackColor = true;
+            this.button_autoSamples.Click += this.button_autoSamples_Click;
+            // 
+            // button_newBag
+            // 
+            this.button_newBag.BackColor = Color.FromArgb(  192,   255,   192);
+            this.button_newBag.Location = new Point(131, 12);
+            this.button_newBag.Name = "button_newBag";
+            this.button_newBag.Size = new Size(75, 23);
+            this.button_newBag.TabIndex = 14;
+            this.button_newBag.Text = "New Bag";
+            this.button_newBag.UseVisualStyleBackColor = false;
+            this.button_newBag.Click += this.button_newBag_Click;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(704, 321);
+            this.Controls.Add(this.button_newBag);
+            this.Controls.Add(this.button_autoSamples);
+            this.Controls.Add(this.comboBox_exportBits);
+            this.Controls.Add(this.comboBox_exportFormat);
+            this.Controls.Add(this.button_export);
             this.Controls.Add(this.button_timeStretch);
             this.Controls.Add(this.textBox_scanKeyResult);
             this.Controls.Add(this.button_scanKey);
@@ -161,6 +222,8 @@
             this.Controls.Add(this.checkBox_singleCollection);
             this.Controls.Add(this.button_browse);
             this.Controls.Add(this.button_import);
+            this.MaximumSize = new Size(720, 360);
+            this.MinimumSize = new Size(720, 360);
             this.Name = "WindowMain";
             this.Text = "ModularAudience (Main Control)";
             this.ResumeLayout(false);
@@ -179,5 +242,10 @@
         private TextBox textBox_scanKeyResult;
         private Button button_scanKey;
         private Button button_timeStretch;
+        private Button button_export;
+        private ComboBox comboBox_exportFormat;
+        private ComboBox comboBox_exportBits;
+        private Button button_autoSamples;
+        private Button button_newBag;
     }
 }

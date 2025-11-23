@@ -1,7 +1,9 @@
 ﻿using ModularAudience.Audio;
 using NAudience.Core;
 using System;
+using System.ComponentModel;
 using System.Drawing;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,6 +18,7 @@ namespace ModularAudience.Forms.Modules
         private static readonly int[] LoopSteps = { 1, 2, 4, 8, 16, 32, 64 };
         private const int MaxSamplesPerPixel = 16384;
         private const int MinSamplesPerPixel = 8;
+        private static int selectionCopySeed;
 
         public readonly AudioObj OriginalAudio;
         public readonly TrackViewSettings Settings;
@@ -125,7 +128,12 @@ namespace ModularAudience.Forms.Modules
                 {
                     WindowMain.LastSelectedTrackView = null;
                 }
-            };
+				// Remove from TrackViews collection
+                WindowMain.InvokeIfRequired(() =>
+                {
+                    WindowMain.TrackViews.Remove(this);
+                });
+			};
         }
 
         // Rekursiv alle relevanten Controls für Interaktion registrieren
@@ -1026,6 +1034,22 @@ namespace ModularAudience.Forms.Modules
 
         private async void TrackView_KeyDown(object? sender, KeyEventArgs e)
         {
+            if (e.Control && e.KeyCode == Keys.C)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                await this.CopySelectionAsync();
+                return;
+            }
+
+            if (e.KeyCode == Keys.Delete)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                await this.RemoveSelectionAsync();
+                return;
+            }
+
             if (e.KeyCode == Keys.Space)
             {
                 e.Handled = true;
@@ -1036,8 +1060,27 @@ namespace ModularAudience.Forms.Modules
             {
                 e.Handled = true;
                 e.SuppressKeyPress = true;
-                await this.RestartPlaybackFromStartAsync();
+                if (e.Control)
+                {
+                    await this.ResetStartingPointAsync();
+                }
+                else
+                {
+                    await this.RestartPlaybackFromStartAsync();
+                }
             }
+        }
+
+        private async Task ResetStartingPointAsync()
+        {
+            await this.OriginalAudio.StopAsync();
+            this.OriginalAudio.StartingOffset = 0;
+            this.OriginalAudio.SetPosition(0);
+            this.lastClickFrame = 0;
+            this.offsetFrames = 0;
+            this.UpdateOffsetScrollbar();
+            await this.RefreshWaveformAsync();
+            this.InvokeIfRequired(() => this.button_playback.Text = "▶");
         }
 
         private async Task RestartPlaybackFromStartAsync()
@@ -1090,6 +1133,104 @@ namespace ModularAudience.Forms.Modules
             this.suppressSettingsCheckbox = false;
         }
 
+        private async Task CopySelectionAsync()
+        {
+            if (!this.HasValidSelection())
+            {
+                LogCollection.Log("No active selection to copy.");
+                return;
+            }
+
+            AudioObj? clip = await this.OriginalAudio.CloneFromSelectionAsync().ConfigureAwait(true);
+            if (clip == null)
+            {
+                LogCollection.Log("Copy selection failed.");
+                return;
+            }
+
+            clip.Name = this.GenerateClipName();
+
+            WindowMain.InvokeIfRequired(() =>
+            {
+                global::ModularAudience.Forms.AudioCollectionView? targetView = WindowMain.CollectionViews.FirstOrDefault(cv => cv != null && !cv.IsDisposed);
+                if (targetView == null)
+                {
+                    targetView = new global::ModularAudience.Forms.AudioCollectionView(new[] { clip });
+                    WindowMain.CollectionViews.Add(targetView);
+                    targetView.Show();
+                }
+                else
+                {
+                    targetView.AudioC.Audios.Add(clip);
+                }
+
+                WindowMain.UpdateCollectionTag(clip, targetView);
+                LogCollection.Log($"Selection copied to '{clip.Name}'.");
+            });
+        }
+
+        private async Task RemoveSelectionAsync()
+        {
+            if (!this.HasValidSelection())
+            {
+                return;
+            }
+
+            if (this.OriginalAudio.Playing)
+            {
+                LogCollection.Log("Stop playback before removing audio.");
+                return;
+            }
+
+            await this.OriginalAudio.EraseSelectionAsync().ConfigureAwait(true);
+            this.ClearSelectionMarkers();
+            this.RecalculateLoopFraction();
+            this.ApplyLoopFractionToAudio();
+            this.AlignViewToCurrentPosition();
+            this.UpdateOffsetScrollbar();
+            this.RequestWaveformRender();
+            LogCollection.Log("Selection removed from track view.");
+        }
+
+        private void ClearSelectionMarkers()
+        {
+            this.selectStartFrame = -1;
+            this.selectEndFrame = -1;
+            this.OriginalAudio.SelectionStart = -1;
+            this.OriginalAudio.SelectionEnd = -1;
+            this.pendingSelect = false;
+            this.dragSelecting = false;
+        }
+
+        private bool HasValidSelection()
+        {
+            return this.OriginalAudio.SelectionStart >= 0 && this.OriginalAudio.SelectionEnd > this.OriginalAudio.SelectionStart;
+        }
+
+        private string GenerateClipName()
+        {
+            string baseName = string.IsNullOrWhiteSpace(this.OriginalAudio.Name) ? "clip" : this.OriginalAudio.Name;
+            int number = Interlocked.Increment(ref selectionCopySeed);
+            return $"{baseName}_clip_{number:D3}";
+        }
+
+        private void contextMenu_waveform_Opening(object? sender, CancelEventArgs e)
+        {
+            bool hasSelection = this.HasValidSelection();
+            this.menuItem_copySelection.Enabled = hasSelection;
+            this.menuItem_removeSelection.Enabled = hasSelection && !this.OriginalAudio.Playing;
+        }
+
+        private async void menuItem_copySelection_Click(object? sender, EventArgs e)
+        {
+            await this.CopySelectionAsync();
+        }
+
+        private async void menuItem_removeSelection_Click(object? sender, EventArgs e)
+        {
+            await this.RemoveSelectionAsync();
+        }
+
         private void InvokeIfRequired(Action action)
         {
             if (this.IsDisposed)
@@ -1118,7 +1259,7 @@ namespace ModularAudience.Forms.Modules
             this.CancelPendingRender();
 
             var original = this.OriginalAudio;
-            float[] newData = result.Data ?? Array.Empty<float>();
+            float[] newData = result.Data ?? [];
             original.Data = newData;
             original.SampleRate = result.SampleRate;
             original.Channels = result.Channels;

@@ -11,7 +11,7 @@ namespace ModularAudience.Audio.Processing
         {
             if (audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0 || audio.Channels <= 0)
             {
-                return Array.Empty<float>();
+                return [];
             }
 
             windowSize = Math.Max(1, windowSize);
@@ -23,7 +23,7 @@ namespace ModularAudience.Audio.Processing
             int fullWindowFrames = halfWindowFrames * 2;
             if (fullWindowFrames <= 0)
             {
-                return Array.Empty<float>();
+                return [];
             }
 
             if (mono)
@@ -31,7 +31,7 @@ namespace ModularAudience.Audio.Processing
                 float[] data = await AudioConversionProcessor.ConvertToMonoAsync(audio, set: false, maxWorkers: Environment.ProcessorCount);
                 if (data.Length == 0)
                 {
-                    return Array.Empty<float>();
+                    return [];
                 }
 
                 long startFrame = posFrames - (lookBackwards ? halfWindowFrames : 0);
@@ -51,7 +51,7 @@ namespace ModularAudience.Audio.Processing
 
                 if (endFrameExclusive > data.LongLength)
                 {
-                    return Array.Empty<float>();
+                    return [];
                 }
 
                 float[] current = new float[fullWindowFrames];
@@ -79,7 +79,7 @@ namespace ModularAudience.Audio.Processing
                 if (endFloatIndexExclusive > data.LongLength || startFloatIndex < 0)
                 {
                     Debug.WriteLine("GetCurrentWindow: Out of bounds access prevented.");
-                    return Array.Empty<float>();
+                    return [];
                 }
 
                 int lengthFloats = fullWindowFrames * audio.Channels;

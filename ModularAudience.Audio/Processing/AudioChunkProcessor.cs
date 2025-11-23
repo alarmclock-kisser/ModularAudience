@@ -16,12 +16,12 @@ namespace ModularAudience.Audio.Processing
 
             if (audio.Data == null || audio.Data.Length == 0)
             {
-                return Array.Empty<float[]>();
+                return [];
             }
 
             if (size <= 0 || overlap < 0 || overlap >= 1)
             {
-                return Array.Empty<float[]>();
+                return [];
             }
 
             audio.ChunkSize = size;
@@ -29,7 +29,7 @@ namespace ModularAudience.Audio.Processing
             int step = size - audio.OverlapSize;
             if (step <= 0)
             {
-                return Array.Empty<float[]>();
+                return [];
             }
 
             int numChunks = Math.Max(1, ((audio.Data.Length - size) / step) + 1);
