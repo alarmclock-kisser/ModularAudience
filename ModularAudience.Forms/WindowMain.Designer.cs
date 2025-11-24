@@ -43,6 +43,7 @@
             this.comboBox_exportBits = new ComboBox();
             this.button_autoSamples = new Button();
             this.button_newBag = new Button();
+            this.button_drumRoll = new Button();
             this.SuspendLayout();
             // 
             // button_import
@@ -202,11 +203,22 @@
             this.button_newBag.UseVisualStyleBackColor = false;
             this.button_newBag.Click += this.button_newBag_Click;
             // 
+            // button_drumRoll
+            // 
+            this.button_drumRoll.Location = new Point(511, 70);
+            this.button_drumRoll.Name = "button_drumRoll";
+            this.button_drumRoll.Size = new Size(90, 23);
+            this.button_drumRoll.TabIndex = 15;
+            this.button_drumRoll.Text = "Drum Roll";
+            this.button_drumRoll.UseVisualStyleBackColor = true;
+            this.button_drumRoll.Click += this.button_drumRoll_Click;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(704, 321);
+            this.Controls.Add(this.button_drumRoll);
             this.Controls.Add(this.button_newBag);
             this.Controls.Add(this.button_autoSamples);
             this.Controls.Add(this.comboBox_exportBits);
@@ -247,5 +259,6 @@
         private ComboBox comboBox_exportBits;
         private Button button_autoSamples;
         private Button button_newBag;
+        private Button button_drumRoll;
     }
 }

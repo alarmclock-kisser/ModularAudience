@@ -16,6 +16,8 @@ namespace ModularAudience.Forms
         public readonly AudioCollection AudioC = new();
 
         internal static readonly BindingList<AudioCollectionView> CollectionViews = [];
+        internal static IEnumerable<AudioObj> SelectedTracks => CollectionViews.SelectMany(cv => cv.SelectedAudios);
+
         internal static readonly BindingList<TrackView> TrackViews = [];
         private static TrackView? _lastSelectedTrackView = null;
         internal static TrackView? LastSelectedTrackView
@@ -40,6 +42,8 @@ namespace ModularAudience.Forms
         private static readonly Padding TrackViewScreenMargin = new(20, 20, 20, 20);
         private static readonly Size TrackViewSpacing = new(15, 12);
         private bool suppressExportFormatEvent;
+
+        internal static DrumRollEditor? DrumRoll { get; set; } = null;
 
         public WindowMain()
         {
@@ -84,7 +88,34 @@ namespace ModularAudience.Forms
             IEnumerable<string> filesToImport = [];
             bool fromResources = false;
 
-            if (ModifierKeys.HasFlag(Keys.Alt))
+            if (ModifierKeys.HasFlag(Keys.Shift))
+            {
+                // FBD from Resources
+                using FolderBrowserDialog folderBrowserDialog = new()
+                {
+                    Description = "Select Resource Folder to Import Audio Files From",
+                    SelectedPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources"),
+                    ShowNewFolderButton = false
+                };
+
+                if (folderBrowserDialog.ShowDialog() != DialogResult.OK)
+                {
+                    return;
+                }
+
+                try
+                {
+                    filesToImport = Directory
+                        .EnumerateFiles(folderBrowserDialog.SelectedPath, "*.*", SearchOption.AllDirectories)
+                        .Where(f => AllowedImportExtensions.Contains(Path.GetExtension(f)));
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log($"Failed to scan resources at '{folderBrowserDialog.SelectedPath}': {ex.Message}");
+                    return;
+                }
+            }
+            else if (ModifierKeys.HasFlag(Keys.Alt))
             {
                 string? resourceFile = TryGetRandomResourceFile();
                 if (resourceFile == null)
@@ -92,7 +123,7 @@ namespace ModularAudience.Forms
                     LogCollection.Log("No resource audio files found for import.");
                     return;
                 }
-                filesToImport = new[] { resourceFile };
+                filesToImport = [resourceFile];
                 fromResources = true;
             }
             else
@@ -736,7 +767,9 @@ namespace ModularAudience.Forms
         public static string GetTimingString(float timing)
         {
             if (timing <= 0f)
+            {
                 return "-";
+            }
 
             // Standard: 4/4 als Basis
             // timing = Bruchteil eines Takts (z.B. 0.25 = Viertel, 0.5 = Halbe, 1.0 = Ganze, 0.75 = punktierte Halbe, etc.)
@@ -880,7 +913,9 @@ namespace ModularAudience.Forms
         internal static void InvokeIfRequired(Action action)
         {
             if (Instance == null || Instance.IsDisposed)
+            {
                 return;
+            }
 
             if (Instance.InvokeRequired)
             {
@@ -924,7 +959,22 @@ namespace ModularAudience.Forms
             AudioCollectionView collection = new([]);
             CollectionViews.Add(collection);
             collection.Show();
-		}
+        }
+
+        private void button_drumRoll_Click(object sender, EventArgs e)
+        {
+            if (DrumRoll != null && !DrumRoll.IsDisposed)
+            {
+                DrumRoll.BringToFront();
+                return;
+            }
+
+            DrumRoll = new(SelectedTracks);
+            DrumRoll.Show();
+        }
+
+
+
     }
 }
 

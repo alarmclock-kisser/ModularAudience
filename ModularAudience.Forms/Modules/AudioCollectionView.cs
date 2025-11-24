@@ -18,6 +18,8 @@ namespace ModularAudience.Forms
     {
         internal readonly AudioCollection AudioC = new();
 
+        internal IEnumerable<AudioObj> SelectedAudios => this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>();
+
         private Point? _dragOrigin;
         private AudioObj? _dragCandidate;
         private int _hoverInsertIndex = -1;
@@ -37,7 +39,7 @@ namespace ModularAudience.Forms
         private List<AudioObj>? _mouseDownSelectionSnapshot;
         private List<AudioObj> _committedSelection = new();
         private bool _restoringSelectionDuringDrag;
-        private static readonly HashSet<char> InvalidFileNameChars = new(Path.GetInvalidFileNameChars());
+        private static readonly HashSet<char> InvalidFileNameChars = [.. Path.GetInvalidFileNameChars()];
 
         public int AudioCount => this.AudioC.Audios.Count;
 
@@ -123,7 +125,7 @@ namespace ModularAudience.Forms
                         if (clickedSelected && hadMultiSelection)
                         {
                             this.preserveDragSnapshot = true;
-                            this._dragSelectionSnapshot = new List<AudioObj>(this._mouseDownSelectionSnapshot);
+                            this._dragSelectionSnapshot = [.. this._mouseDownSelectionSnapshot];
                             this.RestoreSelectionFromList(this._dragSelectionSnapshot);
                             this.BeginInvoke(new Action(() =>
                             {
@@ -488,8 +490,20 @@ namespace ModularAudience.Forms
 
         private void listBox_audios_GiveFeedback(object? sender, GiveFeedbackEventArgs e)
         {
+            // Use a plus cursor for Copy, hand for Move, no for None
             e.UseDefaultCursors = false;
-            Cursor.Current = e.Effect == DragDropEffects.Move ? Cursors.SizeAll : Cursors.No;
+            if ((e.Effect & DragDropEffects.Copy) == DragDropEffects.Copy)
+            {
+                Cursor.Current = Cursors.Cross; // Plus symbol
+            }
+            else if ((e.Effect & DragDropEffects.Move) == DragDropEffects.Move)
+            {
+                Cursor.Current = Cursors.Hand;
+            }
+            else
+            {
+                Cursor.Current = Cursors.No;
+            }
         }
 
         private void BeginAudioDrag()
@@ -505,9 +519,15 @@ namespace ModularAudience.Forms
             this._dragStarted = true;
             this.RefreshListVisuals();
             var payload = new AudioDragPayload(this, selection);
+            // --- PATCH: Add compatible DataObject for external drop targets (like DrumRollEditor) ---
+            DataObject data = new DataObject();
+            data.SetData(typeof(AudioDragPayload), payload);
+            data.SetData(typeof(List<AudioObj>), selection);
+            data.SetData(typeof(IEnumerable<AudioObj>), selection);
+            data.SetData(DataFormats.Serializable, selection);
             try
             {
-                this.listBox_audios.DoDragDrop(payload, DragDropEffects.Move);
+                this.listBox_audios.DoDragDrop(data, DragDropEffects.Copy | DragDropEffects.Move);
             }
             finally
             {

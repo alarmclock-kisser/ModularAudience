@@ -74,7 +74,7 @@ namespace ModularAudience.Forms.Modules
             this.GotFocus += (_, __) => this.SetAsLastSelected();
             this.MouseDown += (_, __) => this.SetAsLastSelected();
             this.RegisterInteractionEvents(this);
-            this.SizeChanged += TrackView_SizeChanged;
+            this.SizeChanged += this.TrackView_SizeChanged;
 
             this.Text = "#" + WindowMain.TrackViews.Count.ToString("D2") + " - " + audio.Name;
             this.OriginalAudio.SelectionStart = -1;
