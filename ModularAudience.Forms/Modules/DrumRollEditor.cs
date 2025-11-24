@@ -18,7 +18,7 @@ namespace ModularAudience.Forms.Modules
         public int Hits => this.domainUpDown_hits.SelectedItem is null ? 16 : int.Parse(this.domainUpDown_hits.SelectedItem.ToString() ?? "16");
 
 
-        internal BindingList<Panel> Panels = [];
+        internal readonly BindingList<Panel> Panels = [];
 
 
         public DrumRollEditor(IEnumerable<AudioObj>? samples = null)
