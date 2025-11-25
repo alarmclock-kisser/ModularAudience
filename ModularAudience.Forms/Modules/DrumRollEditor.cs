@@ -16,14 +16,20 @@ namespace ModularAudience.Forms.Modules
 
         public float Bpm => (float) this.numericUpDown_bpm.Value;
         public int Hits => this.domainUpDown_hits.SelectedItem is null ? 16 : int.Parse(this.domainUpDown_hits.SelectedItem.ToString() ?? "16");
+        public float Volume => (float) this.numericUpDown_volume.Value / 100.0f;
 
 
-        internal readonly BindingList<Panel> Panels = [];
+		internal readonly BindingList<Panel> Panels = [];
+
+        private readonly System.Windows.Forms.Timer playbackTimer = new();
+        private int currentStep = 0;
+        private bool isPlaying = false;
 
 
         public DrumRollEditor(IEnumerable<AudioObj>? samples = null)
         {
             this.InitializeComponent();
+            this.KeyPreview = true;
             this.panel_pattern.Visible = false;
             this.button_hit.Visible = false;
             this.domainUpDown_hits.SelectedIndex = this.domainUpDown_hits.Items.IndexOf("16");
@@ -44,9 +50,8 @@ namespace ModularAudience.Forms.Modules
             this.DragDrop += this.DrumRollEditor_DragDrop;
             this.FormClosing += this.Form_Closing;
 
-            // Event für Änderungen an der Audios-Liste
+            this.playbackTimer.Tick += this.PlaybackTimer_Tick;
             this.AudioC.Audios.ListChanged += this.AudioC_Audios_ListChanged;
-            // Event für Änderung der Hits (Beats)
             this.domainUpDown_hits.SelectedItemChanged += this.domainUpDown_hits_SelectedItemChanged;
 
             // Initial Panels bauen, falls Samples vorhanden
@@ -65,7 +70,62 @@ namespace ModularAudience.Forms.Modules
 
         private void button_playback_Click(object sender, EventArgs e)
         {
+            if (this.isPlaying)
+            {
+                this.StopPlayback();
+            }
+            else
+            {
+                this.StartPlayback();
+            }
+        }
 
+        private void StartPlayback()
+        {
+            if (this.isPlaying)
+            {
+                return;
+            }
+
+            this.isPlaying = true;
+            this.button_playback.Text = "■";
+            float bpm = this.Bpm;
+            int hits = this.Hits;
+
+            // Ein Beat = 4 Hits, also: Zeit pro Hit = (60 / BPM) / 4
+            double msPerHit = (60.0 / bpm) / 4.0 * 1000.0;
+            this.playbackTimer.Interval = Math.Max(1, (int) msPerHit);
+            this.currentStep = 0;
+            this.playbackTimer.Start();
+        }
+
+        private void StopPlayback()
+        {
+            if (!this.isPlaying)
+            {
+                return;
+            }
+
+            this.isPlaying = false;
+            this.button_playback.Text = "▶";
+            this.playbackTimer.Stop();
+            this.ResetButtonHighlights();
+        }
+
+        // Hilfsmethode zum Zurücksetzen der Highlights:
+        private void ResetButtonHighlights()
+        {
+            foreach (var panel in this.Panels)
+            {
+                foreach (Control ctrl in panel.Controls)
+                {
+                    if (ctrl is Button btn)
+                    {
+                        btn.BackColor = Color.LightGray;
+                        btn.ForeColor = Color.Black;
+                    }
+                }
+            }
         }
 
         private async void AudioC_Audios_ListChanged(object? sender, ListChangedEventArgs e)
@@ -76,6 +136,10 @@ namespace ModularAudience.Forms.Modules
         private async void domainUpDown_hits_SelectedItemChanged(object? sender, EventArgs e)
         {
             await this.RebuildPatternPanelsAsync();
+            if (this.isPlaying)
+            {
+                this.currentStep = 0;
+            }
         }
 
         private void DrumRollEditor_DragEnter(object? sender, DragEventArgs e)
@@ -279,21 +343,90 @@ namespace ModularAudience.Forms.Modules
                     tv.Show();
                     try { tv.BringToFront(); } catch { }
                 };
+
+                // Randomize-Pattern-Menüpunkt
+                var randomizeItem = new ToolStripMenuItem("Randomize");
+                randomizeItem.Click += (s, e) =>
+                {
+                    // Alle Buttons im Panel finden und zufällig toggeln
+                    var rand = new Random();
+                    foreach (Control ctrl in panel.Controls)
+                    {
+                        if (ctrl is Button btn)
+                        {
+                            // 50% Chance toggeln
+                            btn.BackColor = rand.NextDouble() < 0.5 ? Color.Green : Color.LightGray;
+                        }
+                    }
+                };
+
                 cms.Items.Add(editItem);
                 cms.Items.Add(removeItem);
+                cms.Items.Add(new ToolStripSeparator());
+                cms.Items.Add(randomizeItem);
                 panel.ContextMenuStrip = cms;
 
                 // Label für Audio-Namen
-                Label label = new()
+                Label label; // declared in outer scope so following layout code can reference it
                 {
-                    Text = audio.Name,
-                    AutoSize = false,
-                    TextAlign = ContentAlignment.MiddleLeft,
-                    Location = new Point(5, 0),
-                    Size = new Size(Math.Min(120, width / 4), panelHeight),
-                    Font = new Font(this.Font.FontFamily, Math.Max(8, panelHeight / 3), FontStyle.Bold)
-                };
-                panel.Controls.Add(label);
+                    string nameText = string.IsNullOrWhiteSpace(audio.Name) ? "untitled" : audio.Name;
+
+                    // Breite für den Namen: etwas großzügiger als vorher
+                    int nameWidth = Math.Min(240, Math.Max(80, width / 4));
+                    int nameHeight = panelHeight;
+
+                    // Start-Schriftgröße (groß, wird bei Bedarf reduziert)
+                    int startFontSize = Math.Max(8, panelHeight / 3);
+                    int minFontSize = 7;
+
+                    label = new Label
+                    {
+                        Text = nameText,
+                        AutoSize = false,
+                        TextAlign = ContentAlignment.MiddleLeft,
+                        Location = new Point(5, 0),
+                        Size = new Size(nameWidth, nameHeight),
+                        Font = new Font(this.Font.FontFamily, startFontSize, FontStyle.Bold),
+                        AutoEllipsis = true,
+                        UseCompatibleTextRendering = true
+                    };
+
+                    // Versuche, Schriftgröße so weit zu reduzieren, bis Text in das Rechteck passt (WordWrap erlaubt)
+                    try
+                    {
+                        using var g = panel.CreateGraphics();
+                        for (int fs = startFontSize; fs >= minFontSize; fs--)
+                        {
+                            using var testFont = new Font(this.Font.FontFamily, fs, FontStyle.Bold);
+                            var measured = TextRenderer.MeasureText(
+                                g,
+                                nameText,
+                                testFont,
+                                new Size(nameWidth, nameHeight),
+                                TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+
+                            if (measured.Height <= nameHeight)
+                            {
+                                label.Font = new Font(this.Font.FontFamily, fs, FontStyle.Bold);
+                                break;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // ignore measurement failures, benutze Default-Font
+                    }
+
+                    // Tooltip mit vollständigem Namen (bei Ellipsis/Wrap hilfreich)
+                    try
+                    {
+                        var tt = new ToolTip();
+                        tt.SetToolTip(label, nameText);
+                    }
+                    catch { }
+
+                    panel.Controls.Add(label);
+                }
 
                 // Buttons für jeden Hit
                 int buttonAreaLeft = label.Right + 5;
@@ -348,7 +481,114 @@ namespace ModularAudience.Forms.Modules
             this.panel_pattern.Visible = false;
         }
 
+        private void RandomizeAllPanels()
+        {
+            var rand = new Random();
+            foreach (var panel in this.Panels)
+            {
+                foreach (Control ctrl in panel.Controls)
+                {
+                    if (ctrl is Button btn)
+                    {
+                        btn.BackColor = rand.NextDouble() < 0.5 ? Color.Green : Color.LightGray;
+                    }
+                }
+            }
+        }
 
+        // OnKeyDown überschreiben:
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (e.KeyCode == Keys.R && !e.Handled)
+            {
+                this.RandomizeAllPanels();
+                e.Handled = true;
+            }
+        }
+
+
+
+
+
+        private static readonly Color StepHighlightBack = Color.Gold;
+        private static readonly Color StepHighlightFore = Color.LightGray;
+        private static readonly Color StepDefaultBack = Color.LightGray;
+        private static readonly Color StepDefaultFore = Color.Black;
+
+		private void PlaybackTimer_Tick(object? sender, EventArgs e)
+		{
+			int hits = this.Hits;
+			if (hits <= 0)
+            {
+                return;
+            }
+
+            for (int panelIdx = 0; panelIdx < this.Panels.Count; panelIdx++)
+			{
+				var panel = this.Panels[panelIdx];
+				int btnIdx = 0;
+				Button? playBtn = null;
+				foreach (Control ctrl in panel.Controls)
+				{
+					if (ctrl is Button btn)
+					{
+						// Step-Highlighting
+						if (btnIdx == this.currentStep)
+						{
+							bool isActive = btn.BackColor == Color.Green;
+							btn.BackColor = StepHighlightBack;
+							btn.ForeColor = StepHighlightFore;
+							playBtn = btn;
+							btn.Tag = isActive ? "active" : "inactive";
+						}
+						else
+						{
+							if (btn.Tag is string tag && tag == "active")
+                            {
+                                btn.BackColor = Color.Green;
+                            }
+                            else if (btn.Tag is string tag2 && tag2 == "inactive")
+                            {
+                                btn.BackColor = StepDefaultBack;
+                            }
+
+                            btn.ForeColor = StepDefaultFore;
+							btn.Tag = null;
+						}
+						btnIdx++;
+					}
+				}
+
+				// Audio abspielen, wenn Button im aktuellen Step im Pattern aktiv ist
+				if (playBtn != null && (playBtn.Tag as string) == "active")
+				{
+					if (panelIdx < this.AudioC.Audios.Count)
+					{
+						var audio = this.AudioC.Audios[panelIdx];
+						var audioClone = audio.Clone(); // Klonen für unabhängige Wiedergabe
+						_ = this.PlayAudioAsync(audioClone);
+					}
+				}
+			}
+
+			this.currentStep = (this.currentStep + 1) % hits;
+		}
+
+		private async Task PlayAudioAsync(AudioObj audio)
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource();
+                await audio.PlayAsync(cts.Token, null, this.Volume, 25);
+                audio.Dispose(); // Klon nach Wiedergabe entsorgen
+            }
+            catch
+            {
+                // Fehler beim Playback ignorieren
+                try { audio.Dispose(); } catch { }
+            }
+        }
 
 
     }

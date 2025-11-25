@@ -45,6 +45,9 @@
             this.button_newBag = new Button();
             this.button_drumRoll = new Button();
             this.textBox_info = new TextBox();
+            this.button_record = new Button();
+            this.textBox_recordingTime = new TextBox();
+            this.label_stopRecordInfo = new Label();
             this.SuspendLayout();
             // 
             // button_import
@@ -225,11 +228,44 @@
             this.textBox_info.Size = new Size(181, 210);
             this.textBox_info.TabIndex = 16;
             // 
+            // button_record
+            // 
+            this.button_record.ForeColor = Color.Black;
+            this.button_record.Location = new Point(12, 199);
+            this.button_record.Name = "button_record";
+            this.button_record.Size = new Size(23, 23);
+            this.button_record.TabIndex = 17;
+            this.button_record.Text = "●";
+            this.button_record.UseVisualStyleBackColor = true;
+            this.button_record.Click += this.button_record_Click;
+            // 
+            // textBox_recordingTime
+            // 
+            this.textBox_recordingTime.Location = new Point(93, 199);
+            this.textBox_recordingTime.Name = "textBox_recordingTime";
+            this.textBox_recordingTime.PlaceholderText = "Not recording";
+            this.textBox_recordingTime.Size = new Size(80, 23);
+            this.textBox_recordingTime.TabIndex = 18;
+            // 
+            // label_stopRecordInfo
+            // 
+            this.label_stopRecordInfo.AutoSize = true;
+            this.label_stopRecordInfo.ForeColor = Color.Red;
+            this.label_stopRecordInfo.Location = new Point(12, 181);
+            this.label_stopRecordInfo.Name = "label_stopRecordInfo";
+            this.label_stopRecordInfo.Size = new Size(154, 15);
+            this.label_stopRecordInfo.TabIndex = 19;
+            this.label_stopRecordInfo.Text = "Ctrl-Click to stop recording.";
+            this.label_stopRecordInfo.Visible = false;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(704, 321);
+            this.Controls.Add(this.label_stopRecordInfo);
+            this.Controls.Add(this.textBox_recordingTime);
+            this.Controls.Add(this.button_record);
             this.Controls.Add(this.textBox_info);
             this.Controls.Add(this.button_drumRoll);
             this.Controls.Add(this.button_newBag);
@@ -274,5 +310,8 @@
         private Button button_newBag;
         private Button button_drumRoll;
         private TextBox textBox_info;
+        private Button button_record;
+        private TextBox textBox_recordingTime;
+        private Label label_stopRecordInfo;
     }
 }

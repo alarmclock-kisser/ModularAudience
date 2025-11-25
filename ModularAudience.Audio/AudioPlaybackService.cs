@@ -12,7 +12,7 @@ namespace ModularAudience.Audio
     {
         private ISampleProvider? current;
         private readonly WaveFormat outputFormat;
-        private readonly object gate = new();
+        private readonly Lock gate = new();
 
         public SwitchingSampleProvider(WaveFormat outputFormat)
         {
@@ -137,7 +137,7 @@ namespace ModularAudience.Audio
         private VolumeSampleProvider? volumeControl; // per-instance volume control
         private SampleToWaveProvider? waveProvider; // für WaveOutEvent.Init
         private ISampleProvider? pipeline; // aktuelle (resampled) Pipeline
-        private readonly object graphGate = new();
+        private readonly Lock graphGate = new();
         private float[]? rawData; // store original data for seeking while paused
         private int rawSampleRate;
         private int rawChannels;

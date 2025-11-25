@@ -31,7 +31,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_initialBpm.Value = this.Track.Bpm > 0 ? (decimal) this.Track.Bpm : this.Track.ScannedBpm > 30 ? (decimal) this.Track.ScannedBpm : 120;
             this.numericUpDown_threads.Maximum = Math.Max(Environment.ProcessorCount, 1);
             this.numericUpDown_threads.Value = Math.Max(Environment.ProcessorCount - 1, 1);
-            
+
 
             this.FormClosing += this.TimeStretchDialog_FormClosing;
         }

@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 
 namespace ModularAudience.Audio
 {
-    public class AudioCollection
+    public class AudioCollection : IDisposable
     {
         // Fields
         public string WorkingDirectory { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "ModularAudience");
@@ -61,8 +61,6 @@ namespace ModularAudience.Audio
             this.Exporter = new AudioExporter(this.ExportPath);
         }
 
-        // Snapshot-Helfer: Wird vor einer destruktiven Änderung aufgerufen (z.B. Erase)
-        // Legt aktuellen Zustand auf PreviousSteps und leert den Redo-Stack.
         public async Task<bool> PushSnapshotAsync(Guid id)
         {
             var audio = this[id];
@@ -146,8 +144,18 @@ namespace ModularAudience.Audio
             this.Audios.Clear();
         }
 
-        // Einfache Wiederherstellung ohne Undo/Redo-Stack-Manipulation (legacy).
-        public async Task RestoreFromAudioObjAsync(Guid id, int stepsBack = 1)
+        public void Dispose()
+        {
+            foreach (var audio in this.Audios)
+            {
+                audio.Dispose();
+            }
+            this.Audios.Clear();
+            GC.SuppressFinalize(this);
+		}
+
+		// Einfache Wiederherstellung ohne Undo/Redo-Stack-Manipulation (legacy).
+		public async Task RestoreFromAudioObjAsync(Guid id, int stepsBack = 1)
         {
             var audio = this[id];
             if (audio == null || stepsBack <= 0 || audio.PreviousSteps.Count < stepsBack)

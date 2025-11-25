@@ -26,11 +26,11 @@ namespace ModularAudience.Forms.Modules
         public readonly AudioObj OriginalAudio;
         private readonly AudioObj? SourceAudio;
         private readonly AudioCollection? SourceCollection;
-		public readonly TrackViewSettings Settings;
+        public readonly TrackViewSettings Settings;
 
 
-		private float CurrentVolume => 1f - (float) this.vScrollBar_volume.Value / Math.Max(1, this.vScrollBar_volume.Maximum);
-		internal bool Synced => this.checkBox_sync.Checked;
+        private float CurrentVolume => 1f - (float) this.vScrollBar_volume.Value / Math.Max(1, this.vScrollBar_volume.Maximum);
+        internal bool Synced => this.checkBox_sync.Checked;
 
         private readonly Timer frameTimer;
         private bool frameBusy;
@@ -77,7 +77,7 @@ namespace ModularAudience.Forms.Modules
 
             this.button_apply.Enabled = this.SourceCollection != null && this.SourceAudio != null;
 
-			this.KeyPreview = true;
+            this.KeyPreview = true;
             this.KeyDown += this.TrackView_KeyDown;
 
             this.ApplySettingsAppearance();
@@ -89,10 +89,10 @@ namespace ModularAudience.Forms.Modules
             this.RegisterInteractionEvents(this);
             this.SizeChanged += this.TrackView_SizeChanged;
 
-			this.TrackViewId = WindowMain.TrackViewIds.OrderBy(id => id).Select((id, index) => new { id, index }).FirstOrDefault(pair => pair.id > pair.index)?.index ?? WindowMain.TrackViewIds.Count;
+            this.TrackViewId = WindowMain.TrackViewIds.OrderBy(id => id).Select((id, index) => new { id, index }).FirstOrDefault(pair => pair.id > pair.index)?.index ?? WindowMain.TrackViewIds.Count;
 
-			WindowMain.TrackViewIds.Add(this.TrackViewId);
-			this.Text = "#" + this.TrackViewId.ToString("D2") + " - " + audio.Name;
+            WindowMain.TrackViewIds.Add(this.TrackViewId);
+            this.Text = "#" + this.TrackViewId.ToString("D2") + " - " + audio.Name;
             this.OriginalAudio.SelectionStart = -1;
             this.OriginalAudio.SelectionEnd = -1;
             this.OriginalAudio.LoopEnabled = false;
@@ -149,7 +149,7 @@ namespace ModularAudience.Forms.Modules
                 {
                     WindowMain.TrackViews.Remove(this);
                     WindowMain.TrackViewIds.Remove(this.TrackViewId);
-				});
+                });
             };
         }
 
@@ -609,219 +609,219 @@ namespace ModularAudience.Forms.Modules
             return Math.Max(0, this.OriginalAudio.Length / Math.Max(1, this.OriginalAudio.Channels));
         }
 
-		private long GetMaxOffsetFrames()
-		{
-			long totalFrames = this.GetTotalFrames();
-			// Anzahl der sichtbaren Frames in der PictureBox (wie bisher)
-			long visibleFrames = (long) Math.Max(1, this.pictureBox_waveform.Width) * this.samplesPerPixel;
+        private long GetMaxOffsetFrames()
+        {
+            long totalFrames = this.GetTotalFrames();
+            // Anzahl der sichtbaren Frames in der PictureBox (wie bisher)
+            long visibleFrames = (long) Math.Max(1, this.pictureBox_waveform.Width) * this.samplesPerPixel;
 
-			// Zusätzlicher visueller Puffer am Ende: 20% der sichtbaren Breite
-			const double extraFraction = 0.20;
-			long extraFrames = (long) Math.Round(visibleFrames * extraFraction);
+            // Zusätzlicher visueller Puffer am Ende: 20% der sichtbaren Breite
+            const double extraFraction = 0.20;
+            long extraFrames = (long) Math.Round(visibleFrames * extraFraction);
 
-			// Erlaube Scrolling bis (end-of-samples) + extraFrames, aber never negative
-			long max = totalFrames - visibleFrames + extraFrames;
-			return Math.Max(0, max);
-		}
+            // Erlaube Scrolling bis (end-of-samples) + extraFrames, aber never negative
+            long max = totalFrames - visibleFrames + extraFrames;
+            return Math.Max(0, max);
+        }
 
-		private long MapPixelToFrameInView(int x)
+        private long MapPixelToFrameInView(int x)
         {
             int width = Math.Max(1, this.pictureBox_waveform.Width);
             x = Math.Clamp(x, 0, width);
             return this.offsetFrames + (long) x * this.samplesPerPixel;
         }
 
-		private void Wave_MouseWheel(object? sender, MouseEventArgs e)
-		{
-			// Zoom mit Ctrl: samplesPerPixel ändern, Zoom um den Cursor herum (Sample unter Cursor bleibt an gleicher Pixel-Position)
-			if ((ModifierKeys & Keys.Control) != 0)
-			{
-				int current = this.samplesPerPixel;
-				int newSamplesPerPixel;
-				if (e.Delta > 0)
-				{
-					int step = Math.Max(1, current / 8);
-					newSamplesPerPixel = Math.Max(MinSamplesPerPixel, current - step);
-				}
-				else
-				{
-					int step = Math.Max(1, current / 6);
-					newSamplesPerPixel = Math.Min(MaxSamplesPerPixel, current + step);
-				}
+        private void Wave_MouseWheel(object? sender, MouseEventArgs e)
+        {
+            // Zoom mit Ctrl: samplesPerPixel ändern, Zoom um den Cursor herum (Sample unter Cursor bleibt an gleicher Pixel-Position)
+            if ((ModifierKeys & Keys.Control) != 0)
+            {
+                int current = this.samplesPerPixel;
+                int newSamplesPerPixel;
+                if (e.Delta > 0)
+                {
+                    int step = Math.Max(1, current / 8);
+                    newSamplesPerPixel = Math.Max(MinSamplesPerPixel, current - step);
+                }
+                else
+                {
+                    int step = Math.Max(1, current / 6);
+                    newSamplesPerPixel = Math.Min(MaxSamplesPerPixel, current + step);
+                }
 
-				if (newSamplesPerPixel != current)
-				{
-					// Bestimme X relativ zur PictureBox (sicher clamped)
-					int width = Math.Max(1, this.pictureBox_waveform.Width);
-					int localX = Math.Clamp(e.X, 0, width - 1);
+                if (newSamplesPerPixel != current)
+                {
+                    // Bestimme X relativ zur PictureBox (sicher clamped)
+                    int width = Math.Max(1, this.pictureBox_waveform.Width);
+                    int localX = Math.Clamp(e.X, 0, width - 1);
 
-					// Sample unter dem Cursor vor dem Zoom
-					long sampleAtCursor = this.offsetFrames + (long) localX * current;
+                    // Sample unter dem Cursor vor dem Zoom
+                    long sampleAtCursor = this.offsetFrames + (long) localX * current;
 
-					// Setze neuen Zoom
-					this.samplesPerPixel = newSamplesPerPixel;
+                    // Setze neuen Zoom
+                    this.samplesPerPixel = newSamplesPerPixel;
 
-					// Berechne offset so dass sampleAtCursor wieder unter localX landet
-					long desiredOffset = sampleAtCursor - (long) localX * this.samplesPerPixel;
-					desiredOffset = Math.Max(0, desiredOffset);
-					this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
+                    // Berechne offset so dass sampleAtCursor wieder unter localX landet
+                    long desiredOffset = sampleAtCursor - (long) localX * this.samplesPerPixel;
+                    desiredOffset = Math.Max(0, desiredOffset);
+                    this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
 
-					this.UpdateOffsetScrollbar();
-					this.pictureBox_waveform.Invalidate();
-				}
+                    this.UpdateOffsetScrollbar();
+                    this.pictureBox_waveform.Invalidate();
+                }
 
-				return;
-			}
+                return;
+            }
 
-			// Ohne Ctrl: normaler Scroll (verschiebt die Ansicht)
-			if (this.OriginalAudio.Playing)
-			{
-				return;
-			}
+            // Ohne Ctrl: normaler Scroll (verschiebt die Ansicht)
+            if (this.OriginalAudio.Playing)
+            {
+                return;
+            }
 
-			long visibleFrames = (long) Math.Max(1, this.pictureBox_waveform.Width) * this.samplesPerPixel;
-			long stepFrames = Math.Max(1, (long) (visibleFrames * 0.15));
-			if (e.Delta > 0)
-			{
-				this.offsetFrames = Math.Max(0, this.offsetFrames - stepFrames);
-			}
-			else
-			{
-				this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), this.offsetFrames + stepFrames);
-			}
-			this.UpdateOffsetScrollbar();
-			this.pictureBox_waveform.Invalidate();
-		}
+            long visibleFrames = (long) Math.Max(1, this.pictureBox_waveform.Width) * this.samplesPerPixel;
+            long stepFrames = Math.Max(1, (long) (visibleFrames * 0.15));
+            if (e.Delta > 0)
+            {
+                this.offsetFrames = Math.Max(0, this.offsetFrames - stepFrames);
+            }
+            else
+            {
+                this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), this.offsetFrames + stepFrames);
+            }
+            this.UpdateOffsetScrollbar();
+            this.pictureBox_waveform.Invalidate();
+        }
 
-		private void Wave_MouseDown(object? sender, MouseEventArgs e)
-		{
-			if (e.Button == MouseButtons.Right)
-			{
-				this.dragSelecting = false;
-				this.pendingSelect = false;
-				return;
-			}
+        private void Wave_MouseDown(object? sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right)
+            {
+                this.dragSelecting = false;
+                this.pendingSelect = false;
+                return;
+            }
 
-			if (this.OriginalAudio.Playing)
-			{
-				return;
-			}
+            if (this.OriginalAudio.Playing)
+            {
+                return;
+            }
 
-			if (e.Button == MouseButtons.Left)
-			{
-				long frame = this.MapPixelToFrameInView(e.X);
-				this.mouseDownX = e.X;
-				this.pendingSelect = true;
-				this.dragSelecting = false;
-				this.selectStartFrame = frame;
-				this.selectEndFrame = frame;
-				this.lastClickFrame = frame;
-			}
-		}
+            if (e.Button == MouseButtons.Left)
+            {
+                long frame = this.MapPixelToFrameInView(e.X);
+                this.mouseDownX = e.X;
+                this.pendingSelect = true;
+                this.dragSelecting = false;
+                this.selectStartFrame = frame;
+                this.selectEndFrame = frame;
+                this.lastClickFrame = frame;
+            }
+        }
 
-		private void Wave_MouseMove(object? sender, MouseEventArgs e)
-		{
-			this.mouseX = e.X;
-			if (this.OriginalAudio.Playing)
-			{
-				return;
-			}
+        private void Wave_MouseMove(object? sender, MouseEventArgs e)
+        {
+            this.mouseX = e.X;
+            if (this.OriginalAudio.Playing)
+            {
+                return;
+            }
 
-			if (this.pendingSelect && !this.dragSelecting)
-			{
-				if (Math.Abs(e.X - this.mouseDownX) >= DragThresholdPx)
-				{
-					this.dragSelecting = true;
-				}
-			}
+            if (this.pendingSelect && !this.dragSelecting)
+            {
+                if (Math.Abs(e.X - this.mouseDownX) >= DragThresholdPx)
+                {
+                    this.dragSelecting = true;
+                }
+            }
 
-			if (this.dragSelecting)
-			{
-				this.selectEndFrame = this.MapPixelToFrameInView(e.X);
-				this.UpdateSelection();
-				// DIES IST DER FIX: Fordert sofort eine Neuzeichnung an, 
-				// die den SCHNELLEN Paint-Handler (Overlay-Zeichnung) triggert.
-				this.pictureBox_waveform.Invalidate();
-			}
-		}
+            if (this.dragSelecting)
+            {
+                this.selectEndFrame = this.MapPixelToFrameInView(e.X);
+                this.UpdateSelection();
+                // DIES IST DER FIX: Fordert sofort eine Neuzeichnung an, 
+                // die den SCHNELLEN Paint-Handler (Overlay-Zeichnung) triggert.
+                this.pictureBox_waveform.Invalidate();
+            }
+        }
 
-		private void Wave_MouseUp(object? sender, MouseEventArgs e)
-		{
-			if (this.OriginalAudio.Playing)
-			{
-				this.pendingSelect = false;
-				this.dragSelecting = false;
-				return;
-			}
+        private void Wave_MouseUp(object? sender, MouseEventArgs e)
+        {
+            if (this.OriginalAudio.Playing)
+            {
+                this.pendingSelect = false;
+                this.dragSelecting = false;
+                return;
+            }
 
-			if (e.Button != MouseButtons.Left)
-			{
-				return;
-			}
+            if (e.Button != MouseButtons.Left)
+            {
+                return;
+            }
 
-			if (!this.dragSelecting && this.pendingSelect)
-			{
-				long frame = this.MapPixelToFrameInView(e.X);
-				this.OriginalAudio.SelectionStart = -1;
-				this.OriginalAudio.SelectionEnd = -1;
-				this.OriginalAudio.SetPosition(frame);
-				int channels = Math.Max(1, this.OriginalAudio.Channels);
-				this.OriginalAudio.StartingOffset = frame * channels;
-				long desiredOffset = frame - this.GetCaretAnchorFrame();
-				desiredOffset = Math.Max(0, desiredOffset);
-				this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
-				this.UpdateOffsetScrollbar();
+            if (!this.dragSelecting && this.pendingSelect)
+            {
+                long frame = this.MapPixelToFrameInView(e.X);
+                this.OriginalAudio.SelectionStart = -1;
+                this.OriginalAudio.SelectionEnd = -1;
+                this.OriginalAudio.SetPosition(frame);
+                int channels = Math.Max(1, this.OriginalAudio.Channels);
+                this.OriginalAudio.StartingOffset = frame * channels;
+                long desiredOffset = frame - this.GetCaretAnchorFrame();
+                desiredOffset = Math.Max(0, desiredOffset);
+                this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
+                this.UpdateOffsetScrollbar();
 
-				// EINZELKLICK: Muss die Wellenform neu rendern, da der Scroll-Offset sich geändert hat.
-				_ = this.RefreshWaveformAsync();
-			}
-			else if (this.dragSelecting)
-			{
-				this.selectEndFrame = this.MapPixelToFrameInView(e.X);
-				this.UpdateSelection();
+                // EINZELKLICK: Muss die Wellenform neu rendern, da der Scroll-Offset sich geändert hat.
+                _ = this.RefreshWaveformAsync();
+            }
+            else if (this.dragSelecting)
+            {
+                this.selectEndFrame = this.MapPixelToFrameInView(e.X);
+                this.UpdateSelection();
 
-				// SELEKTION BEENDET: Ein finaler Cache-Refresh (falls nötig) nach dem Dragging. 
-				// Dieser eine Aufruf verursacht keinen spürbaren Lag.
-				_ = this.RefreshWaveformAsync();
-			}
+                // SELEKTION BEENDET: Ein finaler Cache-Refresh (falls nötig) nach dem Dragging. 
+                // Dieser eine Aufruf verursacht keinen spürbaren Lag.
+                _ = this.RefreshWaveformAsync();
+            }
 
-			this.pendingSelect = false;
-			this.dragSelecting = false;
-		}
+            this.pendingSelect = false;
+            this.dragSelecting = false;
+        }
 
-		private void UpdateSelection()
-		{
-			long previousSamples = this.GetCurrentSamplePosition();
-			long start = Math.Min(this.selectStartFrame, this.selectEndFrame);
-			long end = Math.Max(this.selectStartFrame, this.selectEndFrame);
-			int channels = Math.Max(1, this.OriginalAudio.Channels);
-			if (end - start > 0)
-			{
-				this.OriginalAudio.SelectionStart = start * channels;
-				this.OriginalAudio.SelectionEnd = end * channels;
-			}
-			else
-			{
-				this.OriginalAudio.SelectionStart = -1;
-				this.OriginalAudio.SelectionEnd = -1;
-			}
-			this.RecalculateLoopFraction();
-			this.ApplyLoopFractionToAudio();
-			if (this.OriginalAudio.Playing)
-			{
-				bool snapped = this.EnsureLoopPosition(previousSamples, false);
-				if (snapped)
-				{
-					this.AlignViewToCurrentPosition();
-				}
-				else
-				{
-					this.RestoreLoopPlaybackPosition(previousSamples);
-				}
-			}
-		}
+        private void UpdateSelection()
+        {
+            long previousSamples = this.GetCurrentSamplePosition();
+            long start = Math.Min(this.selectStartFrame, this.selectEndFrame);
+            long end = Math.Max(this.selectStartFrame, this.selectEndFrame);
+            int channels = Math.Max(1, this.OriginalAudio.Channels);
+            if (end - start > 0)
+            {
+                this.OriginalAudio.SelectionStart = start * channels;
+                this.OriginalAudio.SelectionEnd = end * channels;
+            }
+            else
+            {
+                this.OriginalAudio.SelectionStart = -1;
+                this.OriginalAudio.SelectionEnd = -1;
+            }
+            this.RecalculateLoopFraction();
+            this.ApplyLoopFractionToAudio();
+            if (this.OriginalAudio.Playing)
+            {
+                bool snapped = this.EnsureLoopPosition(previousSamples, false);
+                if (snapped)
+                {
+                    this.AlignViewToCurrentPosition();
+                }
+                else
+                {
+                    this.RestoreLoopPlaybackPosition(previousSamples);
+                }
+            }
+        }
 
-		private async void button_playback_Click(object? sender, EventArgs e)
+        private async void button_playback_Click(object? sender, EventArgs e)
         {
             await this.TogglePlayAsync();
         }
@@ -1305,17 +1305,17 @@ namespace ModularAudience.Forms.Modules
 
             WindowMain.InvokeIfRequired(() =>
             {
-                global::ModularAudience.Forms.AudioCollectionView? targetView = WindowMain.CollectionViews.FirstOrDefault(cv => cv != null && !cv.IsDisposed);
-                if (targetView == null)
-                {
-                    targetView = new global::ModularAudience.Forms.AudioCollectionView(new[] { clip });
+                AudioCollectionView? targetView = WindowMain.CollectionViews.FirstOrDefault(cv => cv != null && !cv.IsDisposed);
+                if (targetView == null || targetView.IsDisposed)
+				{
+                    targetView = new AudioCollectionView([clip]);
                     WindowMain.CollectionViews.Add(targetView);
-                    targetView.Show();
+					targetView.Show();
                 }
                 else
                 {
-                    targetView.AudioC.Audios.Add(clip);
-                }
+					targetView.AudioC.Audios.Add(clip);
+				}
 
                 WindowMain.UpdateCollectionTag(clip, targetView);
                 LogCollection.Log($"Selection copied to '{clip.Name}'.");
@@ -1554,26 +1554,27 @@ namespace ModularAudience.Forms.Modules
             }
 
             WindowMain.RefreshAllCollectionViews();
-		}
+        }
 
         internal void HighlightBorder()
         {
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.FormBorderColor = Color.Red;
-		}
+        }
+
         internal void NormalightBorder()
         {
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.FormBorderColor = Color.White;
-		}
+        }
 
 
 
 
-		// Berücksichtigt Zoom und Scroll-Offset
-		private int FrameToPixel(long frameIndex)
-		{
-			if (this.OriginalAudio == null || this.Settings == null)
+        // Berücksichtigt Zoom und Scroll-Offset
+        private int FrameToPixel(long frameIndex)
+        {
+            if (this.OriginalAudio == null || this.Settings == null)
             {
                 return 0;
             }
@@ -1581,18 +1582,18 @@ namespace ModularAudience.Forms.Modules
             // 1. Relativer Frame-Index (vom linken Rand des sichtbaren Bereichs)
             long relativeFrame = frameIndex - this.OriginalAudio.ScrollOffset;
 
-			// 2. Umrechnung in Pixel
-			// Hier wird Samples pro Pixel (Zoom) verwendet.
-			// Eine Division durch 0 wird durch Math.Max verhindert, obwohl SamplesPerPixel > 0 sein sollte.
-			int samplesPerPixel = Math.Max(1, this.samplesPerPixel);
+            // 2. Umrechnung in Pixel
+            // Hier wird Samples pro Pixel (Zoom) verwendet.
+            // Eine Division durch 0 wird durch Math.Max verhindert, obwohl SamplesPerPixel > 0 sein sollte.
+            int samplesPerPixel = Math.Max(1, this.samplesPerPixel);
 
-			return (int) (relativeFrame / samplesPerPixel);
-		}
+            return (int) (relativeFrame / samplesPerPixel);
+        }
 
-		// Helfermethode: Gibt die aktuelle Playback-Position in Frames zurück
-		private long GetCurrentFramePosition()
-		{
-			if (this.OriginalAudio == null || this.OriginalAudio.Channels == 0)
+        // Helfermethode: Gibt die aktuelle Playback-Position in Frames zurück
+        private long GetCurrentFramePosition()
+        {
+            if (this.OriginalAudio == null || this.OriginalAudio.Channels == 0)
             {
                 return 0;
             }
@@ -1600,145 +1601,145 @@ namespace ModularAudience.Forms.Modules
             // CurrentPlaybackPositionBytes kommt aus AudioObj.Playback.cs
             long bytes = this.OriginalAudio.CurrentPlaybackPositionBytes;
 
-			// Frames = Bytes / (Kanäle * 4 Bytes pro Float)
-			int bytesPerFrame = Math.Max(1, this.OriginalAudio.Channels) * sizeof(float);
+            // Frames = Bytes / (Kanäle * 4 Bytes pro Float)
+            int bytesPerFrame = Math.Max(1, this.OriginalAudio.Channels) * sizeof(float);
 
-			return bytes / bytesPerFrame;
-		}
+            return bytes / bytesPerFrame;
+        }
 
-		[SupportedOSPlatform("windows")]
-		private void waveFormPictureBox_Paint(object sender, PaintEventArgs e)
-		{
-			if (this.OriginalAudio == null || this.OriginalAudio.Data == null || this.currentWaveformBitmap == null)
-			{
-				// Wenn der Cache noch nicht fertig ist, nur den Hintergrund zeichnen
-				e.Graphics.Clear(Color.Black); // Oder Ihre gewählte Hintergrundfarbe
-				return;
-			}
+        [SupportedOSPlatform("windows")]
+        private void waveFormPictureBox_Paint(object sender, PaintEventArgs e)
+        {
+            if (this.OriginalAudio == null || this.OriginalAudio.Data == null || this.currentWaveformBitmap == null)
+            {
+                // Wenn der Cache noch nicht fertig ist, nur den Hintergrund zeichnen
+                e.Graphics.Clear(Color.Black); // Oder Ihre gewählte Hintergrundfarbe
+                return;
+            }
 
-			// 1. Statischen Cache als Hintergrund zeichnen (extrem schnell)
-			// 'currentWaveformBitmap' muss das Ergebnis eines DrawWaveformCacheAsync-Aufrufs sein.
-			e.Graphics.DrawImage(this.currentWaveformBitmap, 0, 0);
+            // 1. Statischen Cache als Hintergrund zeichnen (extrem schnell)
+            // 'currentWaveformBitmap' muss das Ergebnis eines DrawWaveformCacheAsync-Aufrufs sein.
+            e.Graphics.DrawImage(this.currentWaveformBitmap, 0, 0);
 
-			// 2. Selection Rectangle (Auswahl) zeichnen
-			DrawSelectionOverlay(e.Graphics, e.ClipRectangle.Height);
+            // 2. Selection Rectangle (Auswahl) zeichnen
+            this.DrawSelectionOverlay(e.Graphics, e.ClipRectangle.Height);
 
-			// 3. Playback Caret (Abspielposition) zeichnen
-			DrawPlaybackCaret(e.Graphics, e.ClipRectangle.Height);
-		}
+            // 3. Playback Caret (Abspielposition) zeichnen
+            this.DrawPlaybackCaret(e.Graphics, e.ClipRectangle.Height);
+        }
 
-		[SupportedOSPlatform("windows")]
-		private void DrawSelectionOverlay(Graphics g, int height)
-		{
-			long selStartFrame = this.OriginalAudio.SelectionStart;
-			long selEndFrame = this.OriginalAudio.SelectionEnd;
+        [SupportedOSPlatform("windows")]
+        private void DrawSelectionOverlay(Graphics g, int height)
+        {
+            long selStartFrame = this.OriginalAudio.SelectionStart;
+            long selEndFrame = this.OriginalAudio.SelectionEnd;
 
-			// Nur zeichnen, wenn eine Auswahl aktiv ist und gültig ist
-			if (selStartFrame < 0 || selEndFrame < 0 || selStartFrame == selEndFrame)
-			{
-				return;
-			}
+            // Nur zeichnen, wenn eine Auswahl aktiv ist und gültig ist
+            if (selStartFrame < 0 || selEndFrame < 0 || selStartFrame == selEndFrame)
+            {
+                return;
+            }
 
-			// Sicherstellen, dass Start < Ende für die Berechnung
-			long start = Math.Min(selStartFrame, selEndFrame);
-			long end = Math.Max(selStartFrame, selEndFrame);
+            // Sicherstellen, dass Start < Ende für die Berechnung
+            long start = Math.Min(selStartFrame, selEndFrame);
+            long end = Math.Max(selStartFrame, selEndFrame);
 
-			// Umrechnung in Pixel
-			int startPixel = FrameToPixel(start);
-			int endPixel = FrameToPixel(end);
+            // Umrechnung in Pixel
+            int startPixel = this.FrameToPixel(start);
+            int endPixel = this.FrameToPixel(end);
 
-			// Das Selection-Rechteck
-			int x = startPixel;
-			int w = endPixel - startPixel;
+            // Das Selection-Rechteck
+            int x = startPixel;
+            int w = endPixel - startPixel;
 
-			// Optimierung: Nur den sichtbaren Bereich zeichnen
-			int clipWidth = this.pictureBox_waveform.Width;
-			int clipHeight = height;
+            // Optimierung: Nur den sichtbaren Bereich zeichnen
+            int clipWidth = this.pictureBox_waveform.Width;
+            int clipHeight = height;
 
-			// Clipping-Berechnung (wichtig für Scrolling Performance)
-			int drawX = Math.Max(0, x);
-			int drawWidth = Math.Min(clipWidth, x + w) - drawX;
+            // Clipping-Berechnung (wichtig für Scrolling Performance)
+            int drawX = Math.Max(0, x);
+            int drawWidth = Math.Min(clipWidth, x + w) - drawX;
 
-			if (drawWidth <= 0 || drawX >= clipWidth)
-			{
-				return; // Selection ist nicht sichtbar
-			}
+            if (drawWidth <= 0 || drawX >= clipWidth)
+            {
+                return; // Selection ist nicht sichtbar
+            }
 
-			// Zeichnen der transparenten Auswahl
-			using (var selectionBrush = new SolidBrush(Color.FromArgb(60, Color.DeepSkyBlue))) // 60% Transparenz, helles Blau
-			{
-				g.FillRectangle(selectionBrush, drawX, 0, drawWidth, clipHeight);
-			}
+            // Zeichnen der transparenten Auswahl
+            using (var selectionBrush = new SolidBrush(Color.FromArgb(60, Color.DeepSkyBlue))) // 60% Transparenz, helles Blau
+            {
+                g.FillRectangle(selectionBrush, drawX, 0, drawWidth, clipHeight);
+            }
 
-			// Optional: Randlinien der Selektion
-			using (var selectionPen = new Pen(Color.DodgerBlue, 1))
-			{
-				// Start- und Endlinien zeichnen
-				g.DrawLine(selectionPen, startPixel, 0, startPixel, clipHeight);
-				g.DrawLine(selectionPen, endPixel, 0, endPixel, clipHeight);
-			}
-		}
+            // Optional: Randlinien der Selektion
+            using (var selectionPen = new Pen(Color.DodgerBlue, 1))
+            {
+                // Start- und Endlinien zeichnen
+                g.DrawLine(selectionPen, startPixel, 0, startPixel, clipHeight);
+                g.DrawLine(selectionPen, endPixel, 0, endPixel, clipHeight);
+            }
+        }
 
-		[SupportedOSPlatform("windows")]
-		private void DrawPlaybackCaret(Graphics g, int height)
-		{
-			// Caret nur zeichnen, wenn Playing oder Paused
-			if (!this.OriginalAudio.Playing && !this.OriginalAudio.Paused)
-			{
-				return;
-			}
+        [SupportedOSPlatform("windows")]
+        private void DrawPlaybackCaret(Graphics g, int height)
+        {
+            // Caret nur zeichnen, wenn Playing oder Paused
+            if (!this.OriginalAudio.Playing && !this.OriginalAudio.Paused)
+            {
+                return;
+            }
 
-			// Aktuelle Position in Frames
-			long currentFrame = GetCurrentFramePosition();
+            // Aktuelle Position in Frames
+            long currentFrame = this.GetCurrentFramePosition();
 
-			// Caret-Position in Pixel
-			int caretPixelX = FrameToPixel(currentFrame);
+            // Caret-Position in Pixel
+            int caretPixelX = this.FrameToPixel(currentFrame);
 
-			// Überprüfen, ob das Caret im sichtbaren Bereich ist
-			if (caretPixelX < 0 || caretPixelX > this.pictureBox_waveform.Width)
-			{
-				return;
-			}
+            // Überprüfen, ob das Caret im sichtbaren Bereich ist
+            if (caretPixelX < 0 || caretPixelX > this.pictureBox_waveform.Width)
+            {
+                return;
+            }
 
-			// Caret zeichnen (dicke rote Linie)
-			using (var caretPen = new Pen(Color.Red, 2))
-			{
-				// Optional: Eine leichte Verbesserung der Sichtbarkeit am oberen Rand (kleiner Dreieck-Kopf)
-				g.DrawLine(caretPen, caretPixelX, 0, caretPixelX, height);
-				g.DrawLine(caretPen, caretPixelX - 3, 0, caretPixelX + 3, 0); // Horizontaler Strich oben
-			}
-		}
+            // Caret zeichnen (dicke rote Linie)
+            using (var caretPen = new Pen(Color.Red, 2))
+            {
+                // Optional: Eine leichte Verbesserung der Sichtbarkeit am oberen Rand (kleiner Dreieck-Kopf)
+                g.DrawLine(caretPen, caretPixelX, 0, caretPixelX, height);
+                g.DrawLine(caretPen, caretPixelX - 3, 0, caretPixelX + 3, 0); // Horizontaler Strich oben
+            }
+        }
 
 
 
-		protected override void WndProc(ref Message m)
-		{
-			const int WM_NCLBUTTONDBLCLK = 0x00A3; // Non-client left button double-click
-			if (m.Msg == WM_NCLBUTTONDBLCLK)
-			{
-				try
-				{
-					// Dialog auf UI-Thread öffnen
-					this.BeginInvoke(new Action(() => ShowTrackRenameDialog()));
-				}
-				catch { }
-				// Standardverhalten (Maximieren) unterdrücken
-				return;
-			}
+        protected override void WndProc(ref Message m)
+        {
+            const int WM_NCLBUTTONDBLCLK = 0x00A3; // Non-client left button double-click
+            if (m.Msg == WM_NCLBUTTONDBLCLK)
+            {
+                try
+                {
+                    // Dialog auf UI-Thread öffnen
+                    this.BeginInvoke(new Action(() => this.ShowTrackRenameDialog()));
+                }
+                catch { }
+                // Standardverhalten (Maximieren) unterdrücken
+                return;
+            }
 
-			base.WndProc(ref m);
-		}
+            base.WndProc(ref m);
+        }
 
-		private void ShowTrackRenameDialog()
-		{
-			string current = this.Text ?? string.Empty;
-			// Microsoft.VisualBasic.Interaction.InputBox wird bereits im Projekt genutzt
-			string input = Microsoft.VisualBasic.Interaction.InputBox("Enter new name for this track:", "Rename Track", current);
-			if (!string.IsNullOrWhiteSpace(input) && input != current)
-			{
-				this.Text = input;
+        private void ShowTrackRenameDialog()
+        {
+            string current = this.Text ?? string.Empty;
+            // Microsoft.VisualBasic.Interaction.InputBox wird bereits im Projekt genutzt
+            string input = Microsoft.VisualBasic.Interaction.InputBox("Enter new name for this track:", "Rename Track", current);
+            if (!string.IsNullOrWhiteSpace(input) && input != current)
+            {
+                this.Text = input;
                 this.OriginalAudio.Name = input;
-			}
-		}
-	}
+            }
+        }
+    }
 }

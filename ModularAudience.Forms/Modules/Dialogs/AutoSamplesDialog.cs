@@ -69,134 +69,134 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
 
 
-		private async void button_cut_Click(object sender, EventArgs e)
-		{
-			if (this.cuttingCts != null)
-			{
-				return;
-			}
-
-			this.ResultSamples.Clear();
-			this.ToggleInputs(false);
-			this.cuttingCts = new CancellationTokenSource();
-			var progress = new Progress<double>(value =>
-			{
-				double clamped = Math.Max(0d, Math.Min(1d, value));
-				int percent = (int) Math.Round(clamped * 100d);
-				percent = Math.Max(this.progressBar_cutting.Minimum, Math.Min(this.progressBar_cutting.Maximum, percent));
-				this.progressBar_cutting.Value = percent;
-				this.label_status.Text = $"Processing… {percent}%";
-			});
-
-			try
-			{
-				var clips = await AutoSampleCutter.CutAutoSamplesAsync(
-					this.OriginalAudio,
-					this.CutMinDuration,
-					this.CutMaxDuration,
-					this.CutSilenceDuration,
-					progress,
-					this.cuttingCts.Token).ConfigureAwait(true);
-
-				foreach (var clip in clips)
-				{
-					this.ResultSamples.Add(clip);
-				}
-
-				if (this.ResultSamples.Count == 0)
-				{
-					this.label_status.Text = "No regions detected – adjust settings.";
-					MessageBox.Show(this, "No regions matched the current thresholds. Try lowering the minimum duration or silence requirement.", "Auto Samples", MessageBoxButtons.OK, MessageBoxIcon.Information);
-				}
-				else
-				{
-					this.label_status.Text = $"{this.ResultSamples.Count} samples ready";
-					this.DialogResult = DialogResult.OK;
-					this.Close();
-				}
-			}
-			catch (OperationCanceledException)
-			{
-				this.label_status.Text = "Processing canceled";
-			}
-			catch (Exception ex)
-			{
-				this.label_status.Text = "Processing failed";
-				MessageBox.Show(this, $"Auto sample cutting failed:{Environment.NewLine}{ex.Message}", "Auto Samples", MessageBoxButtons.OK, MessageBoxIcon.Error);
-			}
-			finally
-			{
-				this.cuttingCts?.Dispose();
-				this.cuttingCts = null;
-				this.progressBar_cutting.Value = 0;
-				this.ToggleInputs(true);
-			}
-		}
-
-		private async void button_cutV2_Click(object sender, EventArgs e)
+        private async void button_cut_Click(object sender, EventArgs e)
         {
-			if (this.cuttingCts != null)
-			{
-				return;
-			}
+            if (this.cuttingCts != null)
+            {
+                return;
+            }
 
-			this.ResultSamples.Clear();
-			this.ToggleInputs(false);
-			this.cuttingCts = new CancellationTokenSource();
-			var progress = new Progress<double>(value =>
-			{
-				double clamped = Math.Max(0d, Math.Min(1d, value));
-				int percent = (int) Math.Round(clamped * 100d);
-				percent = Math.Max(this.progressBar_cutting.Minimum, Math.Min(this.progressBar_cutting.Maximum, percent));
-				this.progressBar_cutting.Value = percent;
-				this.label_status.Text = $"Processing… {percent}%";
-			});
+            this.ResultSamples.Clear();
+            this.ToggleInputs(false);
+            this.cuttingCts = new CancellationTokenSource();
+            var progress = new Progress<double>(value =>
+            {
+                double clamped = Math.Max(0d, Math.Min(1d, value));
+                int percent = (int) Math.Round(clamped * 100d);
+                percent = Math.Max(this.progressBar_cutting.Minimum, Math.Min(this.progressBar_cutting.Maximum, percent));
+                this.progressBar_cutting.Value = percent;
+                this.label_status.Text = $"Processing… {percent}%";
+            });
 
-			try
-			{
-				var clips = await AutoSampleCutter_V2.CutAutoSamplesAsync(
-					this.OriginalAudio,
-					null,
-					null,
-					this.CutMinDuration > 0 ? this.CutMinDuration : null,
-					this.CutMaxDuration > 0 ? this.CutMaxDuration : null,
-					null,
-					progress,
-					this.cuttingCts.Token).ConfigureAwait(true);
+            try
+            {
+                var clips = await AutoSampleCutter.CutAutoSamplesAsync(
+                    this.OriginalAudio,
+                    this.CutMinDuration,
+                    this.CutMaxDuration,
+                    this.CutSilenceDuration,
+                    progress,
+                    this.cuttingCts.Token).ConfigureAwait(true);
 
-				foreach (var clip in clips)
-				{
-					this.ResultSamples.Add(clip);
-				}
+                foreach (var clip in clips)
+                {
+                    this.ResultSamples.Add(clip);
+                }
 
-				if (this.ResultSamples.Count == 0)
-				{
-					this.label_status.Text = "No regions detected – adjust settings.";
-					MessageBox.Show(this, "No regions matched the current thresholds. Try lowering the minimum duration or silence requirement.", "Auto Samples", MessageBoxButtons.OK, MessageBoxIcon.Information);
-				}
-				else
-				{
-					this.label_status.Text = $"{this.ResultSamples.Count} samples ready";
-					this.DialogResult = DialogResult.OK;
-					this.Close();
-				}
-			}
-			catch (OperationCanceledException)
-			{
-				this.label_status.Text = "Processing canceled";
-			}
-			catch (Exception ex)
-			{
-				this.label_status.Text = "Processing failed";
-				MessageBox.Show(this, $"Auto sample cutting failed:{Environment.NewLine}{ex.Message}", "Auto Samples", MessageBoxButtons.OK, MessageBoxIcon.Error);
-			}
-			finally
-			{
-				this.cuttingCts?.Dispose();
-				this.cuttingCts = null;
-				this.progressBar_cutting.Value = 0;
-				this.ToggleInputs(true);
-			}
-		}
+                if (this.ResultSamples.Count == 0)
+                {
+                    this.label_status.Text = "No regions detected – adjust settings.";
+                    MessageBox.Show(this, "No regions matched the current thresholds. Try lowering the minimum duration or silence requirement.", "Auto Samples", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    this.label_status.Text = $"{this.ResultSamples.Count} samples ready";
+                    this.DialogResult = DialogResult.OK;
+                    this.Close();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                this.label_status.Text = "Processing canceled";
+            }
+            catch (Exception ex)
+            {
+                this.label_status.Text = "Processing failed";
+                MessageBox.Show(this, $"Auto sample cutting failed:{Environment.NewLine}{ex.Message}", "Auto Samples", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                this.cuttingCts?.Dispose();
+                this.cuttingCts = null;
+                this.progressBar_cutting.Value = 0;
+                this.ToggleInputs(true);
+            }
+        }
+
+        private async void button_cutV2_Click(object sender, EventArgs e)
+        {
+            if (this.cuttingCts != null)
+            {
+                return;
+            }
+
+            this.ResultSamples.Clear();
+            this.ToggleInputs(false);
+            this.cuttingCts = new CancellationTokenSource();
+            var progress = new Progress<double>(value =>
+            {
+                double clamped = Math.Max(0d, Math.Min(1d, value));
+                int percent = (int) Math.Round(clamped * 100d);
+                percent = Math.Max(this.progressBar_cutting.Minimum, Math.Min(this.progressBar_cutting.Maximum, percent));
+                this.progressBar_cutting.Value = percent;
+                this.label_status.Text = $"Processing… {percent}%";
+            });
+
+            try
+            {
+                var clips = await AutoSampleCutter_V2.CutAutoSamplesAsync(
+                    this.OriginalAudio,
+                    null,
+                    null,
+                    this.CutMinDuration > 0 ? this.CutMinDuration : null,
+                    this.CutMaxDuration > 0 ? this.CutMaxDuration : null,
+                    null,
+                    progress,
+                    this.cuttingCts.Token).ConfigureAwait(true);
+
+                foreach (var clip in clips)
+                {
+                    this.ResultSamples.Add(clip);
+                }
+
+                if (this.ResultSamples.Count == 0)
+                {
+                    this.label_status.Text = "No regions detected – adjust settings.";
+                    MessageBox.Show(this, "No regions matched the current thresholds. Try lowering the minimum duration or silence requirement.", "Auto Samples", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    this.label_status.Text = $"{this.ResultSamples.Count} samples ready";
+                    this.DialogResult = DialogResult.OK;
+                    this.Close();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                this.label_status.Text = "Processing canceled";
+            }
+            catch (Exception ex)
+            {
+                this.label_status.Text = "Processing failed";
+                MessageBox.Show(this, $"Auto sample cutting failed:{Environment.NewLine}{ex.Message}", "Auto Samples", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                this.cuttingCts?.Dispose();
+                this.cuttingCts = null;
+                this.progressBar_cutting.Value = 0;
+                this.ToggleInputs(true);
+            }
+        }
     }
 }

@@ -462,11 +462,11 @@ namespace ModularAudience.Audio.Processors_V1
             for (int f = 0; f < nFrames; f++)
             {
                 int start = f * hopSize;
-                MathNet.Numerics.Complex32[] fft = new MathNet.Numerics.Complex32[fftSize];
+                Complex32[] fft = new Complex32[fftSize];
                 for (int i = 0; i < fftSize; i++)
                 {
                     float s = (start + i) < n ? samples[start + i] : 0f;
-                    fft[i] = new MathNet.Numerics.Complex32((float) (s * window[i]), 0f);
+                    fft[i] = new Complex32((float) (s * window[i]), 0f);
                 }
 
                 Fourier.Forward(fft, FourierOptions.Matlab);
@@ -522,10 +522,10 @@ namespace ModularAudience.Audio.Processors_V1
                 L <<= 1;
             }
 
-            var fft = new MathNet.Numerics.Complex32[L];
+            var fft = new Complex32[L];
             for (int i = 0; i < n; i++)
             {
-                fft[i] = new MathNet.Numerics.Complex32((float) x[i], 0f);
+                fft[i] = new Complex32((float) x[i], 0f);
             }
 
             for (int i = n; i < L; i++)
@@ -534,7 +534,7 @@ namespace ModularAudience.Audio.Processors_V1
             }
 
             Fourier.Forward(fft, FourierOptions.Matlab);
-            for (int i = 0; i < L; i++) { var v = fft[i]; fft[i] = new MathNet.Numerics.Complex32(v.Magnitude * v.Magnitude, 0f); }
+            for (int i = 0; i < L; i++) { var v = fft[i]; fft[i] = new Complex32(v.Magnitude * v.Magnitude, 0f); }
             Fourier.Inverse(fft, FourierOptions.Matlab);
             double r0 = Math.Max(fft[0].Real, 1e-12f);
             double[] acf = new double[n];
@@ -739,11 +739,11 @@ namespace ModularAudience.Audio.Processors_V1
                     int end = Math.Min(start + fftSize, mono.Length);
 
                     // Fenster kopieren und fenstern
-                    MathNet.Numerics.Complex32[] fft = new MathNet.Numerics.Complex32[fftSize];
+                    Complex32[] fft = new Complex32[fftSize];
                     for (int i = 0; i < fftSize; i++)
                     {
                         float s = (start + i) < mono.Length ? mono[start + i] : 0f;
-                        fft[i] = new MathNet.Numerics.Complex32((float) (s * window[i]), 0f);
+                        fft[i] = new Complex32((float) (s * window[i]), 0f);
                     }
 
                     // FFT

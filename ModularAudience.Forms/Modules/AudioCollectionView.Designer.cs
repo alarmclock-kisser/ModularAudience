@@ -46,6 +46,8 @@
             // checkBox_autoPlay
             // 
             this.checkBox_autoPlay.AutoSize = true;
+            this.checkBox_autoPlay.Checked = true;
+            this.checkBox_autoPlay.CheckState = CheckState.Checked;
             this.checkBox_autoPlay.Location = new Point(155, 2);
             this.checkBox_autoPlay.Name = "checkBox_autoPlay";
             this.checkBox_autoPlay.Size = new Size(77, 19);

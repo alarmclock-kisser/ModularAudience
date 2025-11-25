@@ -36,8 +36,11 @@
             this.label_info_bpm = new Label();
             this.label_info_hits = new Label();
             this.label_info_dragndrop = new Label();
+            this.numericUpDown_volume = new NumericUpDown();
+            this.label_info_volume = new Label();
             this.panel_pattern.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_bpm).BeginInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_volume).BeginInit();
             this.SuspendLayout();
             // 
             // panel_pattern
@@ -79,8 +82,10 @@
             this.numericUpDown_bpm.Maximum = new decimal(new int[] { 360, 0, 0, 0 });
             this.numericUpDown_bpm.Minimum = new decimal(new int[] { 15, 0, 0, 0 });
             this.numericUpDown_bpm.Name = "numericUpDown_bpm";
+            this.numericUpDown_bpm.ReadOnly = true;
             this.numericUpDown_bpm.Size = new Size(75, 23);
             this.numericUpDown_bpm.TabIndex = 6;
+            this.numericUpDown_bpm.TabStop = false;
             this.numericUpDown_bpm.Value = new decimal(new int[] { 90, 0, 0, 0 });
             // 
             // domainUpDown_hits
@@ -95,8 +100,10 @@
             this.domainUpDown_hits.Items.Add("4");
             this.domainUpDown_hits.Location = new Point(120, 12);
             this.domainUpDown_hits.Name = "domainUpDown_hits";
+            this.domainUpDown_hits.ReadOnly = true;
             this.domainUpDown_hits.Size = new Size(75, 23);
             this.domainUpDown_hits.TabIndex = 7;
+            this.domainUpDown_hits.TabStop = false;
             this.domainUpDown_hits.Text = "Hits";
             this.domainUpDown_hits.SelectedItemChanged += this.domainUpDown_hits_SelectedItemChanged;
             // 
@@ -127,11 +134,32 @@
             this.label_info_dragndrop.TabIndex = 10;
             this.label_info_dragndrop.Text = "Drop Sample here to add";
             // 
+            // numericUpDown_volume
+            // 
+            this.numericUpDown_volume.Location = new Point(436, 27);
+            this.numericUpDown_volume.Name = "numericUpDown_volume";
+            this.numericUpDown_volume.ReadOnly = true;
+            this.numericUpDown_volume.Size = new Size(55, 23);
+            this.numericUpDown_volume.TabIndex = 11;
+            this.numericUpDown_volume.TabStop = false;
+            this.numericUpDown_volume.Value = new decimal(new int[] { 80, 0, 0, 0 });
+            // 
+            // label_info_volume
+            // 
+            this.label_info_volume.AutoSize = true;
+            this.label_info_volume.Location = new Point(436, 9);
+            this.label_info_volume.Name = "label_info_volume";
+            this.label_info_volume.Size = new Size(47, 15);
+            this.label_info_volume.TabIndex = 12;
+            this.label_info_volume.Text = "Volume";
+            // 
             // DrumRollEditor
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(704, 441);
+            this.Controls.Add(this.label_info_volume);
+            this.Controls.Add(this.numericUpDown_volume);
             this.Controls.Add(this.label_info_dragndrop);
             this.Controls.Add(this.label_info_hits);
             this.Controls.Add(this.label_info_bpm);
@@ -146,6 +174,7 @@
             this.Text = "Drum Roll Editor";
             this.panel_pattern.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_bpm).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_volume).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -160,5 +189,7 @@
         private Label label_info_bpm;
         private Label label_info_hits;
         private Label label_info_dragndrop;
+        private NumericUpDown numericUpDown_volume;
+        private Label label_info_volume;
     }
 }

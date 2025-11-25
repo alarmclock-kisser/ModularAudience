@@ -16,7 +16,7 @@ namespace ModularAudience.Forms
 {
     public partial class AudioCollectionView : Form
     {
-        internal readonly AudioCollection AudioC = new();
+        internal  readonly AudioCollection AudioC = new();
 
         internal IEnumerable<AudioObj> SelectedAudios => this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>();
 
@@ -26,7 +26,7 @@ namespace ModularAudience.Forms
         private int _preDragSelection = -1;
         private List<AudioObj>? _dragSelectionSnapshot;
         private const double AutoPlayMaxSeconds = 10.0;
-        private readonly object autoPlayGate = new();
+        private readonly Lock autoPlayGate = new();
         private CancellationTokenSource? autoPlayCts;
         private AudioObj? autoPlayCurrent;
         private int selectionVersion;
@@ -42,6 +42,11 @@ namespace ModularAudience.Forms
         private static readonly HashSet<char> InvalidFileNameChars = [.. Path.GetInvalidFileNameChars()];
 
         public int AudioCount => this.AudioC.Audios.Count;
+
+		private System.Windows.Forms.Timer waveformPreviewTimer;
+        private int waveformPreviewIndex = -1;
+        private WaveformPreview? waveformPreviewForm;
+        private Point lastMousePos;
 
         public AudioCollectionView(IEnumerable<AudioObj> audios)
         {
@@ -84,9 +89,15 @@ namespace ModularAudience.Forms
                 await this.CancelAutoPlayAsync(stopCollection: true).ConfigureAwait(false);
                 this.Hide();
                 await this.AudioC.ClearAsync().ConfigureAwait(false);
+                this.AudioC.Dispose();
 
                 WindowMain.CollectionViews.Remove(this);
-			};
+            };
+
+            this.waveformPreviewTimer = new System.Windows.Forms.Timer { Interval = 700 };
+            this.waveformPreviewTimer.Tick += this.WaveformPreviewTimer_Tick;
+            this.listBox_audios.MouseMove += this.ListBox_audios_MouseMove_WaveformPreview;
+            this.listBox_audios.MouseLeave += this.ListBox_audios_MouseLeave_WaveformPreview;
         }
 
 
@@ -330,77 +341,77 @@ namespace ModularAudience.Forms
             return string.IsNullOrWhiteSpace(result) ? "Audio" : result;
         }
 
-		private string BuildExportFolderName(string folderDirectory)
-		{
-			string baseName = SanitizePathSegment(this.Text);
-			string exportFolderPath = Path.Combine(folderDirectory, baseName);
-			if (!Directory.Exists(exportFolderPath))
-			{
-				return exportFolderPath;
-			}
+        private string BuildExportFolderName(string folderDirectory)
+        {
+            string baseName = SanitizePathSegment(this.Text);
+            string exportFolderPath = Path.Combine(folderDirectory, baseName);
+            if (!Directory.Exists(exportFolderPath))
+            {
+                return exportFolderPath;
+            }
 
-			try
-			{
-				// Ermittle alle direkten Unterordner, deren Name baseName oder baseName_### entspricht
-				var siblings = Directory.EnumerateDirectories(folderDirectory, baseName + "*", SearchOption.TopDirectoryOnly)
-					.Select(path => Path.GetFileName(path) ?? string.Empty)
-					.Where(name => !string.IsNullOrEmpty(name))
-					.ToList();
+            try
+            {
+                // Ermittle alle direkten Unterordner, deren Name baseName oder baseName_### entspricht
+                var siblings = Directory.EnumerateDirectories(folderDirectory, baseName + "*", SearchOption.TopDirectoryOnly)
+                    .Select(path => Path.GetFileName(path) ?? string.Empty)
+                    .Where(name => !string.IsNullOrEmpty(name))
+                    .ToList();
 
-				// Sammle numerische Suffixe; baseName ohne Suffix wird als 1 betrachtet
-				var numbers = siblings
-					.Select(name =>
-					{
-						if (string.Equals(name, baseName, StringComparison.OrdinalIgnoreCase))
-						{
-							return 1;
-						}
+                // Sammle numerische Suffixe; baseName ohne Suffix wird als 1 betrachtet
+                var numbers = siblings
+                    .Select(name =>
+                    {
+                        if (string.Equals(name, baseName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return 1;
+                        }
 
-						if (name.Length > baseName.Length + 1 && name.StartsWith(baseName + "_", StringComparison.OrdinalIgnoreCase))
-						{
-							var suffix = name.Substring(baseName.Length + 1);
-							if (int.TryParse(suffix, out int n) && n >= 2)
-							{
-								return n;
-							}
-						}
+                        if (name.Length > baseName.Length + 1 && name.StartsWith(baseName + "_", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var suffix = name.Substring(baseName.Length + 1);
+                            if (int.TryParse(suffix, out int n) && n >= 2)
+                            {
+                                return n;
+                            }
+                        }
 
-						return -1;
-					})
-					.Where(n => n > 0)
-					.ToList();
+                        return -1;
+                    })
+                    .Where(n => n > 0)
+                    .ToList();
 
-				int nextSuffix = 2;
-				if (numbers.Count > 0)
-				{
-					int max = numbers.Max();
-					nextSuffix = Math.Max(2, max + 1);
-				}
+                int nextSuffix = 2;
+                if (numbers.Count > 0)
+                {
+                    int max = numbers.Max();
+                    nextSuffix = Math.Max(2, max + 1);
+                }
 
-				// Baue Kandidatenpfad (keine Endlosschleife)
-				string candidateName = $"{baseName}_{nextSuffix}";
-				return Path.Combine(folderDirectory, candidateName);
-			}
-			catch
-			{
-				// Fallback: begrenzte Suche bis zu einem hohen Wert, danach zufälliger Suffix
-				for (int suffix = 2; suffix <= 9999; suffix++)
-				{
-					string candidateName = $"{baseName}_{suffix}";
-					string candidatePath = Path.Combine(folderDirectory, candidateName);
-					if (!Directory.Exists(candidatePath))
-					{
-						return candidatePath;
-					}
-				}
+                // Baue Kandidatenpfad (keine Endlosschleife)
+                string candidateName = $"{baseName}_{nextSuffix}";
+                return Path.Combine(folderDirectory, candidateName);
+            }
+            catch
+            {
+                // Fallback: begrenzte Suche bis zu einem hohen Wert, danach zufälliger Suffix
+                for (int suffix = 2; suffix <= 9999; suffix++)
+                {
+                    string candidateName = $"{baseName}_{suffix}";
+                    string candidatePath = Path.Combine(folderDirectory, candidateName);
+                    if (!Directory.Exists(candidatePath))
+                    {
+                        return candidatePath;
+                    }
+                }
 
-				// letzter Ausweg: eindeutiger Suffix
-				string fallback = $"{baseName}_{Guid.NewGuid():N}".Substring(0, Math.Min(64, baseName.Length + 9));
-				return Path.Combine(folderDirectory, fallback);
-			}
-		}
+                // letzter Ausweg: eindeutiger Suffix
+                string fallback = $"{baseName}_{Guid.NewGuid():N}".Substring(0, Math.Min(64, baseName.Length + 9));
+                return Path.Combine(folderDirectory, fallback);
+            }
+        }
 
-		private static string EnsureWavExtension(string filePath)
+        private static string EnsureWavExtension(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))
             {
@@ -1119,7 +1130,7 @@ namespace ModularAudience.Forms
             }
         }
 
-        
+
 
         private async void button_export_Click(object sender, EventArgs e)
         {
@@ -1257,39 +1268,39 @@ namespace ModularAudience.Forms
         internal void RefreshList()
         {
             this.listBox_audios.Invalidate();
-		}
+        }
 
 
 
 
-		protected override void WndProc(ref Message m)
-		{
-			const int WM_NCLBUTTONDBLCLK = 0x00A3; // Non-client left button double-click
-			if (m.Msg == WM_NCLBUTTONDBLCLK)
-			{
-				try
-				{
-					// Dialog auf UI-Thread öffnen
-					this.BeginInvoke(new Action(() => ShowCollectionRenameDialog()));
-				}
-				catch { }
-				// Standardverhalten (Maximieren) unterdrücken
-				return;
-			}
+        protected override void WndProc(ref Message m)
+        {
+            const int WM_NCLBUTTONDBLCLK = 0x00A3; // Non-client left button double-click
+            if (m.Msg == WM_NCLBUTTONDBLCLK)
+            {
+                try
+                {
+                    // Dialog auf UI-Thread öffnen
+                    this.BeginInvoke(new Action(() => this.ShowCollectionRenameDialog()));
+                }
+                catch { }
+                // Standardverhalten (Maximieren) unterdrücken
+                return;
+            }
 
-			base.WndProc(ref m);
-		}
+            base.WndProc(ref m);
+        }
 
-		private void ShowCollectionRenameDialog()
-		{
-			string current = this.Text ?? string.Empty;
-			// Microsoft.VisualBasic.Interaction.InputBox wird bereits im Projekt genutzt
-			string input = Microsoft.VisualBasic.Interaction.InputBox("Enter new name for this collection:", "Rename Collection", current);
-			if (!string.IsNullOrWhiteSpace(input) && input != current)
-			{
+        private void ShowCollectionRenameDialog()
+        {
+            string current = this.Text ?? string.Empty;
+            // Microsoft.VisualBasic.Interaction.InputBox wird bereits im Projekt genutzt
+            string input = Microsoft.VisualBasic.Interaction.InputBox("Enter new name for this collection:", "Rename Collection", current);
+            if (!string.IsNullOrWhiteSpace(input) && input != current)
+            {
                 this.Text = input;
-			}
-		}
+            }
+        }
 
 
 
@@ -1299,17 +1310,77 @@ namespace ModularAudience.Forms
 
 
 
-		private sealed class AudioDragPayload
-		{
-			public AudioCollectionView SourceView { get; }
-			public IReadOnlyList<AudioObj> Audios { get; }
-			public AudioObj? PrimaryAudio => this.Audios.Count > 0 ? this.Audios[0] : null;
+        private sealed class AudioDragPayload
+        {
+            public AudioCollectionView SourceView { get; }
+            public IReadOnlyList<AudioObj> Audios { get; }
+            public AudioObj? PrimaryAudio => this.Audios.Count > 0 ? this.Audios[0] : null;
 
-			public AudioDragPayload(AudioCollectionView sourceView, IReadOnlyList<AudioObj> audios)
-			{
-				this.SourceView = sourceView ?? throw new ArgumentNullException(nameof(sourceView));
-				this.Audios = audios ?? throw new ArgumentNullException(nameof(audios));
-			}
-		}
-	}
+            public AudioDragPayload(AudioCollectionView sourceView, IReadOnlyList<AudioObj> audios)
+            {
+                this.SourceView = sourceView ?? throw new ArgumentNullException(nameof(sourceView));
+                this.Audios = audios ?? throw new ArgumentNullException(nameof(audios));
+            }
+        }
+
+        private void ListBox_audios_MouseMove_WaveformPreview(object? sender, MouseEventArgs e)
+        {
+            int idx = this.listBox_audios.IndexFromPoint(e.Location);
+            if (idx != this.waveformPreviewIndex || e.Location != this.lastMousePos)
+            {
+                this.waveformPreviewTimer.Stop();
+                this.HideWaveformPreview();
+                this.waveformPreviewIndex = idx;
+                this.lastMousePos = e.Location;
+                if (idx >= 0 && idx < this.listBox_audios.Items.Count)
+                {
+                    this.waveformPreviewTimer.Start();
+                }
+            }
+        }
+
+        private void ListBox_audios_MouseLeave_WaveformPreview(object? sender, EventArgs e)
+        {
+            this.waveformPreviewTimer.Stop();
+            this.HideWaveformPreview();
+            this.waveformPreviewIndex = -1;
+        }
+
+        private void WaveformPreviewTimer_Tick(object? sender, EventArgs e)
+        {
+            this.waveformPreviewTimer.Stop();
+            if (this.waveformPreviewIndex < 0 || this.waveformPreviewIndex >= this.listBox_audios.Items.Count)
+            {
+                return;
+            }
+
+            if (this.listBox_audios.Items[this.waveformPreviewIndex] is AudioObj audio)
+            {
+                // Vorschau nur anzeigen, wenn Audio < 20s
+                if (audio.Duration.TotalSeconds > 20.0)
+                {
+                    return;
+                }
+                if (audio.WaveformPreview != null)
+                {
+                    if (this.waveformPreviewForm == null || this.waveformPreviewForm.IsDisposed)
+                    {
+                        this.waveformPreviewForm = new WaveformPreview();
+                    }
+
+                    Point screenPos = this.listBox_audios.PointToScreen(this.lastMousePos);
+                    screenPos.Offset(20, 10); // etwas rechts/unten von der Maus
+                    this.waveformPreviewForm.ShowWaveform(audio.WaveformPreview, screenPos);
+                }
+            }
+        }
+
+        private void HideWaveformPreview()
+        {
+            if (this.waveformPreviewForm != null && this.waveformPreviewForm.Visible)
+            {
+                this.waveformPreviewForm.Hide();
+            }
+        }
+    }
 }

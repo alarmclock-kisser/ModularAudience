@@ -50,6 +50,10 @@ namespace ModularAudience.Forms
         private static readonly Size TrackViewSpacing = new(15, 12);
         private bool suppressExportFormatEvent;
 
+        // Recording timer
+        private System.Windows.Forms.Timer? recordingTimer = null;
+        private DateTime _infoCtrlToStopAppeared = DateTime.MinValue;
+
         internal static DrumRollEditor? DrumRoll { get; set; } = null;
 
         public WindowMain()
@@ -164,7 +168,7 @@ namespace ModularAudience.Forms
 
             // Laden
             var loaded = await this.AudioC.LoadManyAsync(validPaths);
-            var importedAudios = loaded.Where(a => a != null).Cast<ModularAudience.Core.AudioObj>().ToList();
+            var importedAudios = loaded.Where(a => a != null).Cast<AudioObj>().ToList();
             if (importedAudios.Count == 0)
             {
                 return;
@@ -440,7 +444,7 @@ namespace ModularAudience.Forms
             }
             else
             {
-                this.PositionCollectionViews();
+                // this.PositionCollectionViews();
             }
         }
 
@@ -520,7 +524,7 @@ namespace ModularAudience.Forms
             }
 
             // Alle Audios einsammeln
-            var allAudios = new List<ModularAudience.Core.AudioObj>();
+            var allAudios = new List<AudioObj>();
             foreach (var cv in CollectionViews)
             {
                 allAudios.AddRange(cv.AudioC.Audios.ToList());
@@ -590,8 +594,11 @@ namespace ModularAudience.Forms
                 view.StartPosition = FormStartPosition.Manual;
                 var offset = new Point(CollectionCascadeOffset.Width * i, CollectionCascadeOffset.Height * i);
                 var location = new Point(basePoint.X + offset.X, basePoint.Y + offset.Y);
-                view.Location = location;
-            }
+				view.Invoke(() =>
+				{
+                    view.Location = location;
+				});
+			}
         }
 
         private void PositionCollectionView(AudioCollectionView? view)
@@ -805,7 +812,7 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            using var dlg = new ModularAudience.Forms.Modules.Dialogs.TimeStretchDialog(LastSelectedTrackView);
+            using var dlg = new Modules.Dialogs.TimeStretchDialog(LastSelectedTrackView);
             dlg.ShowDialog(this);
         }
 
@@ -943,7 +950,7 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            using var dlg = new ModularAudience.Forms.Modules.Dialogs.AutoSamplesDialog(LastSelectedTrackView.OriginalAudio);
+            using var dlg = new Modules.Dialogs.AutoSamplesDialog(LastSelectedTrackView.OriginalAudio);
             dlg.ShowDialog(this);
 
             if (dlg.DialogResult != DialogResult.OK || dlg.ResultSamples.Count == 0)
@@ -1005,7 +1012,107 @@ namespace ModularAudience.Forms
             }
         }
 
+        private async void button_record_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (!AudioRecorder.IsRecording)
+                {
+                    // Timer anlegen, Event anhängen und starten
+                    this.recordingTimer = new System.Windows.Forms.Timer { Interval = 500 };
+                    this.recordingTimer.Tick += async (s, ev) => await this.RecordingTimer_TickAsync();
+                    this.recordingTimer.Start();
 
+                    // Sicherstellen, dass Aufnahme-Ordner existiert
+                    string recordDir = this.AudioC.RecordPath;
+                    try { System.IO.Directory.CreateDirectory(recordDir); } catch { }
+
+                    // Aufnahme-Dateiname mit .wav-Endung
+                    string fileName = "Recording" + DateTime.Now.ToString("_yyyyMMdd_HHmmss") + ".wav";
+                    string fullPath = System.IO.Path.Combine(recordDir, fileName);
+
+                    // Aufnahme starten (Dateiname mit Timestamp + .wav)
+                    await AudioRecorder.StartRecording(fullPath);
+
+                    // UI-Status
+                    this.button_record.ForeColor = Color.Red;
+                    this.label_stopRecordInfo.Visible = false;
+                    this._infoCtrlToStopAppeared = DateTime.MinValue;
+                    this.button_record.Enabled = true; // sicher stellen, dass Button aktiv bleibt beim Aufnehmen
+                }
+                else
+                {
+                    // Wenn kein Ctrl gedrückt ist: nur Info anzeigen (4s), Aufnahme läuft weiter
+                    if (!ModifierKeys.HasFlag(Keys.Control))
+                    {
+                        this.label_stopRecordInfo.Visible = true;
+                        this._infoCtrlToStopAppeared = DateTime.Now;
+                    }
+                    else
+                    {
+                        // Ctrl gedrückt: Aufnahme beenden, Button sofort deaktivieren bis Recorder wirklich gestoppt ist
+                        this.button_record.Enabled = false;
+                        AudioRecorder.StopRecording(normalizeOutput: true);
+
+                        // Info kurz zeigen bis Timer das Ende erkennt
+                        this.label_stopRecordInfo.Visible = true;
+                        this._infoCtrlToStopAppeared = DateTime.Now;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"Recording button error: {ex.Message}");
+                try { this.recordingTimer?.Stop(); this.recordingTimer?.Dispose(); } catch { }
+                this.recordingTimer = null;
+                this.button_record.ForeColor = Color.Black;
+                this.label_stopRecordInfo.Visible = false;
+                this.button_record.Enabled = true;
+            }
+        }
+
+        private async Task RecordingTimer_TickAsync()
+        {
+            // Verbergen des Info-Labels nach 4s (wenn angezeigt)
+            if (this.label_stopRecordInfo.Visible && this._infoCtrlToStopAppeared != DateTime.MinValue)
+            {
+                TimeSpan elapsedSinceInfoShown = DateTime.Now - this._infoCtrlToStopAppeared;
+                if (elapsedSinceInfoShown.TotalSeconds >= 4)
+                {
+                    this.label_stopRecordInfo.Visible = false;
+                    this._infoCtrlToStopAppeared = DateTime.MinValue;
+                }
+            }
+
+            // Anzeige der Laufzeit aktualisieren
+            if (AudioRecorder.IsRecording && AudioRecorder.RecordingTime.HasValue)
+            {
+                this.textBox_recordingTime.Text = AudioRecorder.RecordingTime.Value.ToString(@"hh\:mm\:ss");
+            }
+            else
+            {
+                // Wenn Aufnahme nicht mehr läuft, UI aufräumen und Timer stoppen
+                this.textBox_recordingTime.Text = "";
+                this.label_stopRecordInfo.Visible = false;
+
+                if (this.recordingTimer != null)
+                {
+                    try
+                    {
+                        this.recordingTimer.Stop();
+                        this.recordingTimer.Dispose();
+                    }
+                    catch { }
+                    this.recordingTimer = null;
+                }
+
+                // Button-Farbe zurücksetzen und Button wieder aktivieren
+                this.button_record.ForeColor = Color.Black;
+                this.button_record.Enabled = true;
+            }
+
+            await Task.CompletedTask;
+        }
 
     }
 }

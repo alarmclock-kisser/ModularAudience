@@ -141,10 +141,10 @@ namespace ModularAudience.Core
                     L <<= 1;
                 }
 
-                var fft = new MathNet.Numerics.Complex32[L];
+                var fft = new Complex32[L];
                 for (int i = 0; i < n; i++)
                 {
-                    fft[i] = new MathNet.Numerics.Complex32((float)novelty[i], 0f);
+                    fft[i] = new Complex32((float) novelty[i], 0f);
                 }
 
                 for (int i = n; i < L; i++)
@@ -158,7 +158,7 @@ namespace ModularAudience.Core
                 {
                     // |X|^2 = X * conj(X)
                     var v = fft[i];
-                    fft[i] = new MathNet.Numerics.Complex32(v.Magnitude * v.Magnitude, 0f);
+                    fft[i] = new Complex32(v.Magnitude * v.Magnitude, 0f);
                 }
 
                 Fourier.Inverse(fft, FourierOptions.Matlab);
@@ -166,8 +166,8 @@ namespace ModularAudience.Core
                 // Realteil, 0..n-1 relevant (lineare Autokorrelation)
                 double r0 = Math.Max(fft[0].Real, 1e-12f);
                 // 3) Lag-Suchbereich aus BPM-Grenzen
-                int minLag = (int)Math.Round(sampleRate * 60.0 / Math.Max(maxBpm, 1));
-                int maxLag = (int)Math.Round(sampleRate * 60.0 / Math.Max(minBpm, 1));
+                int minLag = (int) Math.Round(sampleRate * 60.0 / Math.Max(maxBpm, 1));
+                int maxLag = (int) Math.Round(sampleRate * 60.0 / Math.Max(minBpm, 1));
                 minLag = Math.Clamp(minLag, 1, n - 1);
                 maxLag = Math.Clamp(maxLag, minLag, n - 1);
 
@@ -297,10 +297,10 @@ namespace ModularAudience.Core
                     L <<= 1;
                 }
 
-                var fft = new MathNet.Numerics.Complex32[L];
+                var fft = new Complex32[L];
                 for (int i = 0; i < n; i++)
                 {
-                    fft[i] = new MathNet.Numerics.Complex32((float)novelty[i], 0f);
+                    fft[i] = new Complex32((float) novelty[i], 0f);
                 }
                 for (int i = n; i < L; i++)
                 {
@@ -311,14 +311,14 @@ namespace ModularAudience.Core
                 for (int i = 0; i < L; i++)
                 {
                     var v = fft[i];
-                    fft[i] = new MathNet.Numerics.Complex32(v.Magnitude * v.Magnitude, 0f);
+                    fft[i] = new Complex32(v.Magnitude * v.Magnitude, 0f);
                 }
                 Fourier.Inverse(fft, FourierOptions.Matlab);
 
                 double r0 = Math.Max(fft[0].Real, 1e-12f);
                 int minBpm = 50, maxBpm = 200;
-                int minLag = Math.Clamp((int)Math.Round(sampleRate * 60.0 / Math.Max(maxBpm, 1)), 1, n - 1);
-                int maxLag = Math.Clamp((int)Math.Round(sampleRate * 60.0 / Math.Max(minBpm, 1)), minLag, n - 1);
+                int minLag = Math.Clamp((int) Math.Round(sampleRate * 60.0 / Math.Max(maxBpm, 1)), 1, n - 1);
+                int maxLag = Math.Clamp((int) Math.Round(sampleRate * 60.0 / Math.Max(minBpm, 1)), minLag, n - 1);
 
                 int bestLag = -1;
                 double bestVal = double.NegativeInfinity;
@@ -412,7 +412,7 @@ namespace ModularAudience.Core
                     double tplCorr = MaxCircularCorrelation(phaseAvg, tpl);
 
                     // Bars-Abdeckung (mehr Bars => vertrauenswürdiger)
-                    double nBars = (double)nBeats / K;
+                    double nBars = (double) nBeats / K;
                     double coverage = Math.Min(1.0, nBars / 4.0); // bis 4 Takte hochskalieren
 
                     // Gewichte: Template etwas stärker, Kontrast etwas schwächer
@@ -421,21 +421,21 @@ namespace ModularAudience.Core
 
                     // Subharmonik-Penalties/Boosts
                     if (K == 2)
-					{
-						score *= 0.92;      // 2/4 leicht benachteiligen
-					}
+                    {
+                        score *= 0.92;      // 2/4 leicht benachteiligen
+                    }
 
-					if (K == 4)
-					{
-						score *= 1.04;      // 4/4 leicht bevorzugen
-					}
+                    if (K == 4)
+                    {
+                        score *= 1.04;      // 4/4 leicht bevorzugen
+                    }
 
-					if (K % 3 == 0)
-					{
-						score *= 1.06;  // 3er-Gruppen (3/4, 6/8, 12/8) fördern
-					}
+                    if (K % 3 == 0)
+                    {
+                        score *= 1.06;  // 3er-Gruppen (3/4, 6/8, 12/8) fördern
+                    }
 
-					scoreByK[K] = (score, tplCorr);
+                    scoreByK[K] = (score, tplCorr);
 
                     if (score > bestScoreK)
                     {
@@ -494,12 +494,12 @@ namespace ModularAudience.Core
                     normalized = bestK / 4.0;
                 }
                 else
-				{
-					normalized = bestK <= 8 ? bestK / 8.0 : bestK / 12.0;
-				}
+                {
+                    normalized = bestK <= 8 ? bestK / 8.0 : bestK / 12.0;
+                }
 
-				normalized = Math.Clamp(normalized, 0.125, 1.0);
-                return (float)normalized;
+                normalized = Math.Clamp(normalized, 0.125, 1.0);
+                return (float) normalized;
             });
         }
 
@@ -536,8 +536,8 @@ namespace ModularAudience.Core
             int K = x.Length;
 
             // z-Normalisierung
-            double[] xn = (double[])x.Clone();
-            double[] yn = (double[])y.Clone();
+            double[] xn = (double[]) x.Clone();
+            double[] yn = (double[]) y.Clone();
             NormalizeZeroMeanUnitVar(xn);
             NormalizeZeroMeanUnitVar(yn);
 

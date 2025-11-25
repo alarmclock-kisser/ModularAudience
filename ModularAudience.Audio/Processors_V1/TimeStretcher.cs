@@ -432,7 +432,7 @@ namespace ModularAudience.Audio.Processors_V1
 
         private sealed class ProgressTracker
         {
-            private readonly object gate = new();
+            private readonly Lock gate = new();
             private readonly IProgress<double> progress;
             private readonly double totalWork;
             private double completed;
