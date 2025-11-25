@@ -44,6 +44,7 @@
             this.button_autoSamples = new Button();
             this.button_newBag = new Button();
             this.button_drumRoll = new Button();
+            this.textBox_info = new TextBox();
             this.SuspendLayout();
             // 
             // button_import
@@ -72,7 +73,7 @@
             // checkBox_singleCollection
             // 
             this.checkBox_singleCollection.AutoSize = true;
-            this.checkBox_singleCollection.Location = new Point(12, 41);
+            this.checkBox_singleCollection.Location = new Point(12, 70);
             this.checkBox_singleCollection.Name = "checkBox_singleCollection";
             this.checkBox_singleCollection.Size = new Size(115, 19);
             this.checkBox_singleCollection.TabIndex = 2;
@@ -144,7 +145,7 @@
             // 
             // button_timeStretch
             // 
-            this.button_timeStretch.Location = new Point(511, 12);
+            this.button_timeStretch.Location = new Point(149, 12);
             this.button_timeStretch.Name = "button_timeStretch";
             this.button_timeStretch.Size = new Size(90, 23);
             this.button_timeStretch.TabIndex = 9;
@@ -184,7 +185,7 @@
             // 
             // button_autoSamples
             // 
-            this.button_autoSamples.Location = new Point(511, 41);
+            this.button_autoSamples.Location = new Point(149, 41);
             this.button_autoSamples.Name = "button_autoSamples";
             this.button_autoSamples.Size = new Size(90, 23);
             this.button_autoSamples.TabIndex = 13;
@@ -195,7 +196,7 @@
             // button_newBag
             // 
             this.button_newBag.BackColor = Color.FromArgb(  192,   255,   192);
-            this.button_newBag.Location = new Point(131, 12);
+            this.button_newBag.Location = new Point(12, 41);
             this.button_newBag.Name = "button_newBag";
             this.button_newBag.Size = new Size(75, 23);
             this.button_newBag.TabIndex = 14;
@@ -205,7 +206,7 @@
             // 
             // button_drumRoll
             // 
-            this.button_drumRoll.Location = new Point(511, 70);
+            this.button_drumRoll.Location = new Point(149, 70);
             this.button_drumRoll.Name = "button_drumRoll";
             this.button_drumRoll.Size = new Size(90, 23);
             this.button_drumRoll.TabIndex = 15;
@@ -213,11 +214,23 @@
             this.button_drumRoll.UseVisualStyleBackColor = true;
             this.button_drumRoll.Click += this.button_drumRoll_Click;
             // 
+            // textBox_info
+            // 
+            this.textBox_info.Font = new Font("Bahnschrift", 9F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.textBox_info.Location = new Point(511, 12);
+            this.textBox_info.Multiline = true;
+            this.textBox_info.Name = "textBox_info";
+            this.textBox_info.PlaceholderText = "No track currently selected.";
+            this.textBox_info.ReadOnly = true;
+            this.textBox_info.Size = new Size(181, 210);
+            this.textBox_info.TabIndex = 16;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(704, 321);
+            this.Controls.Add(this.textBox_info);
             this.Controls.Add(this.button_drumRoll);
             this.Controls.Add(this.button_newBag);
             this.Controls.Add(this.button_autoSamples);
@@ -260,5 +273,6 @@
         private Button button_autoSamples;
         private Button button_newBag;
         private Button button_drumRoll;
+        private TextBox textBox_info;
     }
 }

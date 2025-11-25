@@ -1,5 +1,6 @@
 ﻿using Microsoft.Win32;
-using NAudience.Core;
+using ModularAudience.Audio.Processors_V1;
+using ModularAudience.Core;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

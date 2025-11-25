@@ -270,7 +270,9 @@
             this.Controls.Add(this.checkBox_smoothen);
             this.Controls.Add(this.checkBox_drawEachChannel);
             this.MaximizeBox = false;
+            this.MaximumSize = new Size(411, 240);
             this.MinimizeBox = false;
+            this.MinimumSize = new Size(411, 240);
             this.Name = "TrackViewSettings";
             this.Text = "TrackViewSettings";
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_timeMarkers).EndInit();

@@ -1,6 +1,6 @@
 ﻿using MathNet.Numerics;
 using MathNet.Numerics.IntegralTransforms;
-using NAudience.Core;
+using ModularAudience.Core;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

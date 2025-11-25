@@ -33,15 +33,18 @@
             this.button_playback = new Button();
             this.button_pause = new Button();
             this.pictureBox_waveform = new PictureBox();
+            this.contextMenu_waveform = new ContextMenuStrip(this.components);
+            this.menuItem_copySelection = new ToolStripMenuItem();
+            this.menuItem_removeSelection = new ToolStripMenuItem();
             this.vScrollBar_volume = new VScrollBar();
             this.hScrollBar_offset = new HScrollBar();
             this.label_volume = new Label();
             this.textBox_time = new TextBox();
             this.checkBox_settings = new CheckBox();
-            this.contextMenu_waveform = new ContextMenuStrip(this.components);
-            this.menuItem_copySelection = new ToolStripMenuItem();
-            this.menuItem_removeSelection = new ToolStripMenuItem();
+            this.button_apply = new Button();
+            this.checkBox_sync = new CheckBox();
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_waveform).BeginInit();
+            this.contextMenu_waveform.SuspendLayout();
             this.SuspendLayout();
             // 
             // button_loop
@@ -93,6 +96,27 @@
             this.pictureBox_waveform.TabIndex = 7;
             this.pictureBox_waveform.TabStop = false;
             // 
+            // contextMenu_waveform
+            // 
+            this.contextMenu_waveform.Items.AddRange(new ToolStripItem[] { this.menuItem_copySelection, this.menuItem_removeSelection });
+            this.contextMenu_waveform.Name = "contextMenu_waveform";
+            this.contextMenu_waveform.Size = new Size(169, 48);
+            this.contextMenu_waveform.Opening += this.contextMenu_waveform_Opening;
+            // 
+            // menuItem_copySelection
+            // 
+            this.menuItem_copySelection.Name = "menuItem_copySelection";
+            this.menuItem_copySelection.Size = new Size(168, 22);
+            this.menuItem_copySelection.Text = "Copy Selection";
+            this.menuItem_copySelection.Click += this.menuItem_copySelection_Click;
+            // 
+            // menuItem_removeSelection
+            // 
+            this.menuItem_removeSelection.Name = "menuItem_removeSelection";
+            this.menuItem_removeSelection.Size = new Size(168, 22);
+            this.menuItem_removeSelection.Text = "Remove Selection";
+            this.menuItem_removeSelection.Click += this.menuItem_removeSelection_Click;
+            // 
             // vScrollBar_volume
             // 
             this.vScrollBar_volume.LargeChange = 1;
@@ -122,7 +146,7 @@
             // 
             // textBox_time
             // 
-            this.textBox_time.Location = new Point(10, 149);
+            this.textBox_time.Location = new Point(9, 120);
             this.textBox_time.MaxLength = 32;
             this.textBox_time.Name = "textBox_time";
             this.textBox_time.PlaceholderText = "0:00:00.000";
@@ -134,7 +158,7 @@
             // checkBox_settings
             // 
             this.checkBox_settings.AutoSize = true;
-            this.checkBox_settings.Location = new Point(10, 125);
+            this.checkBox_settings.Location = new Point(9, 96);
             this.checkBox_settings.Name = "checkBox_settings";
             this.checkBox_settings.Size = new Size(68, 19);
             this.checkBox_settings.TabIndex = 12;
@@ -142,26 +166,28 @@
             this.checkBox_settings.UseVisualStyleBackColor = true;
             this.checkBox_settings.CheckedChanged += this.checkBox_settings_CheckedChanged;
             // 
-            // contextMenu_waveform
+            // button_apply
             // 
-            this.contextMenu_waveform.Items.AddRange(new ToolStripItem[] { this.menuItem_copySelection, this.menuItem_removeSelection });
-            this.contextMenu_waveform.Name = "contextMenu_waveform";
-            this.contextMenu_waveform.Size = new Size(176, 48);
-            this.contextMenu_waveform.Opening += this.contextMenu_waveform_Opening;
+            this.button_apply.BackColor = SystemColors.Info;
+            this.button_apply.Font = new Font("Bahnschrift SemiCondensed", 9F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.button_apply.Location = new Point(9, 149);
+            this.button_apply.Name = "button_apply";
+            this.button_apply.Size = new Size(92, 23);
+            this.button_apply.TabIndex = 13;
+            this.button_apply.Text = "Apply Changes";
+            this.button_apply.UseVisualStyleBackColor = false;
+            this.button_apply.Click += this.button_apply_Click;
             // 
-            // menuItem_copySelection
+            // checkBox_sync
             // 
-            this.menuItem_copySelection.Name = "menuItem_copySelection";
-            this.menuItem_copySelection.Size = new Size(175, 22);
-            this.menuItem_copySelection.Text = "Copy Selection";
-            this.menuItem_copySelection.Click += this.menuItem_copySelection_Click;
-            // 
-            // menuItem_removeSelection
-            // 
-            this.menuItem_removeSelection.Name = "menuItem_removeSelection";
-            this.menuItem_removeSelection.Size = new Size(175, 22);
-            this.menuItem_removeSelection.Text = "Remove Selection";
-            this.menuItem_removeSelection.Click += this.menuItem_removeSelection_Click;
+            this.checkBox_sync.AutoSize = true;
+            this.checkBox_sync.Font = new Font("Bahnschrift SemiCondensed", 9F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.checkBox_sync.Location = new Point(9, 36);
+            this.checkBox_sync.Name = "checkBox_sync";
+            this.checkBox_sync.Size = new Size(94, 18);
+            this.checkBox_sync.TabIndex = 14;
+            this.checkBox_sync.Text = "Sync Playback";
+            this.checkBox_sync.UseVisualStyleBackColor = true;
             // 
             // TrackView
             // 
@@ -169,6 +195,8 @@
             this.AutoScaleMode = AutoScaleMode.Font;
             this.BackColor = SystemColors.ControlLight;
             this.ClientSize = new Size(1064, 197);
+            this.Controls.Add(this.checkBox_sync);
+            this.Controls.Add(this.button_apply);
             this.Controls.Add(this.checkBox_settings);
             this.Controls.Add(this.textBox_time);
             this.Controls.Add(this.label_volume);
@@ -178,11 +206,13 @@
             this.Controls.Add(this.button_loop);
             this.Controls.Add(this.button_playback);
             this.Controls.Add(this.button_pause);
+            this.MaximizeBox = false;
             this.MaximumSize = new Size(8192, 236);
             this.MinimumSize = new Size(400, 236);
             this.Name = "TrackView";
             this.Text = "#00 - No Track Loaded";
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_waveform).EndInit();
+            this.contextMenu_waveform.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -201,5 +231,7 @@
         private ContextMenuStrip contextMenu_waveform;
         private ToolStripMenuItem menuItem_copySelection;
         private ToolStripMenuItem menuItem_removeSelection;
+        private Button button_apply;
+        private CheckBox checkBox_sync;
     }
 }

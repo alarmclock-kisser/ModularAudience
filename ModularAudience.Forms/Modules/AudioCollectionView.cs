@@ -1,6 +1,6 @@
 ﻿using ModularAudience.Audio;
 using ModularAudience.Forms.Modules;
-using NAudience.Core;
+using ModularAudience.Core;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -37,7 +37,7 @@ namespace ModularAudience.Forms
         private int _pendingSingleSelectionIndex = -1;
         private readonly SemaphoreSlim autoPlayLock = new(1, 1);
         private List<AudioObj>? _mouseDownSelectionSnapshot;
-        private List<AudioObj> _committedSelection = new();
+        private List<AudioObj> _committedSelection = [];
         private bool _restoringSelectionDuringDrag;
         private static readonly HashSet<char> InvalidFileNameChars = [.. Path.GetInvalidFileNameChars()];
 
@@ -84,7 +84,9 @@ namespace ModularAudience.Forms
                 await this.CancelAutoPlayAsync(stopCollection: true).ConfigureAwait(false);
                 this.Hide();
                 await this.AudioC.ClearAsync().ConfigureAwait(false);
-            };
+
+                WindowMain.CollectionViews.Remove(this);
+			};
         }
 
 
@@ -102,13 +104,13 @@ namespace ModularAudience.Forms
                 {
                     bool ctrlDown = (Control.ModifierKeys & Keys.Control) != 0;
                     AudioObj? clickedAudio = this.listBox_audios.Items[index] as AudioObj;
-                    List<AudioObj> committedSelection = this._committedSelection?.ToList() ?? new List<AudioObj>();
+                    List<AudioObj> committedSelection = this._committedSelection?.ToList() ?? [];
                     bool clickedSelected = clickedAudio != null && committedSelection.Contains(clickedAudio);
                     bool hadMultiSelection = committedSelection.Count > 1;
                     this._mouseDownSelectionSnapshot = committedSelection;
                     if (!ctrlDown && (!clickedSelected || committedSelection.Count == 0) && clickedAudio != null)
                     {
-                        this._mouseDownSelectionSnapshot = new List<AudioObj> { clickedAudio };
+                        this._mouseDownSelectionSnapshot = [clickedAudio];
                         clickedSelected = false;
                         hadMultiSelection = false;
                     }
@@ -137,7 +139,7 @@ namespace ModularAudience.Forms
                         }
                         else if (clickedAudio != null)
                         {
-                            this._dragSelectionSnapshot = new List<AudioObj> { clickedAudio };
+                            this._dragSelectionSnapshot = [clickedAudio];
                         }
                         this.ScheduleSelectionSnapshotCapture();
                     }
@@ -328,18 +330,77 @@ namespace ModularAudience.Forms
             return string.IsNullOrWhiteSpace(result) ? "Audio" : result;
         }
 
-        private string BuildExportFolderName(IReadOnlyList<AudioObj> audios)
-        {
-            string baseName = audios.Count > 0 ? SanitizePathSegment(audios[0].Name) : "BatchExport";
-            if (audios.Count > 1)
-            {
-                baseName += "_" + audios.Count.ToString("D2", CultureInfo.InvariantCulture);
-            }
+		private string BuildExportFolderName(string folderDirectory)
+		{
+			string baseName = SanitizePathSegment(this.Text);
+			string exportFolderPath = Path.Combine(folderDirectory, baseName);
+			if (!Directory.Exists(exportFolderPath))
+			{
+				return exportFolderPath;
+			}
 
-            return baseName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
-        }
+			try
+			{
+				// Ermittle alle direkten Unterordner, deren Name baseName oder baseName_### entspricht
+				var siblings = Directory.EnumerateDirectories(folderDirectory, baseName + "*", SearchOption.TopDirectoryOnly)
+					.Select(path => Path.GetFileName(path) ?? string.Empty)
+					.Where(name => !string.IsNullOrEmpty(name))
+					.ToList();
 
-        private static string EnsureWavExtension(string filePath)
+				// Sammle numerische Suffixe; baseName ohne Suffix wird als 1 betrachtet
+				var numbers = siblings
+					.Select(name =>
+					{
+						if (string.Equals(name, baseName, StringComparison.OrdinalIgnoreCase))
+						{
+							return 1;
+						}
+
+						if (name.Length > baseName.Length + 1 && name.StartsWith(baseName + "_", StringComparison.OrdinalIgnoreCase))
+						{
+							var suffix = name.Substring(baseName.Length + 1);
+							if (int.TryParse(suffix, out int n) && n >= 2)
+							{
+								return n;
+							}
+						}
+
+						return -1;
+					})
+					.Where(n => n > 0)
+					.ToList();
+
+				int nextSuffix = 2;
+				if (numbers.Count > 0)
+				{
+					int max = numbers.Max();
+					nextSuffix = Math.Max(2, max + 1);
+				}
+
+				// Baue Kandidatenpfad (keine Endlosschleife)
+				string candidateName = $"{baseName}_{nextSuffix}";
+				return Path.Combine(folderDirectory, candidateName);
+			}
+			catch
+			{
+				// Fallback: begrenzte Suche bis zu einem hohen Wert, danach zufälliger Suffix
+				for (int suffix = 2; suffix <= 9999; suffix++)
+				{
+					string candidateName = $"{baseName}_{suffix}";
+					string candidatePath = Path.Combine(folderDirectory, candidateName);
+					if (!Directory.Exists(candidatePath))
+					{
+						return candidatePath;
+					}
+				}
+
+				// letzter Ausweg: eindeutiger Suffix
+				string fallback = $"{baseName}_{Guid.NewGuid():N}".Substring(0, Math.Min(64, baseName.Length + 9));
+				return Path.Combine(folderDirectory, fallback);
+			}
+		}
+
+		private static string EnsureWavExtension(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))
             {
@@ -424,7 +485,7 @@ namespace ModularAudience.Forms
             AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
             if (selectedAudio != null)
             {
-                WindowMain.TrackViews.Add(new TrackView(selectedAudio));
+                WindowMain.TrackViews.Add(new TrackView(selectedAudio, this.AudioC));
             }
 
             await this.AudioC.StopAllAsync();
@@ -560,10 +621,10 @@ namespace ModularAudience.Forms
 
             if (this._dragCandidate != null)
             {
-                return new List<AudioObj> { this._dragCandidate };
+                return [this._dragCandidate];
             }
 
-            return new List<AudioObj>();
+            return [];
         }
 
         private const int DragScrollMarginPixels = 20;
@@ -1058,18 +1119,7 @@ namespace ModularAudience.Forms
             }
         }
 
-        private sealed class AudioDragPayload
-        {
-            public AudioCollectionView SourceView { get; }
-            public IReadOnlyList<AudioObj> Audios { get; }
-            public AudioObj? PrimaryAudio => this.Audios.Count > 0 ? this.Audios[0] : null;
-
-            public AudioDragPayload(AudioCollectionView sourceView, IReadOnlyList<AudioObj> audios)
-            {
-                this.SourceView = sourceView ?? throw new ArgumentNullException(nameof(sourceView));
-                this.Audios = audios ?? throw new ArgumentNullException(nameof(audios));
-            }
-        }
+        
 
         private async void button_export_Click(object sender, EventArgs e)
         {
@@ -1186,7 +1236,7 @@ namespace ModularAudience.Forms
                 }
                 else if (!ctrlDown && (selectedAudios.Count > 1 || shiftDown))
                 {
-                    string folderName = this.BuildExportFolderName(selectedAudios);
+                    string folderName = this.BuildExportFolderName(exportFolder);
                     exportFolder = Path.Combine(exportFolder, folderName);
                     Directory.CreateDirectory(exportFolder);
                 }
@@ -1203,5 +1253,63 @@ namespace ModularAudience.Forms
                 this.button_export.Enabled = true;
             }
         }
-    }
+
+        internal void RefreshList()
+        {
+            this.listBox_audios.Invalidate();
+		}
+
+
+
+
+		protected override void WndProc(ref Message m)
+		{
+			const int WM_NCLBUTTONDBLCLK = 0x00A3; // Non-client left button double-click
+			if (m.Msg == WM_NCLBUTTONDBLCLK)
+			{
+				try
+				{
+					// Dialog auf UI-Thread öffnen
+					this.BeginInvoke(new Action(() => ShowCollectionRenameDialog()));
+				}
+				catch { }
+				// Standardverhalten (Maximieren) unterdrücken
+				return;
+			}
+
+			base.WndProc(ref m);
+		}
+
+		private void ShowCollectionRenameDialog()
+		{
+			string current = this.Text ?? string.Empty;
+			// Microsoft.VisualBasic.Interaction.InputBox wird bereits im Projekt genutzt
+			string input = Microsoft.VisualBasic.Interaction.InputBox("Enter new name for this collection:", "Rename Collection", current);
+			if (!string.IsNullOrWhiteSpace(input) && input != current)
+			{
+                this.Text = input;
+			}
+		}
+
+
+
+
+
+
+
+
+
+		private sealed class AudioDragPayload
+		{
+			public AudioCollectionView SourceView { get; }
+			public IReadOnlyList<AudioObj> Audios { get; }
+			public AudioObj? PrimaryAudio => this.Audios.Count > 0 ? this.Audios[0] : null;
+
+			public AudioDragPayload(AudioCollectionView sourceView, IReadOnlyList<AudioObj> audios)
+			{
+				this.SourceView = sourceView ?? throw new ArgumentNullException(nameof(sourceView));
+				this.Audios = audios ?? throw new ArgumentNullException(nameof(audios));
+			}
+		}
+	}
 }

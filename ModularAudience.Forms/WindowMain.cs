@@ -1,11 +1,12 @@
 using ModularAudience.Audio;
 using ModularAudience.Forms.Modules;
-using NAudience.Core;
+using ModularAudience.Core;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using ModularAudience.Audio.Processors_V1;
 
 namespace ModularAudience.Forms
 {
@@ -17,8 +18,12 @@ namespace ModularAudience.Forms
 
         internal static readonly BindingList<AudioCollectionView> CollectionViews = [];
         internal static IEnumerable<AudioObj> SelectedTracks => CollectionViews.SelectMany(cv => cv.SelectedAudios);
+        internal static IEnumerable<TrackView> PlayingTrackViews => TrackViews.Where(tv => tv.OriginalAudio.PlayerPlaying);
+        internal static bool IsAnyTrackPlaying => PlayingTrackViews.Any();
+        internal static IEnumerable<TrackView> SyncedTrackViews => TrackViews.Where(tv => tv.Synced);
 
         internal static readonly BindingList<TrackView> TrackViews = [];
+        internal static List<int> TrackViewIds { get; set; } = [];
         private static TrackView? _lastSelectedTrackView = null;
         internal static TrackView? LastSelectedTrackView
         {
@@ -29,9 +34,11 @@ namespace ModularAudience.Forms
                 {
                     _lastSelectedTrackView = value;
                     UpdateTrackDependentUI();
+                    HighlightSelectedTrackView();
                 }
             }
         }
+
 
         // Map AudioObj.Id -> Collection number (01-based) to restore distribution
         private static readonly Dictionary<Guid, int> AudioCollectionTags = [];
@@ -157,7 +164,7 @@ namespace ModularAudience.Forms
 
             // Laden
             var loaded = await this.AudioC.LoadManyAsync(validPaths);
-            var importedAudios = loaded.Where(a => a != null).Cast<NAudience.Core.AudioObj>().ToList();
+            var importedAudios = loaded.Where(a => a != null).Cast<ModularAudience.Core.AudioObj>().ToList();
             if (importedAudios.Count == 0)
             {
                 return;
@@ -513,7 +520,7 @@ namespace ModularAudience.Forms
             }
 
             // Alle Audios einsammeln
-            var allAudios = new List<NAudience.Core.AudioObj>();
+            var allAudios = new List<ModularAudience.Core.AudioObj>();
             foreach (var cv in CollectionViews)
             {
                 allAudios.AddRange(cv.AudioC.Audios.ToList());
@@ -661,6 +668,7 @@ namespace ModularAudience.Forms
             Instance.comboBox_exportFormat.Enabled = LastSelectedTrackView != null;
             Instance.comboBox_exportBits.Enabled = LastSelectedTrackView != null;
             Instance.button_autoSamples.Enabled = LastSelectedTrackView != null;
+            Instance.textBox_info.Text = LastSelectedTrackView != null ? LastSelectedTrackView.OriginalAudio.GetInfoString() : "";
 
             // Set scanned values to textboxes
             if (LastSelectedTrackView != null)
@@ -745,7 +753,7 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            float scannedTiming = await BeatScanner.ScanTimingAsync(LastSelectedTrackView.OriginalAudio);
+            float scannedTiming = await BeatScanner_V2.ScanTimingAsync(LastSelectedTrackView.OriginalAudio);
 
             this.textBox_scanTimingResult.Text = GetTimingString(scannedTiming);
             LastSelectedTrackView.OriginalAudio.ScannedTiming = scannedTiming;
@@ -758,7 +766,7 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            string scannedKey = await BeatScanner.ScanKeyAsync(LastSelectedTrackView.OriginalAudio);
+            string scannedKey = await BeatScanner_V2.ScanKeyAsync(LastSelectedTrackView.OriginalAudio);
 
             this.textBox_scanKeyResult.Text = scannedKey;
             LastSelectedTrackView.OriginalAudio.ScannedKey = scannedKey;
@@ -971,6 +979,30 @@ namespace ModularAudience.Forms
 
             DrumRoll = new(SelectedTracks);
             DrumRoll.Show();
+        }
+
+
+
+
+        private static void HighlightSelectedTrackView()
+        {
+            LastSelectedTrackView?.HighlightBorder();
+            foreach (var tv in TrackViews)
+            {
+                if (tv != LastSelectedTrackView)
+                {
+                    tv.NormalightBorder();
+                }
+            }
+        }
+
+
+        internal static void RefreshAllCollectionViews()
+        {
+            foreach (var cv in CollectionViews)
+            {
+                cv.RefreshList();
+            }
         }
 
 

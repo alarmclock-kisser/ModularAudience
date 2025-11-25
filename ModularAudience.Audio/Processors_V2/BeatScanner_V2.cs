@@ -1,11 +1,11 @@
 ﻿using MathNet.Numerics;
 using MathNet.Numerics.IntegralTransforms;
-using NAudience.Core;
+using ModularAudience.Core;
 using System.Diagnostics;
 
-namespace ModularAudience.Audio
+namespace ModularAudience.Audio.Processors_V1
 {
-    public static class BeatScanner
+    public static class BeatScanner_V2
     {
         public static async Task<double> ScanBpmAsync(AudioObj obj, int windowSize = 65536, int lookingRange = 2, int? minBpm = null, int? maxBpm = null, bool autoGetTiming = false)
         {

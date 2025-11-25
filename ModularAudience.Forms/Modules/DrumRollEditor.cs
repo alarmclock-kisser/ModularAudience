@@ -1,5 +1,5 @@
 ﻿using ModularAudience.Audio;
-using NAudience.Core;
+using ModularAudience.Core;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -245,22 +245,39 @@ namespace ModularAudience.Forms.Modules
                     await this.RebuildPatternPanelsAsync();
                 };
                 var editItem = new ToolStripMenuItem("Edit Sample");
-                editItem.Click += async (s, e) =>
+                // Open TrackView modeless and update audio on close to avoid forcing other windows to the background
+                editItem.Click += (s, e) =>
                 {
-                    // TrackView öffnen
-                    using var tv = new TrackView(audio);
-                    var dlgResult = tv.ShowDialog(this);
-                    if (dlgResult == DialogResult.OK || dlgResult == DialogResult.None)
+                    var tv = new TrackView(audio, this.AudioC);
+                    tv.StartPosition = FormStartPosition.Manual;
+                    tv.Location = WindowsScreenHelper.GetCenterStartingPoint(this);
+
+                    // When the TrackView is closed, check the DialogResult and update the sample if it was changed
+                    tv.FormClosed += async (o, ev) =>
                     {
-                        // Ersetztes Audio holen (ggf. Property OriginalAudio oder bearbeitetes Audio)
-                        var edited = tv.OriginalAudio ?? audio;
-                        int idx = this.AudioC.Audios.IndexOf(audio);
-                        if (idx >= 0 && edited != null && !ReferenceEquals(audio, edited))
+                        try
                         {
-                            this.AudioC.Audios[idx] = edited;
-                            await this.RebuildPatternPanelsAsync();
+                            if (tv.DialogResult == DialogResult.OK || tv.DialogResult == DialogResult.None)
+                            {
+                                var edited = tv.OriginalAudio ?? audio;
+                                int idx = this.AudioC.Audios.IndexOf(audio);
+                                if (idx >= 0 && edited != null && !ReferenceEquals(audio, edited))
+                                {
+                                    this.AudioC.Audios[idx] = edited;
+                                    await this.RebuildPatternPanelsAsync();
+                                }
+                            }
                         }
-                    }
+                        catch { }
+                        finally
+                        {
+                            try { tv.Dispose(); } catch { }
+                        }
+                    };
+
+                    // Show modeless without setting owner to avoid preventing DrumRollEditor from closing
+                    tv.Show();
+                    try { tv.BringToFront(); } catch { }
                 };
                 cms.Items.Add(editItem);
                 cms.Items.Add(removeItem);

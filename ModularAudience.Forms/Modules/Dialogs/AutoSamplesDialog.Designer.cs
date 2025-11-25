@@ -38,9 +38,13 @@
             this.label_info_silenceDuration = new Label();
             this.numericUpDown_silenceDuration = new NumericUpDown();
             this.label_status = new Label();
+            this.checkBox_arguments = new CheckBox();
+            this.groupBox_options = new GroupBox();
+            this.button_cutV2 = new Button();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_minDuration).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_maxDuration).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_silenceDuration).BeginInit();
+            this.groupBox_options.SuspendLayout();
             this.SuspendLayout();
             // 
             // button_cut
@@ -71,19 +75,10 @@
             this.progressBar_cutting.Size = new Size(178, 23);
             this.progressBar_cutting.TabIndex = 2;
             // 
-            // label_status
-            // 
-            this.label_status.AutoSize = true;
-            this.label_status.Location = new Point(12, 196);
-            this.label_status.Name = "label_status";
-            this.label_status.Size = new Size(120, 15);
-            this.label_status.TabIndex = 9;
-            this.label_status.Text = "Ready to cut samples";
-            // 
             // numericUpDown_minDuration
             // 
             this.numericUpDown_minDuration.Increment = new decimal(new int[] { 5, 0, 0, 0 });
-            this.numericUpDown_minDuration.Location = new Point(12, 114);
+            this.numericUpDown_minDuration.Location = new Point(6, 63);
             this.numericUpDown_minDuration.Maximum = new decimal(new int[] { 1000, 0, 0, 0 });
             this.numericUpDown_minDuration.Minimum = new decimal(new int[] { 25, 0, 0, 0 });
             this.numericUpDown_minDuration.Name = "numericUpDown_minDuration";
@@ -94,7 +89,7 @@
             // label_info_minDuration
             // 
             this.label_info_minDuration.AutoSize = true;
-            this.label_info_minDuration.Location = new Point(12, 81);
+            this.label_info_minDuration.Location = new Point(6, 30);
             this.label_info_minDuration.Name = "label_info_minDuration";
             this.label_info_minDuration.Size = new Size(60, 30);
             this.label_info_minDuration.TabIndex = 4;
@@ -103,7 +98,7 @@
             // label_info_maxDuration
             // 
             this.label_info_maxDuration.AutoSize = true;
-            this.label_info_maxDuration.Location = new Point(78, 81);
+            this.label_info_maxDuration.Location = new Point(72, 30);
             this.label_info_maxDuration.Name = "label_info_maxDuration";
             this.label_info_maxDuration.Size = new Size(61, 30);
             this.label_info_maxDuration.TabIndex = 6;
@@ -112,7 +107,7 @@
             // numericUpDown_maxDuration
             // 
             this.numericUpDown_maxDuration.Increment = new decimal(new int[] { 10, 0, 0, 0 });
-            this.numericUpDown_maxDuration.Location = new Point(78, 114);
+            this.numericUpDown_maxDuration.Location = new Point(72, 63);
             this.numericUpDown_maxDuration.Maximum = new decimal(new int[] { 3600, 0, 0, 0 });
             this.numericUpDown_maxDuration.Minimum = new decimal(new int[] { 50, 0, 0, 0 });
             this.numericUpDown_maxDuration.Name = "numericUpDown_maxDuration";
@@ -123,7 +118,7 @@
             // label_info_silenceDuration
             // 
             this.label_info_silenceDuration.AutoSize = true;
-            this.label_info_silenceDuration.Location = new Point(196, 81);
+            this.label_info_silenceDuration.Location = new Point(138, 30);
             this.label_info_silenceDuration.Name = "label_info_silenceDuration";
             this.label_info_silenceDuration.Size = new Size(53, 30);
             this.label_info_silenceDuration.TabIndex = 8;
@@ -132,7 +127,7 @@
             // numericUpDown_silenceDuration
             // 
             this.numericUpDown_silenceDuration.Increment = new decimal(new int[] { 5, 0, 0, 0 });
-            this.numericUpDown_silenceDuration.Location = new Point(196, 114);
+            this.numericUpDown_silenceDuration.Location = new Point(138, 63);
             this.numericUpDown_silenceDuration.Maximum = new decimal(new int[] { 2000, 0, 0, 0 });
             this.numericUpDown_silenceDuration.Minimum = new decimal(new int[] { 25, 0, 0, 0 });
             this.numericUpDown_silenceDuration.Name = "numericUpDown_silenceDuration";
@@ -140,18 +135,62 @@
             this.numericUpDown_silenceDuration.TabIndex = 7;
             this.numericUpDown_silenceDuration.Value = new decimal(new int[] { 60, 0, 0, 0 });
             // 
+            // label_status
+            // 
+            this.label_status.AutoSize = true;
+            this.label_status.Location = new Point(12, 196);
+            this.label_status.Name = "label_status";
+            this.label_status.Size = new Size(119, 15);
+            this.label_status.TabIndex = 9;
+            this.label_status.Text = "Ready to cut samples";
+            // 
+            // checkBox_arguments
+            // 
+            this.checkBox_arguments.AutoSize = true;
+            this.checkBox_arguments.Checked = true;
+            this.checkBox_arguments.CheckState = CheckState.Checked;
+            this.checkBox_arguments.Location = new Point(12, 12);
+            this.checkBox_arguments.Name = "checkBox_arguments";
+            this.checkBox_arguments.Size = new Size(106, 19);
+            this.checkBox_arguments.TabIndex = 10;
+            this.checkBox_arguments.Text = "Enable Options";
+            this.checkBox_arguments.UseVisualStyleBackColor = true;
+            this.checkBox_arguments.CheckedChanged += this.checkBox_arguments_CheckedChanged;
+            // 
+            // groupBox_options
+            // 
+            this.groupBox_options.Controls.Add(this.label_info_silenceDuration);
+            this.groupBox_options.Controls.Add(this.numericUpDown_silenceDuration);
+            this.groupBox_options.Controls.Add(this.numericUpDown_maxDuration);
+            this.groupBox_options.Controls.Add(this.label_info_minDuration);
+            this.groupBox_options.Controls.Add(this.label_info_maxDuration);
+            this.groupBox_options.Controls.Add(this.numericUpDown_minDuration);
+            this.groupBox_options.Location = new Point(12, 37);
+            this.groupBox_options.Name = "groupBox_options";
+            this.groupBox_options.Size = new Size(204, 92);
+            this.groupBox_options.TabIndex = 11;
+            this.groupBox_options.TabStop = false;
+            // 
+            // button_cutV2
+            // 
+            this.button_cutV2.BackColor = SystemColors.Info;
+            this.button_cutV2.Location = new Point(257, 137);
+            this.button_cutV2.Name = "button_cutV2";
+            this.button_cutV2.Size = new Size(75, 23);
+            this.button_cutV2.TabIndex = 12;
+            this.button_cutV2.Text = "Cut V2";
+            this.button_cutV2.UseVisualStyleBackColor = false;
+            this.button_cutV2.Click += this.button_cutV2_Click;
+            // 
             // AutoSamplesDialog
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(344, 221);
+            this.Controls.Add(this.button_cutV2);
+            this.Controls.Add(this.groupBox_options);
+            this.Controls.Add(this.checkBox_arguments);
             this.Controls.Add(this.label_status);
-            this.Controls.Add(this.label_info_silenceDuration);
-            this.Controls.Add(this.numericUpDown_silenceDuration);
-            this.Controls.Add(this.label_info_maxDuration);
-            this.Controls.Add(this.numericUpDown_maxDuration);
-            this.Controls.Add(this.label_info_minDuration);
-            this.Controls.Add(this.numericUpDown_minDuration);
             this.Controls.Add(this.progressBar_cutting);
             this.Controls.Add(this.button_cancel);
             this.Controls.Add(this.button_cut);
@@ -160,6 +199,8 @@
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_minDuration).EndInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_maxDuration).EndInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_silenceDuration).EndInit();
+            this.groupBox_options.ResumeLayout(false);
+            this.groupBox_options.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -176,5 +217,8 @@
         private Label label_info_silenceDuration;
         private NumericUpDown numericUpDown_silenceDuration;
         private Label label_status;
+        private CheckBox checkBox_arguments;
+        private GroupBox groupBox_options;
+        private Button button_cutV2;
     }
 }

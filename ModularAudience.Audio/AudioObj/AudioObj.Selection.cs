@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
 
-namespace NAudience.Core
+namespace ModularAudience.Core
 {
     public partial class AudioObj
     {

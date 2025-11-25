@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using ModularAudience.Audio.Processing;
 
-namespace NAudience.Core
+namespace ModularAudience.Core
 {
     public partial class AudioObj
     {
