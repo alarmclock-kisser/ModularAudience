@@ -97,8 +97,34 @@ namespace ModularAudience.Forms
             this.waveformPreviewTimer.Tick += this.WaveformPreviewTimer_Tick;
             this.listBox_audios.MouseMove += this.ListBox_audios_MouseMove_WaveformPreview;
             this.listBox_audios.MouseLeave += this.ListBox_audios_MouseLeave_WaveformPreview;
-        }
 
+            // --- Breite automatisch anpassen, damit kein unnötiges horizontales Scrollen nötig ist ---
+            int maxWidth = 1080; // Maximale Breite
+            int minWidth = this.Width; // Designer-Default
+            int requiredWidth = minWidth;
+            using (Graphics g = this.listBox_audios.CreateGraphics())
+            {
+                for (int i = 0; i < this.listBox_audios.Items.Count; i++)
+                {
+                    if (this.listBox_audios.Items[i] is AudioObj audio)
+                    {
+                        string text = audio.Name ?? string.Empty;
+                        Size textSize = TextRenderer.MeasureText(g, text, this.listBox_audios.Font);
+                        int itemWidth = textSize.Width + 120; // Platz für Dauer, Padding, etc.
+                        if (itemWidth > requiredWidth)
+                            requiredWidth = itemWidth;
+                    }
+                }
+            }
+            // Add scrollbar width if needed
+            if (this.listBox_audios.Items.Count > this.listBox_audios.ClientSize.Height / this.listBox_audios.ItemHeight)
+                requiredWidth += SystemInformation.VerticalScrollBarWidth;
+            requiredWidth = Math.Min(Math.Max(requiredWidth + 40, minWidth), maxWidth);
+            if (this.Width < requiredWidth)
+            {
+                this.Width = requiredWidth;
+            }
+        }
 
 
 
@@ -489,7 +515,6 @@ namespace ModularAudience.Forms
             }
         }
 
-        // ListBox entry double-click event to create TrackView from selected audio
         private async void listBox_audios_DoubleClick(object? sender, EventArgs e)
         {
             AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
@@ -953,7 +978,7 @@ namespace ModularAudience.Forms
         private static string FormatDurationText(AudioObj audio)
         {
             TimeSpan duration = ResolveDuration(audio);
-            if (duration.TotalMilliseconds > 0 && duration.TotalMilliseconds < 1000)
+            if (duration.TotalMilliseconds > 0 && duration.TotalMilliseconds < 2500)
             {
                 int ms = Math.Max(1, (int) Math.Round(duration.TotalMilliseconds));
                 return ms.ToString("0", CultureInfo.InvariantCulture) + " ms";

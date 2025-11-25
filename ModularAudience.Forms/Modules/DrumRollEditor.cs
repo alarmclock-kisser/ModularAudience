@@ -5,7 +5,7 @@ using System.ComponentModel;
 
 namespace ModularAudience.Forms.Modules
 {
-	public partial class DrumRollEditor : Form
+    public partial class DrumRollEditor : Form
     {
         private readonly AudioCollection AudioC = new();
 
@@ -13,15 +13,14 @@ namespace ModularAudience.Forms.Modules
         public int Hits => this.domainUpDown_hits.SelectedItem is null ? 16 : int.Parse(this.domainUpDown_hits.SelectedItem.ToString() ?? "16");
         public float Volume => (float) this.numericUpDown_volume.Value / 100.0f;
 
-		internal readonly BindingList<Panel> Panels = [];
+        internal readonly BindingList<Panel> Panels = [];
 
-		private IWavePlayer? waveOut;
-		private MixingSampleProvider? mixer;
-		private WaveFormat outputFormat; // Standard-Audioformat für den Mixer
-		private CancellationTokenSource? playbackCts;
-		private Task? playbackTask;
+        private WaveOutEvent? waveOut;
+        private MixingSampleProvider? mixer;
+        private readonly WaveFormat outputFormat;
+        private CancellationTokenSource? playbackCts;
+        private Task? playbackTask;
 
-		private readonly System.Windows.Forms.Timer playbackTimer = new();
         private int currentStep = 0;
         private bool isPlaying = false;
 
@@ -34,15 +33,15 @@ namespace ModularAudience.Forms.Modules
             this.button_hit.Visible = false;
             this.domainUpDown_hits.SelectedIndex = this.domainUpDown_hits.Items.IndexOf("16");
 
-			this.outputFormat = WaveFormat.CreateIeeeFloatWaveFormat(44100, 2);
-			this.waveOut = null;
-			this.mixer = null;
+            this.outputFormat = WaveFormat.CreateIeeeFloatWaveFormat(44100, 2);
+            this.waveOut = null;
+            this.mixer = null;
 
-			if (samples != null)
+            if (samples != null)
             {
                 foreach (AudioObj sample in samples)
                 {
-                    this.AudioC.Audios.Add((AudioObj)sample.Clone());
+                    this.AudioC.Audios.Add((AudioObj) sample.Clone());
                 }
             }
 
@@ -83,36 +82,21 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-		private int GetTimerIntervalMs()
-		{
-			float bpm = this.Bpm;
-			int hits = this.Hits;
+        private int GetTimerIntervalMs()
+        {
+            float bpm = this.Bpm;
+            int hits = this.Hits;
 
-			// Dauer eines 4/4 Taktes in ms: (60 / BPM) * 4 * 1000
-			// Dauer eines Steps: (Takt-Dauer) / Hits
-			if (bpm <= 0 || hits <= 0) return 100; // Fallback
+            // Dauer eines 4/4 Taktes in ms: (60 / BPM) * 4 * 1000
+            // Dauer eines Steps: (Takt-Dauer) / Hits
+            if (bpm <= 0 || hits <= 0) return 100; // Fallback
 
-			return (int) (60000.0f / bpm * 4.0f / hits);
-		}
+            return (int) (60000.0f / bpm * 4.0f / hits);
+        }
 
 
 
         // Hilfsmethode zum Zurücksetzen der Highlights:
-        private void ResetButtonHighlights()
-        {
-            foreach (var panel in this.Panels)
-            {
-                foreach (Control ctrl in panel.Controls)
-                {
-                    if (ctrl is Button btn)
-                    {
-                        btn.BackColor = Color.LightGray;
-                        btn.ForeColor = Color.Black;
-                    }
-                }
-            }
-        }
-
         private async void AudioC_Audios_ListChanged(object? sender, ListChangedEventArgs e)
         {
             await this.RebuildPatternPanelsAsync();
@@ -240,7 +224,7 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        private async Task RebuildPatternPanelsAsync()
+        private async Task RebuildPatternPanelsAsync(List<List<bool>>? restoreStates = null)
         {
             // Panels entfernen
             foreach (var panel in this.Panels)
@@ -290,8 +274,12 @@ namespace ModularAudience.Forms.Modules
                 var removeItem = new ToolStripMenuItem("Remove");
                 removeItem.Click += async (s, e) =>
                 {
+                    // Capture states before removing
+                    var states = this.CapturePatternButtonStates();
                     this.AudioC.Audios.Remove(audio);
-                    await this.RebuildPatternPanelsAsync();
+                    // Remove the corresponding state row
+                    if (i < states.Count) states.RemoveAt(i);
+                    await this.RebuildPatternPanelsAsync(states);
                 };
                 var editItem = new ToolStripMenuItem("Edit Sample");
                 // Open TrackView modeless and update audio on close to avoid forcing other windows to the background
@@ -463,6 +451,12 @@ namespace ModularAudience.Forms.Modules
                 y += panelHeight + panelSpacing;
             }
 
+            // Restore button states if provided and hits count matches
+            if (restoreStates != null && restoreStates.Count == this.Panels.Count && restoreStates.All(row => row.Count == hits))
+            {
+                this.RestorePatternButtonStates(restoreStates);
+            }
+
             this.panel_pattern.Visible = false;
         }
 
@@ -496,74 +490,72 @@ namespace ModularAudience.Forms.Modules
 
 
 
-        private static readonly Color StepHighlightBack = Color.Gold;
-        private static readonly Color StepHighlightFore = Color.LightGray;
-		private static readonly Color StepActiveFore = Color.White;
-		private static readonly Color StepDefaultFore = Color.Black;
-		private static readonly Color StepDefaultBack = SystemColors.Control;
+        private static readonly Color StepActiveFore = Color.White;
+        private static readonly Color StepDefaultFore = Color.Black;
+        private static readonly Color StepDefaultBack = SystemColors.Control;
 
-		private void HandleCurrentStep(int hits)
-		{
-			// --- UI-Logik: Hervorheben des aktuellen Steps ---
-			int panelIdx = 0;
-			foreach (Panel panel in this.Panels)
-			{
-				int btnIdx = 0;
-				Button? playBtn = null; // Der Button des aktuellen Steps, falls er existiert
-				foreach (Control control in panel.Controls)
-				{
-					if (control is Button btn)
-					{
-						if (btnIdx == this.currentStep)
-						{
-							playBtn = btn;
+        private void HandleCurrentStep(int hits)
+        {
+            // --- UI-Logik: Hervorheben des aktuellen Steps ---
+            int panelIdx = 0;
+            foreach (Panel panel in this.Panels)
+            {
+                int btnIdx = 0;
+                Button? playBtn = null; // Der Button des aktuellen Steps, falls er existiert
+                foreach (Control control in panel.Controls)
+                {
+                    if (control is Button btn)
+                    {
+                        if (btnIdx == this.currentStep)
+                        {
+                            playBtn = btn;
 
-							// Markierung für den aktuellen Step
-							if (btn.Tag is string tag && tag == "active")
-							{
-								btn.BackColor = Color.Red;
-							}
-							else if (btn.Tag is string tag2 && tag2 == "inactive")
-							{
-								btn.BackColor = Color.Orange;
-							}
-							btn.ForeColor = StepActiveFore;
-						}
-						else
-						{
-							// Zurücksetzen der Farbe
-							if (btn.Tag is string tag && tag == "active")
-							{
-								btn.BackColor = Color.Green;
-							}
-							else if (btn.Tag is string tag2 && tag2 == "inactive")
-							{
-								btn.BackColor = StepDefaultBack;
-							}
+                            // Markierung für den aktuellen Step
+                            if (btn.Tag is string tag && tag == "active")
+                            {
+                                btn.BackColor = Color.Red;
+                            }
+                            else if (btn.Tag is string tag2 && tag2 == "inactive")
+                            {
+                                btn.BackColor = Color.Orange;
+                            }
+                            btn.ForeColor = StepActiveFore;
+                        }
+                        else
+                        {
+                            // Zurücksetzen der Farbe
+                            if (btn.Tag is string tag && tag == "active")
+                            {
+                                btn.BackColor = Color.Green;
+                            }
+                            else if (btn.Tag is string tag2 && tag2 == "inactive")
+                            {
+                                btn.BackColor = StepDefaultBack;
+                            }
 
-							btn.ForeColor = StepDefaultFore;
-						}
-						btnIdx++;
-					}
-				}
+                            btn.ForeColor = StepDefaultFore;
+                        }
+                        btnIdx++;
+                    }
+                }
 
-				// Audio abspielen, wenn Button im aktuellen Step im Pattern aktiv ist
-				if (playBtn != null && (playBtn.Tag as string) == "active")
-				{
-					if (panelIdx < this.AudioC.Audios.Count)
-					{
-						var audio = this.AudioC.Audios[panelIdx];
-						// HIER der schnelle, nicht-blockierende Aufruf für überlappende Schläge
-						this.PlayAudioInstant(audio);
-					}
-				}
-				panelIdx++;
-			}
+                // Audio abspielen, wenn Button im aktuellen Step im Pattern aktiv ist
+                if (playBtn != null && (playBtn.Tag as string) == "active")
+                {
+                    if (panelIdx < this.AudioC.Audios.Count)
+                    {
+                        var audio = this.AudioC.Audios[panelIdx];
+                        // HIER der schnelle, nicht-blockierende Aufruf für überlappende Schläge
+                        this.PlayAudioInstant(audio);
+                    }
+                }
+                panelIdx++;
+            }
 
-			this.currentStep = (this.currentStep + 1) % hits;
-		}
+            this.currentStep = (this.currentStep + 1) % hits;
+        }
 
-		private async Task PlayAudioAsync(AudioObj audio)
+        private async Task PlayAudioAsync(AudioObj audio)
         {
             try
             {
@@ -578,139 +570,268 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-		private async Task PlaybackLoop(CancellationToken cancellationToken)
-		{
-			int totalHits = this.Hits;
-			this.currentStep = 0;
+        private async Task PlaybackLoop(CancellationToken cancellationToken)
+        {
+            int totalHits = this.Hits;
+            this.currentStep = 0;
 
-			while (!cancellationToken.IsCancellationRequested)
-			{
-				long startTick = DateTime.Now.Ticks;
-				int intervalMs = this.GetTimerIntervalMs(); // Liest BPM live
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                long startTick = DateTime.Now.Ticks;
+                int intervalMs = this.GetTimerIntervalMs(); // Liest BPM live
 
-				// UI-Update und Audio-Trigger auf dem UI-Thread ausführen
-				this.Invoke((MethodInvoker) (() =>
-				{
-					this.HandleCurrentStep(totalHits);
-				}));
+                // UI-Update und Audio-Trigger auf dem UI-Thread ausführen
+                this.Invoke((MethodInvoker) (() =>
+                {
+                    this.HandleCurrentStep(totalHits);
+                }));
 
-				// Präzise Verzögerung berechnen
-				long elapsedTicks = DateTime.Now.Ticks - startTick;
-				int elapsedMs = (int) new TimeSpan(elapsedTicks).TotalMilliseconds;
-				int delayMs = Math.Max(0, intervalMs - elapsedMs);
+                // Präzise Verzögerung berechnen
+                long elapsedTicks = DateTime.Now.Ticks - startTick;
+                int elapsedMs = (int) new TimeSpan(elapsedTicks).TotalMilliseconds;
+                int delayMs = Math.Max(0, intervalMs - elapsedMs);
 
-				try
-				{
-					// Warten auf den nächsten Step
-					await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
-				}
-				catch (TaskCanceledException)
-				{
-					break;
-				}
-			}
-		}
+                try
+                {
+                    // Warten auf den nächsten Step
+                    await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+                }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
+            }
+        }
 
-		private void PlayAudioInstant(AudioObj audio)
-		{
-			if (audio.Data == null || audio.Data.LongLength == 0)
-			{
-				return;
-			}
+        private void PlayAudioInstant(AudioObj audio)
+        {
+            if (audio.Data == null || audio.Data.LongLength == 0)
+            {
+                return;
+            }
 
-			var sampleProvider = new SampleData(audio.Data, audio.SampleRate, audio.Channels);
+            var sampleProvider = new SampleData(audio.Data, audio.SampleRate, audio.Channels);
 
-			// Mono zu Stereo konvertieren, falls nötig
-			ISampleProvider provider = sampleProvider;
-			if (sampleProvider.WaveFormat.Channels == 1 && this.outputFormat.Channels == 2)
-			{
-				provider = new MonoToStereoSampleProvider(sampleProvider);
-			}
+            // Mono zu Stereo konvertieren, falls nötig
+            ISampleProvider provider = sampleProvider;
+            if (sampleProvider.WaveFormat.Channels == 1 && this.outputFormat.Channels == 2)
+            {
+                provider = new MonoToStereoSampleProvider(sampleProvider);
+            }
 
-			var finalVolumeProvider = new VolumeSampleProvider(provider)
-			{
-				Volume = this.Volume
-			};
+            var finalVolumeProvider = new VolumeSampleProvider(provider)
+            {
+                Volume = this.Volume
+            };
 
-			this.EnsureOutputReady();
-			this.mixer?.AddMixerInput(finalVolumeProvider);
-		}
+            this.EnsureOutputReady();
+            this.mixer?.AddMixerInput(finalVolumeProvider);
+        }
 
-		// --- AKTUALISIERTE START/STOP LOGIK ---
 
-		private void Button_playback_Click(object sender, EventArgs e)
-		{
-			if (this.isPlaying)
-			{
-				this.StopPlayback();
-			}
-			else
-			{
-				this.StartPlayback();
-			}
-		}
+        private void Button_playback_Click(object sender, EventArgs e)
+        {
+            if (this.isPlaying)
+            {
+                this.StopPlayback();
+            }
+            else
+            {
+                this.StartPlayback();
+            }
+        }
 
-		private void EnsureOutputReady()
-		{
-			if (this.mixer == null)
-			{
-				this.mixer = new MixingSampleProvider(this.outputFormat) { ReadFully = true };
-			}
-			if (this.waveOut == null)
-			{
-				this.waveOut = new WaveOutEvent();
-				this.waveOut.Init(this.mixer);
-			}
-			if (this.waveOut.PlaybackState != PlaybackState.Playing)
-			{
-				this.waveOut.Play();
-			}
-		}
+        private void EnsureOutputReady()
+        {
+            if (this.mixer == null)
+            {
+                this.mixer = new MixingSampleProvider(this.outputFormat) { ReadFully = true };
+            }
+            if (this.waveOut == null)
+            {
+                this.waveOut = new WaveOutEvent();
+                this.waveOut.Init(this.mixer);
+            }
+            if (this.waveOut.PlaybackState != PlaybackState.Playing)
+            {
+                this.waveOut.Play();
+            }
+        }
 
-		private void StartPlayback()
-		{
-			if (this.isPlaying) return;
+        private void StartPlayback()
+        {
+            if (this.isPlaying) return;
 
-			this.isPlaying = true;
-			this.currentStep = -1; // -1, damit HandleCurrentStep sofort mit 0 startet
-			this.button_playback.Text = "Stop";
+            this.isPlaying = true;
+            this.currentStep = -1; // -1, damit HandleCurrentStep sofort mit 0 startet
+            this.button_playback.Text = "Stop";
 
-			this.playbackCts = new CancellationTokenSource();
-			this.playbackTask = this.PlaybackLoop(this.playbackCts.Token);
+            this.playbackCts = new CancellationTokenSource();
+            this.playbackTask = this.PlaybackLoop(this.playbackCts.Token);
 
-			// Erlaubt das Anpassen des BPM während der Wiedergabe, da die Loop 
-			// den Wert in jeder Iteration neu liest.
-			this.numericUpDown_bpm.ValueChanged += this.Bpm_ValueChanged;
-		}
+            // Erlaubt das Anpassen des BPM während der Wiedergabe, da die Loop 
+            // den Wert in jeder Iteration neu liest.
+            this.numericUpDown_bpm.ValueChanged += this.Bpm_ValueChanged;
+        }
 
-		private void StopPlayback()
-		{
-			if (!this.isPlaying) return;
+        private void StopPlayback()
+        {
+            if (!this.isPlaying) return;
 
-			this.isPlaying = false;
-			this.button_playback.Text = "Play";
+            this.isPlaying = false;
+            this.button_playback.Text = "Play";
 
-			this.playbackCts?.Cancel();
-			try { this.playbackTask?.Wait(); } catch { }
-			this.playbackCts?.Dispose();
+            this.playbackCts?.Cancel();
+            try { this.playbackTask?.Wait(); } catch { }
+            this.playbackCts?.Dispose();
 
-			this.currentStep = -1;
-			this.HandleCurrentStep(this.Hits);
+            this.currentStep = -1;
+            this.HandleCurrentStep(this.Hits);
 
-			this.numericUpDown_bpm.ValueChanged -= this.Bpm_ValueChanged;
+            this.numericUpDown_bpm.ValueChanged -= this.Bpm_ValueChanged;
 
-			// Mixer und WaveOut aufräumen
-			this.waveOut?.Stop();
-			this.waveOut?.Dispose();
-			this.waveOut = null;
-			this.mixer = null;
-		}
+            // Mixer und WaveOut aufräumen
+            this.waveOut?.Stop();
+            this.waveOut?.Dispose();
+            this.waveOut = null;
+            this.mixer = null;
+        }
 
-		private void Bpm_ValueChanged(object? sender, EventArgs e)
-		{
-			// Da die PlaybackLoop in jeder Iteration this.GetTimerIntervalMs() aufruft, 
-			// wird die BPM-Änderung sofort im nächsten Step wirksam. Keine weitere Logik nötig.
-		}
+        private void Bpm_ValueChanged(object? sender, EventArgs e)
+        {
+            // Da die PlaybackLoop in jeder Iteration this.GetTimerIntervalMs() aufruft, 
+            // wird die BPM-Änderung sofort im nächsten Step wirksam. Keine weitere Logik nötig.
+        }
 
-	}
+
+        public async Task<AudioObj> GenerateSampleAsync()
+        {
+            // 1. Pattern auslesen
+            int hits = this.Hits;
+            float bpm = this.Bpm;
+            float secondsPerStep = 60f / bpm * 4f / hits; // 4/4-Takt
+            int sampleRate = 44100;
+            int channels = 2;
+
+            // 2. Länge berechnen (in Samples)
+            int totalSamples = (int)(secondsPerStep * hits * sampleRate);
+            float[] mixBuffer = new float[totalSamples * channels];
+
+            // 3. Für jede Spur (Panel) und Step prüfen, ob aktiv, dann Audio einmischen
+            for (int trackIdx = 0; trackIdx < this.Panels.Count; trackIdx++)
+            {
+                if (trackIdx >= this.AudioC.Audios.Count) continue;
+                var audio = this.AudioC.Audios[trackIdx];
+                if (audio.Data == null || audio.Data.Length == 0) continue;
+                int audioChannels = audio.Channels > 0 ? audio.Channels : 1;
+                int audioSampleRate = audio.SampleRate > 0 ? audio.SampleRate : sampleRate;
+                float[] audioData = audio.Data;
+                int audioLen = audioData.Length / audioChannels;
+
+                var panel = this.Panels[trackIdx];
+                int btnIdx = 0;
+                foreach (Control ctrl in panel.Controls)
+                {
+                    if (ctrl is Button btn)
+                    {
+                        if (btn.BackColor == Color.Green)
+                        {
+                            // Step aktiv: Audio an diese Position mischen
+                            int stepStart = (int)(btnIdx * secondsPerStep * sampleRate);
+                            for (int n = 0; n < audioLen; n++)
+                            {
+                                int mixPos = (stepStart + n) * channels;
+                                int srcPos = n * audioChannels;
+                                if (mixPos + channels > mixBuffer.Length) break;
+                                for (int c = 0; c < channels; c++)
+                                {
+                                    float sample = audioData[srcPos + (c % audioChannels)];
+                                    mixBuffer[mixPos + c] += sample * this.Volume;
+                                }
+                            }
+                        }
+                        btnIdx++;
+                        if (btnIdx >= hits) break;
+                    }
+                }
+            }
+
+            // 4. Clipping verhindern
+            for (int i = 0; i < mixBuffer.Length; i++)
+            {
+                if (mixBuffer[i] > 1f) mixBuffer[i] = 1f;
+                if (mixBuffer[i] < -1f) mixBuffer[i] = -1f;
+            }
+
+            // 5. AudioObj erzeugen
+            var result = new AudioObj
+            {
+                Name = "DrumRollMix_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"),
+                Data = mixBuffer,
+                SampleRate = sampleRate,
+                Channels = channels,
+                Duration = TimeSpan.FromSeconds(secondsPerStep * hits),
+                Length = mixBuffer.Length,
+                BitDepth = 32
+            };
+            return result;
+        }
+
+        private async void button_export_Click(object sender, EventArgs e)
+        {
+            bool ctrlFlag = (ModifierKeys & Keys.Control) == Keys.Control;
+
+            var mixed = await this.GenerateSampleAsync();
+
+            AudioCollectionView view = new([mixed]);
+            WindowMain.CollectionViews.Add(view);
+            view.Show();
+
+            if (ctrlFlag)
+            {
+                string? exported = await this.AudioC.Exporter.ExportWavAsync(mixed);
+            }
+        }
+
+        // Helper to capture the current pattern button states (per panel, per hit)
+        private List<List<bool>> CapturePatternButtonStates()
+        {
+            var states = new List<List<bool>>();
+            foreach (var panel in this.Panels)
+            {
+                var panelStates = new List<bool>();
+                foreach (Control ctrl in panel.Controls)
+                {
+                    if (ctrl is Button btn)
+                    {
+                        panelStates.Add(btn.BackColor == Color.Green);
+                    }
+                }
+                states.Add(panelStates);
+            }
+            return states;
+        }
+
+        // Helper to restore pattern button states (per panel, per hit)
+        private void RestorePatternButtonStates(List<List<bool>> states)
+        {
+            for (int i = 0; i < this.Panels.Count && i < states.Count; i++)
+            {
+                var panel = this.Panels[i];
+                var panelStates = states[i];
+                int btnIdx = 0;
+                foreach (Control ctrl in panel.Controls)
+                {
+                    if (ctrl is Button btn)
+                    {
+                        if (btnIdx < panelStates.Count)
+                        {
+                            btn.BackColor = panelStates[btnIdx] ? Color.Green : Color.LightGray;
+                        }
+                        btnIdx++;
+                    }
+                }
+            }
+        }
+    }
 }

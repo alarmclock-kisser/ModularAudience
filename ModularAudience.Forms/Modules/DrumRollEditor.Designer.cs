@@ -38,6 +38,7 @@
             this.label_info_dragndrop = new Label();
             this.numericUpDown_volume = new NumericUpDown();
             this.label_info_volume = new Label();
+            this.button_export = new Button();
             this.panel_pattern.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_bpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_volume).BeginInit();
@@ -128,7 +129,7 @@
             // label_info_dragndrop
             // 
             this.label_info_dragndrop.AutoSize = true;
-            this.label_info_dragndrop.Location = new Point(554, 9);
+            this.label_info_dragndrop.Location = new Point(326, 9);
             this.label_info_dragndrop.Name = "label_info_dragndrop";
             this.label_info_dragndrop.Size = new Size(138, 15);
             this.label_info_dragndrop.TabIndex = 10;
@@ -136,7 +137,7 @@
             // 
             // numericUpDown_volume
             // 
-            this.numericUpDown_volume.Location = new Point(436, 27);
+            this.numericUpDown_volume.Location = new Point(201, 27);
             this.numericUpDown_volume.Name = "numericUpDown_volume";
             this.numericUpDown_volume.ReadOnly = true;
             this.numericUpDown_volume.Size = new Size(55, 23);
@@ -147,17 +148,29 @@
             // label_info_volume
             // 
             this.label_info_volume.AutoSize = true;
-            this.label_info_volume.Location = new Point(436, 9);
+            this.label_info_volume.Location = new Point(201, 9);
             this.label_info_volume.Name = "label_info_volume";
             this.label_info_volume.Size = new Size(47, 15);
             this.label_info_volume.TabIndex = 12;
             this.label_info_volume.Text = "Volume";
+            // 
+            // button_export
+            // 
+            this.button_export.BackColor = Color.FromArgb(  192,   255,   255);
+            this.button_export.Location = new Point(617, 12);
+            this.button_export.Name = "button_export";
+            this.button_export.Size = new Size(75, 23);
+            this.button_export.TabIndex = 13;
+            this.button_export.Text = "Export";
+            this.button_export.UseVisualStyleBackColor = false;
+            this.button_export.Click += this.button_export_Click;
             // 
             // DrumRollEditor
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(704, 441);
+            this.Controls.Add(this.button_export);
             this.Controls.Add(this.label_info_volume);
             this.Controls.Add(this.numericUpDown_volume);
             this.Controls.Add(this.label_info_dragndrop);
@@ -191,5 +204,6 @@
         private Label label_info_dragndrop;
         private NumericUpDown numericUpDown_volume;
         private Label label_info_volume;
+        private Button button_export;
     }
 }

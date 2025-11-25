@@ -589,11 +589,15 @@ namespace ModularAudience.Forms
                 view.StartPosition = FormStartPosition.Manual;
                 var offset = new Point(CollectionCascadeOffset.Width * i, CollectionCascadeOffset.Height * i);
                 var location = new Point(basePoint.X + offset.X, basePoint.Y + offset.Y);
-				view.Invoke(() =>
-				{
-                    view.Location = location;
-				});
-			}
+				try
+                {
+                    view.Invoke(() =>
+                    {
+                        view.Location = location;
+                    });
+                }
+                catch { }
+            }
         }
 
         private void PositionCollectionView(AudioCollectionView? view)

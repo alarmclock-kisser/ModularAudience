@@ -210,7 +210,7 @@ namespace ModularAudience.Forms.Modules
                 : minWidth;
 
             Rectangle workingArea = Screen.FromControl(this).WorkingArea;
-            int maxWidth = Math.Max(minWidth, Math.Min(this.designerWaveWidth, workingArea.Width - 20));
+            int maxWidth = Math.Max(minWidth, Math.Min(960, workingArea.Width - 20)); // 1080 = Designer-Default
             desiredWidth = Math.Clamp(desiredWidth, minWidth, maxWidth);
 
             if (totalFrames > 0)
