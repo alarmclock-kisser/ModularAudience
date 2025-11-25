@@ -25,17 +25,27 @@ namespace ModularAudience.Audio
 
 		public int Read(float[] buffer, int offset, int count)
 		{
+			if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+			if (offset < 0 || offset > buffer.Length) throw new ArgumentOutOfRangeException(nameof(offset));
+			if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+
 			if (this.position >= this.data.Length)
 			{
-				return 0; // Ende des Samples erreicht
+				return 0;
 			}
 
-			int samplesToRead = (int) Math.Min(count, this.data.Length - this.position);
+			// wieviel Samples sind im Source noch verfügbar
+			int availableInSource = (int)Math.Min((long)count, this.data.Length - this.position);
 
-			// Stelle sicher, dass wir nicht über den Puffer schreiben
-			samplesToRead = Math.Min(samplesToRead, count - offset);
+			// wieviel Platz ist im Zielpuffer ab 'offset'
+			int availableInBuffer = buffer.Length - offset;
 
-			Array.Copy(this.data, this.position, buffer, offset, samplesToRead);
+			// tatsächlich zu kopierende Samples (>= 0)
+			int samplesToRead = Math.Max(0, Math.Min(availableInSource, availableInBuffer));
+
+			if (samplesToRead == 0) return 0;
+
+			Array.Copy(this.data, (int)this.position, buffer, offset, samplesToRead);
 			this.position += samplesToRead;
 			return samplesToRead;
 		}

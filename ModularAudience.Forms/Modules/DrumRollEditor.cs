@@ -22,7 +22,12 @@ namespace ModularAudience.Forms.Modules
         private CancellationTokenSource? playbackCts;
         private Task? playbackTask;
 
-        private int currentStep = 0;
+        // Scheduler-specific
+        private CancellationTokenSource? schedulerCts;
+        private Task? schedulerTask;
+        private readonly object outputLock = new();
+        private readonly int schedulingLookaheadMs = 150; // lookahead to account for playback buffer latency
+        private volatile int currentStep = 0;
         private bool isPlaying = false;
 
 
@@ -251,6 +256,7 @@ namespace ModularAudience.Forms.Modules
                 this.panel_pattern.Visible = false;
                 return;
             }
+            this.panel_pattern.Visible = true;
 
             // Layout-Parameter
             int availableHeight = this.ClientSize.Height - this.panel_pattern.Top - 20; // ClientSize für exakte Fläche
@@ -498,27 +504,23 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-
-
-
-
         private static readonly Color StepActiveFore = Color.White;
         private static readonly Color StepDefaultFore = Color.Black;
         private static readonly Color StepDefaultBack = SystemColors.Control;
 
-        private void HandleCurrentStep(int hits)
+        // NOTE: HandleCurrentStep bleibt für compatibility, wird aber nur für UI verwendet (keine direkte Playback-Logik).
+        private void HandleCurrentStepUI(int step, int hits)
         {
-            // --- UI-Logik: Hervorheben des aktuellen Steps ---
             int panelIdx = 0;
             foreach (Panel panel in this.Panels)
             {
                 int btnIdx = 0;
-                Button? playBtn = null; // Der Button des aktuellen Steps, falls er existiert
+                Button? playBtn = null;
                 foreach (Control control in panel.Controls)
                 {
                     if (control is Button btn)
                     {
-                        if (btnIdx == this.currentStep)
+                        if (btnIdx == step)
                         {
                             playBtn = btn;
 
@@ -550,21 +552,8 @@ namespace ModularAudience.Forms.Modules
                         btnIdx++;
                     }
                 }
-
-                // Audio abspielen, wenn Button im aktuellen Step im Pattern aktiv ist
-                if (playBtn != null && (playBtn.Tag as string) == "active")
-                {
-                    if (panelIdx < this.AudioC.Audios.Count)
-                    {
-                        var audio = this.AudioC.Audios[panelIdx];
-                        // HIER der schnelle, nicht-blockierende Aufruf für überlappende Schläge
-                        this.PlayAudioInstant(audio);
-                    }
-                }
                 panelIdx++;
             }
-
-            this.currentStep = (this.currentStep + 1) % hits;
         }
 
         private async Task PlayAudioAsync(AudioObj audio)
@@ -582,31 +571,100 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        private async Task PlaybackLoop(CancellationToken cancellationToken)
+        // Neuer Scheduler-Loop: plant Audio-Events mit Lookahead und aktualisiert UI exakt zum Zeitpunkt
+        private async Task SchedulerLoop(CancellationToken cancellationToken)
         {
-            int totalHits = this.Hits;
-            this.currentStep = 0;
+            int hits = this.Hits;
+            if (hits <= 0) return;
 
+            double intervalMs = this.GetTimerIntervalMs();
+            // Start etwas in der Zukunft, damit wir Lookahead nutzen können
+            DateTimeOffset startTime = DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(this.schedulingLookaheadMs);
+            int stepIndex = 0;
+
+            // keep scheduling while playing
             while (!cancellationToken.IsCancellationRequested)
             {
-                long startTick = DateTime.Now.Ticks;
-                int intervalMs = this.GetTimerIntervalMs(); // Liest BPM live
+                DateTimeOffset now = DateTimeOffset.UtcNow;
 
-                // UI-Update und Audio-Trigger auf dem UI-Thread ausführen
-                this.Invoke((MethodInvoker) (() =>
+                // schedule any steps that fall within now + lookahead
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    this.HandleCurrentStep(totalHits);
-                }));
+                    DateTimeOffset scheduledTime = startTime + TimeSpan.FromMilliseconds(stepIndex * intervalMs);
+                    if (scheduledTime <= now + TimeSpan.FromMilliseconds(this.schedulingLookaheadMs))
+                    {
+                        // For each track, if the button at step is active, schedule audio
+                        for (int trackIdx = 0; trackIdx < this.Panels.Count; trackIdx++)
+                        {
+                            if (trackIdx >= this.AudioC.Audios.Count) continue;
+                            var panel = this.Panels[trackIdx];
+                            int btnIdx = 0;
+                            foreach (Control ctrl in panel.Controls)
+                            {
+                                if (ctrl is Button btn)
+                                {
+                                    if (btnIdx == (stepIndex % hits))
+                                    {
+                                        if (btn.BackColor == Color.Green)
+                                        {
+                                            var audio = this.AudioC.Audios[trackIdx];
+                                            // schedule audio for exact scheduledTime
+                                            try
+                                            {
+                                                ScheduleAudioAt(audio, scheduledTime, cancellationToken);
+                                            }
+                                            catch
+                                            {
+                                                // swallow scheduling errors
+                                            }
+                                        }
+                                        break;
+                                    }
+                                    btnIdx++;
+                                }
+                            }
+                        }
 
-                // Präzise Verzögerung berechnen
-                long elapsedTicks = DateTime.Now.Ticks - startTick;
-                int elapsedMs = (int) new TimeSpan(elapsedTicks).TotalMilliseconds;
-                int delayMs = Math.Max(0, intervalMs - elapsedMs);
+                        // schedule UI update to run exactly at scheduledTime
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var delay = scheduledTime - DateTimeOffset.UtcNow;
+                                if (delay > TimeSpan.Zero)
+                                {
+                                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                                }
+                            }
+                            catch (TaskCanceledException) { return; }
+                            catch { }
+                            try
+                            {
+                                if (this.IsHandleCreated && !this.IsDisposed)
+                                {
+                                    this.Invoke((MethodInvoker)(() =>
+                                    {
+                                        // Update current step for UI
+                                        this.currentStep = stepIndex % hits;
+                                        this.HandleCurrentStepUI(this.currentStep, hits);
+                                    }));
+                                }
+                            }
+                            catch { }
+                        }, cancellationToken);
 
+                        stepIndex++;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                // Sleep a short while then re-evaluate; responsive to BPM changes
                 try
                 {
-                    // Warten auf den nächsten Step
-                    await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+                    await Task.Delay(Math.Max(5, this.schedulingLookaheadMs / 4), cancellationToken).ConfigureAwait(false);
                 }
                 catch (TaskCanceledException)
                 {
@@ -615,20 +673,26 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        private void PlayAudioInstant(AudioObj audio)
+        // Schedules audio into the mixer at an absolute playAt time (UTC)
+        private void ScheduleAudioAt(AudioObj audio, DateTimeOffset playAt, CancellationToken cancellationToken)
         {
-            if (audio.Data == null || audio.Data.LongLength == 0)
+            if (audio.Data == null || audio.Data.LongLength == 0) return;
+
+            // Build the sample provider chain (resample, mono->stereo, volume)
+            ISampleProvider provider;
+            var sampleProvider = new SampleData(audio.Data, audio.SampleRate, audio.Channels);
+            provider = sampleProvider;
+
+            // Resample if needed
+            if (sampleProvider.WaveFormat.SampleRate != this.outputFormat.SampleRate)
             {
-                return;
+                provider = new WdlResamplingSampleProvider(provider, this.outputFormat.SampleRate);
             }
 
-            var sampleProvider = new SampleData(audio.Data, audio.SampleRate, audio.Channels);
-
-            // Mono zu Stereo konvertieren, falls nötig
-            ISampleProvider provider = sampleProvider;
-            if (sampleProvider.WaveFormat.Channels == 1 && this.outputFormat.Channels == 2)
+            // Mono -> Stereo if needed
+            if (provider.WaveFormat.Channels == 1 && this.outputFormat.Channels == 2)
             {
-                provider = new MonoToStereoSampleProvider(sampleProvider);
+                provider = new MonoToStereoSampleProvider(provider);
             }
 
             var finalVolumeProvider = new VolumeSampleProvider(provider)
@@ -636,10 +700,36 @@ namespace ModularAudience.Forms.Modules
                 Volume = this.Volume
             };
 
-            this.EnsureOutputReady();
-            this.mixer?.AddMixerInput(finalVolumeProvider);
-        }
+            // Calculate delay relative to now
+            TimeSpan delay = playAt - DateTimeOffset.UtcNow;
+            OffsetSampleProvider? offsetProvider = null;
+            if (delay > TimeSpan.Zero)
+            {
+                offsetProvider = new OffsetSampleProvider(finalVolumeProvider)
+                {
+                    // Delay until playAt. OffsetSampleProvider fills zeros until delay elapses.
+                    DelayBy = delay,
+                    // Ensure it doesn't trim leading silence:
+                    LeadOut = TimeSpan.Zero
+                };
+            }
 
+            lock (this.outputLock)
+            {
+                // Ensure output system is up
+                this.EnsureOutputReady();
+
+                // Add to mixer (with or without offset)
+                if (offsetProvider != null)
+                {
+                    this.mixer?.AddMixerInput(offsetProvider);
+                }
+                else
+                {
+                    this.mixer?.AddMixerInput(finalVolumeProvider);
+                }
+            }
+        }
 
         private void Button_playback_Click(object sender, EventArgs e)
         {
@@ -655,18 +745,32 @@ namespace ModularAudience.Forms.Modules
 
         private void EnsureOutputReady()
         {
-            if (this.mixer == null)
+            lock (this.outputLock)
             {
-                this.mixer = new MixingSampleProvider(this.outputFormat) { ReadFully = true };
-            }
-            if (this.waveOut == null)
-            {
-                this.waveOut = new WaveOutEvent();
-                this.waveOut.Init(this.mixer);
-            }
-            if (this.waveOut.PlaybackState != PlaybackState.Playing)
-            {
-                this.waveOut.Play();
+                if (this.mixer == null)
+                {
+                    this.mixer = new MixingSampleProvider(this.outputFormat) { ReadFully = true };
+                }
+                if (this.waveOut == null)
+                {
+                    this.waveOut = new WaveOutEvent()
+                    {
+                        DesiredLatency = 100
+                    };
+                    // Init with ISampleProvider
+                    this.waveOut.Init(this.mixer);
+                }
+                if (this.waveOut.PlaybackState != PlaybackState.Playing)
+                {
+                    try
+                    {
+                        this.waveOut.Play();
+                    }
+                    catch
+                    {
+                        // ignore errors on Play
+                    }
+                }
             }
         }
 
@@ -678,14 +782,14 @@ namespace ModularAudience.Forms.Modules
             }
 
             this.isPlaying = true;
-            this.currentStep = -1; // -1, damit HandleCurrentStep sofort mit 0 startet
+            this.currentStep = 0;
             this.button_playback.Text = "Stop";
 
-            this.playbackCts = new CancellationTokenSource();
-            this.playbackTask = this.PlaybackLoop(this.playbackCts.Token);
+            // Play scheduler
+            this.schedulerCts = new CancellationTokenSource();
+            this.schedulerTask = Task.Run(() => this.SchedulerLoop(this.schedulerCts.Token));
 
-            // Erlaubt das Anpassen des BPM während der Wiedergabe, da die Loop 
-            // den Wert in jeder Iteration neu liest.
+            // Keep numericUpDown subscription to update BPM live
             this.numericUpDown_bpm.ValueChanged += this.Bpm_ValueChanged;
         }
 
@@ -699,26 +803,47 @@ namespace ModularAudience.Forms.Modules
             this.isPlaying = false;
             this.button_playback.Text = "Play";
 
-            this.playbackCts?.Cancel();
-            try { this.playbackTask?.Wait(); } catch { }
-            this.playbackCts?.Dispose();
+            // Cancel scheduler and wait
+            try
+            {
+                this.schedulerCts?.Cancel();
+                this.schedulerTask?.Wait(500);
+            }
+            catch { }
+            finally
+            {
+                try { this.schedulerCts?.Dispose(); } catch { }
+                this.schedulerCts = null;
+                this.schedulerTask = null;
+            }
 
+            // Reset UI highlight
             this.currentStep = -1;
-            this.HandleCurrentStep(this.Hits);
+            try
+            {
+                if (this.IsHandleCreated && !this.IsDisposed)
+                {
+                    this.Invoke((MethodInvoker)(() =>
+                    {
+                        this.HandleCurrentStepUI(0, this.Hits);
+                    }));
+                }
+            }
+            catch { }
 
             this.numericUpDown_bpm.ValueChanged -= this.Bpm_ValueChanged;
 
-            // Mixer und WaveOut aufräumen
-            this.waveOut?.Stop();
-            this.waveOut?.Dispose();
-            this.waveOut = null;
-            this.mixer = null;
+            // Stop playback but keep output alive for fast restart
+            lock (this.outputLock)
+            {
+                try { this.waveOut?.Stop(); } catch { }
+            }
         }
 
         private void Bpm_ValueChanged(object? sender, EventArgs e)
         {
-            // Da die PlaybackLoop in jeder Iteration this.GetTimerIntervalMs() aufruft, 
-            // wird die BPM-Änderung sofort im nächsten Step wirksam. Keine weitere Logik nötig.
+            // Scheduler reads BPM each loop (GetTimerIntervalMs is used in SchedulerLoop's inner loop),
+            // so changes become effective quickly. No extra handling required.
         }
 
 
