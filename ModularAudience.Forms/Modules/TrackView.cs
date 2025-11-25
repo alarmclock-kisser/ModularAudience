@@ -166,7 +166,7 @@ namespace ModularAudience.Forms.Modules
         {
             WindowMain.LastSelectedTrackView = this;
 
-            var collectionView = WindowMain.CollectionViews.FirstOrDefault(cv => cv.AudioC == this.SourceCollection && !cv.IsDisposed);
+            var collectionView = WindowMain.CollectionViews.FirstOrDefault(cv => cv.AudioC == this.SourceCollection && !cv.IsDisposed && cv.Visible);
             if (collectionView != null)
             {
                 // Select only the exact track in the listBox, deselect all others
@@ -223,7 +223,7 @@ namespace ModularAudience.Forms.Modules
             // Add 10% clearance on the right end for initial view
             if (desiredWidth == maxWidth)
             {
-                desiredWidth = (int)(maxWidth * 0.9);
+                desiredWidth = (int) (maxWidth * 0.9);
             }
 
             if (totalFrames > 0)
@@ -1313,15 +1313,15 @@ namespace ModularAudience.Forms.Modules
             {
                 AudioCollectionView? targetView = WindowMain.CollectionViews.FirstOrDefault(cv => cv != null && !cv.IsDisposed);
                 if (targetView == null || targetView.IsDisposed)
-				{
+                {
                     targetView = new AudioCollectionView([clip]);
                     WindowMain.CollectionViews.Add(targetView);
-					targetView.Show();
+                    targetView.Show();
                 }
                 else
                 {
-					targetView.AudioC.Audios.Add(clip);
-				}
+                    targetView.AudioC.Audios.Add(clip);
+                }
 
                 WindowMain.UpdateCollectionTag(clip, targetView);
                 LogCollection.Log($"Selection copied to '{clip.Name}'.");

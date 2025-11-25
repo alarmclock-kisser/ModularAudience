@@ -74,7 +74,7 @@ namespace ModularAudience.Forms.Modules
             this.DragEnter -= this.DrumRollEditor_DragEnter;
             this.DragDrop -= this.DrumRollEditor_DragDrop;
             this.AudioC.Dispose();
-		}
+        }
 
         private void button_playback_Click(object sender, EventArgs e)
         {
@@ -732,7 +732,7 @@ namespace ModularAudience.Forms.Modules
             int channels = 2;
 
             // 2. Länge berechnen (in Samples)
-            int totalSamples = (int)(secondsPerStep * hits * sampleRate);
+            int totalSamples = (int) (secondsPerStep * hits * sampleRate);
             float[] mixBuffer = new float[totalSamples * channels];
 
             // 3. Für jede Spur (Panel) und Step prüfen, ob aktiv, dann Audio einmischen
@@ -763,7 +763,7 @@ namespace ModularAudience.Forms.Modules
                         if (btn.BackColor == Color.Green)
                         {
                             // Step aktiv: Audio an diese Position mischen
-                            int stepStart = (int)(btnIdx * secondsPerStep * sampleRate);
+                            int stepStart = (int) (btnIdx * secondsPerStep * sampleRate);
                             for (int n = 0; n < audioLen; n++)
                             {
                                 int mixPos = (stepStart + n) * channels;
@@ -814,7 +814,7 @@ namespace ModularAudience.Forms.Modules
                 Length = mixBuffer.Length,
                 BitDepth = 32,
                 Bpm = bpm
-			};
+            };
 
 
             return result;
@@ -945,5 +945,5 @@ namespace ModularAudience.Forms.Modules
             }
             await Task.CompletedTask;
         }
-	}
+    }
 }

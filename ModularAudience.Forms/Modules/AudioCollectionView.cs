@@ -15,7 +15,7 @@ namespace ModularAudience.Forms
 {
     public partial class AudioCollectionView : Form
     {
-        internal  readonly AudioCollection AudioC = new();
+        internal readonly AudioCollection AudioC = new();
 
         internal IEnumerable<AudioObj> SelectedAudios => this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>();
 
@@ -42,7 +42,7 @@ namespace ModularAudience.Forms
 
         public int AudioCount => this.AudioC.Audios.Count;
 
-		private System.Windows.Forms.Timer waveformPreviewTimer;
+        private System.Windows.Forms.Timer waveformPreviewTimer;
         private int waveformPreviewIndex = -1;
         private WaveformPreview? waveformPreviewForm;
         private Point lastMousePos;
@@ -533,34 +533,34 @@ namespace ModularAudience.Forms
         private async void Form_DoubleClick(object? sender, EventArgs e)
         {
             await this.CancelAutoPlayAsync().ConfigureAwait(false);
-			// Clicked not on an item: Select all
-			this.listBox_audios.BeginUpdate();
-			try
-			{
-				this.listBox_audios.ClearSelected();
-				for (int i = 0; i < this.listBox_audios.Items.Count; i++)
-				{
-					this.listBox_audios.SetSelected(i, true);
-				}
-			}
-			finally
-			{
-				this.listBox_audios.EndUpdate();
-			}
-		}
+            // Clicked not on an item: Select all
+            this.listBox_audios.BeginUpdate();
+            try
+            {
+                this.listBox_audios.ClearSelected();
+                for (int i = 0; i < this.listBox_audios.Items.Count; i++)
+                {
+                    this.listBox_audios.SetSelected(i, true);
+                }
+            }
+            finally
+            {
+                this.listBox_audios.EndUpdate();
+            }
+        }
 
-		private async void listBox_audios_DoubleClick(object? sender, EventArgs e)
+        private async void listBox_audios_DoubleClick(object? sender, EventArgs e)
         {
             // First set really selected  item to the one under the mouse cursor
             this.listBox_audios.SelectedIndex = this.listBox_audios.IndexFromPoint(this.listBox_audios.PointToClient(Cursor.Position));
-			AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
+            AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
             if (selectedAudio != null)
             {
                 WindowMain.TrackViews.Add(new TrackView(selectedAudio, this.AudioC));
             }
             else
             {
-				// Clicked not on an item: Select all
+                // Clicked not on an item: Select all
                 this.listBox_audios.BeginUpdate();
                 try
                 {
@@ -573,10 +573,10 @@ namespace ModularAudience.Forms
                 finally
                 {
                     this.listBox_audios.EndUpdate();
-				}
-			}
+                }
+            }
 
-			await this.AudioC.StopAllAsync();
+            await this.AudioC.StopAllAsync();
         }
 
         private void listBox_audios_DragEnter(object? sender, DragEventArgs e)
@@ -1502,6 +1502,8 @@ namespace ModularAudience.Forms
                     }
                 }
             }
+            // Temporarily detach SelectedIndexChanged to avoid recursion/side effects
+            this.listBox_audios.SelectedIndexChanged -= this.listBox_audios_SelectedIndexChanged;
             this.WithSelectionSuppressed(() =>
             {
                 this.listBox_audios.ClearSelected();
@@ -1512,12 +1514,12 @@ namespace ModularAudience.Forms
                     this.listBox_audios.SelectedIndex = index;
                 }
             });
+            this.listBox_audios.SelectedIndexChanged += this.listBox_audios_SelectedIndexChanged;
             if (index >= 0)
             {
                 this.listBox_audios.TopIndex = Math.Max(0, index - 2); // scroll into view
             }
-            this.BringToFront();
         }
 
-	}
+    }
 }

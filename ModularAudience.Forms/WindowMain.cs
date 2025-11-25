@@ -46,8 +46,8 @@ namespace ModularAudience.Forms
         private bool suppressExportFormatEvent;
         private string lastImportFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
 
-		// Recording timer
-		private System.Windows.Forms.Timer? recordingTimer = null;
+        // Recording timer
+        private System.Windows.Forms.Timer? recordingTimer = null;
         private DateTime _infoCtrlToStopAppeared = DateTime.MinValue;
 
 
@@ -101,7 +101,7 @@ namespace ModularAudience.Forms
                 {
                     Description = "Select Resource Folder to Import Audio Files From",
                     SelectedPath = this.lastImportFolder,
-                    ShowNewFolderButton = false                    
+                    ShowNewFolderButton = false
                 };
 
                 if (folderBrowserDialog.ShowDialog() != DialogResult.OK)
@@ -591,7 +591,7 @@ namespace ModularAudience.Forms
                 view.StartPosition = FormStartPosition.Manual;
                 var offset = new Point(CollectionCascadeOffset.Width * i, CollectionCascadeOffset.Height * i);
                 var location = new Point(basePoint.X + offset.X, basePoint.Y + offset.Y);
-				try
+                try
                 {
                     view.Invoke(() =>
                     {
@@ -978,11 +978,11 @@ namespace ModularAudience.Forms
         }
 
         private void button_drumRoll_Click(object sender, EventArgs e)
-		{
+        {
             // New drum roll editor window with all selected tracks
             DrumRollEditor editor = new(SelectedTracks);
             editor.Show();
-		}
+        }
 
 
 
