@@ -631,44 +631,67 @@ namespace ModularAudience.Forms.Modules
             return this.offsetFrames + (long) x * this.samplesPerPixel;
         }
 
-        private void Wave_MouseWheel(object? sender, MouseEventArgs e)
-        {
-            if ((ModifierKeys & Keys.Control) != 0)
-            {
-                int current = this.samplesPerPixel;
-                if (e.Delta > 0)
-                {
-                    int step = Math.Max(1, current / 8);
-                    this.samplesPerPixel = Math.Max(MinSamplesPerPixel, current - step);
-                }
-                else
-                {
-                    int step = Math.Max(1, current / 6);
-                    this.samplesPerPixel = Math.Min(MaxSamplesPerPixel, current + step);
-                }
-                this.UpdateOffsetScrollbar();
-                _ = this.RefreshWaveformAsync();
-                return;
-            }
+		private void Wave_MouseWheel(object? sender, MouseEventArgs e)
+		{
+			// Zoom mit Ctrl: samplesPerPixel ändern, Zoom um den Cursor herum (Sample unter Cursor bleibt an gleicher Pixel-Position)
+			if ((ModifierKeys & Keys.Control) != 0)
+			{
+				int current = this.samplesPerPixel;
+				int newSamplesPerPixel;
+				if (e.Delta > 0)
+				{
+					int step = Math.Max(1, current / 8);
+					newSamplesPerPixel = Math.Max(MinSamplesPerPixel, current - step);
+				}
+				else
+				{
+					int step = Math.Max(1, current / 6);
+					newSamplesPerPixel = Math.Min(MaxSamplesPerPixel, current + step);
+				}
 
-            if (this.OriginalAudio.Playing)
-            {
-                return;
-            }
+				if (newSamplesPerPixel != current)
+				{
+					// Bestimme X relativ zur PictureBox (sicher clamped)
+					int width = Math.Max(1, this.pictureBox_waveform.Width);
+					int localX = Math.Clamp(e.X, 0, width - 1);
 
-            long visibleFrames = (long) Math.Max(1, this.pictureBox_waveform.Width) * this.samplesPerPixel;
-            long stepFrames = Math.Max(1, (long) (visibleFrames * 0.15));
-            if (e.Delta > 0)
-            {
-                this.offsetFrames = Math.Max(0, this.offsetFrames - stepFrames);
-            }
-            else
-            {
-                this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), this.offsetFrames + stepFrames);
-            }
-            this.UpdateOffsetScrollbar();
-            _ = this.RefreshWaveformAsync();
-        }
+					// Sample unter dem Cursor vor dem Zoom
+					long sampleAtCursor = this.offsetFrames + (long) localX * current;
+
+					// Setze neuen Zoom
+					this.samplesPerPixel = newSamplesPerPixel;
+
+					// Berechne offset so dass sampleAtCursor wieder unter localX landet
+					long desiredOffset = sampleAtCursor - (long) localX * this.samplesPerPixel;
+					desiredOffset = Math.Max(0, desiredOffset);
+					this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
+
+					this.UpdateOffsetScrollbar();
+					this.pictureBox_waveform.Invalidate();
+				}
+
+				return;
+			}
+
+			// Ohne Ctrl: normaler Scroll (verschiebt die Ansicht)
+			if (this.OriginalAudio.Playing)
+			{
+				return;
+			}
+
+			long visibleFrames = (long) Math.Max(1, this.pictureBox_waveform.Width) * this.samplesPerPixel;
+			long stepFrames = Math.Max(1, (long) (visibleFrames * 0.15));
+			if (e.Delta > 0)
+			{
+				this.offsetFrames = Math.Max(0, this.offsetFrames - stepFrames);
+			}
+			else
+			{
+				this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), this.offsetFrames + stepFrames);
+			}
+			this.UpdateOffsetScrollbar();
+			this.pictureBox_waveform.Invalidate();
+		}
 
 		private void Wave_MouseDown(object? sender, MouseEventArgs e)
 		{
@@ -1710,7 +1733,7 @@ namespace ModularAudience.Forms.Modules
 		{
 			string current = this.Text ?? string.Empty;
 			// Microsoft.VisualBasic.Interaction.InputBox wird bereits im Projekt genutzt
-			string input = Microsoft.VisualBasic.Interaction.InputBox("Enter new name for this collection:", "Rename Collection", current);
+			string input = Microsoft.VisualBasic.Interaction.InputBox("Enter new name for this track:", "Rename Track", current);
 			if (!string.IsNullOrWhiteSpace(input) && input != current)
 			{
 				this.Text = input;
