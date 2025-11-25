@@ -805,9 +805,16 @@ namespace ModularAudience.Audio
 					for (int s = startSample; s < endSample; s++)
 					{
 						float sample = this.Data[s];
-						if (sample < min) min = sample;
-						if (sample > max) max = sample;
-					}
+						if (sample < min)
+                        {
+                            min = sample;
+                        }
+
+                        if (sample > max)
+                        {
+                            max = sample;
+                        }
+                    }
 					float y1 = midY - (min * (midY - 1));
 					float y2 = midY - (max * (midY - 1));
 					g.DrawLine(pen, x, y1, x, y2);

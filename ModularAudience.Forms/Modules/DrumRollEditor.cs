@@ -89,7 +89,10 @@ namespace ModularAudience.Forms.Modules
 
             // Dauer eines 4/4 Taktes in ms: (60 / BPM) * 4 * 1000
             // Dauer eines Steps: (Takt-Dauer) / Hits
-            if (bpm <= 0 || hits <= 0) return 100; // Fallback
+            if (bpm <= 0 || hits <= 0)
+            {
+                return 100; // Fallback
+            }
 
             return (int) (60000.0f / bpm * 4.0f / hits);
         }
@@ -278,7 +281,11 @@ namespace ModularAudience.Forms.Modules
                     var states = this.CapturePatternButtonStates();
                     this.AudioC.Audios.Remove(audio);
                     // Remove the corresponding state row
-                    if (i < states.Count) states.RemoveAt(i);
+                    if (i < states.Count)
+                    {
+                        states.RemoveAt(i);
+                    }
+
                     await this.RebuildPatternPanelsAsync(states);
                 };
                 var editItem = new ToolStripMenuItem("Edit Sample");
@@ -660,7 +667,10 @@ namespace ModularAudience.Forms.Modules
 
         private void StartPlayback()
         {
-            if (this.isPlaying) return;
+            if (this.isPlaying)
+            {
+                return;
+            }
 
             this.isPlaying = true;
             this.currentStep = -1; // -1, damit HandleCurrentStep sofort mit 0 startet
@@ -676,7 +686,10 @@ namespace ModularAudience.Forms.Modules
 
         private void StopPlayback()
         {
-            if (!this.isPlaying) return;
+            if (!this.isPlaying)
+            {
+                return;
+            }
 
             this.isPlaying = false;
             this.button_playback.Text = "Play";
@@ -720,9 +733,17 @@ namespace ModularAudience.Forms.Modules
             // 3. Für jede Spur (Panel) und Step prüfen, ob aktiv, dann Audio einmischen
             for (int trackIdx = 0; trackIdx < this.Panels.Count; trackIdx++)
             {
-                if (trackIdx >= this.AudioC.Audios.Count) continue;
+                if (trackIdx >= this.AudioC.Audios.Count)
+                {
+                    continue;
+                }
+
                 var audio = this.AudioC.Audios[trackIdx];
-                if (audio.Data == null || audio.Data.Length == 0) continue;
+                if (audio.Data == null || audio.Data.Length == 0)
+                {
+                    continue;
+                }
+
                 int audioChannels = audio.Channels > 0 ? audio.Channels : 1;
                 int audioSampleRate = audio.SampleRate > 0 ? audio.SampleRate : sampleRate;
                 float[] audioData = audio.Data;
@@ -742,7 +763,11 @@ namespace ModularAudience.Forms.Modules
                             {
                                 int mixPos = (stepStart + n) * channels;
                                 int srcPos = n * audioChannels;
-                                if (mixPos + channels > mixBuffer.Length) break;
+                                if (mixPos + channels > mixBuffer.Length)
+                                {
+                                    break;
+                                }
+
                                 for (int c = 0; c < channels; c++)
                                 {
                                     float sample = audioData[srcPos + (c % audioChannels)];
@@ -751,7 +776,10 @@ namespace ModularAudience.Forms.Modules
                             }
                         }
                         btnIdx++;
-                        if (btnIdx >= hits) break;
+                        if (btnIdx >= hits)
+                        {
+                            break;
+                        }
                     }
                 }
             }
@@ -759,8 +787,15 @@ namespace ModularAudience.Forms.Modules
             // 4. Clipping verhindern
             for (int i = 0; i < mixBuffer.Length; i++)
             {
-                if (mixBuffer[i] > 1f) mixBuffer[i] = 1f;
-                if (mixBuffer[i] < -1f) mixBuffer[i] = -1f;
+                if (mixBuffer[i] > 1f)
+                {
+                    mixBuffer[i] = 1f;
+                }
+
+                if (mixBuffer[i] < -1f)
+                {
+                    mixBuffer[i] = -1f;
+                }
             }
 
             // 5. AudioObj erzeugen

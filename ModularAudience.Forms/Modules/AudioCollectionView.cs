@@ -112,13 +112,18 @@ namespace ModularAudience.Forms
                         Size textSize = TextRenderer.MeasureText(g, text, this.listBox_audios.Font);
                         int itemWidth = textSize.Width + 120; // Platz für Dauer, Padding, etc.
                         if (itemWidth > requiredWidth)
+                        {
                             requiredWidth = itemWidth;
+                        }
                     }
                 }
             }
             // Add scrollbar width if needed
             if (this.listBox_audios.Items.Count > this.listBox_audios.ClientSize.Height / this.listBox_audios.ItemHeight)
+            {
                 requiredWidth += SystemInformation.VerticalScrollBarWidth;
+            }
+
             requiredWidth = Math.Min(Math.Max(requiredWidth + 40, minWidth), maxWidth);
             if (this.Width < requiredWidth)
             {
