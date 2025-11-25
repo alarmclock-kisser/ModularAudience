@@ -44,12 +44,12 @@ namespace ModularAudience.Forms
         private static readonly Padding TrackViewScreenMargin = new(20, 20, 20, 20);
         private static readonly Size TrackViewSpacing = new(15, 12);
         private bool suppressExportFormatEvent;
+        private string lastImportFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
 
-        // Recording timer
-        private System.Windows.Forms.Timer? recordingTimer = null;
+		// Recording timer
+		private System.Windows.Forms.Timer? recordingTimer = null;
         private DateTime _infoCtrlToStopAppeared = DateTime.MinValue;
 
-        internal static DrumRollEditor? DrumRoll { get; set; } = null;
 
         public WindowMain()
         {
@@ -100,14 +100,16 @@ namespace ModularAudience.Forms
                 using FolderBrowserDialog folderBrowserDialog = new()
                 {
                     Description = "Select Resource Folder to Import Audio Files From",
-                    SelectedPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources"),
-                    ShowNewFolderButton = false
+                    SelectedPath = this.lastImportFolder,
+                    ShowNewFolderButton = false                    
                 };
 
                 if (folderBrowserDialog.ShowDialog() != DialogResult.OK)
                 {
                     return;
                 }
+
+                this.lastImportFolder = folderBrowserDialog.SelectedPath;
 
                 try
                 {
@@ -976,16 +978,11 @@ namespace ModularAudience.Forms
         }
 
         private void button_drumRoll_Click(object sender, EventArgs e)
-        {
-            if (DrumRoll != null && !DrumRoll.IsDisposed)
-            {
-                DrumRoll.BringToFront();
-                return;
-            }
-
-            DrumRoll = new(SelectedTracks);
-            DrumRoll.Show();
-        }
+		{
+            // New drum roll editor window with all selected tracks
+            DrumRollEditor editor = new(SelectedTracks);
+            editor.Show();
+		}
 
 
 

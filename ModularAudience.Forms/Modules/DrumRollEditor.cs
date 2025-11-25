@@ -8,6 +8,7 @@ namespace ModularAudience.Forms.Modules
     public partial class DrumRollEditor : Form
     {
         private readonly AudioCollection AudioC = new();
+        private AudioCollectionView? CollectionView = null;
 
         public float Bpm => (float) this.numericUpDown_bpm.Value;
         public int Hits => this.domainUpDown_hits.SelectedItem is null ? 16 : int.Parse(this.domainUpDown_hits.SelectedItem.ToString() ?? "16");
@@ -56,6 +57,11 @@ namespace ModularAudience.Forms.Modules
             this.AudioC.Audios.ListChanged += this.AudioC_Audios_ListChanged;
             this.domainUpDown_hits.SelectedItemChanged += this.domainUpDown_hits_SelectedItemChanged;
 
+            // Set min/max width
+            this.MinimumSize = new Size(720, this.MinimumSize.Height);
+            this.MaximumSize = new Size(1280, this.MaximumSize.Height);
+            this.Resize += this.DrumRollEditor_Resize;
+
             // Initial Panels bauen, falls Samples vorhanden
             _ = this.RebuildPatternPanelsAsync();
         }
@@ -67,8 +73,8 @@ namespace ModularAudience.Forms.Modules
             this.domainUpDown_hits.SelectedItemChanged -= this.domainUpDown_hits_SelectedItemChanged;
             this.DragEnter -= this.DrumRollEditor_DragEnter;
             this.DragDrop -= this.DrumRollEditor_DragDrop;
-            WindowMain.DrumRoll = null;
-        }
+            this.AudioC.Dispose();
+		}
 
         private void button_playback_Click(object sender, EventArgs e)
         {
@@ -97,8 +103,6 @@ namespace ModularAudience.Forms.Modules
             return (int) (60000.0f / bpm * 4.0f / hits);
         }
 
-
-
         // Hilfsmethode zum Zurücksetzen der Highlights:
         private async void AudioC_Audios_ListChanged(object? sender, ListChangedEventArgs e)
         {
@@ -108,6 +112,7 @@ namespace ModularAudience.Forms.Modules
         private async void domainUpDown_hits_SelectedItemChanged(object? sender, EventArgs e)
         {
             await this.RebuildPatternPanelsAsync();
+            await this.ResizePanelsAndButtonsAsync();
             if (this.isPlaying)
             {
                 this.currentStep = 0;
@@ -807,8 +812,11 @@ namespace ModularAudience.Forms.Modules
                 Channels = channels,
                 Duration = TimeSpan.FromSeconds(secondsPerStep * hits),
                 Length = mixBuffer.Length,
-                BitDepth = 32
-            };
+                BitDepth = 32,
+                Bpm = bpm
+			};
+
+
             return result;
         }
 
@@ -818,9 +826,18 @@ namespace ModularAudience.Forms.Modules
 
             var mixed = await this.GenerateSampleAsync();
 
-            AudioCollectionView view = new([mixed]);
-            WindowMain.CollectionViews.Add(view);
-            view.Show();
+            if (this.CollectionView == null)
+            {
+                this.CollectionView = new AudioCollectionView([mixed]);
+                this.CollectionView.Rename("Drum Roll Edits");
+                WindowMain.CollectionViews.Add(this.CollectionView);
+            }
+            else
+            {
+                this.CollectionView.AudioC.Audios.Add(mixed);
+            }
+            this.CollectionView.Show();
+            this.CollectionView.BringToFront();
 
             if (ctrlFlag)
             {
@@ -828,7 +845,6 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        // Helper to capture the current pattern button states (per panel, per hit)
         private List<List<bool>> CapturePatternButtonStates()
         {
             var states = new List<List<bool>>();
@@ -847,7 +863,6 @@ namespace ModularAudience.Forms.Modules
             return states;
         }
 
-        // Helper to restore pattern button states (per panel, per hit)
         private void RestorePatternButtonStates(List<List<bool>> states)
         {
             for (int i = 0; i < this.Panels.Count && i < states.Count; i++)
@@ -868,5 +883,67 @@ namespace ModularAudience.Forms.Modules
                 }
             }
         }
-    }
+
+        private void DrumRollEditor_Resize(object? sender, EventArgs e)
+        {
+            _ = this.ResizePanelsAndButtonsAsync();
+        }
+
+        private async Task ResizePanelsAndButtonsAsync()
+        {
+            int width = this.ClientSize.Width - (this.panel_pattern.Left * 2);
+            int hits = this.Hits;
+            int audioCount = this.Panels.Count;
+            if (audioCount == 0 || hits <= 0)
+                return;
+
+            int availableHeight = this.ClientSize.Height - this.panel_pattern.Top - 20;
+            int minPanelHeight = 20;
+            int maxPanelHeight = 75;
+            int panelSpacing = 2;
+            int totalSpacing = (audioCount - 1) * panelSpacing;
+            int panelHeight = Math.Max(minPanelHeight, Math.Min(maxPanelHeight, (availableHeight - totalSpacing) / audioCount));
+
+            for (int i = 0; i < audioCount; i++)
+            {
+                var panel = this.Panels[i];
+                panel.SuspendLayout();
+                panel.Size = new Size(width, panelHeight);
+                panel.Location = new Point(this.panel_pattern.Left, this.panel_pattern.Top + i * (panelHeight + panelSpacing));
+
+                // Find label and buttons
+                Label? label = null;
+                foreach (Control ctrl in panel.Controls)
+                {
+                    if (ctrl is Label lbl)
+                    {
+                        label = lbl;
+                        break;
+                    }
+                }
+                if (label != null)
+                {
+                    int nameWidth = Math.Min(240, Math.Max(80, width / 4));
+                    int nameHeight = panelHeight;
+                    label.Size = new Size(nameWidth, nameHeight);
+                }
+                int buttonAreaLeft = label?.Right + 5 ?? 5;
+                int buttonAreaWidth = width - buttonAreaLeft - 5;
+                int buttonWidth = Math.Max(12, (buttonAreaWidth - (hits - 1) * 3) / hits);
+                int buttonHeight = Math.Max(12, panelHeight - 10);
+                int btnIdx = 0;
+                foreach (Control ctrl in panel.Controls)
+                {
+                    if (ctrl is Button btn)
+                    {
+                        btn.Size = new Size(buttonWidth, buttonHeight);
+                        btn.Location = new Point(buttonAreaLeft + btnIdx * (buttonWidth + 3), 5);
+                        btnIdx++;
+                    }
+                }
+                panel.ResumeLayout();
+            }
+            await Task.CompletedTask;
+        }
+	}
 }

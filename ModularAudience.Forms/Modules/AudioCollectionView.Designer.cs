@@ -73,9 +73,9 @@
             this.Controls.Add(this.checkBox_autoPlay);
             this.Controls.Add(this.listBox_audios);
             this.MaximizeBox = false;
-            this.MaximumSize = new Size(260, 360);
+            this.MaximumSize = new Size(480, 8192);
             this.MinimizeBox = false;
-            this.MinimumSize = new Size(260, 360);
+            this.MinimumSize = new Size(200, 100);
             this.Name = "AudioCollectionView";
             this.Text = "Audio Collection #00";
             this.ResumeLayout(false);

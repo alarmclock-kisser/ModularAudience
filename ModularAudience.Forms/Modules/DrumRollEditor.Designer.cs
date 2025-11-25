@@ -181,7 +181,7 @@
             this.Controls.Add(this.button_playback);
             this.Controls.Add(this.panel_pattern);
             this.MaximizeBox = false;
-            this.MaximumSize = new Size(720, 480);
+            this.MaximumSize = new Size(1280, 480);
             this.MinimumSize = new Size(720, 480);
             this.Name = "DrumRollEditor";
             this.Text = "Drum Roll Editor";

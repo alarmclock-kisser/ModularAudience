@@ -165,6 +165,13 @@ namespace ModularAudience.Forms.Modules
         private void SetAsLastSelected()
         {
             WindowMain.LastSelectedTrackView = this;
+
+            var collectionView = WindowMain.CollectionViews.FirstOrDefault(cv => cv.AudioC == this.SourceCollection && !cv.IsDisposed);
+            if (collectionView != null)
+            {
+                // Select only the exact track in the listBox, deselect all others
+                collectionView.SetSelectionToAudio(this.SourceAudio ?? this.OriginalAudio);
+            }
         }
 
         private void EnablePictureBoxDoubleBuffering()
@@ -212,6 +219,12 @@ namespace ModularAudience.Forms.Modules
             Rectangle workingArea = Screen.FromControl(this).WorkingArea;
             int maxWidth = Math.Max(minWidth, Math.Min(960, workingArea.Width - 20)); // 1080 = Designer-Default
             desiredWidth = Math.Clamp(desiredWidth, minWidth, maxWidth);
+
+            // Add 10% clearance on the right end for initial view
+            if (desiredWidth == maxWidth)
+            {
+                desiredWidth = (int)(maxWidth * 0.9);
+            }
 
             if (totalFrames > 0)
             {

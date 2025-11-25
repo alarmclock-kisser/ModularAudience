@@ -93,10 +93,20 @@ namespace ModularAudience.Forms
                 WindowMain.CollectionViews.Remove(this);
             };
 
-            this.waveformPreviewTimer = new System.Windows.Forms.Timer { Interval = 700 };
+            this.waveformPreviewTimer = new System.Windows.Forms.Timer { Interval = 600 };
             this.waveformPreviewTimer.Tick += this.WaveformPreviewTimer_Tick;
             this.listBox_audios.MouseMove += this.ListBox_audios_MouseMove_WaveformPreview;
             this.listBox_audios.MouseLeave += this.ListBox_audios_MouseLeave_WaveformPreview;
+
+            // Set minimum and maximum sizes
+            this.MinimumSize = new Size(200, 100);
+            this.MaximumSize = new Size(480, 8192);
+
+            // Add resize event handler
+            this.Resize += this.AudioCollectionView_Resize;
+
+            // Initial layout
+            this.AdjustLayout();
 
             // --- Breite automatisch anpassen, damit kein unnötiges horizontales Scrollen nötig ist ---
             int maxWidth = 1080; // Maximale Breite
@@ -520,15 +530,53 @@ namespace ModularAudience.Forms
             }
         }
 
-        private async void listBox_audios_DoubleClick(object? sender, EventArgs e)
+        private async void Form_DoubleClick(object? sender, EventArgs e)
         {
-            AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
+            await this.CancelAutoPlayAsync().ConfigureAwait(false);
+			// Clicked not on an item: Select all
+			this.listBox_audios.BeginUpdate();
+			try
+			{
+				this.listBox_audios.ClearSelected();
+				for (int i = 0; i < this.listBox_audios.Items.Count; i++)
+				{
+					this.listBox_audios.SetSelected(i, true);
+				}
+			}
+			finally
+			{
+				this.listBox_audios.EndUpdate();
+			}
+		}
+
+		private async void listBox_audios_DoubleClick(object? sender, EventArgs e)
+        {
+            // First set really selected  item to the one under the mouse cursor
+            this.listBox_audios.SelectedIndex = this.listBox_audios.IndexFromPoint(this.listBox_audios.PointToClient(Cursor.Position));
+			AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
             if (selectedAudio != null)
             {
                 WindowMain.TrackViews.Add(new TrackView(selectedAudio, this.AudioC));
             }
+            else
+            {
+				// Clicked not on an item: Select all
+                this.listBox_audios.BeginUpdate();
+                try
+                {
+                    this.listBox_audios.ClearSelected();
+                    for (int i = 0; i < this.listBox_audios.Items.Count; i++)
+                    {
+                        this.listBox_audios.SetSelected(i, true);
+                    }
+                }
+                finally
+                {
+                    this.listBox_audios.EndUpdate();
+				}
+			}
 
-            await this.AudioC.StopAllAsync();
+			await this.AudioC.StopAllAsync();
         }
 
         private void listBox_audios_DragEnter(object? sender, DragEventArgs e)
@@ -1299,6 +1347,27 @@ namespace ModularAudience.Forms
             this.listBox_audios.Invalidate();
         }
 
+        private void AudioCollectionView_Resize(object? sender, EventArgs e)
+        {
+            this.AdjustLayout();
+        }
+
+        private void AdjustLayout()
+        {
+            // Anchor checkBox_autoPlay to top-right corner
+            this.checkBox_autoPlay.Location = new Point(this.ClientSize.Width - this.checkBox_autoPlay.Width - 10, 10);
+
+            // Button stays in its logical position (assuming it's already positioned)
+
+            // ListBox: dock to top (below button), bottom to form, left and right to form
+            int top = this.button_export.Bottom + 5;
+            int bottom = this.ClientSize.Height - 10;
+            int left = 10;
+            int right = this.ClientSize.Width - 10;
+
+            this.listBox_audios.Location = new Point(left, top);
+            this.listBox_audios.Size = new Size(Math.Max(0, right - left), Math.Max(0, bottom - top));
+        }
 
 
 
@@ -1331,11 +1400,10 @@ namespace ModularAudience.Forms
             }
         }
 
-
-
-
-
-
+        internal void Rename(string newName)
+        {
+            this.Text = newName;
+        }
 
 
 
@@ -1355,7 +1423,7 @@ namespace ModularAudience.Forms
         private void ListBox_audios_MouseMove_WaveformPreview(object? sender, MouseEventArgs e)
         {
             int idx = this.listBox_audios.IndexFromPoint(e.Location);
-            if (idx != this.waveformPreviewIndex || e.Location != this.lastMousePos)
+            if (idx != this.waveformPreviewIndex)
             {
                 this.waveformPreviewTimer.Stop();
                 this.HideWaveformPreview();
@@ -1365,6 +1433,11 @@ namespace ModularAudience.Forms
                 {
                     this.waveformPreviewTimer.Start();
                 }
+            }
+            else
+            {
+                // Update position for preview placement, but don't restart timer
+                this.lastMousePos = e.Location;
             }
         }
 
@@ -1411,5 +1484,40 @@ namespace ModularAudience.Forms
                 this.waveformPreviewForm.Hide();
             }
         }
-    }
+
+
+        public void SetSelectionToAudio(AudioObj audio)
+        {
+            // Try to match by reference, then by Id if needed
+            int index = this.AudioC.Audios.IndexOf(audio);
+            if (index < 0 && audio != null)
+            {
+                // Try to match by Id if reference not found
+                for (int i = 0; i < this.AudioC.Audios.Count; i++)
+                {
+                    if (this.AudioC.Audios[i]?.Id == audio.Id)
+                    {
+                        index = i;
+                        break;
+                    }
+                }
+            }
+            this.WithSelectionSuppressed(() =>
+            {
+                this.listBox_audios.ClearSelected();
+                if (index >= 0)
+                {
+                    this.listBox_audios.SetSelected(index, true);
+                    this._preDragSelection = index;
+                    this.listBox_audios.SelectedIndex = index;
+                }
+            });
+            if (index >= 0)
+            {
+                this.listBox_audios.TopIndex = Math.Max(0, index - 2); // scroll into view
+            }
+            this.BringToFront();
+        }
+
+	}
 }

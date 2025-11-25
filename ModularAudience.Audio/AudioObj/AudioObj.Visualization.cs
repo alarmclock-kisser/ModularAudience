@@ -778,7 +778,7 @@ namespace ModularAudience.Audio
         }
 
 
-		private Bitmap DrawWaveformPreview(int width = 160, int height = 160)
+		private Bitmap DrawWaveformPreview(int width = 160, int height = 160, int border = 3)
 		{
 			// Zeige nur eine Vorschau, wenn das Audio kürzer als 20 Sekunden ist
 			if (this.Duration.TotalSeconds > 20.0)
@@ -820,6 +820,16 @@ namespace ModularAudience.Audio
 					g.DrawLine(pen, x, y1, x, y2);
 				}
 			}
+
+            if (border > 0)
+            {
+                using (Graphics g = Graphics.FromImage(bitmap))
+                using (Pen borderPen = new(Color.DarkGray, border))
+                {
+                    g.DrawRectangle(borderPen, border / 2, border / 2, width - border, height - border);
+				}
+			}
+
 			return bitmap;
 		}
 
