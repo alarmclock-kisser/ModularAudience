@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace ModularAudience.Core
+namespace ModularAudience.Audio
 {
     public partial class AudioObj
     {

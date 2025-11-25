@@ -1,6 +1,6 @@
 ﻿using MathNet.Numerics;
 using MathNet.Numerics.IntegralTransforms;
-using ModularAudience.Core;
+using ModularAudience.Audio;
 using System.Diagnostics;
 
 namespace ModularAudience.Audio.Processors_V1

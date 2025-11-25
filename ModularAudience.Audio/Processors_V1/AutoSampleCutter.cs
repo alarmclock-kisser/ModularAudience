@@ -1,4 +1,4 @@
-﻿using ModularAudience.Core;
+﻿using ModularAudience.Audio;
 using System;
 using System.Collections.Generic;
 using System.Linq;

@@ -1,11 +1,6 @@
 using ModularAudience.Audio;
 using ModularAudience.Forms.Modules;
-using ModularAudience.Core;
-using System.Collections.Concurrent;
 using System.ComponentModel;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 using ModularAudience.Audio.Processors_V1;
 
 namespace ModularAudience.Forms

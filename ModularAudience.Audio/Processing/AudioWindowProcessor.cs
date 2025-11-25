@@ -1,4 +1,4 @@
-using ModularAudience.Core;
+using ModularAudience.Audio;
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;

@@ -6,7 +6,7 @@ using System.Linq;
 using System.Runtime.Versioning;
 using System.Threading.Tasks;
 
-namespace ModularAudience.Core
+namespace ModularAudience.Audio
 {
     public partial class AudioObj
     {

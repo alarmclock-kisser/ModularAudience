@@ -1,6 +1,5 @@
 ﻿using ModularAudience.Audio;
 using ModularAudience.Forms.Modules;
-using ModularAudience.Core;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;

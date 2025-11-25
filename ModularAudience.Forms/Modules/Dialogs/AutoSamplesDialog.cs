@@ -1,6 +1,6 @@
 ﻿using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio.Processors_V2;
-using ModularAudience.Core;
+using ModularAudience.Audio;
 using System;
 using System.ComponentModel;
 using System.Threading;

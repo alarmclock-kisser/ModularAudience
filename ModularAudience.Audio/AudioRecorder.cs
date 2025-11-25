@@ -1,11 +1,6 @@
 ﻿using ModularAudience.Audio;
-using ModularAudience.Core;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
-using System;
-using System.IO;
-using System.Linq;
-using System.Runtime.CompilerServices;
 
 public static class AudioRecorder
 {

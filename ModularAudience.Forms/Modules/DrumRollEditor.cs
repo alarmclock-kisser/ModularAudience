@@ -1,16 +1,11 @@
 ﻿using ModularAudience.Audio;
-using ModularAudience.Core;
-using System;
-using System.Collections.Generic;
+using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Text;
-using System.Windows.Forms;
 
 namespace ModularAudience.Forms.Modules
 {
-    public partial class DrumRollEditor : Form
+	public partial class DrumRollEditor : Form
     {
         private readonly AudioCollection AudioC = new();
 
@@ -18,10 +13,15 @@ namespace ModularAudience.Forms.Modules
         public int Hits => this.domainUpDown_hits.SelectedItem is null ? 16 : int.Parse(this.domainUpDown_hits.SelectedItem.ToString() ?? "16");
         public float Volume => (float) this.numericUpDown_volume.Value / 100.0f;
 
-
 		internal readonly BindingList<Panel> Panels = [];
 
-        private readonly System.Windows.Forms.Timer playbackTimer = new();
+		private IWavePlayer? waveOut;
+		private MixingSampleProvider? mixer;
+		private WaveFormat outputFormat; // Standard-Audioformat für den Mixer
+		private CancellationTokenSource? playbackCts;
+		private Task? playbackTask;
+
+		private readonly System.Windows.Forms.Timer playbackTimer = new();
         private int currentStep = 0;
         private bool isPlaying = false;
 
@@ -34,11 +34,15 @@ namespace ModularAudience.Forms.Modules
             this.button_hit.Visible = false;
             this.domainUpDown_hits.SelectedIndex = this.domainUpDown_hits.Items.IndexOf("16");
 
-            if (samples != null)
+			this.outputFormat = WaveFormat.CreateIeeeFloatWaveFormat(44100, 2);
+			this.waveOut = null;
+			this.mixer = null;
+
+			if (samples != null)
             {
                 foreach (AudioObj sample in samples)
                 {
-                    this.AudioC.Audios.Add(sample.Clone());
+                    this.AudioC.Audios.Add((AudioObj)sample.Clone());
                 }
             }
 
@@ -50,7 +54,6 @@ namespace ModularAudience.Forms.Modules
             this.DragDrop += this.DrumRollEditor_DragDrop;
             this.FormClosing += this.Form_Closing;
 
-            this.playbackTimer.Tick += this.PlaybackTimer_Tick;
             this.AudioC.Audios.ListChanged += this.AudioC_Audios_ListChanged;
             this.domainUpDown_hits.SelectedItemChanged += this.domainUpDown_hits_SelectedItemChanged;
 
@@ -80,37 +83,19 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        private void StartPlayback()
-        {
-            if (this.isPlaying)
-            {
-                return;
-            }
+		private int GetTimerIntervalMs()
+		{
+			float bpm = this.Bpm;
+			int hits = this.Hits;
 
-            this.isPlaying = true;
-            this.button_playback.Text = "■";
-            float bpm = this.Bpm;
-            int hits = this.Hits;
+			// Dauer eines 4/4 Taktes in ms: (60 / BPM) * 4 * 1000
+			// Dauer eines Steps: (Takt-Dauer) / Hits
+			if (bpm <= 0 || hits <= 0) return 100; // Fallback
 
-            // Ein Beat = 4 Hits, also: Zeit pro Hit = (60 / BPM) / 4
-            double msPerHit = (60.0 / bpm) / 4.0 * 1000.0;
-            this.playbackTimer.Interval = Math.Max(1, (int) msPerHit);
-            this.currentStep = 0;
-            this.playbackTimer.Start();
-        }
+			return (int) (60000.0f / bpm * 4.0f / hits);
+		}
 
-        private void StopPlayback()
-        {
-            if (!this.isPlaying)
-            {
-                return;
-            }
 
-            this.isPlaying = false;
-            this.button_playback.Text = "▶";
-            this.playbackTimer.Stop();
-            this.ResetButtonHighlights();
-        }
 
         // Hilfsmethode zum Zurücksetzen der Highlights:
         private void ResetButtonHighlights()
@@ -513,48 +498,50 @@ namespace ModularAudience.Forms.Modules
 
         private static readonly Color StepHighlightBack = Color.Gold;
         private static readonly Color StepHighlightFore = Color.LightGray;
-        private static readonly Color StepDefaultBack = Color.LightGray;
-        private static readonly Color StepDefaultFore = Color.Black;
+		private static readonly Color StepActiveFore = Color.White;
+		private static readonly Color StepDefaultFore = Color.Black;
+		private static readonly Color StepDefaultBack = SystemColors.Control;
 
-		private void PlaybackTimer_Tick(object? sender, EventArgs e)
+		private void HandleCurrentStep(int hits)
 		{
-			int hits = this.Hits;
-			if (hits <= 0)
-            {
-                return;
-            }
-
-            for (int panelIdx = 0; panelIdx < this.Panels.Count; panelIdx++)
+			// --- UI-Logik: Hervorheben des aktuellen Steps ---
+			int panelIdx = 0;
+			foreach (Panel panel in this.Panels)
 			{
-				var panel = this.Panels[panelIdx];
 				int btnIdx = 0;
-				Button? playBtn = null;
-				foreach (Control ctrl in panel.Controls)
+				Button? playBtn = null; // Der Button des aktuellen Steps, falls er existiert
+				foreach (Control control in panel.Controls)
 				{
-					if (ctrl is Button btn)
+					if (control is Button btn)
 					{
-						// Step-Highlighting
 						if (btnIdx == this.currentStep)
 						{
-							bool isActive = btn.BackColor == Color.Green;
-							btn.BackColor = StepHighlightBack;
-							btn.ForeColor = StepHighlightFore;
 							playBtn = btn;
-							btn.Tag = isActive ? "active" : "inactive";
+
+							// Markierung für den aktuellen Step
+							if (btn.Tag is string tag && tag == "active")
+							{
+								btn.BackColor = Color.Red;
+							}
+							else if (btn.Tag is string tag2 && tag2 == "inactive")
+							{
+								btn.BackColor = Color.Orange;
+							}
+							btn.ForeColor = StepActiveFore;
 						}
 						else
 						{
+							// Zurücksetzen der Farbe
 							if (btn.Tag is string tag && tag == "active")
-                            {
-                                btn.BackColor = Color.Green;
-                            }
-                            else if (btn.Tag is string tag2 && tag2 == "inactive")
-                            {
-                                btn.BackColor = StepDefaultBack;
-                            }
+							{
+								btn.BackColor = Color.Green;
+							}
+							else if (btn.Tag is string tag2 && tag2 == "inactive")
+							{
+								btn.BackColor = StepDefaultBack;
+							}
 
-                            btn.ForeColor = StepDefaultFore;
-							btn.Tag = null;
+							btn.ForeColor = StepDefaultFore;
 						}
 						btnIdx++;
 					}
@@ -566,10 +553,11 @@ namespace ModularAudience.Forms.Modules
 					if (panelIdx < this.AudioC.Audios.Count)
 					{
 						var audio = this.AudioC.Audios[panelIdx];
-						var audioClone = audio.Clone(); // Klonen für unabhängige Wiedergabe
-						_ = this.PlayAudioAsync(audioClone);
+						// HIER der schnelle, nicht-blockierende Aufruf für überlappende Schläge
+						this.PlayAudioInstant(audio);
 					}
 				}
+				panelIdx++;
 			}
 
 			this.currentStep = (this.currentStep + 1) % hits;
@@ -590,6 +578,139 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
+		private async Task PlaybackLoop(CancellationToken cancellationToken)
+		{
+			int totalHits = this.Hits;
+			this.currentStep = 0;
 
-    }
+			while (!cancellationToken.IsCancellationRequested)
+			{
+				long startTick = DateTime.Now.Ticks;
+				int intervalMs = this.GetTimerIntervalMs(); // Liest BPM live
+
+				// UI-Update und Audio-Trigger auf dem UI-Thread ausführen
+				this.Invoke((MethodInvoker) (() =>
+				{
+					this.HandleCurrentStep(totalHits);
+				}));
+
+				// Präzise Verzögerung berechnen
+				long elapsedTicks = DateTime.Now.Ticks - startTick;
+				int elapsedMs = (int) new TimeSpan(elapsedTicks).TotalMilliseconds;
+				int delayMs = Math.Max(0, intervalMs - elapsedMs);
+
+				try
+				{
+					// Warten auf den nächsten Step
+					await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+				}
+				catch (TaskCanceledException)
+				{
+					break;
+				}
+			}
+		}
+
+		private void PlayAudioInstant(AudioObj audio)
+		{
+			if (audio.Data == null || audio.Data.LongLength == 0)
+			{
+				return;
+			}
+
+			var sampleProvider = new SampleData(audio.Data, audio.SampleRate, audio.Channels);
+
+			// Mono zu Stereo konvertieren, falls nötig
+			ISampleProvider provider = sampleProvider;
+			if (sampleProvider.WaveFormat.Channels == 1 && this.outputFormat.Channels == 2)
+			{
+				provider = new MonoToStereoSampleProvider(sampleProvider);
+			}
+
+			var finalVolumeProvider = new VolumeSampleProvider(provider)
+			{
+				Volume = this.Volume
+			};
+
+			this.EnsureOutputReady();
+			this.mixer?.AddMixerInput(finalVolumeProvider);
+		}
+
+		// --- AKTUALISIERTE START/STOP LOGIK ---
+
+		private void Button_playback_Click(object sender, EventArgs e)
+		{
+			if (this.isPlaying)
+			{
+				this.StopPlayback();
+			}
+			else
+			{
+				this.StartPlayback();
+			}
+		}
+
+		private void EnsureOutputReady()
+		{
+			if (this.mixer == null)
+			{
+				this.mixer = new MixingSampleProvider(this.outputFormat) { ReadFully = true };
+			}
+			if (this.waveOut == null)
+			{
+				this.waveOut = new WaveOutEvent();
+				this.waveOut.Init(this.mixer);
+			}
+			if (this.waveOut.PlaybackState != PlaybackState.Playing)
+			{
+				this.waveOut.Play();
+			}
+		}
+
+		private void StartPlayback()
+		{
+			if (this.isPlaying) return;
+
+			this.isPlaying = true;
+			this.currentStep = -1; // -1, damit HandleCurrentStep sofort mit 0 startet
+			this.button_playback.Text = "Stop";
+
+			this.playbackCts = new CancellationTokenSource();
+			this.playbackTask = this.PlaybackLoop(this.playbackCts.Token);
+
+			// Erlaubt das Anpassen des BPM während der Wiedergabe, da die Loop 
+			// den Wert in jeder Iteration neu liest.
+			this.numericUpDown_bpm.ValueChanged += this.Bpm_ValueChanged;
+		}
+
+		private void StopPlayback()
+		{
+			if (!this.isPlaying) return;
+
+			this.isPlaying = false;
+			this.button_playback.Text = "Play";
+
+			this.playbackCts?.Cancel();
+			try { this.playbackTask?.Wait(); } catch { }
+			this.playbackCts?.Dispose();
+
+			this.currentStep = -1;
+			this.HandleCurrentStep(this.Hits);
+
+			this.numericUpDown_bpm.ValueChanged -= this.Bpm_ValueChanged;
+
+			// Mixer und WaveOut aufräumen
+			this.waveOut?.Stop();
+			this.waveOut?.Dispose();
+			this.waveOut = null;
+			this.mixer = null;
+		}
+
+		private void Bpm_ValueChanged(object? sender, EventArgs e)
+		{
+			// Da die PlaybackLoop in jeder Iteration this.GetTimerIntervalMs() aufruft, 
+			// wird die BPM-Änderung sofort im nächsten Step wirksam. Keine weitere Logik nötig.
+		}
+
+	}
 }

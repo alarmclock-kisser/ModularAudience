@@ -6,7 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 
-namespace ModularAudience.Core
+namespace ModularAudience.Audio
 {
     public partial class AudioObj
     {

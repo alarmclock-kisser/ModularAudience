@@ -1,4 +1,4 @@
-﻿using ModularAudience.Core;
+﻿using ModularAudience.Audio;
 using MathNet.Numerics;
 using MathNet.Numerics.IntegralTransforms;
 using System;
@@ -9,7 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ModularAudience.Core
+namespace ModularAudience.Audio
 {
     public static class BeatScanner
     {

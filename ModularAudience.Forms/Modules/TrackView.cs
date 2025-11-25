@@ -1,15 +1,8 @@
 ﻿using ModularAudience.Audio;
-using ModularAudience.Core;
-using System;
 using System.ComponentModel;
-using System.Drawing;
-using System.Linq;
 using System.Media;
 using System.Reflection;
 using System.Runtime.Versioning;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 using Timer = System.Windows.Forms.Timer;
 
 namespace ModularAudience.Forms.Modules

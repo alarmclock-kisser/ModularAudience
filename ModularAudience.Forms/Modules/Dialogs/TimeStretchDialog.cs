@@ -1,5 +1,5 @@
 ﻿using ModularAudience.Audio.Processors_V1;
-using ModularAudience.Core;
+using ModularAudience.Audio;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;

@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics;
 using System.IO;
-using ModularAudience.Core;
+using ModularAudience.Audio;
 using NAudio.Wave;
 
 namespace ModularAudience.Audio
