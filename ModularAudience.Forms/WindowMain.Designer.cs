@@ -69,6 +69,7 @@
             this.button_browse.Name = "button_browse";
             this.button_browse.Size = new Size(32, 23);
             this.button_browse.TabIndex = 1;
+            this.button_browse.TabStop = false;
             this.button_browse.Text = "[...]";
             this.button_browse.UseVisualStyleBackColor = true;
             this.button_browse.Click += this.button_browse_Click;
@@ -80,6 +81,7 @@
             this.checkBox_singleCollection.Name = "checkBox_singleCollection";
             this.checkBox_singleCollection.Size = new Size(115, 19);
             this.checkBox_singleCollection.TabIndex = 2;
+            this.checkBox_singleCollection.TabStop = false;
             this.checkBox_singleCollection.Text = "Single Collection";
             this.checkBox_singleCollection.UseVisualStyleBackColor = true;
             // 
@@ -152,6 +154,7 @@
             this.button_timeStretch.Name = "button_timeStretch";
             this.button_timeStretch.Size = new Size(90, 23);
             this.button_timeStretch.TabIndex = 9;
+            this.button_timeStretch.TabStop = false;
             this.button_timeStretch.Text = "Time Stretch";
             this.button_timeStretch.UseVisualStyleBackColor = true;
             this.button_timeStretch.Click += this.button_timeStretch_Click;
@@ -163,6 +166,7 @@
             this.button_export.Name = "button_export";
             this.button_export.Size = new Size(75, 23);
             this.button_export.TabIndex = 10;
+            this.button_export.TabStop = false;
             this.button_export.Text = "Export";
             this.button_export.UseVisualStyleBackColor = false;
             this.button_export.Click += this.button_export_Click;
@@ -175,6 +179,7 @@
             this.comboBox_exportFormat.Name = "comboBox_exportFormat";
             this.comboBox_exportFormat.Size = new Size(80, 23);
             this.comboBox_exportFormat.TabIndex = 11;
+            this.comboBox_exportFormat.TabStop = false;
             this.comboBox_exportFormat.SelectedIndexChanged += this.comboBox_exportFormat_SelectedIndexChanged;
             // 
             // comboBox_exportBits
@@ -185,6 +190,7 @@
             this.comboBox_exportBits.Name = "comboBox_exportBits";
             this.comboBox_exportBits.Size = new Size(60, 23);
             this.comboBox_exportBits.TabIndex = 12;
+            this.comboBox_exportBits.TabStop = false;
             // 
             // button_autoSamples
             // 
@@ -192,6 +198,7 @@
             this.button_autoSamples.Name = "button_autoSamples";
             this.button_autoSamples.Size = new Size(90, 23);
             this.button_autoSamples.TabIndex = 13;
+            this.button_autoSamples.TabStop = false;
             this.button_autoSamples.Text = "Auto Samples";
             this.button_autoSamples.UseVisualStyleBackColor = true;
             this.button_autoSamples.Click += this.button_autoSamples_Click;
@@ -203,6 +210,7 @@
             this.button_newBag.Name = "button_newBag";
             this.button_newBag.Size = new Size(75, 23);
             this.button_newBag.TabIndex = 14;
+            this.button_newBag.TabStop = false;
             this.button_newBag.Text = "New Bag";
             this.button_newBag.UseVisualStyleBackColor = false;
             this.button_newBag.Click += this.button_newBag_Click;
@@ -213,6 +221,7 @@
             this.button_drumRoll.Name = "button_drumRoll";
             this.button_drumRoll.Size = new Size(90, 23);
             this.button_drumRoll.TabIndex = 15;
+            this.button_drumRoll.TabStop = false;
             this.button_drumRoll.Text = "Drum Roll";
             this.button_drumRoll.UseVisualStyleBackColor = true;
             this.button_drumRoll.Click += this.button_drumRoll_Click;
@@ -227,6 +236,7 @@
             this.textBox_info.ReadOnly = true;
             this.textBox_info.Size = new Size(181, 210);
             this.textBox_info.TabIndex = 16;
+            this.textBox_info.TabStop = false;
             // 
             // button_record
             // 
@@ -235,6 +245,7 @@
             this.button_record.Name = "button_record";
             this.button_record.Size = new Size(23, 23);
             this.button_record.TabIndex = 17;
+            this.button_record.TabStop = false;
             this.button_record.Text = "●";
             this.button_record.UseVisualStyleBackColor = true;
             this.button_record.Click += this.button_record_Click;
@@ -246,6 +257,7 @@
             this.textBox_recordingTime.PlaceholderText = "Not recording";
             this.textBox_recordingTime.Size = new Size(80, 23);
             this.textBox_recordingTime.TabIndex = 18;
+            this.textBox_recordingTime.TabStop = false;
             // 
             // label_stopRecordInfo
             // 

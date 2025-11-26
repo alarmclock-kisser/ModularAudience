@@ -815,6 +815,8 @@ namespace ModularAudience.Forms
 
             using var dlg = new Modules.Dialogs.TimeStretchDialog(LastSelectedTrackView);
             dlg.ShowDialog(this);
+
+            UpdateTrackDependentUI();
         }
 
         private async void button_export_Click(object sender, EventArgs e)
