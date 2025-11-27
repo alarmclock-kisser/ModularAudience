@@ -1201,6 +1201,14 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            if (e.Control && e.KeyCode == Keys.V)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                await this.PasteFromClipboardAsync();
+                return;
+            }
+
             if (e.KeyCode == Keys.Delete)
             {
                 e.Handled = true;
@@ -1228,6 +1236,47 @@ namespace ModularAudience.Forms.Modules
                     await this.RestartPlaybackFromStartAsync();
                 }
             }
+        }
+
+        private async Task PasteFromClipboardAsync()
+        {
+            var clip = WindowMain.ClipboardAudioObj;
+            if (clip == null)
+            {
+                LogCollection.Log("Paste failed: Clipboard is empty.");
+                return;
+            }
+            if (this.OriginalAudio.Playing)
+            {
+                LogCollection.Log("Stop playback before pasting audio.");
+                return;
+            }
+            await this.CreateUndoStep();
+            int insertChannels = Math.Max(1, this.OriginalAudio.Channels);
+            long insertFrame = 0;
+            if (this.HasValidSelection())
+            {
+                insertFrame = this.OriginalAudio.SelectionStart / insertChannels;
+                await this.OriginalAudio.EraseSelectionAsync().ConfigureAwait(true);
+                this.ClearSelectionMarkers();
+            }
+            else if (this.OriginalAudio.StartingOffset > 0)
+            {
+                insertFrame = this.OriginalAudio.StartingOffset / insertChannels;
+            }
+            else if (this.lastClickFrame >= 0)
+            {
+                insertFrame = this.lastClickFrame;
+            }
+            await this.OriginalAudio.InsertAudioAtFrameAsync(clip, insertFrame).ConfigureAwait(true);
+            this.RecalculateLoopFraction();
+            this.ApplyLoopFractionToAudio();
+            this.AlignViewToCurrentPosition();
+            this.UpdateOffsetScrollbar();
+            this.RequestWaveformRender();
+            this.ApplyInitialTrackSizing();
+
+            LogCollection.Log($"AudioObj '{clip.Name}' pasted into track view.");
         }
 
         private async Task ResetStartingPointAsync()
@@ -1294,38 +1343,34 @@ namespace ModularAudience.Forms.Modules
 
         private async Task CopySelectionAsync()
         {
-            if (!this.HasValidSelection())
+            AudioObj? clip = null;
+            if (this.HasValidSelection())
             {
-                LogCollection.Log("No active selection to copy.");
-                return;
+                clip = await this.OriginalAudio.CloneFromSelectionAsync().ConfigureAwait(true);
+                if (clip != null)
+                {
+                    clip.Name = this.GenerateClipName();
+                }
+            }
+            else
+            {
+                // Ganze Spur kopieren
+                clip = this.OriginalAudio.Clone();
+                if (clip != null)
+                {
+                    clip.Name = this.GenerateClipName();
+                }
             }
 
-            AudioObj? clip = await this.OriginalAudio.CloneFromSelectionAsync().ConfigureAwait(true);
             if (clip == null)
             {
-                LogCollection.Log("Copy selection failed.");
+                LogCollection.Log("Copy failed: No audio data available.");
                 return;
             }
 
-            clip.Name = this.GenerateClipName();
-
-            WindowMain.InvokeIfRequired(() =>
-            {
-                AudioCollectionView? targetView = WindowMain.CollectionViews.FirstOrDefault(cv => cv != null && !cv.IsDisposed);
-                if (targetView == null || targetView.IsDisposed)
-                {
-                    targetView = new AudioCollectionView([clip]);
-                    WindowMain.CollectionViews.Add(targetView);
-                    targetView.Show();
-                }
-                else
-                {
-                    targetView.AudioC.Audios.Add(clip);
-                }
-
-                WindowMain.UpdateCollectionTag(clip, targetView);
-                LogCollection.Log($"Selection copied to '{clip.Name}'.");
-            });
+            // In die statische Zwischenablage legen
+            WindowMain.ClipboardAudioObj = clip;
+            LogCollection.Log($"AudioObj '{clip.Name}' in die Zwischenablage kopiert.");
         }
 
         private async Task RemoveSelectionAsync()

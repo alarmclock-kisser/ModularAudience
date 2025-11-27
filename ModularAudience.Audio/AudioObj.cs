@@ -411,5 +411,25 @@ namespace ModularAudience.Audio
             }
         }
 
+        public async Task InsertAudioAtFrameAsync(AudioObj clip, long insertFrame)
+        {
+            if (clip == null || clip.Data.Length == 0)
+            {
+                return;
+            }
+
+            // Ensure insertFrame is within bounds
+            insertFrame = Math.Max(0, Math.Min(insertFrame, this.Length / this.Channels));
+
+            int totalChannels = this.Channels;
+            long insertIndex = insertFrame * totalChannels;
+            float[] newData = new float[this.Data.Length + clip.Data.Length];
+            Array.Copy(this.Data, 0, newData, 0, insertIndex);
+            Array.Copy(clip.Data, 0, newData, insertIndex, clip.Data.Length);
+            Array.Copy(this.Data, insertIndex, newData, insertIndex + clip.Data.Length, this.Data.Length - insertIndex);
+            this.Data = newData;
+            this.Length = this.Data.Length;
+            this.Duration = TimeSpan.FromSeconds((double)this.Length / (this.SampleRate * this.Channels));
+        }
     }
 }

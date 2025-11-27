@@ -50,6 +50,9 @@ namespace ModularAudience.Forms
         private System.Windows.Forms.Timer? recordingTimer = null;
         private DateTime _infoCtrlToStopAppeared = DateTime.MinValue;
 
+        // Copy + Paste AudioObj
+        internal static AudioObj? ClipboardAudioObj = null;
+
 
         public WindowMain()
         {
@@ -1114,6 +1117,10 @@ namespace ModularAudience.Forms
 
     }
 }
+
+
+
+
 
 
 
