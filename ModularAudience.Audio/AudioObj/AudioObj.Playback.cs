@@ -186,7 +186,7 @@ namespace ModularAudience.Audio
             }
             long totalSamples = this.Data?.LongLength ?? 0L;
             baseStartSamples = Math.Clamp(baseStartSamples, 0, totalSamples);
-            baseEndSamples = Math.Clamp(baseEndSamples, baseStartSamples + 1, totalSamples);
+            baseEndSamples = Math.Clamp(baseEndSamples, baseStartSamples, totalSamples);
             long effectiveEnd = fractionSamples > 0
                 ? Math.Min(baseStartSamples + fractionSamples, baseEndSamples)
                 : baseEndSamples;
