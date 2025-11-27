@@ -692,7 +692,7 @@ namespace ModularAudience.Forms
             AudioCollectionTags[audio.Id] = num;
         }
 
-        private static void UpdateTrackDependentUI()
+        internal static void UpdateTrackDependentUI()
         {
             if (Instance == null)
             {
@@ -1040,6 +1040,8 @@ namespace ModularAudience.Forms
             {
                 cv.RefreshList();
             }
+
+            UpdateTrackDependentUI();
         }
 
         private async void button_record_Click(object sender, EventArgs e)
