@@ -277,9 +277,6 @@ namespace ModularAudience.Audio
             }
         }
 
-        //
-        // Async variants (non-blocking, mirror AudioCollection behavior)
-        //
         public async Task CreateUndoStepAsync()
         {
             this.NextSteps.Clear();
