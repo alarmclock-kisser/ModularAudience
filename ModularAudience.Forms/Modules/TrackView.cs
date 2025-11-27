@@ -1,4 +1,5 @@
-﻿using ModularAudience.Audio;
+﻿using Microsoft.VisualBasic.Devices;
+using ModularAudience.Audio;
 using System.ComponentModel;
 using System.Media;
 using System.Reflection;
@@ -1193,6 +1194,7 @@ namespace ModularAudience.Forms.Modules
             {
                 e.Handled = true;
                 e.SuppressKeyPress = true;
+                LogCollection.Log($"TrackView: Ctrl+C pressed (Copy) in '{this.OriginalAudio.Name}'");
                 await this.CopySelectionAsync();
                 return;
             }
@@ -1201,6 +1203,7 @@ namespace ModularAudience.Forms.Modules
             {
                 e.Handled = true;
                 e.SuppressKeyPress = true;
+                LogCollection.Log($"TrackView: Ctrl+V pressed (Paste) in '{this.OriginalAudio.Name}'");
                 await this.PasteFromClipboardAsync();
                 return;
             }
@@ -1209,6 +1212,7 @@ namespace ModularAudience.Forms.Modules
             {
                 e.Handled = true;
                 e.SuppressKeyPress = true;
+                LogCollection.Log($"TrackView: Ctrl+X pressed (Cut) in '{this.OriginalAudio.Name}'");
                 await this.CopySelectionAsync();
                 await this.RemoveSelectionAsync();
                 return;
@@ -1218,7 +1222,7 @@ namespace ModularAudience.Forms.Modules
             {
                 e.Handled = true;
                 e.SuppressKeyPress = true;
-
+                LogCollection.Log($"TrackView: Ctrl+A pressed (Select All) in '{this.OriginalAudio.Name}'");
                 int channels = Math.Max(1, this.OriginalAudio.Channels);
                 this.selectStartFrame = 0;
                 this.selectEndFrame = this.GetTotalFrames();
@@ -1227,10 +1231,20 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            if (e.Control && e.KeyCode == Keys.Z)
+            {
+                LogCollection.Log($"TrackView: Ctrl+Z pressed (Undo) in '{this.OriginalAudio.Name}'");
+            }
+            if (e.Control && e.KeyCode == Keys.Y)
+            {
+                LogCollection.Log($"TrackView: Ctrl+Y pressed (Redo) in '{this.OriginalAudio.Name}'");
+            }
+
             if (e.KeyCode == Keys.Delete)
             {
                 e.Handled = true;
                 e.SuppressKeyPress = true;
+                LogCollection.Log($"TrackView: Delete pressed (Remove Selection) in '{this.OriginalAudio.Name}'");
                 await this.RemoveSelectionAsync();
                 return;
             }
@@ -1276,6 +1290,7 @@ namespace ModularAudience.Forms.Modules
             {
                 insertFrame = this.OriginalAudio.SelectionStart / insertChannels;
                 await this.OriginalAudio.EraseSelectionAsync().ConfigureAwait(true);
+                LogCollection.Log($"Cut: AudioObj.Data selection erased in '{this.OriginalAudio.Name}'");
                 this.ClearSelectionMarkers();
             }
             else if (this.OriginalAudio.StartingOffset > 0)
@@ -1287,6 +1302,7 @@ namespace ModularAudience.Forms.Modules
                 insertFrame = this.lastClickFrame;
             }
             await this.OriginalAudio.InsertAudioAtFrameAsync(clip, insertFrame).ConfigureAwait(true);
+            LogCollection.Log($"Paste: AudioObj.Data inserted in '{this.OriginalAudio.Name}'");
             this.RecalculateLoopFraction();
             this.ApplyLoopFractionToAudio();
             this.AlignViewToCurrentPosition();
@@ -1362,7 +1378,8 @@ namespace ModularAudience.Forms.Modules
         private async Task CopySelectionAsync()
         {
             AudioObj? clip = null;
-            if (this.HasValidSelection())
+            bool wasSelection = this.HasValidSelection();
+            if (wasSelection)
             {
                 clip = await this.OriginalAudio.CloneFromSelectionAsync().ConfigureAwait(true);
                 if (clip != null)
@@ -1388,7 +1405,7 @@ namespace ModularAudience.Forms.Modules
 
             // In die statische Zwischenablage legen
             WindowMain.ClipboardAudioObj = clip;
-            LogCollection.Log($"AudioObj '{clip.Name}' in die Zwischenablage kopiert.");
+            LogCollection.Log($"TrackView: AudioObj '{clip.Name}' {(wasSelection ? "(Selection)" : "(Full)")} copied to clipboard.");
         }
 
         private async Task RemoveSelectionAsync()
@@ -1407,6 +1424,7 @@ namespace ModularAudience.Forms.Modules
             await this.CreateUndoStep();
 
             await this.OriginalAudio.EraseSelectionAsync().ConfigureAwait(true);
+            LogCollection.Log($"Remove: AudioObj.Data selection erased in '{this.OriginalAudio.Name}'");
             this.ClearSelectionMarkers();
             this.RecalculateLoopFraction();
             this.ApplyLoopFractionToAudio();
@@ -1485,6 +1503,7 @@ namespace ModularAudience.Forms.Modules
             var original = this.OriginalAudio;
             float[] newData = result.Data ?? [];
             original.Data = newData;
+            LogCollection.Log($"ApplyStretched: AudioObj.Data replaced in '{original.Name}'");
             original.SampleRate = result.SampleRate;
             original.Channels = result.Channels;
             original.BitDepth = result.BitDepth;
@@ -1558,6 +1577,7 @@ namespace ModularAudience.Forms.Modules
             if (this.OriginalAudio.CanUndo)
             {
                 this.OriginalAudio.Undo();
+                LogCollection.Log($"Undo: AudioObj.Data reverted in '{this.OriginalAudio.Name}'");
                 this.ClearSelectionMarkers();
                 this.RecalculateLoopFraction();
                 this.ApplyLoopFractionToAudio();
@@ -1576,6 +1596,7 @@ namespace ModularAudience.Forms.Modules
             if (this.OriginalAudio.CanRedo)
             {
                 this.OriginalAudio.Redo();
+                LogCollection.Log($"Redo: AudioObj.Data restored in '{this.OriginalAudio.Name}'");
                 this.ClearSelectionMarkers();
                 this.RecalculateLoopFraction();
                 this.ApplyLoopFractionToAudio();
@@ -1793,7 +1814,7 @@ namespace ModularAudience.Forms.Modules
                 try
                 {
                     // Dialog auf UI-Thread öffnen
-                    this.BeginInvoke(new Action(() => this.ShowTrackRenameDialog()));
+                    this.BeginInvoke(new Action(this.ShowTrackRenameDialog));
                 }
                 catch { }
                 // Standardverhalten (Maximieren) unterdrücken
@@ -1805,12 +1826,12 @@ namespace ModularAudience.Forms.Modules
 
         private void ShowTrackRenameDialog()
         {
-            string current = this.Text ?? string.Empty;
+            string current = this.OriginalAudio.Name;
             // Microsoft.VisualBasic.Interaction.InputBox wird bereits im Projekt genutzt
             string input = Microsoft.VisualBasic.Interaction.InputBox("Enter new name for this track:", "Rename Track", current);
             if (!string.IsNullOrWhiteSpace(input) && input != current)
             {
-                this.Text = input;
+                this.Text = "#" + this.TrackViewId.ToString("D2") + " - " + input;
                 this.OriginalAudio.Name = input;
             }
         }

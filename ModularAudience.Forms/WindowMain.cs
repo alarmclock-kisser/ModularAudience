@@ -12,6 +12,7 @@ namespace ModularAudience.Forms
         public readonly AudioCollection AudioC = new();
 
         internal static readonly BindingList<AudioCollectionView> CollectionViews = [];
+        internal static int TotalTracks => CollectionViews.Sum(cv => cv.AudioCount);
         internal static IEnumerable<AudioObj> SelectedTracks => CollectionViews.SelectMany(cv => cv.SelectedAudios);
         internal static IEnumerable<TrackView> PlayingTrackViews => TrackViews.Where(tv => tv.OriginalAudio.PlayerPlaying);
         internal static bool IsAnyTrackPlaying => PlayingTrackViews.Any();
@@ -61,6 +62,7 @@ namespace ModularAudience.Forms
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, true);
 
+            this.Register_ListBox_Log();
             TrackViews.ListChanged += this.TrackViews_ListChanged;
             CollectionViews.ListChanged += this.CollectionViews_ListChanged;
 
@@ -90,6 +92,33 @@ namespace ModularAudience.Forms
             // e.Cancel bleibt false
             Application.ExitThread();
             Environment.Exit(0); // harte Prozessbeendigung falls noch Threads leben
+        }
+
+        private void Register_ListBox_Log()
+        {
+            this.listBox_log.Items.Clear();
+            this.listBox_log.DataSource = LogCollection.Logs;
+
+            // Add horizontal scrollbar
+            this.listBox_log.HorizontalScrollbar = true;
+
+            // Scroll auto to latest entry
+            LogCollection.Logs.ListChanged += (s, e) =>
+            {
+                if (LogCollection.AutoScroll && e.ListChangedType == ListChangedType.ItemAdded)
+                {
+                    this.listBox_log.TopIndex = LogCollection.Logs.Count - 1;
+                }
+            };
+
+            // Double click to copy to clipboard
+            this.listBox_log.DoubleClick += (s, e) =>
+            {
+                if (this.listBox_log.SelectedItem is string selectedLog)
+                {
+                    Clipboard.SetText(selectedLog);
+                }
+            };
         }
 
         private async void button_import_Click(object sender, EventArgs e)
@@ -1125,6 +1154,7 @@ namespace ModularAudience.Forms
 
             var track = new AudioObj
             {
+                Name = "New Track #" + cv.AudioCount.ToString("D2"),
                 SampleRate = 44100,
                 Channels = 2,
                 BitDepth = 32

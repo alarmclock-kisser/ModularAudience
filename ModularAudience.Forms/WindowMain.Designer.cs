@@ -49,6 +49,7 @@
             this.textBox_recordingTime = new TextBox();
             this.label_stopRecordInfo = new Label();
             this.button_newTrack = new Button();
+            this.listBox_log = new ListBox();
             this.SuspendLayout();
             // 
             // button_import
@@ -282,11 +283,22 @@
             this.button_newTrack.UseVisualStyleBackColor = false;
             this.button_newTrack.Click += this.button_newTrack_Click;
             // 
+            // listBox_log
+            // 
+            this.listBox_log.Font = new Font("Bahnschrift SemiLight", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.listBox_log.FormattingEnabled = true;
+            this.listBox_log.Location = new Point(245, 175);
+            this.listBox_log.Name = "listBox_log";
+            this.listBox_log.Size = new Size(260, 134);
+            this.listBox_log.TabIndex = 21;
+            this.listBox_log.TabStop = false;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(704, 321);
+            this.Controls.Add(this.listBox_log);
             this.Controls.Add(this.button_newTrack);
             this.Controls.Add(this.label_stopRecordInfo);
             this.Controls.Add(this.textBox_recordingTime);
@@ -339,5 +351,6 @@
         private TextBox textBox_recordingTime;
         private Label label_stopRecordInfo;
         private Button button_newTrack;
+        private ListBox listBox_log;
     }
 }

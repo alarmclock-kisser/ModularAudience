@@ -79,6 +79,7 @@ namespace ModularAudience.Forms
             this.listBox_audios.DrawItem += this.listBox_audios_DrawItem;
             this.listBox_audios.SelectedIndexChanged += this.listBox_audios_SelectedIndexChanged;
             this.checkBox_autoPlay.CheckedChanged += this.checkBox_autoPlay_CheckedChanged;
+            this.DoubleClick += this.Form_DoubleClick;
 
             this.CacheCommittedSelection();
 
@@ -260,7 +261,29 @@ namespace ModularAudience.Forms
                         this.listBox_audios.DisplayMember = "Name";
                         this.RestoreScrollPosition(previousTopIndex);
                     };
-                    contextMenu.Items.AddRange([renameItem, deleteItem]);
+                    ToolStripMenuItem toNewCollectionItem = new("To new Collection");
+                    toNewCollectionItem.Click += (s, ev) =>
+                    {
+                        List<AudioObj> toMove = this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>().ToList();
+                        if (toMove.Count == 0 && index >= 0 && index < this.listBox_audios.Items.Count && this.listBox_audios.Items[index] is AudioObj fallback)
+                        {
+                            toMove.Add(fallback);
+                        }
+                        if (toMove.Count == 0)
+                        {
+                            return;
+                        }
+                        // Neue Collection erstellen und hinzufügen
+                        var newView = new AudioCollectionView(toMove);
+                        WindowMain.CollectionViews.Add(newView);
+                        newView.Show();
+                        // Aus aktueller Collection entfernen
+                        foreach (var audio in toMove)
+                        {
+                            this.AudioC.Audios.Remove(audio);
+                        }
+                    };
+                    contextMenu.Items.AddRange([renameItem, deleteItem, toNewCollectionItem]);
                     contextMenu.Show(this.listBox_audios, e.Location);
                 }
             }
@@ -285,16 +308,6 @@ namespace ModularAudience.Forms
                 this._dragCandidate = this.listBox_audios.SelectedItem as AudioObj;
                 this.CaptureSelectionSnapshot();
             }));
-        }
-
-        private void RestoreDragSelectionSnapshot()
-        {
-            if (this._dragSelectionSnapshot == null)
-            {
-                return;
-            }
-
-            this.RestoreSelectionFromList(this._dragSelectionSnapshot);
         }
 
         private void RestoreSelectionFromList(IReadOnlyCollection<AudioObj> snapshot)
@@ -531,15 +544,22 @@ namespace ModularAudience.Forms
 
         private async void Form_DoubleClick(object? sender, EventArgs e)
         {
-            await this.CancelAutoPlayAsync().ConfigureAwait(false);
+            await this.CancelAutoPlayAsync();
             // Clicked not on an item: Select all
             this.listBox_audios.BeginUpdate();
             try
             {
-                this.listBox_audios.ClearSelected();
-                for (int i = 0; i < this.listBox_audios.Items.Count; i++)
+                if (this.listBox_audios.SelectedIndices.Count == this.listBox_audios.Items.Count)
                 {
-                    this.listBox_audios.SetSelected(i, true);
+                    this.listBox_audios.ClearSelected();
+                }
+                else
+                {
+                    this.listBox_audios.ClearSelected();
+                    for (int i = 0; i < this.listBox_audios.Items.Count; i++)
+                    {
+                        this.listBox_audios.SetSelected(i, true);
+                    }
                 }
             }
             finally
@@ -563,10 +583,17 @@ namespace ModularAudience.Forms
                 this.listBox_audios.BeginUpdate();
                 try
                 {
-                    this.listBox_audios.ClearSelected();
-                    for (int i = 0; i < this.listBox_audios.Items.Count; i++)
+                    if (this.listBox_audios.SelectedIndices.Count == this.listBox_audios.Items.Count)
                     {
-                        this.listBox_audios.SetSelected(i, true);
+                        this.listBox_audios.ClearSelected();
+                    }
+                    else
+                    {
+                        this.listBox_audios.ClearSelected();
+                        for (int i = 0; i < this.listBox_audios.Items.Count; i++)
+                        {
+                            this.listBox_audios.SetSelected(i, true);
+                        }
                     }
                 }
                 finally
@@ -1378,7 +1405,7 @@ namespace ModularAudience.Forms
                 try
                 {
                     // Dialog auf UI-Thread öffnen
-                    this.BeginInvoke(new Action(() => this.ShowCollectionRenameDialog()));
+                    this.BeginInvoke(new Action(this.ShowCollectionRenameDialog));
                 }
                 catch { }
                 // Standardverhalten (Maximieren) unterdrücken
