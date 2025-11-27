@@ -17,8 +17,8 @@ namespace ModularAudience.Forms.Modules
 
         public readonly int TrackViewId;
         public readonly AudioObj OriginalAudio;
-        private readonly AudioObj? SourceAudio;
-        private readonly AudioCollection? SourceCollection;
+        // Lambda get SourceCollection by WindowMain.CollectionViews first where AudioC.Audios.Contains an audio with same Guid (Id)
+        internal AudioCollection? SourceCollection => WindowMain.CollectionViews.FirstOrDefault(cv => cv.AudioC != null && cv.AudioC.Audios.Any(a => a.Id == this.OriginalAudio.Id))?.AudioC;
         public readonly TrackViewSettings Settings;
 
 
@@ -54,21 +54,17 @@ namespace ModularAudience.Forms.Modules
         private readonly int designerClientWidth;
         private readonly int designerWaveWidth;
 
-        public TrackView(AudioObj audio, AudioCollection? sourceCollection = null)
+        public TrackView(AudioObj audio)
         {
             this.InitializeComponent();
             this.StartPosition = FormStartPosition.Manual;
             this.designerClientWidth = this.ClientSize.Width;
             this.designerWaveWidth = this.pictureBox_waveform.Width;
-            this.SourceAudio = audio; // keep reference to original object in its collection (if any)
             this.OriginalAudio = audio.Clone();
-            this.SourceCollection = sourceCollection;
             this.Settings = new TrackViewSettings(this)
             {
                 Owner = this
             };
-
-            this.button_apply.Enabled = this.SourceCollection != null && this.SourceAudio != null;
 
             this.KeyPreview = true;
             this.KeyDown += this.TrackView_KeyDown;
@@ -170,7 +166,7 @@ namespace ModularAudience.Forms.Modules
             if (collectionView != null)
             {
                 // Select only the exact track in the listBox, deselect all others
-                collectionView.SetSelectionToAudio(this.SourceAudio ?? this.OriginalAudio);
+                collectionView.SetSelectionToAudio(this.OriginalAudio);
             }
         }
 
@@ -1209,6 +1205,28 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            if (e.Control && e.KeyCode == Keys.X)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                await this.CopySelectionAsync();
+                await this.RemoveSelectionAsync();
+                return;
+            }
+
+            if (e.Control && e.KeyCode == Keys.A)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+
+                int channels = Math.Max(1, this.OriginalAudio.Channels);
+                this.selectStartFrame = 0;
+                this.selectEndFrame = this.GetTotalFrames();
+                this.UpdateSelection();
+                this.RequestWaveformRender();
+                return;
+            }
+
             if (e.KeyCode == Keys.Delete)
             {
                 e.Handled = true;
@@ -1578,13 +1596,17 @@ namespace ModularAudience.Forms.Modules
 
         private void button_apply_Click(object sender, EventArgs e)
         {
-            if (this.SourceCollection == null || this.SourceAudio == null)
+            if (this.SourceCollection == null)
             {
+                var cv = new AudioCollectionView([this.OriginalAudio]);
+                WindowMain.CollectionViews.Add(cv);
+                LogCollection.Log($"Created new collection view and applied changes to '{this.OriginalAudio.Name}'.");
+                cv.Show();
                 return;
             }
 
-            // Find index of the original source audio in the provided collection
-            int index = this.SourceCollection.Audios.IndexOf(this.SourceAudio);
+            // Find index of the original source audio in the provided collection find by Id
+            int index = this.SourceCollection.Audios.ToList().FindIndex(a => a.Id == this.OriginalAudio.Id);
             if (index >= 0)
             {
                 try

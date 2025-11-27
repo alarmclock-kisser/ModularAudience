@@ -148,7 +148,14 @@ namespace ModularAudience.Audio
         {
             foreach (var audio in this.Audios)
             {
-                audio.Dispose();
+                try
+                {
+                    audio.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log(ex);
+                }
             }
             this.Audios.Clear();
             GC.SuppressFinalize(this);

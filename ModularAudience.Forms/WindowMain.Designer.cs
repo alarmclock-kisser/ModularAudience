@@ -48,6 +48,7 @@
             this.button_record = new Button();
             this.textBox_recordingTime = new TextBox();
             this.label_stopRecordInfo = new Label();
+            this.button_newTrack = new Button();
             this.SuspendLayout();
             // 
             // button_import
@@ -77,7 +78,7 @@
             // checkBox_singleCollection
             // 
             this.checkBox_singleCollection.AutoSize = true;
-            this.checkBox_singleCollection.Location = new Point(12, 70);
+            this.checkBox_singleCollection.Location = new Point(12, 99);
             this.checkBox_singleCollection.Name = "checkBox_singleCollection";
             this.checkBox_singleCollection.Size = new Size(115, 19);
             this.checkBox_singleCollection.TabIndex = 2;
@@ -206,7 +207,7 @@
             // button_newBag
             // 
             this.button_newBag.BackColor = Color.FromArgb(  192,   255,   192);
-            this.button_newBag.Location = new Point(12, 41);
+            this.button_newBag.Location = new Point(12, 70);
             this.button_newBag.Name = "button_newBag";
             this.button_newBag.Size = new Size(75, 23);
             this.button_newBag.TabIndex = 14;
@@ -270,11 +271,23 @@
             this.label_stopRecordInfo.Text = "Ctrl-Click to stop recording.";
             this.label_stopRecordInfo.Visible = false;
             // 
+            // button_newTrack
+            // 
+            this.button_newTrack.BackColor = Color.FromArgb(  192,   192,   255);
+            this.button_newTrack.Location = new Point(12, 41);
+            this.button_newTrack.Name = "button_newTrack";
+            this.button_newTrack.Size = new Size(75, 23);
+            this.button_newTrack.TabIndex = 20;
+            this.button_newTrack.Text = "New Track";
+            this.button_newTrack.UseVisualStyleBackColor = false;
+            this.button_newTrack.Click += this.button_newTrack_Click;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(704, 321);
+            this.Controls.Add(this.button_newTrack);
             this.Controls.Add(this.label_stopRecordInfo);
             this.Controls.Add(this.textBox_recordingTime);
             this.Controls.Add(this.button_record);
@@ -325,5 +338,6 @@
         private Button button_record;
         private TextBox textBox_recordingTime;
         private Label label_stopRecordInfo;
+        private Button button_newTrack;
     }
 }

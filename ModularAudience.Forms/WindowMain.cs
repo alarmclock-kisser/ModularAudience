@@ -1115,6 +1115,27 @@ namespace ModularAudience.Forms
             await Task.CompletedTask;
         }
 
+        private void button_newTrack_Click(object sender, EventArgs e)
+        {
+            var cv = CollectionViews.LastOrDefault();
+            if (cv == null)
+            {
+                cv = new AudioCollectionView([]);
+            }
+
+            var track = new AudioObj
+            {
+                SampleRate = 44100,
+                Channels = 2,
+                BitDepth = 32
+            };
+            cv.AudioC.Audios.Add(track);
+            var trackView = new TrackView(track);
+            TrackViews.Add(trackView);
+            trackView.Show();
+            CollectionViews.Add(cv);
+            cv.Show();
+        }
     }
 }
 

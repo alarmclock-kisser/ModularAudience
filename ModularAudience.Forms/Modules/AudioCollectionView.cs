@@ -87,7 +87,6 @@ namespace ModularAudience.Forms
                 e.Cancel = true;
                 await this.CancelAutoPlayAsync(stopCollection: true).ConfigureAwait(false);
                 this.Hide();
-                await this.AudioC.ClearAsync().ConfigureAwait(false);
                 this.AudioC.Dispose();
 
                 WindowMain.CollectionViews.Remove(this);
@@ -556,7 +555,7 @@ namespace ModularAudience.Forms
             AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
             if (selectedAudio != null)
             {
-                WindowMain.TrackViews.Add(new TrackView(selectedAudio, this.AudioC));
+                WindowMain.TrackViews.Add(new TrackView(selectedAudio));
             }
             else
             {
@@ -1031,7 +1030,7 @@ namespace ModularAudience.Forms
         private static string FormatDurationText(AudioObj audio)
         {
             TimeSpan duration = ResolveDuration(audio);
-            if (duration.TotalMilliseconds > 0 && duration.TotalMilliseconds < 2500)
+            if (duration.TotalMilliseconds > 0 && duration.TotalMilliseconds < 3000)
             {
                 int ms = Math.Max(1, (int) Math.Round(duration.TotalMilliseconds));
                 return ms.ToString("0", CultureInfo.InvariantCulture) + " ms";

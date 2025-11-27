@@ -155,7 +155,7 @@ namespace ModularAudience.Audio
         {
             return new AudioObj
             {
-                Id = Guid.NewGuid(),
+                Id = this.Id,
                 Name = this.Name,
                 FilePath = this.FilePath,
                 Data = (float[]) this.Data.Clone(),

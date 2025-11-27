@@ -303,9 +303,11 @@ namespace ModularAudience.Forms.Modules
                 // Open TrackView modeless and update audio on close to avoid forcing other windows to the background
                 editItem.Click += (s, e) =>
                 {
-                    var tv = new TrackView(audio, this.AudioC);
-                    tv.StartPosition = FormStartPosition.Manual;
-                    tv.Location = WindowsScreenHelper.GetCenterStartingPoint(this);
+                    var tv = new TrackView(audio)
+                    {
+                        StartPosition = FormStartPosition.Manual,
+                        Location = WindowsScreenHelper.GetCenterStartingPoint(this)
+                    };
 
                     // When the TrackView is closed, check the DialogResult and update the sample if it was changed
                     tv.FormClosed += async (o, ev) =>
