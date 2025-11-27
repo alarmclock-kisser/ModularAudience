@@ -1664,8 +1664,6 @@ namespace ModularAudience.Forms.Modules
 
 
 
-
-        // Berücksichtigt Zoom und Scroll-Offset
         private int FrameToPixel(long frameIndex)
         {
             if (this.OriginalAudio == null || this.Settings == null)

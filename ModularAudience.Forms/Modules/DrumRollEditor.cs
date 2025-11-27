@@ -19,8 +19,6 @@ namespace ModularAudience.Forms.Modules
         private WaveOutEvent? waveOut;
         private MixingSampleProvider? mixer;
         private readonly WaveFormat outputFormat;
-        private CancellationTokenSource? playbackCts;
-        private Task? playbackTask;
 
         // Scheduler-specific
         private CancellationTokenSource? schedulerCts;

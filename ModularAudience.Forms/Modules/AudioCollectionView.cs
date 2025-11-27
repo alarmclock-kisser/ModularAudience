@@ -52,7 +52,7 @@ namespace ModularAudience.Forms
             this.InitializeComponent();
             this.StartPosition = FormStartPosition.Manual;
 
-            this.Text = "Audio Collection #" + (WindowMain.CollectionViews.Count + 1).ToString("D2");
+            this.Text = "Audio Collection #" + (WindowMain.CollectionViews.Where(cv => !cv.IsDisposed).Count() + 1).ToString("D2");
 
             foreach (AudioObj audio in audios)
             {
