@@ -123,10 +123,6 @@ namespace ModularAudience.Forms
         }
 
 
-
-		// ListBox entry richt-click event to show context menu for rename and delete
-
-		// DrawMode for ListBox to show audio name and duration
         public void listBox_audios_DrawItem(object? sender, DrawItemEventArgs e)
         {
             e.DrawBackground();
@@ -333,7 +329,7 @@ namespace ModularAudience.Forms
 
         private async void listBox_audios_MouseClick(object? sender, MouseEventArgs e)
         {
-            if (e.Button != MouseButtons.Left || !this.checkBox_autoPlay.Checked || (Control.ModifierKeys & Keys.Control) != 0)
+            if (e.Button != MouseButtons.Left || (Control.ModifierKeys & Keys.Control) != 0)
             {
                 return;
             }
@@ -356,11 +352,21 @@ namespace ModularAudience.Forms
 
             if (this.listBox_audios.Items[index] is AudioObj audio)
             {
-                await this.TriggerAutoPlayAsync(audio).ConfigureAwait(false);
+                if (this.checkBox_autoPlay.Checked)
+                {
+					await this.TriggerAutoPlayAsync(audio).ConfigureAwait(false);
+				}
             }
-        }
 
-        private async void Form_DoubleClick(object? sender, EventArgs e)
+            WindowMain.CollectionViews.Where(cv => cv != this).ToList().ForEach(cv => cv.UnselectAll());
+		}
+
+        internal void UnselectAll()
+        {
+            this.listBox_audios.ClearSelected();
+		}
+
+		private async void Form_DoubleClick(object? sender, EventArgs e)
         {
             await this.CancelAutoPlayAsync();
             // Clicked not on an item: Select all
