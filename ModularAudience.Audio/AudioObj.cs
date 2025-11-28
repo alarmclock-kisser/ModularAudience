@@ -340,8 +340,10 @@ namespace ModularAudience.Audio
         // Internal helper - applies state from source snapshot to THIS instance
         private void ApplyStateFrom(AudioObj source)
         {
-            // copy audio data and relevant metadata
-            this.Data = (float[]) source.Data.Clone();
+            this.Name = source.Name;
+
+			// copy audio data and relevant metadata
+			this.Data = (float[]) source.Data.Clone();
             this.SampleRate = source.SampleRate;
             this.Channels = source.Channels;
             this.BitDepth = source.BitDepth;

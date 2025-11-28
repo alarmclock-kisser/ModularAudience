@@ -30,7 +30,6 @@
         {
             this.button_import = new Button();
             this.button_browse = new Button();
-            this.checkBox_singleCollection = new CheckBox();
             this.button_scanBpm = new Button();
             this.textBox_scanBpmResult = new TextBox();
             this.textBox_scanTimingResult = new TextBox();
@@ -75,17 +74,6 @@
             this.button_browse.Text = "[...]";
             this.button_browse.UseVisualStyleBackColor = true;
             this.button_browse.Click += this.button_browse_Click;
-            // 
-            // checkBox_singleCollection
-            // 
-            this.checkBox_singleCollection.AutoSize = true;
-            this.checkBox_singleCollection.Location = new Point(12, 99);
-            this.checkBox_singleCollection.Name = "checkBox_singleCollection";
-            this.checkBox_singleCollection.Size = new Size(115, 19);
-            this.checkBox_singleCollection.TabIndex = 2;
-            this.checkBox_singleCollection.TabStop = false;
-            this.checkBox_singleCollection.Text = "Single Collection";
-            this.checkBox_singleCollection.UseVisualStyleBackColor = true;
             // 
             // button_scanBpm
             // 
@@ -317,7 +305,6 @@
             this.Controls.Add(this.button_scanTiming);
             this.Controls.Add(this.textBox_scanBpmResult);
             this.Controls.Add(this.button_scanBpm);
-            this.Controls.Add(this.checkBox_singleCollection);
             this.Controls.Add(this.button_browse);
             this.Controls.Add(this.button_import);
             this.MaximumSize = new Size(720, 360);
@@ -332,7 +319,6 @@
 
         private Button button_import;
         private Button button_browse;
-        private CheckBox checkBox_singleCollection;
         private Button button_scanBpm;
         private TextBox textBox_scanBpmResult;
         private TextBox textBox_scanTimingResult;

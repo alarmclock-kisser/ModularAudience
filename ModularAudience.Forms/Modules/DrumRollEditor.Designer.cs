@@ -161,6 +161,7 @@
             this.button_export.Name = "button_export";
             this.button_export.Size = new Size(75, 23);
             this.button_export.TabIndex = 13;
+            this.button_export.TabStop = false;
             this.button_export.Text = "Export";
             this.button_export.UseVisualStyleBackColor = false;
             this.button_export.Click += this.button_export_Click;
@@ -180,6 +181,7 @@
             this.Controls.Add(this.numericUpDown_bpm);
             this.Controls.Add(this.button_playback);
             this.Controls.Add(this.panel_pattern);
+            this.KeyPreview = true;
             this.MaximizeBox = false;
             this.MaximumSize = new Size(1280, 480);
             this.MinimumSize = new Size(720, 480);

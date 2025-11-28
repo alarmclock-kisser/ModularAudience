@@ -54,15 +54,17 @@ namespace ModularAudience.Forms
             this.listBox_audios.SelectedIndex = -1;
             this.listBox_audios.AllowDrop = true;
             this.listBox_audios.DrawMode = DrawMode.OwnerDrawFixed;
-            this.listBox_audios.MouseDown += this.listBox_audios_MouseDown;
+			this.listBox_audios.MouseDown += this.listBox_audios_MouseDown;
             this.listBox_audios.MouseClick += this.listBox_audios_MouseClick;
             this.listBox_audios.DoubleClick += this.listBox_audios_DoubleClick;
             this.listBox_audios.SelectedIndexChanged += this.listBox_audios_SelectedIndexChanged;
             this.checkBox_autoPlay.CheckedChanged += this.checkBox_autoPlay_CheckedChanged;
             this.DoubleClick += this.Form_DoubleClick;
             alarmclockkisser.DragNDrop.Forms.ListBoxExtensions.Register_ListBox_DragNDrop(this.listBox_audios, true);
+			this.listBox_audios.DrawItem += this.listBox_audios_DrawItem;
 
-            this.FormClosing += async (s, e) =>
+
+			this.FormClosing += async (s, e) =>
             {
                 e.Cancel = true;
                 await this.CancelAutoPlayAsync(stopCollection: true).ConfigureAwait(false);
@@ -122,8 +124,35 @@ namespace ModularAudience.Forms
 
 
 
-        // ListBox entry richt-click event to show context menu for rename and delete
-        private void listBox_audios_MouseDown(object? sender, MouseEventArgs e)
+		// ListBox entry richt-click event to show context menu for rename and delete
+
+		// DrawMode for ListBox to show audio name and duration
+        public void listBox_audios_DrawItem(object? sender, DrawItemEventArgs e)
+        {
+            e.DrawBackground();
+            if (e.Index >= 0 && e.Index < this.listBox_audios.Items.Count)
+            {
+                AudioObj? audio = this.listBox_audios.Items[e.Index] as AudioObj;
+                if (audio != null)
+                {
+                    string nameText = audio.Name ?? string.Empty;
+                    string durationText = FormatDurationText(audio);
+                    // Textfarben basierend auf Auswahlstatus
+                    Color textColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected
+                        ? SystemColors.HighlightText
+                        : this.listBox_audios.ForeColor;
+                    // Zeichne Namen
+                    Rectangle nameRect = new(e.Bounds.Left + 2, e.Bounds.Top, e.Bounds.Width - 100, e.Bounds.Height);
+                    TextRenderer.DrawText(e.Graphics, nameText, e.Font, nameRect, textColor, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+                    // Zeichne Dauer rechtsbündig
+                    Rectangle durationRect = new(e.Bounds.Right - 98, e.Bounds.Top, 96, e.Bounds.Height);
+                    TextRenderer.DrawText(e.Graphics, durationText, e.Font, durationRect, textColor, TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
+                }
+            }
+            e.DrawFocusRectangle();
+		}
+
+		private void listBox_audios_MouseDown(object? sender, MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Right)
             {

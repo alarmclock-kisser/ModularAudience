@@ -529,6 +529,108 @@ namespace ModularAudience.Forms.Modules
             using var g = Graphics.FromImage(bmp);
             using var brush = new SolidBrush(Color.FromArgb(80, selectionColor));
             g.FillRectangle(brush, pxStart, 0, Math.Max(1f, pxEnd - pxStart), bmp.Height);
+
+            // Zeichnen der transparenten Auswahl
+            // - Innerhalb der Track-Dauer: Standard-Farbe (sättigter, halbtransparenter Bereich)
+            // - Außerhalb der Track-Dauer (vor 0 oder nach Ende): hellere / andere Färbung zur Visualisierung
+            {
+                // Auswahl in Samples im AudioObj gespeichert => in Frames umrechnen
+                long selStartSamples = this.OriginalAudio.SelectionStart;
+                long selEndSamples = this.OriginalAudio.SelectionEnd;
+                if (selStartSamples < 0 || selEndSamples <= selStartSamples)
+                {
+                    // ungültig (sollte oben bereits abgefangen sein), aber sicherheitshalber nichts zeichnen
+                    return;
+                }
+
+                long startSamples = Math.Min(selStartSamples, selEndSamples);
+                long endSamples = Math.Max(selStartSamples, selEndSamples);
+
+                long startFrame = startSamples / channels;
+                long endFrame = endSamples / channels;
+
+                // Gesamtanzahl Frames des Tracks (in Frame-Einheiten)
+                long totalFrames = this.GetTotalFrames();
+
+                // Bereiche: vor Track-Start, innerhalb Track, nach Track-Ende
+                long preTrackStart = Math.Min(startFrame, 0);
+                long preTrackEnd = Math.Min(endFrame, 0);
+
+                long insideStart = Math.Max(startFrame, 0);
+                long insideEnd = Math.Min(endFrame, totalFrames);
+
+                long postStart = Math.Max(startFrame, totalFrames);
+                long postEnd = Math.Max(endFrame, totalFrames);
+
+                // Hilfsfunktion: Frame-Bereich in sichtbare Pixel (und Clip)
+                int clipWidth = this.pictureBox_waveform.Width;
+                int clipHeight = bmp.Height; // <-- Fix: 'height' durch 'bmp.Height' ersetzt
+
+                // Brushes: normal und "outside" (heller / dezenter)
+                using var insideBrush = new SolidBrush(Color.FromArgb(60, Color.DeepSkyBlue)); // wie zuvor
+                using var outsideBrush = new SolidBrush(Color.FromArgb(40, Color.LightSkyBlue)); // dezenter, hellerer Ton
+
+                // Zeichne Bereich innerhalb Track
+                if (insideEnd > insideStart)
+                {
+                    pxStart = this.FrameToPixel(insideStart);
+                    pxEnd = this.FrameToPixel(insideEnd);
+                    int x = (Int32) pxStart;
+                    int w = (Int32) Math.Max(1, pxEnd - pxStart);
+
+                    int drawX = Math.Max(0, x);
+                    int drawWidth = Math.Min(clipWidth, x + w) - drawX;
+                    if (drawWidth > 0 && drawX < clipWidth)
+                    {
+                        g.FillRectangle(insideBrush, drawX, 0, drawWidth, clipHeight);
+                    }
+                }
+
+                // Zeichne Bereich vor Track-Start (falls vorhanden) als "outside"
+                if (startFrame < 0 && endFrame > 0)
+                {
+                    // Teil vor 0 bis min(endFrame,0)
+                    int pxPreStart = this.FrameToPixel(Math.Max(startFrame, preTrackStart));
+                    int pxPreEnd = this.FrameToPixel(Math.Min(endFrame, 0));
+                    int xPre = pxPreStart;
+                    int wPre = Math.Max(1, pxPreEnd - pxPreStart);
+                    int drawXPre = Math.Max(0, xPre);
+                    int drawWidthPre = Math.Min(clipWidth, xPre + wPre) - drawXPre;
+                    if (drawWidthPre > 0 && drawXPre < clipWidth)
+                    {
+                        g.FillRectangle(outsideBrush, drawXPre, 0, drawWidthPre, clipHeight);
+                    }
+                }
+                else if (endFrame <= 0)
+                {
+                    // komplette Auswahl vor Track-Start
+                    int pxPreStart = this.FrameToPixel(startFrame);
+                    int pxPreEnd = this.FrameToPixel(endFrame);
+                    int xPre = pxPreStart;
+                    int wPre = Math.Max(1, pxPreEnd - pxPreStart);
+                    int drawXPre = Math.Max(0, xPre);
+                    int drawWidthPre = Math.Min(clipWidth, xPre + wPre) - drawXPre;
+                    if (drawWidthPre > 0 && drawXPre < clipWidth)
+                    {
+                        g.FillRectangle(outsideBrush, drawXPre, 0, drawWidthPre, clipHeight);
+                    }
+                }
+
+                // Zeichne Bereich nach Track-Ende (falls vorhanden) als "outside"
+                if (postEnd > postStart)
+                {
+                    int pxPostStart = this.FrameToPixel(postStart);
+                    int pxPostEnd = this.FrameToPixel(postEnd);
+                    int xPost = pxPostStart;
+                    int wPost = Math.Max(1, pxPostEnd - pxPostStart);
+                    int drawXPost = Math.Max(0, xPost);
+                    int drawWidthPost = Math.Min(clipWidth, xPost + wPost) - drawXPost;
+                    if (drawWidthPost > 0 && drawXPost < clipWidth)
+                    {
+                        g.FillRectangle(outsideBrush, drawXPost, 0, drawWidthPost, clipHeight);
+                    }
+                }
+            }
         }
 
         private void CancelPendingRender()
@@ -696,33 +798,38 @@ namespace ModularAudience.Forms.Modules
             this.pictureBox_waveform.Invalidate();
         }
 
-        private void Wave_MouseDown(object? sender, MouseEventArgs e)
-        {
-            if (e.Button == MouseButtons.Right)
-            {
-                this.dragSelecting = false;
-                this.pendingSelect = false;
-                return;
-            }
+		private void Wave_MouseDown(object? sender, MouseEventArgs e)
+		{
+			if (e.Button == MouseButtons.Right)
+			{
+				this.dragSelecting = false;
+				this.pendingSelect = false;
+				return;
+			}
 
-            if (this.OriginalAudio.Playing)
-            {
-                return;
-            }
+			if (this.OriginalAudio.Playing)
+			{
+				return;
+			}
 
-            if (e.Button == MouseButtons.Left)
-            {
-                long frame = this.MapPixelToFrameInView(e.X);
-                this.mouseDownX = e.X;
-                this.pendingSelect = true;
-                this.dragSelecting = false;
-                this.selectStartFrame = frame;
-                this.selectEndFrame = frame;
-                this.lastClickFrame = frame;
-            }
-        }
+			if (e.Button == MouseButtons.Left)
+			{
+				long frame = this.MapPixelToFrameInView(e.X);
 
-        private void Wave_MouseMove(object? sender, MouseEventArgs e)
+				// Clamp frame to valid range [0, totalFrames]
+				long totalFrames = this.GetTotalFrames();
+				frame = Math.Clamp(frame, 0L, Math.Max(0L, totalFrames));
+
+				this.mouseDownX = e.X;
+				this.pendingSelect = true;
+				this.dragSelecting = false;
+				this.selectStartFrame = frame;
+				this.selectEndFrame = frame;
+				this.lastClickFrame = frame;
+			}
+		}
+
+		private void Wave_MouseMove(object? sender, MouseEventArgs e)
         {
             this.mouseX = e.X;
             if (this.OriginalAudio.Playing)
@@ -792,102 +899,117 @@ namespace ModularAudience.Forms.Modules
             this.dragSelecting = false;
         }
 
-        private void UpdateSelection()
-        {
-            long previousSamples = this.GetCurrentSamplePosition();
-            long start = Math.Min(this.selectStartFrame, this.selectEndFrame);
-            long end = Math.Max(this.selectStartFrame, this.selectEndFrame);
-            int channels = Math.Max(1, this.OriginalAudio.Channels);
-            if (end - start > 0)
-            {
-                this.OriginalAudio.SelectionStart = start * channels;
-                this.OriginalAudio.SelectionEnd = end * channels;
-            }
-            else
-            {
-                this.OriginalAudio.SelectionStart = -1;
-                this.OriginalAudio.SelectionEnd = -1;
-            }
-            this.RecalculateLoopFraction();
-            this.ApplyLoopFractionToAudio();
-            if (this.OriginalAudio.Playing)
-            {
-                bool snapped = this.EnsureLoopPosition(previousSamples, false);
-                if (snapped)
-                {
-                    this.AlignViewToCurrentPosition();
-                }
-                else
-                {
-                    this.RestoreLoopPlaybackPosition(previousSamples);
-                }
-            }
-        }
+		private void UpdateSelection()
+		{
+			long previousSamples = this.GetCurrentSamplePosition();
 
-        private async void button_playback_Click(object? sender, EventArgs e)
+			long start = Math.Min(this.selectStartFrame, this.selectEndFrame);
+			long end = Math.Max(this.selectStartFrame, this.selectEndFrame);
+
+			// Clamp selection to valid frame range
+			long totalFrames = this.GetTotalFrames();
+			start = Math.Clamp(start, 0L, Math.Max(0L, totalFrames));
+			end = Math.Clamp(end, 0L, Math.Max(0L, totalFrames));
+
+			int channels = Math.Max(1, this.OriginalAudio.Channels);
+			if (end - start > 0)
+			{
+				this.OriginalAudio.SelectionStart = start * channels;
+				this.OriginalAudio.SelectionEnd = end * channels;
+			}
+			else
+			{
+				this.OriginalAudio.SelectionStart = -1;
+				this.OriginalAudio.SelectionEnd = -1;
+			}
+
+			this.RecalculateLoopFraction();
+			this.ApplyLoopFractionToAudio();
+
+			if (this.OriginalAudio.Playing)
+			{
+				bool snapped = this.EnsureLoopPosition(previousSamples, false);
+				if (snapped)
+				{
+					this.AlignViewToCurrentPosition();
+				}
+				else
+				{
+					this.RestoreLoopPlaybackPosition(previousSamples);
+				}
+			}
+		}
+
+		private async void button_playback_Click(object? sender, EventArgs e)
         {
             await this.TogglePlayAsync();
         }
 
-        internal async Task TogglePlayAsync()
-        {
-            if (this.OriginalAudio.Paused)
-            {
-                await this.OriginalAudio.PauseAsync();
-                this.button_playback.Text = "■";
-                return;
-            }
+		internal async Task TogglePlayAsync()
+		{
+			if (this.OriginalAudio.Paused)
+			{
+				await this.OriginalAudio.PauseAsync();
+				this.button_playback.Text = "■";
+				return;
+			}
 
-            if (!this.OriginalAudio.Playing)
-            {
-                this.ApplyLoopFractionToAudio();
-                long startFrame = 0;
-                if (this.loopEnabled && this.OriginalAudio.SelectionStart >= 0 && this.OriginalAudio.SelectionEnd > this.OriginalAudio.SelectionStart)
-                {
-                    startFrame = this.OriginalAudio.SelectionStart / Math.Max(1, this.OriginalAudio.Channels);
-                }
-                else if (this.OriginalAudio.StartingOffset > 0)
-                {
-                    startFrame = this.OriginalAudio.StartingOffset / Math.Max(1, this.OriginalAudio.Channels);
-                }
-                else if (this.lastClickFrame >= 0)
-                {
-                    startFrame = this.lastClickFrame;
-                }
-                this.OriginalAudio.SetPosition(startFrame);
-                float volume = this.CurrentVolume;
-                Action onStopped = () => this.InvokeIfRequired(() => this.button_playback.Text = "▶");
-                await this.OriginalAudio.PlayAsync(CancellationToken.None, onStopped, volume);
-                this.button_playback.Text = "■";
+			if (!this.OriginalAudio.Playing)
+			{
+				this.ApplyLoopFractionToAudio();
+				long startFrame = 0;
+				if (this.loopEnabled && this.OriginalAudio.SelectionStart >= 0 && this.OriginalAudio.SelectionEnd > this.OriginalAudio.SelectionStart)
+				{
+					startFrame = this.OriginalAudio.SelectionStart / Math.Max(1, this.OriginalAudio.Channels);
+				}
+				else if (this.OriginalAudio.StartingOffset > 0)
+				{
+					startFrame = this.OriginalAudio.StartingOffset / Math.Max(1, this.OriginalAudio.Channels);
+				}
+				else if (this.lastClickFrame >= 0)
+				{
+					startFrame = this.lastClickFrame;
+				}
 
-                // Broadcast play to other synced TrackViews (fire-and-forget)
-                try
-                {
-                    foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
-                    {
-                        try { _ = tv.OriginalAudio.PlayAsync(CancellationToken.None, null, volume); } catch { }
-                    }
-                }
-                catch { }
-            }
-            else
-            {
-                await this.OriginalAudio.StopAsync();
-                this.button_playback.Text = "▶";
+				// Clamp startFrame to valid playback range
+				long totalFrames = this.GetTotalFrames();
+				long maxStart = Math.Max(0L, totalFrames > 0 ? totalFrames - 1 : 0L);
+				startFrame = Math.Clamp(startFrame, 0L, maxStart);
 
-                // Broadcast stop to other synced TrackViews (fire-and-forget)
-                try
-                {
-                    foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
-                    {
-                        try { _ = tv.OriginalAudio.StopAsync(); } catch { }
-                    }
-                }
-                catch { }
-            }
-        }
+				this.OriginalAudio.SetPosition(startFrame);
+				float volume = this.CurrentVolume;
+				Action onStopped = () => this.InvokeIfRequired(() => this.button_playback.Text = "▶");
+				await this.OriginalAudio.PlayAsync(CancellationToken.None, onStopped, volume);
+				this.button_playback.Text = "■";
 
-        private async void button_pause_Click(object? sender, EventArgs e)
+				// Broadcast play to other synced TrackViews (fire-and-forget)
+				try
+				{
+					foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
+					{
+						try { _ = tv.OriginalAudio.PlayAsync(CancellationToken.None, null, volume); } catch { }
+					}
+				}
+				catch { }
+			}
+			else
+			{
+				await this.OriginalAudio.StopAsync();
+				this.button_playback.Text = "▶";
+
+				// Broadcast stop to other synced TrackViews (fire-and-forget)
+				try
+				{
+					foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
+					{
+						try { _ = tv.OriginalAudio.StopAsync(); } catch { }
+					}
+				}
+				catch { }
+			}
+		}
+
+		private async void button_pause_Click(object? sender, EventArgs e)
         {
             await this.TogglePauseAsync();
         }
@@ -1664,26 +1786,28 @@ namespace ModularAudience.Forms.Modules
 
 
 
-        private int FrameToPixel(long frameIndex)
-        {
-            if (this.OriginalAudio == null || this.Settings == null)
-            {
-                return 0;
-            }
+		private int FrameToPixel(long frameIndex)
+		{
+			if (this.OriginalAudio == null || this.Settings == null)
+			{
+				return 0;
+			}
 
-            // 1. Relativer Frame-Index (vom linken Rand des sichtbaren Bereichs)
-            long relativeFrame = frameIndex - this.OriginalAudio.ScrollOffset;
+			// 1. Relativer Frame-Index (vom linken Rand des sichtbaren Bereichs)
+			// Wichtig: Verwende hier die View-Offset `offsetFrames` (nicht OriginalAudio.ScrollOffset),
+			// damit Zeichnung, Bitmap-Render und Maus-Logik dieselbe Basis haben.
+			long relativeFrame = frameIndex - this.offsetFrames;
 
-            // 2. Umrechnung in Pixel
-            // Hier wird Samples pro Pixel (Zoom) verwendet.
-            // Eine Division durch 0 wird durch Math.Max verhindert, obwohl SamplesPerPixel > 0 sein sollte.
-            int samplesPerPixel = Math.Max(1, this.samplesPerPixel);
+			// 2. Umrechnung in Pixel
+			int samplesPerPixel = Math.Max(1, this.samplesPerPixel);
 
-            return (int) (relativeFrame / samplesPerPixel);
-        }
+			// Division kann negative Werte erzeugen -> cast/rounding zu int ist OK,
+			// aber wir clampen das Ergebnis später, wenn nötig.
+			return (int) (relativeFrame / samplesPerPixel);
+		}
 
-        // Helfermethode: Gibt die aktuelle Playback-Position in Frames zurück
-        private long GetCurrentFramePosition()
+		// Helfermethode: Gibt die aktuelle Playback-Position in Frames zurück
+		private long GetCurrentFramePosition()
         {
             if (this.OriginalAudio == null || this.OriginalAudio.Channels == 0)
             {
@@ -1758,17 +1882,107 @@ namespace ModularAudience.Forms.Modules
             }
 
             // Zeichnen der transparenten Auswahl
-            using (var selectionBrush = new SolidBrush(Color.FromArgb(60, Color.DeepSkyBlue))) // 60% Transparenz, helles Blau
+            // - Innerhalb der Track-Dauer: Standard-Farbe (sättigter, halbtransparenter Bereich)
+            // - Außerhalb der Track-Dauer (vor 0 oder nach Ende): hellere / andere Färbung zur Visualisierung
             {
-                g.FillRectangle(selectionBrush, drawX, 0, drawWidth, clipHeight);
-            }
+                int channels = Math.Max(1, this.OriginalAudio.Channels);
 
-            // Optional: Randlinien der Selektion
-            using (var selectionPen = new Pen(Color.DodgerBlue, 1))
-            {
-                // Start- und Endlinien zeichnen
-                g.DrawLine(selectionPen, startPixel, 0, startPixel, clipHeight);
-                g.DrawLine(selectionPen, endPixel, 0, endPixel, clipHeight);
+                // Auswahl in Samples im AudioObj gespeichert => in Frames umrechnen
+                long selStartSamples = this.OriginalAudio.SelectionStart;
+                long selEndSamples = this.OriginalAudio.SelectionEnd;
+                if (selStartSamples < 0 || selEndSamples <= selStartSamples)
+                {
+                    // ungültig (sollte oben bereits abgefangen sein), aber sicherheitshalber nichts zeichnen
+                    return;
+                }
+
+                long startSamples = Math.Min(selStartSamples, selEndSamples);
+                long endSamples = Math.Max(selStartSamples, selEndSamples);
+
+                long startFrame = startSamples / channels;
+                long endFrame = endSamples / channels;
+
+                // Gesamtanzahl Frames des Tracks (in Frame-Einheiten)
+                long totalFrames = this.GetTotalFrames();
+
+                // Bereiche: vor Track-Start, innerhalb Track, nach Track-Ende
+                long preTrackStart = Math.Min(startFrame, 0);
+                long preTrackEnd = Math.Min(endFrame, 0);
+
+                long insideStart = Math.Max(startFrame, 0);
+                long insideEnd = Math.Min(endFrame, totalFrames);
+
+                long postStart = Math.Max(startFrame, totalFrames);
+                long postEnd = Math.Max(endFrame, totalFrames);
+
+                // Hilfsfunktion: Frame-Bereich in sichtbare Pixel (und Clip)
+                clipWidth = this.pictureBox_waveform.Width;
+                clipHeight = height;
+
+                // Brushes: normal und "outside" (heller / dezenter)
+                using var insideBrush = new SolidBrush(Color.FromArgb(60, Color.DeepSkyBlue)); // wie zuvor
+                using var outsideBrush = new SolidBrush(Color.FromArgb(40, Color.LightSkyBlue)); // dezenter, hellerer Ton
+
+                // Zeichne Bereich innerhalb Track
+                if (insideEnd > insideStart)
+                {
+                    int pxStart = this.FrameToPixel(insideStart);
+                    int pxEnd = this.FrameToPixel(insideEnd);
+                    x = pxStart;
+                    w = Math.Max(1, pxEnd - pxStart);
+
+                    drawX = Math.Max(0, x);
+                    drawWidth = Math.Min(clipWidth, x + w) - drawX;
+                    if (drawWidth > 0 && drawX < clipWidth)
+                    {
+                        g.FillRectangle(insideBrush, drawX, 0, drawWidth, clipHeight);
+                    }
+                }
+
+                // Zeichne Bereich vor Track-Start (falls vorhanden) als "outside"
+                if (startFrame < 0 && endFrame > 0)
+                {
+                    // Teil vor 0 bis min(endFrame,0)
+                    int pxPreStart = this.FrameToPixel(Math.Max(startFrame, preTrackStart));
+                    int pxPreEnd = this.FrameToPixel(Math.Min(endFrame, 0));
+                    int xPre = pxPreStart;
+                    int wPre = Math.Max(1, pxPreEnd - pxPreStart);
+                    int drawXPre = Math.Max(0, xPre);
+                    int drawWidthPre = Math.Min(clipWidth, xPre + wPre) - drawXPre;
+                    if (drawWidthPre > 0 && drawXPre < clipWidth)
+                    {
+                        g.FillRectangle(outsideBrush, drawXPre, 0, drawWidthPre, clipHeight);
+                    }
+                }
+                else if (endFrame <= 0)
+                {
+                    // komplette Auswahl vor Track-Start
+                    int pxPreStart = this.FrameToPixel(startFrame);
+                    int pxPreEnd = this.FrameToPixel(endFrame);
+                    int xPre = pxPreStart;
+                    int wPre = Math.Max(1, pxPreEnd - pxPreStart);
+                    int drawXPre = Math.Max(0, xPre);
+                    int drawWidthPre = Math.Min(clipWidth, xPre + wPre) - drawXPre;
+                    if (drawWidthPre > 0 && drawXPre < clipWidth)
+                    {
+                        g.FillRectangle(outsideBrush, drawXPre, 0, drawWidthPre, clipHeight);
+                    }
+                }
+
+                // Zeichne Bereich nach Track-Ende (falls vorhanden) als "outside"
+                if (postEnd > postStart)
+                {
+                    int pxPostStart = this.FrameToPixel(postStart);
+                    int pxPostEnd = this.FrameToPixel(postEnd);
+                    int xPost = pxPostStart;
+                    int wPost = Math.Max(1, pxPostEnd - pxPostStart);
+                    int drawXPost = Math.Max(0, xPost);
+                    int drawWidthPost = Math.Min(clipWidth, xPost + wPost) - drawXPost;
+                    if (drawWidthPost > 0 && drawXPost < clipWidth)
+                    {
+                        g.FillRectangle(outsideBrush, drawXPost, 0, drawWidthPost, clipHeight);
+                    }
+                }
             }
         }
 

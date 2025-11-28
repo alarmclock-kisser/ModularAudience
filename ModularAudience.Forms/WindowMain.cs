@@ -13,7 +13,7 @@ namespace ModularAudience.Forms
 
         internal static readonly BindingList<AudioCollectionView> CollectionViews = [];
         internal static int TotalTracks => CollectionViews.Sum(cv => cv.AudioCount);
-        internal static IEnumerable<AudioObj> SelectedTracks => CollectionViews.SelectMany(cv => cv.SelectedAudios);
+        internal static IEnumerable<AudioObj> SelectedTracks => CollectionViews.Where(cv => !cv.IsDisposed).SelectMany(cv => cv.SelectedAudios);
         internal static IEnumerable<TrackView> PlayingTrackViews => TrackViews.Where(tv => tv.OriginalAudio.PlayerPlaying);
         internal static bool IsAnyTrackPlaying => PlayingTrackViews.Any();
         internal static IEnumerable<TrackView> SyncedTrackViews => TrackViews.Where(tv => tv.Synced);
@@ -67,7 +67,6 @@ namespace ModularAudience.Forms
             CollectionViews.ListChanged += this.CollectionViews_ListChanged;
 
             this.FormClosing += this.WindowMain_FormClosing;
-            this.checkBox_singleCollection.CheckedChanged += this.checkBox_singleCollection_CheckedChanged;
             this.LocationChanged += (_, __) => this.PositionCollectionViews();
             this.SizeChanged += (_, __) => this.PositionCollectionViews();
 
@@ -210,7 +209,7 @@ namespace ModularAudience.Forms
             }
 
             // Single-Collection Modus: immer nur erste View pflegen
-            if (this.checkBox_singleCollection.Checked)
+            /*if (this.checkBox_singleCollection.Checked)
             {
                 var first = CollectionViews.FirstOrDefault();
                 if (first == null)
@@ -236,7 +235,7 @@ namespace ModularAudience.Forms
                     this.AudioC.Audios.Remove(audio);
                 }
                 return;
-            }
+            }*/
 
             var last = CollectionViews.LastOrDefault();
             if (last == null)
@@ -479,14 +478,14 @@ namespace ModularAudience.Forms
 
         private void checkBox_singleCollection_CheckedChanged(object? sender, EventArgs e)
         {
-            if (this.checkBox_singleCollection.Checked)
+            /*if (this.checkBox_singleCollection.Checked)
             {
                 this.MergeCollectionsToSingle();
             }
             else
             {
                 this.RebuildCollectionsFromTags();
-            }
+            }*/
         }
 
         private static int GetCollectionNumber(AudioCollectionView view)

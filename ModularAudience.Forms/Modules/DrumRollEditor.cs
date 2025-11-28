@@ -478,19 +478,57 @@ namespace ModularAudience.Forms.Modules
             this.panel_pattern.Visible = false;
         }
 
-        private void RandomizeAllPanels()
+        private void RandomizeAllPanels(bool interleaved = false)
         {
-            var rand = new Random();
-            foreach (var panel in this.Panels)
+            if (interleaved)
             {
-                foreach (Control ctrl in panel.Controls)
-                {
-                    if (ctrl is Button btn)
+				// Single drum hit at most per step across all panels
+                var rand = new Random();
+                int hits = this.Hits;
+                for (int h = 0; h < hits; h++)
+				{
+                    // Choose a random panel to activate this step
+                    int panelIdx = rand.Next(this.Panels.Count);
+                    for (int p = 0; p < this.Panels.Count; p++)
                     {
-                        btn.BackColor = rand.NextDouble() < 0.5 ? Color.Green : Color.LightGray;
-                    }
-                }
-            }
+                        var panel = this.Panels[p];
+                        int btnIdx = 0;
+                        foreach (Control ctrl in panel.Controls)
+                        {
+                            if (ctrl is Button btn)
+                            {
+                                if (btnIdx == h)
+                                {
+                                    if (p == panelIdx)
+                                    {
+                                        btn.BackColor = Color.Green;
+                                    }
+                                    else
+                                    {
+                                        btn.BackColor = Color.LightGray;
+                                    }
+                                    break;
+                                }
+                                btnIdx++;
+                            }
+                        }
+					}
+				}
+			}
+			else
+            {
+				var rand = new Random();
+				foreach (var panel in this.Panels)
+				{
+					foreach (Control ctrl in panel.Controls)
+					{
+						if (ctrl is Button btn)
+						{
+							btn.BackColor = rand.NextDouble() < 0.5 ? Color.Green : Color.LightGray;
+						}
+					}
+				}
+			}
         }
 
         // OnKeyDown überschreiben:
@@ -499,7 +537,7 @@ namespace ModularAudience.Forms.Modules
             base.OnKeyDown(e);
             if (e.KeyCode == Keys.R && !e.Handled)
             {
-                this.RandomizeAllPanels();
+                this.RandomizeAllPanels(ModifierKeys.HasFlag(Keys.Control));
                 e.Handled = true;
             }
         }
