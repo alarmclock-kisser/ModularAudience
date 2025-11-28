@@ -167,7 +167,7 @@ namespace ModularAudience.Forms.Modules
             if (collectionView != null)
             {
                 // Select only the exact track in the listBox, deselect all others
-                collectionView.SetSelectionToAudio(this.OriginalAudio);
+                // collectionView.SetSelectionToAudio(this.OriginalAudio);
             }
         }
 

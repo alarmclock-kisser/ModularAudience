@@ -15,6 +15,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="alarmclockkisser.DragNDrop.Forms" Version="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\ModularAudience.Audio\ModularAudience.Audio.csproj" />
   </ItemGroup>
 
