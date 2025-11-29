@@ -489,27 +489,27 @@ namespace ModularAudience.Forms
 
         private void textBox_scanBpmResult_DoubleClick(object? sender, EventArgs e)
         {
-			if (LastSelectedTrackView == null)
+            if (LastSelectedTrackView == null)
             {
                 return;
             }
 
             // Editiermodus aktivieren
             this.textBox_scanBpmResult.ReadOnly = false;
-			this.textBox_scanBpmResult.Text = LastSelectedTrackView.OriginalAudio.ScannedBpm > 0
-				? LastSelectedTrackView.OriginalAudio.ScannedBpm.ToString("0.###")
-				: "";
-			this.textBox_scanBpmResult.Focus();
-			this.textBox_scanBpmResult.SelectAll();
+            this.textBox_scanBpmResult.Text = LastSelectedTrackView.OriginalAudio.ScannedBpm > 0
+                ? LastSelectedTrackView.OriginalAudio.ScannedBpm.ToString("0.###")
+                : "";
+            this.textBox_scanBpmResult.Focus();
+            this.textBox_scanBpmResult.SelectAll();
 
-			// Event-Handler nur einmal anhängen
-			this.textBox_scanBpmResult.Leave -= this.TextBox_scanBpmResult_LeaveOrEndEdit;
-			this.textBox_scanBpmResult.KeyDown -= this.TextBox_scanBpmResult_KeyDown;
-			this.textBox_scanBpmResult.Leave += this.TextBox_scanBpmResult_LeaveOrEndEdit;
-			this.textBox_scanBpmResult.KeyDown += this.TextBox_scanBpmResult_KeyDown;
+            // Event-Handler nur einmal anhängen
+            this.textBox_scanBpmResult.Leave -= this.TextBox_scanBpmResult_LeaveOrEndEdit;
+            this.textBox_scanBpmResult.KeyDown -= this.TextBox_scanBpmResult_KeyDown;
+            this.textBox_scanBpmResult.Leave += this.TextBox_scanBpmResult_LeaveOrEndEdit;
+            this.textBox_scanBpmResult.KeyDown += this.TextBox_scanBpmResult_KeyDown;
             this.textBox_scanBpmResult.TabStop = false;
             this.textBox_scanBpmResult.ReadOnly = true;
-		}
+        }
 
         private void TextBox_scanBpmResult_LeaveOrEndEdit(object? sender, EventArgs e)
         {
@@ -1252,6 +1252,11 @@ namespace ModularAudience.Forms
         {
             using var dlg = new Modules.Dialogs.BreakbeatGeneratorDialog(SelectedTracks);
             dlg.ShowDialog(this);
+        }
+
+        private void button_pitchShift_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }

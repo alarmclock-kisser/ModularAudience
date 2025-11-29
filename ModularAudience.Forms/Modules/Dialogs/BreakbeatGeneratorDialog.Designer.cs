@@ -280,6 +280,7 @@
             this.Controls.Add(this.checkBox_autoPlay);
             this.Controls.Add(this.comboBox_drumset);
             this.Controls.Add(this.listBox_samples);
+            this.MaximizeBox = false;
             this.MaximumSize = new Size(480, 480);
             this.MinimumSize = new Size(480, 480);
             this.Name = "BreakbeatGeneratorDialog";

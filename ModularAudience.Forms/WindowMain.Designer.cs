@@ -50,6 +50,7 @@
             this.button_newTrack = new Button();
             this.listBox_log = new ListBox();
             this.button_breakbeatArchitect = new Button();
+            this.button_pitchShift = new Button();
             this.SuspendLayout();
             // 
             // button_import
@@ -293,11 +294,23 @@
             this.button_breakbeatArchitect.UseVisualStyleBackColor = true;
             this.button_breakbeatArchitect.Click += this.button_breakbeatArchitect_Click;
             // 
+            // button_pitchShift
+            // 
+            this.button_pitchShift.Location = new Point(245, 41);
+            this.button_pitchShift.Name = "button_pitchShift";
+            this.button_pitchShift.Size = new Size(90, 23);
+            this.button_pitchShift.TabIndex = 23;
+            this.button_pitchShift.TabStop = false;
+            this.button_pitchShift.Text = "Pitch Shift";
+            this.button_pitchShift.UseVisualStyleBackColor = true;
+            this.button_pitchShift.Click += this.button_pitchShift_Click;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(704, 321);
+            this.Controls.Add(this.button_pitchShift);
             this.Controls.Add(this.button_breakbeatArchitect);
             this.Controls.Add(this.listBox_log);
             this.Controls.Add(this.button_newTrack);
@@ -352,5 +365,6 @@
         private Button button_newTrack;
         private ListBox listBox_log;
         private Button button_breakbeatArchitect;
+        private Button button_pitchShift;
     }
 }
