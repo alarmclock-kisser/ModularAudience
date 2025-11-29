@@ -69,7 +69,7 @@
             this.hScrollBar_caretPosition.Name = "hScrollBar_caretPosition";
             this.hScrollBar_caretPosition.Size = new Size(171, 17);
             this.hScrollBar_caretPosition.TabIndex = 41;
-            this.hScrollBar_caretPosition.Value = 500;
+            this.hScrollBar_caretPosition.Value = 666;
             // 
             // checkBox_timeMarkers
             // 

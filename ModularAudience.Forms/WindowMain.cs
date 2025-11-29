@@ -215,7 +215,6 @@ namespace ModularAudience.Forms
                 if (first == null)
                 {
                     first = new AudioCollectionView(importedAudios);
-                    CollectionViews.Add(first);
                 }
                 else
                 {
@@ -242,7 +241,6 @@ namespace ModularAudience.Forms
             {
                 // Erste View erstellen
                 var newView = new AudioCollectionView(importedAudios);
-                CollectionViews.Add(newView);
                 // Tags auf Nummer der neuen View setzen
                 int num = GetCollectionNumber(newView);
                 foreach (var audio in importedAudios)
@@ -266,7 +264,6 @@ namespace ModularAudience.Forms
             {
                 // Neue View nur wenn letzte nicht leer ist
                 var newView = new AudioCollectionView(importedAudios);
-                CollectionViews.Add(newView);
                 int num = GetCollectionNumber(newView);
                 foreach (var audio in importedAudios)
                 {
@@ -569,7 +566,6 @@ namespace ModularAudience.Forms
             while (CollectionViews.Count < maxNum)
             {
                 var emptyView = new AudioCollectionView([]);
-                CollectionViews.Add(emptyView);
             }
 
             // Alle leeren und ausblenden
@@ -994,19 +990,18 @@ namespace ModularAudience.Forms
 
             var samples = dlg.ResultSamples.ToList();
             AudioCollectionView collection = new(samples);
-            CollectionViews.Add(collection);
             int num = GetCollectionNumber(collection);
             foreach (var audio in samples)
             {
                 AudioCollectionTags[audio.Id] = num;
             }
+            collection.Rename("Samples [" + LastSelectedTrackView.OriginalAudio.Name + "]");
             collection.Show();
         }
 
         private void button_newBag_Click(object sender, EventArgs e)
         {
             AudioCollectionView collection = new([]);
-            CollectionViews.Add(collection);
             collection.Show();
         }
 
@@ -1164,8 +1159,13 @@ namespace ModularAudience.Forms
             var trackView = new TrackView(track);
             TrackViews.Add(trackView);
             trackView.Show();
-            CollectionViews.Add(cv);
             cv.Show();
+        }
+
+        private void button_breakbeatArchitect_Click(object sender, EventArgs e)
+        {
+            using var dlg = new Modules.Dialogs.BreakbeatGeneratorDialog(SelectedTracks);
+            dlg.ShowDialog(this);
         }
     }
 }

@@ -1,8 +1,4 @@
-﻿using System;
-using System.Drawing;
-using System.Windows.Forms;
-
-namespace ModularAudience.Forms.Modules
+﻿namespace ModularAudience.Forms.Modules
 {
     public partial class TrackViewSettings : Form
     {

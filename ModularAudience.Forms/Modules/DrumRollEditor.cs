@@ -23,8 +23,8 @@ namespace ModularAudience.Forms.Modules
         // Scheduler-specific
         private CancellationTokenSource? schedulerCts;
         private Task? schedulerTask;
-        private readonly object outputLock = new();
-        private readonly int schedulingLookaheadMs = 150; // lookahead to account for playback buffer latency
+        private readonly Lock outputLock = new();
+        private readonly int schedulingLookaheadMs = 150;
         private volatile int currentStep = 0;
         private bool isPlaying = false;
 
@@ -482,11 +482,11 @@ namespace ModularAudience.Forms.Modules
         {
             if (interleaved)
             {
-				// Single drum hit at most per step across all panels
+                // Single drum hit at most per step across all panels
                 var rand = new Random();
                 int hits = this.Hits;
                 for (int h = 0; h < hits; h++)
-				{
+                {
                     // Choose a random panel to activate this step
                     int panelIdx = rand.Next(this.Panels.Count);
                     for (int p = 0; p < this.Panels.Count; p++)
@@ -512,23 +512,23 @@ namespace ModularAudience.Forms.Modules
                                 btnIdx++;
                             }
                         }
-					}
-				}
-			}
-			else
+                    }
+                }
+            }
+            else
             {
-				var rand = new Random();
-				foreach (var panel in this.Panels)
-				{
-					foreach (Control ctrl in panel.Controls)
-					{
-						if (ctrl is Button btn)
-						{
-							btn.BackColor = rand.NextDouble() < 0.5 ? Color.Green : Color.LightGray;
-						}
-					}
-				}
-			}
+                var rand = new Random();
+                foreach (var panel in this.Panels)
+                {
+                    foreach (Control ctrl in panel.Controls)
+                    {
+                        if (ctrl is Button btn)
+                        {
+                            btn.BackColor = rand.NextDouble() < 0.5 ? Color.Green : Color.LightGray;
+                        }
+                    }
+                }
+            }
         }
 
         // OnKeyDown überschreiben:
@@ -613,7 +613,10 @@ namespace ModularAudience.Forms.Modules
         private async Task SchedulerLoop(CancellationToken cancellationToken)
         {
             int hits = this.Hits;
-            if (hits <= 0) return;
+            if (hits <= 0)
+            {
+                return;
+            }
 
             double intervalMs = this.GetTimerIntervalMs();
             // Start etwas in der Zukunft, damit wir Lookahead nutzen können
@@ -634,7 +637,11 @@ namespace ModularAudience.Forms.Modules
                         // For each track, if the button at step is active, schedule audio
                         for (int trackIdx = 0; trackIdx < this.Panels.Count; trackIdx++)
                         {
-                            if (trackIdx >= this.AudioC.Audios.Count) continue;
+                            if (trackIdx >= this.AudioC.Audios.Count)
+                            {
+                                continue;
+                            }
+
                             var panel = this.Panels[trackIdx];
                             int btnIdx = 0;
                             foreach (Control ctrl in panel.Controls)
@@ -680,7 +687,7 @@ namespace ModularAudience.Forms.Modules
                             {
                                 if (this.IsHandleCreated && !this.IsDisposed)
                                 {
-                                    this.Invoke((MethodInvoker)(() =>
+                                    this.Invoke((MethodInvoker) (() =>
                                     {
                                         // Update current step for UI
                                         this.currentStep = stepIndex % hits;
@@ -714,7 +721,10 @@ namespace ModularAudience.Forms.Modules
         // Schedules audio into the mixer at an absolute playAt time (UTC)
         private void ScheduleAudioAt(AudioObj audio, DateTimeOffset playAt, CancellationToken cancellationToken)
         {
-            if (audio.Data == null || audio.Data.LongLength == 0) return;
+            if (audio.Data == null || audio.Data.LongLength == 0)
+            {
+                return;
+            }
 
             // Build the sample provider chain (resample, mono->stereo, volume)
             ISampleProvider provider;
@@ -861,7 +871,7 @@ namespace ModularAudience.Forms.Modules
             {
                 if (this.IsHandleCreated && !this.IsDisposed)
                 {
-                    this.Invoke((MethodInvoker)(() =>
+                    this.Invoke((MethodInvoker) (() =>
                     {
                         this.HandleCurrentStepUI(0, this.Hits);
                     }));
@@ -993,7 +1003,6 @@ namespace ModularAudience.Forms.Modules
             {
                 this.CollectionView = new AudioCollectionView([mixed]);
                 this.CollectionView.Rename("Drum Roll Edits");
-                WindowMain.CollectionViews.Add(this.CollectionView);
             }
             else
             {
@@ -1058,7 +1067,9 @@ namespace ModularAudience.Forms.Modules
             int hits = this.Hits;
             int audioCount = this.Panels.Count;
             if (audioCount == 0 || hits <= 0)
+            {
                 return;
+            }
 
             int availableHeight = this.ClientSize.Height - this.panel_pattern.Top - 20;
             int minPanelHeight = 20;

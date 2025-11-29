@@ -49,6 +49,7 @@
             this.label_stopRecordInfo = new Label();
             this.button_newTrack = new Button();
             this.listBox_log = new ListBox();
+            this.button_breakbeatArchitect = new Button();
             this.SuspendLayout();
             // 
             // button_import
@@ -281,11 +282,23 @@
             this.listBox_log.TabIndex = 21;
             this.listBox_log.TabStop = false;
             // 
+            // button_breakbeatArchitect
+            // 
+            this.button_breakbeatArchitect.Location = new Point(245, 70);
+            this.button_breakbeatArchitect.Name = "button_breakbeatArchitect";
+            this.button_breakbeatArchitect.Size = new Size(90, 23);
+            this.button_breakbeatArchitect.TabIndex = 22;
+            this.button_breakbeatArchitect.TabStop = false;
+            this.button_breakbeatArchitect.Text = "Break Beat";
+            this.button_breakbeatArchitect.UseVisualStyleBackColor = true;
+            this.button_breakbeatArchitect.Click += this.button_breakbeatArchitect_Click;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(704, 321);
+            this.Controls.Add(this.button_breakbeatArchitect);
             this.Controls.Add(this.listBox_log);
             this.Controls.Add(this.button_newTrack);
             this.Controls.Add(this.label_stopRecordInfo);
@@ -338,5 +351,6 @@
         private Label label_stopRecordInfo;
         private Button button_newTrack;
         private ListBox listBox_log;
+        private Button button_breakbeatArchitect;
     }
 }

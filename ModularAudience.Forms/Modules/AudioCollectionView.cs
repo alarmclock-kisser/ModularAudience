@@ -1,15 +1,7 @@
 ﻿using ModularAudience.Audio;
 using ModularAudience.Forms.Modules;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
 using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 
 namespace ModularAudience.Forms
 {
@@ -40,7 +32,9 @@ namespace ModularAudience.Forms
             this.InitializeComponent();
             this.StartPosition = FormStartPosition.Manual;
 
-            this.Text = "Audio Collection #" + (WindowMain.CollectionViews.Where(cv => !cv.IsDisposed).Count() + 1).ToString("D2");
+            WindowMain.CollectionViews.Add(this);
+
+            this.Text = "Audio Collection #" + (WindowMain.CollectionViews.Where(cv => !cv.IsDisposed).Count()).ToString("D2");
 
             foreach (AudioObj audio in audios)
             {
@@ -54,17 +48,17 @@ namespace ModularAudience.Forms
             this.listBox_audios.SelectedIndex = -1;
             this.listBox_audios.AllowDrop = true;
             this.listBox_audios.DrawMode = DrawMode.OwnerDrawFixed;
-			this.listBox_audios.MouseDown += this.listBox_audios_MouseDown;
+            this.listBox_audios.MouseDown += this.listBox_audios_MouseDown;
             this.listBox_audios.MouseClick += this.listBox_audios_MouseClick;
             this.listBox_audios.DoubleClick += this.listBox_audios_DoubleClick;
             this.listBox_audios.SelectedIndexChanged += this.listBox_audios_SelectedIndexChanged;
             this.checkBox_autoPlay.CheckedChanged += this.checkBox_autoPlay_CheckedChanged;
             this.DoubleClick += this.Form_DoubleClick;
             alarmclockkisser.DragNDrop.Forms.ListBoxExtensions.Register_ListBox_DragNDrop(this.listBox_audios, true);
-			this.listBox_audios.DrawItem += this.listBox_audios_DrawItem;
+            this.listBox_audios.DrawItem += this.listBox_audios_DrawItem;
 
 
-			this.FormClosing += async (s, e) =>
+            this.FormClosing += async (s, e) =>
             {
                 e.Cancel = true;
                 await this.CancelAutoPlayAsync(stopCollection: true).ConfigureAwait(false);
@@ -120,6 +114,8 @@ namespace ModularAudience.Forms
             {
                 this.Width = requiredWidth;
             }
+
+            this.Show();
         }
 
 
@@ -146,9 +142,9 @@ namespace ModularAudience.Forms
                 }
             }
             e.DrawFocusRectangle();
-		}
+        }
 
-		private void listBox_audios_MouseDown(object? sender, MouseEventArgs e)
+        private void listBox_audios_MouseDown(object? sender, MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Right)
             {
@@ -171,6 +167,8 @@ namespace ModularAudience.Forms
                             {
                                 selectedAudio.Name = input;
                                 this.listBox_audios.Refresh();
+
+                                WindowMain.TrackViews.Where(tv => tv.OriginalAudio.Id == selectedAudio.Id).ToList().ForEach(tv => tv.Rename(input));
                             }
                         }
                     };
@@ -216,7 +214,6 @@ namespace ModularAudience.Forms
                         }
                         // Neue Collection erstellen und hinzufügen
                         var newView = new AudioCollectionView(toMove);
-                        WindowMain.CollectionViews.Add(newView);
                         newView.Show();
                         // Aus aktueller Collection entfernen
                         foreach (var audio in toMove)
@@ -228,11 +225,6 @@ namespace ModularAudience.Forms
                     contextMenu.Show(this.listBox_audios, e.Location);
                 }
             }
-        }
-
-        private void RefreshListVisuals()
-        {
-            this.listBox_audios.Invalidate();
         }
 
         private static string SanitizePathSegment(string? value)
@@ -354,19 +346,19 @@ namespace ModularAudience.Forms
             {
                 if (this.checkBox_autoPlay.Checked)
                 {
-					await this.TriggerAutoPlayAsync(audio).ConfigureAwait(false);
-				}
+                    await this.TriggerAutoPlayAsync(audio).ConfigureAwait(false);
+                }
             }
 
             WindowMain.CollectionViews.Where(cv => cv != this).ToList().ForEach(cv => cv.UnselectAll());
-		}
+        }
 
         internal void UnselectAll()
         {
-            this.listBox_audios.ClearSelected();
-		}
+            this.listBox_audios.Invoke(new Action(this.listBox_audios.ClearSelected));
+        }
 
-		private async void Form_DoubleClick(object? sender, EventArgs e)
+        private async void Form_DoubleClick(object? sender, EventArgs e)
         {
             await this.CancelAutoPlayAsync();
             // Clicked not on an item: Select all
@@ -438,10 +430,10 @@ namespace ModularAudience.Forms
                 .Select(entry => entry.Audio)
                 .ToList();
         }
-   
+
         private async void listBox_audios_SelectedIndexChanged(object? sender, EventArgs e)
         {
-           
+
         }
 
 
@@ -600,6 +592,7 @@ namespace ModularAudience.Forms
                 await this.AudioC.StopAllAsync().ConfigureAwait(false);
             }
         }
+
         private void OnAutoPlayPlaybackStopped(CancellationTokenSource cts)
         {
             bool dispose = false;
@@ -833,7 +826,7 @@ namespace ModularAudience.Forms
 
 
 
-       
+
         private void ListBox_audios_MouseMove_WaveformPreview(object? sender, MouseEventArgs e)
         {
             int idx = this.listBox_audios.IndexFromPoint(e.Location);

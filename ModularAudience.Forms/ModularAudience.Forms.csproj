@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ModularAudience.Audio\ModularAudience.Audio.csproj" />
+    <ProjectReference Include="..\ModularAudience.Generators\ModularAudience.Generators.csproj" />
   </ItemGroup>
 
 </Project>
