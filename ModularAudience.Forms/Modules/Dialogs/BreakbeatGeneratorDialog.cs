@@ -97,7 +97,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             var tv = new TrackView(this.SelectedTrack, this.AudioC);
-            WindowMain.TrackViews.Add(tv);
             tv.Show();
         }
 

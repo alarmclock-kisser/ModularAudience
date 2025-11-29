@@ -1157,7 +1157,6 @@ namespace ModularAudience.Forms
             };
             cv.AudioC.Audios.Add(track);
             var trackView = new TrackView(track);
-            TrackViews.Add(trackView);
             trackView.Show();
             cv.Show();
         }

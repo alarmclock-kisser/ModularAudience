@@ -80,8 +80,7 @@ namespace ModularAudience.Forms.Modules
             this.MouseDown += (_, __) => this.SetAsLastSelected();
             this.RegisterInteractionEvents(this);
             this.SizeChanged += this.TrackView_SizeChanged;
-
-            this.TrackViewId = WindowMain.TrackViewIds.OrderBy(id => id).Select((id, index) => new { id, index }).FirstOrDefault(pair => pair.id > pair.index)?.index ?? WindowMain.TrackViewIds.Count;
+			this.TrackViewId = WindowMain.TrackViewIds.OrderBy(id => id).Select((id, index) => new { id, index }).FirstOrDefault(pair => pair.id > pair.index)?.index ?? WindowMain.TrackViewIds.Count;
 
             WindowMain.TrackViewIds.Add(this.TrackViewId);
             this.Text = "#" + this.TrackViewId.ToString("D2") + " - " + audio.Name;
@@ -143,6 +142,10 @@ namespace ModularAudience.Forms.Modules
                     WindowMain.TrackViewIds.Remove(this.TrackViewId);
                 });
             };
+
+            WindowMain.TrackViews.Add(this);
+
+			this.Show();
         }
 
         // Rekursiv alle relevanten Controls für Interaktion registrieren
@@ -1314,7 +1317,30 @@ namespace ModularAudience.Forms.Modules
 
         private async void TrackView_KeyDown(object? sender, KeyEventArgs e)
         {
-            if (e.Control && e.KeyCode == Keys.C)
+			// Tab: Zyklisch durch alle offenen und sichtbaren TrackViews wechseln
+			if (e.KeyCode == Keys.Tab)
+			{
+				e.Handled = true;
+				e.SuppressKeyPress = true;
+
+				// Nur sichtbare und nicht-disponierte TrackViews berücksichtigen
+				var openTrackViews = WindowMain.TrackViews
+					.Where(tv => tv.Visible && !tv.IsDisposed)
+					.ToList();
+
+				int thisIndex = openTrackViews.IndexOf(this);
+				if (thisIndex >= 0 && openTrackViews.Count > 1)
+				{
+					int nextIndex = (thisIndex + 1) % openTrackViews.Count;
+					var nextTrackView = openTrackViews[nextIndex];
+					nextTrackView.Focus();
+					nextTrackView.Activate();
+				}
+
+				return;
+			}
+
+			if (e.Control && e.KeyCode == Keys.C)
             {
                 e.Handled = true;
                 e.SuppressKeyPress = true;
@@ -1353,15 +1379,6 @@ namespace ModularAudience.Forms.Modules
                 this.UpdateSelection();
                 this.RequestWaveformRender();
                 return;
-            }
-
-            if (e.Control && e.KeyCode == Keys.Z)
-            {
-                LogCollection.Log($"TrackView: Ctrl+Z pressed (Undo) in '{this.OriginalAudio.Name}'");
-            }
-            if (e.Control && e.KeyCode == Keys.Y)
-            {
-                LogCollection.Log($"TrackView: Ctrl+Y pressed (Redo) in '{this.OriginalAudio.Name}'");
             }
 
             if (e.KeyCode == Keys.Delete)
@@ -1684,7 +1701,25 @@ namespace ModularAudience.Forms.Modules
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-            if (keyData == (Keys.Control | Keys.Z))
+			if (keyData == Keys.Tab)
+			{
+				// Nur sichtbare und nicht-disponierte TrackViews berücksichtigen
+				var openTrackViews = WindowMain.TrackViews
+					.Where(tv => tv.Visible && !tv.IsDisposed)
+					.ToList();
+
+				int thisIndex = openTrackViews.IndexOf(this);
+				if (thisIndex >= 0 && openTrackViews.Count > 1)
+				{
+					int nextIndex = (thisIndex + 1) % openTrackViews.Count;
+					var nextTrackView = openTrackViews[nextIndex];
+					nextTrackView.Focus();
+					nextTrackView.Activate();
+				}
+				return true;
+			}
+
+			if (keyData == (Keys.Control | Keys.Z))
             {
                 this.Undo();
                 return true;
@@ -1694,7 +1729,43 @@ namespace ModularAudience.Forms.Modules
                 this.Redo();
                 return true;
             }
-            return base.ProcessCmdKey(ref msg, keyData);
+			if (keyData == (Keys.Control | Keys.S))
+            {
+                this.button_apply_Click(null, null);
+                return true;
+            }
+			if (keyData == (Keys.Control | Keys.N))
+			{
+				var cv = WindowMain.CollectionViews.LastOrDefault();
+				if (cv == null)
+				{
+					cv = new AudioCollectionView([]);
+				}
+
+				var track = new AudioObj
+				{
+					Name = "New Track #" + cv.AudioCount.ToString("D2"),
+					SampleRate = 44100,
+					Channels = 2,
+					BitDepth = 32
+				};
+				cv.AudioC.Audios.Add(track);
+				var trackView = new TrackView(track);
+				trackView.Show();
+				cv.Show();
+			}
+			if (keyData == (Keys.Control | Keys.L))
+			{
+				this.ToggleLoop(null, this.OriginalAudio.LoopEnabled);
+				return true;
+			}
+			if (keyData == (Keys.Control | Keys.Q))
+			{
+                this.Close();
+                return true;
+			}
+
+			return base.ProcessCmdKey(ref msg, keyData);
         }
 
         public void Undo()
@@ -1740,7 +1811,7 @@ namespace ModularAudience.Forms.Modules
             this.OriginalAudio.CreateUndoStep();
         }
 
-        private void button_apply_Click(object sender, EventArgs e)
+        private void button_apply_Click(object? sender, EventArgs? e)
         {
             if (this.SourceCollection == null)
             {

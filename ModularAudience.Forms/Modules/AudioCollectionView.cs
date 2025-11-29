@@ -391,8 +391,9 @@ namespace ModularAudience.Forms
             AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
             if (selectedAudio != null)
             {
-                WindowMain.TrackViews.Add(new TrackView(selectedAudio));
-            }
+                var tv = new TrackView(selectedAudio);
+
+			}
             else
             {
                 // Clicked not on an item: Select all
@@ -421,15 +422,6 @@ namespace ModularAudience.Forms
             await this.AudioC.StopAllAsync();
         }
 
-        private List<AudioObj> NormalizeSelectionOrder(IEnumerable<AudioObj> selection)
-        {
-            return selection
-                .Select(audio => new { Audio = audio, Index = this.AudioC.Audios.IndexOf(audio) })
-                .Where(entry => entry.Index >= 0)
-                .OrderBy(entry => entry.Index)
-                .Select(entry => entry.Audio)
-                .ToList();
-        }
 
         private async void listBox_audios_SelectedIndexChanged(object? sender, EventArgs e)
         {
