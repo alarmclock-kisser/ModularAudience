@@ -134,7 +134,7 @@ namespace ModularAudience.Generators
         }
 
         // Erweiterte Overload: erlaubt feinere Steuerung (optional nutzbar).
-        public static async Task<List<bool[]>> GenerateBreakPatternAsync(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, int? seed = null)
+        public static async Task<List<bool[]>> GenerateBreakPatternAsync(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null)
         {
             if (bars <= 0)
             {
@@ -180,6 +180,11 @@ namespace ModularAudience.Generators
                 var found = computed.First(f => f.elem == elem);
                 results.Add(found.line);
             }
+
+            if (interleaved)
+            {
+                results = MakeInterleaved(results, elements.ToArray());
+			}
 
             return results;
         }
@@ -301,6 +306,98 @@ namespace ModularAudience.Generators
         }
 
         // Helpers
+        private static List<bool[]> MakeInterleaved(List<bool[]> breakbeat, DrumsetElement[]? elements = null)
+        {
+			// If drumset given for breakbeat, use that to determine interleaving order
+			// Else random line gets to play solo per hit
+            if (elements == null || elements?.Length != breakbeat.Count)
+			{
+                var rnd = new Random();
+                int totalSteps = breakbeat[0].Length;
+                var interleaved = new List<bool[]>(breakbeat.Count);
+                for (int i = 0; i < breakbeat.Count; i++)
+                {
+                    interleaved.Add(new bool[totalSteps]);
+                }
+                for (int step = 0; step < totalSteps; step++)
+                {
+                    // Find which lines have a hit at this step
+                    var candidates = new List<int>();
+                    for (int lineIdx = 0; lineIdx < breakbeat.Count; lineIdx++)
+                    {
+                        if (breakbeat[lineIdx][step])
+                        {
+                            candidates.Add(lineIdx);
+                        }
+                    }
+                    if (candidates.Count > 0)
+                    {
+                        // Pick one randomly to keep
+                        int chosenIdx = candidates[rnd.Next(candidates.Count)];
+                        interleaved[chosenIdx][step] = true;
+                    }
+                }
+                return interleaved;
+			}
+            else
+            {
+                var rnd = new Random();
+                int totalSteps = breakbeat[0].Length;
+                var interleaved = new List<bool[]>(breakbeat.Count);
+                for (int i = 0; i < breakbeat.Count; i++)
+                {
+                    interleaved.Add(new bool[totalSteps]);
+                }
+                for (int step = 0; step < totalSteps; step++)
+                {
+                    // Find which lines have a hit at this step
+                    var candidates = new List<int>();
+                    for (int lineIdx = 0; lineIdx < breakbeat.Count; lineIdx++)
+                    {
+                        if (breakbeat[lineIdx][step])
+                        {
+                            candidates.Add(lineIdx);
+                        }
+                    }
+                    if (candidates.Count > 0)
+                    {
+                        // Pick one based on element priority to keep
+                        int bestPriority = int.MinValue;
+                        int chosenIdx = -1;
+                        foreach (var cidx in candidates)
+                        {
+                            int priority = ElementInterleavePriority(elements[cidx]);
+                            if (priority > bestPriority)
+                            {
+                                bestPriority = priority;
+                                chosenIdx = cidx;
+                            }
+                        }
+                        interleaved[chosenIdx][step] = true;
+                    }
+                }
+                return interleaved;
+			}
+		}
+
+        private static int ElementInterleavePriority(DrumsetElement drumsetElement)
+        {
+            return drumsetElement switch
+            {
+                DrumsetElement.Kick => 100,
+                DrumsetElement.Snare => 90,
+                DrumsetElement.HiHatClosed => 80,
+                DrumsetElement.HiHatOpen => 70,
+                DrumsetElement.Ride => 60,
+                DrumsetElement.TomHigh => 50,
+                DrumsetElement.TomMid => 40,
+                DrumsetElement.TomLow => 30,
+                DrumsetElement.FloorTom => 20,
+                DrumsetElement.Clap => 10,
+                _ => 0
+            };
+		}
+
         private static int ScaleIndexToResolution(int idxFrom16, int fromResolution, int toResolution)
         {
             if (fromResolution == toResolution)
@@ -461,116 +558,127 @@ namespace ModularAudience.Generators
             }
         }
 
-        public static async Task<AudioObj> RenderBreakbeatAsync(List<bool[]> breakbeat, IEnumerable<AudioObj> samples, float bpm, int resolution, float swing)
-        {
-            // Annahmen:
-            // - breakbeat.Count == samples.Count() (jede Spur ein Pattern)
-            // - Jedes bool[] ist ein Pattern für ein Sample (z.B. Kick, Snare, ...)
-            // - Alle Patterns haben die gleiche Länge (steps)
-            // - Es wird EIN AudioObj erzeugt, das alle Spuren summiert (klassischer Drumloop)
-            // - Die Samples werden als Loop (Pattern-Länge) ausgegeben
 
-            if (breakbeat == null || samples == null || breakbeat.Count == 0 || !samples.Any())
-            {
-                return null!;
-            }
 
-            int numTracks = Math.Min(breakbeat.Count, samples.Count());
-            int steps = breakbeat[0].Length;
-            int sampleRate = 44100; // Standard
-            int channels = 2; // Stereo-Default
+		public static async Task<AudioObj> RenderBreakbeatAsync(List<bool[]> breakbeat, IEnumerable<AudioObj> samples, float bpm, int resolution, float swing)
+		{
+			// Annahmen:
+			// - breakbeat.Count == samples.Count() (jede Spur ein Pattern)
+			// - Jedes bool[] ist ein Pattern für ein Sample (z.B. Kick, Snare, ...)
+			// - Alle Patterns haben die gleiche Länge (steps)
+			// - Es wird EIN AudioObj erzeugt, das alle Spuren summiert (klassischer Drumloop)
+			// - Die Samples werden als Loop (Pattern-Länge) ausgegeben
 
-            // Zeit pro Step (in Sekunden)
-            float secondsPerStep = 60f / bpm * 4f / resolution; // 4/4-Takt
+			if (breakbeat == null || samples == null || breakbeat.Count == 0 || !samples.Any())
+			{
+				return null!;
+			}
 
-            // Gesamtlänge in Samples
-            int totalSamples = (int) Math.Ceiling(secondsPerStep * steps * sampleRate);
+			int numTracks = Math.Min(breakbeat.Count, samples.Count());
+			int steps = breakbeat[0].Length;
+			int sampleRate = 44100; // Standard
+			int channels = 2; // Stereo-Default
 
-            float[] mixBuffer = new float[totalSamples * channels];
+			// Zeit pro Step (in Sekunden)
+			float secondsPerStep = 60f / bpm * 4f / resolution; // 4/4-Takt
 
-            var sampleList = samples.ToList();
+			// Gesamtlänge in Samples
+			int totalSamples = (int) Math.Ceiling(secondsPerStep * steps * sampleRate);
 
-            for (int trackIdx = 0; trackIdx < numTracks; trackIdx++)
-            {
-                var pattern = breakbeat[trackIdx];
-                var audio = sampleList[trackIdx];
-                if (audio.Data == null || audio.Data.Length == 0)
-                {
-                    continue;
-                }
+			float[] mixBuffer = new float[totalSamples * channels];
 
-                int audioChannels = audio.Channels > 0 ? audio.Channels : 1;
-                int audioSampleRate = audio.SampleRate > 0 ? audio.SampleRate : sampleRate;
-                float[] audioData = audio.Data;
-                int audioLen = audioData.Length / audioChannels;
+			var sampleList = samples.ToList();
 
-                // Für echtes Resampling: hier einbauen (aktuell: nur SampleRate-Check)
-                // Downmix/Upmix Channels (Mono->Stereo, Stereo->Mono)
-                for (int step = 0; step < steps; step++)
-                {
-                    if (!pattern[step])
-                    {
-                        continue;
-                    }
+			for (int trackIdx = 0; trackIdx < numTracks; trackIdx++)
+			{
+				var pattern = breakbeat[trackIdx];
+				var audio = sampleList[trackIdx];
+				if (audio.Data == null || audio.Data.Length == 0)
+				{
+					continue;
+				}
 
-                    // Swing: verschiebt jede zweite 16tel nach hinten (nur bei swing > 0)
-                    float swingOffset = 0f;
-                    if (swing > 0 && (step % 2 == 1))
-                    {
-                        swingOffset = secondsPerStep * swing;
-                    }
+				await audio.NormalizeAsync(0.8f);
 
-                    int stepStart = (int) ((step * secondsPerStep + swingOffset) * sampleRate);
+				int audioChannels = audio.Channels > 0 ? audio.Channels : 1;
+				int audioSampleRate = audio.SampleRate > 0 ? audio.SampleRate : sampleRate;
+				float[] audioData = audio.Data;
+				int audioLen = audioData.Length / audioChannels;
 
-                    for (int n = 0; n < audioLen; n++)
-                    {
-                        int mixPos = (stepStart + n) * channels;
-                        int srcPos = n * audioChannels;
-                        if (mixPos + channels > mixBuffer.Length)
-                        {
-                            break;
-                        }
+				// Für echtes Resampling: hier einbauen (aktuell: nur SampleRate-Check)
+				// Downmix/Upmix Channels (Mono->Stereo, Stereo->Mono)
+				for (int step = 0; step < steps; step++)
+				{
+					if (!pattern[step])
+					{
+						continue;
+					}
 
-                        for (int c = 0; c < channels; c++)
-                        {
-                            float sample = audioData[srcPos + (c % audioChannels)];
-                            // Lautstärke pro Sample (falls gesetzt), sonst 1.0f
-                            float vol = audio.Volume > 0f ? audio.Volume : 1.0f;
-                            mixBuffer[mixPos + c] += sample * vol;
-                        }
-                    }
-                }
-            }
+					// Swing: verschiebt jede zweite 16tel nach hinten (nur bei swing > 0)
+					float swingOffset = 0f;
+					if (swing > 0 && (step % 2 == 1))
+					{
+						swingOffset = secondsPerStep * swing;
+					}
 
-            // Clipping verhindern
-            for (int i = 0; i < mixBuffer.Length; i++)
-            {
-                if (mixBuffer[i] > 1f)
-                {
-                    mixBuffer[i] = 1f;
-                }
+					int stepStart = (int) ((step * secondsPerStep + swingOffset) * sampleRate);
 
-                if (mixBuffer[i] < -1f)
-                {
-                    mixBuffer[i] = -1f;
-                }
-            }
+					for (int n = 0; n < audioLen; n++)
+					{
+						int mixPos = (stepStart + n) * channels;
+						int srcPos = n * audioChannels;
+						if (mixPos + channels > mixBuffer.Length)
+						{
+							break;
+						}
 
-            // AudioObj erzeugen
-            var result = new AudioObj
-            {
-                Name = "Breakbeat_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"),
-                Data = mixBuffer,
-                SampleRate = sampleRate,
-                Channels = channels,
-                Duration = TimeSpan.FromSeconds(secondsPerStep * steps),
-                Length = mixBuffer.Length,
-                BitDepth = 32,
-                Bpm = bpm
-            };
+						for (int c = 0; c < channels; c++)
+						{
+							float sample = audioData[srcPos + (c % audioChannels)];
+							// Lautstärke pro Sample (falls gesetzt), clamp sensible range
+							float vol = audio.Volume;
+							if (vol <= 0f || float.IsNaN(vol) || float.IsInfinity(vol)) vol = 1.0f;
+							vol = (float) Math.Clamp((double) vol, 0.0, 1.0);
+							mixBuffer[mixPos + c] += sample * vol;
+						}
+					}
+				}
+			}
 
-            return await Task.FromResult(result);
-        }
-    }
+			// Normalize final mix to avoid hard clipping / excessive overload.
+			// Compute absolute peak
+			float peak = 0f;
+			for (int i = 0; i < mixBuffer.Length; i++)
+			{
+				float v = (float) Math.Abs(mixBuffer[i]);
+				if (v > peak) peak = v;
+			}
+
+			const float targetPeak = 0.95f;
+			if (peak > 0f && peak > targetPeak)
+			{
+				float scale = targetPeak / peak;
+				for (int i = 0; i < mixBuffer.Length; i++)
+				{
+					mixBuffer[i] *= scale;
+				}
+			}
+
+			// AudioObj erzeugen
+			var result = new AudioObj
+			{
+				Name = "Breakbeat_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"),
+				Data = mixBuffer,
+				SampleRate = sampleRate,
+				Channels = channels,
+				Duration = TimeSpan.FromSeconds(secondsPerStep * steps),
+				Length = mixBuffer.Length,
+				BitDepth = 32,
+				Bpm = bpm
+			};
+
+			return await Task.FromResult(result);
+		}
+	}
 }
 

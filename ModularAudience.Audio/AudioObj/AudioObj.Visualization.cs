@@ -313,7 +313,7 @@ namespace ModularAudience.Audio
             int stride = Math.Max(1, (int) Math.Ceiling((double) samplesPerPixel / targetSamplesPerPixelBudget));
 
 
-            var data = this.Data ?? Array.Empty<float>();
+            var data = this.Data ?? [];
             long dataLength = data.LongLength;
             int channels = Math.Max(1, this.Channels);
 
@@ -582,7 +582,7 @@ namespace ModularAudience.Audio
             pixelStart = Math.Clamp(pixelStart, 0, this._cacheWidthPixels - 1);
             pixelCount = Math.Clamp(pixelCount, 0, this._cacheWidthPixels - pixelStart);
 
-            var data = this.Data ?? Array.Empty<float>();
+            var data = this.Data ?? [];
             long dataLength = data.LongLength;
             int channels = Math.Max(1, this.Channels);
             int height = this._cacheHeight;

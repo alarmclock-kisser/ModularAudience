@@ -18,7 +18,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private CancellationTokenSource? cuttingCts;
 
 
-        public AutoSamplesDialog(AudioObj audio)
+		public AutoSamplesDialog(AudioObj audio)
         {
             this.InitializeComponent();
             this.OriginalAudio = audio.Clone();
@@ -195,5 +195,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.ToggleInputs(true);
             }
         }
+
+        private async void button_atomize_Click(object sender, EventArgs e)
+        {
+            var atomics =  await LoopAtomizer.AtomizeLoopAsync(this.OriginalAudio);
+		
+			foreach (var atom in atomics)
+            {
+                this.ResultSamples.Add(atom);
+			}
+
+            this.DialogResult = DialogResult.OK;
+		}
     }
 }

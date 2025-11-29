@@ -1256,8 +1256,9 @@ namespace ModularAudience.Forms
 
         private void button_pitchShift_Click(object sender, EventArgs e)
         {
-
-        }
+            using var dlg = new Modules.Dialogs.PitchShiftDialog(SelectedTracks);
+            dlg.ShowDialog(this);
+		}
     }
 }
 

@@ -26,6 +26,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private float Complexity => (float) this.numericUpDown_complexity.Value;
         private int Seed => (int) this.numericUpDown_seed.Value;
 
+        private bool Interleaved => this.checkBox_interleaved.Checked;
+
 
 
         public BreakbeatGeneratorDialog(IEnumerable<AudioObj> samples)
@@ -154,6 +156,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 resolution: this.Resolution,
                 swing: this.Swing,
                 complexity: this.Complexity,
+                interleaved: this.Interleaved,
                 seed: this.Seed
             );
 

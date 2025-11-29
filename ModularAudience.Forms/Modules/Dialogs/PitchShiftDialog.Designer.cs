@@ -32,7 +32,12 @@
             this.numericUpDown_range = new NumericUpDown();
             this.label_info_range = new Label();
             this.button_create = new Button();
+            this.label_info_step = new Label();
+            this.numericUpDown_delta = new NumericUpDown();
+            this.progressBar_processing = new ProgressBar();
+            this.checkBox_fftPv = new CheckBox();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_range).BeginInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_delta).BeginInit();
             this.SuspendLayout();
             // 
             // listBox_samples
@@ -73,11 +78,55 @@
             this.button_create.UseVisualStyleBackColor = false;
             this.button_create.Click += this.button_create_Click;
             // 
+            // label_info_step
+            // 
+            this.label_info_step.AutoSize = true;
+            this.label_info_step.Location = new Point(78, 253);
+            this.label_info_step.Name = "label_info_step";
+            this.label_info_step.Size = new Size(30, 30);
+            this.label_info_step.TabIndex = 5;
+            this.label_info_step.Text = "Key\r\nStep";
+            // 
+            // numericUpDown_delta
+            // 
+            this.numericUpDown_delta.DecimalPlaces = 4;
+            this.numericUpDown_delta.Increment = new decimal(new int[] { 125, 0, 0, 196608 });
+            this.numericUpDown_delta.Location = new Point(78, 286);
+            this.numericUpDown_delta.Maximum = new decimal(new int[] { 4, 0, 0, 0 });
+            this.numericUpDown_delta.Minimum = new decimal(new int[] { 1, 0, 0, 196608 });
+            this.numericUpDown_delta.Name = "numericUpDown_delta";
+            this.numericUpDown_delta.Size = new Size(60, 23);
+            this.numericUpDown_delta.TabIndex = 4;
+            this.numericUpDown_delta.Value = new decimal(new int[] { 5, 0, 0, 65536 });
+            // 
+            // progressBar_processing
+            // 
+            this.progressBar_processing.Location = new Point(144, 286);
+            this.progressBar_processing.Name = "progressBar_processing";
+            this.progressBar_processing.Size = new Size(227, 23);
+            this.progressBar_processing.TabIndex = 6;
+            // 
+            // checkBox_fftPv
+            // 
+            this.checkBox_fftPv.AutoSize = true;
+            this.checkBox_fftPv.Checked = true;
+            this.checkBox_fftPv.CheckState = CheckState.Checked;
+            this.checkBox_fftPv.Location = new Point(377, 261);
+            this.checkBox_fftPv.Name = "checkBox_fftPv";
+            this.checkBox_fftPv.Size = new Size(64, 19);
+            this.checkBox_fftPv.TabIndex = 7;
+            this.checkBox_fftPv.Text = "FFT-PV";
+            this.checkBox_fftPv.UseVisualStyleBackColor = true;
+            // 
             // PitchShiftDialog
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(464, 321);
+            this.Controls.Add(this.checkBox_fftPv);
+            this.Controls.Add(this.progressBar_processing);
+            this.Controls.Add(this.label_info_step);
+            this.Controls.Add(this.numericUpDown_delta);
             this.Controls.Add(this.button_create);
             this.Controls.Add(this.label_info_range);
             this.Controls.Add(this.numericUpDown_range);
@@ -88,6 +137,7 @@
             this.Name = "PitchShiftDialog";
             this.Text = "PitchShiftDialog";
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_range).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_delta).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -98,5 +148,9 @@
         private NumericUpDown numericUpDown_range;
         private Label label_info_range;
         private Button button_create;
+        private Label label_info_step;
+        private NumericUpDown numericUpDown_delta;
+        private ProgressBar progressBar_processing;
+        private CheckBox checkBox_fftPv;
     }
 }

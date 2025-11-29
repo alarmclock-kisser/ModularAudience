@@ -48,6 +48,7 @@
             this.button_go = new Button();
             this.label_info_bpm = new Label();
             this.numericUpDown_bpm = new NumericUpDown();
+            this.checkBox_interleaved = new CheckBox();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_bars).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_resolution).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_swing).BeginInit();
@@ -176,13 +177,13 @@
             // numericUpDown_complexity
             // 
             this.numericUpDown_complexity.DecimalPlaces = 3;
-            this.numericUpDown_complexity.Increment = new decimal(new int[] { 1, 0, 0, 196608 });
+            this.numericUpDown_complexity.Increment = new decimal(new int[] { 5, 0, 0, 196608 });
             this.numericUpDown_complexity.Location = new Point(236, 406);
             this.numericUpDown_complexity.Maximum = new decimal(new int[] { 1, 0, 0, 0 });
             this.numericUpDown_complexity.Name = "numericUpDown_complexity";
             this.numericUpDown_complexity.Size = new Size(50, 23);
             this.numericUpDown_complexity.TabIndex = 11;
-            this.numericUpDown_complexity.Value = new decimal(new int[] { 33, 0, 0, 131072 });
+            this.numericUpDown_complexity.Value = new decimal(new int[] { 666, 0, 0, 196608 });
             // 
             // label_info_density
             // 
@@ -196,13 +197,13 @@
             // numericUpDown_density
             // 
             this.numericUpDown_density.DecimalPlaces = 3;
-            this.numericUpDown_density.Increment = new decimal(new int[] { 5, 0, 0, 131072 });
+            this.numericUpDown_density.Increment = new decimal(new int[] { 1, 0, 0, 131072 });
             this.numericUpDown_density.Location = new Point(68, 406);
             this.numericUpDown_density.Maximum = new decimal(new int[] { 1, 0, 0, 0 });
             this.numericUpDown_density.Name = "numericUpDown_density";
             this.numericUpDown_density.Size = new Size(50, 23);
             this.numericUpDown_density.TabIndex = 13;
-            this.numericUpDown_density.Value = new decimal(new int[] { 33, 0, 0, 131072 });
+            this.numericUpDown_density.Value = new decimal(new int[] { 34, 0, 0, 131072 });
             // 
             // numericUpDown_seed
             // 
@@ -255,11 +256,22 @@
             this.numericUpDown_bpm.TabIndex = 18;
             this.numericUpDown_bpm.Value = new decimal(new int[] { 875, 0, 0, 65536 });
             // 
+            // checkBox_interleaved
+            // 
+            this.checkBox_interleaved.AutoSize = true;
+            this.checkBox_interleaved.Location = new Point(83, 363);
+            this.checkBox_interleaved.Name = "checkBox_interleaved";
+            this.checkBox_interleaved.Size = new Size(84, 19);
+            this.checkBox_interleaved.TabIndex = 20;
+            this.checkBox_interleaved.Text = "Interleaved";
+            this.checkBox_interleaved.UseVisualStyleBackColor = true;
+            // 
             // BreakbeatGeneratorDialog
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(464, 441);
+            this.Controls.Add(this.checkBox_interleaved);
             this.Controls.Add(this.label_info_bpm);
             this.Controls.Add(this.numericUpDown_bpm);
             this.Controls.Add(this.button_go);
@@ -318,5 +330,6 @@
         private Button button_go;
         private Label label_info_bpm;
         private NumericUpDown numericUpDown_bpm;
+        private CheckBox checkBox_interleaved;
     }
 }

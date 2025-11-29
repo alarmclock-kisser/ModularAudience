@@ -41,6 +41,7 @@
             this.checkBox_arguments = new CheckBox();
             this.groupBox_options = new GroupBox();
             this.button_cutV2 = new Button();
+            this.button_atomize = new Button();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_minDuration).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_maxDuration).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_silenceDuration).BeginInit();
@@ -182,11 +183,24 @@
             this.button_cutV2.UseVisualStyleBackColor = false;
             this.button_cutV2.Click += this.button_cutV2_Click;
             // 
+            // button_atomize
+            // 
+            this.button_atomize.BackColor = Color.FromArgb(  255,   224,   192);
+            this.button_atomize.Font = new Font("Segoe UI", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.button_atomize.Location = new Point(222, 12);
+            this.button_atomize.Name = "button_atomize";
+            this.button_atomize.Size = new Size(110, 23);
+            this.button_atomize.TabIndex = 13;
+            this.button_atomize.Text = "A T O M I Z E";
+            this.button_atomize.UseVisualStyleBackColor = false;
+            this.button_atomize.Click += this.button_atomize_Click;
+            // 
             // AutoSamplesDialog
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(344, 221);
+            this.Controls.Add(this.button_atomize);
             this.Controls.Add(this.button_cutV2);
             this.Controls.Add(this.groupBox_options);
             this.Controls.Add(this.checkBox_arguments);
@@ -220,5 +234,6 @@
         private CheckBox checkBox_arguments;
         private GroupBox groupBox_options;
         private Button button_cutV2;
+        private Button button_atomize;
     }
 }
