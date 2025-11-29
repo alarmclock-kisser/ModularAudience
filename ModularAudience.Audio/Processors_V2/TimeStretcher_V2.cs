@@ -48,7 +48,7 @@ public static class TimeStretcher_V2
         {
             ctLocal.ThrowIfCancellationRequested();
 
-            float[] input = track.Data ?? Array.Empty<float>();
+            float[] input = track.Data ?? [];
             int sampleRate = track.SampleRate;
             int samples = input.Length;
             if (samples == 0)
@@ -447,7 +447,7 @@ CancellationToken ct)
 
 
             // find peaks
-            List<int> peakBins = new List<int>();
+            List<int> peakBins = [];
             for (int k = 1; k < fftSize - 1; k++)
             {
                 if (mag[k] > mag[k - 1] && mag[k] >= mag[k + 1] && mag[k] > 1e-6)

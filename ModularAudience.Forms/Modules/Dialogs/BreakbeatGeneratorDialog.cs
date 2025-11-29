@@ -48,7 +48,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.numericUpDown_seed.Value = new Random().Next(0, 999999998);
 
-            this.FormClosing += (s, e) =>
+			this.StartPosition = FormStartPosition.Manual;
+			this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false);
+
+			this.FormClosing += (s, e) =>
             {
                 this.AudioC.Dispose();
             };

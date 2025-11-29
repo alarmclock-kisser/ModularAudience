@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace ModularAudience.Audio.Processing
 {
-    internal static class AudioAmplitudeProcessor
+    public static class AudioAmplitudeProcessor
     {
         public static async Task NormalizeAsync(AudioObj audio, float maxAmplitude, int maxWorkers)
         {
@@ -50,5 +50,50 @@ namespace ModularAudience.Audio.Processing
             sw.Stop();
             audio["Normalize"] = sw.Elapsed.TotalMilliseconds;
         }
-    }
+
+		public static async Task NormalizeAsync(AudioObj audio, long startSample, long endSample, float maxAmplitude, int maxWorkers)
+        {
+            maxWorkers = Math.Clamp(maxWorkers, 1, Environment.ProcessorCount);
+            if (audio.Data == null || audio.Data.Length == 0 || startSample < 0 || endSample > audio.Data.LongLength || startSample >= endSample)
+            {
+                return;
+			}
+
+			// If start and end swapped, swap them back
+            if (startSample > endSample)
+            {
+                (startSample, endSample) = (endSample, startSample);
+			}
+
+            var parallelOptions = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = maxWorkers
+            };
+            Stopwatch sw = Stopwatch.StartNew();
+            float segmentMax = await Task.Run(() =>
+            {
+                float max = 0f;
+                Parallel.For(startSample, endSample, parallelOptions,
+                    () => 0f,
+                    (i, _, localMax) => Math.Max(Math.Abs(audio.Data[i]), localMax),
+                    localMax => { lock (audio) { max = Math.Max(max, localMax); } });
+                return max;
+            }).ConfigureAwait(false);
+            if (segmentMax == 0f)
+            {
+                return;
+            }
+            float scale = maxAmplitude / segmentMax;
+            await Task.Run(() =>
+            {
+                Parallel.For(startSample, endSample, parallelOptions, i =>
+                {
+                    audio.Data[i] *= scale;
+                });
+            }).ConfigureAwait(false);
+            sw.Stop();
+            audio["NormalizeSegment"] = sw.Elapsed.TotalMilliseconds;
+		}
+
+	}
 }

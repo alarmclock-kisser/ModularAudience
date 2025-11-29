@@ -5,6 +5,7 @@ using System.Media;
 using System.Reflection;
 using System.Runtime.Versioning;
 using Timer = System.Windows.Forms.Timer;
+using ModularAudience.Audio.Processing;
 
 namespace ModularAudience.Forms.Modules
 {
@@ -148,7 +149,7 @@ namespace ModularAudience.Forms.Modules
             this.Show();
         }
 
-        // Rekursiv alle relevanten Controls für Interaktion registrieren
+
         private void RegisterInteractionEvents(Control parent)
         {
             foreach (Control ctrl in parent.Controls)
@@ -163,7 +164,6 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        // Setzt die aktuelle Instanz als zuletzt ausgewählte TrackView
         private void SetAsLastSelected()
         {
             WindowMain.LastSelectedTrackView = this;
@@ -219,7 +219,7 @@ namespace ModularAudience.Forms.Modules
                 : minWidth;
 
             Rectangle workingArea = Screen.FromControl(this).WorkingArea;
-            int maxWidth = Math.Max(minWidth, Math.Min(960, workingArea.Width - 20)); // 1080 = Designer-Default
+            int maxWidth = Math.Max(minWidth, Math.Min(900, workingArea.Width - 20)); // 1080 = Designer-Default
             desiredWidth = Math.Clamp(desiredWidth, minWidth, maxWidth);
 
             // Add 10% clearance on the right end for initial view
@@ -1615,7 +1615,76 @@ namespace ModularAudience.Forms.Modules
             await this.RemoveSelectionAsync();
         }
 
-        private void InvokeIfRequired(Action action)
+		private async void menuItem_normalizeSelection_Click(object? sender, EventArgs e)
+		{
+            // Open Forms or VBasic default Dialog to input a value
+            var input = Microsoft.VisualBasic.Interaction.InputBox(
+                "Enter normalization level (0.0 - 1.0):",
+                "Normalize Audio",
+                "0.8");
+
+			// Try parse float from value (work with ',' and '.'), fallback 0.8f
+            if (!float.TryParse(input.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float normalizeLevel))
+            {
+                normalizeLevel = 0.8f;
+			}
+
+			// Create Undo Step
+			await this.OriginalAudio.CreateUndoStepAsync();
+
+			// Perform NormalizeAsync on OriginalAudio or selection if any
+            if (!this.HasValidSelection())
+            {
+                await AudioAmplitudeProcessor.NormalizeAsync(this.OriginalAudio, normalizeLevel, 4);
+			}
+            else
+            {
+                await AudioAmplitudeProcessor.NormalizeAsync(this.OriginalAudio, this.OriginalAudio.SelectionStart, this.OriginalAudio.SelectionEnd, normalizeLevel, 4);
+            }
+		}
+
+		private async void menuItem_fadeIn_Click(object? sender, EventArgs e)
+		{
+            // Open VBasic dialog to get targetAmplitude for fade low offset
+            var input = Microsoft.VisualBasic.Interaction.InputBox(
+                "Enter fade-in target offset amplitude (0.0 - 1.0):",
+                "Fade In Audio",
+                "0.0");
+
+			// Try parse float from value (work with ',' and '.'), fallback 0.0f
+            if (!float.TryParse(input.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float targetAmplitude))
+            {
+                targetAmplitude = 0.0f;
+			}
+
+			// Create Undo Step
+            await this.OriginalAudio.CreateUndoStepAsync();
+
+            await AudioFadeProcessor.FadeInAsync(this.OriginalAudio, targetAmplitude);
+		}
+
+		private async void menuItem_fadeOut_Click(object? sender, EventArgs e)
+		{
+			// Open VBasic dialog to get targetAmplitude for fade low offset
+			var input = Microsoft.VisualBasic.Interaction.InputBox(
+				"Enter fade-out target offset amplitude (0.0 - 1.0):",
+				"Fade In Audio",
+				"0.0");
+
+			// Try parse float from value (work with ',' and '.'), fallback 0.0f
+			if (!float.TryParse(input.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float targetAmplitude))
+			{
+				targetAmplitude = 0.0f;
+			}
+
+			// Create Undo Step
+			await this.OriginalAudio.CreateUndoStepAsync();
+
+			await AudioFadeProcessor.FadeOutAsync(this.OriginalAudio, targetAmplitude);
+		}
+
+
+		private void InvokeIfRequired(Action action)
         {
             if (this.IsDisposed)
             {
@@ -1808,43 +1877,13 @@ namespace ModularAudience.Forms.Modules
 
         public async Task CreateUndoStep()
         {
-            this.OriginalAudio.CreateUndoStep();
+            await this.OriginalAudio.CreateUndoStepAsync();
         }
 
-        private void button_apply_Click(object? sender, EventArgs? e)
+        private async void button_apply_Click(object? sender, EventArgs? e)
         {
-            if (this.SourceCollection == null)
-            {
-                var cv = new AudioCollectionView([this.OriginalAudio]);
-                WindowMain.CollectionViews.Add(cv);
-                LogCollection.Log($"Created new collection view and applied changes to '{this.OriginalAudio.Name}'.");
-                cv.Show();
-                return;
-            }
-
-            // Find index of the original source audio in the provided collection find by Id
-            int index = this.SourceCollection.Audios.ToList().FindIndex(a => a.Id == this.OriginalAudio.Id);
-            if (index >= 0)
-            {
-                try
-                {
-                    // Copy edited state into the existing collection item so bindings remain valid
-                    // Do not dispose the editing clone because TrackView is still using it
-                    this.SourceCollection.Audios[index].ReplaceWith(this.OriginalAudio, disposeSource: false);
-
-                    // Notify the BindingList that the item changed so UI updates
-                    this.SourceCollection.Audios.ResetItem(index);
-
-                    LogCollection.Log($"Applied changes to '{this.SourceCollection.Audios[index].Name}' in source collection.");
-                }
-                catch (Exception ex)
-                {
-                    LogCollection.Log(ex);
-                }
-            }
-
-            WindowMain.RefreshAllCollectionViews();
-        }
+            await this.ApplyTrackAsync(andClose: false);
+		}
 
         internal void HighlightBorder()
         {
@@ -1857,6 +1896,49 @@ namespace ModularAudience.Forms.Modules
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.FormBorderColor = Color.White;
         }
+
+        internal async Task ApplyTrackAsync(bool andClose = false)
+        {
+			if (this.SourceCollection == null)
+			{
+				var cv = new AudioCollectionView([this.OriginalAudio]);
+				WindowMain.CollectionViews.Add(cv);
+				LogCollection.Log($"Created new collection view and applied changes to '{this.OriginalAudio.Name}'.");
+				cv.Show();
+				return;
+			}
+
+            await Task.Run(() =>
+            {
+				// Find index of the original source audio in the provided collection find by Id
+				int index = this.SourceCollection.Audios.ToList().FindIndex(a => a.Id == this.OriginalAudio.Id);
+				if (index >= 0)
+				{
+					try
+					{
+						// Copy edited state into the existing collection item so bindings remain valid
+						// Do not dispose the editing clone because TrackView is still using it
+						this.SourceCollection.Audios[index].ReplaceWith(this.OriginalAudio, disposeSource: false);
+
+						// Notify the BindingList that the item changed so UI updates
+						this.SourceCollection.Audios.ResetItem(index);
+
+						LogCollection.Log($"Applied changes to '{this.SourceCollection.Audios[index].Name}' in source collection.");
+					}
+					catch (Exception ex)
+					{
+						LogCollection.Log(ex);
+					}
+				}
+			});
+
+			WindowMain.RefreshAllCollectionViews();
+
+            if (andClose)
+            {
+                this.Close();
+			}
+		}
 
 
 
@@ -1880,7 +1962,6 @@ namespace ModularAudience.Forms.Modules
             return (int) (relativeFrame / samplesPerPixel);
         }
 
-        // Helfermethode: Gibt die aktuelle Playback-Position in Frames zurück
         private long GetCurrentFramePosition()
         {
             if (this.OriginalAudio == null || this.OriginalAudio.Channels == 0)

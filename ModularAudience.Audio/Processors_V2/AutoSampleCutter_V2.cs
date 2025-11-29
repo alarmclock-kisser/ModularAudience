@@ -155,7 +155,7 @@ namespace ModularAudience.Audio.Processors_V2
             double sumSquares = 0;
             int count = 0;
             float maxPeak = 0;
-            List<float> noiseCandidates = new();
+            List<float> noiseCandidates = [];
 
             for (int i = 0; i < data.Length; i += step)
             {

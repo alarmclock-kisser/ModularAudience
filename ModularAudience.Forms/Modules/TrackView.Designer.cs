@@ -36,7 +36,10 @@
             this.contextMenu_waveform = new ContextMenuStrip(this.components);
             this.menuItem_copySelection = new ToolStripMenuItem();
             this.menuItem_removeSelection = new ToolStripMenuItem();
-            this.vScrollBar_volume = new VScrollBar();
+            this.menuItem_normalizeSelection = new ToolStripMenuItem();
+            this.menuItem_fadeIn = new ToolStripMenuItem();
+            this.menuItem_fadeOut = new ToolStripMenuItem();
+			this.vScrollBar_volume = new VScrollBar();
             this.hScrollBar_offset = new HScrollBar();
             this.label_volume = new Label();
             this.textBox_time = new TextBox();
@@ -98,7 +101,7 @@
             // 
             // contextMenu_waveform
             // 
-            this.contextMenu_waveform.Items.AddRange(new ToolStripItem[] { this.menuItem_copySelection, this.menuItem_removeSelection });
+            this.contextMenu_waveform.Items.AddRange(new ToolStripItem[] { this.menuItem_copySelection, this.menuItem_removeSelection, this.menuItem_normalizeSelection, this.menuItem_fadeIn, this.menuItem_fadeOut });
             this.contextMenu_waveform.Name = "contextMenu_waveform";
             this.contextMenu_waveform.Size = new Size(169, 48);
             this.contextMenu_waveform.Opening += this.contextMenu_waveform_Opening;
@@ -116,10 +119,31 @@
             this.menuItem_removeSelection.Size = new Size(168, 22);
             this.menuItem_removeSelection.Text = "Remove Selection";
             this.menuItem_removeSelection.Click += this.menuItem_removeSelection_Click;
-            // 
-            // vScrollBar_volume
-            // 
-            this.vScrollBar_volume.LargeChange = 1;
+			//
+			// menuItem_normalizeSelection
+            //
+            this.menuItem_normalizeSelection.Name = "menuItem_normalizeSelection";
+            this.menuItem_normalizeSelection.Size = new Size(168, 22);
+            this.menuItem_normalizeSelection.Text = "Normalize...";
+            this.menuItem_normalizeSelection.Click += this.menuItem_normalizeSelection_Click;
+			//
+			// menuItem_fadeIn
+            //
+            this.menuItem_fadeIn.Name = "menuItem_fadeIn";
+            this.menuItem_fadeIn.Size = new Size(168, 22);
+            this.menuItem_fadeIn.Text = "Fade In...";
+            this.menuItem_fadeIn.Click += this.menuItem_fadeIn_Click;
+			// 
+			// menuItem_fadeOut
+            //
+            this.menuItem_fadeOut.Name = "menuItem_fadeOut";
+            this.menuItem_fadeOut.Size = new Size(168, 22);
+            this.menuItem_fadeOut.Text = "Fade Out...";
+            this.menuItem_fadeOut.Click += this.menuItem_fadeOut_Click;
+			// 
+			// vScrollBar_volume
+			// 
+			this.vScrollBar_volume.LargeChange = 1;
             this.vScrollBar_volume.Location = new Point(104, 12);
             this.vScrollBar_volume.Maximum = 9999;
             this.vScrollBar_volume.Name = "vScrollBar_volume";
@@ -231,7 +255,10 @@
         private ContextMenuStrip contextMenu_waveform;
         private ToolStripMenuItem menuItem_copySelection;
         private ToolStripMenuItem menuItem_removeSelection;
-        private Button button_apply;
+        private ToolStripMenuItem menuItem_normalizeSelection;
+        private ToolStripMenuItem menuItem_fadeIn;
+        private ToolStripMenuItem menuItem_fadeOut;
+		private Button button_apply;
         private CheckBox checkBox_sync;
     }
 }

@@ -20,7 +20,7 @@ namespace ModularAudience.Audio.Processors_V1
                 throw new ArgumentNullException(nameof(audioObj));
             }
 
-            var interleaved = audioObj.Data ?? Array.Empty<float>();
+            var interleaved = audioObj.Data ?? [];
             int channels = Math.Max(1, audioObj.Channels);
             int sr = Math.Max(1, audioObj.SampleRate);
             if (interleaved.Length == 0)
@@ -423,7 +423,7 @@ namespace ModularAudience.Audio.Processors_V1
         {
             if (segments == null || segments.Count == 0)
             {
-                return new List<(int, int)>();
+                return [];
             }
             // Merge tight neighbors first
             var merged = MergeOverlapping(segments, toleranceSamples: Math.Max(1, (int) (0.01 * sr)));
@@ -556,7 +556,7 @@ namespace ModularAudience.Audio.Processors_V1
         {
             if (segments == null || segments.Count == 0)
             {
-                return new List<(int, int)>();
+                return [];
             }
             // compute spectral centroid per segment
             var centroids = segments.Select(seg => ComputeSpectralCentroid(mono, seg.start, seg.end, sr)).ToArray();
@@ -644,7 +644,7 @@ namespace ModularAudience.Audio.Processors_V1
         {
             if (channels <= 1)
             {
-                return interleaved ?? Array.Empty<float>();
+                return interleaved ?? [];
             }
 
             int frames = interleaved.Length / channels;
@@ -781,7 +781,7 @@ namespace ModularAudience.Audio.Processors_V1
         {
             if (segs == null || segs.Count == 0)
             {
-                return new List<(int, int)>();
+                return [];
             }
 
             var ordered = segs.OrderBy(s => s.start).ToList();
@@ -836,7 +836,7 @@ namespace ModularAudience.Audio.Processors_V1
                 throw new ArgumentNullException(nameof(sample));
             }
 
-            var data = sample.Data ?? Array.Empty<float>();
+            var data = sample.Data ?? [];
             int channels = Math.Max(1, sample.Channels);
             if (data.Length == 0)
             {

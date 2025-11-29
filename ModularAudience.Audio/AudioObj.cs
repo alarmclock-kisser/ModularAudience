@@ -55,8 +55,8 @@ namespace ModularAudience.Audio
         public long SelectionEnd { get; set; } = -1;
         public int LastSamplesPerPixel { get; set; }
         public string SampleTag { get; set; } = string.Empty;
-        public BindingList<AudioObj> PreviousSteps { get; } = new BindingList<AudioObj>();
-        public BindingList<AudioObj> NextSteps { get; } = new BindingList<AudioObj>();
+        public BindingList<AudioObj> PreviousSteps { get; } = [];
+        public BindingList<AudioObj> NextSteps { get; } = [];
 
         // Playback infrastructure
         private readonly AudioPlaybackService playback = new();
@@ -76,7 +76,7 @@ namespace ModularAudience.Audio
         public bool CanRedo => this.NextSteps.Count > 0;
 
         // Metrics store
-        public Dictionary<string, double> Metrics { get; } = new Dictionary<string, double>();
+        public Dictionary<string, double> Metrics { get; } = [];
 
         public double this[string metric]
         {
@@ -185,14 +185,13 @@ namespace ModularAudience.Audio
         public string GetInfoString(bool formatted = true)
         {
             List<string> infoLines =
-            new()
-            {
+            [
                 $"{(this.SampleRate / 1000.0f):F1} Hz, {this.Channels} ch., {this.BitDepth} bits",
                 $"Duration: {this.Duration:h\\:mm\\:ss\\.fff}",
                 $"({this.Length:N0} f32 ≙ {(this.SizeInKb / 1024.0f):F2} MB)",
                 $"BPM-Tag: {this.Bpm:F3}",
                 $"BPM Scanned: {this.ScannedBpm:F3}"
-            };
+            ];
 
             return formatted ? string.Join(Environment.NewLine, infoLines) : string.Join(" | ", infoLines);
         }

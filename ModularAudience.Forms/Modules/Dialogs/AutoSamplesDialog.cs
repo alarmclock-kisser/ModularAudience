@@ -28,7 +28,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.progressBar_cutting.Maximum = 100;
             this.progressBar_cutting.Value = 0;
             this.label_status.Text = "Ready to cut samples";
-        }
+
+            this.StartPosition = FormStartPosition.Manual;
+            this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false);
+		}
 
         private void button_cancel_Click(object sender, EventArgs e)
         {
