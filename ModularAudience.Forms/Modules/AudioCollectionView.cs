@@ -393,7 +393,7 @@ namespace ModularAudience.Forms
             {
                 var tv = new TrackView(selectedAudio);
 
-			}
+            }
             else
             {
                 // Clicked not on an item: Select all
@@ -441,7 +441,7 @@ namespace ModularAudience.Forms
         private static string FormatDurationText(AudioObj audio)
         {
             TimeSpan duration = ResolveDuration(audio);
-            if (duration.TotalMilliseconds > 0 && duration.TotalMilliseconds < 3000)
+            if (duration.TotalMilliseconds > 0 && duration.TotalMilliseconds < 8000)
             {
                 int ms = Math.Max(1, (int) Math.Round(duration.TotalMilliseconds));
                 return ms.ToString("0", CultureInfo.InvariantCulture) + " ms";
@@ -805,6 +805,11 @@ namespace ModularAudience.Forms
             string current = this.Text ?? string.Empty;
             // Microsoft.VisualBasic.Interaction.InputBox wird bereits im Projekt genutzt
             string input = Microsoft.VisualBasic.Interaction.InputBox("Enter new name for this collection:", "Rename Collection", current);
+            if (string.IsNullOrEmpty(input))
+            {
+                return;
+            }
+
             if (!string.IsNullOrWhiteSpace(input) && input != current)
             {
                 this.Text = input;

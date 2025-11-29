@@ -656,7 +656,7 @@ namespace ModularAudience.Forms.Modules
                                             // schedule audio for exact scheduledTime
                                             try
                                             {
-                                                ScheduleAudioAt(audio, scheduledTime, cancellationToken);
+                                                this.ScheduleAudioAt(audio, scheduledTime, cancellationToken);
                                             }
                                             catch
                                             {

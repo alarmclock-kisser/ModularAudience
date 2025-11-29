@@ -69,7 +69,7 @@ namespace ModularAudience.Forms.Modules
 
             this.sourceCollection = sourceCollection;
 
-			this.KeyPreview = true;
+            this.KeyPreview = true;
             this.KeyDown += this.TrackView_KeyDown;
 
             this.ApplySettingsAppearance();
@@ -80,7 +80,7 @@ namespace ModularAudience.Forms.Modules
             this.MouseDown += (_, __) => this.SetAsLastSelected();
             this.RegisterInteractionEvents(this);
             this.SizeChanged += this.TrackView_SizeChanged;
-			this.TrackViewId = WindowMain.TrackViewIds.OrderBy(id => id).Select((id, index) => new { id, index }).FirstOrDefault(pair => pair.id > pair.index)?.index ?? WindowMain.TrackViewIds.Count;
+            this.TrackViewId = WindowMain.TrackViewIds.OrderBy(id => id).Select((id, index) => new { id, index }).FirstOrDefault(pair => pair.id > pair.index)?.index ?? WindowMain.TrackViewIds.Count;
 
             WindowMain.TrackViewIds.Add(this.TrackViewId);
             this.Text = "#" + this.TrackViewId.ToString("D2") + " - " + audio.Name;
@@ -145,7 +145,7 @@ namespace ModularAudience.Forms.Modules
 
             WindowMain.TrackViews.Add(this);
 
-			this.Show();
+            this.Show();
         }
 
         // Rekursiv alle relevanten Controls für Interaktion registrieren
@@ -803,38 +803,38 @@ namespace ModularAudience.Forms.Modules
             this.pictureBox_waveform.Invalidate();
         }
 
-		private void Wave_MouseDown(object? sender, MouseEventArgs e)
-		{
-			if (e.Button == MouseButtons.Right)
-			{
-				this.dragSelecting = false;
-				this.pendingSelect = false;
-				return;
-			}
+        private void Wave_MouseDown(object? sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right)
+            {
+                this.dragSelecting = false;
+                this.pendingSelect = false;
+                return;
+            }
 
-			if (this.OriginalAudio.Playing)
-			{
-				return;
-			}
+            if (this.OriginalAudio.Playing)
+            {
+                return;
+            }
 
-			if (e.Button == MouseButtons.Left)
-			{
-				long frame = this.MapPixelToFrameInView(e.X);
+            if (e.Button == MouseButtons.Left)
+            {
+                long frame = this.MapPixelToFrameInView(e.X);
 
-				// Clamp frame to valid range [0, totalFrames]
-				long totalFrames = this.GetTotalFrames();
-				frame = Math.Clamp(frame, 0L, Math.Max(0L, totalFrames));
+                // Clamp frame to valid range [0, totalFrames]
+                long totalFrames = this.GetTotalFrames();
+                frame = Math.Clamp(frame, 0L, Math.Max(0L, totalFrames));
 
-				this.mouseDownX = e.X;
-				this.pendingSelect = true;
-				this.dragSelecting = false;
-				this.selectStartFrame = frame;
-				this.selectEndFrame = frame;
-				this.lastClickFrame = frame;
-			}
-		}
+                this.mouseDownX = e.X;
+                this.pendingSelect = true;
+                this.dragSelecting = false;
+                this.selectStartFrame = frame;
+                this.selectEndFrame = frame;
+                this.lastClickFrame = frame;
+            }
+        }
 
-		private void Wave_MouseMove(object? sender, MouseEventArgs e)
+        private void Wave_MouseMove(object? sender, MouseEventArgs e)
         {
             this.mouseX = e.X;
             if (this.OriginalAudio.Playing)
@@ -904,117 +904,117 @@ namespace ModularAudience.Forms.Modules
             this.dragSelecting = false;
         }
 
-		private void UpdateSelection()
-		{
-			long previousSamples = this.GetCurrentSamplePosition();
+        private void UpdateSelection()
+        {
+            long previousSamples = this.GetCurrentSamplePosition();
 
-			long start = Math.Min(this.selectStartFrame, this.selectEndFrame);
-			long end = Math.Max(this.selectStartFrame, this.selectEndFrame);
+            long start = Math.Min(this.selectStartFrame, this.selectEndFrame);
+            long end = Math.Max(this.selectStartFrame, this.selectEndFrame);
 
-			// Clamp selection to valid frame range
-			long totalFrames = this.GetTotalFrames();
-			start = Math.Clamp(start, 0L, Math.Max(0L, totalFrames));
-			end = Math.Clamp(end, 0L, Math.Max(0L, totalFrames));
+            // Clamp selection to valid frame range
+            long totalFrames = this.GetTotalFrames();
+            start = Math.Clamp(start, 0L, Math.Max(0L, totalFrames));
+            end = Math.Clamp(end, 0L, Math.Max(0L, totalFrames));
 
-			int channels = Math.Max(1, this.OriginalAudio.Channels);
-			if (end - start > 0)
-			{
-				this.OriginalAudio.SelectionStart = start * channels;
-				this.OriginalAudio.SelectionEnd = end * channels;
-			}
-			else
-			{
-				this.OriginalAudio.SelectionStart = -1;
-				this.OriginalAudio.SelectionEnd = -1;
-			}
+            int channels = Math.Max(1, this.OriginalAudio.Channels);
+            if (end - start > 0)
+            {
+                this.OriginalAudio.SelectionStart = start * channels;
+                this.OriginalAudio.SelectionEnd = end * channels;
+            }
+            else
+            {
+                this.OriginalAudio.SelectionStart = -1;
+                this.OriginalAudio.SelectionEnd = -1;
+            }
 
-			this.RecalculateLoopFraction();
-			this.ApplyLoopFractionToAudio();
+            this.RecalculateLoopFraction();
+            this.ApplyLoopFractionToAudio();
 
-			if (this.OriginalAudio.Playing)
-			{
-				bool snapped = this.EnsureLoopPosition(previousSamples, false);
-				if (snapped)
-				{
-					this.AlignViewToCurrentPosition();
-				}
-				else
-				{
-					this.RestoreLoopPlaybackPosition(previousSamples);
-				}
-			}
-		}
+            if (this.OriginalAudio.Playing)
+            {
+                bool snapped = this.EnsureLoopPosition(previousSamples, false);
+                if (snapped)
+                {
+                    this.AlignViewToCurrentPosition();
+                }
+                else
+                {
+                    this.RestoreLoopPlaybackPosition(previousSamples);
+                }
+            }
+        }
 
-		private async void button_playback_Click(object? sender, EventArgs e)
+        private async void button_playback_Click(object? sender, EventArgs e)
         {
             await this.TogglePlayAsync();
         }
 
-		internal async Task TogglePlayAsync()
-		{
-			if (this.OriginalAudio.Paused)
-			{
-				await this.OriginalAudio.PauseAsync();
-				this.button_playback.Text = "■";
-				return;
-			}
+        internal async Task TogglePlayAsync()
+        {
+            if (this.OriginalAudio.Paused)
+            {
+                await this.OriginalAudio.PauseAsync();
+                this.button_playback.Text = "■";
+                return;
+            }
 
-			if (!this.OriginalAudio.Playing)
-			{
-				this.ApplyLoopFractionToAudio();
-				long startFrame = 0;
-				if (this.loopEnabled && this.OriginalAudio.SelectionStart >= 0 && this.OriginalAudio.SelectionEnd > this.OriginalAudio.SelectionStart)
-				{
-					startFrame = this.OriginalAudio.SelectionStart / Math.Max(1, this.OriginalAudio.Channels);
-				}
-				else if (this.OriginalAudio.StartingOffset > 0)
-				{
-					startFrame = this.OriginalAudio.StartingOffset / Math.Max(1, this.OriginalAudio.Channels);
-				}
-				else if (this.lastClickFrame >= 0)
-				{
-					startFrame = this.lastClickFrame;
-				}
+            if (!this.OriginalAudio.Playing)
+            {
+                this.ApplyLoopFractionToAudio();
+                long startFrame = 0;
+                if (this.loopEnabled && this.OriginalAudio.SelectionStart >= 0 && this.OriginalAudio.SelectionEnd > this.OriginalAudio.SelectionStart)
+                {
+                    startFrame = this.OriginalAudio.SelectionStart / Math.Max(1, this.OriginalAudio.Channels);
+                }
+                else if (this.OriginalAudio.StartingOffset > 0)
+                {
+                    startFrame = this.OriginalAudio.StartingOffset / Math.Max(1, this.OriginalAudio.Channels);
+                }
+                else if (this.lastClickFrame >= 0)
+                {
+                    startFrame = this.lastClickFrame;
+                }
 
-				// Clamp startFrame to valid playback range
-				long totalFrames = this.GetTotalFrames();
-				long maxStart = Math.Max(0L, totalFrames > 0 ? totalFrames - 1 : 0L);
-				startFrame = Math.Clamp(startFrame, 0L, maxStart);
+                // Clamp startFrame to valid playback range
+                long totalFrames = this.GetTotalFrames();
+                long maxStart = Math.Max(0L, totalFrames > 0 ? totalFrames - 1 : 0L);
+                startFrame = Math.Clamp(startFrame, 0L, maxStart);
 
-				this.OriginalAudio.SetPosition(startFrame);
-				float volume = this.CurrentVolume;
-				Action onStopped = () => this.InvokeIfRequired(() => this.button_playback.Text = "▶");
-				await this.OriginalAudio.PlayAsync(CancellationToken.None, onStopped, volume);
-				this.button_playback.Text = "■";
+                this.OriginalAudio.SetPosition(startFrame);
+                float volume = this.CurrentVolume;
+                Action onStopped = () => this.InvokeIfRequired(() => this.button_playback.Text = "▶");
+                await this.OriginalAudio.PlayAsync(CancellationToken.None, onStopped, volume);
+                this.button_playback.Text = "■";
 
-				// Broadcast play to other synced TrackViews (fire-and-forget)
-				try
-				{
-					foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
-					{
-						try { _ = tv.OriginalAudio.PlayAsync(CancellationToken.None, null, volume); } catch { }
-					}
-				}
-				catch { }
-			}
-			else
-			{
-				await this.OriginalAudio.StopAsync();
-				this.button_playback.Text = "▶";
+                // Broadcast play to other synced TrackViews (fire-and-forget)
+                try
+                {
+                    foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
+                    {
+                        try { _ = tv.OriginalAudio.PlayAsync(CancellationToken.None, null, volume); } catch { }
+                    }
+                }
+                catch { }
+            }
+            else
+            {
+                await this.OriginalAudio.StopAsync();
+                this.button_playback.Text = "▶";
 
-				// Broadcast stop to other synced TrackViews (fire-and-forget)
-				try
-				{
-					foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
-					{
-						try { _ = tv.OriginalAudio.StopAsync(); } catch { }
-					}
-				}
-				catch { }
-			}
-		}
+                // Broadcast stop to other synced TrackViews (fire-and-forget)
+                try
+                {
+                    foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
+                    {
+                        try { _ = tv.OriginalAudio.StopAsync(); } catch { }
+                    }
+                }
+                catch { }
+            }
+        }
 
-		private async void button_pause_Click(object? sender, EventArgs e)
+        private async void button_pause_Click(object? sender, EventArgs e)
         {
             await this.TogglePauseAsync();
         }
@@ -1317,30 +1317,30 @@ namespace ModularAudience.Forms.Modules
 
         private async void TrackView_KeyDown(object? sender, KeyEventArgs e)
         {
-			// Tab: Zyklisch durch alle offenen und sichtbaren TrackViews wechseln
-			if (e.KeyCode == Keys.Tab)
-			{
-				e.Handled = true;
-				e.SuppressKeyPress = true;
+            // Tab: Zyklisch durch alle offenen und sichtbaren TrackViews wechseln
+            if (e.KeyCode == Keys.Tab)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
 
-				// Nur sichtbare und nicht-disponierte TrackViews berücksichtigen
-				var openTrackViews = WindowMain.TrackViews
-					.Where(tv => tv.Visible && !tv.IsDisposed)
-					.ToList();
+                // Nur sichtbare und nicht-disponierte TrackViews berücksichtigen
+                var openTrackViews = WindowMain.TrackViews
+                    .Where(tv => tv.Visible && !tv.IsDisposed)
+                    .ToList();
 
-				int thisIndex = openTrackViews.IndexOf(this);
-				if (thisIndex >= 0 && openTrackViews.Count > 1)
-				{
-					int nextIndex = (thisIndex + 1) % openTrackViews.Count;
-					var nextTrackView = openTrackViews[nextIndex];
-					nextTrackView.Focus();
-					nextTrackView.Activate();
-				}
+                int thisIndex = openTrackViews.IndexOf(this);
+                if (thisIndex >= 0 && openTrackViews.Count > 1)
+                {
+                    int nextIndex = (thisIndex + 1) % openTrackViews.Count;
+                    var nextTrackView = openTrackViews[nextIndex];
+                    nextTrackView.Focus();
+                    nextTrackView.Activate();
+                }
 
-				return;
-			}
+                return;
+            }
 
-			if (e.Control && e.KeyCode == Keys.C)
+            if (e.Control && e.KeyCode == Keys.C)
             {
                 e.Handled = true;
                 e.SuppressKeyPress = true;
@@ -1701,25 +1701,25 @@ namespace ModularAudience.Forms.Modules
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-			if (keyData == Keys.Tab)
-			{
-				// Nur sichtbare und nicht-disponierte TrackViews berücksichtigen
-				var openTrackViews = WindowMain.TrackViews
-					.Where(tv => tv.Visible && !tv.IsDisposed)
-					.ToList();
+            if (keyData == Keys.Tab)
+            {
+                // Nur sichtbare und nicht-disponierte TrackViews berücksichtigen
+                var openTrackViews = WindowMain.TrackViews
+                    .Where(tv => tv.Visible && !tv.IsDisposed)
+                    .ToList();
 
-				int thisIndex = openTrackViews.IndexOf(this);
-				if (thisIndex >= 0 && openTrackViews.Count > 1)
-				{
-					int nextIndex = (thisIndex + 1) % openTrackViews.Count;
-					var nextTrackView = openTrackViews[nextIndex];
-					nextTrackView.Focus();
-					nextTrackView.Activate();
-				}
-				return true;
-			}
+                int thisIndex = openTrackViews.IndexOf(this);
+                if (thisIndex >= 0 && openTrackViews.Count > 1)
+                {
+                    int nextIndex = (thisIndex + 1) % openTrackViews.Count;
+                    var nextTrackView = openTrackViews[nextIndex];
+                    nextTrackView.Focus();
+                    nextTrackView.Activate();
+                }
+                return true;
+            }
 
-			if (keyData == (Keys.Control | Keys.Z))
+            if (keyData == (Keys.Control | Keys.Z))
             {
                 this.Undo();
                 return true;
@@ -1729,43 +1729,43 @@ namespace ModularAudience.Forms.Modules
                 this.Redo();
                 return true;
             }
-			if (keyData == (Keys.Control | Keys.S))
+            if (keyData == (Keys.Control | Keys.S))
             {
                 this.button_apply_Click(null, null);
                 return true;
             }
-			if (keyData == (Keys.Control | Keys.N))
-			{
-				var cv = WindowMain.CollectionViews.LastOrDefault();
-				if (cv == null)
-				{
-					cv = new AudioCollectionView([]);
-				}
+            if (keyData == (Keys.Control | Keys.N))
+            {
+                var cv = WindowMain.CollectionViews.LastOrDefault();
+                if (cv == null)
+                {
+                    cv = new AudioCollectionView([]);
+                }
 
-				var track = new AudioObj
-				{
-					Name = "New Track #" + cv.AudioCount.ToString("D2"),
-					SampleRate = 44100,
-					Channels = 2,
-					BitDepth = 32
-				};
-				cv.AudioC.Audios.Add(track);
-				var trackView = new TrackView(track);
-				trackView.Show();
-				cv.Show();
-			}
-			if (keyData == (Keys.Control | Keys.L))
-			{
-				this.ToggleLoop(null, this.OriginalAudio.LoopEnabled);
-				return true;
-			}
-			if (keyData == (Keys.Control | Keys.Q))
-			{
+                var track = new AudioObj
+                {
+                    Name = "New Track #" + cv.AudioCount.ToString("D2"),
+                    SampleRate = 44100,
+                    Channels = 2,
+                    BitDepth = 32
+                };
+                cv.AudioC.Audios.Add(track);
+                var trackView = new TrackView(track);
+                trackView.Show();
+                cv.Show();
+            }
+            if (keyData == (Keys.Control | Keys.L))
+            {
+                this.ToggleLoop(null, this.OriginalAudio.LoopEnabled);
+                return true;
+            }
+            if (keyData == (Keys.Control | Keys.Q))
+            {
                 this.Close();
                 return true;
-			}
+            }
 
-			return base.ProcessCmdKey(ref msg, keyData);
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         public void Undo()
@@ -1860,28 +1860,28 @@ namespace ModularAudience.Forms.Modules
 
 
 
-		private int FrameToPixel(long frameIndex)
-		{
-			if (this.OriginalAudio == null || this.Settings == null)
-			{
-				return 0;
-			}
+        private int FrameToPixel(long frameIndex)
+        {
+            if (this.OriginalAudio == null || this.Settings == null)
+            {
+                return 0;
+            }
 
-			// 1. Relativer Frame-Index (vom linken Rand des sichtbaren Bereichs)
-			// Wichtig: Verwende hier die View-Offset `offsetFrames` (nicht OriginalAudio.ScrollOffset),
-			// damit Zeichnung, Bitmap-Render und Maus-Logik dieselbe Basis haben.
-			long relativeFrame = frameIndex - this.offsetFrames;
+            // 1. Relativer Frame-Index (vom linken Rand des sichtbaren Bereichs)
+            // Wichtig: Verwende hier die View-Offset `offsetFrames` (nicht OriginalAudio.ScrollOffset),
+            // damit Zeichnung, Bitmap-Render und Maus-Logik dieselbe Basis haben.
+            long relativeFrame = frameIndex - this.offsetFrames;
 
-			// 2. Umrechnung in Pixel
-			int samplesPerPixel = Math.Max(1, this.samplesPerPixel);
+            // 2. Umrechnung in Pixel
+            int samplesPerPixel = Math.Max(1, this.samplesPerPixel);
 
-			// Division kann negative Werte erzeugen -> cast/rounding zu int ist OK,
-			// aber wir clampen das Ergebnis später, wenn nötig.
-			return (int) (relativeFrame / samplesPerPixel);
-		}
+            // Division kann negative Werte erzeugen -> cast/rounding zu int ist OK,
+            // aber wir clampen das Ergebnis später, wenn nötig.
+            return (int) (relativeFrame / samplesPerPixel);
+        }
 
-		// Helfermethode: Gibt die aktuelle Playback-Position in Frames zurück
-		private long GetCurrentFramePosition()
+        // Helfermethode: Gibt die aktuelle Playback-Position in Frames zurück
+        private long GetCurrentFramePosition()
         {
             if (this.OriginalAudio == null || this.OriginalAudio.Channels == 0)
             {
@@ -2126,6 +2126,6 @@ namespace ModularAudience.Forms.Modules
         {
             this.OriginalAudio.Name = newName;
             this.Text = "#" + this.TrackViewId.ToString("D2") + " - " + newName;
-		}
+        }
     }
 }

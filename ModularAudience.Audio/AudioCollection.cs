@@ -159,10 +159,10 @@ namespace ModularAudience.Audio
             }
             this.Audios.Clear();
             GC.SuppressFinalize(this);
-		}
+        }
 
-		// Einfache Wiederherstellung ohne Undo/Redo-Stack-Manipulation (legacy).
-		public async Task RestoreFromAudioObjAsync(Guid id, int stepsBack = 1)
+        // Einfache Wiederherstellung ohne Undo/Redo-Stack-Manipulation (legacy).
+        public async Task RestoreFromAudioObjAsync(Guid id, int stepsBack = 1)
         {
             var audio = this[id];
             if (audio == null || stepsBack <= 0 || audio.PreviousSteps.Count < stepsBack)

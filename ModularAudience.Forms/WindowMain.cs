@@ -70,6 +70,8 @@ namespace ModularAudience.Forms
             this.LocationChanged += (_, __) => this.PositionCollectionViews();
             this.SizeChanged += (_, __) => this.PositionCollectionViews();
 
+            this.textBox_scanBpmResult.DoubleClick += this.textBox_scanBpmResult_DoubleClick;
+
             this.InitializeExportControls();
             UpdateTrackDependentUI();
         }
@@ -483,6 +485,91 @@ namespace ModularAudience.Forms
             {
                 this.RebuildCollectionsFromTags();
             }*/
+        }
+
+        private void textBox_scanBpmResult_DoubleClick(object? sender, EventArgs e)
+        {
+			if (LastSelectedTrackView == null)
+            {
+                return;
+            }
+
+            // Editiermodus aktivieren
+            this.textBox_scanBpmResult.ReadOnly = false;
+			this.textBox_scanBpmResult.Text = LastSelectedTrackView.OriginalAudio.ScannedBpm > 0
+				? LastSelectedTrackView.OriginalAudio.ScannedBpm.ToString("0.###")
+				: "";
+			this.textBox_scanBpmResult.Focus();
+			this.textBox_scanBpmResult.SelectAll();
+
+			// Event-Handler nur einmal anhängen
+			this.textBox_scanBpmResult.Leave -= this.TextBox_scanBpmResult_LeaveOrEndEdit;
+			this.textBox_scanBpmResult.KeyDown -= this.TextBox_scanBpmResult_KeyDown;
+			this.textBox_scanBpmResult.Leave += this.TextBox_scanBpmResult_LeaveOrEndEdit;
+			this.textBox_scanBpmResult.KeyDown += this.TextBox_scanBpmResult_KeyDown;
+            this.textBox_scanBpmResult.TabStop = false;
+            this.textBox_scanBpmResult.ReadOnly = true;
+		}
+
+        private void TextBox_scanBpmResult_LeaveOrEndEdit(object? sender, EventArgs e)
+        {
+            this.ApplyBpmEditAndReset();
+        }
+
+        private void TextBox_scanBpmResult_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                this.ApplyBpmEditAndReset();
+            }
+            else if (e.KeyCode == Keys.Escape)
+            {
+                // Abbrechen, Wert zurücksetzen
+                this.ResetBpmEdit();
+            }
+        }
+
+        private void ApplyBpmEditAndReset()
+        {
+            if (LastSelectedTrackView == null)
+            {
+                return;
+            }
+
+            string input = this.textBox_scanBpmResult.Text.Trim();
+            input = input.Replace(',', '.'); // Komma zu Punkt für Parsing
+
+            if (float.TryParse(input, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float bpm) && bpm > 0)
+            {
+                LastSelectedTrackView.OriginalAudio.ScannedBpm = bpm;
+                this.textBox_scanBpmResult.Text = bpm.ToString("0.###") + " BPM";
+            }
+            else
+            {
+                // Bei ungültigem oder leerem Wert: alten Wert anzeigen
+                float oldBpm = LastSelectedTrackView.OriginalAudio.ScannedBpm;
+                this.textBox_scanBpmResult.Text = oldBpm > 0 ? oldBpm.ToString("0.###") + " BPM" : "";
+            }
+
+            this.textBox_scanBpmResult.ReadOnly = true;
+            this.textBox_scanBpmResult.Leave -= this.TextBox_scanBpmResult_LeaveOrEndEdit;
+            this.textBox_scanBpmResult.KeyDown -= this.TextBox_scanBpmResult_KeyDown;
+        }
+
+        private void ResetBpmEdit()
+        {
+            if (LastSelectedTrackView == null)
+            {
+                return;
+            }
+
+            float oldBpm = LastSelectedTrackView.OriginalAudio.ScannedBpm;
+            this.textBox_scanBpmResult.Text = oldBpm > 0 ? oldBpm.ToString("0.###") + " BPM" : "";
+            this.textBox_scanBpmResult.ReadOnly = true;
+            this.textBox_scanBpmResult.Leave -= this.TextBox_scanBpmResult_LeaveOrEndEdit;
+            this.textBox_scanBpmResult.KeyDown -= this.TextBox_scanBpmResult_KeyDown;
         }
 
         private static int GetCollectionNumber(AudioCollectionView view)

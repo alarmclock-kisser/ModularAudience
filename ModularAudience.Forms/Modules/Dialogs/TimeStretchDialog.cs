@@ -92,6 +92,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     maxWorkers: (int) this.numericUpDown_threads.Value,
                     progress: progress);
 
+                await this.trackView.OriginalAudio.CreateUndoStepAsync();
                 await this.trackView.ApplyStretchedAudioAsync(result);
                 this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
                 closeAfterSuccess = true;

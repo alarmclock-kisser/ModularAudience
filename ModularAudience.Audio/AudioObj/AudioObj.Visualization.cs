@@ -778,34 +778,34 @@ namespace ModularAudience.Audio
         }
 
 
-		private Bitmap DrawWaveformPreview(int width = 160, int height = 160, int border = 3)
-		{
-			// Zeige nur eine Vorschau, wenn das Audio k¸rzer als 20 Sekunden ist
-			if (this.Duration.TotalSeconds > 20.0)
-			{
-				return new Bitmap(width, height); // leer lassen
-			}
-			Bitmap bitmap = new(width, height);
-			using (Graphics g = Graphics.FromImage(bitmap))
-			{
-				g.Clear(Color.White); // Hintergrund weiﬂ
-				if (this.Data.Length == 0)
-				{
-					return bitmap;
-				}
-				using Pen pen = new(Color.BlueViolet, 2f); // Kurve BlueViolet, dicker
-				float midY = height / 2.0f;
-				int samplesPerPixel = Math.Max(1, this.Data.Length / width);
-				for (int x = 0; x < width; x++)
-				{
-					int startSample = x * samplesPerPixel;
-					int endSample = Math.Min(startSample + samplesPerPixel, this.Data.Length);
-					float min = float.MaxValue;
-					float max = float.MinValue;
-					for (int s = startSample; s < endSample; s++)
-					{
-						float sample = this.Data[s];
-						if (sample < min)
+        private Bitmap DrawWaveformPreview(int width = 160, int height = 160, int border = 3)
+        {
+            // Zeige nur eine Vorschau, wenn das Audio k¸rzer als 20 Sekunden ist
+            if (this.Duration.TotalSeconds > 20.0)
+            {
+                return new Bitmap(width, height); // leer lassen
+            }
+            Bitmap bitmap = new(width, height);
+            using (Graphics g = Graphics.FromImage(bitmap))
+            {
+                g.Clear(Color.White); // Hintergrund weiﬂ
+                if (this.Data.Length == 0)
+                {
+                    return bitmap;
+                }
+                using Pen pen = new(Color.BlueViolet, 2f); // Kurve BlueViolet, dicker
+                float midY = height / 2.0f;
+                int samplesPerPixel = Math.Max(1, this.Data.Length / width);
+                for (int x = 0; x < width; x++)
+                {
+                    int startSample = x * samplesPerPixel;
+                    int endSample = Math.Min(startSample + samplesPerPixel, this.Data.Length);
+                    float min = float.MaxValue;
+                    float max = float.MinValue;
+                    for (int s = startSample; s < endSample; s++)
+                    {
+                        float sample = this.Data[s];
+                        if (sample < min)
                         {
                             min = sample;
                         }
@@ -815,11 +815,11 @@ namespace ModularAudience.Audio
                             max = sample;
                         }
                     }
-					float y1 = midY - (min * (midY - 1));
-					float y2 = midY - (max * (midY - 1));
-					g.DrawLine(pen, x, y1, x, y2);
-				}
-			}
+                    float y1 = midY - (min * (midY - 1));
+                    float y2 = midY - (max * (midY - 1));
+                    g.DrawLine(pen, x, y1, x, y2);
+                }
+            }
 
             if (border > 0)
             {
@@ -827,11 +827,11 @@ namespace ModularAudience.Audio
                 using (Pen borderPen = new(Color.DarkGray, border))
                 {
                     g.DrawRectangle(borderPen, border / 2, border / 2, width - border, height - border);
-				}
-			}
+                }
+            }
 
-			return bitmap;
-		}
+            return bitmap;
+        }
 
-	}
+    }
 }

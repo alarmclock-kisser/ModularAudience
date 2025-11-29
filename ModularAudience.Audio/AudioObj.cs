@@ -29,7 +29,7 @@ namespace ModularAudience.Audio
 
         public object? Tag { get; set; } = null;
 
-		public Bitmap WaveformPreview => this.DrawWaveformPreview();
+        public Bitmap WaveformPreview => this.DrawWaveformPreview();
 
 
         // Musical metadata
@@ -344,8 +344,8 @@ namespace ModularAudience.Audio
         {
             this.Name = source.Name;
 
-			// copy audio data and relevant metadata
-			this.Data = (float[]) source.Data.Clone();
+            // copy audio data and relevant metadata
+            this.Data = (float[]) source.Data.Clone();
             this.SampleRate = source.SampleRate;
             this.Channels = source.Channels;
             this.BitDepth = source.BitDepth;
@@ -430,7 +430,7 @@ namespace ModularAudience.Audio
             Array.Copy(this.Data, insertIndex, newData, insertIndex + clip.Data.Length, this.Data.Length - insertIndex);
             this.Data = newData;
             this.Length = this.Data.Length;
-            this.Duration = TimeSpan.FromSeconds((double)this.Length / (this.SampleRate * this.Channels));
+            this.Duration = TimeSpan.FromSeconds((double) this.Length / (this.SampleRate * this.Channels));
         }
     }
 }

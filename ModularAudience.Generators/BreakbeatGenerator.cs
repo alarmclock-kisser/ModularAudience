@@ -471,7 +471,9 @@ namespace ModularAudience.Generators
             // - Die Samples werden als Loop (Pattern-Länge) ausgegeben
 
             if (breakbeat == null || samples == null || breakbeat.Count == 0 || !samples.Any())
+            {
                 return null!;
+            }
 
             int numTracks = Math.Min(breakbeat.Count, samples.Count());
             int steps = breakbeat[0].Length;
@@ -493,7 +495,9 @@ namespace ModularAudience.Generators
                 var pattern = breakbeat[trackIdx];
                 var audio = sampleList[trackIdx];
                 if (audio.Data == null || audio.Data.Length == 0)
+                {
                     continue;
+                }
 
                 int audioChannels = audio.Channels > 0 ? audio.Channels : 1;
                 int audioSampleRate = audio.SampleRate > 0 ? audio.SampleRate : sampleRate;
@@ -505,7 +509,9 @@ namespace ModularAudience.Generators
                 for (int step = 0; step < steps; step++)
                 {
                     if (!pattern[step])
+                    {
                         continue;
+                    }
 
                     // Swing: verschiebt jede zweite 16tel nach hinten (nur bei swing > 0)
                     float swingOffset = 0f;
@@ -521,7 +527,9 @@ namespace ModularAudience.Generators
                         int mixPos = (stepStart + n) * channels;
                         int srcPos = n * audioChannels;
                         if (mixPos + channels > mixBuffer.Length)
+                        {
                             break;
+                        }
 
                         for (int c = 0; c < channels; c++)
                         {
@@ -537,8 +545,15 @@ namespace ModularAudience.Generators
             // Clipping verhindern
             for (int i = 0; i < mixBuffer.Length; i++)
             {
-                if (mixBuffer[i] > 1f) mixBuffer[i] = 1f;
-                if (mixBuffer[i] < -1f) mixBuffer[i] = -1f;
+                if (mixBuffer[i] > 1f)
+                {
+                    mixBuffer[i] = 1f;
+                }
+
+                if (mixBuffer[i] < -1f)
+                {
+                    mixBuffer[i] = -1f;
+                }
             }
 
             // AudioObj erzeugen
