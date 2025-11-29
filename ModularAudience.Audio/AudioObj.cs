@@ -27,6 +27,8 @@ namespace ModularAudience.Audio
         public long Length { get; set; }
         public TimeSpan Duration { get; set; } = TimeSpan.Zero;
 
+        public object? Tag { get; set; } = null;
+
 		public Bitmap WaveformPreview => this.DrawWaveformPreview();
 
 

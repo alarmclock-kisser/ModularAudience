@@ -18,7 +18,7 @@ namespace ModularAudience.Forms.Modules
 
         public readonly int TrackViewId;
         public readonly AudioObj OriginalAudio;
-        // Lambda get SourceCollection by WindowMain.CollectionViews first where AudioC.Audios.Contains an audio with same Guid (Id)
+        private readonly AudioCollection? sourceCollection;
         internal AudioCollection? SourceCollection => WindowMain.CollectionViews.FirstOrDefault(cv => cv.AudioC != null && cv.AudioC.Audios.Any(a => a.Id == this.OriginalAudio.Id))?.AudioC;
         public readonly TrackViewSettings Settings;
 
@@ -55,7 +55,7 @@ namespace ModularAudience.Forms.Modules
         private readonly int designerClientWidth;
         private readonly int designerWaveWidth;
 
-        public TrackView(AudioObj audio)
+        public TrackView(AudioObj audio, AudioCollection? sourceCollection = null)
         {
             this.InitializeComponent();
             this.StartPosition = FormStartPosition.Manual;
@@ -67,7 +67,9 @@ namespace ModularAudience.Forms.Modules
                 Owner = this
             };
 
-            this.KeyPreview = true;
+            this.sourceCollection = sourceCollection;
+
+			this.KeyPreview = true;
             this.KeyDown += this.TrackView_KeyDown;
 
             this.ApplySettingsAppearance();
@@ -1053,10 +1055,10 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        private void ToggleLoop(MouseEventArgs? e)
+        private void ToggleLoop(MouseEventArgs? e, bool forceOff = false)
         {
             long previousSamples = this.GetCurrentSamplePosition();
-            if (e != null && (ModifierKeys & Keys.Control) != 0)
+            if (e != null && (ModifierKeys & Keys.Control) != 0 || forceOff)
             {
                 this.loopEnabled = false;
                 this.loopDenominator = 0;
@@ -1440,6 +1442,7 @@ namespace ModularAudience.Forms.Modules
             await this.OriginalAudio.StopAsync();
             this.OriginalAudio.StartingOffset = 0;
             this.OriginalAudio.SetPosition(0);
+            this.ToggleLoop(null, true);
             this.lastClickFrame = 0;
             this.offsetFrames = 0;
             this.UpdateOffsetScrollbar();
@@ -2047,5 +2050,11 @@ namespace ModularAudience.Forms.Modules
                 this.OriginalAudio.Name = input;
             }
         }
+
+        internal void Rename(string newName)
+        {
+            this.OriginalAudio.Name = newName;
+            this.Text = "#" + this.TrackViewId.ToString("D2") + " - " + newName;
+		}
     }
 }
