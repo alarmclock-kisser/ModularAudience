@@ -108,7 +108,14 @@ namespace ModularAudience.Forms
             {
                 if (LogCollection.AutoScroll && e.ListChangedType == ListChangedType.ItemAdded)
                 {
-                    this.listBox_log.TopIndex = LogCollection.Logs.Count - 1;
+                    InvokeIfRequired(() =>
+                    {
+                        try
+                        {
+                            this.listBox_log.TopIndex = LogCollection.Logs.Count - 1;
+                        }
+                        catch { }
+                    });
                 }
             };
 
@@ -1258,7 +1265,7 @@ namespace ModularAudience.Forms
         {
             using var dlg = new Modules.Dialogs.PitchShiftDialog(SelectedTracks);
             dlg.ShowDialog(this);
-		}
+        }
     }
 }
 

@@ -42,6 +42,7 @@
             this.groupBox_options = new GroupBox();
             this.button_cutV2 = new Button();
             this.button_atomize = new Button();
+            this.button_autoCut = new Button();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_minDuration).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_maxDuration).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_silenceDuration).BeginInit();
@@ -195,11 +196,23 @@
             this.button_atomize.UseVisualStyleBackColor = false;
             this.button_atomize.Click += this.button_atomize_Click;
             // 
+            // button_autoCut
+            // 
+            this.button_autoCut.BackColor = SystemColors.Info;
+            this.button_autoCut.Location = new Point(257, 108);
+            this.button_autoCut.Name = "button_autoCut";
+            this.button_autoCut.Size = new Size(75, 23);
+            this.button_autoCut.TabIndex = 14;
+            this.button_autoCut.Text = "Auto Cut";
+            this.button_autoCut.UseVisualStyleBackColor = false;
+            this.button_autoCut.Click += this.button_autoCut_Click;
+            // 
             // AutoSamplesDialog
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(344, 221);
+            this.Controls.Add(this.button_autoCut);
             this.Controls.Add(this.button_atomize);
             this.Controls.Add(this.button_cutV2);
             this.Controls.Add(this.groupBox_options);
@@ -235,5 +248,6 @@
         private GroupBox groupBox_options;
         private Button button_cutV2;
         private Button button_atomize;
+        private Button button_autoCut;
     }
 }

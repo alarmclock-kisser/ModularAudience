@@ -184,7 +184,7 @@ namespace ModularAudience.Generators
             if (interleaved)
             {
                 results = MakeInterleaved(results, elements.ToArray());
-			}
+            }
 
             return results;
         }
@@ -308,10 +308,10 @@ namespace ModularAudience.Generators
         // Helpers
         private static List<bool[]> MakeInterleaved(List<bool[]> breakbeat, DrumsetElement[]? elements = null)
         {
-			// If drumset given for breakbeat, use that to determine interleaving order
-			// Else random line gets to play solo per hit
+            // If drumset given for breakbeat, use that to determine interleaving order
+            // Else random line gets to play solo per hit
             if (elements == null || elements?.Length != breakbeat.Count)
-			{
+            {
                 var rnd = new Random();
                 int totalSteps = breakbeat[0].Length;
                 var interleaved = new List<bool[]>(breakbeat.Count);
@@ -338,7 +338,7 @@ namespace ModularAudience.Generators
                     }
                 }
                 return interleaved;
-			}
+            }
             else
             {
                 var rnd = new Random();
@@ -377,8 +377,8 @@ namespace ModularAudience.Generators
                     }
                 }
                 return interleaved;
-			}
-		}
+            }
+        }
 
         private static int ElementInterleavePriority(DrumsetElement drumsetElement)
         {
@@ -396,7 +396,7 @@ namespace ModularAudience.Generators
                 DrumsetElement.Clap => 10,
                 _ => 0
             };
-		}
+        }
 
         private static int ScaleIndexToResolution(int idxFrom16, int fromResolution, int toResolution)
         {
@@ -560,125 +560,132 @@ namespace ModularAudience.Generators
 
 
 
-		public static async Task<AudioObj> RenderBreakbeatAsync(List<bool[]> breakbeat, IEnumerable<AudioObj> samples, float bpm, int resolution, float swing)
-		{
-			// Annahmen:
-			// - breakbeat.Count == samples.Count() (jede Spur ein Pattern)
-			// - Jedes bool[] ist ein Pattern für ein Sample (z.B. Kick, Snare, ...)
-			// - Alle Patterns haben die gleiche Länge (steps)
-			// - Es wird EIN AudioObj erzeugt, das alle Spuren summiert (klassischer Drumloop)
-			// - Die Samples werden als Loop (Pattern-Länge) ausgegeben
+        public static async Task<AudioObj> RenderBreakbeatAsync(List<bool[]> breakbeat, IEnumerable<AudioObj> samples, float bpm, int resolution, float swing)
+        {
+            // Annahmen:
+            // - breakbeat.Count == samples.Count() (jede Spur ein Pattern)
+            // - Jedes bool[] ist ein Pattern für ein Sample (z.B. Kick, Snare, ...)
+            // - Alle Patterns haben die gleiche Länge (steps)
+            // - Es wird EIN AudioObj erzeugt, das alle Spuren summiert (klassischer Drumloop)
+            // - Die Samples werden als Loop (Pattern-Länge) ausgegeben
 
-			if (breakbeat == null || samples == null || breakbeat.Count == 0 || !samples.Any())
-			{
-				return null!;
-			}
+            if (breakbeat == null || samples == null || breakbeat.Count == 0 || !samples.Any())
+            {
+                return null!;
+            }
 
-			int numTracks = Math.Min(breakbeat.Count, samples.Count());
-			int steps = breakbeat[0].Length;
-			int sampleRate = 44100; // Standard
-			int channels = 2; // Stereo-Default
+            int numTracks = Math.Min(breakbeat.Count, samples.Count());
+            int steps = breakbeat[0].Length;
+            int sampleRate = 44100; // Standard
+            int channels = 2; // Stereo-Default
 
-			// Zeit pro Step (in Sekunden)
-			float secondsPerStep = 60f / bpm * 4f / resolution; // 4/4-Takt
+            // Zeit pro Step (in Sekunden)
+            float secondsPerStep = 60f / bpm * 4f / resolution; // 4/4-Takt
 
-			// Gesamtlänge in Samples
-			int totalSamples = (int) Math.Ceiling(secondsPerStep * steps * sampleRate);
+            // Gesamtlänge in Samples
+            int totalSamples = (int) Math.Ceiling(secondsPerStep * steps * sampleRate);
 
-			float[] mixBuffer = new float[totalSamples * channels];
+            float[] mixBuffer = new float[totalSamples * channels];
 
-			var sampleList = samples.ToList();
+            var sampleList = samples.ToList();
 
-			for (int trackIdx = 0; trackIdx < numTracks; trackIdx++)
-			{
-				var pattern = breakbeat[trackIdx];
-				var audio = sampleList[trackIdx];
-				if (audio.Data == null || audio.Data.Length == 0)
-				{
-					continue;
-				}
+            for (int trackIdx = 0; trackIdx < numTracks; trackIdx++)
+            {
+                var pattern = breakbeat[trackIdx];
+                var audio = sampleList[trackIdx];
+                if (audio.Data == null || audio.Data.Length == 0)
+                {
+                    continue;
+                }
 
-				await audio.NormalizeAsync(0.8f);
+                await audio.NormalizeAsync(0.8f);
 
-				int audioChannels = audio.Channels > 0 ? audio.Channels : 1;
-				int audioSampleRate = audio.SampleRate > 0 ? audio.SampleRate : sampleRate;
-				float[] audioData = audio.Data;
-				int audioLen = audioData.Length / audioChannels;
+                int audioChannels = audio.Channels > 0 ? audio.Channels : 1;
+                int audioSampleRate = audio.SampleRate > 0 ? audio.SampleRate : sampleRate;
+                float[] audioData = audio.Data;
+                int audioLen = audioData.Length / audioChannels;
 
-				// Für echtes Resampling: hier einbauen (aktuell: nur SampleRate-Check)
-				// Downmix/Upmix Channels (Mono->Stereo, Stereo->Mono)
-				for (int step = 0; step < steps; step++)
-				{
-					if (!pattern[step])
-					{
-						continue;
-					}
+                // Für echtes Resampling: hier einbauen (aktuell: nur SampleRate-Check)
+                // Downmix/Upmix Channels (Mono->Stereo, Stereo->Mono)
+                for (int step = 0; step < steps; step++)
+                {
+                    if (!pattern[step])
+                    {
+                        continue;
+                    }
 
-					// Swing: verschiebt jede zweite 16tel nach hinten (nur bei swing > 0)
-					float swingOffset = 0f;
-					if (swing > 0 && (step % 2 == 1))
-					{
-						swingOffset = secondsPerStep * swing;
-					}
+                    // Swing: verschiebt jede zweite 16tel nach hinten (nur bei swing > 0)
+                    float swingOffset = 0f;
+                    if (swing > 0 && (step % 2 == 1))
+                    {
+                        swingOffset = secondsPerStep * swing;
+                    }
 
-					int stepStart = (int) ((step * secondsPerStep + swingOffset) * sampleRate);
+                    int stepStart = (int) ((step * secondsPerStep + swingOffset) * sampleRate);
 
-					for (int n = 0; n < audioLen; n++)
-					{
-						int mixPos = (stepStart + n) * channels;
-						int srcPos = n * audioChannels;
-						if (mixPos + channels > mixBuffer.Length)
-						{
-							break;
-						}
+                    for (int n = 0; n < audioLen; n++)
+                    {
+                        int mixPos = (stepStart + n) * channels;
+                        int srcPos = n * audioChannels;
+                        if (mixPos + channels > mixBuffer.Length)
+                        {
+                            break;
+                        }
 
-						for (int c = 0; c < channels; c++)
-						{
-							float sample = audioData[srcPos + (c % audioChannels)];
-							// Lautstärke pro Sample (falls gesetzt), clamp sensible range
-							float vol = audio.Volume;
-							if (vol <= 0f || float.IsNaN(vol) || float.IsInfinity(vol)) vol = 1.0f;
-							vol = (float) Math.Clamp((double) vol, 0.0, 1.0);
-							mixBuffer[mixPos + c] += sample * vol;
-						}
-					}
-				}
-			}
+                        for (int c = 0; c < channels; c++)
+                        {
+                            float sample = audioData[srcPos + (c % audioChannels)];
+                            // Lautstärke pro Sample (falls gesetzt), clamp sensible range
+                            float vol = audio.Volume;
+                            if (vol <= 0f || float.IsNaN(vol) || float.IsInfinity(vol))
+                            {
+                                vol = 1.0f;
+                            }
 
-			// Normalize final mix to avoid hard clipping / excessive overload.
-			// Compute absolute peak
-			float peak = 0f;
-			for (int i = 0; i < mixBuffer.Length; i++)
-			{
-				float v = (float) Math.Abs(mixBuffer[i]);
-				if (v > peak) peak = v;
-			}
+                            vol = (float) Math.Clamp((double) vol, 0.0, 1.0);
+                            mixBuffer[mixPos + c] += sample * vol;
+                        }
+                    }
+                }
+            }
 
-			const float targetPeak = 0.95f;
-			if (peak > 0f && peak > targetPeak)
-			{
-				float scale = targetPeak / peak;
-				for (int i = 0; i < mixBuffer.Length; i++)
-				{
-					mixBuffer[i] *= scale;
-				}
-			}
+            // Normalize final mix to avoid hard clipping / excessive overload.
+            // Compute absolute peak
+            float peak = 0f;
+            for (int i = 0; i < mixBuffer.Length; i++)
+            {
+                float v = (float) Math.Abs(mixBuffer[i]);
+                if (v > peak)
+                {
+                    peak = v;
+                }
+            }
 
-			// AudioObj erzeugen
-			var result = new AudioObj
-			{
-				Name = "Breakbeat_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"),
-				Data = mixBuffer,
-				SampleRate = sampleRate,
-				Channels = channels,
-				Duration = TimeSpan.FromSeconds(secondsPerStep * steps),
-				Length = mixBuffer.Length,
-				BitDepth = 32,
-				Bpm = bpm
-			};
+            const float targetPeak = 0.95f;
+            if (peak > 0f && peak > targetPeak)
+            {
+                float scale = targetPeak / peak;
+                for (int i = 0; i < mixBuffer.Length; i++)
+                {
+                    mixBuffer[i] *= scale;
+                }
+            }
 
-			return await Task.FromResult(result);
-		}
-	}
+            // AudioObj erzeugen
+            var result = new AudioObj
+            {
+                Name = "Breakbeat_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"),
+                Data = mixBuffer,
+                SampleRate = sampleRate,
+                Channels = channels,
+                Duration = TimeSpan.FromSeconds(secondsPerStep * steps),
+                Length = mixBuffer.Length,
+                BitDepth = 32,
+                Bpm = bpm
+            };
+
+            return await Task.FromResult(result);
+        }
+    }
 }
 

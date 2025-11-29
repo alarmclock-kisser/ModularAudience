@@ -185,7 +185,7 @@ namespace ModularAudience.Audio
         public string GetInfoString(bool formatted = true)
         {
             List<string> infoLines =
-            new List<string>
+            new()
             {
                 $"{(this.SampleRate / 1000.0f):F1} Hz, {this.Channels} ch., {this.BitDepth} bits",
                 $"Duration: {this.Duration:h\\:mm\\:ss\\.fff}",

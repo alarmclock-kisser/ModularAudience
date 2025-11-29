@@ -155,7 +155,7 @@ namespace ModularAudience.Audio.Processors_V2
             double sumSquares = 0;
             int count = 0;
             float maxPeak = 0;
-            List<float> noiseCandidates = new List<float>();
+            List<float> noiseCandidates = new();
 
             for (int i = 0; i < data.Length; i += step)
             {
@@ -313,52 +313,52 @@ namespace ModularAudience.Audio.Processors_V2
             return totalFrames;
         }
 
-		private static AudioObj? ExtractSlice(AudioObj source, float[] sourceData, int startFrame, int lengthFrames, int index)
-		{
-			int channels = Math.Max(1, source.Channels);
-			long startSampleIdx = (long) startFrame * channels;
-			long lengthSamples = (long) lengthFrames * channels;
+        private static AudioObj? ExtractSlice(AudioObj source, float[] sourceData, int startFrame, int lengthFrames, int index)
+        {
+            int channels = Math.Max(1, source.Channels);
+            long startSampleIdx = (long) startFrame * channels;
+            long lengthSamples = (long) lengthFrames * channels;
 
-			if (startSampleIdx >= sourceData.LongLength)
-			{
-				return null;
-			}
+            if (startSampleIdx >= sourceData.LongLength)
+            {
+                return null;
+            }
 
-			if (startSampleIdx + lengthSamples > sourceData.LongLength)
-			{
-				lengthSamples = sourceData.LongLength - startSampleIdx;
-			}
+            if (startSampleIdx + lengthSamples > sourceData.LongLength)
+            {
+                lengthSamples = sourceData.LongLength - startSampleIdx;
+            }
 
-			if (lengthSamples <= 0)
-			{
-				return null;
-			}
+            if (lengthSamples <= 0)
+            {
+                return null;
+            }
 
-			// Use int indices for Array.Copy (reasonable for typical audio sizes). Cast safe for <2GB arrays.
-			int srcIndex = (int) startSampleIdx;
-			int copyCount = (int) lengthSamples;
-			var newData = new float[copyCount];
-			Array.Copy(sourceData, srcIndex, newData, 0, copyCount);
+            // Use int indices for Array.Copy (reasonable for typical audio sizes). Cast safe for <2GB arrays.
+            int srcIndex = (int) startSampleIdx;
+            int copyCount = (int) lengthSamples;
+            var newData = new float[copyCount];
+            Array.Copy(sourceData, srcIndex, newData, 0, copyCount);
 
-			long framesActual = lengthSamples / channels;
+            long framesActual = lengthSamples / channels;
 
-			return new AudioObj
-			{
-				Name = $"{source.Name}_Sample_{index:000}",
-				FilePath = source.FilePath,
-				Data = newData,
-				SampleRate = source.SampleRate,
-				Channels = source.Channels,
-				BitDepth = source.BitDepth,
-				// IMPORTANT: Length is number of float32 samples (f32), not frames.
-				Length = lengthSamples,
-				// Duration must reflect actual frames / sampleRate
-				Duration = TimeSpan.FromSeconds((double) framesActual / source.SampleRate),
-				Bpm = source.Bpm,
-				Volume = 100.0f,
-				SelectionStart = -1,
-				SelectionEnd = -1
-			};
-		}
-	}
+            return new AudioObj
+            {
+                Name = $"{source.Name}_Sample_{index:000}",
+                FilePath = source.FilePath,
+                Data = newData,
+                SampleRate = source.SampleRate,
+                Channels = source.Channels,
+                BitDepth = source.BitDepth,
+                // IMPORTANT: Length is number of float32 samples (f32), not frames.
+                Length = lengthSamples,
+                // Duration must reflect actual frames / sampleRate
+                Duration = TimeSpan.FromSeconds((double) framesActual / source.SampleRate),
+                Bpm = source.Bpm,
+                Volume = 100.0f,
+                SelectionStart = -1,
+                SelectionEnd = -1
+            };
+        }
+    }
 }

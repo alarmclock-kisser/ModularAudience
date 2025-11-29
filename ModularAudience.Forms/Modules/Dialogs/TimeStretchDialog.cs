@@ -1,5 +1,8 @@
 ﻿using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio;
+using ModularAudience.Audio.Processors_V2;
+using MathNet.Numerics;
+using System.Threading;
 
 namespace ModularAudience.Forms.Modules.Dialogs
 {
@@ -8,6 +11,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         internal AudioObj Track;
         private readonly TrackView trackView;
         private bool isProcessing;
+
+
+        private CancellationTokenSource? ProcessingCancellationSource = null;
+        private System.Windows.Forms.Timer? ProcessingTimer = null;
+        private DateTime ProcessingStarted = DateTime.MinValue;
 
         public TimeStretchDialog(TrackView trackView)
         {
@@ -147,5 +155,112 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             try { this.Track.Dispose(); } catch { }
         }
+
+        private async void button_stretchV2_Click(object sender, EventArgs e)
+        {
+            if (this.isProcessing)
+            {
+                // Cancel running processing
+                try
+                {
+                    if (this.ProcessingCancellationSource != null && !this.ProcessingCancellationSource.IsCancellationRequested)
+                    {
+                        this.ProcessingCancellationSource.Cancel();
+                    }
+                }
+                catch { }
+
+                // Reset button text
+                try { this.button_stretchV2.Text = "Stretch V2"; } catch { }
+                return;
+            }
+
+            // Start processing with cancellation support
+            this.ProcessingCancellationSource = new CancellationTokenSource();
+            this.ProcessingStarted = DateTime.Now;
+            bool closeAfterSuccess = false;
+            this.progressBar_stretching.Value = this.progressBar_stretching.Minimum;
+            this.SetProcessingState(true);
+
+            try
+            {
+                this.ProcessingTimer = new System.Windows.Forms.Timer
+                {
+                    Interval = 250
+                };
+                this.ProcessingTimer.Tick += (s, ev) =>
+                {
+                    if (!this.isProcessing)
+                    {
+                        this.ProcessingTimer.Stop();
+                    }
+
+                    TimeSpan elapsed = DateTime.Now - this.ProcessingStarted;
+
+                    try { this.label_processingTime.Text = elapsed.ToString("mm\\:ss"); } catch { }
+                };
+                this.ProcessingTimer.Start();
+
+                var progress = new Progress<double>(percent =>
+                {
+                    int scaled = (int) Math.Round(percent * this.progressBar_stretching.Maximum);
+                    this.progressBar_stretching.Value = Math.Clamp(scaled, this.progressBar_stretching.Minimum, this.progressBar_stretching.Maximum);
+                });
+
+                await this.trackView.OriginalAudio.CreateUndoStepAsync();
+
+                int? chunkSize = this.checkBox_autoChunking.Checked ? null : (int?) this.numericUpDown_chunkSize.Value;
+                float? overlap = this.checkBox_autoChunking.Checked ? null : (float?) this.numericUpDown_overlap.Value;
+
+                try { this.button_stretchV2.Text = "Cancel"; } catch { }
+
+                await TimeStretcher_V2.Timestretch_V2Async(
+                    this.Track,
+                    (double) this.numericUpDown_stretchFactor.Value,
+                    chunkSize, overlap,
+                    progress: progress,
+                    ct: this.ProcessingCancellationSource.Token);
+
+                await this.trackView.ApplyStretchedAudioAsync(this.Track);
+
+                this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
+                closeAfterSuccess = true;
+                this.SetProcessingState(false);
+                this.DialogResult = DialogResult.OK;
+                this.Close();
+            }
+            catch (OperationCanceledException)
+            {
+                // User cancelled - reset progress and UI
+                this.progressBar_stretching.Value = this.progressBar_stretching.Minimum;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Fehler beim Time-Stretch: {ex.Message}", "Time Stretch", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                this.progressBar_stretching.Value = this.progressBar_stretching.Minimum;
+            }
+            finally
+            {
+                try { this.ProcessingTimer?.Stop(); } catch { }
+                try { this.ProcessingTimer?.Dispose(); } catch { }
+                this.ProcessingTimer = null;
+
+                try { this.ProcessingCancellationSource?.Dispose(); } catch { }
+                this.ProcessingCancellationSource = null;
+
+                try { this.button_stretchV2.Text = "Stretch V2"; } catch { }
+
+                if (!closeAfterSuccess && !this.IsDisposed)
+                {
+                    this.SetProcessingState(false);
+                }
+            }
+        }
+
+        private void checkBox_autoChunking_CheckedChanged(object sender, EventArgs e)
+        {
+            this.numericUpDown_chunkSize.Enabled = !this.checkBox_autoChunking.Checked;
+            this.numericUpDown_overlap.Enabled = !this.checkBox_autoChunking.Checked;
+		}
     }
 }

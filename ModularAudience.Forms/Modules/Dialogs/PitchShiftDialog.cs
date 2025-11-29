@@ -18,12 +18,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
         internal AudioCollectionView? CollectionView { get; private set; } = null;
 
 
-		private int ShiftKeysRange => (int) this.numericUpDown_range.Value;
+        private int ShiftKeysRange => (int) this.numericUpDown_range.Value;
         private float SemitoneDelta => (float) this.numericUpDown_delta.Value;
         private bool useFftPv => this.checkBox_fftPv.Checked;
 
 
-		public PitchShiftDialog(IEnumerable<AudioObj> samples)
+        public PitchShiftDialog(IEnumerable<AudioObj> samples)
         {
             this.InitializeComponent();
 
@@ -44,17 +44,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async void button_create_Click(object sender, EventArgs e)
         {
-            
+
             bool ctrlFlag = ModifierKeys.HasFlag(Keys.Control);
 
-			IProgress<double> progress = new Progress<double>(p =>
+            IProgress<double> progress = new Progress<double>(p =>
             {
                 int percent = (int) (p * this.progressBar_processing.Maximum);
-                
-                this.progressBar_processing.Value = Math.Min(percent, this.progressBar_processing.Maximum);
-			});
 
-			var pitchedSamples = await PitchShifter.CreatePitchShiftsBatchAsync(this.AudioC.Audios, this.ShiftKeysRange, this.SemitoneDelta, this.useFftPv, progress);
+                this.progressBar_processing.Value = Math.Min(percent, this.progressBar_processing.Maximum);
+            });
+
+            var pitchedSamples = await PitchShifter.CreatePitchShiftsBatchAsync(this.AudioC.Audios, this.ShiftKeysRange, this.SemitoneDelta, this.useFftPv, progress);
 
             this.CollectionView ??= new AudioCollectionView([]);
             foreach (var samples in pitchedSamples)
@@ -62,8 +62,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 foreach (var sample in samples)
                 {
                     this.CollectionView.AudioC.Audios.Add(sample);
-				}
-			}
+                }
+            }
 
             this.CollectionView.Show();
             this.CollectionView.Rename("Pitch-Shifted Samples");
@@ -72,7 +72,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             if (!ctrlFlag)
             {
                 this.Close();
-			}
-		}
+            }
+        }
     }
 }

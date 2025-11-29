@@ -2,6 +2,7 @@
 using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio;
 using System.ComponentModel;
+using System.Threading.Tasks;
 
 namespace ModularAudience.Forms.Modules.Dialogs
 {
@@ -18,7 +19,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private CancellationTokenSource? cuttingCts;
 
 
-		public AutoSamplesDialog(AudioObj audio)
+        public AutoSamplesDialog(AudioObj audio)
         {
             this.InitializeComponent();
             this.OriginalAudio = audio.Clone();
@@ -198,14 +199,25 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async void button_atomize_Click(object sender, EventArgs e)
         {
-            var atomics =  await LoopAtomizer.AtomizeLoopAsync(this.OriginalAudio);
-		
-			foreach (var atom in atomics)
+            var atomics = await LoopAtomizer.AtomizeLoopAsync(this.OriginalAudio);
+
+            foreach (var atom in atomics)
             {
                 this.ResultSamples.Add(atom);
-			}
+            }
 
             this.DialogResult = DialogResult.OK;
-		}
+        }
+
+        private async void button_autoCut_Click(object sender, EventArgs e)
+        {
+            var samples = await this.OriginalAudio.AutoCutAsync();
+            foreach (var sample in samples)
+            {
+                this.ResultSamples.Add(sample);
+            }
+
+            this.DialogResult = DialogResult.OK;
+        }
     }
 }
