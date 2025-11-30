@@ -276,111 +276,13 @@ namespace ModularAudience.Audio.Processors_V1
 			return outArr;
 		}
 
+
 		// -------------------------
 		// BeatGrid generation (public)
 		// -------------------------
-		public static async Task<bool[]> GenerateBeatGridAsync(AudioObj audio, bool set = true, int granularity = 2)
-		{
-			if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
-				return Array.Empty<bool>();
+		
 
-			// clamp granularity to [1.32]
-			granularity = Math.Clamp(granularity, 1, 32);
 
-			LogCollection.Log($"Starting advanced Beat-Grid detection. (granularity={granularity})");
-
-			// Run heavy steps in parallel tasks and combine
-			return await Task.Run(async () =>
-			{
-				try
-				{
-					int sampleRate = audio.SampleRate;
-					int channels = audio.Channels;
-					float[] data = audio.Data;
-					int totalSamples = data.Length;
-					int totalFrames = totalSamples / channels;
-
-					// 1) skip start silence (fast)
-					TimeSpan startSilence = ComputeSilenceDuration(audio, findStart: true, threshold: null, minDurationMs: 50);
-					int startSample = (int) (startSilence.TotalSeconds * sampleRate);
-					startSample = Math.Max(0, Math.Min(startSample, totalFrames - 1));
-
-					// 2) create mono and preprocessed envelope (async)
-					(float[] mono, float[] envelope) = await Task.Run(() =>
-						CreateMonoAndEnvelope(data, channels, sampleRate, totalFrames, startSample));
-
-					// 3) Launch detectors in parallel (spectral flux, energy peaks, zcr + zcr-array)
-					var tSpectral = Task.Run(() => DetectOnsetSpectralFlux(envelope, sampleRate, startSample));
-					var tEnergy = Task.Run(() => DetectEnergyPeaks(envelope, sampleRate, startSample));
-
-					// ZCR: einmal Array + Beats zurückgeben, damit wir es später wiederverwenden
-					var tZcr = Task.Run(() =>
-					{
-						var zcrArray = CalculateZeroCrossingRate(mono, sampleRate);
-						var zcrBeats = DetectZeroCrossingBeats(mono, zcrArray, sampleRate, startSample);
-						return (zcrBeats, zcrArray);
-					});
-
-					await Task.WhenAll(tSpectral, tEnergy, tZcr);
-
-					var spectralBeats = tSpectral.Result;
-					var energyBeats = tEnergy.Result;
-					var (zcrBeats, zcrArray) = tZcr.Result;
-
-					// 4) build onset envelope downsampled for tempo detection
-					var onsetEnv = BuildOnsetEnvelope(envelope, sampleRate, downsampleHz: 100); // 100 Hz envelope
-
-					// 5) tempo estimation (autocorrelation) on onsetEnv
-					int estimatedInterval = EstimatePrimaryInterval(onsetEnv, sampleRateDownsampledHz: 100);
-					if (estimatedInterval <= 0)
-					{
-						// fallback to median interval from detections
-						estimatedInterval = FallbackIntervalFromDetections(
-							new[] { spectralBeats, energyBeats, zcrBeats },
-							sampleRate,
-							sampleRateDownsampledHz: 100);
-					}
-
-					// convert estimatedInterval (in downsampled samples) to original-sample interval if needed
-					int primaryIntervalSamples = estimatedInterval > 0
-						? Math.Max(1, (int) Math.Round((sampleRate / 100.0) * estimatedInterval))
-						: sampleRate / 2; // default 0.5s
-
-					// 6) Combine detections and cluster -> vote -> create beat list
-					var beatGrid = new bool[totalFrames];
-					CombineBeatDetectionsWithFiltering(
-						beatGrid,
-						spectralBeats,
-						energyBeats,
-						new List<int>(),
-						zcrBeats,
-						zcrArray,
-						startSample,
-						sampleRate,
-						primaryIntervalSamples);
-
-					// 7) apply tempo grid fill (robust) - pass granularity
-					ApplyTempoAnalysisAndFill(beatGrid, sampleRate, primaryIntervalSamples, granularity);
-
-					// 8) safety: ensure first beat not before startSample and remove too-close duplicates
-					for (int i = 0; i < Math.Min(startSample, beatGrid.Length); i++)
-						beatGrid[i] = false;
-
-					EnforceMinDistance(beatGrid, Math.Max(1, sampleRate / 30)); // min ~33ms
-
-					if (set) audio.BeatGrid = beatGrid;
-
-					int beatCount = beatGrid.Count(b => b);
-					LogCollection.Log($"Advanced Beat-Grid detection completed. Found {beatCount} beats. primaryIntervalSamples={primaryIntervalSamples} granularity={granularity}");
-					return beatGrid;
-				}
-				catch (Exception ex)
-				{
-					LogCollection.Log($"Error in advanced Beat-Grid detection: {ex.Message}");
-					return new bool[audio.Data?.Length ?? 0];
-				}
-			});
-		}
 
 
 
@@ -469,6 +371,7 @@ namespace ModularAudience.Audio.Processors_V1
 			if (max > 0) for (int i = 0; i < outEnv.Length; i++) outEnv[i] /= max;
 			return outEnv;
 		}
+
 
 		// -------------------------
 		// Onset detectors (optimized)
@@ -665,6 +568,7 @@ namespace ModularAudience.Audio.Processors_V1
 		}
 
 
+
 		// -------------------------
 		// Combining + tempo + utilities
 		// -------------------------
@@ -783,20 +687,6 @@ namespace ModularAudience.Audio.Processors_V1
 			}
 		}
 
-		private static void EnforceMinDistance(bool[] beatGrid, int minSamples)
-		{
-			// traverse and remove beats that are too close (keep first)
-			int last = -minSamples * 2;
-			for (int i = 0; i < beatGrid.Length; i++)
-			{
-				if (!beatGrid[i]) continue;
-				if (i - last < minSamples)
-					beatGrid[i] = false;
-				else
-					last = i;
-			}
-		}
-
 		private static int EstimatePrimaryInterval(float[] downsampledEnv, int sampleRateDownsampledHz)
 		{
 			if (downsampledEnv == null || downsampledEnv.Length < 16) return -1;
@@ -837,6 +727,8 @@ namespace ModularAudience.Audio.Processors_V1
 			return Math.Max(1, (int) Math.Round(med / (sampleRate / (double) sampleRateDownsampledHz)));
 		}
 
+
+
 		// -------------------------
 		// small helpers used previously kept for compatibility (not all old methods preserved)
 		// -------------------------
@@ -848,5 +740,395 @@ namespace ModularAudience.Audio.Processors_V1
 			float mean = values.Average();
 			return median * 1.8f + mean * 0.2f;
 		}
+
+		public static async Task<bool[]> GenerateBeatGridAsync(AudioObj audio, bool set = true, int granularity = 4)
+		{
+			if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
+				return Array.Empty<bool[]>().FirstOrDefault() ?? Array.Empty<bool>();
+
+			return await Task.Run(() =>
+			{
+				try
+				{
+					int sampleRate = audio.SampleRate;
+					int channels = Math.Max(1, audio.Channels);
+					float[] data = audio.Data;
+					int totalFrames = data.Length / channels;
+
+					TimeSpan startSilence = ComputeSilenceDuration(audio, true, null, 50);
+					int startSample = (int) Math.Round(startSilence.TotalSeconds * sampleRate);
+					startSample = Math.Clamp(startSample, 0, Math.Max(0, totalFrames - 1));
+
+					var pre = CreateMonoAndEnvelope(data, channels, sampleRate, totalFrames, startSample);
+					float[] mono = pre.mono;
+					float[] envelope = pre.envelope;
+
+					if (mono.Length < sampleRate / 2)
+					{
+						var emptyGrid = new bool[totalFrames];
+						if (set) audio.BeatGrid = emptyGrid;
+						return emptyGrid;
+					}
+
+					int downsampleHz = 200;
+					float[] envDs = BuildOnsetEnvelope(envelope, sampleRate, downsampleHz);
+					if (envDs == null || envDs.Length < 32)
+					{
+						var emptyGrid = new bool[totalFrames];
+						if (set) audio.BeatGrid = emptyGrid;
+						return emptyGrid;
+					}
+
+					float[] onsetEnv = new float[envDs.Length];
+					onsetEnv[0] = 0f;
+					for (int i = 1; i < envDs.Length; i++)
+					{
+						float d = envDs[i] - envDs[i - 1];
+						onsetEnv[i] = d > 0f ? d : 0f;
+					}
+
+					int dsFactor = Math.Max(1, sampleRate / downsampleHz);
+					var onsetFrames = DetectOnsetsFromEnvelope(onsetEnv, envDs, sampleRate, downsampleHz, startSample, dsFactor);
+					if (onsetFrames.Count < 4)
+					{
+						var emptyGrid = new bool[totalFrames];
+						if (set) audio.BeatGrid = emptyGrid;
+						return emptyGrid;
+					}
+
+					int intervalFrames = EstimateBeatIntervalFromOnsets(onsetFrames, sampleRate);
+					if (intervalFrames <= 0)
+					{
+						int lag = EstimateBeatLagFromOnsetEnvelope(onsetEnv, downsampleHz);
+						if (lag > 0)
+							intervalFrames = lag * dsFactor;
+					}
+
+					if (intervalFrames <= 0)
+					{
+						var emptyGrid = new bool[totalFrames];
+						if (set) audio.BeatGrid = emptyGrid;
+						return emptyGrid;
+					}
+
+					granularity = Math.Clamp(granularity, 1, 16);
+					int snappedInterval = Math.Max(1, (int) Math.Round((double) intervalFrames / granularity) * granularity);
+					intervalFrames = snappedInterval;
+
+					int phaseFrame = FindBestPhase(onsetFrames, intervalFrames);
+
+					var beatGrid = new bool[totalFrames];
+					BuildBeatGridFromTempo(beatGrid, intervalFrames, phaseFrame);
+
+					AlignBeatGridToEnvelope(beatGrid, envelope, startSample, intervalFrames / 3);
+
+					for (int i = 0; i < Math.Min(startSample, beatGrid.Length); i++)
+						beatGrid[i] = false;
+
+					int minDist = Math.Max(1, intervalFrames / 4);
+					EnforceMinDistance(beatGrid, minDist);
+
+					if (set) audio.BeatGrid = beatGrid;
+
+					int beatCount = beatGrid.Count(b => b);
+					double bpm = 60.0 * sampleRate / intervalFrames;
+					LogCollection.Log($"Beat grid detection finished. Beats: {beatCount}, intervalFrames={intervalFrames}, bpm≈{bpm:F1}");
+					return beatGrid;
+				}
+				catch (Exception ex)
+				{
+					LogCollection.Log($"Error in beat grid detection: {ex.Message}");
+					return new bool[audio.Data?.Length ?? 0];
+				}
+			});
+		}
+
+		private static List<int> DetectOnsetsFromEnvelope(float[] onsetEnv, float[] envDs, int sampleRate, int downsampleHz, int startSample, int dsFactor)
+		{
+			var result = new List<int>();
+			if (onsetEnv == null || envDs == null) return result;
+			if (onsetEnv.Length == 0 || envDs.Length == 0) return result;
+			if (onsetEnv.Length != envDs.Length) return result;
+
+			var pos = onsetEnv.Where(v => v > 0f).ToArray();
+			if (pos.Length < 4) return result;
+
+			var sortedOn = pos.OrderBy(x => x).ToArray();
+			float medOn = sortedOn[sortedOn.Length / 2];
+			float q3On = sortedOn[(int) (sortedOn.Length * 0.75)];
+			float thrOn = medOn + (q3On - medOn) * 0.5f;
+			thrOn = Math.Max(thrOn, medOn * 1.5f);
+
+			var sortedEnv = envDs.OrderBy(x => x).ToArray();
+			float envMax = sortedEnv[^1];
+			float envMed = sortedEnv[sortedEnv.Length / 2];
+			float envThr = Math.Max(envMed * 0.5f, envMax * 0.15f);
+
+			for (int i = 2; i < onsetEnv.Length - 2; i++)
+			{
+				float v = onsetEnv[i];
+				if (v <= thrOn) continue;
+				if (!(v > onsetEnv[i - 1] && v > onsetEnv[i + 1])) continue;
+				if (envDs[i] < envThr) continue;
+
+				long frame = startSample + (long) i * dsFactor;
+				if (frame >= 0)
+					result.Add((int) frame);
+			}
+
+			result.Sort();
+			return result;
+		}
+
+		private static int EstimateBeatIntervalFromOnsets(List<int> onsetFrames, int sampleRate)
+		{
+			if (onsetFrames == null || onsetFrames.Count < 4) return -1;
+
+			onsetFrames.Sort();
+			var diffs = new List<int>();
+			for (int i = 1; i < onsetFrames.Count; i++)
+			{
+				int d = onsetFrames[i] - onsetFrames[i - 1];
+				if (d <= 0) continue;
+				if (d < sampleRate * 0.2 || d > sampleRate * 2.0) continue;
+				diffs.Add(d);
+			}
+			if (diffs.Count == 0) return -1;
+
+			int minInterval = (int) (sampleRate * 0.25);
+			int maxInterval = (int) (sampleRate * 1.0);
+			int range = Math.Max(1, maxInterval - minInterval + 1);
+			int bins = 120;
+			int binSize = Math.Max(1, range / bins);
+			var hist = new int[bins];
+
+			foreach (int d in diffs)
+			{
+				double val = d;
+				while (val < minInterval) val *= 2.0;
+				while (val > maxInterval) val /= 2.0;
+				int iv = (int) Math.Round(val);
+				int idx = (iv - minInterval) / binSize;
+				if (idx < 0 || idx >= bins) continue;
+				hist[idx]++;
+			}
+
+			int bestIdx = -1;
+			int bestCount = -1;
+			for (int i = 0; i < bins; i++)
+			{
+				if (hist[i] > bestCount)
+				{
+					bestCount = hist[i];
+					bestIdx = i;
+				}
+			}
+			if (bestIdx < 0 || bestCount <= 0) return -1;
+
+			int center = minInterval + bestIdx * binSize + binSize / 2;
+			var near = diffs.Select(d =>
+			{
+				double val = d;
+				while (val < minInterval) val *= 2.0;
+				while (val > maxInterval) val /= 2.0;
+				return (int) Math.Round(val);
+			}).Where(iv => Math.Abs(iv - center) <= binSize).ToArray();
+
+			if (near.Length == 0) return center;
+			Array.Sort(near);
+			int median = near[near.Length / 2];
+			return median;
+		}
+
+		private static int EstimateBeatLagFromOnsetEnvelope(float[] onsetEnv, int downsampleHz)
+		{
+			if (onsetEnv == null || onsetEnv.Length < 32) return -1;
+
+			int n = onsetEnv.Length;
+			float mean = onsetEnv.Average();
+			var norm = new float[n];
+			for (int i = 0; i < n; i++)
+				norm[i] = onsetEnv[i] - mean;
+
+			int minBpm = 70;
+			int maxBpm = 180;
+			double minSec = 60.0 / maxBpm;
+			double maxSec = 60.0 / minBpm;
+
+			int minLag = (int) Math.Round(minSec * downsampleHz);
+			int maxLag = Math.Min(n / 2, (int) Math.Round(maxSec * downsampleHz));
+			if (maxLag <= minLag) return -1;
+
+			double bestVal = double.MinValue;
+			int bestLag = -1;
+
+			for (int lag = minLag; lag <= maxLag; lag++)
+			{
+				double sum = 0;
+				for (int i = lag; i < n; i++)
+					sum += norm[i] * norm[i - lag];
+				if (sum > bestVal)
+				{
+					bestVal = sum;
+					bestLag = lag;
+				}
+			}
+
+			if (bestLag <= 0) return -1;
+			return bestLag;
+		}
+
+		private static int FindBestPhase(List<int> onsetFrames, int intervalFrames)
+		{
+			if (onsetFrames == null || onsetFrames.Count == 0 || intervalFrames <= 0)
+				return 0;
+
+			onsetFrames.Sort();
+			int steps = 48;
+			double bestCost = double.MaxValue;
+			int bestPhase = 0;
+
+			for (int s = 0; s < steps; s++)
+			{
+				double phase = intervalFrames * (s / (double) steps);
+				double cost = 0.0;
+
+				foreach (var f in onsetFrames)
+				{
+					double r = (f - phase) % intervalFrames;
+					if (r < 0) r += intervalFrames;
+					double d = r;
+					if (d > intervalFrames / 2.0) d = intervalFrames - d;
+					cost += d;
+				}
+
+				if (cost < bestCost)
+				{
+					bestCost = cost;
+					bestPhase = (int) Math.Round(phase);
+				}
+			}
+
+			return bestPhase;
+		}
+
+		private static void BuildBeatGridFromTempo(bool[] beatGrid, int intervalFrames, int phaseFrame)
+		{
+			if (beatGrid == null || beatGrid.Length == 0 || intervalFrames <= 0)
+				return;
+
+			int n = beatGrid.Length;
+			int start = phaseFrame;
+			while (start - intervalFrames >= 0)
+				start -= intervalFrames;
+			if (start < 0)
+				start += intervalFrames;
+
+			for (int pos = start; pos < n; pos += intervalFrames)
+				beatGrid[pos] = true;
+		}
+
+		private static void AlignBeatGridToEnvelope(bool[] beatGrid, float[] envelope, int startSample, int maxShiftFrames)
+		{
+			if (beatGrid == null || envelope == null) return;
+			if (beatGrid.Length == 0 || envelope.Length == 0) return;
+
+			int n = beatGrid.Length;
+			int envLen = envelope.Length;
+			maxShiftFrames = Math.Max(1, maxShiftFrames);
+
+			var newGrid = new bool[n];
+
+			float maxEnv = envelope.Max();
+			if (maxEnv <= 0f)
+			{
+				Array.Copy(beatGrid, newGrid, n);
+				Array.Copy(newGrid, beatGrid, n);
+				return;
+			}
+
+			float thr = maxEnv * 0.12f;
+
+			for (int i = 0; i < n; i++)
+			{
+				if (!beatGrid[i]) continue;
+
+				int center = i - startSample;
+				if (center < 0 || center >= envLen)
+				{
+					if (i >= 0 && i < n)
+						newGrid[i] = true;
+					continue;
+				}
+
+				int radius = Math.Min(maxShiftFrames, envLen - 1);
+				int s = Math.Max(0, center - radius);
+				int e = Math.Min(envLen - 1, center + radius);
+
+				int bestIdx = center;
+				float bestVal = envelope[center];
+
+				for (int j = s; j <= e; j++)
+				{
+					float v = envelope[j];
+					if (v > bestVal)
+					{
+						bestVal = v;
+						bestIdx = j;
+					}
+				}
+
+				if (bestVal < thr)
+				{
+					if (i >= 0 && i < n)
+						newGrid[i] = true;
+					continue;
+				}
+
+				int newFrame = startSample + bestIdx;
+				if (newFrame < 0 || newFrame >= n)
+					newFrame = Math.Clamp(i, 0, n - 1);
+
+				newGrid[newFrame] = true;
+			}
+
+			Array.Copy(newGrid, beatGrid, n);
+		}
+
+		private static void EnforceMinDistance(bool[] beatGrid, int minDistance)
+		{
+			if (beatGrid == null || beatGrid.Length == 0 || minDistance <= 0)
+				return;
+
+			int last = -minDistance - 1;
+			for (int i = 0; i < beatGrid.Length; i++)
+			{
+				if (!beatGrid[i]) continue;
+				if (i - last < minDistance)
+				{
+					beatGrid[i] = false;
+				}
+				else
+				{
+					last = i;
+				}
+			}
+		}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 	}
 }

@@ -1309,7 +1309,6 @@ namespace ModularAudience.Forms.Modules
 			// Ergebnis-Objekt erstellen (leichtgewichtiger UI-unabhängiger Schritt)
 			var result = new AudioObj
 			{
-				Name = "DrumRollMix_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"),
 				Data = mixBuffer,
 				SampleRate = sampleRate,
 				Channels = channels,
@@ -1318,6 +1317,8 @@ namespace ModularAudience.Forms.Modules
 				BitDepth = 32,
 				Bpm = bpm
 			};
+
+			result.Rename("DrumRollMix_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"));
 
 			return result;
 		}

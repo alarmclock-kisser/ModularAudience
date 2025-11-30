@@ -93,7 +93,7 @@ namespace ModularAudience.Audio.Processors_V1
                     {
                         // no pitch change: clone original (preserve all metadata)
                         result = sample.Clone();
-                        result.Name = baseName; // keep base name for unshifted
+                        result.Rename(baseName); // keep base name for unshifted
                     }
                     else
                     {
@@ -118,13 +118,13 @@ namespace ModularAudience.Audio.Processors_V1
                     // Ensure name format: baseName + " +Nst" or " -Nst" (omit for 0)
                     if (Math.Abs(semitones) < 1e-6f)
                     {
-                        result.Name = baseName;
+                        result.Rename(baseName);
                     }
                     else
                     {
                         string sign = semitones > 0 ? "+" : "-";
                         float absSteps = Math.Abs(semitones);
-                        result.Name = $"{baseName}{sign}{absSteps:0.##}st";
+                        result.Rename($"{baseName}{sign}{absSteps:0.##}st");
                     }
 
                     // Preserve BPM and other metadata fields from sample if present
@@ -206,7 +206,7 @@ namespace ModularAudience.Audio.Processors_V1
                 if (Math.Abs(semitones) < 1e-6f)
                 {
                     result = sample.Clone();
-                    result.Name = baseName;
+                    result.Rename(baseName);
                 }
                 else
                 {
@@ -270,7 +270,7 @@ namespace ModularAudience.Audio.Processors_V1
                 if (Math.Abs(semitones) < 1e-6f)
                 {
                     results[index] = sample.Clone();
-                    results[index].Name = baseName;
+                    results[index].Rename(baseName);
                 }
                 else
                 {
@@ -279,7 +279,7 @@ namespace ModularAudience.Audio.Processors_V1
                     var r = results[index] = new AudioObj();
                     // Already have 'result' constructed; copy into results[index]
                     r = result; // reuse
-                    r.Name = $"{baseName}{sign}{absSteps:0.##}st";
+                    r.Rename($"{baseName}{sign}{absSteps:0.##}st");
                     results[index] = r;
                 }
 
