@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
+using System.Numerics;
 using System.Threading.Tasks;
+using MathNet.Numerics.IntegralTransforms;
 
 namespace ModularAudience.Audio.Processors_V1
 {
@@ -11,285 +13,840 @@ namespace ModularAudience.Audio.Processors_V1
 		public static async Task<TimeSpan> FindSilenceDurationStartAsync(AudioObj audio, float? threshold = null, int? minDurationMs = null)
 		{
 			if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
-			{
 				return TimeSpan.Zero;
-			}
 
-			return await Task.Run(() => ComputeSilenceDuration(audio, findStart: true, threshold, minDurationMs));
+			var result = await Task.Run(() => ComputeSilenceDuration(audio, findStart: true, threshold, minDurationMs));
+			LogCollection.Log("Detected silence at start: " + result.TotalSeconds.ToString("F1") + " seconds");
+			return result;
 		}
 
 		public static async Task<TimeSpan> FindSilenceDurationEndAsync(AudioObj audio, float? threshold = null, int? minDurationMs = null)
 		{
 			if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
-			{
 				return TimeSpan.Zero;
-			}
 
-			return await Task.Run(() => ComputeSilenceDuration(audio, findStart: false, threshold, minDurationMs));
+			var result = await Task.Run(() => ComputeSilenceDuration(audio, findStart: false, threshold, minDurationMs));
+			LogCollection.Log("Detected silence at end: " + result.TotalSeconds.ToString("F1") + " seconds");
+			return result;
 		}
-
-
 
 		public static async Task TrimSilenceAsync(AudioObj audio, float? threshold = null, int? minDurationMs = null)
 		{
-			// Find silence start & end
 			double startSilenceSeconds = (await FindSilenceDurationStartAsync(audio, threshold, minDurationMs)).TotalSeconds;
 			double endSilenceSeconds = (await FindSilenceDurationEndAsync(audio, threshold, minDurationMs)).TotalSeconds;
 
-			LogCollection.Log($"Trimming silence with threshold={(threshold.HasValue ? threshold.Value.ToString("F5") : "auto")}, minDurationMs={(minDurationMs.HasValue ? minDurationMs.Value.ToString() : "default")}");
+			LogCollection.Log($"Trimming silence - start: {startSilenceSeconds:F2}s, end: {endSilenceSeconds:F2}s, threshold={(threshold.HasValue ? threshold.Value.ToString("F5") : "auto")}, minDurationMs={(minDurationMs.HasValue ? minDurationMs.Value.ToString() : "default")}");
 
-			// Select samples from seconds
 			audio.SelectionStart = 0;
-			audio.SelectionEnd = audio.GetSampleAtSeconds(startSilenceSeconds);
+			audio.SelectionEnd = audio.GetSampleAtSeconds(startSilenceSeconds) * audio.Channels;
 			await audio.EraseSelectionAsync();
 
-			audio.SelectionStart = audio.GetSampleAtSeconds(audio.Duration.TotalSeconds - endSilenceSeconds);
+			audio.SelectionStart = audio.GetSampleAtSeconds(audio.Duration.TotalSeconds - endSilenceSeconds) * audio.Channels;
 			audio.SelectionEnd = audio.Length;
 			await audio.EraseSelectionAsync();
 
-			// Clear selection
 			audio.SelectionStart = 0;
 			audio.SelectionEnd = 0;
 		}
 
-
-
-
-		// Gemeinsame Implementierung — liefert TimeSpan der Stille am Anfang bzw. Ende.
 		private static TimeSpan ComputeSilenceDuration(AudioObj audio, bool findStart, float? threshold, int? minDurationMs)
 		{
 			int sampleRate = Math.Max(1, audio.SampleRate);
 			int channels = Math.Max(1, audio.Channels <= 0 ? 1 : audio.Channels);
-			int minDurMs = minDurationMs ?? 40; // Default 40 ms
+			int minDurMs = minDurationMs ?? 80;
 			int minDurSamples = (int) Math.Ceiling(sampleRate * (minDurMs / 1000.0));
 
-			// Envelope window/hop für groben Scan
-			int windowSamples = Math.Clamp(sampleRate / 44, 256, 4096);
-			int hopSamples = Math.Max(1, windowSamples / 4);
+			float[] data = audio.Data ?? Array.Empty<float>();
+			int totalFrames = Math.Max(0, data.Length / channels);
+			if (totalFrames <= 0) return TimeSpan.Zero;
 
-			float[] data = audio.Data;
-			int totalFrames = data.Length / channels;
+			// -----------------------------------
+			// 1) Envelope berechnen (RMS, ~1 Sample pro ms)
+			// -----------------------------------
+			int downsampleFactor = Math.Max(1, sampleRate / 1000); // ~1 ms pro Step
+			int envLen = Math.Max(1, totalFrames / downsampleFactor);
+			var env = new float[envLen];
 
-			// Mono: max-abs über Kanäle (erhält Transienten)
-			float[] mono = new float[totalFrames];
-			if (channels == 1)
+			Parallel.For(0, envLen, idx =>
 			{
-				for (int i = 0; i < totalFrames; i++) mono[i] = MathF.Abs(data[i]);
-			}
-			else
-			{
-				for (int f = 0, di = 0; f < totalFrames; f++)
+				int frameStart = Math.Min(totalFrames - 1, idx * downsampleFactor);
+				int frameEnd = Math.Min(totalFrames - 1, frameStart + downsampleFactor - 1);
+				double sumSq = 0;
+				int count = 0;
+
+				for (int f = frameStart; f <= frameEnd; f++)
 				{
-					float max = 0f;
-					for (int c = 0; c < channels; c++, di++)
+					int di = f * channels;
+					for (int c = 0; c < channels; c++)
 					{
-						float v = data[di];
-						float av = v < 0 ? -v : v;
-						if (av > max) max = av;
+						float v = data[di + c];
+						sumSq += v * v;
+						count++;
 					}
-					mono[f] = max;
 				}
-			}
 
-			// RMS‑ähnliche Hüllkurve (pro Fenster)
-			List<float> envelope = new();
-			int approxCount = Math.Max(0, (totalFrames - windowSamples) / Math.Max(1, hopSamples) + 1);
-			envelope.Capacity = approxCount;
-			for (int start = 0; start + windowSamples <= totalFrames; start += hopSamples)
+				env[idx] = (float) Math.Sqrt(sumSq / Math.Max(1, count));
+			});
+
+			// leicht glätten
+			int smoothWin = Math.Max(3, Math.Min(21, envLen / 200));
+			env = MovingAverage(env, smoothWin);
+
+			// globale Statistik
+			var sortedEnv = env.OrderBy(x => x).ToArray();
+			int n = sortedEnv.Length;
+			float globalMax = sortedEnv[^1];
+			float globalMedian = sortedEnv[n / 2];
+			float noiseFloor = sortedEnv[Math.Max(0, (int) (n * 0.02f))]; // untere 2%
+
+			if (globalMax <= 1e-7f)
 			{
-				double sumSq = 0.0;
-				int end = start + windowSamples;
-				for (int i = start; i < end; i++)
-				{
-					double v = mono[i];
-					sumSq += v * v;
-				}
-				double rms = Math.Sqrt(sumSq / windowSamples);
-				envelope.Add((float) rms);
+				// praktisch komplette Stille -> nichts automatisch trimmen
+				return TimeSpan.Zero;
 			}
 
-			// Sehr kurze Audios: fallback sample‑level
-			if (envelope.Count == 0)
+			// minimal sinnvoller Unterschied
+			float eps = 1e-9f;
+
+			// -----------------------------------
+			// 2) Anfangs-/Endbereich Charakterisierung
+			// -----------------------------------
+			int windowFrames = (int) (20.0 * sampleRate / downsampleFactor); // bis zu 20 s
+			windowFrames = Math.Max(1, Math.Min(envLen, windowFrames));
+
+			// Anfangsfenster
+			float startMax = 0f;
+			float startMedian;
 			{
-				if (findStart)
-				{
-					for (int i = 0; i < mono.Length; i++)
-					{
-						if (mono[i] > 1e-5f) return TimeSpan.FromSeconds(i / (double) sampleRate);
-					}
-					return audio.Duration; // komplett stumm
-				}
-				else
-				{
-					for (int i = mono.Length - 1; i >= 0; i--)
-					{
-						if (mono[i] > 1e-5f)
-						{
-							int trailing = Math.Max(0, totalFrames - 1 - i);
-							return TimeSpan.FromSeconds(trailing / (double) sampleRate);
-						}
-					}
-					return audio.Duration;
-				}
+				var tmp = new float[windowFrames];
+				Array.Copy(env, 0, tmp, 0, windowFrames);
+				Array.Sort(tmp);
+				startMax = tmp[^1];
+				startMedian = tmp[tmp.Length / 2];
 			}
 
-			float[] envArr = envelope.ToArray();
-
-			// Rauschboden: 10th percentile
-			float noiseFloor;
+			// Endfenster
+			float endMax = 0f;
+			float endMedian;
 			{
-				var sorted = envArr.OrderBy(x => x).ToArray();
-				int idx = (int) Math.Floor(sorted.Length * 0.1);
-				idx = Math.Clamp(idx, 0, sorted.Length - 1);
-				noiseFloor = Math.Max(1e-7f, sorted[idx]);
+				var tmp = new float[windowFrames];
+				Array.Copy(env, envLen - windowFrames, tmp, 0, windowFrames);
+				Array.Sort(tmp);
+				endMax = tmp[^1];
+				endMedian = tmp[tmp.Length / 2];
 			}
 
-			// Threshold setzen oder dynamisch bestimmen
-			float thresh;
+			// Verhältnis Anfang/Ende zur Gesamtenergie
+			float startMaxRatio = startMax / Math.Max(globalMax, eps);
+			float endMaxRatio = endMax / Math.Max(globalMax, eps);
+			float startMedRatio = globalMedian > eps ? (startMedian / globalMedian) : 0f;
+			float endMedRatio = globalMedian > eps ? (endMedian / globalMedian) : 0f;
+
+			// -----------------------------------
+			// 3) Silence-Schwelle (floor) bestimmen
+			//    - threshold (manuell) dominiert
+			//    - sonst dynamisch aus Noise-Floor + globalMax
+			// -----------------------------------
+			float silenceFloorBase;
 			if (threshold.HasValue)
 			{
-				thresh = MathF.Max(1e-7f, threshold.Value);
+				silenceFloorBase = Math.Max(threshold.Value, 1e-7f);
 			}
 			else
 			{
-				if (noiseFloor < 1e-4f) thresh = MathF.Max(1e-5f, noiseFloor * 10f);
-				else if (noiseFloor < 5e-3f) thresh = noiseFloor * 6f;
-				else thresh = noiseFloor * 4f;
-				thresh = Math.Clamp(thresh, 1e-5f, 0.3f);
+				// sehr nahe am Rauschen, aber nicht 0
+				// tracks mit großem Dynamikumfang -> Floor sehr niedrig
+				float dynRange = globalMax / Math.Max(noiseFloor, eps);
+				float dynDb = 20f * MathF.Log10(Math.Max(1.0001f, dynRange));
+
+				// alpha bestimmt, wie weit wir über dem Noise-Floor liegen
+				// großer Dynamikumfang -> kleine alpha (Intro bleibt erhalten)
+				float alpha;
+				if (dynDb < 20f) alpha = 0.4f;
+				else if (dynDb < 40f) alpha = 0.25f;
+				else if (dynDb < 60f) alpha = 0.12f;
+				else alpha = 0.06f;
+
+				float upperRef = sortedEnv[Math.Max(0, (int) (n * 0.8f))]; // 80%-Perzentil
+				float target = noiseFloor + (upperRef - noiseFloor) * alpha;
+
+				// zusätzlich clampen, damit wir wirkliche Stille sauber erwischen
+				float minFloor = globalMax * 0.0001f;
+				float maxFloor = globalMax * 0.05f;
+				silenceFloorBase = Math.Clamp(target, minFloor, maxFloor);
 			}
 
-			// Anzahl Fenster, die benötigt werden um minDuration abzudecken
-			int neededWindows = Math.Max(1, (int) Math.Ceiling((minDurSamples - windowSamples) / (double) hopSamples) + 1);
+			// digitalere Stille -> noch strenger
+			float digitalSilenceFloor = Math.Max(globalMax * 0.00005f, silenceFloorBase * 0.3f);
 
+			// minimal benötigte "Silence-Frames"
+			int minSilenceFrames = Math.Max(2, minDurSamples / downsampleFactor);
+
+			// -----------------------------------
+			// 4) Start- oder End-Silence bestimmen
+			// -----------------------------------
 			if (findStart)
 			{
-				// Suche vorwärts nach dem ersten sustain-Event
-				int foundWindowIndex = -1;
-				for (int i = 0; i < envArr.Length; i++)
-				{
-					if (envArr[i] >= thresh)
-					{
-						int run = 1;
-						for (int j = i + 1; j < envArr.Length && run < neededWindows; j++, run++)
-						{
-							if (envArr[j] < thresh) break;
-						}
-						if (run >= neededWindows)
-						{
-							foundWindowIndex = i;
-							break;
-						}
-					}
-				}
+				// Ist der Anfang vom Energie-Niveau her "Teil des Songs"?
+				// -> dann nur wirklich digitale Nullbereiche wegnehmen
+				bool startLooksLikeContent =
+					startMaxRatio >= 0.25f || startMedRatio >= 0.5f;
 
-				if (foundWindowIndex < 0)
-				{
-					// Kein Signal -> komplette Dauer ist Stille
-					return audio.Duration;
-				}
+				float floor = startLooksLikeContent
+					? digitalSilenceFloor       // nur echte Nullen
+					: Math.Min(silenceFloorBase, globalMax * 0.03f); // "leise, aber wirklich still"
 
-				// Grobe Startprobe (Samples)
-				int coarseSample = foundWindowIndex * hopSamples;
+				int i = 0;
+				while (i < envLen && env[i] <= floor)
+					i++;
 
-				// Verfeinerung: suche rückwärts nach erstem Sample, das einen niedrigeren refineThresh überschreitet
-				float refineThresh = MathF.Max(1e-7f, thresh * 0.5f);
-				int refineLookback = Math.Min(coarseSample, windowSamples * 2);
-				int refineStart = Math.Max(0, coarseSample - refineLookback);
-				int exactSample = -1;
-				for (int s = refineStart; s <= coarseSample && s < totalFrames; s++)
-				{
-					if (mono[s] >= refineThresh)
-					{
-						exactSample = s;
-						break;
-					}
-				}
+				// zu kurz -> vermutlich nur paar Samples Offset / Dither -> nicht trimmen
+				if (i < minSilenceFrames)
+					return TimeSpan.Zero;
 
-				// Falls nicht gefunden, rückwärts scan starten
-				if (exactSample < 0)
-				{
-					for (int s = coarseSample; s >= 0; s--)
-					{
-						if (mono[s] < refineThresh)
-						{
-							exactSample = Math.Min(totalFrames - 1, s + 1);
-							break;
-						}
-						if (s == 0) exactSample = 0;
-					}
-				}
+				int sampleIdx = Math.Min(totalFrames - 1, i * downsampleFactor);
 
-				if (exactSample < 0) exactSample = coarseSample;
-				double seconds = exactSample / (double) sampleRate;
+				// leichte Vorlauf-Sicherheit: paar ms stehen lassen
+				sampleIdx = Math.Max(0, sampleIdx - sampleRate / 200); // ~5ms
+
+				double seconds = sampleIdx / (double) sampleRate;
 				return TimeSpan.FromSeconds(seconds);
 			}
 			else
 			{
-				// Suche rückwärts nach dem letzten sustain-Event (Ende des letzten Signals)
-				int foundWindowIndex = -1;
-				int foundRunLength = 0;
+				// Ende: ähnlich wie Anfang, aber Outro darf gerne leiser sein.
+				bool endLooksLikeContent =
+					endMaxRatio >= 0.3f || endMedRatio >= 0.6f;
 
-				for (int i = envArr.Length - 1; i >= 0; i--)
-				{
-					if (envArr[i] >= thresh)
-					{
-						int run = 1;
-						for (int j = i - 1; j >= 0 && run < neededWindows; j--, run++)
-						{
-							if (envArr[j] < thresh) break;
-						}
-						if (run >= neededWindows)
-						{
-							// Startindex der run (vorwärts)
-							foundWindowIndex = i - (run - 1);
-							foundRunLength = run;
-							// erster Treffer beim Rückwärtslauf ist die letzte run nahe Dateiende
-							break;
-						}
-					}
-				}
+				float floor = endLooksLikeContent
+					? digitalSilenceFloor
+					: Math.Min(silenceFloorBase * 1.2f, globalMax * 0.04f);
 
-				if (foundWindowIndex < 0)
-				{
-					// Kein Signal -> komplette Dauer ist Stille
-					return audio.Duration;
-				}
+				int i = envLen - 1;
+				while (i >= 0 && env[i] <= floor)
+					i--;
 
-				// Bestimme lastWindowIndex innerhalb envelope
-				int runLen = 0;
-				for (int k = foundWindowIndex; k < envArr.Length; k++)
-				{
-					if (envArr[k] >= thresh) runLen++;
-					else break;
-				}
-				int lastWindowIndex = foundWindowIndex + Math.Max(0, runLen - 1);
+				int trailingFrames = (envLen - 1) - i;
+				if (trailingFrames < minSilenceFrames)
+					return TimeSpan.Zero;
 
-				// Grobe Endprobe (letzter Sample innerhalb der letzten Window)
-				int coarseEndSample = lastWindowIndex * hopSamples + windowSamples - 1;
-				coarseEndSample = Math.Clamp(coarseEndSample, 0, totalFrames - 1);
+				int trailingSamples = trailingFrames * downsampleFactor;
 
-				// Verfeinerung: suche rückwärts vom coarseEndSample den letzten Sample >= refineThresh
-				float refineThresh2 = MathF.Max(1e-7f, thresh * 0.5f);
-				int exactLastSound = -1;
-				for (int s = coarseEndSample; s >= 0; s--)
-				{
-					if (mono[s] >= refineThresh2)
-					{
-						exactLastSound = s;
-						break;
-					}
-				}
+				// leichte Sicherheitsreserve: ein paar ms dran lassen
+				trailingSamples = Math.Max(0, trailingSamples - sampleRate / 200);
 
-				if (exactLastSound < 0)
-				{
-					// kein Sample gefunden => komplett stumm
-					return audio.Duration;
-				}
-
-				int trailingSamples = Math.Max(0, totalFrames - 1 - exactLastSound);
 				double seconds = trailingSamples / (double) sampleRate;
 				return TimeSpan.FromSeconds(seconds);
 			}
+		}
+
+
+
+
+		private static float CalculateRobustThreshold(float[] env, int sampleRate)
+		{
+			// Robust threshold using median + lower quartile noise floor
+			if (env == null || env.Length == 0) return 1e-5f;
+			var sorted = env.OrderBy(x => x).ToArray();
+			float q1 = sorted[Math.Max(0, sorted.Length / 4)];
+			float median = sorted[sorted.Length / 2];
+			float mean = env.Average();
+			float max = sorted[^1];
+
+			// conservative but adaptive
+			float thr = MathF.Max(q1 * 4f, median * 0.7f);
+			thr = Math.Clamp(thr, 1e-6f, MathF.Max(1e-3f, max * 0.5f));
+			LogCollection.Log($"Calculated silence threshold: {thr:F6} (q1:{q1:F6}, median:{median:F6}, mean:{mean:F6}, max:{max:F6})");
+			return thr;
+		}
+
+		private static float[] MovingAverage(float[] data, int win)
+		{
+			if (win <= 1) return data;
+			var outArr = new float[data.Length];
+			int h = win / 2;
+			for (int i = 0; i < data.Length; i++)
+			{
+				int s = Math.Max(0, i - h);
+				int e = Math.Min(data.Length - 1, i + h);
+				double sum = 0;
+				for (int j = s; j <= e; j++) sum += data[j];
+				outArr[i] = (float) (sum / (e - s + 1));
+			}
+			return outArr;
+		}
+
+		// -------------------------
+		// BeatGrid generation (public)
+		// -------------------------
+		public static async Task<bool[]> GenerateBeatGridAsync(AudioObj audio, bool set = true, int granularity = 2)
+		{
+			if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
+				return Array.Empty<bool>();
+
+			// clamp granularity to [1.32]
+			granularity = Math.Clamp(granularity, 1, 32);
+
+			LogCollection.Log($"Starting advanced Beat-Grid detection. (granularity={granularity})");
+
+			// Run heavy steps in parallel tasks and combine
+			return await Task.Run(async () =>
+			{
+				try
+				{
+					int sampleRate = audio.SampleRate;
+					int channels = audio.Channels;
+					float[] data = audio.Data;
+					int totalSamples = data.Length;
+					int totalFrames = totalSamples / channels;
+
+					// 1) skip start silence (fast)
+					TimeSpan startSilence = ComputeSilenceDuration(audio, findStart: true, threshold: null, minDurationMs: 50);
+					int startSample = (int) (startSilence.TotalSeconds * sampleRate);
+					startSample = Math.Max(0, Math.Min(startSample, totalFrames - 1));
+
+					// 2) create mono and preprocessed envelope (async)
+					(float[] mono, float[] envelope) = await Task.Run(() =>
+						CreateMonoAndEnvelope(data, channels, sampleRate, totalFrames, startSample));
+
+					// 3) Launch detectors in parallel (spectral flux, energy peaks, zcr + zcr-array)
+					var tSpectral = Task.Run(() => DetectOnsetSpectralFlux(envelope, sampleRate, startSample));
+					var tEnergy = Task.Run(() => DetectEnergyPeaks(envelope, sampleRate, startSample));
+
+					// ZCR: einmal Array + Beats zurückgeben, damit wir es später wiederverwenden
+					var tZcr = Task.Run(() =>
+					{
+						var zcrArray = CalculateZeroCrossingRate(mono, sampleRate);
+						var zcrBeats = DetectZeroCrossingBeats(mono, zcrArray, sampleRate, startSample);
+						return (zcrBeats, zcrArray);
+					});
+
+					await Task.WhenAll(tSpectral, tEnergy, tZcr);
+
+					var spectralBeats = tSpectral.Result;
+					var energyBeats = tEnergy.Result;
+					var (zcrBeats, zcrArray) = tZcr.Result;
+
+					// 4) build onset envelope downsampled for tempo detection
+					var onsetEnv = BuildOnsetEnvelope(envelope, sampleRate, downsampleHz: 100); // 100 Hz envelope
+
+					// 5) tempo estimation (autocorrelation) on onsetEnv
+					int estimatedInterval = EstimatePrimaryInterval(onsetEnv, sampleRateDownsampledHz: 100);
+					if (estimatedInterval <= 0)
+					{
+						// fallback to median interval from detections
+						estimatedInterval = FallbackIntervalFromDetections(
+							new[] { spectralBeats, energyBeats, zcrBeats },
+							sampleRate,
+							sampleRateDownsampledHz: 100);
+					}
+
+					// convert estimatedInterval (in downsampled samples) to original-sample interval if needed
+					int primaryIntervalSamples = estimatedInterval > 0
+						? Math.Max(1, (int) Math.Round((sampleRate / 100.0) * estimatedInterval))
+						: sampleRate / 2; // default 0.5s
+
+					// 6) Combine detections and cluster -> vote -> create beat list
+					var beatGrid = new bool[totalFrames];
+					CombineBeatDetectionsWithFiltering(
+						beatGrid,
+						spectralBeats,
+						energyBeats,
+						new List<int>(),
+						zcrBeats,
+						zcrArray,
+						startSample,
+						sampleRate,
+						primaryIntervalSamples);
+
+					// 7) apply tempo grid fill (robust) - pass granularity
+					ApplyTempoAnalysisAndFill(beatGrid, sampleRate, primaryIntervalSamples, granularity);
+
+					// 8) safety: ensure first beat not before startSample and remove too-close duplicates
+					for (int i = 0; i < Math.Min(startSample, beatGrid.Length); i++)
+						beatGrid[i] = false;
+
+					EnforceMinDistance(beatGrid, Math.Max(1, sampleRate / 30)); // min ~33ms
+
+					if (set) audio.BeatGrid = beatGrid;
+
+					int beatCount = beatGrid.Count(b => b);
+					LogCollection.Log($"Advanced Beat-Grid detection completed. Found {beatCount} beats. primaryIntervalSamples={primaryIntervalSamples} granularity={granularity}");
+					return beatGrid;
+				}
+				catch (Exception ex)
+				{
+					LogCollection.Log($"Error in advanced Beat-Grid detection: {ex.Message}");
+					return new bool[audio.Data?.Length ?? 0];
+				}
+			});
+		}
+
+
+
+		// -------------------------
+		// Preprocessing utilities
+		// -------------------------
+		private static (float[] mono, float[] envelope) CreateMonoAndEnvelope(float[] data, int channels, int sampleRate, int totalFrames, int startSample)
+		{
+			int analysisLen = Math.Max(0, totalFrames - startSample);
+			var mono = new float[analysisLen];
+
+			// build mono
+			if (channels == 1)
+			{
+				Array.Copy(data, startSample, mono, 0, analysisLen);
+			}
+			else
+			{
+				Parallel.For(0, analysisLen, i =>
+				{
+					int baseIdx = (startSample + i) * channels;
+					float sum = 0f;
+					for (int c = 0; c < channels; c++) sum += data[baseIdx + c];
+					mono[i] = sum / channels;
+				});
+			}
+
+			// envelope via simple abs + smoothing (fast)
+			var env = new float[analysisLen];
+			for (int i = 0; i < analysisLen; i++) env[i] = MathF.Abs(mono[i]);
+
+			// smooth with small moving average (faster incremental)
+			int w = Math.Max(1, Math.Min(101, sampleRate / 200)); // ~5-10ms smoothing
+			env = FastMovingAverage(env, w);
+
+			// compress dynamic range (sqrt)
+			Parallel.For(0, env.Length, i => env[i] = MathF.Sqrt(env[i]));
+
+			return (mono, env);
+		}
+
+		private static float[] FastMovingAverage(float[] data, int window)
+		{
+			int n = data.Length;
+			if (n == 0 || window <= 1) return data;
+			var outArr = new float[n];
+			double sum = 0;
+			int half = window / 2;
+			int s = 0, e = -1;
+			for (int i = 0; i < n; i++)
+			{
+				int newE = Math.Min(n - 1, i + half);
+				while (e < newE)
+				{
+					e++;
+					sum += data[e];
+				}
+				int newS = Math.Max(0, i - half);
+				while (s < newS)
+				{
+					sum -= data[s];
+					s++;
+				}
+				int len = e - s + 1;
+				outArr[i] = (float) (sum / Math.Max(1, len));
+			}
+			return outArr;
+		}
+
+		private static float[] BuildOnsetEnvelope(float[] env, int sampleRate, int downsampleHz)
+		{
+			if (env == null || env.Length == 0) return Array.Empty<float>();
+			int dsFactor = Math.Max(1, sampleRate / downsampleHz);
+			int outLen = Math.Max(1, env.Length / dsFactor);
+			var outEnv = new float[outLen];
+			for (int i = 0; i < outLen; i++)
+			{
+				int s = i * dsFactor;
+				int e = Math.Min(env.Length - 1, s + dsFactor - 1);
+				float maxv = 0f;
+				for (int j = s; j <= e; j++) if (env[j] > maxv) maxv = env[j];
+				outEnv[i] = maxv;
+			}
+			// normalize
+			float max = outEnv.Max();
+			if (max > 0) for (int i = 0; i < outEnv.Length; i++) outEnv[i] /= max;
+			return outEnv;
+		}
+
+		// -------------------------
+		// Onset detectors (optimized)
+		// -------------------------
+		private static List<int> DetectOnsetSpectralFlux(float[] envelope, int sampleRate, int startSample)
+		{
+			// spectral flux auf Envelope ist billig & gut für Percussion
+			var results = new List<int>();
+			if (envelope == null || envelope.Length < 8) return results;
+
+			int fftSize = 512;
+			int hop = 128;
+			int envLen = envelope.Length;
+			int numWindows = Math.Max(0, (envLen - fftSize) / hop);
+
+			// guard - do FFT only if there are enough samples
+			if (numWindows < 3)
+			{
+				// fallback: simple peak picking on envelope
+				for (int i = 2; i < envelope.Length - 2; i++)
+				{
+					if (envelope[i] > envelope[i - 1] &&
+						envelope[i] > envelope[i + 1] &&
+						envelope[i] > 0.12f)
+					{
+						results.Add(startSample + i);
+					}
+				}
+				return results;
+			}
+
+			// 1) Magnituden-Spektren aller Fenster PARALLEL berechnen
+			int bins = fftSize / 2;
+			var mags = new float[numWindows][];
+
+			Parallel.For(0, numWindows, w =>
+			{
+				int idx = w * hop;
+				var buf = new Complex[fftSize];
+				int limit = Math.Min(fftSize, envLen - idx);
+
+				for (int j = 0; j < limit; j++)
+				{
+					float v = envelope[idx + j];
+					// Hann-Fenster
+					float win = 0.5f * (1 - MathF.Cos(2 * MathF.PI * j / (fftSize - 1)));
+					buf[j] = new Complex(v * win, 0);
+				}
+				for (int j = limit; j < fftSize; j++)
+					buf[j] = Complex.Zero;
+
+				Fourier.Forward(buf, FourierOptions.Matlab);
+
+				var localMag = new float[bins];
+				for (int b = 0; b < bins; b++)
+					localMag[b] = (float) buf[b].Magnitude;
+
+				mags[w] = localMag;
+			});
+
+			// 2) Serien-Flux-Berechnung zwischen benachbarten Frames (billig)
+			var flux = new float[numWindows];
+			for (int w = 1; w < numWindows; w++)
+			{
+				float localFlux = 0f;
+				var cur = mags[w];
+				var prev = mags[w - 1];
+				for (int b = 1; b < bins; b++)
+				{
+					float diff = cur[b] - prev[b];
+					if (diff > 0) localFlux += diff;
+				}
+				flux[w] = localFlux;
+			}
+
+			// 3) adaptive threshold und Peak-Picking
+			var thr = CalculateAdaptiveThreshold(flux) * 1.1f;
+			for (int i = 2; i < flux.Length - 2; i++)
+			{
+				if (flux[i] > thr && flux[i] > flux[i - 1] && flux[i] > flux[i + 1])
+				{
+					int pos = startSample + i * hop + fftSize / 2;
+					results.Add(pos);
+				}
+			}
+
+			return results;
+		}
+
+
+		private static List<int> DetectEnergyPeaks(float[] envelope, int sampleRate, int startSample)
+		{
+			var beats = new List<int>();
+			if (envelope == null || envelope.Length < 8) return beats;
+
+			int windowSize = Math.Max(3, sampleRate / 200); // small window in samples
+			int hop = Math.Max(1, windowSize / 2);
+			int n = Math.Max(0, (envelope.Length - windowSize) / hop);
+			if (n < 4)
+			{
+				// fallback: simple peaks
+				for (int i = 2; i < envelope.Length - 2; i++)
+					if (envelope[i] > envelope[i - 1] && envelope[i] > envelope[i + 1] && envelope[i] > 0.08f)
+						beats.Add(startSample + i);
+				return beats;
+			}
+
+			// compute window energies
+			var energy = new float[n];
+			Parallel.For(0, n, i =>
+			{
+				int s = i * hop;
+				float sum = 0;
+				for (int j = 0; j < windowSize && (s + j) < envelope.Length; j++)
+					sum += envelope[s + j] * envelope[s + j];
+				energy[i] = sum / windowSize;
+			});
+
+			// median local threshold
+			int medianWin = Math.Max(3, Math.Min(21, n / 10));
+			for (int i = 2; i < n - 2; i++)
+			{
+				int s = Math.Max(0, i - medianWin);
+				int e = Math.Min(n - 1, i + medianWin);
+				var window = new List<float>();
+				for (int j = s; j <= e; j++) window.Add(energy[j]);
+				window.Sort();
+				float med = window[window.Count / 2];
+				float thr = med * 2.2f + 1e-8f;
+				if (energy[i] > thr && energy[i] > energy[i - 1] && energy[i] > energy[i + 1])
+				{
+					int pos = startSample + i * hop + windowSize / 2;
+					beats.Add(Math.Min(Math.Max(0, pos), envelope.Length - 1));
+				}
+			}
+			return beats;
+		}
+
+		private static List<int> DetectZeroCrossingBeats(float[] mono, float[] zeroCrossing, int sampleRate, int startSample)
+		{
+			var beats = new List<int>();
+
+			if (mono == null || mono.Length < 64 || zeroCrossing == null || zeroCrossing.Length < 64) return beats;
+
+			int windowSize = Math.Max(32, sampleRate / 40);
+			int hop = Math.Max(8, windowSize / 2);
+			int numWindows = Math.Max(0, (mono.Length - windowSize) / hop);
+
+			for (int i = 0; i < numWindows; i++)
+			{
+				int s = i * hop;
+				// compute avg zcr in window
+				float sum = 0;
+				for (int j = 0; j < windowSize && (s + j) < zeroCrossing.Length; j++) sum += zeroCrossing[s + j];
+				float avg = sum / Math.Max(1, windowSize);
+				if (avg < 0.12f) // likely transient region
+				{
+					// find max energy in window
+					float maxE = 0;
+					int peak = s + windowSize / 2;
+					for (int j = 0; j < windowSize && (s + j) < mono.Length; j++)
+					{
+						float e = MathF.Abs(mono[s + j]);
+						if (e > maxE) { maxE = e; peak = s + j; }
+					}
+					if (maxE > 0.04f)
+					{
+						beats.Add(startSample + peak);
+					}
+				}
+			}
+			return beats;
+		}
+
+		private static float[] CalculateZeroCrossingRate(float[] data, int sampleRate)
+		{
+			int n = data.Length;
+			var zcr = new float[n];
+			int window = Math.Min(512, Math.Max(32, sampleRate / 20));
+
+			Parallel.For(0, n, i =>
+			{
+				int s = Math.Max(0, i - window / 2);
+				int e = Math.Min(n - 1, i + window / 2);
+				int crossings = 0;
+				for (int j = s + 1; j <= e; j++)
+				{
+					if (data[j - 1] * data[j] < 0) crossings++;
+				}
+				zcr[i] = (float) crossings / Math.Max(1, (e - s));
+			});
+
+			return zcr;
+		}
+
+
+		// -------------------------
+		// Combining + tempo + utilities
+		// -------------------------
+		private static void CombineBeatDetectionsWithFiltering(bool[] beatGrid, List<int> spectralBeats, List<int> energyBeats, List<int> complexBeats, List<int> zeroCrossingBeats, float[] zeroCrossing, int startSample, int sampleRate, int primaryIntervalSamples)
+		{
+			// All candidate beats -> weighted votes (spectral: high, energy: medium, zcr: low)
+			var vote = new ConcurrentDictionary<int, float>();
+
+			void Vote(IEnumerable<int> positions, float weight)
+			{
+				foreach (var p in positions)
+				{
+					if (p < startSample) continue;
+					int clamped = Math.Min(Math.Max(0, p), beatGrid.Length - 1);
+					vote.AddOrUpdate(clamped, weight, (_, old) => old + weight);
+				}
+			}
+
+			Vote(spectralBeats, 3.0f);
+			Vote(energyBeats, 2.0f);
+			Vote(zeroCrossingBeats, 1.0f);
+			Vote(complexBeats, 1.5f);
+
+			if (vote.IsEmpty) return;
+
+			// Convert votes to list and cluster near positions
+			var candidates = vote.ToArray().OrderByDescending(kv => kv.Value).Select(kv => kv.Key).ToList();
+
+			int minDist = Math.Max(1, sampleRate / 40); // ~25ms min
+			var chosen = new List<int>();
+			var used = new bool[beatGrid.Length];
+
+			foreach (var cand in candidates)
+			{
+				if (used[cand]) continue;
+				// cluster neighborhood and pick best centre
+				int s = Math.Max(0, cand - minDist);
+				int e = Math.Min(beatGrid.Length - 1, cand + minDist);
+				// find max vote in cluster
+				int best = cand;
+				float bestScore = vote.ContainsKey(cand) ? vote[cand] : 0;
+				for (int i = s; i <= e; i++)
+				{
+					if (vote.TryGetValue(i, out float sc) && sc > bestScore)
+					{
+						bestScore = sc; best = i;
+					}
+				}
+				// mark used
+				for (int i = Math.Max(0, best - minDist); i <= Math.Min(beatGrid.Length - 1, best + minDist); i++) used[i] = true;
+				chosen.Add(best);
+			}
+
+			// Place chosen beats into beatGrid
+			foreach (var b in chosen)
+			{
+				if (b >= 0 && b < beatGrid.Length) beatGrid[b] = true;
+			}
+		}
+
+		private static void ApplyTempoAnalysisAndFill(bool[] beatGrid, int sampleRate, int primaryInterval, int granularity)
+		{
+			// Get current beats
+			var detected = new List<int>();
+			for (int i = 0; i < beatGrid.Length; i++) if (beatGrid[i]) detected.Add(i);
+			if (detected.Count < 3 || primaryInterval <= 0) return;
+
+			// Compute histogram of intervals (robust)
+			var intervals = new List<int>();
+			for (int i = 1; i < detected.Count; i++)
+			{
+				int inter = detected[i] - detected[i - 1];
+				if (inter >= sampleRate / 8 && inter <= sampleRate) intervals.Add(inter);
+			}
+			if (intervals.Count == 0) return;
+
+			// primary interval: either provided or modal of intervals
+			int modal = intervals.OrderBy(x => x).GroupBy(x => x).OrderByDescending(g => g.Count()).First().Key;
+			int interval = primaryInterval > 0 ? primaryInterval : modal;
+
+			// round interval to nearest granularity samples for stability
+			granularity = Math.Max(1, Math.Min(64, granularity));
+			// round to nearest multiple of granularity
+			interval = Math.Max(1, ((interval + (granularity / 2)) / granularity) * granularity);
+
+			// Fill grid from detected beats using interval
+			int seed = detected[0];
+
+			// seed may be not on-beat; try to align seed to nearest strong detection if any
+			int bestSeed = seed;
+			int minDist = Math.Max(1, sampleRate / 40);
+			foreach (var d in detected)
+			{
+				if (Math.Abs(d - seed) < Math.Abs(bestSeed - seed)) bestSeed = d;
+			}
+			seed = bestSeed;
+
+			FillBeatGridWithInterval(beatGrid, seed, interval);
+		}
+
+
+		private static void FillBeatGridWithInterval(bool[] beatGrid, int seed, int interval)
+		{
+			if (interval <= 0) return;
+			int cur = seed;
+			while (cur < beatGrid.Length)
+			{
+				beatGrid[cur] = true;
+				cur += interval;
+			}
+			cur = seed - interval;
+			while (cur >= 0)
+			{
+				beatGrid[cur] = true;
+				cur -= interval;
+			}
+		}
+
+		private static void EnforceMinDistance(bool[] beatGrid, int minSamples)
+		{
+			// traverse and remove beats that are too close (keep first)
+			int last = -minSamples * 2;
+			for (int i = 0; i < beatGrid.Length; i++)
+			{
+				if (!beatGrid[i]) continue;
+				if (i - last < minSamples)
+					beatGrid[i] = false;
+				else
+					last = i;
+			}
+		}
+
+		private static int EstimatePrimaryInterval(float[] downsampledEnv, int sampleRateDownsampledHz)
+		{
+			if (downsampledEnv == null || downsampledEnv.Length < 16) return -1;
+			// autocorrelation
+			int n = downsampledEnv.Length;
+			// normalize
+			float mean = downsampledEnv.Average();
+			var norm = new float[n];
+			for (int i = 0; i < n; i++) norm[i] = downsampledEnv[i] - mean;
+
+			int maxLag = Math.Min(n / 2, sampleRateDownsampledHz * 2); // consider up to 2 seconds
+			double bestVal = double.MinValue;
+			int bestLag = -1;
+			for (int lag = sampleRateDownsampledHz / 3; lag <= maxLag; lag++) // 0.3s .. max
+			{
+				double sum = 0;
+				for (int i = 0; i < n - lag; i++) sum += norm[i] * norm[i + lag];
+				if (sum > bestVal)
+				{
+					bestVal = sum;
+					bestLag = lag;
+				}
+			}
+			return bestLag;
+		}
+
+		private static int FallbackIntervalFromDetections(List<int>[] detectionLists, int sampleRate, int sampleRateDownsampledHz)
+		{
+			var all = new List<int>();
+			foreach (var l in detectionLists) all.AddRange(l);
+			all.Sort();
+			if (all.Count < 2) return sampleRateDownsampledHz; // 1s fallback
+			var intervals = new List<int>();
+			for (int i = 1; i < all.Count; i++) intervals.Add(all[i] - all[i - 1]);
+			if (intervals.Count == 0) return sampleRateDownsampledHz;
+			int med = intervals.OrderBy(x => x).ElementAt(intervals.Count / 2);
+			// convert to downsampled units (~100Hz)
+			return Math.Max(1, (int) Math.Round(med / (sampleRate / (double) sampleRateDownsampledHz)));
+		}
+
+		// -------------------------
+		// small helpers used previously kept for compatibility (not all old methods preserved)
+		// -------------------------
+		private static float CalculateAdaptiveThreshold(float[] values)
+		{
+			if (values == null || values.Length == 0) return 0f;
+			var sorted = values.OrderBy(x => x).ToArray();
+			float median = sorted[sorted.Length / 2];
+			float mean = values.Average();
+			return median * 1.8f + mean * 0.2f;
 		}
 	}
 }

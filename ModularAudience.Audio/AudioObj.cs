@@ -76,6 +76,10 @@ namespace ModularAudience.Audio
         public bool CanUndo => this.PreviousSteps.Count > 0;
         public bool CanRedo => this.NextSteps.Count > 0;
 
+        // Beat grid
+        public bool DrawBeatGrid { get; set; } = false;
+        public bool[] BeatGrid { get; set; } = [];
+
         // Metrics store
         public Dictionary<string, double> Metrics { get; } = [];
 
@@ -395,9 +399,10 @@ namespace ModularAudience.Audio
             this.ScrollOffset = source.ScrollOffset;
             this.StartingOffset = source.StartingOffset;
             this.Bpm = source.Bpm;
+            this.Rename(source.OriginalName);
 
-            // Copy metrics dictionary content
-            this.Metrics.Clear();
+			// Copy metrics dictionary content
+			this.Metrics.Clear();
             foreach (var kv in source.Metrics)
             {
                 this.Metrics[kv.Key] = kv.Value;
@@ -464,6 +469,11 @@ namespace ModularAudience.Audio
 				return 0;
 			}
 
+			if (seconds >= this.Duration.TotalSeconds)
+			{
+				return totalFrames - 1;
+			}
+
 			// Compute frame index (floor to avoid stepping past requested time)
 			long frameIndex = (long) Math.Floor(seconds * this.SampleRate);
 
@@ -472,6 +482,59 @@ namespace ModularAudience.Audio
 
 			return frameIndex;
 		}
+
+		public long GetNearestSnapSamplePosition(long frameIndex)
+		{
+			if (this.BeatGrid == null || this.BeatGrid.Length == 0)
+			{
+				long totalFrames = this.Length / Math.Max(1, this.Channels);
+				if (totalFrames <= 0)
+				{
+					return 0;
+				}
+				return Math.Clamp(frameIndex, 0L, totalFrames - 1);
+			}
+
+			int total = this.BeatGrid.Length;
+			if (total <= 0)
+			{
+				return 0;
+			}
+
+			long clamped = Math.Clamp(frameIndex, 0L, total - 1);
+			int center = (int) clamped;
+
+			if (this.BeatGrid[center])
+			{
+				return center;
+			}
+
+			int maxDistance = total - 1;
+			for (int d = 1; d <= maxDistance; d++)
+			{
+				int left = center - d;
+				if (left >= 0 && this.BeatGrid[left])
+				{
+					return left;
+				}
+
+				int right = center + d;
+				if (right < total && this.BeatGrid[right])
+				{
+					return right;
+				}
+
+				if (left < 0 && right >= total)
+				{
+					break;
+				}
+			}
+
+			return center;
+		}
+
+
+
 
 	}
 }

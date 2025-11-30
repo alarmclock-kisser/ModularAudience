@@ -385,16 +385,27 @@ namespace ModularAudience.Forms
 						foreach (var g in groups)
 						{
 							var audios = g.Select(x => x.Audio!).ToList();
-							if (audios.Count == 0) continue;
+							if (audios.Count == 0)
+							{
+								continue;
+							}
 
 							var newView = new AudioCollectionView(audios);
 							// Setze Name auf Ordnername (Fallback: Voller Pfad)
 							string folderName = Path.GetFileName(g.Key);
-							if (string.IsNullOrWhiteSpace(folderName)) folderName = g.Key;
+							if (string.IsNullOrWhiteSpace(folderName))
+							{
+								folderName = g.Key;
+							}
+
 							try { newView.Rename(folderName); } catch { }
 
 							int num = GetCollectionNumber(newView);
-							foreach (var audio in audios) AudioCollectionTags[audio.Id] = num;
+							foreach (var audio in audios)
+							{
+								AudioCollectionTags[audio.Id] = num;
+							}
+
 							newView.Show();
 						}
 					}
@@ -407,7 +418,11 @@ namespace ModularAudience.Forms
 						{
 							var newView = new AudioCollectionView(audioList);
 							int num = GetCollectionNumber(newView);
-							foreach (var audio in audioList) AudioCollectionTags[audio.Id] = num;
+							foreach (var audio in audioList)
+							{
+								AudioCollectionTags[audio.Id] = num;
+							}
+
 							newView.Show();
 						}
 						else if (last.AudioCount == 0)
@@ -424,7 +439,11 @@ namespace ModularAudience.Forms
 						{
 							var newView = new AudioCollectionView(audioList);
 							int num = GetCollectionNumber(newView);
-							foreach (var audio in audioList) AudioCollectionTags[audio.Id] = num;
+							foreach (var audio in audioList)
+							{
+								AudioCollectionTags[audio.Id] = num;
+							}
+
 							newView.Show();
 						}
 					}
@@ -441,7 +460,10 @@ namespace ModularAudience.Forms
 			// Entfernen aus temporärer Sammlung ohne Dispose
 			try
 			{
-				foreach (var p in pairs) this.AudioC.Audios.Remove(p.Audio!);
+				foreach (var p in pairs)
+				{
+					this.AudioC.Audios.Remove(p.Audio!);
+				}
 			}
 			catch { }
 		}
@@ -488,15 +510,26 @@ namespace ModularAudience.Forms
 						foreach (var g in groups)
 						{
 							var audios = g.Select(x => x.Audio!).ToList();
-							if (audios.Count == 0) continue;
+							if (audios.Count == 0)
+							{
+								continue;
+							}
 
 							var newView = new AudioCollectionView(audios);
 							string folderName = Path.GetFileName(g.Key);
-							if (string.IsNullOrWhiteSpace(folderName)) folderName = g.Key;
+							if (string.IsNullOrWhiteSpace(folderName))
+							{
+								folderName = g.Key;
+							}
+
 							try { newView.Rename(folderName); } catch { }
 
 							int num = GetCollectionNumber(newView);
-							foreach (var audio in audios) AudioCollectionTags[audio.Id] = num;
+							foreach (var audio in audios)
+							{
+								AudioCollectionTags[audio.Id] = num;
+							}
+
 							newView.Show();
 						}
 					}

@@ -154,7 +154,7 @@ namespace ModularAudience.Generators
             var presetNorm = (preset ?? "").Trim();
             if (!string.Equals(presetNorm, "- None -", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(presetNorm))
             {
-                string key = presetNorm.Replace(" ", "").Replace("-", "").ToLowerInvariant();
+                string key = presetNorm.Replace(" ", "").Replace("-", "");
 				// Resolve via reflection to avoid huge switch/case
                 var method = typeof(BreakbeatGenerator).GetMethod($"Preset_{key}", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
                 if (method != null)

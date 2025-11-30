@@ -7,13 +7,15 @@ using System.Runtime.Versioning;
 using Timer = System.Windows.Forms.Timer;
 using ModularAudience.Audio.Processing;
 using ModularAudience.Audio.Processors_V1;
+using System.Threading.Tasks;
+using MathNet.Numerics.Optimization.TrustRegion;
 
 namespace ModularAudience.Forms.Modules
 {
 	public partial class TrackView : Form
 	{
 		private const int DragThresholdPx = 2;
-		private static readonly int[] LoopSteps = { 1, 2, 4, 8, 16, 32, 64 };
+		private static readonly int[] LoopSteps = [1, 2, 4, 8, 16, 32, 64];
 		private const int MaxSamplesPerPixel = 16384;
 		private const int MinSamplesPerPixel = 1;
 		private static int selectionCopySeed;
@@ -1706,10 +1708,46 @@ namespace ModularAudience.Forms.Modules
 				minDuration = duration;
 			}
 
+			// Busy cursor
+			Cursor cursor = this.Cursor;
+			this.Cursor = Cursors.WaitCursor;
+
 			// Create Undo Step
 			await this.OriginalAudio.CreateUndoStepAsync();
 			await BeatGridFinder.TrimSilenceAsync(this.OriginalAudio, silenceThreshold, minDuration);
+
+			// Restore cursor
+			this.Cursor = cursor;
 		}
+
+		private async void menuItem_drawBeatGrid_Click(object? sender, EventArgs e)
+		{
+			bool activated = this.drawBeatGridToolStripMenuItem.Checked;
+			if (activated)
+			{
+				if (this.OriginalAudio.Data.LongLength != this.OriginalAudio.BeatGrid.LongLength * 2)
+				{
+					// Make cursor for Form busy
+					Cursor previousCursor = this.Cursor;
+					this.Cursor = Cursors.WaitCursor;
+
+					await BeatGridFinder.GenerateBeatGridAsync(this.OriginalAudio);
+
+					// Restore previous cursor
+					this.Cursor = previousCursor;
+				}
+			}
+
+			this.OriginalAudio.DrawBeatGrid = activated;
+
+			if (activated && !this.OriginalAudio.Playing)
+			{
+				// Redraw waveform
+				await this.RefreshWaveformAsync();
+			}
+		}
+
+
 
 
 		private void InvokeIfRequired(Action action)
@@ -1861,6 +1899,11 @@ namespace ModularAudience.Forms.Modules
 				this.Close();
 				return true;
 			}
+			if (keyData == (Keys.Shift | Keys.ShiftKey))
+			{
+				this.ShiftDown_Cursor_SnapToBeatGrid();
+				return true;
+			}
 
 			return base.ProcessCmdKey(ref msg, keyData);
 		}
@@ -1967,6 +2010,52 @@ namespace ModularAudience.Forms.Modules
 				this.Close();
 			}
 		}
+
+
+		internal void ShiftDown_Cursor_SnapToBeatGrid()
+		{
+			if (this.OriginalAudio == null
+				|| this.OriginalAudio.BeatGrid == null
+				|| this.OriginalAudio.BeatGrid.LongLength <= 0
+				|| !this.OriginalAudio.DrawBeatGrid
+				|| this.OriginalAudio.Playing)
+			{
+				return;
+			}
+
+			if (this.samplesPerPixel <= 0)
+			{
+				return;
+			}
+
+			if (this.pictureBox_waveform.Width <= 0)
+			{
+				return;
+			}
+
+			Point cursorScreen = Cursor.Position;
+			Point waveClient = this.pictureBox_waveform.PointToClient(cursorScreen);
+
+			int width = Math.Max(1, this.pictureBox_waveform.Width);
+			int x = Math.Clamp(waveClient.X, 0, width - 1);
+
+			long totalFrames = this.GetTotalFrames();
+			int spp = Math.Max(1, this.samplesPerPixel);
+
+			long frameUnderCursor = this.offsetFrames + (long) x * spp;
+			frameUnderCursor = Math.Clamp(frameUnderCursor, 0L, Math.Max(0L, totalFrames - 1));
+
+			long snappedFrame = this.OriginalAudio.GetNearestSnapSamplePosition(frameUnderCursor);
+
+			double invSpp = 1.0 / spp;
+			int snappedX = (int) Math.Round((snappedFrame - this.offsetFrames) * invSpp);
+			snappedX = Math.Clamp(snappedX, 0, width - 1);
+
+			Point newWaveClient = new Point(snappedX, waveClient.Y);
+			Point newScreenPoint = this.pictureBox_waveform.PointToScreen(newWaveClient);
+			Cursor.Position = newScreenPoint;
+		}
+
 
 
 
@@ -2227,7 +2316,7 @@ namespace ModularAudience.Forms.Modules
 			if (!string.IsNullOrWhiteSpace(input) && input != current)
 			{
 				this.Text = "#" + this.TrackViewId.ToString("D2") + " - " + input;
-				this.OriginalAudio.Name = input;
+				this.OriginalAudio.Rename(input);
 			}
 		}
 
@@ -2236,5 +2325,7 @@ namespace ModularAudience.Forms.Modules
 			this.OriginalAudio.Rename(newName);
 			this.Text = "#" + this.TrackViewId.ToString("D2") + " - " + newName;
 		}
+
+
 	}
 }

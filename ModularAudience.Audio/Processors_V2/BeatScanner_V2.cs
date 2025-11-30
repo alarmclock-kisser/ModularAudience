@@ -851,8 +851,8 @@ namespace ModularAudience.Audio.Processors_V1
             }
 
             // Krumhansl Templates
-            double[] majorTpl = NormalizeTemplate(new double[] { 6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88 });
-            double[] minorTpl = NormalizeTemplate(new double[] { 6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17 });
+            double[] majorTpl = NormalizeTemplate([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]);
+            double[] minorTpl = NormalizeTemplate([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]);
 
             int bestKey = -1;
             bool bestIsMinor = false;
@@ -922,7 +922,7 @@ namespace ModularAudience.Audio.Processors_V1
         private static string KeyNameFromIndex(int key, bool isMinor)
         {
             // 0=C, 1=C#, ..., 11=B
-            string[] names = new[] { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+            string[] names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
             string root = names[((key % 12) + 12) % 12];
             return isMinor ? $"{root} minor" : $"{root} major";
         }
