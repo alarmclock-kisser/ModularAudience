@@ -127,14 +127,14 @@ namespace ModularAudience.Generators
     };
 
         // Public API wie gewünscht. Diese Signatur wurde beibehalten; intern existiert eine mächtigere Overload mit mehr Parametern.
-        public static Task<List<bool[]>> GenerateBreakPatternAsync(IEnumerable<DrumsetElement> drumset, int bars = 2, float density = 0.33f)
+        public static Task<List<bool[]>> GenerateBreakPatternAsync(IEnumerable<DrumsetElement> drumset, int bars = 2, float density = 0.33f, string preset = " - None - ")
         {
-            // Default-Extras: resolution=16, swing=0, complexityFactor=1.0, seed random
-            return GenerateBreakPatternAsync(drumset, bars, density, DefaultResolution, swing: 0.0f, complexity: 1.0f, seed: NextSeed());
+            // Forward to full overload, keep existing defaults and provide preset through
+            return GenerateBreakPatternAsync(drumset, bars, density, DefaultResolution, swing: 0.0f, complexity: 1.0f, interleaved: false, seed: NextSeed(), preset: preset);
         }
 
         // Erweiterte Overload: erlaubt feinere Steuerung (optional nutzbar).
-        public static async Task<List<bool[]>> GenerateBreakPatternAsync(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null)
+        public static async Task<List<bool[]>> GenerateBreakPatternAsync(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null, string preset = " - None - ")
         {
             if (bars <= 0)
             {
@@ -150,7 +150,29 @@ namespace ModularAudience.Generators
             swing = Math.Clamp(swing, 0f, 0.5f); // 0..0.5 reasonable
             complexity = Math.Clamp(complexity, 0.1f, 4.0f);
 
-            int totalSteps = bars * resolution;
+            // If a preset was requested, dispatch to the preset implementation in the partial file
+            var presetNorm = (preset ?? "").Trim();
+            if (!string.Equals(presetNorm, "- None -", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(presetNorm))
+            {
+                string key = presetNorm.Replace(" ", "").Replace("-", "").ToLowerInvariant();
+				// Resolve via reflection to avoid huge switch/case
+                var method = typeof(BreakbeatGenerator).GetMethod($"Preset_{key}", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                if (method != null)
+                {
+                    LogCollection.Log("Using BreakbeatGenerator '" + method.Name + "'.");
+					var task = (Task<List<bool[]>>) method.Invoke(null, [drumset, bars, density, resolution, swing, complexity, interleaved, seed])!;
+                    return await task;
+				}
+                else
+                {
+                    // Unknown preset: fall back to default generation (could log if you add logging)
+                    LogCollection.Log("Could not get Method 'Preset_" + key + "', fallback to default break generation.");
+				}
+
+				// Unknown preset: fall back to default generation (could log if you add logging)
+			}
+
+			int totalSteps = bars * resolution;
             var elements = drumset.ToList();
             var results = new List<bool[]>(elements.Count);
 

@@ -154,7 +154,7 @@ namespace ModularAudience.Forms
                             string input = Microsoft.VisualBasic.Interaction.InputBox("Enter new name:", "Rename Audio", selectedAudio.Name);
                             if (!string.IsNullOrWhiteSpace(input))
                             {
-                                selectedAudio.Name = input;
+                                selectedAudio.Rename(input);
                                 this.listBox_audios.Refresh();
 
                                 WindowMain.TrackViews.Where(tv => tv.OriginalAudio.Id == selectedAudio.Id).ToList().ForEach(tv => tv.Rename(input));
@@ -210,7 +210,18 @@ namespace ModularAudience.Forms
                             this.AudioC.Audios.Remove(audio);
                         }
                     };
-                    contextMenu.Items.AddRange([renameItem, deleteItem, toNewCollectionItem]);
+					ToolStripMenuItem addIndexToNamesItem = new("Add Index to Names")
+					{
+						CheckOnClick = true,
+						Checked = this.AudioC.AddIndexToNames
+					};
+					addIndexToNamesItem.CheckedChanged += (s, ev) =>
+					{
+						// Setze den Wert explizit (ToggleAddIndexToNames akzeptiert bool?)
+						this.AudioC.ToggleAddIndexToNames(addIndexToNamesItem.Checked);
+						this.listBox_audios.Refresh();
+					};
+					contextMenu.Items.AddRange([renameItem, deleteItem, toNewCollectionItem, addIndexToNamesItem]);
                     contextMenu.Show(this.listBox_audios, e.Location);
                 }
             }

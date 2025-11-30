@@ -30,9 +30,10 @@ namespace ModularAudience.Audio
         public double TruncateStartSeconds { get; set; } = 0.0;
         public double TruncateEndSeconds { get; set; } = 0.0;
         public bool KeepOriginal { get; set; } = false;
+        public bool AddIndexToNames { get; set; } = false;
 
-        // Objects
-        public readonly AudioExporter Exporter;
+		// Objects
+		public readonly AudioExporter Exporter;
 
         // Lambda
         public string ExportPath => Path.Combine(this.WorkingDirectory, "_Exports");
@@ -59,9 +60,15 @@ namespace ModularAudience.Audio
             Directory.CreateDirectory(this.ExportPath);
             Directory.CreateDirectory(this.RecordPath);
             this.Exporter = new AudioExporter(this.ExportPath);
-        }
 
-        public async Task<bool> PushSnapshotAsync(Guid id)
+            this.Audios.ListChanged += (s, e) =>
+            {
+                this.ToggleAddIndexToNames();
+            };
+		}
+
+
+		public async Task<bool> PushSnapshotAsync(Guid id)
         {
             var audio = this[id];
             if (audio == null)
@@ -380,5 +387,33 @@ namespace ModularAudience.Audio
                 return null;
             }
         }
+
+
+        public void ToggleAddIndexToNames(bool? value = null)
+        {
+            if (value.HasValue)
+            {
+                this.AddIndexToNames = value.Value;
+            }
+
+			// Add index to names if enabled
+			if (this.AddIndexToNames)
+			{
+				int zeros = this.Audios.Count.ToString().Length;
+				string format = new string('0', zeros);
+				foreach (var audio in this.Audios)
+				{
+					int index = this.Audios.IndexOf(audio) + 1;
+					audio.Name = $"{index.ToString(format)} - {audio.OriginalName}";
+				}
+			}
+			else if (!this.AddIndexToNames)
+			{
+				foreach (var audio in this.Audios)
+				{
+					audio.Name = audio.OriginalName;
+				}
+			}
+		}
     }
 }

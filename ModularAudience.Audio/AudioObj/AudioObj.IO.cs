@@ -30,7 +30,8 @@ namespace ModularAudience.Audio
             }
 
             this.Name = Path.GetFileNameWithoutExtension(this.FilePath);
-            Stopwatch sw = Stopwatch.StartNew();
+            this.OriginalName = this.Name;
+			Stopwatch sw = Stopwatch.StartNew();
 
             try
             {

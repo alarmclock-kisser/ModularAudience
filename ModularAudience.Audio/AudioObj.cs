@@ -15,7 +15,8 @@ namespace ModularAudience.Audio
         public Guid Id { get; set; } = Guid.NewGuid();
         public readonly DateTime CreatedAt = DateTime.UtcNow;
         public string Name { get; set; } = string.Empty;
-        public string FilePath { get; set; } = string.Empty;
+        public string OriginalName { get; private set; } = string.Empty;
+		public string FilePath { get; set; } = string.Empty;
 
         // Audio data & format
         public float[] Data { get; set; } = [];
@@ -159,7 +160,8 @@ namespace ModularAudience.Audio
             {
                 Id = this.Id,
                 Name = this.Name,
-                FilePath = this.FilePath,
+                OriginalName = this.OriginalName,
+				FilePath = this.FilePath,
                 Data = (float[]) this.Data.Clone(),
                 SampleRate = this.SampleRate,
                 Channels = this.Channels,
@@ -338,6 +340,12 @@ namespace ModularAudience.Audio
             }
         }
 
+        public void Rename (string newName)
+        {
+            this.Name = newName;
+            this.OriginalName = newName;
+        }
+
         // Internal helper - applies state from source snapshot to THIS instance
         private void ApplyStateFrom(AudioObj source)
         {
@@ -430,6 +438,40 @@ namespace ModularAudience.Audio
             this.Data = newData;
             this.Length = this.Data.Length;
             this.Duration = TimeSpan.FromSeconds((double) this.Length / (this.SampleRate * this.Channels));
-        }
-    }
+
+            await Task.CompletedTask;
+		}
+
+		public long GetSampleAtSeconds(double seconds)
+		{
+			// Guard
+			if (this.SampleRate <= 0 || this.Data == null || this.Data.Length == 0 || this.Channels <= 0)
+			{
+				return 0;
+			}
+
+			if (double.IsNaN(seconds) || double.IsInfinity(seconds))
+			{
+				return 0;
+			}
+
+			// Use base sample rate (frames = samples per channel)
+			long totalFrames = this.Data.Length / this.Channels;
+
+			// Clamp seconds to valid range
+			if (seconds <= 0.0)
+			{
+				return 0;
+			}
+
+			// Compute frame index (floor to avoid stepping past requested time)
+			long frameIndex = (long) Math.Floor(seconds * this.SampleRate);
+
+			// Ensure within bounds [0, totalFrames-1]
+			frameIndex = Math.Clamp(frameIndex, 0L, Math.Max(0L, totalFrames - 1));
+
+			return frameIndex;
+		}
+
+	}
 }

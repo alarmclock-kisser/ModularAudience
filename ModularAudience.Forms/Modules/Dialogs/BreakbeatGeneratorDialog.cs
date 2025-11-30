@@ -166,8 +166,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
 				swing: this.Swing,
 				complexity: this.Complexity,
 				interleaved: this.Interleaved,
-				seed: this.Seed
-				//preset: this.SelectedPreset
+				seed: this.Seed,
+				preset: this.SelectedPreset
 			);
 
 			var audioObj = await BreakbeatGenerator.RenderBreakbeatAsync(breakbeat, this.AudioC.Audios, this.Bpm, this.Resolution, this.Swing);
