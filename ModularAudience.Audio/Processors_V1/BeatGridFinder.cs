@@ -8,9 +8,6 @@ namespace ModularAudience.Audio.Processors_V1
 {
 	public static class BeatGridFinder
 	{
-		/// <summary>
-		/// Länge der Stille am Anfang (bis zum ersten hörbaren Signal).
-		/// </summary>
 		public static async Task<TimeSpan> FindSilenceDurationStartAsync(AudioObj audio, float? threshold = null, int? minDurationMs = null)
 		{
 			if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
@@ -21,9 +18,6 @@ namespace ModularAudience.Audio.Processors_V1
 			return await Task.Run(() => ComputeSilenceDuration(audio, findStart: true, threshold, minDurationMs));
 		}
 
-		/// <summary>
-		/// Länge der Stille am Ende (Trailing silence).
-		/// </summary>
 		public static async Task<TimeSpan> FindSilenceDurationEndAsync(AudioObj audio, float? threshold = null, int? minDurationMs = null)
 		{
 			if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
