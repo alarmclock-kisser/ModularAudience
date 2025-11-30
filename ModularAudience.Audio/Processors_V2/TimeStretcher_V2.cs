@@ -218,7 +218,7 @@ public static class TimeStretcher_V2
 
         Array.Resize(ref outBuffer, newSize);
         Array.Resize(ref winSum, newSize);
-    }
+    } 
 
     static int AutoChooseFrameSize(int sampleRate, int frames)
     {
