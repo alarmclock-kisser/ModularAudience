@@ -24,7 +24,7 @@ public enum DrumsetElement
 
 namespace ModularAudience.Generators
 {
-    public static class BreakbeatGenerator
+    public static partial class BreakbeatGenerator
     {
         // Default resolution: 16 steps per bar (16th notes). Das entspricht dem, was man in Drum-Machines oft sieht.
         private const int DefaultResolution = 16;

@@ -46,6 +46,9 @@ namespace ModularAudience.Forms
 		private static readonly Size TrackViewSpacing = new(15, 12);
 		private bool suppressExportFormatEvent;
 		private string lastImportFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
+		internal bool StructuredImports => this.checkBox_structure.Checked;
+
+		internal static bool SuppressCollectionViewPositioning = false;
 
 		// Recording timer
 		private System.Windows.Forms.Timer? recordingTimer = null;
@@ -254,8 +257,9 @@ namespace ModularAudience.Forms
 			{
 				if (e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop))
 				{
-					var files = e.Data.GetData(DataFormats.FileDrop) as string[] ?? [];
-					if (files.Any(f => !string.IsNullOrWhiteSpace(f) && AllowedImportExtensions.Contains(Path.GetExtension(f))))
+					var items = e.Data.GetData(DataFormats.FileDrop) as string[] ?? Array.Empty<string>();
+					if (items.Any(p => !string.IsNullOrWhiteSpace(p) &&
+						(Directory.Exists(p) || AllowedImportExtensions.Contains(Path.GetExtension(p)))))
 					{
 						e.Effect = DragDropEffects.Copy;
 						return;
@@ -271,30 +275,55 @@ namespace ModularAudience.Forms
 		{
 			if (e.Data == null || !e.Data.GetDataPresent(DataFormats.FileDrop))
 			{
+				LogCollection.Log("DragDrop: no FileDrop data.");
 				return;
 			}
 
 			string[] dropped;
 			try
 			{
-				dropped = e.Data.GetData(DataFormats.FileDrop) as string[] ?? [];
+				dropped = e.Data.GetData(DataFormats.FileDrop) as string[] ?? Array.Empty<string>();
 			}
-			catch
+			catch (Exception ex)
 			{
+				LogCollection.Log($"DragDrop: failed to read dropped data: {ex.Message}");
 				return;
 			}
 
-			var validPaths = dropped
-				.Where(p => !string.IsNullOrWhiteSpace(p))
-				.Where(p => AllowedImportExtensions.Contains(Path.GetExtension(p)))
-				.ToList();
+			LogCollection.Log($"DragDrop: {dropped.Length} item(s) dropped.");
+			var candidates = dropped.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+			LogCollection.Log("Dropped (sample): " + string.Join(", ", candidates.Take(10)));
 
+			// Expand directories (recursive) and collect allowed files
+			var collectedPaths = new List<string>();
+			foreach (var path in candidates)
+			{
+				try
+				{
+					if (Directory.Exists(path))
+					{
+						var found = Directory.EnumerateFiles(path, "*.*", SearchOption.AllDirectories)
+							.Where(f => AllowedImportExtensions.Contains(Path.GetExtension(f)));
+						collectedPaths.AddRange(found);
+					}
+					else if (File.Exists(path) && AllowedImportExtensions.Contains(Path.GetExtension(path)))
+					{
+						collectedPaths.Add(path);
+					}
+				}
+				catch (Exception ex)
+				{
+					LogCollection.Log($"DragDrop: error scanning '{path}': {ex.Message}");
+				}
+			}
+
+			var validPaths = collectedPaths.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 			if (validPaths.Count == 0)
 			{
+				LogCollection.Log("DragDrop: No allowed audio files found in drop.");
 				return;
 			}
 
-			// Merke Import-Ordner
 			try
 			{
 				this.lastImportFolder = Path.GetDirectoryName(validPaths[0]) ?? this.lastImportFolder;
@@ -302,16 +331,16 @@ namespace ModularAudience.Forms
 			catch { }
 
 			// Lade jede Datei parallel (je Task = LoadAsync)
-			List<Task<AudioObj?>> loadTasks = new();
-			foreach (var path in validPaths)
+			var loadTasks = new List<Task<AudioObj?>>();
+			foreach (var file in validPaths)
 			{
 				try
 				{
-					loadTasks.Add(this.AudioC.LoadAsync(path));
+					loadTasks.Add(this.AudioC.LoadAsync(file));
 				}
-				catch
+				catch (Exception ex)
 				{
-					// Continue on individual failure
+					LogCollection.Log($"DragDrop: enqueue LoadAsync failed for '{file}': {ex.Message}");
 					loadTasks.Add(Task.FromResult<AudioObj?>(null));
 				}
 			}
@@ -319,164 +348,212 @@ namespace ModularAudience.Forms
 			AudioObj?[] loadedResults;
 			try
 			{
-				loadedResults = await Task.WhenAll(loadTasks).ConfigureAwait(false);
+				// Absichtlich ohne ConfigureAwait(false): Fortsetzung soll auf UI-Thread laufen
+				loadedResults = await Task.WhenAll(loadTasks);
 			}
-			catch
+			catch (Exception ex)
 			{
-				// wenn Task.WhenAll scheitert, versuche einzelne Tasks zu sammeln
+				LogCollection.Log($"DragDrop: Task.WhenAll failed: {ex.Message}");
 				loadedResults = loadTasks.Select(t => t.IsCompletedSuccessfully ? t.Result : null).ToArray();
 			}
 
-			var importedAudios = loadedResults.Where(a => a != null).Cast<AudioObj>().ToList();
-			if (importedAudios.Count == 0)
+			// Pair file path with created AudioObj
+			var pairs = validPaths
+				.Select((p, i) => new { Path = Path.GetFullPath(p), Audio = i < loadedResults.Length ? loadedResults[i] : null })
+				.Where(x => x.Audio != null)
+				.ToList();
+
+			var importedCount = pairs.Count;
+			LogCollection.Log($"DragDrop: {importedCount} audio object(s) created.");
+			if (importedCount == 0)
 			{
+				LogCollection.Log("DragDrop: no files could be loaded (all loads failed).");
 				return;
 			}
 
-			// Logging (wie ImportAndPlaceAsync)
-			foreach (var audio in importedAudios)
+			// UI-Operationen auf UI-Thread: Views erzeugen / zeigen / positionieren
+			InvokeIfRequired(() =>
 			{
-				LogCollection.Log($"{audio.Name} imported.");
-			}
+				bool prevSuppress = SuppressCollectionViewPositioning;
+				SuppressCollectionViewPositioning = true;
+				try
+				{
+					if (this.StructuredImports)
+					{
+						// Gruppiere nach Verzeichnis und für jede Gruppe eine View erstellen
+						var groups = pairs.GroupBy(x => Path.GetDirectoryName(x.Path) ?? string.Empty);
+						foreach (var g in groups)
+						{
+							var audios = g.Select(x => x.Audio!).ToList();
+							if (audios.Count == 0) continue;
 
-			// Fall-Logik analog zu ImportAndPlaceAsync: letzte View verwenden wenn leer, sonst neue View erstellen
-			var last = CollectionViews.LastOrDefault();
-			if (last == null)
-			{
-				var newView = new AudioCollectionView(importedAudios);
-				int num = GetCollectionNumber(newView);
-				foreach (var audio in importedAudios)
-				{
-					AudioCollectionTags[audio.Id] = num;
-				}
-				newView.Show();
-			}
-			else if (last.AudioCount == 0)
-			{
-				int num = GetCollectionNumber(last);
-				foreach (var audio in importedAudios)
-				{
-					last.AudioC.Audios.Add(audio);
-					AudioCollectionTags[audio.Id] = num;
-				}
-				last.Show();
-			}
-			else
-			{
-				var newView = new AudioCollectionView(importedAudios);
-				int num = GetCollectionNumber(newView);
-				foreach (var audio in importedAudios)
-				{
-					AudioCollectionTags[audio.Id] = num;
-				}
-				newView.Show();
-			}
+							var newView = new AudioCollectionView(audios);
+							// Setze Name auf Ordnername (Fallback: Voller Pfad)
+							string folderName = Path.GetFileName(g.Key);
+							if (string.IsNullOrWhiteSpace(folderName)) folderName = g.Key;
+							try { newView.Rename(folderName); } catch { }
 
-			// Entfernen aus temporärer Sammlung ohne Dispose (wie ImportAndPlaceAsync)
+							int num = GetCollectionNumber(newView);
+							foreach (var audio in audios) AudioCollectionTags[audio.Id] = num;
+							newView.Show();
+						}
+					}
+					else
+					{
+						// Bisheriges Verhalten: alle Audios in eine View / vorhandene leere View
+						var audioList = pairs.Select(x => x.Audio!).ToList();
+						var last = CollectionViews.LastOrDefault();
+						if (last == null)
+						{
+							var newView = new AudioCollectionView(audioList);
+							int num = GetCollectionNumber(newView);
+							foreach (var audio in audioList) AudioCollectionTags[audio.Id] = num;
+							newView.Show();
+						}
+						else if (last.AudioCount == 0)
+						{
+							int num = GetCollectionNumber(last);
+							foreach (var audio in audioList)
+							{
+								last.AudioC.Audios.Add(audio);
+								AudioCollectionTags[audio.Id] = num;
+							}
+							last.Show();
+						}
+						else
+						{
+							var newView = new AudioCollectionView(audioList);
+							int num = GetCollectionNumber(newView);
+							foreach (var audio in audioList) AudioCollectionTags[audio.Id] = num;
+							newView.Show();
+						}
+					}
+				}
+				finally
+				{
+					SuppressCollectionViewPositioning = prevSuppress;
+				}
+
+				// Einmalige, sichere Neupositionierung
+				try { this.PositionCollectionViews(); } catch { }
+			});
+
+			// Entfernen aus temporärer Sammlung ohne Dispose
 			try
 			{
-				foreach (var audio in importedAudios)
-				{
-					this.AudioC.Audios.Remove(audio);
-				}
+				foreach (var p in pairs) this.AudioC.Audios.Remove(p.Audio!);
 			}
 			catch { }
 		}
 
 		private async Task ImportAndPlaceAsync(IEnumerable<string> filePaths, bool fromResources)
 		{
-			// Laden und Liste neu importierter Audios bestimmen ohne sp�tere Dispose
+			// Laden und Liste neu importierter Audios bestimmen ohne spätere Dispose
 			var validPaths = filePaths.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
 			if (validPaths.Count == 0)
 			{
 				return;
 			}
 
-			// Laden
+			// Lade alle Dateien (LoadManyAsync gibt AudioObj?[] zurück)
 			var loaded = await this.AudioC.LoadManyAsync(validPaths);
-			var importedAudios = loaded.Where(a => a != null).Cast<AudioObj>().ToList();
+			// Pair paths mit Ergebnissen
+			var pairs = validPaths
+				.Select((p, i) => new { Path = Path.GetFullPath(p), Audio = i < loaded.Count() ? loaded.ElementAt(i) : null })
+				.Where(x => x.Audio != null)
+				.ToList();
+
+			var importedAudios = pairs.Select(x => x.Audio!).ToList();
 			if (importedAudios.Count == 0)
 			{
 				return;
 			}
 
-			// Logging nur f�r neu importierte
+			// Logging nur für neu importierte
 			foreach (var audio in importedAudios)
 			{
 				LogCollection.Log(fromResources ? $"{audio.Name} imported from resources." : $"{audio.Name} imported.");
 			}
 
-			// Single-Collection Modus: immer nur erste View pflegen
-			/*if (this.checkBox_singleCollection.Checked)
-            {
-                var first = CollectionViews.FirstOrDefault();
-                if (first == null)
-                {
-                    first = new AudioCollectionView(importedAudios);
-                }
-                else
-                {
-                    foreach (var audio in importedAudios)
-                    {
-                        first.AudioC.Audios.Add(audio);
-                    }
-                }
-                foreach (var audio in importedAudios)
-                {
-                    AudioCollectionTags[audio.Id] = 1;
-                }
-                first.Show();
-                // Nur Referenzen aus tempor�rem Loader entfernen, nicht disposen
-                foreach (var audio in importedAudios)
-                {
-                    this.AudioC.Audios.Remove(audio);
-                }
-                return;
-            }*/
+			// Wenn StructuredImports aktiv: gruppiere nach Verzeichnis und erstelle pro Ordner eine View
+			if (this.StructuredImports)
+			{
+				InvokeIfRequired(() =>
+				{
+					bool prevSuppress = SuppressCollectionViewPositioning;
+					SuppressCollectionViewPositioning = true;
+					try
+					{
+						var groups = pairs.GroupBy(x => Path.GetDirectoryName(x.Path) ?? string.Empty);
+						foreach (var g in groups)
+						{
+							var audios = g.Select(x => x.Audio!).ToList();
+							if (audios.Count == 0) continue;
 
-			var last = CollectionViews.LastOrDefault();
-			if (last == null)
-			{
-				// Erste View erstellen
-				var newView = new AudioCollectionView(importedAudios);
-				// Tags auf Nummer der neuen View setzen
-				int num = GetCollectionNumber(newView);
-				foreach (var audio in importedAudios)
-				{
-					AudioCollectionTags[audio.Id] = num;
-				}
-				newView.Show();
-			}
-			else if (last.AudioCount == 0)
-			{
-				// In bestehende leere View importieren
-				int num = GetCollectionNumber(last);
-				foreach (var audio in importedAudios)
-				{
-					last.AudioC.Audios.Add(audio);
-					AudioCollectionTags[audio.Id] = num;
-				}
-				last.Show();
+							var newView = new AudioCollectionView(audios);
+							string folderName = Path.GetFileName(g.Key);
+							if (string.IsNullOrWhiteSpace(folderName)) folderName = g.Key;
+							try { newView.Rename(folderName); } catch { }
+
+							int num = GetCollectionNumber(newView);
+							foreach (var audio in audios) AudioCollectionTags[audio.Id] = num;
+							newView.Show();
+						}
+					}
+					finally
+					{
+						SuppressCollectionViewPositioning = prevSuppress;
+					}
+
+					try { this.PositionCollectionViews(); } catch { }
+				});
 			}
 			else
 			{
-				// Neue View nur wenn letzte nicht leer ist
-				var newView = new AudioCollectionView(importedAudios);
-				int num = GetCollectionNumber(newView);
-				foreach (var audio in importedAudios)
+				// Single-batch wie vorher: in bestehende leere View oder neue View
+				InvokeIfRequired(() =>
 				{
-					AudioCollectionTags[audio.Id] = num;
-				}
-				newView.Show();
+					var last = CollectionViews.LastOrDefault();
+					if (last == null)
+					{
+						var newView = new AudioCollectionView(importedAudios);
+						int num = GetCollectionNumber(newView);
+						foreach (var audio in importedAudios)
+						{
+							AudioCollectionTags[audio.Id] = num;
+						}
+						newView.Show();
+					}
+					else if (last.AudioCount == 0)
+					{
+						int num = GetCollectionNumber(last);
+						foreach (var audio in importedAudios)
+						{
+							last.AudioC.Audios.Add(audio);
+							AudioCollectionTags[audio.Id] = num;
+						}
+						last.Show();
+					}
+					else
+					{
+						var newView = new AudioCollectionView(importedAudios);
+						int num = GetCollectionNumber(newView);
+						foreach (var audio in importedAudios)
+						{
+							AudioCollectionTags[audio.Id] = num;
+						}
+						newView.Show();
+					}
+
+					try { this.PositionCollectionViews(); } catch { }
+				});
 			}
 
-			// Entfernen aus tempor�rer Sammlung ohne Dispose (damit Views g�ltige Objekte behalten)
+			// Entfernen aus temporärer Sammlung ohne Dispose (damit Views gültige Objekte behalten)
 			foreach (var audio in importedAudios)
 			{
 				this.AudioC.Audios.Remove(audio);
 			}
-
-			// Positioning happens per-view on add; keep global layout untouched here.
 		}
 
 		private void InitializeExportControls()
@@ -679,11 +756,53 @@ namespace ModularAudience.Forms
 			if (e.ListChangedType == ListChangedType.ItemAdded)
 			{
 				var addedView = CollectionViews[e.NewIndex];
-				this.PositionCollectionView(addedView);
+				if (addedView == null || addedView.IsDisposed)
+				{
+					return;
+				}
+
+				// Wenn bereits Handle vorhanden: sofort diese View positionieren
+				if (addedView.IsHandleCreated)
+				{
+					try { this.PositionCollectionView(addedView); } catch { }
+					return;
+				}
+
+				// Sonst: einmalig positionieren, sobald Handle erstellt wird
+				EventHandler? handleCreatedHandler = null;
+				handleCreatedHandler = (s, ea) =>
+				{
+					try
+					{
+						addedView.HandleCreated -= handleCreatedHandler;
+						if (!addedView.IsDisposed)
+						{
+							this.PositionCollectionView(addedView);
+						}
+					}
+					catch { }
+				};
+				addedView.HandleCreated += handleCreatedHandler;
+
+				// Zusätzlich Fallback: bei Shown nochmal sicherstellen
+				EventHandler? shownHandler = null;
+				shownHandler = (s, ea) =>
+				{
+					try
+					{
+						addedView.Shown -= shownHandler;
+						if (!addedView.IsDisposed)
+						{
+							this.PositionCollectionView(addedView);
+						}
+					}
+					catch { }
+				};
+				addedView.Shown += shownHandler;
 			}
 			else
 			{
-				// this.PositionCollectionViews();
+				// keine Änderung erforderlich
 			}
 		}
 
@@ -1430,8 +1549,8 @@ namespace ModularAudience.Forms
 
 		private void button_breakbeatArchitect_Click(object sender, EventArgs e)
 		{
-			using var dlg = new Modules.Dialogs.BreakbeatGeneratorDialog(SelectedTracks);
-			dlg.ShowDialog(this);
+			var breakbeatWindow = new Modules.Dialogs.BreakbeatGeneratorDialog(SelectedTracks);	
+			breakbeatWindow.Show();
 		}
 
 		private void button_pitchShift_Click(object sender, EventArgs e)

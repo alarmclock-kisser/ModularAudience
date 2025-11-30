@@ -480,6 +480,7 @@ namespace ModularAudience.Forms.Modules
 								int nameHeight = spec.NameHeight;
 								float chosenFontSize = Math.Max(7, (nameHeight / 3f));
 
+								Font font = this.Font ?? SystemFonts.DefaultFont;
 								label = new Label
 								{
 									Text = nameText,
@@ -487,7 +488,7 @@ namespace ModularAudience.Forms.Modules
 									TextAlign = ContentAlignment.MiddleLeft,
 									Location = new Point(5, 0),
 									Size = new Size(nameWidth, nameHeight),
-									Font = new Font(this.Font.FontFamily, chosenFontSize, FontStyle.Bold),
+									Font = new Font(font.FontFamily, chosenFontSize, FontStyle.Bold),
 									AutoEllipsis = true,
 									UseCompatibleTextRendering = true,
 									Anchor = AnchorStyles.Left | AnchorStyles.Top
@@ -521,20 +522,21 @@ namespace ModularAudience.Forms.Modules
 								string text = spec.ButtonTexts.Count > h ? spec.ButtonTexts[h] : string.Empty;
 								if (!string.IsNullOrEmpty(text))
 								{
+									Font font = this.Font ?? new Font(FontFamily.GenericMonospace, 8, FontStyle.Regular);
 									if (buttonWidth < 22 && text.Length == 2)
 									{
 										button.Text = text;
-										button.Font = new Font(this.Font.FontFamily, 6, FontStyle.Regular);
+										button.Font = new Font(font.FontFamily, 6, FontStyle.Regular);
 									}
 									else if (buttonWidth < 30)
 									{
 										button.Text = text;
-										button.Font = new Font(this.Font.FontFamily, 7, FontStyle.Regular);
+										button.Font = new Font(font.FontFamily, 7, FontStyle.Regular);
 									}
 									else
 									{
 										button.Text = text;
-										button.Font = new Font(this.Font.FontFamily, 8, FontStyle.Regular);
+										button.Font = new Font(font.FontFamily, 8, FontStyle.Regular);
 									}
 									button.UseCompatibleTextRendering = true;
 								}
@@ -729,70 +731,75 @@ namespace ModularAudience.Forms.Modules
 
 
 		private void RandomizeAllPanels(bool interleaved = false)
-        {
-            if (interleaved)
-            {
-                // Single drum hit at most per step across all panels
-                var rand = new Random();
-                int hits = this.Hits;
-                for (int h = 0; h < hits; h++)
-                {
-                    // Choose a random panel to activate this step
-                    int panelIdx = rand.Next(this.Panels.Count);
-                    for (int p = 0; p < this.Panels.Count; p++)
-                    {
-                        var panel = this.Panels[p];
-                        int btnIdx = 0;
-                        foreach (Control ctrl in panel.Controls)
-                        {
-                            if (ctrl is Button btn)
-                            {
-                                if (btnIdx == h)
-                                {
-                                    if (p == panelIdx)
-                                    {
-                                        btn.BackColor = Color.Green;
-                                    }
-                                    else
-                                    {
-                                        btn.BackColor = Color.LightGray;
-                                    }
-                                    break;
-                                }
-                                btnIdx++;
-                            }
-                        }
-                    }
-                }
-            }
-            else
-            {
-                var rand = new Random();
-                foreach (var panel in this.Panels)
-                {
-                    foreach (Control ctrl in panel.Controls)
-                    {
-                        if (ctrl is Button btn)
-                        {
-                            btn.BackColor = rand.NextDouble() < 0.5 ? Color.Green : Color.LightGray;
-                        }
-                    }
-                }
-            }
-        }
+		{
+			var rand = new Random();
+			int hits = this.Hits;
+
+			if (interleaved)
+			{
+				// Single drum hit at most per step across all panels,
+				// allow "no hit" by selecting Panels.Count as sentinel.
+				if (this.Panels.Count == 0)
+				{
+					return;
+				}
+
+				for (int h = 0; h < hits; h++)
+				{
+					// Choose a random panel to activate this step or none:
+					// range [0 .. Panels.Count] inclusive of Panels.Count -> "no hit"
+					int choice = rand.Next(this.Panels.Count + 1);
+
+					for (int p = 0; p < this.Panels.Count; p++)
+					{
+						var panel = this.Panels[p];
+						int btnIdx = 0;
+						foreach (Control ctrl in panel.Controls)
+						{
+							if (ctrl is Button btn)
+							{
+								if (btnIdx == h)
+								{
+									// If choice == Panels.Count -> treat as "no hit" -> leave all LightGray
+									if (p == choice)
+									{
+										btn.BackColor = Color.Green;
+									}
+									else
+									{
+										btn.BackColor = Color.LightGray;
+									}
+									break;
+								}
+								btnIdx++;
+							}
+						}
+					}
+					// If choice == Panels.Count, none of the panels had p == choice,
+					// so all corresponding step buttons remain LightGray -> "silent" step.
+				}
+			}
+			else
+			{
+				var r = new Random();
+				foreach (var panel in this.Panels)
+				{
+					foreach (Control ctrl in panel.Controls)
+					{
+						if (ctrl is Button btn)
+						{
+							btn.BackColor = r.NextDouble() < 0.5 ? Color.Green : Color.LightGray;
+						}
+					}
+				}
+			}
+		}
 
 
 
-        protected override void OnKeyDown(KeyEventArgs e)
+		protected override void OnKeyDown(KeyEventArgs e)
         {
             base.OnKeyDown(e);
-
-            if (e.KeyCode == Keys.R && !e.Handled)
-            {
-                this.RandomizeAllPanels(ModifierKeys.HasFlag(Keys.Control));
-                e.Handled = true;
-				return;
-            }
 
 			if ((e.KeyCode == Keys.Back || e.KeyCode == Keys.Space) && !e.Handled)
 			{
@@ -800,10 +807,43 @@ namespace ModularAudience.Forms.Modules
 				e.Handled = true;
 				return;
 			}
+		}
 
-        }
+		protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+		{
+			// R / Ctrl+R -> Randomize (interleaved when Ctrl gedrückt)
+			if (keyData == Keys.R || keyData == (Keys.Control | Keys.R))
+			{
+				try
+				{
+					bool interleaved = (keyData & Keys.Control) == Keys.Control;
+					this.RandomizeAllPanels(interleaved);
+				}
+				catch { }
+				return true;
+			}
 
-        private static readonly Color StepActiveFore = Color.White;
+			// Up / Down -> BPM anpassen (funktioniert auch wenn ein Child Control Fokus hat)
+			if (keyData == Keys.Up || keyData == Keys.Down)
+			{
+				try
+				{
+					float step = ModifierKeys.HasFlag(Keys.Control) ? 0.1f : 1.0f;
+					decimal current = this.numericUpDown_bpm.Value;
+					decimal delta = (decimal) (keyData == Keys.Up ? step : -step);
+					decimal next = Math.Clamp(current + delta, this.numericUpDown_bpm.Minimum, this.numericUpDown_bpm.Maximum);
+					this.numericUpDown_bpm.Value = next;
+				}
+				catch { }
+				return true;
+			}
+
+			// Space / Back handled weiterhin in OnKeyDown - fallthrough ansonsten
+			return base.ProcessCmdKey(ref msg, keyData);
+		}
+
+
+		private static readonly Color StepActiveFore = Color.White;
         private static readonly Color StepDefaultFore = Color.Black;
         private static readonly Color StepDefaultBack = SystemColors.Control;
 

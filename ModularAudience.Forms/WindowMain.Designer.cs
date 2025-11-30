@@ -52,6 +52,7 @@
 			this.button_breakbeatArchitect = new Button();
 			this.button_pitchShift = new Button();
 			this.button_applyCloseAll = new Button();
+			this.checkBox_structure = new CheckBox();
 			this.SuspendLayout();
 			// 
 			// button_import
@@ -199,7 +200,7 @@
 			// button_newBag
 			// 
 			this.button_newBag.BackColor = Color.FromArgb(  192,   255,   192);
-			this.button_newBag.Location = new Point(12, 70);
+			this.button_newBag.Location = new Point(12, 99);
 			this.button_newBag.Name = "button_newBag";
 			this.button_newBag.Size = new Size(75, 23);
 			this.button_newBag.TabIndex = 14;
@@ -266,7 +267,7 @@
 			// button_newTrack
 			// 
 			this.button_newTrack.BackColor = Color.FromArgb(  192,   192,   255);
-			this.button_newTrack.Location = new Point(12, 41);
+			this.button_newTrack.Location = new Point(12, 70);
 			this.button_newTrack.Name = "button_newTrack";
 			this.button_newTrack.Size = new Size(75, 23);
 			this.button_newTrack.TabIndex = 20;
@@ -318,11 +319,24 @@
 			this.button_applyCloseAll.UseVisualStyleBackColor = false;
 			this.button_applyCloseAll.Click += this.button_applyCloseAll_Click;
 			// 
+			// checkBox_structure
+			// 
+			this.checkBox_structure.AutoSize = true;
+			this.checkBox_structure.Checked = true;
+			this.checkBox_structure.CheckState = CheckState.Checked;
+			this.checkBox_structure.Location = new Point(12, 41);
+			this.checkBox_structure.Name = "checkBox_structure";
+			this.checkBox_structure.Size = new Size(103, 19);
+			this.checkBox_structure.TabIndex = 25;
+			this.checkBox_structure.Text = "Keep Structure";
+			this.checkBox_structure.UseVisualStyleBackColor = true;
+			// 
 			// WindowMain
 			// 
 			this.AutoScaleDimensions = new SizeF(7F, 15F);
 			this.AutoScaleMode = AutoScaleMode.Font;
 			this.ClientSize = new Size(704, 321);
+			this.Controls.Add(this.checkBox_structure);
 			this.Controls.Add(this.button_applyCloseAll);
 			this.Controls.Add(this.button_pitchShift);
 			this.Controls.Add(this.button_breakbeatArchitect);
@@ -381,5 +395,6 @@
         private Button button_breakbeatArchitect;
         private Button button_pitchShift;
 		private Button button_applyCloseAll;
+		private CheckBox checkBox_structure;
 	}
 }
