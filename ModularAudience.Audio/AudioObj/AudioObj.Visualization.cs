@@ -602,10 +602,13 @@ namespace ModularAudience.Audio
 
 				Parallel.For((int) visibleStartFrame, (int) visibleEndFrame, i =>
 				{
-					if (!grid[i]) return;
+					if (!grid[i])
+                    {
+                        return;
+                    }
 
-					// Calculate pixel position based on current zoom and offset
-					long frameRelativeToView = i - offsetFrames;
+                    // Calculate pixel position based on current zoom and offset
+                    long frameRelativeToView = i - offsetFrames;
 					int x = (int) (frameRelativeToView / samplesPerPixel);
 
 					// Only draw if within visible area

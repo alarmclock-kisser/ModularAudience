@@ -11,8 +11,15 @@ namespace ModularAudience.Generators
         // Parameters match GenerateBreakPatternAsync
         public static async Task<List<bool[]>> Preset_AmenSnareScale_Old(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null)
         {
-            if (bars <= 0) throw new ArgumentOutOfRangeException(nameof(bars));
-            if (resolution <= 0) throw new ArgumentOutOfRangeException(nameof(resolution));
+            if (bars <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(bars));
+            }
+
+            if (resolution <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(resolution));
+            }
 
             var elements = drumset.ToList();
             int totalSteps = bars * resolution;
@@ -57,11 +64,17 @@ namespace ModularAudience.Generators
                     foreach (var off in offsets)
                     {
                         int p = centerPos + off;
-                        if (p < 0 || p >= totalSteps) continue;
+                        if (p < 0 || p >= totalSteps)
+                        {
+                            continue;
+                        }
 
                         // Probability to include decreases with distance
                         double prob = 0.95 - (Math.Abs(off) * 0.25) + (rnd.NextDouble() - 0.5) * 0.15;
-                        if (rnd.NextDouble() < Math.Clamp(prob, 0.05, 0.99)) masterHits.Add(p);
+                        if (rnd.NextDouble() < Math.Clamp(prob, 0.05, 0.99))
+                        {
+                            masterHits.Add(p);
+                        }
                     }
 
                     // small chance for a short roll following the cluster
@@ -86,7 +99,10 @@ namespace ModularAudience.Generators
                     for (int off = -1; off <= 1; off++)
                     {
                         int p = alt + off;
-                        if (p >= 0 && p < totalSteps && rnd.NextDouble() < 0.6) masterHits.Add(p);
+                        if (p >= 0 && p < totalSteps && rnd.NextDouble() < 0.6)
+                        {
+                            masterHits.Add(p);
+                        }
                     }
                 }
             }
@@ -136,14 +152,23 @@ namespace ModularAudience.Generators
             for (int idx = 0; idx < elements.Count; idx++)
             {
                 var elem = elements[idx];
-                if (snareIndices.Contains(idx)) continue;
+                if (snareIndices.Contains(idx))
+                {
+                    continue;
+                }
 
                 // Use the generator helper to create a lightweight line
                 var localRnd = new Random((seed ?? NextSeed()) ^ idx);
                 var line = GenerateLineForElement(elem, totalSteps, resolution, density * 0.45f, swing, Math.Max(0.4f, complexity * 0.6f), localRnd);
 
                 // Merge into patterns (OR)
-                for (int p = 0; p < totalSteps; p++) if (line[p]) patterns[idx][p] = true;
+                for (int p = 0; p < totalSteps; p++)
+                {
+                    if (line[p])
+                    {
+                        patterns[idx][p] = true;
+                    }
+                }
             }
 
             // Optionally interleave to avoid overlapping hits across tracks
@@ -158,8 +183,15 @@ namespace ModularAudience.Generators
 
         public static async Task<List<bool[]>> Preset_AmenSnareScale(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null)
         {
-            if (bars <= 0) throw new ArgumentOutOfRangeException(nameof(bars));
-            if (resolution <= 0) throw new ArgumentOutOfRangeException(nameof(resolution));
+            if (bars <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(bars));
+            }
+
+            if (resolution <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(resolution));
+            }
 
             var elements = drumset.ToList();
             int totalSteps = bars * resolution;
@@ -176,7 +208,10 @@ namespace ModularAudience.Generators
             if (snareIndices.Count == 0)
             {
                 if (interleaved)
+                {
                     patterns = MakeInterleaved(patterns, elements.ToArray());
+                }
+
                 return patterns;
             }
 
@@ -195,9 +230,14 @@ namespace ModularAudience.Generators
                 foreach (var snIdx in snareIndices)
                 {
                     if (backbeatA >= 0 && backbeatA < totalSteps)
+                    {
                         patterns[snIdx][backbeatA] = true;
+                    }
+
                     if (backbeatB >= 0 && backbeatB < totalSteps)
+                    {
                         patterns[snIdx][backbeatB] = true;
+                    }
                 }
 
                 int tailStart = offset + (3 * resolution) / 4;
@@ -207,9 +247,15 @@ namespace ModularAudience.Generators
                     foreach (var snIdx in snareIndices)
                     {
                         double p = 0.25 * inten;
-                        if (bar == bars - 1) p *= 1.4;
+                        if (bar == bars - 1)
+                        {
+                            p *= 1.4;
+                        }
+
                         if (rnd.NextDouble() < p)
+                        {
                             patterns[snIdx][pos] = true;
+                        }
                     }
                 }
 
@@ -222,25 +268,40 @@ namespace ModularAudience.Generators
                         for (int r = -rollLen; r <= rollLen; r++)
                         {
                             int pos = rollCenter + r;
-                            if (pos < offset || pos >= offset + resolution) continue;
+                            if (pos < offset || pos >= offset + resolution)
+                            {
+                                continue;
+                            }
+
                             double p = 0.4 + 0.4 * (1.0 - Math.Abs(r) / (double) rollLen);
                             if (rnd.NextDouble() < p * inten)
+                            {
                                 patterns[snIdx][pos] = true;
+                            }
                         }
                     }
                 }
             }
 
             if (interleaved)
+            {
                 patterns = MakeInterleaved(patterns, elements.ToArray());
+            }
 
             return patterns;
         }
 
         public static async Task<List<bool[]>> Preset_JungleRoller(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null)
         {
-            if (bars <= 0) throw new ArgumentOutOfRangeException(nameof(bars));
-            if (resolution <= 0) throw new ArgumentOutOfRangeException(nameof(resolution));
+            if (bars <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(bars));
+            }
+
+            if (resolution <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(resolution));
+            }
 
             var elements = drumset.ToList();
             int totalSteps = bars * resolution;
@@ -273,7 +334,10 @@ namespace ModularAudience.Generators
                         for (int local = 0; local < resolution; local++)
                         {
                             int pos = offset + local;
-                            if (!patterns[snIdx][pos]) continue;
+                            if (!patterns[snIdx][pos])
+                            {
+                                continue;
+                            }
 
                             if (rnd.NextDouble() < 0.6 * barFactor)
                             {
@@ -281,10 +345,16 @@ namespace ModularAudience.Generators
                                 for (int r = 1; r <= rollLen; r++)
                                 {
                                     int rp = pos + r;
-                                    if (rp >= offset + resolution || rp >= totalSteps) break;
+                                    if (rp >= offset + resolution || rp >= totalSteps)
+                                    {
+                                        break;
+                                    }
+
                                     double p = 0.7 + 0.3 * (1.0 - r / (double) rollLen);
                                     if (rnd.NextDouble() < p)
+                                    {
                                         patterns[snIdx][rp] = true;
+                                    }
                                 }
                             }
                         }
@@ -313,26 +383,39 @@ namespace ModularAudience.Generators
                             var tmp = new bool[resolution];
                             int offset = bar * resolution;
                             for (int i = 0; i < resolution; i++)
+                            {
                                 tmp[i] = line[offset + i];
+                            }
 
                             Array.Reverse(tmp);
                             for (int i = 0; i < resolution; i++)
+                            {
                                 line[offset + i] = tmp[i];
+                            }
                         }
                     }
                 }
             }
 
             if (interleaved)
+            {
                 patterns = MakeInterleaved(patterns, elements.ToArray());
+            }
 
             return patterns;
         }
 
         public static async Task<List<bool[]>> Preset_FunkShuffle(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null)
         {
-            if (bars <= 0) throw new ArgumentOutOfRangeException(nameof(bars));
-            if (resolution <= 0) throw new ArgumentOutOfRangeException(nameof(resolution));
+            if (bars <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(bars));
+            }
+
+            if (resolution <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(resolution));
+            }
 
             var elements = drumset.ToList();
             int totalSteps = bars * resolution;
@@ -371,9 +454,15 @@ namespace ModularAudience.Generators
                         {
                             int pos = offset + s;
                             bool isTripletSlot = (s % 2 == 1);
-                            if (!isTripletSlot) continue;
+                            if (!isTripletSlot)
+                            {
+                                continue;
+                            }
+
                             if (rnd.NextDouble() < 0.45)
+                            {
                                 line[pos] = true;
+                            }
                         }
                     }
                 }
@@ -390,29 +479,47 @@ namespace ModularAudience.Generators
                         int q = resolution / 4;
                         int posA = offset + q;
                         int posB = offset + 3 * q;
-                        if (posA >= 0 && posA < totalSteps) line[posA] = true;
-                        if (posB >= 0 && posB < totalSteps) line[posB] = true;
+                        if (posA >= 0 && posA < totalSteps)
+                        {
+                            line[posA] = true;
+                        }
+
+                        if (posB >= 0 && posB < totalSteps)
+                        {
+                            line[posB] = true;
+                        }
 
                         if (rnd.NextDouble() < 0.55)
                         {
                             int ghost = posB - 1;
                             if (ghost >= offset && ghost < offset + resolution)
+                            {
                                 line[ghost] = true;
+                            }
                         }
                     }
                 }
             }
 
             if (interleaved)
+            {
                 patterns = MakeInterleaved(patterns, elements.ToArray());
+            }
 
             return patterns;
         }
 
         public static async Task<List<bool[]>> Preset_DnBStepper(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null)
         {
-            if (bars <= 0) throw new ArgumentOutOfRangeException(nameof(bars));
-            if (resolution <= 0) throw new ArgumentOutOfRangeException(nameof(resolution));
+            if (bars <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(bars));
+            }
+
+            if (resolution <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(resolution));
+            }
 
             var elements = drumset.ToList();
             int totalSteps = bars * resolution;
@@ -448,17 +555,24 @@ namespace ModularAudience.Generators
                 {
                     var line = patterns[kIdx];
                     int k0 = offset;
-                    if (k0 >= 0 && k0 < totalSteps) line[k0] = true;
+                    if (k0 >= 0 && k0 < totalSteps)
+                    {
+                        line[k0] = true;
+                    }
 
                     int k2 = offset + 2 * q;
                     if (k2 >= 0 && k2 < totalSteps && rnd.NextDouble() < 0.9)
+                    {
                         line[k2] = true;
+                    }
 
                     if (rnd.NextDouble() < 0.6)
                     {
                         int late = offset + 3 * q + rnd.Next(-2, 3);
                         if (late >= offset && late < offset + resolution)
+                        {
                             line[late] = true;
+                        }
                     }
                 }
 
@@ -467,20 +581,31 @@ namespace ModularAudience.Generators
                     var line = patterns[snIdx];
                     int sA = offset + q;
                     int sB = offset + 3 * q;
-                    if (sA >= 0 && sA < totalSteps) line[sA] = true;
-                    if (sB >= 0 && sB < totalSteps) line[sB] = true;
+                    if (sA >= 0 && sA < totalSteps)
+                    {
+                        line[sA] = true;
+                    }
+
+                    if (sB >= 0 && sB < totalSteps)
+                    {
+                        line[sB] = true;
+                    }
 
                     if (rnd.NextDouble() < 0.45)
                     {
                         int ghost = sB - 1;
                         if (ghost >= offset && ghost < offset + resolution)
+                        {
                             line[ghost] = true;
+                        }
                     }
                 }
             }
 
             if (interleaved)
+            {
                 patterns = MakeInterleaved(patterns, elements.ToArray());
+            }
 
             return patterns;
         }

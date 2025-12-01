@@ -9,6 +9,8 @@ namespace ModularAudience.Audio
     public partial class AudioObj
     {
         public bool PlayerPlaying => this.Playing && !this.Paused;
+        public float LoopFraction { get; set; } = 0f;
+
 
         public long CurrentPlaybackPositionBytes
         {
@@ -177,6 +179,11 @@ namespace ModularAudience.Audio
 
         public void UpdateLoopFraction(long baseStartSamples, long baseEndSamples, long fractionSamples, bool loopEnabled, bool adjustPosition)
         {
+            this.LoopFraction = loopEnabled
+                ? (fractionSamples >= 0
+                    ? (float) fractionSamples / (baseEndSamples - baseStartSamples)
+                    : 0f)
+                : 0f;
             bool wasLooping = this.playbackLoopApplied;
             bool disablingLoop = wasLooping && !loopEnabled;
             long resumeSamples = -1;

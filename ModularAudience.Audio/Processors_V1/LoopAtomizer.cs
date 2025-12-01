@@ -819,11 +819,13 @@ namespace ModularAudience.Audio.Processors_V1
                     outData[f * channels + c] = src < interleaved.Length ? interleaved[src] : 0f;
                 }
             }
-            var obj = new AudioObj();
-            obj.Data = outData;
-            obj.Channels = channels;
-            obj.SampleRate = sampleRate;
-            obj.Length = outData.LongLength;
+            var obj = new AudioObj
+            {
+                Data = outData,
+                Channels = channels,
+                SampleRate = sampleRate,
+                Length = outData.LongLength
+            };
             try { obj.Name = (string.IsNullOrWhiteSpace(baseName) ? "slice" : baseName); } catch { }
             return obj;
         }

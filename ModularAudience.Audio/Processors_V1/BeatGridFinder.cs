@@ -13,9 +13,11 @@ namespace ModularAudience.Audio.Processors_V1
 		public static async Task<TimeSpan> FindSilenceDurationStartAsync(AudioObj audio, float? threshold = null, int? minDurationMs = null)
 		{
 			if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
-				return TimeSpan.Zero;
+            {
+                return TimeSpan.Zero;
+            }
 
-			var result = await Task.Run(() => ComputeSilenceDuration(audio, findStart: true, threshold, minDurationMs));
+            var result = await Task.Run(() => ComputeSilenceDuration(audio, findStart: true, threshold, minDurationMs));
 			LogCollection.Log("Detected silence at start: " + result.TotalSeconds.ToString("F1") + " seconds");
 			return result;
 		}
@@ -23,9 +25,11 @@ namespace ModularAudience.Audio.Processors_V1
 		public static async Task<TimeSpan> FindSilenceDurationEndAsync(AudioObj audio, float? threshold = null, int? minDurationMs = null)
 		{
 			if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
-				return TimeSpan.Zero;
+            {
+                return TimeSpan.Zero;
+            }
 
-			var result = await Task.Run(() => ComputeSilenceDuration(audio, findStart: false, threshold, minDurationMs));
+            var result = await Task.Run(() => ComputeSilenceDuration(audio, findStart: false, threshold, minDurationMs));
 			LogCollection.Log("Detected silence at end: " + result.TotalSeconds.ToString("F1") + " seconds");
 			return result;
 		}
@@ -58,12 +62,15 @@ namespace ModularAudience.Audio.Processors_V1
 
 			float[] data = audio.Data ?? Array.Empty<float>();
 			int totalFrames = Math.Max(0, data.Length / channels);
-			if (totalFrames <= 0) return TimeSpan.Zero;
+			if (totalFrames <= 0)
+            {
+                return TimeSpan.Zero;
+            }
 
-			// -----------------------------------
-			// 1) Envelope berechnen (RMS, ~1 Sample pro ms)
-			// -----------------------------------
-			int downsampleFactor = Math.Max(1, sampleRate / 1000); // ~1 ms pro Step
+            // -----------------------------------
+            // 1) Envelope berechnen (RMS, ~1 Sample pro ms)
+            // -----------------------------------
+            int downsampleFactor = Math.Max(1, sampleRate / 1000); // ~1 ms pro Step
 			int envLen = Math.Max(1, totalFrames / downsampleFactor);
 			var env = new float[envLen];
 
@@ -162,12 +169,24 @@ namespace ModularAudience.Audio.Processors_V1
 				// alpha bestimmt, wie weit wir über dem Noise-Floor liegen
 				// großer Dynamikumfang -> kleine alpha (Intro bleibt erhalten)
 				float alpha;
-				if (dynDb < 20f) alpha = 0.4f;
-				else if (dynDb < 40f) alpha = 0.25f;
-				else if (dynDb < 60f) alpha = 0.12f;
-				else alpha = 0.06f;
+				if (dynDb < 20f)
+                {
+                    alpha = 0.4f;
+                }
+                else if (dynDb < 40f)
+                {
+                    alpha = 0.25f;
+                }
+                else if (dynDb < 60f)
+                {
+                    alpha = 0.12f;
+                }
+                else
+                {
+                    alpha = 0.06f;
+                }
 
-				float upperRef = sortedEnv[Math.Max(0, (int) (n * 0.8f))]; // 80%-Perzentil
+                float upperRef = sortedEnv[Math.Max(0, (int) (n * 0.8f))]; // 80%-Perzentil
 				float target = noiseFloor + (upperRef - noiseFloor) * alpha;
 
 				// zusätzlich clampen, damit wir wirkliche Stille sauber erwischen
@@ -198,13 +217,17 @@ namespace ModularAudience.Audio.Processors_V1
 
 				int i = 0;
 				while (i < envLen && env[i] <= floor)
-					i++;
+                {
+                    i++;
+                }
 
-				// zu kurz -> vermutlich nur paar Samples Offset / Dither -> nicht trimmen
-				if (i < minSilenceFrames)
-					return TimeSpan.Zero;
+                // zu kurz -> vermutlich nur paar Samples Offset / Dither -> nicht trimmen
+                if (i < minSilenceFrames)
+                {
+                    return TimeSpan.Zero;
+                }
 
-				int sampleIdx = Math.Min(totalFrames - 1, i * downsampleFactor);
+                int sampleIdx = Math.Min(totalFrames - 1, i * downsampleFactor);
 
 				// leichte Vorlauf-Sicherheit: paar ms stehen lassen
 				sampleIdx = Math.Max(0, sampleIdx - sampleRate / 200); // ~5ms
@@ -224,13 +247,17 @@ namespace ModularAudience.Audio.Processors_V1
 
 				int i = envLen - 1;
 				while (i >= 0 && env[i] <= floor)
-					i--;
+                {
+                    i--;
+                }
 
-				int trailingFrames = (envLen - 1) - i;
+                int trailingFrames = (envLen - 1) - i;
 				if (trailingFrames < minSilenceFrames)
-					return TimeSpan.Zero;
+                {
+                    return TimeSpan.Zero;
+                }
 
-				int trailingSamples = trailingFrames * downsampleFactor;
+                int trailingSamples = trailingFrames * downsampleFactor;
 
 				// leichte Sicherheitsreserve: ein paar ms dran lassen
 				trailingSamples = Math.Max(0, trailingSamples - sampleRate / 200);
@@ -246,8 +273,12 @@ namespace ModularAudience.Audio.Processors_V1
 		private static float CalculateRobustThreshold(float[] env, int sampleRate)
 		{
 			// Robust threshold using median + lower quartile noise floor
-			if (env == null || env.Length == 0) return 1e-5f;
-			var sorted = env.OrderBy(x => x).ToArray();
+			if (env == null || env.Length == 0)
+            {
+                return 1e-5f;
+            }
+
+            var sorted = env.OrderBy(x => x).ToArray();
 			float q1 = sorted[Math.Max(0, sorted.Length / 4)];
 			float median = sorted[sorted.Length / 2];
 			float mean = env.Average();
@@ -262,16 +293,24 @@ namespace ModularAudience.Audio.Processors_V1
 
 		private static float[] MovingAverage(float[] data, int win)
 		{
-			if (win <= 1) return data;
-			var outArr = new float[data.Length];
+			if (win <= 1)
+            {
+                return data;
+            }
+
+            var outArr = new float[data.Length];
 			int h = win / 2;
 			for (int i = 0; i < data.Length; i++)
 			{
 				int s = Math.Max(0, i - h);
 				int e = Math.Min(data.Length - 1, i + h);
 				double sum = 0;
-				for (int j = s; j <= e; j++) sum += data[j];
-				outArr[i] = (float) (sum / (e - s + 1));
+				for (int j = s; j <= e; j++)
+                {
+                    sum += data[j];
+                }
+
+                outArr[i] = (float) (sum / (e - s + 1));
 			}
 			return outArr;
 		}
@@ -305,17 +344,24 @@ namespace ModularAudience.Audio.Processors_V1
 				{
 					int baseIdx = (startSample + i) * channels;
 					float sum = 0f;
-					for (int c = 0; c < channels; c++) sum += data[baseIdx + c];
-					mono[i] = sum / channels;
+					for (int c = 0; c < channels; c++)
+                    {
+                        sum += data[baseIdx + c];
+                    }
+
+                    mono[i] = sum / channels;
 				});
 			}
 
 			// envelope via simple abs + smoothing (fast)
 			var env = new float[analysisLen];
-			for (int i = 0; i < analysisLen; i++) env[i] = MathF.Abs(mono[i]);
+			for (int i = 0; i < analysisLen; i++)
+            {
+                env[i] = MathF.Abs(mono[i]);
+            }
 
-			// smooth with small moving average (faster incremental)
-			int w = Math.Max(1, Math.Min(101, sampleRate / 200)); // ~5-10ms smoothing
+            // smooth with small moving average (faster incremental)
+            int w = Math.Max(1, Math.Min(101, sampleRate / 200)); // ~5-10ms smoothing
 			env = FastMovingAverage(env, w);
 
 			// compress dynamic range (sqrt)
@@ -327,8 +373,12 @@ namespace ModularAudience.Audio.Processors_V1
 		private static float[] FastMovingAverage(float[] data, int window)
 		{
 			int n = data.Length;
-			if (n == 0 || window <= 1) return data;
-			var outArr = new float[n];
+			if (n == 0 || window <= 1)
+            {
+                return data;
+            }
+
+            var outArr = new float[n];
 			double sum = 0;
 			int half = window / 2;
 			int s = 0, e = -1;
@@ -354,8 +404,12 @@ namespace ModularAudience.Audio.Processors_V1
 
 		private static float[] BuildOnsetEnvelope(float[] env, int sampleRate, int downsampleHz)
 		{
-			if (env == null || env.Length == 0) return Array.Empty<float>();
-			int dsFactor = Math.Max(1, sampleRate / downsampleHz);
+			if (env == null || env.Length == 0)
+            {
+                return Array.Empty<float>();
+            }
+
+            int dsFactor = Math.Max(1, sampleRate / downsampleHz);
 			int outLen = Math.Max(1, env.Length / dsFactor);
 			var outEnv = new float[outLen];
 			for (int i = 0; i < outLen; i++)
@@ -363,13 +417,27 @@ namespace ModularAudience.Audio.Processors_V1
 				int s = i * dsFactor;
 				int e = Math.Min(env.Length - 1, s + dsFactor - 1);
 				float maxv = 0f;
-				for (int j = s; j <= e; j++) if (env[j] > maxv) maxv = env[j];
-				outEnv[i] = maxv;
+				for (int j = s; j <= e; j++)
+                {
+                    if (env[j] > maxv)
+                    {
+                        maxv = env[j];
+                    }
+                }
+
+                outEnv[i] = maxv;
 			}
 			// normalize
 			float max = outEnv.Max();
-			if (max > 0) for (int i = 0; i < outEnv.Length; i++) outEnv[i] /= max;
-			return outEnv;
+			if (max > 0)
+            {
+                for (int i = 0; i < outEnv.Length; i++)
+                {
+                    outEnv[i] /= max;
+                }
+            }
+
+            return outEnv;
 		}
 
 
@@ -380,9 +448,12 @@ namespace ModularAudience.Audio.Processors_V1
 		{
 			// spectral flux auf Envelope ist billig & gut für Percussion
 			var results = new List<int>();
-			if (envelope == null || envelope.Length < 8) return results;
+			if (envelope == null || envelope.Length < 8)
+            {
+                return results;
+            }
 
-			int fftSize = 512;
+            int fftSize = 512;
 			int hop = 128;
 			int envLen = envelope.Length;
 			int numWindows = Math.Max(0, (envLen - fftSize) / hop);
@@ -421,15 +492,19 @@ namespace ModularAudience.Audio.Processors_V1
 					buf[j] = new Complex(v * win, 0);
 				}
 				for (int j = limit; j < fftSize; j++)
-					buf[j] = Complex.Zero;
+                {
+                    buf[j] = Complex.Zero;
+                }
 
-				Fourier.Forward(buf, FourierOptions.Matlab);
+                Fourier.Forward(buf, FourierOptions.Matlab);
 
 				var localMag = new float[bins];
 				for (int b = 0; b < bins; b++)
-					localMag[b] = (float) buf[b].Magnitude;
+                {
+                    localMag[b] = (float) buf[b].Magnitude;
+                }
 
-				mags[w] = localMag;
+                mags[w] = localMag;
 			});
 
 			// 2) Serien-Flux-Berechnung zwischen benachbarten Frames (billig)
@@ -442,8 +517,11 @@ namespace ModularAudience.Audio.Processors_V1
 				for (int b = 1; b < bins; b++)
 				{
 					float diff = cur[b] - prev[b];
-					if (diff > 0) localFlux += diff;
-				}
+					if (diff > 0)
+                    {
+                        localFlux += diff;
+                    }
+                }
 				flux[w] = localFlux;
 			}
 
@@ -465,18 +543,26 @@ namespace ModularAudience.Audio.Processors_V1
 		private static List<int> DetectEnergyPeaks(float[] envelope, int sampleRate, int startSample)
 		{
 			var beats = new List<int>();
-			if (envelope == null || envelope.Length < 8) return beats;
+			if (envelope == null || envelope.Length < 8)
+            {
+                return beats;
+            }
 
-			int windowSize = Math.Max(3, sampleRate / 200); // small window in samples
+            int windowSize = Math.Max(3, sampleRate / 200); // small window in samples
 			int hop = Math.Max(1, windowSize / 2);
 			int n = Math.Max(0, (envelope.Length - windowSize) / hop);
 			if (n < 4)
 			{
 				// fallback: simple peaks
 				for (int i = 2; i < envelope.Length - 2; i++)
-					if (envelope[i] > envelope[i - 1] && envelope[i] > envelope[i + 1] && envelope[i] > 0.08f)
-						beats.Add(startSample + i);
-				return beats;
+                {
+                    if (envelope[i] > envelope[i - 1] && envelope[i] > envelope[i + 1] && envelope[i] > 0.08f)
+                    {
+                        beats.Add(startSample + i);
+                    }
+                }
+
+                return beats;
 			}
 
 			// compute window energies
@@ -486,8 +572,11 @@ namespace ModularAudience.Audio.Processors_V1
 				int s = i * hop;
 				float sum = 0;
 				for (int j = 0; j < windowSize && (s + j) < envelope.Length; j++)
-					sum += envelope[s + j] * envelope[s + j];
-				energy[i] = sum / windowSize;
+                {
+                    sum += envelope[s + j] * envelope[s + j];
+                }
+
+                energy[i] = sum / windowSize;
 			});
 
 			// median local threshold
@@ -497,8 +586,12 @@ namespace ModularAudience.Audio.Processors_V1
 				int s = Math.Max(0, i - medianWin);
 				int e = Math.Min(n - 1, i + medianWin);
 				var window = new List<float>();
-				for (int j = s; j <= e; j++) window.Add(energy[j]);
-				window.Sort();
+				for (int j = s; j <= e; j++)
+                {
+                    window.Add(energy[j]);
+                }
+
+                window.Sort();
 				float med = window[window.Count / 2];
 				float thr = med * 2.2f + 1e-8f;
 				if (energy[i] > thr && energy[i] > energy[i - 1] && energy[i] > energy[i + 1])
@@ -514,9 +607,12 @@ namespace ModularAudience.Audio.Processors_V1
 		{
 			var beats = new List<int>();
 
-			if (mono == null || mono.Length < 64 || zeroCrossing == null || zeroCrossing.Length < 64) return beats;
+			if (mono == null || mono.Length < 64 || zeroCrossing == null || zeroCrossing.Length < 64)
+            {
+                return beats;
+            }
 
-			int windowSize = Math.Max(32, sampleRate / 40);
+            int windowSize = Math.Max(32, sampleRate / 40);
 			int hop = Math.Max(8, windowSize / 2);
 			int numWindows = Math.Max(0, (mono.Length - windowSize) / hop);
 
@@ -525,8 +621,12 @@ namespace ModularAudience.Audio.Processors_V1
 				int s = i * hop;
 				// compute avg zcr in window
 				float sum = 0;
-				for (int j = 0; j < windowSize && (s + j) < zeroCrossing.Length; j++) sum += zeroCrossing[s + j];
-				float avg = sum / Math.Max(1, windowSize);
+				for (int j = 0; j < windowSize && (s + j) < zeroCrossing.Length; j++)
+                {
+                    sum += zeroCrossing[s + j];
+                }
+
+                float avg = sum / Math.Max(1, windowSize);
 				if (avg < 0.12f) // likely transient region
 				{
 					// find max energy in window
@@ -559,8 +659,11 @@ namespace ModularAudience.Audio.Processors_V1
 				int crossings = 0;
 				for (int j = s + 1; j <= e; j++)
 				{
-					if (data[j - 1] * data[j] < 0) crossings++;
-				}
+					if (data[j - 1] * data[j] < 0)
+                    {
+                        crossings++;
+                    }
+                }
 				zcr[i] = (float) crossings / Math.Max(1, (e - s));
 			});
 
@@ -581,8 +684,12 @@ namespace ModularAudience.Audio.Processors_V1
 			{
 				foreach (var p in positions)
 				{
-					if (p < startSample) continue;
-					int clamped = Math.Min(Math.Max(0, p), beatGrid.Length - 1);
+					if (p < startSample)
+                    {
+                        continue;
+                    }
+
+                    int clamped = Math.Min(Math.Max(0, p), beatGrid.Length - 1);
 					vote.AddOrUpdate(clamped, weight, (_, old) => old + weight);
 				}
 			}
@@ -592,10 +699,13 @@ namespace ModularAudience.Audio.Processors_V1
 			Vote(zeroCrossingBeats, 1.0f);
 			Vote(complexBeats, 1.5f);
 
-			if (vote.IsEmpty) return;
+			if (vote.IsEmpty)
+            {
+                return;
+            }
 
-			// Convert votes to list and cluster near positions
-			var candidates = vote.ToArray().OrderByDescending(kv => kv.Value).Select(kv => kv.Key).ToList();
+            // Convert votes to list and cluster near positions
+            var candidates = vote.ToArray().OrderByDescending(kv => kv.Value).Select(kv => kv.Key).ToList();
 
 			int minDist = Math.Max(1, sampleRate / 40); // ~25ms min
 			var chosen = new List<int>();
@@ -603,9 +713,12 @@ namespace ModularAudience.Audio.Processors_V1
 
 			foreach (var cand in candidates)
 			{
-				if (used[cand]) continue;
-				// cluster neighborhood and pick best centre
-				int s = Math.Max(0, cand - minDist);
+				if (used[cand])
+                {
+                    continue;
+                }
+                // cluster neighborhood and pick best centre
+                int s = Math.Max(0, cand - minDist);
 				int e = Math.Min(beatGrid.Length - 1, cand + minDist);
 				// find max vote in cluster
 				int best = cand;
@@ -618,35 +731,58 @@ namespace ModularAudience.Audio.Processors_V1
 					}
 				}
 				// mark used
-				for (int i = Math.Max(0, best - minDist); i <= Math.Min(beatGrid.Length - 1, best + minDist); i++) used[i] = true;
-				chosen.Add(best);
+				for (int i = Math.Max(0, best - minDist); i <= Math.Min(beatGrid.Length - 1, best + minDist); i++)
+                {
+                    used[i] = true;
+                }
+
+                chosen.Add(best);
 			}
 
 			// Place chosen beats into beatGrid
 			foreach (var b in chosen)
 			{
-				if (b >= 0 && b < beatGrid.Length) beatGrid[b] = true;
-			}
+				if (b >= 0 && b < beatGrid.Length)
+                {
+                    beatGrid[b] = true;
+                }
+            }
 		}
 
 		private static void ApplyTempoAnalysisAndFill(bool[] beatGrid, int sampleRate, int primaryInterval, int granularity)
 		{
 			// Get current beats
 			var detected = new List<int>();
-			for (int i = 0; i < beatGrid.Length; i++) if (beatGrid[i]) detected.Add(i);
-			if (detected.Count < 3 || primaryInterval <= 0) return;
+			for (int i = 0; i < beatGrid.Length; i++)
+            {
+                if (beatGrid[i])
+                {
+                    detected.Add(i);
+                }
+            }
 
-			// Compute histogram of intervals (robust)
-			var intervals = new List<int>();
+            if (detected.Count < 3 || primaryInterval <= 0)
+            {
+                return;
+            }
+
+            // Compute histogram of intervals (robust)
+            var intervals = new List<int>();
 			for (int i = 1; i < detected.Count; i++)
 			{
 				int inter = detected[i] - detected[i - 1];
-				if (inter >= sampleRate / 8 && inter <= sampleRate) intervals.Add(inter);
-			}
-			if (intervals.Count == 0) return;
+				if (inter >= sampleRate / 8 && inter <= sampleRate)
+                {
+                    intervals.Add(inter);
+                }
+            }
+			if (intervals.Count == 0)
+            {
+                return;
+            }
 
-			// primary interval: either provided or modal of intervals
-			int modal = intervals.OrderBy(x => x).GroupBy(x => x).OrderByDescending(g => g.Count()).First().Key;
+            // primary interval: either provided or modal of intervals
+            int modal = intervals.OrderBy(x => x).GroupBy(x => x).OrderByDescending(g => g.Count()).First().Key;
 			int interval = primaryInterval > 0 ? primaryInterval : modal;
 
 			// round interval to nearest granularity samples for stability
@@ -662,8 +798,11 @@ namespace ModularAudience.Audio.Processors_V1
 			int minDist = Math.Max(1, sampleRate / 40);
 			foreach (var d in detected)
 			{
-				if (Math.Abs(d - seed) < Math.Abs(bestSeed - seed)) bestSeed = d;
-			}
+				if (Math.Abs(d - seed) < Math.Abs(bestSeed - seed))
+                {
+                    bestSeed = d;
+                }
+            }
 			seed = bestSeed;
 
 			FillBeatGridWithInterval(beatGrid, seed, interval);
@@ -672,8 +811,12 @@ namespace ModularAudience.Audio.Processors_V1
 
 		private static void FillBeatGridWithInterval(bool[] beatGrid, int seed, int interval)
 		{
-			if (interval <= 0) return;
-			int cur = seed;
+			if (interval <= 0)
+            {
+                return;
+            }
+
+            int cur = seed;
 			while (cur < beatGrid.Length)
 			{
 				beatGrid[cur] = true;
@@ -689,22 +832,32 @@ namespace ModularAudience.Audio.Processors_V1
 
 		private static int EstimatePrimaryInterval(float[] downsampledEnv, int sampleRateDownsampledHz)
 		{
-			if (downsampledEnv == null || downsampledEnv.Length < 16) return -1;
-			// autocorrelation
-			int n = downsampledEnv.Length;
+			if (downsampledEnv == null || downsampledEnv.Length < 16)
+            {
+                return -1;
+            }
+            // autocorrelation
+            int n = downsampledEnv.Length;
 			// normalize
 			float mean = downsampledEnv.Average();
 			var norm = new float[n];
-			for (int i = 0; i < n; i++) norm[i] = downsampledEnv[i] - mean;
+			for (int i = 0; i < n; i++)
+            {
+                norm[i] = downsampledEnv[i] - mean;
+            }
 
-			int maxLag = Math.Min(n / 2, sampleRateDownsampledHz * 2); // consider up to 2 seconds
+            int maxLag = Math.Min(n / 2, sampleRateDownsampledHz * 2); // consider up to 2 seconds
 			double bestVal = double.MinValue;
 			int bestLag = -1;
 			for (int lag = sampleRateDownsampledHz / 3; lag <= maxLag; lag++) // 0.3s .. max
 			{
 				double sum = 0;
-				for (int i = 0; i < n - lag; i++) sum += norm[i] * norm[i + lag];
-				if (sum > bestVal)
+				for (int i = 0; i < n - lag; i++)
+                {
+                    sum += norm[i] * norm[i + lag];
+                }
+
+                if (sum > bestVal)
 				{
 					bestVal = sum;
 					bestLag = lag;
@@ -716,13 +869,29 @@ namespace ModularAudience.Audio.Processors_V1
 		private static int FallbackIntervalFromDetections(List<int>[] detectionLists, int sampleRate, int sampleRateDownsampledHz)
 		{
 			var all = new List<int>();
-			foreach (var l in detectionLists) all.AddRange(l);
-			all.Sort();
-			if (all.Count < 2) return sampleRateDownsampledHz; // 1s fallback
-			var intervals = new List<int>();
-			for (int i = 1; i < all.Count; i++) intervals.Add(all[i] - all[i - 1]);
-			if (intervals.Count == 0) return sampleRateDownsampledHz;
-			int med = intervals.OrderBy(x => x).ElementAt(intervals.Count / 2);
+			foreach (var l in detectionLists)
+            {
+                all.AddRange(l);
+            }
+
+            all.Sort();
+			if (all.Count < 2)
+            {
+                return sampleRateDownsampledHz; // 1s fallback
+            }
+
+            var intervals = new List<int>();
+			for (int i = 1; i < all.Count; i++)
+            {
+                intervals.Add(all[i] - all[i - 1]);
+            }
+
+            if (intervals.Count == 0)
+            {
+                return sampleRateDownsampledHz;
+            }
+
+            int med = intervals.OrderBy(x => x).ElementAt(intervals.Count / 2);
 			// convert to downsampled units (~100Hz)
 			return Math.Max(1, (int) Math.Round(med / (sampleRate / (double) sampleRateDownsampledHz)));
 		}
@@ -734,8 +903,12 @@ namespace ModularAudience.Audio.Processors_V1
 		// -------------------------
 		private static float CalculateAdaptiveThreshold(float[] values)
 		{
-			if (values == null || values.Length == 0) return 0f;
-			var sorted = values.OrderBy(x => x).ToArray();
+			if (values == null || values.Length == 0)
+            {
+                return 0f;
+            }
+
+            var sorted = values.OrderBy(x => x).ToArray();
 			float median = sorted[sorted.Length / 2];
 			float mean = values.Average();
 			return median * 1.8f + mean * 0.2f;
@@ -744,9 +917,11 @@ namespace ModularAudience.Audio.Processors_V1
 		public static async Task<bool[]> GenerateBeatGridAsync(AudioObj audio, bool set = true, int granularity = 4)
 		{
 			if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
-				return Array.Empty<bool[]>().FirstOrDefault() ?? Array.Empty<bool>();
+            {
+                return Array.Empty<bool[]>().FirstOrDefault() ?? Array.Empty<bool>();
+            }
 
-			return await Task.Run(() =>
+            return await Task.Run(() =>
 			{
 				try
 				{
@@ -766,8 +941,12 @@ namespace ModularAudience.Audio.Processors_V1
 					if (mono.Length < sampleRate / 2)
 					{
 						var emptyGrid = new bool[totalFrames];
-						if (set) audio.BeatGrid = emptyGrid;
-						return emptyGrid;
+						if (set)
+                        {
+                            audio.BeatGrid = emptyGrid;
+                        }
+
+                        return emptyGrid;
 					}
 
 					int downsampleHz = 200;
@@ -775,8 +954,12 @@ namespace ModularAudience.Audio.Processors_V1
 					if (envDs == null || envDs.Length < 32)
 					{
 						var emptyGrid = new bool[totalFrames];
-						if (set) audio.BeatGrid = emptyGrid;
-						return emptyGrid;
+						if (set)
+                        {
+                            audio.BeatGrid = emptyGrid;
+                        }
+
+                        return emptyGrid;
 					}
 
 					float[] onsetEnv = new float[envDs.Length];
@@ -792,8 +975,12 @@ namespace ModularAudience.Audio.Processors_V1
 					if (onsetFrames.Count < 4)
 					{
 						var emptyGrid = new bool[totalFrames];
-						if (set) audio.BeatGrid = emptyGrid;
-						return emptyGrid;
+						if (set)
+                        {
+                            audio.BeatGrid = emptyGrid;
+                        }
+
+                        return emptyGrid;
 					}
 
 					int intervalFrames = EstimateBeatIntervalFromOnsets(onsetFrames, sampleRate);
@@ -801,14 +988,20 @@ namespace ModularAudience.Audio.Processors_V1
 					{
 						int lag = EstimateBeatLagFromOnsetEnvelope(onsetEnv, downsampleHz);
 						if (lag > 0)
-							intervalFrames = lag * dsFactor;
-					}
+                        {
+                            intervalFrames = lag * dsFactor;
+                        }
+                    }
 
 					if (intervalFrames <= 0)
 					{
 						var emptyGrid = new bool[totalFrames];
-						if (set) audio.BeatGrid = emptyGrid;
-						return emptyGrid;
+						if (set)
+                        {
+                            audio.BeatGrid = emptyGrid;
+                        }
+
+                        return emptyGrid;
 					}
 
 					granularity = Math.Clamp(granularity, 1, 16);
@@ -823,14 +1016,19 @@ namespace ModularAudience.Audio.Processors_V1
 					AlignBeatGridToEnvelope(beatGrid, envelope, startSample, intervalFrames / 3);
 
 					for (int i = 0; i < Math.Min(startSample, beatGrid.Length); i++)
-						beatGrid[i] = false;
+                    {
+                        beatGrid[i] = false;
+                    }
 
-					int minDist = Math.Max(1, intervalFrames / 4);
+                    int minDist = Math.Max(1, intervalFrames / 4);
 					EnforceMinDistance(beatGrid, minDist);
 
-					if (set) audio.BeatGrid = beatGrid;
+					if (set)
+                    {
+                        audio.BeatGrid = beatGrid;
+                    }
 
-					int beatCount = beatGrid.Count(b => b);
+                    int beatCount = beatGrid.Count(b => b);
 					double bpm = 60.0 * sampleRate / intervalFrames;
 					LogCollection.Log($"Beat grid detection finished. Beats: {beatCount}, intervalFrames={intervalFrames}, bpm≈{bpm:F1}");
 					return beatGrid;
@@ -846,14 +1044,28 @@ namespace ModularAudience.Audio.Processors_V1
 		private static List<int> DetectOnsetsFromEnvelope(float[] onsetEnv, float[] envDs, int sampleRate, int downsampleHz, int startSample, int dsFactor)
 		{
 			var result = new List<int>();
-			if (onsetEnv == null || envDs == null) return result;
-			if (onsetEnv.Length == 0 || envDs.Length == 0) return result;
-			if (onsetEnv.Length != envDs.Length) return result;
+			if (onsetEnv == null || envDs == null)
+            {
+                return result;
+            }
 
-			var pos = onsetEnv.Where(v => v > 0f).ToArray();
-			if (pos.Length < 4) return result;
+            if (onsetEnv.Length == 0 || envDs.Length == 0)
+            {
+                return result;
+            }
 
-			var sortedOn = pos.OrderBy(x => x).ToArray();
+            if (onsetEnv.Length != envDs.Length)
+            {
+                return result;
+            }
+
+            var pos = onsetEnv.Where(v => v > 0f).ToArray();
+			if (pos.Length < 4)
+            {
+                return result;
+            }
+
+            var sortedOn = pos.OrderBy(x => x).ToArray();
 			float medOn = sortedOn[sortedOn.Length / 2];
 			float q3On = sortedOn[(int) (sortedOn.Length * 0.75)];
 			float thrOn = medOn + (q3On - medOn) * 0.5f;
@@ -867,14 +1079,27 @@ namespace ModularAudience.Audio.Processors_V1
 			for (int i = 2; i < onsetEnv.Length - 2; i++)
 			{
 				float v = onsetEnv[i];
-				if (v <= thrOn) continue;
-				if (!(v > onsetEnv[i - 1] && v > onsetEnv[i + 1])) continue;
-				if (envDs[i] < envThr) continue;
+				if (v <= thrOn)
+                {
+                    continue;
+                }
 
-				long frame = startSample + (long) i * dsFactor;
+                if (!(v > onsetEnv[i - 1] && v > onsetEnv[i + 1]))
+                {
+                    continue;
+                }
+
+                if (envDs[i] < envThr)
+                {
+                    continue;
+                }
+
+                long frame = startSample + (long) i * dsFactor;
 				if (frame >= 0)
-					result.Add((int) frame);
-			}
+                {
+                    result.Add((int) frame);
+                }
+            }
 
 			result.Sort();
 			return result;
@@ -882,20 +1107,34 @@ namespace ModularAudience.Audio.Processors_V1
 
 		private static int EstimateBeatIntervalFromOnsets(List<int> onsetFrames, int sampleRate)
 		{
-			if (onsetFrames == null || onsetFrames.Count < 4) return -1;
+			if (onsetFrames == null || onsetFrames.Count < 4)
+            {
+                return -1;
+            }
 
-			onsetFrames.Sort();
+            onsetFrames.Sort();
 			var diffs = new List<int>();
 			for (int i = 1; i < onsetFrames.Count; i++)
 			{
 				int d = onsetFrames[i] - onsetFrames[i - 1];
-				if (d <= 0) continue;
-				if (d < sampleRate * 0.2 || d > sampleRate * 2.0) continue;
-				diffs.Add(d);
-			}
-			if (diffs.Count == 0) return -1;
+				if (d <= 0)
+                {
+                    continue;
+                }
 
-			int minInterval = (int) (sampleRate * 0.25);
+                if (d < sampleRate * 0.2 || d > sampleRate * 2.0)
+                {
+                    continue;
+                }
+
+                diffs.Add(d);
+			}
+			if (diffs.Count == 0)
+            {
+                return -1;
+            }
+
+            int minInterval = (int) (sampleRate * 0.25);
 			int maxInterval = (int) (sampleRate * 1.0);
 			int range = Math.Max(1, maxInterval - minInterval + 1);
 			int bins = 120;
@@ -905,12 +1144,24 @@ namespace ModularAudience.Audio.Processors_V1
 			foreach (int d in diffs)
 			{
 				double val = d;
-				while (val < minInterval) val *= 2.0;
-				while (val > maxInterval) val /= 2.0;
-				int iv = (int) Math.Round(val);
+				while (val < minInterval)
+                {
+                    val *= 2.0;
+                }
+
+                while (val > maxInterval)
+                {
+                    val /= 2.0;
+                }
+
+                int iv = (int) Math.Round(val);
 				int idx = (iv - minInterval) / binSize;
-				if (idx < 0 || idx >= bins) continue;
-				hist[idx]++;
+				if (idx < 0 || idx >= bins)
+                {
+                    continue;
+                }
+
+                hist[idx]++;
 			}
 
 			int bestIdx = -1;
@@ -923,67 +1174,99 @@ namespace ModularAudience.Audio.Processors_V1
 					bestIdx = i;
 				}
 			}
-			if (bestIdx < 0 || bestCount <= 0) return -1;
+			if (bestIdx < 0 || bestCount <= 0)
+            {
+                return -1;
+            }
 
-			int center = minInterval + bestIdx * binSize + binSize / 2;
+            int center = minInterval + bestIdx * binSize + binSize / 2;
 			var near = diffs.Select(d =>
 			{
 				double val = d;
-				while (val < minInterval) val *= 2.0;
-				while (val > maxInterval) val /= 2.0;
-				return (int) Math.Round(val);
+				while (val < minInterval)
+                {
+                    val *= 2.0;
+                }
+
+                while (val > maxInterval)
+                {
+                    val /= 2.0;
+                }
+
+                return (int) Math.Round(val);
 			}).Where(iv => Math.Abs(iv - center) <= binSize).ToArray();
 
-			if (near.Length == 0) return center;
-			Array.Sort(near);
+			if (near.Length == 0)
+            {
+                return center;
+            }
+
+            Array.Sort(near);
 			int median = near[near.Length / 2];
 			return median;
 		}
 
 		private static int EstimateBeatLagFromOnsetEnvelope(float[] onsetEnv, int downsampleHz)
 		{
-			if (onsetEnv == null || onsetEnv.Length < 32) return -1;
+			if (onsetEnv == null || onsetEnv.Length < 32)
+            {
+                return -1;
+            }
 
-			int n = onsetEnv.Length;
+            int n = onsetEnv.Length;
 			float mean = onsetEnv.Average();
 			var norm = new float[n];
 			for (int i = 0; i < n; i++)
-				norm[i] = onsetEnv[i] - mean;
+            {
+                norm[i] = onsetEnv[i] - mean;
+            }
 
-			int minBpm = 70;
+            int minBpm = 70;
 			int maxBpm = 180;
 			double minSec = 60.0 / maxBpm;
 			double maxSec = 60.0 / minBpm;
 
 			int minLag = (int) Math.Round(minSec * downsampleHz);
 			int maxLag = Math.Min(n / 2, (int) Math.Round(maxSec * downsampleHz));
-			if (maxLag <= minLag) return -1;
+			if (maxLag <= minLag)
+            {
+                return -1;
+            }
 
-			double bestVal = double.MinValue;
+            double bestVal = double.MinValue;
 			int bestLag = -1;
 
 			for (int lag = minLag; lag <= maxLag; lag++)
 			{
 				double sum = 0;
 				for (int i = lag; i < n; i++)
-					sum += norm[i] * norm[i - lag];
-				if (sum > bestVal)
+                {
+                    sum += norm[i] * norm[i - lag];
+                }
+
+                if (sum > bestVal)
 				{
 					bestVal = sum;
 					bestLag = lag;
 				}
 			}
 
-			if (bestLag <= 0) return -1;
-			return bestLag;
+			if (bestLag <= 0)
+            {
+                return -1;
+            }
+
+            return bestLag;
 		}
 
 		private static int FindBestPhase(List<int> onsetFrames, int intervalFrames)
 		{
 			if (onsetFrames == null || onsetFrames.Count == 0 || intervalFrames <= 0)
-				return 0;
+            {
+                return 0;
+            }
 
-			onsetFrames.Sort();
+            onsetFrames.Sort();
 			int steps = 48;
 			double bestCost = double.MaxValue;
 			int bestPhase = 0;
@@ -996,10 +1279,18 @@ namespace ModularAudience.Audio.Processors_V1
 				foreach (var f in onsetFrames)
 				{
 					double r = (f - phase) % intervalFrames;
-					if (r < 0) r += intervalFrames;
-					double d = r;
-					if (d > intervalFrames / 2.0) d = intervalFrames - d;
-					cost += d;
+					if (r < 0)
+                    {
+                        r += intervalFrames;
+                    }
+
+                    double d = r;
+					if (d > intervalFrames / 2.0)
+                    {
+                        d = intervalFrames - d;
+                    }
+
+                    cost += d;
 				}
 
 				if (cost < bestCost)
@@ -1015,25 +1306,41 @@ namespace ModularAudience.Audio.Processors_V1
 		private static void BuildBeatGridFromTempo(bool[] beatGrid, int intervalFrames, int phaseFrame)
 		{
 			if (beatGrid == null || beatGrid.Length == 0 || intervalFrames <= 0)
-				return;
+            {
+                return;
+            }
 
-			int n = beatGrid.Length;
+            int n = beatGrid.Length;
 			int start = phaseFrame;
 			while (start - intervalFrames >= 0)
-				start -= intervalFrames;
-			if (start < 0)
-				start += intervalFrames;
+            {
+                start -= intervalFrames;
+            }
 
-			for (int pos = start; pos < n; pos += intervalFrames)
-				beatGrid[pos] = true;
-		}
+            if (start < 0)
+            {
+                start += intervalFrames;
+            }
+
+            for (int pos = start; pos < n; pos += intervalFrames)
+            {
+                beatGrid[pos] = true;
+            }
+        }
 
 		private static void AlignBeatGridToEnvelope(bool[] beatGrid, float[] envelope, int startSample, int maxShiftFrames)
 		{
-			if (beatGrid == null || envelope == null) return;
-			if (beatGrid.Length == 0 || envelope.Length == 0) return;
+			if (beatGrid == null || envelope == null)
+            {
+                return;
+            }
 
-			int n = beatGrid.Length;
+            if (beatGrid.Length == 0 || envelope.Length == 0)
+            {
+                return;
+            }
+
+            int n = beatGrid.Length;
 			int envLen = envelope.Length;
 			maxShiftFrames = Math.Max(1, maxShiftFrames);
 
@@ -1051,14 +1358,20 @@ namespace ModularAudience.Audio.Processors_V1
 
 			for (int i = 0; i < n; i++)
 			{
-				if (!beatGrid[i]) continue;
+				if (!beatGrid[i])
+                {
+                    continue;
+                }
 
-				int center = i - startSample;
+                int center = i - startSample;
 				if (center < 0 || center >= envLen)
 				{
 					if (i >= 0 && i < n)
-						newGrid[i] = true;
-					continue;
+                    {
+                        newGrid[i] = true;
+                    }
+
+                    continue;
 				}
 
 				int radius = Math.Min(maxShiftFrames, envLen - 1);
@@ -1081,15 +1394,20 @@ namespace ModularAudience.Audio.Processors_V1
 				if (bestVal < thr)
 				{
 					if (i >= 0 && i < n)
-						newGrid[i] = true;
-					continue;
+                    {
+                        newGrid[i] = true;
+                    }
+
+                    continue;
 				}
 
 				int newFrame = startSample + bestIdx;
 				if (newFrame < 0 || newFrame >= n)
-					newFrame = Math.Clamp(i, 0, n - 1);
+                {
+                    newFrame = Math.Clamp(i, 0, n - 1);
+                }
 
-				newGrid[newFrame] = true;
+                newGrid[newFrame] = true;
 			}
 
 			Array.Copy(newGrid, beatGrid, n);
@@ -1098,13 +1416,19 @@ namespace ModularAudience.Audio.Processors_V1
 		private static void EnforceMinDistance(bool[] beatGrid, int minDistance)
 		{
 			if (beatGrid == null || beatGrid.Length == 0 || minDistance <= 0)
-				return;
+            {
+                return;
+            }
 
-			int last = -minDistance - 1;
+            int last = -minDistance - 1;
 			for (int i = 0; i < beatGrid.Length; i++)
 			{
-				if (!beatGrid[i]) continue;
-				if (i - last < minDistance)
+				if (!beatGrid[i])
+                {
+                    continue;
+                }
+
+                if (i - last < minDistance)
 				{
 					beatGrid[i] = false;
 				}

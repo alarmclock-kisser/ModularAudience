@@ -53,7 +53,7 @@ namespace ModularAudience.Audio
             return clone;
         }
 
-        public async Task EraseSelectionAsync()
+        public async Task EraseSelectionAsync(bool inverted = false)
         {
             if (this.Data == null || this.Data.Length == 0 || this.SelectionEnd < 0 || this.SelectionStart < 0 || this.SelectionStart == this.SelectionEnd)
             {
@@ -74,29 +74,51 @@ namespace ModularAudience.Audio
                 return;
             }
 
-            float[] newData = new float[this.Data.Length - selCount];
-            await Task.Run(() =>
+            if (!inverted)
             {
-                int bytesBefore = checked((int) (selStart * sizeof(float)));
-                int srcAfterOffset = checked((int) (selEnd * sizeof(float)));
-                int bytesAfter = checked((int) ((totalSamples - selEnd) * sizeof(float)));
-                int dstAfterOffset = bytesBefore;
-
-                if (bytesBefore > 0)
+                // Standardverhalten: Auswahl löschen, Rest behalten
+                float[] newData = new float[this.Data.Length - selCount];
+                await Task.Run(() =>
                 {
-                    Buffer.BlockCopy(this.Data, 0, newData, 0, bytesBefore);
-                }
+                    int bytesBefore = checked((int) (selStart * sizeof(float)));
+                    int srcAfterOffset = checked((int) (selEnd * sizeof(float)));
+                    int bytesAfter = checked((int) ((totalSamples - selEnd) * sizeof(float)));
+                    int dstAfterOffset = bytesBefore;
 
-                if (bytesAfter > 0)
+                    if (bytesBefore > 0)
+                    {
+                        Buffer.BlockCopy(this.Data, 0, newData, 0, bytesBefore);
+                    }
+
+                    if (bytesAfter > 0)
+                    {
+                        Buffer.BlockCopy(this.Data, srcAfterOffset, newData, dstAfterOffset, bytesAfter);
+                    }
+                }).ConfigureAwait(false);
+
+                this.Data = newData;
+            }
+            else
+            {
+                // Inverted: alles außer Auswahl löschen -> behalten nur die Auswahl
+                float[] newData = new float[selCount];
+                await Task.Run(() =>
                 {
-                    Buffer.BlockCopy(this.Data, srcAfterOffset, newData, dstAfterOffset, bytesAfter);
-                }
-            }).ConfigureAwait(false);
+                    int srcOffset = checked((int) (selStart * sizeof(float)));
+                    int copyBytes = checked((int) (selCount * sizeof(float)));
+                    if (copyBytes > 0)
+                    {
+                        Buffer.BlockCopy(this.Data, srcOffset, newData, 0, copyBytes);
+                    }
+                }).ConfigureAwait(false);
 
-            this.Data = newData;
+                this.Data = newData;
+            }
+
             int channels = Math.Max(1, this.Channels);
             this.Length = this.Data.Length;
             this.Duration = TimeSpan.FromSeconds((double) this.Data.Length / (this.SampleRate * channels));
+            // Auswahl zurücksetzen - TrackView/Callees erwarten meist Selection cleared after erase
             this.SelectionStart = -1;
             this.SelectionEnd = -1;
         }

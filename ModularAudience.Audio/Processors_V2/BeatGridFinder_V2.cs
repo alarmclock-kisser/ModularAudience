@@ -10,9 +10,11 @@ namespace ModularAudience.Audio.Processors_V2
 		public static async Task<TimeSpan> FindSilenceDurationStartAsync(AudioObj audio, float? threshold = null, int? minDurationMs = null)
 		{
 			if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
-				return TimeSpan.Zero;
+            {
+                return TimeSpan.Zero;
+            }
 
-			var result = await Task.Run(() => ComputeSilenceDuration(audio, true, threshold, minDurationMs));
+            var result = await Task.Run(() => ComputeSilenceDuration(audio, true, threshold, minDurationMs));
 			LogCollection.Log("Detected silence at start: " + result.TotalSeconds.ToString("F1") + " seconds");
 			return result;
 		}
@@ -20,9 +22,11 @@ namespace ModularAudience.Audio.Processors_V2
 		public static async Task<TimeSpan> FindSilenceDurationEndAsync(AudioObj audio, float? threshold = null, int? minDurationMs = null)
 		{
 			if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
-				return TimeSpan.Zero;
+            {
+                return TimeSpan.Zero;
+            }
 
-			var result = await Task.Run(() => ComputeSilenceDuration(audio, false, threshold, minDurationMs));
+            var result = await Task.Run(() => ComputeSilenceDuration(audio, false, threshold, minDurationMs));
 			LogCollection.Log("Detected silence at end: " + result.TotalSeconds.ToString("F1") + " seconds");
 			return result;
 		}
@@ -55,9 +59,12 @@ namespace ModularAudience.Audio.Processors_V2
 
 			float[] data = audio.Data ?? Array.Empty<float>();
 			int totalFrames = Math.Max(0, data.Length / channels);
-			if (totalFrames <= 0) return TimeSpan.Zero;
+			if (totalFrames <= 0)
+            {
+                return TimeSpan.Zero;
+            }
 
-			int downsampleFactor = Math.Max(1, sampleRate / 1000);
+            int downsampleFactor = Math.Max(1, sampleRate / 1000);
 			int envLen = Math.Max(1, totalFrames / downsampleFactor);
 			var env = new float[envLen];
 
@@ -92,9 +99,11 @@ namespace ModularAudience.Audio.Processors_V2
 			float noiseFloor = sortedEnv[Math.Max(0, (int) (n * 0.02f))];
 
 			if (globalMax <= 1e-7f)
-				return TimeSpan.Zero;
+            {
+                return TimeSpan.Zero;
+            }
 
-			float eps = 1e-9f;
+            float eps = 1e-9f;
 
 			int windowFrames = (int) (20.0 * sampleRate / downsampleFactor);
 			windowFrames = Math.Max(1, Math.Min(envLen, windowFrames));
@@ -135,12 +144,24 @@ namespace ModularAudience.Audio.Processors_V2
 				float dynDb = 20f * MathF.Log10(Math.Max(1.0001f, dynRange));
 
 				float alpha;
-				if (dynDb < 20f) alpha = 0.4f;
-				else if (dynDb < 40f) alpha = 0.25f;
-				else if (dynDb < 60f) alpha = 0.12f;
-				else alpha = 0.06f;
+				if (dynDb < 20f)
+                {
+                    alpha = 0.4f;
+                }
+                else if (dynDb < 40f)
+                {
+                    alpha = 0.25f;
+                }
+                else if (dynDb < 60f)
+                {
+                    alpha = 0.12f;
+                }
+                else
+                {
+                    alpha = 0.06f;
+                }
 
-				float upperRef = sortedEnv[Math.Max(0, (int) (n * 0.8f))];
+                float upperRef = sortedEnv[Math.Max(0, (int) (n * 0.8f))];
 				float target = noiseFloor + (upperRef - noiseFloor) * alpha;
 
 				float minFloor = globalMax * 0.0001f;
@@ -161,12 +182,16 @@ namespace ModularAudience.Audio.Processors_V2
 
 				int i = 0;
 				while (i < envLen && env[i] <= floor)
-					i++;
+                {
+                    i++;
+                }
 
-				if (i < minSilenceFrames)
-					return TimeSpan.Zero;
+                if (i < minSilenceFrames)
+                {
+                    return TimeSpan.Zero;
+                }
 
-				int sampleIdx = Math.Min(totalFrames - 1, i * downsampleFactor);
+                int sampleIdx = Math.Min(totalFrames - 1, i * downsampleFactor);
 				sampleIdx = Math.Max(0, sampleIdx - sampleRate / 200);
 
 				double seconds = sampleIdx / (double) sampleRate;
@@ -182,13 +207,17 @@ namespace ModularAudience.Audio.Processors_V2
 
 				int i = envLen - 1;
 				while (i >= 0 && env[i] <= floor)
-					i--;
+                {
+                    i--;
+                }
 
-				int trailingFrames = (envLen - 1) - i;
+                int trailingFrames = (envLen - 1) - i;
 				if (trailingFrames < minSilenceFrames)
-					return TimeSpan.Zero;
+                {
+                    return TimeSpan.Zero;
+                }
 
-				int trailingSamples = trailingFrames * downsampleFactor;
+                int trailingSamples = trailingFrames * downsampleFactor;
 				trailingSamples = Math.Max(0, trailingSamples - sampleRate / 200);
 
 				double seconds = trailingSamples / (double) sampleRate;
@@ -198,8 +227,12 @@ namespace ModularAudience.Audio.Processors_V2
 
 		private static float CalculateRobustThreshold(float[] env, int sampleRate)
 		{
-			if (env == null || env.Length == 0) return 1e-5f;
-			var sorted = env.OrderBy(x => x).ToArray();
+			if (env == null || env.Length == 0)
+            {
+                return 1e-5f;
+            }
+
+            var sorted = env.OrderBy(x => x).ToArray();
 			float q1 = sorted[Math.Max(0, sorted.Length / 4)];
 			float median = sorted[sorted.Length / 2];
 			float mean = env.Average();
@@ -213,16 +246,24 @@ namespace ModularAudience.Audio.Processors_V2
 
 		private static float[] MovingAverage(float[] data, int win)
 		{
-			if (win <= 1) return data;
-			var outArr = new float[data.Length];
+			if (win <= 1)
+            {
+                return data;
+            }
+
+            var outArr = new float[data.Length];
 			int h = win / 2;
 			for (int i = 0; i < data.Length; i++)
 			{
 				int s = Math.Max(0, i - h);
 				int e = Math.Min(data.Length - 1, i + h);
 				double sum = 0;
-				for (int j = s; j <= e; j++) sum += data[j];
-				outArr[i] = (float) (sum / (e - s + 1));
+				for (int j = s; j <= e; j++)
+                {
+                    sum += data[j];
+                }
+
+                outArr[i] = (float) (sum / (e - s + 1));
 			}
 			return outArr;
 		}
@@ -242,15 +283,22 @@ namespace ModularAudience.Audio.Processors_V2
 				{
 					int baseIdx = (startSample + i) * channels;
 					float sum = 0f;
-					for (int c = 0; c < channels; c++) sum += data[baseIdx + c];
-					mono[i] = sum / channels;
+					for (int c = 0; c < channels; c++)
+                    {
+                        sum += data[baseIdx + c];
+                    }
+
+                    mono[i] = sum / channels;
 				});
 			}
 
 			var env = new float[analysisLen];
-			for (int i = 0; i < analysisLen; i++) env[i] = MathF.Abs(mono[i]);
+			for (int i = 0; i < analysisLen; i++)
+            {
+                env[i] = MathF.Abs(mono[i]);
+            }
 
-			int w = Math.Max(1, Math.Min(101, sampleRate / 200));
+            int w = Math.Max(1, Math.Min(101, sampleRate / 200));
 			env = FastMovingAverage(env, w);
 
             Parallel.For(0, env.Length, i => env[i] = MathF.Sqrt(env[i]));
@@ -261,8 +309,12 @@ namespace ModularAudience.Audio.Processors_V2
 		private static float[] FastMovingAverage(float[] data, int window)
 		{
 			int n = data.Length;
-			if (n == 0 || window <= 1) return data;
-			var outArr = new float[n];
+			if (n == 0 || window <= 1)
+            {
+                return data;
+            }
+
+            var outArr = new float[n];
 			double sum = 0;
 			int half = window / 2;
 			int s = 0, e = -1;
@@ -288,8 +340,12 @@ namespace ModularAudience.Audio.Processors_V2
 
 		private static float[] BuildOnsetEnvelope(float[] env, int sampleRate, int downsampleHz)
 		{
-			if (env == null || env.Length == 0) return Array.Empty<float>();
-			int dsFactor = Math.Max(1, sampleRate / downsampleHz);
+			if (env == null || env.Length == 0)
+            {
+                return Array.Empty<float>();
+            }
+
+            int dsFactor = Math.Max(1, sampleRate / downsampleHz);
 			int outLen = Math.Max(1, env.Length / dsFactor);
 			var outEnv = new float[outLen];
 			for (int i = 0; i < outLen; i++)
@@ -297,26 +353,46 @@ namespace ModularAudience.Audio.Processors_V2
 				int s = i * dsFactor;
 				int e = Math.Min(env.Length - 1, s + dsFactor - 1);
 				float maxv = 0f;
-				for (int j = s; j <= e; j++) if (env[j] > maxv) maxv = env[j];
-				outEnv[i] = maxv;
+				for (int j = s; j <= e; j++)
+                {
+                    if (env[j] > maxv)
+                    {
+                        maxv = env[j];
+                    }
+                }
+
+                outEnv[i] = maxv;
 			}
 			float max = outEnv.Max();
-			if (max > 0) for (int i = 0; i < outEnv.Length; i++) outEnv[i] /= max;
-			return outEnv;
+			if (max > 0)
+            {
+                for (int i = 0; i < outEnv.Length; i++)
+                {
+                    outEnv[i] /= max;
+                }
+            }
+
+            return outEnv;
 		}
 
 		public static async Task<bool[]> GenerateBeatGridAsync(AudioObj audio, bool set = true, int granularity = 4)
 		{
 			if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
-				return Array.Empty<bool>();
+            {
+                return Array.Empty<bool>();
+            }
 
-			return await Task.Run(() =>
+            return await Task.Run(() =>
 			{
 				try
 				{
 					var grid = GenerateBeatGridInternal(audio, granularity);
-					if (set) audio.BeatGrid = grid;
-					return grid;
+					if (set)
+                    {
+                        audio.BeatGrid = grid;
+                    }
+
+                    return grid;
 				}
 				catch (Exception ex)
 				{
@@ -342,21 +418,27 @@ namespace ModularAudience.Audio.Processors_V2
 			float[] envelope = pre.envelope;
 
 			if (mono.Length < sampleRate / 2)
-				return new bool[totalFrames];
+            {
+                return new bool[totalFrames];
+            }
 
-			int downsampleHz = 200;
+            int downsampleHz = 200;
 			float[] envDs = BuildOnsetEnvelope(envelope, sampleRate, downsampleHz);
 			if (envDs == null || envDs.Length < 32)
-				return new bool[totalFrames];
+            {
+                return new bool[totalFrames];
+            }
 
-			var tempoPhase = EstimateTempoAndPhase(envDs, sampleRate, downsampleHz);
+            var tempoPhase = EstimateTempoAndPhase(envDs, sampleRate, downsampleHz);
 			int intervalFrames = tempoPhase.intervalFrames;
 			int phaseFrames = tempoPhase.phaseOffsetFrames;
 
 			if (intervalFrames <= 0)
-				return new bool[totalFrames];
+            {
+                return new bool[totalFrames];
+            }
 
-			granularity = Math.Clamp(granularity, 1, 16);
+            granularity = Math.Clamp(granularity, 1, 16);
 			intervalFrames = Math.Max(1, (int) Math.Round((double) intervalFrames / granularity) * granularity);
 
 			var beatGrid = new bool[totalFrames];
@@ -365,9 +447,11 @@ namespace ModularAudience.Audio.Processors_V2
 			ApplyGlobalAttackOffset(beatGrid, mono, envelope, startSample, sampleRate, intervalFrames);
 
 			for (int i = 0; i < Math.Min(startSample, beatGrid.Length); i++)
-				beatGrid[i] = false;
+            {
+                beatGrid[i] = false;
+            }
 
-			int minDist = Math.Max(1, intervalFrames / 4);
+            int minDist = Math.Max(1, intervalFrames / 4);
 			EnforceMinDistance(beatGrid, minDist);
 
 			int beatCount = beatGrid.Count(b => b);
@@ -381,9 +465,11 @@ namespace ModularAudience.Audio.Processors_V2
 		private static (int intervalFrames, int phaseOffsetFrames) EstimateTempoAndPhase(float[] envDs, int sampleRate, int downsampleHz)
 		{
 			if (envDs == null || envDs.Length < 32)
-				return (0, 0);
+            {
+                return (0, 0);
+            }
 
-			int n = envDs.Length;
+            int n = envDs.Length;
 			int minBpm = 70;
 			int maxBpm = 180;
 
@@ -434,9 +520,11 @@ namespace ModularAudience.Audio.Processors_V2
 			}
 
 			if (bestLag <= 0)
-				return (0, 0);
+            {
+                return (0, 0);
+            }
 
-			int dsFactor = Math.Max(1, sampleRate / downsampleHz);
+            int dsFactor = Math.Max(1, sampleRate / downsampleHz);
 			int intervalFrames = bestLag * dsFactor;
 			int phaseFrames = bestPhase * dsFactor;
 
@@ -446,31 +534,44 @@ namespace ModularAudience.Audio.Processors_V2
 		private static void BuildBeatGridFromTempoPhase(bool[] beatGrid, int intervalFrames, int firstBeatFrame)
 		{
 			if (beatGrid == null || beatGrid.Length == 0 || intervalFrames <= 0)
-				return;
+            {
+                return;
+            }
 
-			int n = beatGrid.Length;
+            int n = beatGrid.Length;
 
 			int start = firstBeatFrame;
 			while (start - intervalFrames >= 0)
-				start -= intervalFrames;
-			if (start < 0)
-				start += intervalFrames;
+            {
+                start -= intervalFrames;
+            }
 
-			for (int pos = start; pos < n; pos += intervalFrames)
-				beatGrid[pos] = true;
-		}
+            if (start < 0)
+            {
+                start += intervalFrames;
+            }
+
+            for (int pos = start; pos < n; pos += intervalFrames)
+            {
+                beatGrid[pos] = true;
+            }
+        }
 
 		private static void SnapBeatsToEnvelopePeaks(bool[] beatGrid, float[] envelope, int startSample, int maxShiftFrames)
 		{
 			if (beatGrid == null || envelope == null)
-				return;
+            {
+                return;
+            }
 
-			int n = beatGrid.Length;
+            int n = beatGrid.Length;
 			int envLen = envelope.Length;
 			if (n == 0 || envLen == 0)
-				return;
+            {
+                return;
+            }
 
-			maxShiftFrames = Math.Max(1, maxShiftFrames);
+            maxShiftFrames = Math.Max(1, maxShiftFrames);
 			var newGrid = new bool[n];
 
 			float maxEnv = envelope.Max();
@@ -485,14 +586,20 @@ namespace ModularAudience.Audio.Processors_V2
 
 			for (int i = 0; i < n; i++)
 			{
-				if (!beatGrid[i]) continue;
+				if (!beatGrid[i])
+                {
+                    continue;
+                }
 
-				int center = i - startSample;
+                int center = i - startSample;
 				if (center < 0 || center >= envLen)
 				{
 					if (i >= 0 && i < n)
-						newGrid[i] = true;
-					continue;
+                    {
+                        newGrid[i] = true;
+                    }
+
+                    continue;
 				}
 
 				int radius = Math.Min(maxShiftFrames, envLen - 1);
@@ -515,15 +622,20 @@ namespace ModularAudience.Audio.Processors_V2
 				if (bestVal < thr)
 				{
 					if (i >= 0 && i < n)
-						newGrid[i] = true;
-					continue;
+                    {
+                        newGrid[i] = true;
+                    }
+
+                    continue;
 				}
 
 				int newFrame = startSample + bestIdx;
 				if (newFrame < 0 || newFrame >= n)
-					newFrame = Math.Clamp(i, 0, n - 1);
+                {
+                    newFrame = Math.Clamp(i, 0, n - 1);
+                }
 
-				newGrid[newFrame] = true;
+                newGrid[newFrame] = true;
 			}
 
 			Array.Copy(newGrid, beatGrid, n);
@@ -532,13 +644,19 @@ namespace ModularAudience.Audio.Processors_V2
 		private static void EnforceMinDistance(bool[] beatGrid, int minDistance)
 		{
 			if (beatGrid == null || beatGrid.Length == 0 || minDistance <= 0)
-				return;
+            {
+                return;
+            }
 
-			int last = -minDistance - 1;
+            int last = -minDistance - 1;
 			for (int i = 0; i < beatGrid.Length; i++)
 			{
-				if (!beatGrid[i]) continue;
-				if (i - last < minDistance)
+				if (!beatGrid[i])
+                {
+                    continue;
+                }
+
+                if (i - last < minDistance)
 				{
 					beatGrid[i] = false;
 				}
@@ -552,53 +670,71 @@ namespace ModularAudience.Audio.Processors_V2
 		private static void ApplyGlobalAttackOffset(bool[] beatGrid, float[] mono, float[] envelope, int startSample, int sampleRate, int intervalFrames)
 		{
 			if (beatGrid == null || mono == null || envelope == null)
-				return;
+            {
+                return;
+            }
 
-			int n = beatGrid.Length;
+            int n = beatGrid.Length;
 			if (n == 0 || mono.Length == 0 || envelope.Length == 0)
-				return;
+            {
+                return;
+            }
 
-			var beats = new List<int>();
+            var beats = new List<int>();
 			for (int i = 0; i < n; i++)
 			{
 				if (beatGrid[i])
 				{
 					beats.Add(i);
 					if (beats.Count >= 64)
-						break;
-				}
+                    {
+                        break;
+                    }
+                }
 			}
 
 			if (beats.Count < 3)
-				return;
+            {
+                return;
+            }
 
-			var offsets = new List<int>();
+            var offsets = new List<int>();
 			foreach (int b in beats)
 			{
 				int onsetFrame = FindAttackStartForBeat(b, mono, envelope, startSample, sampleRate, intervalFrames);
 				if (onsetFrame >= 0)
-					offsets.Add(onsetFrame - b);
-			}
+                {
+                    offsets.Add(onsetFrame - b);
+                }
+            }
 
 			if (offsets.Count < 2)
-				return;
+            {
+                return;
+            }
 
-			offsets.Sort();
+            offsets.Sort();
 			int medianOffset = offsets[offsets.Count / 2];
 
 			if (medianOffset == 0)
-				return;
+            {
+                return;
+            }
 
-			var newGrid = new bool[n];
+            var newGrid = new bool[n];
 			for (int i = 0; i < n; i++)
 			{
 				if (!beatGrid[i])
-					continue;
+                {
+                    continue;
+                }
 
-				int ni = i + medianOffset;
+                int ni = i + medianOffset;
 				if (ni >= 0 && ni < n)
-					newGrid[ni] = true;
-			}
+                {
+                    newGrid[ni] = true;
+                }
+            }
 
 			Array.Copy(newGrid, beatGrid, n);
 		}
@@ -608,9 +744,11 @@ namespace ModularAudience.Audio.Processors_V2
 			int envLen = envelope.Length;
 			int localIdx = beatFrame - startSample;
 			if (localIdx <= 0 || localIdx >= envLen)
-				return -1;
+            {
+                return -1;
+            }
 
-			int backMax = Math.Max(sampleRate / 4, intervalFrames / 2);
+            int backMax = Math.Max(sampleRate / 4, intervalFrames / 2);
 			int fwdMax = Math.Max(sampleRate / 8, intervalFrames / 4);
 
 			int back = Math.Min(localIdx, backMax);
@@ -632,9 +770,11 @@ namespace ModularAudience.Audio.Processors_V2
 			}
 
 			if (peakVal <= 0f)
-				return beatFrame;
+            {
+                return beatFrame;
+            }
 
-			float thr = peakVal * 0.2f;
+            float thr = peakVal * 0.2f;
 			int attackIdx = peakIdx;
 			for (int i = peakIdx; i >= s; i--)
 			{
@@ -654,9 +794,11 @@ namespace ModularAudience.Audio.Processors_V2
 		{
 			int n = mono.Length;
 			if (n < 2)
-				return index;
+            {
+                return index;
+            }
 
-			index = Math.Clamp(index, 1, n - 1);
+            index = Math.Clamp(index, 1, n - 1);
 			maxSearch = Math.Max(1, maxSearch);
 
 			for (int d = 0; d <= maxSearch; d++)
@@ -667,10 +809,15 @@ namespace ModularAudience.Audio.Processors_V2
 					float a = mono[left - 1];
 					float b = mono[left];
 					if (a == 0f)
-						return left - 1;
-					if (Math.Sign(a) != Math.Sign(b))
-						return left;
-				}
+                    {
+                        return left - 1;
+                    }
+
+                    if (Math.Sign(a) != Math.Sign(b))
+                    {
+                        return left;
+                    }
+                }
 
 				int right = index + d;
 				if (right < n)
@@ -678,10 +825,15 @@ namespace ModularAudience.Audio.Processors_V2
 					float a = mono[right - 1];
 					float b = mono[right];
 					if (a == 0f)
-						return right - 1;
-					if (Math.Sign(a) != Math.Sign(b))
-						return right;
-				}
+                    {
+                        return right - 1;
+                    }
+
+                    if (Math.Sign(a) != Math.Sign(b))
+                    {
+                        return right;
+                    }
+                }
 			}
 
 			return index;

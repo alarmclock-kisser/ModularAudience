@@ -892,6 +892,7 @@ namespace ModularAudience.Forms.Modules
                 this.UpdateOffsetScrollbar();
 
                 // EINZELKLICK: Muss die Wellenform neu rendern, da der Scroll-Offset sich geändert hat.
+                this.OriginalAudio.UpdateLoopFraction(0, 0, 0, false, false);
                 _ = this.RefreshWaveformAsync();
             }
             else if (this.dragSelecting)
@@ -1540,6 +1541,7 @@ namespace ModularAudience.Forms.Modules
                 if (clip != null)
                 {
                     clip.Name = this.GenerateClipName();
+                    clip.Rename(clip.Name);
                 }
             }
 

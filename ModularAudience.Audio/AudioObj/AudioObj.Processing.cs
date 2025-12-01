@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Threading.Tasks;
 using ModularAudience.Audio.Processing;
 
@@ -39,6 +40,31 @@ namespace ModularAudience.Audio
         public Task<float[]> GetCurrentWindowAsync(int windowSize = 65536, int lookingRange = 2, bool mono = false, bool lookBackwards = false)
         {
             return AudioWindowProcessor.GetCurrentWindowAsync(this, windowSize, lookingRange, mono, lookBackwards);
+        }
+    
+        public async Task<AudioObj?> CreateLoopAsync(long? startSample = null, long? endSample = null)
+        {
+            startSample ??= this.loopFractionStartSamples;
+            endSample ??= this.loopFractionEndSamples;
+            if (startSample.Value > endSample.Value)
+            {
+                (startSample, endSample) = (endSample, startSample);
+            }
+
+            var clone = await this.CloneAsync();
+            if (clone != null)
+            {
+                clone.SelectionStart = startSample.Value;
+                clone.SelectionEnd = endSample.Value;
+                await clone.EraseSelectionAsync(true);
+
+                string fraction = "1/" + ((int)(1 / this.LoopFraction)).ToString();
+                double loopStartTime = (double) startSample.Value / this.SampleRate / this.Channels;
+
+                clone.Rename($"{this.OriginalName} (Looped {fraction} at {loopStartTime:F1}");
+            }
+
+            return clone;
         }
     }
 }

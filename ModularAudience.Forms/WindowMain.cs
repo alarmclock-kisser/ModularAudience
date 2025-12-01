@@ -33,6 +33,7 @@ namespace ModularAudience.Forms
                     _lastSelectedTrackView = value;
                     UpdateTrackDependentUI();
                     HighlightSelectedTrackView();
+                    LoopControlWindow?.UpdateLoopButtonsState();
                 }
             }
         }
@@ -1599,6 +1600,8 @@ namespace ModularAudience.Forms
                 Channels = 2,
                 BitDepth = 32
             };
+            track.Rename(track.Name);
+
             cv.AudioC.Audios.Add(track);
             var trackView = new TrackView(track);
             trackView.Show();

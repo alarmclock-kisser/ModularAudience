@@ -183,8 +183,15 @@ namespace ModularAudience.Generators
 
         public static async Task<List<bool[]>> GenerateBreakPatternAsync(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null, string preset = " - None - ")
         {
-            if (bars <= 0) throw new ArgumentOutOfRangeException(nameof(bars));
-            if (resolution <= 0) throw new ArgumentOutOfRangeException(nameof(resolution));
+            if (bars <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(bars));
+            }
+
+            if (resolution <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(resolution));
+            }
 
             density = Math.Clamp(density, 0f, 1f);
             swing = Math.Clamp(swing, 0f, 0.5f);
@@ -269,7 +276,9 @@ namespace ModularAudience.Generators
                 {
                     float useChance = TemplateUseChanceFor(elem);
                     if (rnd.NextDouble() > useChance)
+                    {
                         continue;
+                    }
 
                     int templateIndex = rnd.Next(templList.Count);
                     var baseTemplate = templList[templateIndex];
@@ -315,12 +324,16 @@ namespace ModularAudience.Generators
                 attempts++;
                 int pos = rnd.Next(totalSteps);
                 if (!line[pos])
+                {
                     continue;
+                }
 
                 int stepInBar = pos % resolution;
                 bool isAnchor = IsAnchorStep(elem, stepInBar, resolution);
                 if (isAnchor && rnd.NextDouble() < 0.9)
+                {
                     continue;
+                }
 
                 if (rnd.NextDouble() < 0.6)
                 {
@@ -371,13 +384,17 @@ namespace ModularAudience.Generators
         static void EnforceMinStepSpacing(bool[] line, int minSpacing)
         {
             if (line == null || line.Length == 0 || minSpacing <= 0)
+            {
                 return;
+            }
 
             int last = -minSpacing - 1;
             for (int i = 0; i < line.Length; i++)
             {
                 if (!line[i])
+                {
                     continue;
+                }
 
                 if (i - last < minSpacing)
                 {
@@ -400,7 +417,9 @@ namespace ModularAudience.Generators
             {
                 int index16 = idx16;
                 if (mirror)
+                {
                     index16 = 15 - index16;
+                }
 
                 int step = ScaleIndexToResolution(index16, 16, resolution);
 
@@ -408,15 +427,22 @@ namespace ModularAudience.Generators
                 {
                     int group = resolution / 4;
                     step = (step + rotateQuarterSteps * group) % resolution;
-                    if (step < 0) step += resolution;
+                    if (step < 0)
+                    {
+                        step += resolution;
+                    }
                 }
 
                 double keepProb = 0.6 + 0.4 * Math.Min(1.5, complexity);
                 if (elem == DrumsetElement.ThinkBreak)
+                {
                     keepProb = 0.8 + 0.2 * Math.Min(1.5, complexity);
+                }
 
                 if (rnd.NextDouble() > keepProb)
+                {
                     continue;
+                }
 
                 int shift = 0;
                 if (rnd.NextDouble() < complexity * 0.35f)
@@ -427,7 +453,9 @@ namespace ModularAudience.Generators
                 int posInBar = Math.Clamp(step + shift, 0, stepsPerBar - 1);
                 int pos = barOffset + posInBar;
                 if (pos >= 0 && pos < line.Length)
+                {
                     line[pos] = true;
+                }
 
                 if (elem == DrumsetElement.Snare || elem == DrumsetElement.SnareRattle || elem == DrumsetElement.TomHigh || elem == DrumsetElement.TomMid || elem == DrumsetElement.TomLow)
                 {
@@ -435,7 +463,9 @@ namespace ModularAudience.Generators
                     {
                         int ghost = pos + (rnd.NextDouble() < 0.5 ? -1 : 1);
                         if (ghost >= barOffset && ghost < barOffset + stepsPerBar)
+                        {
                             line[ghost] = true;
+                        }
                     }
                 }
             }
@@ -451,13 +481,17 @@ namespace ModularAudience.Generators
                 {
                     int s0 = offset + 0;
                     if (s0 >= 0 && s0 < line.Length)
+                    {
                         line[s0] = true;
+                    }
 
                     if (density >= 0.2f)
                     {
                         int s2 = offset + stepsPerBar / 2;
                         if (s2 >= 0 && s2 < line.Length && rnd.NextDouble() < 0.85)
+                        {
                             line[s2] = true;
+                        }
                     }
                 }
 
@@ -466,9 +500,14 @@ namespace ModularAudience.Generators
                     int sA = offset + stepsPerBar / 4;
                     int sB = offset + (3 * stepsPerBar) / 4;
                     if (sA >= 0 && sA < line.Length && rnd.NextDouble() < 0.9)
+                    {
                         line[sA] = true;
+                    }
+
                     if (sB >= 0 && sB < line.Length && rnd.NextDouble() < 0.9)
+                    {
                         line[sB] = true;
+                    }
                 }
 
                 if (elem == DrumsetElement.HiHatClosed || elem == DrumsetElement.Ride || elem == DrumsetElement.Shaker)
@@ -477,7 +516,9 @@ namespace ModularAudience.Generators
                     {
                         int pos = offset + s;
                         if (pos >= 0 && pos < line.Length && rnd.NextDouble() < 0.9)
+                        {
                             line[pos] = true;
+                        }
                     }
                 }
             }
@@ -507,7 +548,9 @@ namespace ModularAudience.Generators
             int totalSteps = breakbeat[0].Length;
             var interleaved = new List<bool[]>(breakbeat.Count);
             for (int i = 0; i < breakbeat.Count; i++)
+            {
                 interleaved.Add(new bool[totalSteps]);
+            }
 
             for (int step = 0; step < totalSteps; step++)
             {
@@ -515,11 +558,15 @@ namespace ModularAudience.Generators
                 for (int lineIdx = 0; lineIdx < breakbeat.Count; lineIdx++)
                 {
                     if (breakbeat[lineIdx][step])
+                    {
                         candidates.Add(lineIdx);
+                    }
                 }
 
                 if (candidates.Count == 0)
+                {
                     continue;
+                }
 
                 int chosenIdx;
                 if (elements == null || elements.Length != breakbeat.Count)
@@ -571,7 +618,10 @@ namespace ModularAudience.Generators
         static int ScaleIndexToResolution(int idxFrom16, int fromResolution, int toResolution)
         {
             if (fromResolution == toResolution)
+            {
                 return idxFrom16;
+            }
+
             double scaled = idxFrom16 * (toResolution / (double) fromResolution);
             return (int) Math.Round(scaled);
         }
@@ -634,30 +684,43 @@ namespace ModularAudience.Generators
                 int e = resolution / 8;
 
                 if (stepInBar % q == 0)
+                {
                     w += 3.0;
+                }
+
                 if (stepInBar % e == 0)
+                {
                     w += 1.5;
+                }
 
                 bool neighborHit = (i > 0 && line[i - 1]) || (i < totalSteps - 1 && line[i + 1]);
                 if (neighborHit)
+                {
                     w += 1.2;
+                }
 
                 if (elem == DrumsetElement.HiHatClosed || elem == DrumsetElement.Shaker || elem == DrumsetElement.Ride)
                 {
                     if (stepInBar % 2 == 0)
+                    {
                         w += 0.8;
+                    }
                 }
 
                 if (elem == DrumsetElement.Kick)
                 {
                     if (stepInBar == 0 || stepInBar == 2 * q)
+                    {
                         w += 2.0;
+                    }
                 }
 
                 if (elem == DrumsetElement.Snare || elem == DrumsetElement.SnareRattle || elem == DrumsetElement.Clap || elem == DrumsetElement.Rim)
                 {
                     if (stepInBar == q || stepInBar == 3 * q)
+                    {
                         w += 2.5;
+                    }
                 }
 
                 w *= 1.0 + (rnd.NextDouble() - 0.5) * 0.4;
@@ -671,7 +734,9 @@ namespace ModularAudience.Generators
             {
                 acc += weights[i];
                 if (pick <= acc)
+                {
                     return i;
+                }
             }
             return rnd.Next(totalSteps);
         }
@@ -694,7 +759,9 @@ namespace ModularAudience.Generators
             {
                 int p = pos + i;
                 if (p < total && rnd.NextDouble() < 0.75)
+                {
                     line[p] = true;
+                }
             }
         }
 
@@ -721,17 +788,25 @@ namespace ModularAudience.Generators
             for (int i = 0; i < total; i++)
             {
                 if (line[i])
+                {
                     continue;
+                }
 
                 if (rnd.NextDouble() >= probability)
+                {
                     continue;
+                }
 
                 bool nearby = (i > 0 && line[i - 1]) || (i < total - 1 && line[i + 1]);
                 if (!nearby)
+                {
                     continue;
+                }
 
                 if (rnd.NextDouble() < 0.7)
+                {
                     line[i] = true;
+                }
             }
         }
 
@@ -746,7 +821,9 @@ namespace ModularAudience.Generators
         public static async Task<AudioObj> RenderBreakbeatAsync(List<bool[]> breakbeat, IEnumerable<AudioObj> samples, float bpm, int resolution, float swing, string? patternName = null)
         {
             if (breakbeat == null || samples == null || breakbeat.Count == 0 || !samples.Any())
+            {
                 return null!;
+            }
 
             int numTracks = Math.Min(breakbeat.Count, samples.Count());
             int steps = breakbeat[0].Length;
@@ -764,7 +841,9 @@ namespace ModularAudience.Generators
                 var pattern = breakbeat[trackIdx];
                 var audio = sampleList[trackIdx];
                 if (audio.Data == null || audio.Data.Length == 0)
+                {
                     continue;
+                }
 
                 await audio.NormalizeAsync(0.8f);
 
@@ -776,11 +855,15 @@ namespace ModularAudience.Generators
                 for (int step = 0; step < steps; step++)
                 {
                     if (!pattern[step])
+                    {
                         continue;
+                    }
 
                     float swingOffset = 0f;
                     if (swing > 0 && (step % 2 == 1))
+                    {
                         swingOffset = secondsPerStep * swing;
+                    }
 
                     int stepStart = (int) ((step * secondsPerStep + swingOffset) * sampleRate);
 
@@ -789,14 +872,19 @@ namespace ModularAudience.Generators
                         int mixPos = (stepStart + n) * channels;
                         int srcPos = n * audioChannels;
                         if (mixPos + channels > mixBuffer.Length)
+                        {
                             break;
+                        }
 
                         for (int c = 0; c < channels; c++)
                         {
                             float sample = audioData[srcPos + (c % audioChannels)];
                             float vol = audio.Volume;
                             if (vol <= 0f || float.IsNaN(vol) || float.IsInfinity(vol))
+                            {
                                 vol = 1.0f;
+                            }
+
                             vol = (float) Math.Clamp(vol, 0.0, 1.0);
                             mixBuffer[mixPos + c] += sample * vol;
                         }
@@ -808,7 +896,10 @@ namespace ModularAudience.Generators
             for (int i = 0; i < mixBuffer.Length; i++)
             {
                 float v = Math.Abs(mixBuffer[i]);
-                if (v > peak) peak = v;
+                if (v > peak)
+                {
+                    peak = v;
+                }
             }
 
             const float targetPeak = 0.95f;
@@ -816,7 +907,9 @@ namespace ModularAudience.Generators
             {
                 float scale = targetPeak / peak;
                 for (int i = 0; i < mixBuffer.Length; i++)
+                {
                     mixBuffer[i] *= scale;
+                }
             }
 
             patternName ??= "Breakbeat_";
