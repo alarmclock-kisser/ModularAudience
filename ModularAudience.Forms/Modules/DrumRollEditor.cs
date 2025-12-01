@@ -59,7 +59,7 @@ namespace ModularAudience.Forms.Modules
             }
 
 			this.StartPosition = FormStartPosition.Manual;
-			this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false);
+			this.Location = WindowsScreenHelper.GetCenterStartingPoint(this);
 
 			this.AllowDrop = true;
             this.DragEnter += this.DrumRollEditor_DragEnter;

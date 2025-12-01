@@ -47,10 +47,17 @@ namespace ModularAudience.Forms.Modules
         {
             this.InitializeComponent();
 
+            this.StartPosition = FormStartPosition.Manual;
+            this.Location = WindowsScreenHelper.GetCenterStartingPoint(this);
+
             this.BuildLoopControlButtons();
 
-            this.StartPosition = FormStartPosition.Manual;
-            this.Location = new Point(0, 0);
+            this.FormClosing += (s, e) =>
+            {
+                // Hide instead of close
+                WindowMain.LoopControlWindow = null;
+                this.Hide();
+            };
 
         }
 
@@ -58,124 +65,95 @@ namespace ModularAudience.Forms.Modules
 
         private void BuildLoopControlButtons()
         {
-            // Configure template button (hidden in UI)
-            this.button_loop.Font = new Font("Bahnschrift Light Condensed", 5.5F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            this.button_loop.Enabled = false;
-            this.button_loop.Visible = false;
+            var template = this.button_loop;
+            if (template == null || this.panel_buttons == null)
+                return;
 
-            // Labels (left -> right)
-            string[] buttonLabels = new[] { "4", "2", "1", "/2", "/4", "/8", "/16", "/32", "/32", "/16", "/8", "/4", "/2", "1", "2", "4" };
+            template.Visible = false;
 
-            // Corresponding numeric fractions (left half negative = "lookback", right half positive = "forward")
-            float[] fractions = new[]
-            {
-        -4f, -2f, -1f, -0.5f, -0.25f, -0.125f, -0.0625f, -0.03125f,
+            string[] buttonLabels = ["4", "2", "1", "/2", "/4", "/8", "/16", "/32", "/32", "/16", "/8", "/4", "/2", "1", "2", "4"];
+            float[] fractions =
+            [
+                -4f, -2f, -1f, -0.5f, -0.25f, -0.125f, -0.0625f, -0.03125f,
          0.03125f, 0.0625f, 0.125f, 0.25f, 0.5f, 1f, 2f, 4f
-    };
+            ];
 
             const int buttonCount = 16;
 
-            // Ensure panel padding/margin set so buttons align nicely
-            try
-            {
-                this.panel_buttons.SuspendLayout();
-                this.panel_buttons.Padding = new Padding(6);
-                this.panel_buttons.Margin = Padding.Empty;
-                this.panel_buttons.AutoScroll = false; // we force-fit, no horizontal scroll
-            }
-            catch { }
+            this.panel_buttons.SuspendLayout();
 
-            // Remove existing child buttons previously created (keep other controls if any)
-            var existing = this.panel_buttons.Controls.OfType<Button>().ToList();
-            foreach (var b in existing)
+            var toRemove = this.panel_buttons.Controls.OfType<Button>()
+                .Where(b => !ReferenceEquals(b, template))
+                .ToList();
+            foreach (var b in toRemove)
             {
-                try { this.panel_buttons.Controls.Remove(b); b.Dispose(); } catch { }
+                this.panel_buttons.Controls.Remove(b);
+                b.Dispose();
             }
 
-            // Create buttons
             var created = new List<Button>(buttonCount);
+
             for (int i = 0; i < buttonCount; i++)
             {
-                var copy = new Button
-                {
-                    Text = buttonLabels[i],
-                    Tag = fractions[i].ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    BackColor = SystemColors.Control,
-                    FlatStyle = FlatStyle.Standard,
-                    TextAlign = ContentAlignment.MiddleCenter,
-                    UseCompatibleTextRendering = true,
-                    Font = this.button_loop.Font,
-                    Margin = Padding.Empty,
-                    Anchor = AnchorStyles.Top | AnchorStyles.Left
-                };
+                var copy = new Button();
 
-                // Click handler shared
+                copy.Font = template.Font;
+                copy.Size = template.Size;
+                copy.BackColor = template.BackColor;
+                copy.ForeColor = template.ForeColor;
+                copy.FlatStyle = template.FlatStyle;
+                copy.Image = template.Image;
+                copy.ImageAlign = template.ImageAlign;
+                copy.TextAlign = template.TextAlign;
+                copy.Padding = template.Padding;
+                copy.Margin = template.Margin;
+                copy.UseVisualStyleBackColor = template.UseVisualStyleBackColor;
+                copy.FlatAppearance.BorderSize = template.FlatAppearance.BorderSize;
+                copy.FlatAppearance.MouseDownBackColor = template.FlatAppearance.MouseDownBackColor;
+                copy.FlatAppearance.MouseOverBackColor = template.FlatAppearance.MouseOverBackColor;
+
+                copy.Text = buttonLabels[i];
+                copy.Tag = fractions[i].ToString(System.Globalization.CultureInfo.InvariantCulture);
+                copy.TabStop = false;
+                copy.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+
                 copy.Click += this.LoopButton_Click;
-
-                // Optional tooltip
-                try
-                {
-                    var tt = new ToolTip();
-                    tt.SetToolTip(copy, (fractions[i] < 0 ? "Look back " : "Loop forward ") + Math.Abs(fractions[i]) + "× beat");
-                }
-                catch { }
 
                 this.panel_buttons.Controls.Add(copy);
                 created.Add(copy);
             }
 
-            // Layout helper that fits exactly 16 buttons into the client area (respecting panel padding)
             void LayoutButtons()
             {
-                try
+                if (this.panel_buttons.ClientSize.Width <= 0 || created.Count == 0)
+                    return;
+
+                int panelWidth = this.panel_buttons.ClientSize.Width;
+                int panelHeight = this.panel_buttons.ClientSize.Height;
+
+                int spacing = Math.Max(0, template.Margin.Right);
+                int totalSpacing = spacing * (created.Count - 1);
+                int availableWidth = Math.Max(1, panelWidth - totalSpacing);
+                int btnWidth = Math.Max(8, availableWidth / created.Count);
+
+                int btnHeight = template.Height;
+                int contentWidth = btnWidth * created.Count + totalSpacing;
+                int startX = Math.Max(0, (panelWidth - contentWidth) / 2);
+                int y = Math.Max(0, (panelHeight - btnHeight) / 2);
+
+                int x = startX;
+                for (int i = 0; i < created.Count; i++)
                 {
-                    if (this.panel_buttons.ClientSize.Width <= 0 || created.Count == 0)
-                    {
-                        return;
-                    }
-
-                    int paddingLeft = this.panel_buttons.Padding.Left;
-                    int paddingRight = this.panel_buttons.Padding.Right;
-                    int paddingTop = this.panel_buttons.Padding.Top;
-                    int paddingBottom = this.panel_buttons.Padding.Bottom;
-
-                    int spacing = 4; // gap between buttons
-                    int availableWidth = Math.Max(0, this.panel_buttons.ClientSize.Width - paddingLeft - paddingRight);
-                    int availableHeight = Math.Max(1, this.panel_buttons.ClientSize.Height - paddingTop - paddingBottom);
-
-                    // Compute base width per button and distribute remainder to last buttons to avoid rounding gaps
-                    int totalSpacing = Math.Max(0, (created.Count - 1) * spacing);
-                    int baseWidth = created.Count > 0 ? Math.Max(8, (availableWidth - totalSpacing) / created.Count) : 0;
-                    int used = baseWidth * created.Count + totalSpacing;
-                    int remainder = Math.Max(0, availableWidth - used);
-
-                    int x = paddingLeft;
-                    for (int i = 0; i < created.Count; i++)
-                    {
-                        int w = baseWidth;
-                        // distribute remainder (one pixel each to first 'remainder' buttons)
-                        if (i < remainder)
-                        {
-                            w += 1;
-                        }
-
-                        var btn = created[i];
-                        int h = Math.Max(1, availableHeight); // full height of panel content
-                        btn.SetBounds(x, paddingTop, w, h);
-                        x += w + spacing;
-                    }
+                    var btn = created[i];
+                    btn.SetBounds(x, y, btnWidth, btnHeight);
+                    x += btnWidth + spacing;
                 }
-                catch { }
             }
 
-            // Initial layout
             LayoutButtons();
-
-            // Re-layout on resize so the 16 buttons always fit exactly
-            this.panel_buttons.Resize -= (s, e) => LayoutButtons();
             this.panel_buttons.Resize += (s, e) => LayoutButtons();
 
-            try { this.panel_buttons.ResumeLayout(); } catch { }
+            this.panel_buttons.ResumeLayout();
         }
 
 
@@ -189,7 +167,7 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            clickedButton.BackColor = Color.LightBlue;
+            clickedButton.BackColor = clickedButton.BackColor != Color.LightBlue ? Color.LightBlue : SystemColors.Control;
 
             // Untoggle all other buttons
             this.UntoggleAllOtherButtons(clickedButton);

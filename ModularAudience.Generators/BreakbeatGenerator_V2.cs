@@ -198,7 +198,7 @@ namespace ModularAudience.Generators
                 if (method != null)
                 {
                     LogCollection.Log("Using BreakbeatGenerator preset '" + method.Name + "'.");
-                    var task = (Task<List<bool[]>>) method.Invoke(null, new object[] { drumset, bars, density, resolution, swing, complexity, interleaved, seed })!;
+                    var task = (Task<List<bool[]>>) method.Invoke(null, [drumset, bars, density, resolution, swing, complexity, interleaved, seed])!;
                     return await task;
                 }
                 LogCollection.Log("Could not get Method 'Preset_" + key + "', fallback to default break generation.");
