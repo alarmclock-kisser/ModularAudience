@@ -14,9 +14,9 @@ namespace ModularAudience.Forms.Modules
         public int Hits => this.domainUpDown_hits.SelectedItem is null ? 16 : int.Parse(this.domainUpDown_hits.SelectedItem.ToString() ?? "16");
         public float Volume => (float) this.numericUpDown_volume.Value / 100.0f;
 
-		internal int RerollInterval => (int) this.numericUpDown_rerollInterval.Value;
-		internal int RerollCountdown { get; private set; } = -1;
-		internal bool InterleavedRandom { get; private set; } = false;
+        internal int RerollInterval => (int) this.numericUpDown_rerollInterval.Value;
+        internal int RerollCountdown { get; private set; } = -1;
+        internal bool InterleavedRandom { get; private set; } = false;
 
         internal readonly BindingList<Panel> Panels = [];
 
@@ -31,11 +31,11 @@ namespace ModularAudience.Forms.Modules
         private readonly int schedulingLookaheadMs = 150;
         private volatile int currentStep = 0;
         private bool isPlaying = false;
-		private volatile float schedulerBpm;
-		private volatile int schedulerHits;
+        private volatile float schedulerBpm;
+        private volatile int schedulerHits;
 
 
-		public DrumRollEditor(IEnumerable<AudioObj>? samples = null)
+        public DrumRollEditor(IEnumerable<AudioObj>? samples = null)
         {
             this.InitializeComponent();
             this.KeyPreview = true;
@@ -43,10 +43,10 @@ namespace ModularAudience.Forms.Modules
             this.button_hit.Visible = false;
             this.domainUpDown_hits.SelectedIndex = this.domainUpDown_hits.Items.IndexOf("16");
 
-			int maxHeight = (Screen.PrimaryScreen?.WorkingArea.Height ?? 720) * 3 / 4;
-			this.MaximumSize = new Size(this.MaximumSize.Width, maxHeight);
+            int maxHeight = (Screen.PrimaryScreen?.WorkingArea.Height ?? 720) * 3 / 4;
+            this.MaximumSize = new Size(this.MaximumSize.Width, maxHeight);
 
-			this.outputFormat = WaveFormat.CreateIeeeFloatWaveFormat(44100, 2);
+            this.outputFormat = WaveFormat.CreateIeeeFloatWaveFormat(44100, 2);
             this.waveOut = null;
             this.mixer = null;
 
@@ -58,10 +58,10 @@ namespace ModularAudience.Forms.Modules
                 }
             }
 
-			this.StartPosition = FormStartPosition.Manual;
-			this.Location = WindowsScreenHelper.GetCenterStartingPoint(this);
+            this.StartPosition = FormStartPosition.Manual;
+            this.Location = WindowsScreenHelper.GetCenterStartingPoint(this);
 
-			this.AllowDrop = true;
+            this.AllowDrop = true;
             this.DragEnter += this.DrumRollEditor_DragEnter;
             this.DragDrop += this.DrumRollEditor_DragDrop;
             this.FormClosing += this.Form_Closing;
@@ -107,24 +107,24 @@ namespace ModularAudience.Forms.Modules
             await this.RebuildPatternPanelsAsync();
         }
 
-		private async void domainUpDown_hits_SelectedItemChanged(object? sender, EventArgs e)
-		{
-			// Update scheduler-safe copy sofort auf UI-Thread
-			try
-			{
-				this.schedulerHits = this.Hits;
-			}
-			catch { }
+        private async void domainUpDown_hits_SelectedItemChanged(object? sender, EventArgs e)
+        {
+            // Update scheduler-safe copy sofort auf UI-Thread
+            try
+            {
+                this.schedulerHits = this.Hits;
+            }
+            catch { }
 
-			await this.RebuildPatternPanelsAsync();
-			await this.ResizePanelsAndButtonsAsync();
-			if (this.isPlaying)
-			{
-				this.currentStep = 0;
-			}
-		}
+            await this.RebuildPatternPanelsAsync();
+            await this.ResizePanelsAndButtonsAsync();
+            if (this.isPlaying)
+            {
+                this.currentStep = 0;
+            }
+        }
 
-		private void DrumRollEditor_DragEnter(object? sender, DragEventArgs e)
+        private void DrumRollEditor_DragEnter(object? sender, DragEventArgs e)
         {
             if (e.Data != null)
             {
@@ -239,616 +239,616 @@ namespace ModularAudience.Forms.Modules
 
 
 
-		private async Task RebuildPatternPanelsAsync(List<List<bool>>? restoreStates = null)
-		{
-			// Panels entfernen (sicher)
-			foreach (var panel in this.Panels)
-			{
-				try
-				{
-					if (panel.Parent != null)
-					{
-						panel.Parent.Controls.Remove(panel);
-					}
-					panel.Dispose();
-				}
-				catch { }
-			}
-			this.Panels.Clear();
-
-			int audioCount = this.AudioC.Audios.Count;
-			if (audioCount == 0)
-			{
-				try { this.panel_pattern.Visible = false; } catch { }
-				return;
-			}
-
-			// Panel_pattern positionieren (unterhalb label_info_hits) und Scroll konfigurieren
-			try
-			{
-				int top = Math.Max(0, this.label_info_hits.Bottom + 4);
-				int left = Math.Max(0, this.panel_pattern.Left);
-				int rightMargin = 12;
-				int bottomMargin = 20;
-
-				int width = Math.Max(64, this.ClientSize.Width - left - rightMargin);
-				int height = Math.Max(80, this.ClientSize.Height - top - bottomMargin);
-
-				this.panel_pattern.Dock = DockStyle.None;
-				this.panel_pattern.Location = new Point(left, top);
-				this.panel_pattern.Size = new Size(width, height);
-
-				// Keine horizontale Scroll-Leiste erlauben
-				this.panel_pattern.AutoScroll = true;
-				try
-				{
-					this.panel_pattern.HorizontalScroll.Enabled = false;
-					this.panel_pattern.HorizontalScroll.Visible = false;
-				}
-				catch { } // manche Framework-Versionen erlauben nicht direktes Schreiben
-
-				// Sicherstellen, dass Panel keine Innen-Abstände erzeugt
-				try { this.panel_pattern.Padding = Padding.Empty; } catch { }
-				try { this.panel_pattern.Margin = Padding.Empty; } catch { }
-
-				// Panel automatisch in Höhe und Breite anpassen, wenn Form resized wird
-				this.panel_pattern.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
-
-				this.panel_pattern.Controls.Clear();
-				this.panel_pattern.Visible = true;
-			}
-			catch { }
-
-			// Layout-Parameter (einmalig lesen)
-			int availableHeight = Math.Max(0, this.panel_pattern.ClientSize.Height);
-			int minPanelHeight = 25;
-			int maxPanelHeight = 75;
-			int panelSpacing = 2;
-			int totalSpacing = Math.Max(0, (audioCount - 1) * panelSpacing);
-			int panelHeight = Math.Max(minPanelHeight, Math.Min(maxPanelHeight, (availableHeight - totalSpacing) / Math.Max(1, audioCount)));
-
-			// Container-Breite berücksichtigen; wenn vertikale Scrollbar benötigt wird, Platz dafür abziehen
-			int containerWidth = Math.Max(64, this.panel_pattern.ClientSize.Width);
-			int estimatedContentHeight = audioCount * (panelHeight + panelSpacing) - panelSpacing;
-			bool willNeedVScroll = estimatedContentHeight > this.panel_pattern.ClientSize.Height;
-			if (willNeedVScroll)
-			{
-				containerWidth = Math.Max(64, containerWidth - SystemInformation.VerticalScrollBarWidth);
-			}
-
-			int hits = this.Hits;
-
-			// Phase 1: parallele Layout-Berechnung pro Panel
-			var specTasks = new Task<(int Index, Color BackColor, string NameText, int NameWidth, int NameHeight, int ButtonAreaLeft, int ButtonAreaWidth, int ButtonWidth, int ButtonHeight, List<string> ButtonTexts)>[audioCount];
-
-			string fontFamilyName = this.Font?.FontFamily?.Name ?? SystemFonts.DefaultFont.FontFamily.Name;
-
-			for (int i = 0; i < audioCount; i++)
-			{
-				int idx = i;
-				var audio = this.AudioC.Audios[idx];
-
-				specTasks[idx] = Task.Run(() =>
-				{
-					Color backColor = (idx % 2 == 0) ? Color.FromArgb(245, 245, 245) : Color.FromArgb(230, 230, 230);
-					string nameText = string.IsNullOrWhiteSpace(audio.Name) ? "untitled" : audio.Name;
-
-					int nameWidth = Math.Min(240, Math.Max(80, containerWidth / 4));
-					int nameHeight = panelHeight;
-
-					int startFontSize = Math.Max(8, panelHeight / 3);
-					int minFontSize = 7;
-					int chosenFontSize = startFontSize;
-					try
-					{
-						using var bmp = new Bitmap(Math.Max(1, nameWidth), Math.Max(1, nameHeight));
-						using var g = Graphics.FromImage(bmp);
-						g.PageUnit = GraphicsUnit.Pixel;
-						for (int fs = startFontSize; fs >= minFontSize; fs--)
-						{
-							using var ff = new Font(new FontFamily(fontFamilyName), fs, FontStyle.Bold);
-							var measured = g.MeasureString(nameText, ff, nameWidth);
-							if (measured.Height <= nameHeight)
-							{
-								chosenFontSize = fs;
-								break;
-							}
-						}
-					}
-					catch
-					{
-						chosenFontSize = Math.Max(minFontSize, startFontSize);
-					}
-
-					int buttonAreaLeft = nameWidth + 5;
-					int buttonAreaWidth = Math.Max(0, containerWidth - buttonAreaLeft - 5);
-
-					// Berechne ButtonWidth so, dass Buttons immer in die Breite passen (keine horizontale Scroll)
-					int spacing = 3;
-					int buttonWidth = Math.Max(12, (buttonAreaWidth - (hits - 1) * spacing) / Math.Max(1, hits));
-					int buttonHeight = Math.Max(12, panelHeight - 10);
-
-					var buttonTexts = new List<string>(hits);
-					for (int h = 0; h < hits; h++)
-					{
-						if (hits > 20)
-						{
-							buttonTexts.Add(string.Empty);
-						}
-						else
-						{
-							buttonTexts.Add((h + 1).ToString());
-						}
-					}
-
-					return (Index: idx, BackColor: backColor, NameText: nameText, NameWidth: nameWidth, NameHeight: nameHeight, ButtonAreaLeft: buttonAreaLeft, ButtonAreaWidth: buttonAreaWidth, ButtonWidth: buttonWidth, ButtonHeight: buttonHeight, ButtonTexts: buttonTexts);
-				});
-			}
-
-			var specs = await Task.WhenAll(specTasks).ConfigureAwait(false);
-
-			// Phase 2: Controls auf UI-Thread erstellen
-			try
-			{
-				if (this.IsHandleCreated && !this.IsDisposed)
-				{
-					this.Invoke((MethodInvoker) (() =>
-					{
-						int y = 0;
-						foreach (var spec in specs.OrderBy(s => s.Index))
-						{
-							int i = spec.Index;
-							var audio = this.AudioC.Audios[i];
-
-							Panel panel = new()
-							{
-								Size = new Size(containerWidth, panelHeight),
-								Location = new Point(0, y),
-								Visible = true,
-								BackColor = spec.BackColor,
-								Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
-							};
-
-							ContextMenuStrip cms = new();
-							var removeItem = new ToolStripMenuItem("Remove");
-							removeItem.Click += async (s, e) =>
-							{
-								var states = this.CapturePatternButtonStates();
-								int idxRemove = this.AudioC.Audios.IndexOf(audio);
-								if (idxRemove >= 0)
-								{
-									this.AudioC.Audios.Remove(audio);
-									if (idxRemove < states.Count)
-									{
-										states.RemoveAt(idxRemove);
-									}
-								}
-								await this.RebuildPatternPanelsAsync(states);
-							};
-							var editItem = new ToolStripMenuItem("Edit Sample");
-							editItem.Click += (s, e) =>
-							{
-								var tv = new TrackView(audio)
-								{
-									StartPosition = FormStartPosition.Manual,
-									Location = WindowsScreenHelper.GetCenterStartingPoint(this)
-								};
-
-								tv.FormClosed += async (o, ev) =>
-								{
-									try
-									{
-										if (tv.DialogResult == DialogResult.OK || tv.DialogResult == DialogResult.None)
-										{
-											var edited = tv.OriginalAudio ?? audio;
-											int idx2 = this.AudioC.Audios.IndexOf(audio);
-											if (idx2 >= 0 && edited != null && !ReferenceEquals(audio, edited))
-											{
-												this.AudioC.Audios[idx2] = edited;
-												await this.RebuildPatternPanelsAsync();
-											}
-										}
-									}
-									catch { }
-									finally { try { tv.Dispose(); } catch { } }
-								};
-
-								tv.Show();
-								try { tv.BringToFront(); } catch { }
-							};
-
-							var randomizeItem = new ToolStripMenuItem("Randomize");
-							randomizeItem.Click += (s, e) =>
-							{
-								var rand = new Random();
-								foreach (Control ctrl in panel.Controls)
-								{
-									if (ctrl is Button btn)
-									{
-										btn.BackColor = rand.NextDouble() < 0.5 ? Color.Green : Color.LightGray;
-									}
-								}
-							};
-
-							cms.Items.Add(editItem);
-							cms.Items.Add(removeItem);
-							cms.Items.Add(new ToolStripSeparator());
-							cms.Items.Add(randomizeItem);
-							panel.ContextMenuStrip = cms;
-
-							// Label für Audio-Namen
-							Label label;
-							{
-								string nameText = spec.NameText;
-								int nameWidth = spec.NameWidth;
-								int nameHeight = spec.NameHeight;
-								float chosenFontSize = Math.Max(7, (nameHeight / 3f));
-
-								Font font = this.Font ?? SystemFonts.DefaultFont;
-								label = new Label
-								{
-									Text = nameText,
-									AutoSize = false,
-									TextAlign = ContentAlignment.MiddleLeft,
-									Location = new Point(5, 0),
-									Size = new Size(nameWidth, nameHeight),
-									Font = new Font(font.FontFamily, chosenFontSize, FontStyle.Bold),
-									AutoEllipsis = true,
-									UseCompatibleTextRendering = true,
-									Anchor = AnchorStyles.Left | AnchorStyles.Top
-								};
-
-								try
-								{
-									var tt = new ToolTip();
-									tt.SetToolTip(label, nameText);
-								}
-								catch { }
-
-								panel.Controls.Add(label);
-							}
-
-							// Buttons für jeden Hit
-							int buttonAreaLeft = label.Right + 5;
-							int buttonWidth = spec.ButtonWidth;
-							int buttonHeight = spec.ButtonHeight;
-							int spacingLocal = 3;
-							for (int h = 0; h < hits; h++)
-							{
-								Button button = new()
-								{
-									Size = new Size(buttonWidth, buttonHeight),
-									Location = new Point(buttonAreaLeft + h * (buttonWidth + spacingLocal), 5),
-									BackColor = Color.LightGray,
-									Anchor = AnchorStyles.Top
-								};
-
-								string text = spec.ButtonTexts.Count > h ? spec.ButtonTexts[h] : string.Empty;
-								if (!string.IsNullOrEmpty(text))
-								{
-									Font font = this.Font ?? new Font(FontFamily.GenericMonospace, 8, FontStyle.Regular);
-									if (buttonWidth < 22 && text.Length == 2)
-									{
-										button.Text = text;
-										button.Font = new Font(font.FontFamily, 6, FontStyle.Regular);
-									}
-									else if (buttonWidth < 30)
-									{
-										button.Text = text;
-										button.Font = new Font(font.FontFamily, 7, FontStyle.Regular);
-									}
-									else
-									{
-										button.Text = text;
-										button.Font = new Font(font.FontFamily, 8, FontStyle.Regular);
-									}
-									button.UseCompatibleTextRendering = true;
-								}
-								button.Click += (s, e) =>
-								{
-									button.BackColor = button.BackColor == Color.LightGray ? Color.Green : Color.LightGray;
-								};
-								panel.Controls.Add(button);
-							}
-
-							// Panel in den scrollbaren Container einfügen
-							this.panel_pattern.Controls.Add(panel);
-							this.Panels.Add(panel);
-
-							y += panelHeight + panelSpacing;
-						}
-
-						// Restore button states falls angegeben und passend
-						if (restoreStates != null && restoreStates.Count == this.Panels.Count && restoreStates.All(row => row.Count == hits))
-						{
-							this.RestorePatternButtonStates(restoreStates);
-						}
-
-						// Setze AutoScrollMinSize damit VerticalScroll korrekt erscheint, aber HorizontalScroll nicht
-						int totalHeight = this.Panels.Count * (panelHeight + panelSpacing) - panelSpacing;
-						try
-						{
-							this.panel_pattern.AutoScrollMinSize = new Size(0, Math.Max(0, totalHeight));
-						}
-						catch { }
-
-						// Scrollposition auf Anfang zurücksetzen (kein leerer Bereich oben)
-						try
-						{
-							this.panel_pattern.AutoScrollPosition = new Point(0, 0);
-						}
-						catch { }
-						try
-						{
-							if (this.panel_pattern.VerticalScroll != null)
-							{
-								this.panel_pattern.VerticalScroll.Value = this.panel_pattern.VerticalScroll.Minimum;
-							}
-						}
-						catch { }
-
-						// Sicherstellen, dass erstes Panel sichtbar ist
-						try
-						{
-							if (this.Panels.Count > 0)
-							{
-								this.panel_pattern.ScrollControlIntoView(this.Panels[0]);
-								this.panel_pattern.AutoScrollPosition = new Point(0, 0);
-							}
-						}
-						catch { }
-
-						this.panel_pattern.Visible = true;
-					}));
-				}
-			}
-			catch
-			{
-				try
-				{
-					if (this.IsHandleCreated && !this.IsDisposed)
-					{
-						this.Invoke((MethodInvoker) (() =>
-						{
-							this.panel_pattern.Visible = true;
-						}));
-					}
-				}
-				catch { }
-			}
-		}
-
-		private async Task ResizePanelsAndButtonsAsync()
-		{
-			int hits = this.Hits;
-			int audioCount = this.Panels.Count;
-			if (audioCount == 0 || hits <= 0)
-			{
-				return;
-			}
-
-			// Stelle panel_pattern immer direkt unter label_info_hits und skaliere Höhe/Breite
-			try
-			{
-				int top = Math.Max(0, this.label_info_hits.Bottom + 4);
-				int left = Math.Max(0, this.panel_pattern.Left);
-				int rightMargin = 12;
-				int bottomMargin = 20;
-				int width = Math.Max(64, this.ClientSize.Width - left - rightMargin);
-				int height = Math.Max(80, this.ClientSize.Height - top - bottomMargin);
-				this.panel_pattern.Location = new Point(left, top);
-				this.panel_pattern.Size = new Size(width, height);
-				this.panel_pattern.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
-			}
-			catch { }
-
-			int availableHeight = Math.Max(0, this.panel_pattern.ClientSize.Height);
-			int minPanelHeight = 25;
-			int maxPanelHeight = 75;
-			int panelSpacing = 2;
-			int totalSpacing = (audioCount - 1) * panelSpacing;
-			int panelHeight = Math.Max(minPanelHeight, Math.Min(maxPanelHeight, (availableHeight - totalSpacing) / audioCount));
-
-			// Breite berechnen und anpassen, wenn vertikaler Scroll benötigt wird
-			int containerWidth = Math.Max(64, this.panel_pattern.ClientSize.Width);
-			int estimatedContentHeight = audioCount * (panelHeight + panelSpacing) - panelSpacing;
-			bool needVScroll = estimatedContentHeight > this.panel_pattern.ClientSize.Height;
-			if (needVScroll)
-			{
-				containerWidth = Math.Max(64, containerWidth - SystemInformation.VerticalScrollBarWidth);
-			}
-
-			int spacing = 3;
-
-			for (int i = 0; i < audioCount; i++)
-			{
-				var panel = this.Panels[i];
-				panel.SuspendLayout();
-
-				panel.Size = new Size(containerWidth, panelHeight);
-				panel.Location = new Point(0, i * (panelHeight + panelSpacing));
-
-				// Find label and buttons
-				Label? label = null;
-				foreach (Control ctrl in panel.Controls)
-				{
-					if (ctrl is Label lbl)
-					{
-						label = lbl;
-						break;
-					}
-				}
-				if (label != null)
-				{
-					int nameWidth = Math.Min(240, Math.Max(80, containerWidth / 4));
-					int nameHeight = panelHeight;
-					label.Size = new Size(nameWidth, nameHeight);
-				}
-
-				int buttonAreaLeft = label?.Right + 5 ?? 5;
-				int buttonAreaWidth = containerWidth - buttonAreaLeft - 5;
-				int buttonWidth = Math.Max(12, (buttonAreaWidth - (hits - 1) * spacing) / Math.Max(1, hits));
-				int buttonHeight = Math.Max(12, panelHeight - 10);
-
-				int btnIdx = 0;
-				foreach (Control ctrl in panel.Controls)
-				{
-					if (ctrl is Button btn)
-					{
-						btn.Size = new Size(buttonWidth, buttonHeight);
-						btn.Location = new Point(buttonAreaLeft + btnIdx * (buttonWidth + spacing), 5);
-						btnIdx++;
-					}
-				}
-
-				panel.ResumeLayout();
-			}
-
-			// AutoScrollMinSize anpassen und Scroll-Position bereinigen
-			try
-			{
-				int totalHeight = audioCount * (panelHeight + panelSpacing) - panelSpacing;
-				this.panel_pattern.AutoScrollMinSize = new Size(0, Math.Max(0, totalHeight));
-				try
-				{
-					this.panel_pattern.HorizontalScroll.Enabled = false;
-					this.panel_pattern.HorizontalScroll.Visible = false;
-				}
-				catch { }
-
-				// Reset scroll to top (verhindert leere Fläche oben nach Resize)
-				try { this.panel_pattern.AutoScrollPosition = new Point(0, 0); } catch { }
-				try
-				{
-					if (this.panel_pattern.VerticalScroll != null)
-					{
-						this.panel_pattern.VerticalScroll.Value = this.panel_pattern.VerticalScroll.Minimum;
-					}
-				}
-				catch { }
-			}
-			catch { }
-
-			await Task.CompletedTask;
-		}
-
-
-
-		private void RandomizeAllPanels(bool interleaved = false)
-		{
-			var rand = new Random();
-			int hits = this.Hits;
-
-			if (interleaved)
-			{
-				// Single drum hit at most per step across all panels,
-				// allow "no hit" by selecting Panels.Count as sentinel.
-				if (this.Panels.Count == 0)
-				{
-					return;
-				}
-
-				for (int h = 0; h < hits; h++)
-				{
-					// Choose a random panel to activate this step or none:
-					// range [0 .. Panels.Count] inclusive of Panels.Count -> "no hit"
-					int choice = rand.Next(this.Panels.Count + 1);
-
-					for (int p = 0; p < this.Panels.Count; p++)
-					{
-						var panel = this.Panels[p];
-						int btnIdx = 0;
-						foreach (Control ctrl in panel.Controls)
-						{
-							if (ctrl is Button btn)
-							{
-								if (btnIdx == h)
-								{
-									// If choice == Panels.Count -> treat as "no hit" -> leave all LightGray
-									if (p == choice)
-									{
-										btn.BackColor = Color.Green;
-									}
-									else
-									{
-										btn.BackColor = Color.LightGray;
-									}
-									break;
-								}
-								btnIdx++;
-							}
-						}
-					}
-					// If choice == Panels.Count, none of the panels had p == choice,
-					// so all corresponding step buttons remain LightGray -> "silent" step.
-				}
-			}
-			else
-			{
-				var r = new Random();
-				foreach (var panel in this.Panels)
-				{
-					foreach (Control ctrl in panel.Controls)
-					{
-						if (ctrl is Button btn)
-						{
-							btn.BackColor = r.NextDouble() < 0.5 ? Color.Green : Color.LightGray;
-						}
-					}
-				}
-			}
-		}
-
-
-
-		protected override void OnKeyDown(KeyEventArgs e)
+        private async Task RebuildPatternPanelsAsync(List<List<bool>>? restoreStates = null)
+        {
+            // Panels entfernen (sicher)
+            foreach (var panel in this.Panels)
+            {
+                try
+                {
+                    if (panel.Parent != null)
+                    {
+                        panel.Parent.Controls.Remove(panel);
+                    }
+                    panel.Dispose();
+                }
+                catch { }
+            }
+            this.Panels.Clear();
+
+            int audioCount = this.AudioC.Audios.Count;
+            if (audioCount == 0)
+            {
+                try { this.panel_pattern.Visible = false; } catch { }
+                return;
+            }
+
+            // Panel_pattern positionieren (unterhalb label_info_hits) und Scroll konfigurieren
+            try
+            {
+                int top = Math.Max(0, this.label_info_hits.Bottom + 4);
+                int left = Math.Max(0, this.panel_pattern.Left);
+                int rightMargin = 12;
+                int bottomMargin = 20;
+
+                int width = Math.Max(64, this.ClientSize.Width - left - rightMargin);
+                int height = Math.Max(80, this.ClientSize.Height - top - bottomMargin);
+
+                this.panel_pattern.Dock = DockStyle.None;
+                this.panel_pattern.Location = new Point(left, top);
+                this.panel_pattern.Size = new Size(width, height);
+
+                // Keine horizontale Scroll-Leiste erlauben
+                this.panel_pattern.AutoScroll = true;
+                try
+                {
+                    this.panel_pattern.HorizontalScroll.Enabled = false;
+                    this.panel_pattern.HorizontalScroll.Visible = false;
+                }
+                catch { } // manche Framework-Versionen erlauben nicht direktes Schreiben
+
+                // Sicherstellen, dass Panel keine Innen-Abstände erzeugt
+                try { this.panel_pattern.Padding = Padding.Empty; } catch { }
+                try { this.panel_pattern.Margin = Padding.Empty; } catch { }
+
+                // Panel automatisch in Höhe und Breite anpassen, wenn Form resized wird
+                this.panel_pattern.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+
+                this.panel_pattern.Controls.Clear();
+                this.panel_pattern.Visible = true;
+            }
+            catch { }
+
+            // Layout-Parameter (einmalig lesen)
+            int availableHeight = Math.Max(0, this.panel_pattern.ClientSize.Height);
+            int minPanelHeight = 25;
+            int maxPanelHeight = 75;
+            int panelSpacing = 2;
+            int totalSpacing = Math.Max(0, (audioCount - 1) * panelSpacing);
+            int panelHeight = Math.Max(minPanelHeight, Math.Min(maxPanelHeight, (availableHeight - totalSpacing) / Math.Max(1, audioCount)));
+
+            // Container-Breite berücksichtigen; wenn vertikale Scrollbar benötigt wird, Platz dafür abziehen
+            int containerWidth = Math.Max(64, this.panel_pattern.ClientSize.Width);
+            int estimatedContentHeight = audioCount * (panelHeight + panelSpacing) - panelSpacing;
+            bool willNeedVScroll = estimatedContentHeight > this.panel_pattern.ClientSize.Height;
+            if (willNeedVScroll)
+            {
+                containerWidth = Math.Max(64, containerWidth - SystemInformation.VerticalScrollBarWidth);
+            }
+
+            int hits = this.Hits;
+
+            // Phase 1: parallele Layout-Berechnung pro Panel
+            var specTasks = new Task<(int Index, Color BackColor, string NameText, int NameWidth, int NameHeight, int ButtonAreaLeft, int ButtonAreaWidth, int ButtonWidth, int ButtonHeight, List<string> ButtonTexts)>[audioCount];
+
+            string fontFamilyName = this.Font?.FontFamily?.Name ?? SystemFonts.DefaultFont.FontFamily.Name;
+
+            for (int i = 0; i < audioCount; i++)
+            {
+                int idx = i;
+                var audio = this.AudioC.Audios[idx];
+
+                specTasks[idx] = Task.Run(() =>
+                {
+                    Color backColor = (idx % 2 == 0) ? Color.FromArgb(245, 245, 245) : Color.FromArgb(230, 230, 230);
+                    string nameText = string.IsNullOrWhiteSpace(audio.Name) ? "untitled" : audio.Name;
+
+                    int nameWidth = Math.Min(240, Math.Max(80, containerWidth / 4));
+                    int nameHeight = panelHeight;
+
+                    int startFontSize = Math.Max(8, panelHeight / 3);
+                    int minFontSize = 7;
+                    int chosenFontSize = startFontSize;
+                    try
+                    {
+                        using var bmp = new Bitmap(Math.Max(1, nameWidth), Math.Max(1, nameHeight));
+                        using var g = Graphics.FromImage(bmp);
+                        g.PageUnit = GraphicsUnit.Pixel;
+                        for (int fs = startFontSize; fs >= minFontSize; fs--)
+                        {
+                            using var ff = new Font(new FontFamily(fontFamilyName), fs, FontStyle.Bold);
+                            var measured = g.MeasureString(nameText, ff, nameWidth);
+                            if (measured.Height <= nameHeight)
+                            {
+                                chosenFontSize = fs;
+                                break;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        chosenFontSize = Math.Max(minFontSize, startFontSize);
+                    }
+
+                    int buttonAreaLeft = nameWidth + 5;
+                    int buttonAreaWidth = Math.Max(0, containerWidth - buttonAreaLeft - 5);
+
+                    // Berechne ButtonWidth so, dass Buttons immer in die Breite passen (keine horizontale Scroll)
+                    int spacing = 3;
+                    int buttonWidth = Math.Max(12, (buttonAreaWidth - (hits - 1) * spacing) / Math.Max(1, hits));
+                    int buttonHeight = Math.Max(12, panelHeight - 10);
+
+                    var buttonTexts = new List<string>(hits);
+                    for (int h = 0; h < hits; h++)
+                    {
+                        if (hits > 20)
+                        {
+                            buttonTexts.Add(string.Empty);
+                        }
+                        else
+                        {
+                            buttonTexts.Add((h + 1).ToString());
+                        }
+                    }
+
+                    return (Index: idx, BackColor: backColor, NameText: nameText, NameWidth: nameWidth, NameHeight: nameHeight, ButtonAreaLeft: buttonAreaLeft, ButtonAreaWidth: buttonAreaWidth, ButtonWidth: buttonWidth, ButtonHeight: buttonHeight, ButtonTexts: buttonTexts);
+                });
+            }
+
+            var specs = await Task.WhenAll(specTasks).ConfigureAwait(false);
+
+            // Phase 2: Controls auf UI-Thread erstellen
+            try
+            {
+                if (this.IsHandleCreated && !this.IsDisposed)
+                {
+                    this.Invoke((MethodInvoker) (() =>
+                    {
+                        int y = 0;
+                        foreach (var spec in specs.OrderBy(s => s.Index))
+                        {
+                            int i = spec.Index;
+                            var audio = this.AudioC.Audios[i];
+
+                            Panel panel = new()
+                            {
+                                Size = new Size(containerWidth, panelHeight),
+                                Location = new Point(0, y),
+                                Visible = true,
+                                BackColor = spec.BackColor,
+                                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+                            };
+
+                            ContextMenuStrip cms = new();
+                            var removeItem = new ToolStripMenuItem("Remove");
+                            removeItem.Click += async (s, e) =>
+                            {
+                                var states = this.CapturePatternButtonStates();
+                                int idxRemove = this.AudioC.Audios.IndexOf(audio);
+                                if (idxRemove >= 0)
+                                {
+                                    this.AudioC.Audios.Remove(audio);
+                                    if (idxRemove < states.Count)
+                                    {
+                                        states.RemoveAt(idxRemove);
+                                    }
+                                }
+                                await this.RebuildPatternPanelsAsync(states);
+                            };
+                            var editItem = new ToolStripMenuItem("Edit Sample");
+                            editItem.Click += (s, e) =>
+                            {
+                                var tv = new TrackView(audio)
+                                {
+                                    StartPosition = FormStartPosition.Manual,
+                                    Location = WindowsScreenHelper.GetCenterStartingPoint(this)
+                                };
+
+                                tv.FormClosed += async (o, ev) =>
+                                {
+                                    try
+                                    {
+                                        if (tv.DialogResult == DialogResult.OK || tv.DialogResult == DialogResult.None)
+                                        {
+                                            var edited = tv.OriginalAudio ?? audio;
+                                            int idx2 = this.AudioC.Audios.IndexOf(audio);
+                                            if (idx2 >= 0 && edited != null && !ReferenceEquals(audio, edited))
+                                            {
+                                                this.AudioC.Audios[idx2] = edited;
+                                                await this.RebuildPatternPanelsAsync();
+                                            }
+                                        }
+                                    }
+                                    catch { }
+                                    finally { try { tv.Dispose(); } catch { } }
+                                };
+
+                                tv.Show();
+                                try { tv.BringToFront(); } catch { }
+                            };
+
+                            var randomizeItem = new ToolStripMenuItem("Randomize");
+                            randomizeItem.Click += (s, e) =>
+                            {
+                                var rand = new Random();
+                                foreach (Control ctrl in panel.Controls)
+                                {
+                                    if (ctrl is Button btn)
+                                    {
+                                        btn.BackColor = rand.NextDouble() < 0.5 ? Color.Green : Color.LightGray;
+                                    }
+                                }
+                            };
+
+                            cms.Items.Add(editItem);
+                            cms.Items.Add(removeItem);
+                            cms.Items.Add(new ToolStripSeparator());
+                            cms.Items.Add(randomizeItem);
+                            panel.ContextMenuStrip = cms;
+
+                            // Label für Audio-Namen
+                            Label label;
+                            {
+                                string nameText = spec.NameText;
+                                int nameWidth = spec.NameWidth;
+                                int nameHeight = spec.NameHeight;
+                                float chosenFontSize = Math.Max(7, (nameHeight / 3f));
+
+                                Font font = this.Font ?? SystemFonts.DefaultFont;
+                                label = new Label
+                                {
+                                    Text = nameText,
+                                    AutoSize = false,
+                                    TextAlign = ContentAlignment.MiddleLeft,
+                                    Location = new Point(5, 0),
+                                    Size = new Size(nameWidth, nameHeight),
+                                    Font = new Font(font.FontFamily, chosenFontSize, FontStyle.Bold),
+                                    AutoEllipsis = true,
+                                    UseCompatibleTextRendering = true,
+                                    Anchor = AnchorStyles.Left | AnchorStyles.Top
+                                };
+
+                                try
+                                {
+                                    var tt = new ToolTip();
+                                    tt.SetToolTip(label, nameText);
+                                }
+                                catch { }
+
+                                panel.Controls.Add(label);
+                            }
+
+                            // Buttons für jeden Hit
+                            int buttonAreaLeft = label.Right + 5;
+                            int buttonWidth = spec.ButtonWidth;
+                            int buttonHeight = spec.ButtonHeight;
+                            int spacingLocal = 3;
+                            for (int h = 0; h < hits; h++)
+                            {
+                                Button button = new()
+                                {
+                                    Size = new Size(buttonWidth, buttonHeight),
+                                    Location = new Point(buttonAreaLeft + h * (buttonWidth + spacingLocal), 5),
+                                    BackColor = Color.LightGray,
+                                    Anchor = AnchorStyles.Top
+                                };
+
+                                string text = spec.ButtonTexts.Count > h ? spec.ButtonTexts[h] : string.Empty;
+                                if (!string.IsNullOrEmpty(text))
+                                {
+                                    Font font = this.Font ?? new Font(FontFamily.GenericMonospace, 8, FontStyle.Regular);
+                                    if (buttonWidth < 22 && text.Length == 2)
+                                    {
+                                        button.Text = text;
+                                        button.Font = new Font(font.FontFamily, 6, FontStyle.Regular);
+                                    }
+                                    else if (buttonWidth < 30)
+                                    {
+                                        button.Text = text;
+                                        button.Font = new Font(font.FontFamily, 7, FontStyle.Regular);
+                                    }
+                                    else
+                                    {
+                                        button.Text = text;
+                                        button.Font = new Font(font.FontFamily, 8, FontStyle.Regular);
+                                    }
+                                    button.UseCompatibleTextRendering = true;
+                                }
+                                button.Click += (s, e) =>
+                                {
+                                    button.BackColor = button.BackColor == Color.LightGray ? Color.Green : Color.LightGray;
+                                };
+                                panel.Controls.Add(button);
+                            }
+
+                            // Panel in den scrollbaren Container einfügen
+                            this.panel_pattern.Controls.Add(panel);
+                            this.Panels.Add(panel);
+
+                            y += panelHeight + panelSpacing;
+                        }
+
+                        // Restore button states falls angegeben und passend
+                        if (restoreStates != null && restoreStates.Count == this.Panels.Count && restoreStates.All(row => row.Count == hits))
+                        {
+                            this.RestorePatternButtonStates(restoreStates);
+                        }
+
+                        // Setze AutoScrollMinSize damit VerticalScroll korrekt erscheint, aber HorizontalScroll nicht
+                        int totalHeight = this.Panels.Count * (panelHeight + panelSpacing) - panelSpacing;
+                        try
+                        {
+                            this.panel_pattern.AutoScrollMinSize = new Size(0, Math.Max(0, totalHeight));
+                        }
+                        catch { }
+
+                        // Scrollposition auf Anfang zurücksetzen (kein leerer Bereich oben)
+                        try
+                        {
+                            this.panel_pattern.AutoScrollPosition = new Point(0, 0);
+                        }
+                        catch { }
+                        try
+                        {
+                            if (this.panel_pattern.VerticalScroll != null)
+                            {
+                                this.panel_pattern.VerticalScroll.Value = this.panel_pattern.VerticalScroll.Minimum;
+                            }
+                        }
+                        catch { }
+
+                        // Sicherstellen, dass erstes Panel sichtbar ist
+                        try
+                        {
+                            if (this.Panels.Count > 0)
+                            {
+                                this.panel_pattern.ScrollControlIntoView(this.Panels[0]);
+                                this.panel_pattern.AutoScrollPosition = new Point(0, 0);
+                            }
+                        }
+                        catch { }
+
+                        this.panel_pattern.Visible = true;
+                    }));
+                }
+            }
+            catch
+            {
+                try
+                {
+                    if (this.IsHandleCreated && !this.IsDisposed)
+                    {
+                        this.Invoke((MethodInvoker) (() =>
+                        {
+                            this.panel_pattern.Visible = true;
+                        }));
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private async Task ResizePanelsAndButtonsAsync()
+        {
+            int hits = this.Hits;
+            int audioCount = this.Panels.Count;
+            if (audioCount == 0 || hits <= 0)
+            {
+                return;
+            }
+
+            // Stelle panel_pattern immer direkt unter label_info_hits und skaliere Höhe/Breite
+            try
+            {
+                int top = Math.Max(0, this.label_info_hits.Bottom + 4);
+                int left = Math.Max(0, this.panel_pattern.Left);
+                int rightMargin = 12;
+                int bottomMargin = 20;
+                int width = Math.Max(64, this.ClientSize.Width - left - rightMargin);
+                int height = Math.Max(80, this.ClientSize.Height - top - bottomMargin);
+                this.panel_pattern.Location = new Point(left, top);
+                this.panel_pattern.Size = new Size(width, height);
+                this.panel_pattern.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+            }
+            catch { }
+
+            int availableHeight = Math.Max(0, this.panel_pattern.ClientSize.Height);
+            int minPanelHeight = 25;
+            int maxPanelHeight = 75;
+            int panelSpacing = 2;
+            int totalSpacing = (audioCount - 1) * panelSpacing;
+            int panelHeight = Math.Max(minPanelHeight, Math.Min(maxPanelHeight, (availableHeight - totalSpacing) / audioCount));
+
+            // Breite berechnen und anpassen, wenn vertikaler Scroll benötigt wird
+            int containerWidth = Math.Max(64, this.panel_pattern.ClientSize.Width);
+            int estimatedContentHeight = audioCount * (panelHeight + panelSpacing) - panelSpacing;
+            bool needVScroll = estimatedContentHeight > this.panel_pattern.ClientSize.Height;
+            if (needVScroll)
+            {
+                containerWidth = Math.Max(64, containerWidth - SystemInformation.VerticalScrollBarWidth);
+            }
+
+            int spacing = 3;
+
+            for (int i = 0; i < audioCount; i++)
+            {
+                var panel = this.Panels[i];
+                panel.SuspendLayout();
+
+                panel.Size = new Size(containerWidth, panelHeight);
+                panel.Location = new Point(0, i * (panelHeight + panelSpacing));
+
+                // Find label and buttons
+                Label? label = null;
+                foreach (Control ctrl in panel.Controls)
+                {
+                    if (ctrl is Label lbl)
+                    {
+                        label = lbl;
+                        break;
+                    }
+                }
+                if (label != null)
+                {
+                    int nameWidth = Math.Min(240, Math.Max(80, containerWidth / 4));
+                    int nameHeight = panelHeight;
+                    label.Size = new Size(nameWidth, nameHeight);
+                }
+
+                int buttonAreaLeft = label?.Right + 5 ?? 5;
+                int buttonAreaWidth = containerWidth - buttonAreaLeft - 5;
+                int buttonWidth = Math.Max(12, (buttonAreaWidth - (hits - 1) * spacing) / Math.Max(1, hits));
+                int buttonHeight = Math.Max(12, panelHeight - 10);
+
+                int btnIdx = 0;
+                foreach (Control ctrl in panel.Controls)
+                {
+                    if (ctrl is Button btn)
+                    {
+                        btn.Size = new Size(buttonWidth, buttonHeight);
+                        btn.Location = new Point(buttonAreaLeft + btnIdx * (buttonWidth + spacing), 5);
+                        btnIdx++;
+                    }
+                }
+
+                panel.ResumeLayout();
+            }
+
+            // AutoScrollMinSize anpassen und Scroll-Position bereinigen
+            try
+            {
+                int totalHeight = audioCount * (panelHeight + panelSpacing) - panelSpacing;
+                this.panel_pattern.AutoScrollMinSize = new Size(0, Math.Max(0, totalHeight));
+                try
+                {
+                    this.panel_pattern.HorizontalScroll.Enabled = false;
+                    this.panel_pattern.HorizontalScroll.Visible = false;
+                }
+                catch { }
+
+                // Reset scroll to top (verhindert leere Fläche oben nach Resize)
+                try { this.panel_pattern.AutoScrollPosition = new Point(0, 0); } catch { }
+                try
+                {
+                    if (this.panel_pattern.VerticalScroll != null)
+                    {
+                        this.panel_pattern.VerticalScroll.Value = this.panel_pattern.VerticalScroll.Minimum;
+                    }
+                }
+                catch { }
+            }
+            catch { }
+
+            await Task.CompletedTask;
+        }
+
+
+
+        private void RandomizeAllPanels(bool interleaved = false)
+        {
+            var rand = new Random();
+            int hits = this.Hits;
+
+            if (interleaved)
+            {
+                // Single drum hit at most per step across all panels,
+                // allow "no hit" by selecting Panels.Count as sentinel.
+                if (this.Panels.Count == 0)
+                {
+                    return;
+                }
+
+                for (int h = 0; h < hits; h++)
+                {
+                    // Choose a random panel to activate this step or none:
+                    // range [0 .. Panels.Count] inclusive of Panels.Count -> "no hit"
+                    int choice = rand.Next(this.Panels.Count + 1);
+
+                    for (int p = 0; p < this.Panels.Count; p++)
+                    {
+                        var panel = this.Panels[p];
+                        int btnIdx = 0;
+                        foreach (Control ctrl in panel.Controls)
+                        {
+                            if (ctrl is Button btn)
+                            {
+                                if (btnIdx == h)
+                                {
+                                    // If choice == Panels.Count -> treat as "no hit" -> leave all LightGray
+                                    if (p == choice)
+                                    {
+                                        btn.BackColor = Color.Green;
+                                    }
+                                    else
+                                    {
+                                        btn.BackColor = Color.LightGray;
+                                    }
+                                    break;
+                                }
+                                btnIdx++;
+                            }
+                        }
+                    }
+                    // If choice == Panels.Count, none of the panels had p == choice,
+                    // so all corresponding step buttons remain LightGray -> "silent" step.
+                }
+            }
+            else
+            {
+                var r = new Random();
+                foreach (var panel in this.Panels)
+                {
+                    foreach (Control ctrl in panel.Controls)
+                    {
+                        if (ctrl is Button btn)
+                        {
+                            btn.BackColor = r.NextDouble() < 0.5 ? Color.Green : Color.LightGray;
+                        }
+                    }
+                }
+            }
+        }
+
+
+
+        protected override void OnKeyDown(KeyEventArgs e)
         {
             base.OnKeyDown(e);
 
-			if ((e.KeyCode == Keys.Back || e.KeyCode == Keys.Space) && !e.Handled)
-			{
-				this.button_playback_Click(this, EventArgs.Empty);
-				e.Handled = true;
-				return;
-			}
-		}
+            if ((e.KeyCode == Keys.Back || e.KeyCode == Keys.Space) && !e.Handled)
+            {
+                this.button_playback_Click(this, EventArgs.Empty);
+                e.Handled = true;
+                return;
+            }
+        }
 
-		protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
-		{
-			// R / Ctrl+R -> Randomize (interleaved when Ctrl gedrückt)
-			if (keyData == Keys.R || keyData == (Keys.Control | Keys.R))
-			{
-				try
-				{
-					bool interleaved = (keyData & Keys.Control) == Keys.Control;
-					this.InterleavedRandom = interleaved;
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            // R / Ctrl+R -> Randomize (interleaved when Ctrl gedrückt)
+            if (keyData == Keys.R || keyData == (Keys.Control | Keys.R))
+            {
+                try
+                {
+                    bool interleaved = (keyData & Keys.Control) == Keys.Control;
+                    this.InterleavedRandom = interleaved;
                     this.RandomizeAllPanels(interleaved);
-				}
-				catch { }
-				return true;
-			}
+                }
+                catch { }
+                return true;
+            }
 
-			// Up / Down -> BPM anpassen (funktioniert auch wenn ein Child Control Fokus hat)
-			if (keyData == Keys.Up || keyData == Keys.Down)
-			{
-				try
-				{
-					float step = ModifierKeys.HasFlag(Keys.Control) ? 0.1f : 1.0f;
-					decimal current = this.numericUpDown_bpm.Value;
-					decimal delta = (decimal) (keyData == Keys.Up ? step : -step);
-					decimal next = Math.Clamp(current + delta, this.numericUpDown_bpm.Minimum, this.numericUpDown_bpm.Maximum);
-					this.numericUpDown_bpm.Value = next;
-				}
-				catch { }
-				return true;
-			}
+            // Up / Down -> BPM anpassen (funktioniert auch wenn ein Child Control Fokus hat)
+            if (keyData == Keys.Up || keyData == Keys.Down)
+            {
+                try
+                {
+                    float step = ModifierKeys.HasFlag(Keys.Control) ? 0.1f : 1.0f;
+                    decimal current = this.numericUpDown_bpm.Value;
+                    decimal delta = (decimal) (keyData == Keys.Up ? step : -step);
+                    decimal next = Math.Clamp(current + delta, this.numericUpDown_bpm.Minimum, this.numericUpDown_bpm.Maximum);
+                    this.numericUpDown_bpm.Value = next;
+                }
+                catch { }
+                return true;
+            }
 
-			// Space / Back handled weiterhin in OnKeyDown - fallthrough ansonsten
-			return base.ProcessCmdKey(ref msg, keyData);
-		}
+            // Space / Back handled weiterhin in OnKeyDown - fallthrough ansonsten
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
 
 
-		private static readonly Color StepActiveFore = Color.White;
+        private static readonly Color StepActiveFore = Color.White;
         private static readonly Color StepDefaultFore = Color.Black;
         private static readonly Color StepDefaultBack = SystemColors.Control;
 
@@ -1263,138 +1263,138 @@ namespace ModularAudience.Forms.Modules
 
 
         public async Task<AudioObj> GenerateSampleAsync()
-		{
-			// UI-state sicher erfassen (auf UI-Thread)
-			int hits = this.Hits;
-			float bpm = this.Bpm;
-			int sampleRate = 44100;
-			int channels = 2;
+        {
+            // UI-state sicher erfassen (auf UI-Thread)
+            int hits = this.Hits;
+            float bpm = this.Bpm;
+            int sampleRate = 44100;
+            int channels = 2;
 
-			if (bpm <= 0f || hits <= 0)
-			{
-				// Fallbackwerte
-				bpm = Math.Max(1f, bpm);
-				hits = Math.Max(1, hits);
-			}
+            if (bpm <= 0f || hits <= 0)
+            {
+                // Fallbackwerte
+                bpm = Math.Max(1f, bpm);
+                hits = Math.Max(1, hits);
+            }
 
-			// Button-Zustände und Audiodaten als Snapshots erfassen, um Cross-Thread-Access zu vermeiden
-			var patternStates = this.CapturePatternButtonStates(); // List<List<bool>> - UI-thread
-			var audioSnapshots = new List<(float[] Data, int Channels, int SampleRate)>();
-			int panelCount = this.Panels.Count;
-			for (int trackIdx = 0; trackIdx < panelCount; trackIdx++)
-			{
-				if (trackIdx >= this.AudioC.Audios.Count)
-				{
-					audioSnapshots.Add((Array.Empty<float>(), 1, sampleRate));
-					continue;
-				}
+            // Button-Zustände und Audiodaten als Snapshots erfassen, um Cross-Thread-Access zu vermeiden
+            var patternStates = this.CapturePatternButtonStates(); // List<List<bool>> - UI-thread
+            var audioSnapshots = new List<(float[] Data, int Channels, int SampleRate)>();
+            int panelCount = this.Panels.Count;
+            for (int trackIdx = 0; trackIdx < panelCount; trackIdx++)
+            {
+                if (trackIdx >= this.AudioC.Audios.Count)
+                {
+                    audioSnapshots.Add((Array.Empty<float>(), 1, sampleRate));
+                    continue;
+                }
 
-				var audio = this.AudioC.Audios[trackIdx];
-				if (audio?.Data == null || audio.Data.Length == 0)
-				{
-					audioSnapshots.Add((Array.Empty<float>(), Math.Max(1, audio?.Channels ?? 1), audio?.SampleRate > 0 ? audio.SampleRate : sampleRate));
-					continue;
-				}
+                var audio = this.AudioC.Audios[trackIdx];
+                if (audio?.Data == null || audio.Data.Length == 0)
+                {
+                    audioSnapshots.Add((Array.Empty<float>(), Math.Max(1, audio?.Channels ?? 1), audio?.SampleRate > 0 ? audio.SampleRate : sampleRate));
+                    continue;
+                }
 
-				// Kopie der Audiodaten anfertigen, damit Background-Task nicht auf UI-Objekte zeigt
-				float[] copy = new float[audio.Data.Length];
-				Array.Copy(audio.Data, copy, audio.Data.Length);
-				audioSnapshots.Add((copy, Math.Max(1, audio.Channels), audio.SampleRate > 0 ? audio.SampleRate : sampleRate));
-			}
+                // Kopie der Audiodaten anfertigen, damit Background-Task nicht auf UI-Objekte zeigt
+                float[] copy = new float[audio.Data.Length];
+                Array.Copy(audio.Data, copy, audio.Data.Length);
+                audioSnapshots.Add((copy, Math.Max(1, audio.Channels), audio.SampleRate > 0 ? audio.SampleRate : sampleRate));
+            }
 
-			// Dauer / Samples berechnen
-			float secondsPerStep = 60f / bpm * 4f / hits; // 4/4-Takt
-			int totalSamples = (int) (secondsPerStep * hits * sampleRate);
-			if (totalSamples <= 0)
-			{
-				totalSamples = 1;
-			}
+            // Dauer / Samples berechnen
+            float secondsPerStep = 60f / bpm * 4f / hits; // 4/4-Takt
+            int totalSamples = (int) (secondsPerStep * hits * sampleRate);
+            if (totalSamples <= 0)
+            {
+                totalSamples = 1;
+            }
 
-			// Heavy CPU-Arbeit auf ThreadPool ausführen
-			var mixBuffer = await Task.Run(() =>
-			{
-				var mix = new float[totalSamples * channels];
+            // Heavy CPU-Arbeit auf ThreadPool ausführen
+            var mixBuffer = await Task.Run(() =>
+            {
+                var mix = new float[totalSamples * channels];
 
-				int usableTracks = Math.Min(audioSnapshots.Count, patternStates.Count);
-				for (int trackIdx = 0; trackIdx < usableTracks; trackIdx++)
-				{
-					var audioSnap = audioSnapshots[trackIdx];
-					var statesRow = patternStates[trackIdx];
-					if (audioSnap.Data == null || audioSnap.Data.Length == 0)
-					{
-						continue;
-					}
+                int usableTracks = Math.Min(audioSnapshots.Count, patternStates.Count);
+                for (int trackIdx = 0; trackIdx < usableTracks; trackIdx++)
+                {
+                    var audioSnap = audioSnapshots[trackIdx];
+                    var statesRow = patternStates[trackIdx];
+                    if (audioSnap.Data == null || audioSnap.Data.Length == 0)
+                    {
+                        continue;
+                    }
 
-					int audioChannels = audioSnap.Channels > 0 ? audioSnap.Channels : 1;
-					float[] audioData = audioSnap.Data;
-					int audioLen = audioData.Length / audioChannels;
+                    int audioChannels = audioSnap.Channels > 0 ? audioSnap.Channels : 1;
+                    float[] audioData = audioSnap.Data;
+                    int audioLen = audioData.Length / audioChannels;
 
-					int btnIdx = 0;
-					int stepsToCheck = Math.Min(hits, statesRow.Count);
-					for (int step = 0; step < stepsToCheck; step++)
-					{
-						bool active = statesRow[step];
-						if (active)
-						{
-							int stepStart = (int) (step * secondsPerStep * sampleRate);
-							for (int n = 0; n < audioLen; n++)
-							{
-								int mixPos = (stepStart + n) * channels;
-								int srcPos = n * audioChannels;
-								if (mixPos + channels > mix.Length)
-								{
-									break;
-								}
+                    int btnIdx = 0;
+                    int stepsToCheck = Math.Min(hits, statesRow.Count);
+                    for (int step = 0; step < stepsToCheck; step++)
+                    {
+                        bool active = statesRow[step];
+                        if (active)
+                        {
+                            int stepStart = (int) (step * secondsPerStep * sampleRate);
+                            for (int n = 0; n < audioLen; n++)
+                            {
+                                int mixPos = (stepStart + n) * channels;
+                                int srcPos = n * audioChannels;
+                                if (mixPos + channels > mix.Length)
+                                {
+                                    break;
+                                }
 
-								for (int c = 0; c < channels; c++)
-								{
-									float sample = audioData[srcPos + (c % audioChannels)];
-									mix[mixPos + c] += sample * this.Volume;
-								}
-							}
-						}
-						btnIdx++;
-						if (btnIdx >= hits)
-						{
-							break;
-						}
-					}
-				}
+                                for (int c = 0; c < channels; c++)
+                                {
+                                    float sample = audioData[srcPos + (c % audioChannels)];
+                                    mix[mixPos + c] += sample * this.Volume;
+                                }
+                            }
+                        }
+                        btnIdx++;
+                        if (btnIdx >= hits)
+                        {
+                            break;
+                        }
+                    }
+                }
 
-				// Clipping verhindern
-				for (int i = 0; i < mix.Length; i++)
-				{
-					if (mix[i] > 1f)
-					{
-						mix[i] = 1f;
-					}
-					else if (mix[i] < -1f)
-					{
-						mix[i] = -1f;
-					}
-				}
+                // Clipping verhindern
+                for (int i = 0; i < mix.Length; i++)
+                {
+                    if (mix[i] > 1f)
+                    {
+                        mix[i] = 1f;
+                    }
+                    else if (mix[i] < -1f)
+                    {
+                        mix[i] = -1f;
+                    }
+                }
 
-				return mix;
-			}).ConfigureAwait(false);
+                return mix;
+            }).ConfigureAwait(false);
 
-			// Ergebnis-Objekt erstellen (leichtgewichtiger UI-unabhängiger Schritt)
-			var result = new AudioObj
-			{
-				Data = mixBuffer,
-				SampleRate = sampleRate,
-				Channels = channels,
-				Duration = TimeSpan.FromSeconds(secondsPerStep * hits),
-				Length = mixBuffer.Length,
-				BitDepth = 32,
-				Bpm = bpm
-			};
+            // Ergebnis-Objekt erstellen (leichtgewichtiger UI-unabhängiger Schritt)
+            var result = new AudioObj
+            {
+                Data = mixBuffer,
+                SampleRate = sampleRate,
+                Channels = channels,
+                Duration = TimeSpan.FromSeconds(secondsPerStep * hits),
+                Length = mixBuffer.Length,
+                BitDepth = 32,
+                Bpm = bpm
+            };
 
-			result.Rename("DrumRollMix_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"));
+            result.Rename("DrumRollMix_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"));
 
-			return result;
-		}
+            return result;
+        }
 
-		private async void button_export_Click(object sender, EventArgs e)
+        private async void button_export_Click(object sender, EventArgs e)
         {
             bool ctrlFlag = (ModifierKeys & Keys.Control) == Keys.Control;
 
@@ -1466,25 +1466,25 @@ namespace ModularAudience.Forms.Modules
 
 
 
-		private static int ComputeIntervalMsFromValues(float bpm, int hits)
-		{
-			if (bpm <= 0f || hits <= 0)
-			{
-				return 100;
-			}
+        private static int ComputeIntervalMsFromValues(float bpm, int hits)
+        {
+            if (bpm <= 0f || hits <= 0)
+            {
+                return 100;
+            }
 
-			return (int) (60000.0f / bpm * 4.0f / hits);
-		}
+            return (int) (60000.0f / bpm * 4.0f / hits);
+        }
 
-		private void Bpm_ValueChanged(object? sender, EventArgs e)
-		{
-			// live übernehmen: sichere Kopie aktualisieren (ValueChanged läuft auf UI-Thread)
-			try
-			{
-				this.schedulerBpm = this.Bpm;
-			}
-			catch { }
-			// keine weitere Aktion nötig: Scheduler liest schedulerBpm regelmäßig
-		}
-	}
+        private void Bpm_ValueChanged(object? sender, EventArgs e)
+        {
+            // live übernehmen: sichere Kopie aktualisieren (ValueChanged läuft auf UI-Thread)
+            try
+            {
+                this.schedulerBpm = this.Bpm;
+            }
+            catch { }
+            // keine weitere Aktion nötig: Scheduler liest schedulerBpm regelmäßig
+        }
+    }
 }

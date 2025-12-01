@@ -218,36 +218,36 @@ public static class TimeStretcher_V2
 
         Array.Resize(ref outBuffer, newSize);
         Array.Resize(ref winSum, newSize);
-    } 
+    }
 
     static int AutoChooseFrameSize(int sampleRate, int frames)
     {
         if (sampleRate >= 96000)
         {
             LogCollection.Log("Using very large frame size (16384) for high sample rate (>= 96000)");
-			return 16384;
+            return 16384;
         }
 
         if (sampleRate >= 48000)
         {
             LogCollection.Log("Using large frame size (8192) for sample rate (>= 48000)");
-			return 8192;
+            return 8192;
         }
 
         if (sampleRate >= 32000)
         {
             LogCollection.Log("Using medium-large frame size (4196) for sample rate (>= 32000)");
-			return 4196;
+            return 4196;
         }
 
         if (sampleRate >= 22050)
         {
             LogCollection.Log("Using medium frame size (2048) for sample rate (>= 22050)");
-			return 2048;
+            return 2048;
         }
 
         LogCollection.Log("Using standard frame size (1024) for low sample rate (< 22050)");
-		return 1024;
+        return 1024;
     }
 
     static float AutoChooseOverlap(int frameSize, int sampleRate)
@@ -261,17 +261,17 @@ public static class TimeStretcher_V2
         if (frameSize >= 4096)
         {
             LogCollection.Log("Using medium-high overlap (0.8) for frame size >= 4096");
-			return 0.75f;
+            return 0.75f;
         }
 
         if (frameSize >= 2048)
         {
             LogCollection.Log("Using medium overlap (0.75) for frame size >= 2048");
-			return 0.66f;
+            return 0.66f;
         }
 
         LogCollection.Log("Using standard overlap (0.5) for small frame size (< 2048)");
-		return 0.5f;
+        return 0.5f;
     }
 
     static int NextPowerOfTwo(int v)
@@ -408,7 +408,14 @@ CancellationToken ct)
 
         for (int pos = segStartSample; pos + fftSize <= segEndSample && pos + fftSize <= samples; pos += hopAnalysis)
         {
-            ct.ThrowIfCancellationRequested();
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+            }
+            catch
+            {
+                return;
+            }
 
             for (int n = 0; n < fftSize; n++)
             {

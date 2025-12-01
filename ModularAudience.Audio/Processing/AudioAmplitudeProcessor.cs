@@ -51,19 +51,19 @@ namespace ModularAudience.Audio.Processing
             audio["Normalize"] = sw.Elapsed.TotalMilliseconds;
         }
 
-		public static async Task NormalizeAsync(AudioObj audio, long startSample, long endSample, float maxAmplitude, int maxWorkers)
+        public static async Task NormalizeAsync(AudioObj audio, long startSample, long endSample, float maxAmplitude, int maxWorkers)
         {
             maxWorkers = Math.Clamp(maxWorkers, 1, Environment.ProcessorCount);
             if (audio.Data == null || audio.Data.Length == 0 || startSample < 0 || endSample > audio.Data.LongLength || startSample >= endSample)
             {
                 return;
-			}
+            }
 
-			// If start and end swapped, swap them back
+            // If start and end swapped, swap them back
             if (startSample > endSample)
             {
                 (startSample, endSample) = (endSample, startSample);
-			}
+            }
 
             var parallelOptions = new ParallelOptions
             {
@@ -93,7 +93,7 @@ namespace ModularAudience.Audio.Processing
             }).ConfigureAwait(false);
             sw.Stop();
             audio["NormalizeSegment"] = sw.Elapsed.TotalMilliseconds;
-		}
+        }
 
-	}
+    }
 }

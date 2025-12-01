@@ -31,7 +31,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false);
-		}
+        }
 
         private void button_cancel_Click(object sender, EventArgs e)
         {

@@ -1,6 +1,9 @@
-﻿using System;
+﻿using Microsoft.VisualBasic.Devices;
+
+using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace ModularAudience.Audio.Processing
 {
@@ -33,9 +36,10 @@ namespace ModularAudience.Audio.Processing
 				int startFrame, endFrame;
 				if (selEndLong > selStartLong && selStartLong >= 0)
 				{
-					startFrame = (int) Math.Max(0, Math.Min(selStartLong, totalFrames - 1));
-					endFrame = (int) Math.Max(0, Math.Min(selEndLong, totalFrames - 1));
-					// selection end might be inclusive; ensure sensible range
+					// Selection stored in SAMPLES; convert to FRAMES by dividing by channels
+					startFrame = (int) Math.Max(0, Math.Min((selStartLong / channels), totalFrames - 1));
+					endFrame = (int) Math.Max(0, Math.Min((selEndLong / channels), totalFrames - 1));
+					// ensure sensible order
 					if (endFrame < startFrame)
 					{
 						(startFrame, endFrame) = (endFrame, startFrame);
@@ -100,8 +104,9 @@ namespace ModularAudience.Audio.Processing
 				int startFrame, endFrame;
 				if (selEndLong > selStartLong && selStartLong >= 0)
 				{
-					startFrame = (int) Math.Max(0, Math.Min(selStartLong, totalFrames - 1));
-					endFrame = (int) Math.Max(0, Math.Min(selEndLong, totalFrames - 1));
+					// Selection stored in SAMPLES; convert to FRAMES by dividing by channels
+					startFrame = (int) Math.Max(0, Math.Min((selStartLong / channels), totalFrames - 1));
+					endFrame = (int) Math.Max(0, Math.Min((selEndLong / channels), totalFrames - 1));
 					if (endFrame < startFrame)
 					{
 						(startFrame, endFrame) = (endFrame, startFrame);

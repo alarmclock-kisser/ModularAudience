@@ -41,7 +41,7 @@ namespace ModularAudience.Audio
         {
             return AudioWindowProcessor.GetCurrentWindowAsync(this, windowSize, lookingRange, mono, lookBackwards);
         }
-    
+
         public async Task<AudioObj?> CreateLoopAsync(long? startSample = null, long? endSample = null)
         {
             startSample ??= this.loopFractionStartSamples;
@@ -58,7 +58,7 @@ namespace ModularAudience.Audio
                 clone.SelectionEnd = endSample.Value;
                 await clone.EraseSelectionAsync(true);
 
-                string fraction = "1/" + ((int)(1 / this.LoopFraction)).ToString();
+                string fraction = "1/" + ((int) (1 / this.LoopFraction)).ToString();
                 double loopStartTime = (double) startSample.Value / this.SampleRate / this.Channels;
 
                 clone.Rename($"{this.OriginalName} (Looped {fraction} at {loopStartTime:F1}");

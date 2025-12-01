@@ -30,8 +30,9 @@ namespace ModularAudience.Forms.Modules
 
         private float CurrentVolume => 1f - (float) this.vScrollBar_volume.Value / Math.Max(1, this.vScrollBar_volume.Maximum);
         internal bool Synced => this.checkBox_sync.Checked;
+        internal bool Muted => this.checkBox_mute.Checked;
 
-        private readonly Timer frameTimer;
+		private readonly Timer frameTimer;
         private bool frameBusy;
 
         private CancellationTokenSource? waveformRenderCts;
@@ -671,7 +672,7 @@ namespace ModularAudience.Forms.Modules
         {
             float vol = this.CurrentVolume;
             this.label_volume.Text = (vol * 100f).ToString("F1") + "%";
-            try { this.OriginalAudio.SetVolume(vol); } catch { }
+            try { this.OriginalAudio.SetVolume(this.Muted ? 0f : vol); } catch { }
         }
 
         private void vScrollBar_volume_Scroll(object? sender, ScrollEventArgs e)
@@ -957,67 +958,83 @@ namespace ModularAudience.Forms.Modules
 
         internal async Task TogglePlayAsync()
         {
-            if (this.OriginalAudio.Paused)
+            var group = GetPlaybackGroup(this);
+            if (group.Count == 0)
             {
-                await this.OriginalAudio.PauseAsync();
-                this.button_playback.Text = "■";
                 return;
             }
 
-            if (!this.OriginalAudio.Playing)
+            bool anyPlaying = group.Any(tv => tv.OriginalAudio.Playing);
+            bool anyPaused = group.Any(tv => tv.OriginalAudio.Paused);
+
+            if (!anyPlaying)
             {
-                this.ApplyLoopFractionToAudio();
-                long startFrame = 0;
-                if (this.loopEnabled && this.OriginalAudio.SelectionStart >= 0 && this.OriginalAudio.SelectionEnd > this.OriginalAudio.SelectionStart)
+                if (anyPaused)
                 {
-                    startFrame = this.OriginalAudio.SelectionStart / Math.Max(1, this.OriginalAudio.Channels);
-                }
-                else if (this.OriginalAudio.StartingOffset > 0)
-                {
-                    startFrame = this.OriginalAudio.StartingOffset / Math.Max(1, this.OriginalAudio.Channels);
-                }
-                else if (this.lastClickFrame >= 0)
-                {
-                    startFrame = this.lastClickFrame;
-                }
+                    var resumeTasks = group
+                        .Where(tv => tv.OriginalAudio.Paused)
+                        .Select(tv => tv.OriginalAudio.PauseAsync());
+                    await Task.WhenAll(resumeTasks);
 
-                // Clamp startFrame to valid playback range
-                long totalFrames = this.GetTotalFrames();
-                long maxStart = Math.Max(0L, totalFrames > 0 ? totalFrames - 1 : 0L);
-                startFrame = Math.Clamp(startFrame, 0L, maxStart);
-
-                this.OriginalAudio.SetPosition(startFrame);
-                float volume = this.CurrentVolume;
-                Action onStopped = () => this.InvokeIfRequired(() => this.button_playback.Text = "▶");
-                await this.OriginalAudio.PlayAsync(CancellationToken.None, onStopped, volume);
-                this.button_playback.Text = "■";
-
-                // Broadcast play to other synced TrackViews (fire-and-forget)
-                try
-                {
-                    foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
+                    foreach (var tv in group)
                     {
-                        try { _ = tv.OriginalAudio.PlayAsync(CancellationToken.None, null, volume); } catch { }
+                        tv.InvokeIfRequired(() => tv.button_playback.Text = "■");
                     }
+
+                    return;
                 }
-                catch { }
+
+                foreach (var tv in group)
+                {
+                    tv.ApplyLoopFractionToAudio();
+
+                    long startFrame = 0;
+                    int channels = Math.Max(1, tv.OriginalAudio.Channels);
+
+                    if (tv.loopEnabled &&
+                        tv.OriginalAudio.SelectionStart >= 0 &&
+                        tv.OriginalAudio.SelectionEnd > tv.OriginalAudio.SelectionStart)
+                    {
+                        startFrame = tv.OriginalAudio.SelectionStart / channels;
+                    }
+                    else if (tv.lastClickFrame >= 0)
+                    {
+                        startFrame = tv.lastClickFrame;
+                    }
+                    else if (tv.OriginalAudio.StartingOffset > 0)
+                    {
+                        startFrame = tv.OriginalAudio.StartingOffset / channels;
+                    }
+
+                    long totalFrames = tv.GetTotalFrames();
+                    if (totalFrames > 0)
+                    {
+                        long maxStart = Math.Max(0L, totalFrames - 1);
+                        startFrame = Math.Clamp(startFrame, 0L, maxStart);
+                    }
+                    else
+                    {
+                        startFrame = 0;
+                    }
+
+                    tv.OriginalAudio.SetPosition(startFrame);
+                    tv.lastClickFrame = startFrame;
+                }
+
+                await StartPlaybackForGroupAsync(group, this);
             }
             else
             {
-                await this.OriginalAudio.StopAsync();
-                this.button_playback.Text = "▶";
+                var stopTasks = group.Select(tv => tv.OriginalAudio.StopAsync());
+                await Task.WhenAll(stopTasks);
 
-                // Broadcast stop to other synced TrackViews (fire-and-forget)
-                try
+                foreach (var tv in group)
                 {
-                    foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
-                    {
-                        try { _ = tv.OriginalAudio.StopAsync(); } catch { }
-                    }
+                    tv.InvokeIfRequired(() => tv.button_playback.Text = "▶");
                 }
-                catch { }
             }
         }
+
 
         private async void button_pause_Click(object? sender, EventArgs e)
         {
@@ -1322,13 +1339,11 @@ namespace ModularAudience.Forms.Modules
 
         private async void TrackView_KeyDown(object? sender, KeyEventArgs e)
         {
-            // Tab: Zyklisch durch alle offenen und sichtbaren TrackViews wechseln
             if (e.KeyCode == Keys.Tab)
             {
                 e.Handled = true;
                 e.SuppressKeyPress = true;
 
-                // Nur sichtbare und nicht-disponierte TrackViews berücksichtigen
                 var openTrackViews = WindowMain.TrackViews
                     .Where(tv => tv.Visible && !tv.IsDisposed)
                     .ToList();
@@ -1400,8 +1415,10 @@ namespace ModularAudience.Forms.Modules
                 e.Handled = true;
                 e.SuppressKeyPress = true;
                 this.button_pause.PerformClick();
+                return;
             }
-            else if (e.KeyCode == Keys.Back)
+
+            if (e.KeyCode == Keys.Back)
             {
                 e.Handled = true;
                 e.SuppressKeyPress = true;
@@ -1413,83 +1430,130 @@ namespace ModularAudience.Forms.Modules
                 {
                     await this.RestartPlaybackFromStartAsync();
                 }
-            }
-        }
-
-        private async Task PasteFromClipboardAsync()
-        {
-            var clip = WindowMain.ClipboardAudioObj;
-            if (clip == null)
-            {
-                LogCollection.Log("Paste failed: Clipboard is empty.");
                 return;
             }
-            if (this.OriginalAudio.Playing)
-            {
-                LogCollection.Log("Stop playback before pasting audio.");
-                return;
-            }
-            await this.CreateUndoStep();
-            int insertChannels = Math.Max(1, this.OriginalAudio.Channels);
-            long insertFrame = 0;
-            if (this.HasValidSelection())
-            {
-                insertFrame = this.OriginalAudio.SelectionStart / insertChannels;
-                await this.OriginalAudio.EraseSelectionAsync().ConfigureAwait(true);
-                LogCollection.Log($"Cut: AudioObj.Data selection erased in '{this.OriginalAudio.Name}'");
-                this.ClearSelectionMarkers();
-            }
-            else if (this.OriginalAudio.StartingOffset > 0)
-            {
-                insertFrame = this.OriginalAudio.StartingOffset / insertChannels;
-            }
-            else if (this.lastClickFrame >= 0)
-            {
-                insertFrame = this.lastClickFrame;
-            }
-            await this.OriginalAudio.InsertAudioAtFrameAsync(clip, insertFrame).ConfigureAwait(true);
-            LogCollection.Log($"Paste: AudioObj.Data inserted in '{this.OriginalAudio.Name}'");
-            this.RecalculateLoopFraction();
-            this.ApplyLoopFractionToAudio();
-            this.AlignViewToCurrentPosition();
-            this.UpdateOffsetScrollbar();
-            this.RequestWaveformRender();
-            this.ApplyInitialTrackSizing();
 
-            LogCollection.Log($"AudioObj '{clip.Name}' pasted into track view.");
-        }
+			const Keys LessGreaterPipeKey = (Keys) 226;
 
-        private async Task ResetStartingPointAsync()
-        {
-            await this.OriginalAudio.StopAsync();
-            this.OriginalAudio.StartingOffset = 0;
-            this.OriginalAudio.SetPosition(0);
-            this.ToggleLoop(null, true);
-            this.lastClickFrame = 0;
-            this.offsetFrames = 0;
-            this.UpdateOffsetScrollbar();
-            await this.RefreshWaveformAsync();
-            this.InvokeIfRequired(() => this.button_playback.Text = "▶");
-        }
+			// Ctrl + <  -> Fade In
+			if (e.Control && !e.Shift && e.KeyCode == LessGreaterPipeKey)
+			{
+				e.Handled = true;
+				e.SuppressKeyPress = true;
 
-        private async Task RestartPlaybackFromStartAsync()
-        {
-            await this.OriginalAudio.StopAsync();
-            int channels = Math.Max(1, this.OriginalAudio.Channels);
-            long startFrame = this.OriginalAudio.StartingOffset > 0
-                ? this.OriginalAudio.StartingOffset / channels
-                : 0;
-            this.OriginalAudio.SetPosition(startFrame);
-            this.lastClickFrame = startFrame;
+				if (this.OriginalAudio.Playing)
+					await this.StopPlaybackAsync();
 
-            long desiredOffset = Math.Max(0, startFrame - this.GetCaretAnchorFrame());
-            this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
-            this.UpdateOffsetScrollbar();
-            await this.RefreshWaveformAsync();
-            await this.TogglePlayAsync();
-        }
+				await this.OriginalAudio.CreateUndoStepAsync();
+				await AudioFadeProcessor.FadeInAsync(this.OriginalAudio);
 
-        private void checkBox_settings_CheckedChanged(object? sender, EventArgs e)
+				this.RequestWaveformRender();
+				return;
+			}
+
+			// Ctrl + Shift + <  -> Fade Out
+			if (e.Control && e.Shift && e.KeyCode == LessGreaterPipeKey)
+			{
+				e.Handled = true;
+				e.SuppressKeyPress = true;
+
+				if (this.OriginalAudio.Playing)
+					await this.StopPlaybackAsync();
+
+				await this.OriginalAudio.CreateUndoStepAsync();
+				await AudioFadeProcessor.FadeOutAsync(this.OriginalAudio);
+
+				this.RequestWaveformRender();
+				return;
+			}
+
+		}
+
+		private async Task PasteFromClipboardAsync()
+		{
+			var clip = WindowMain.ClipboardAudioObj;
+			if (clip == null)
+			{
+				LogCollection.Log("Paste failed: Clipboard is empty.");
+				return;
+			}
+			if (this.OriginalAudio.Playing)
+			{
+				LogCollection.Log("Stop playback before pasting audio.");
+				return;
+			}
+
+			// Wenn der Track leer ist (keine Samples), dann die Track-Format-Metadaten
+			// auf das eingefügte Sample übernehmen (insbesondere SampleRate, Channels, BitDepth),
+			// damit InsertAudioAtFrameAsync später konsistent arbeitet.
+			bool trackWasEmpty = (this.OriginalAudio.Data == null || this.OriginalAudio.Data.LongLength <= 0);
+			if (trackWasEmpty)
+			{
+				try
+				{
+					// Nur Metadaten übernehmen, Daten werden durch InsertAudioAtFrameAsync eingefügt.
+					this.OriginalAudio.SampleRate = clip.SampleRate;
+					this.OriginalAudio.Channels = clip.Channels;
+					this.OriginalAudio.BitDepth = clip.BitDepth;
+					// Länge / Duration bleiben bis nach dem Einfügen aktuell.
+					LogCollection.Log($"Paste: Target track was empty — sample rate set to {clip.SampleRate} Hz, channels set to {clip.Channels}.");
+				}
+				catch (Exception ex)
+				{
+					try { LogCollection.Log($"Paste: Failed to set track format metadata: {ex.Message}"); } catch { }
+				}
+			}
+
+			await this.CreateUndoStep();
+			int insertChannels = Math.Max(1, this.OriginalAudio.Channels);
+			long insertFrame = 0;
+			if (this.HasValidSelection())
+			{
+				insertFrame = this.OriginalAudio.SelectionStart / insertChannels;
+				await this.OriginalAudio.EraseSelectionAsync().ConfigureAwait(true);
+				LogCollection.Log($"Cut: AudioObj.Data selection erased in '{this.OriginalAudio.Name}'");
+				this.ClearSelectionMarkers();
+			}
+			else if (this.OriginalAudio.StartingOffset > 0)
+			{
+				insertFrame = this.OriginalAudio.StartingOffset / insertChannels;
+			}
+			else if (this.lastClickFrame >= 0)
+			{
+				insertFrame = this.lastClickFrame;
+			}
+
+			await this.OriginalAudio.InsertAudioAtFrameAsync(clip, insertFrame).ConfigureAwait(true);
+			LogCollection.Log($"Paste: AudioObj.Data inserted in '{this.OriginalAudio.Name}'");
+
+			// Falls Track zuvor leer war, InsertAudioAtFrame hat nun Daten eingefügt —
+			// Länge/Duration ggf. sofort anpassen (InsertAudioAtFrameAsync macht das bereits,
+			// dennoch sicherstellen, dass SampleRate/Channels konsistent sind).
+			if (trackWasEmpty)
+			{
+				try
+				{
+					// Length und Duration wurden im Insert aktualisiert; stelle sicher, dass Duration korrekt ist.
+					long sampleCount = this.OriginalAudio.Data?.LongLength ?? 0L;
+					this.OriginalAudio.Length = sampleCount;
+					int channels = Math.Max(1, this.OriginalAudio.Channels);
+					int sampleRate = Math.Max(1, this.OriginalAudio.SampleRate);
+					this.OriginalAudio.Duration = TimeSpan.FromSeconds(sampleCount / (double) (sampleRate * channels));
+				}
+				catch { }
+			}
+
+			this.RecalculateLoopFraction();
+			this.ApplyLoopFractionToAudio();
+			this.AlignViewToCurrentPosition();
+			this.UpdateOffsetScrollbar();
+			this.RequestWaveformRender();
+			this.ApplyInitialTrackSizing();
+
+			LogCollection.Log($"AudioObj '{clip.Name}' pasted into track view.");
+		}
+
+		private void checkBox_settings_CheckedChanged(object? sender, EventArgs e)
         {
             if (this.suppressSettingsCheckbox)
             {
@@ -1723,68 +1787,68 @@ namespace ModularAudience.Forms.Modules
             this.Cursor = cursor;
         }
 
-		private async void beatgridV1ToolStripMenuItem_Click(object sender, EventArgs e)
-		{
-			bool activated = this.beatGridV1ToolStripMenuItem.Checked;
-			if (activated)
-			{
-				if (this.OriginalAudio.Data.LongLength != this.OriginalAudio.BeatGrid.LongLength * 2 || this.beatGridV2ToolStripMenuItem.Checked)
-				{
-					// Make cursor for Form busy
-					Cursor previousCursor = this.Cursor;
-					this.Cursor = Cursors.WaitCursor;
+        private async void beatgridV1ToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            bool activated = this.beatGridV1ToolStripMenuItem.Checked;
+            if (activated)
+            {
+                if (this.OriginalAudio.Data.LongLength != this.OriginalAudio.BeatGrid.LongLength * 2 || this.beatGridV2ToolStripMenuItem.Checked)
+                {
+                    // Make cursor for Form busy
+                    Cursor previousCursor = this.Cursor;
+                    this.Cursor = Cursors.WaitCursor;
 
-					await BeatGridFinder.GenerateBeatGridAsync(this.OriginalAudio);
+                    await BeatGridFinder.GenerateBeatGridAsync(this.OriginalAudio);
 
-					// Restore previous cursor
-					this.Cursor = previousCursor;
-				}
+                    // Restore previous cursor
+                    this.Cursor = previousCursor;
+                }
 
-				this.beatGridV2ToolStripMenuItem.Checked = false;
-			}
+                this.beatGridV2ToolStripMenuItem.Checked = false;
+            }
 
-			this.OriginalAudio.DrawBeatGrid = activated;
+            this.OriginalAudio.DrawBeatGrid = activated;
 
-			if (activated && !this.OriginalAudio.Playing)
-			{
-				// Redraw waveform
-				await this.RefreshWaveformAsync();
-			}
-		}
+            if (activated && !this.OriginalAudio.Playing)
+            {
+                // Redraw waveform
+                await this.RefreshWaveformAsync();
+            }
+        }
 
-		private async void beatGridV2ToolStripMenuItem_Click(object sender, EventArgs e)
-		{
-			bool activated = this.beatGridV2ToolStripMenuItem.Checked;
-			if (activated)
-			{
-				if (this.OriginalAudio.Data.LongLength != this.OriginalAudio.BeatGrid.LongLength * 2 || this.beatGridV1ToolStripMenuItem.Checked)
-				{
-					// Make cursor for Form busy
-					Cursor previousCursor = this.Cursor;
-					this.Cursor = Cursors.WaitCursor;
+        private async void beatGridV2ToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            bool activated = this.beatGridV2ToolStripMenuItem.Checked;
+            if (activated)
+            {
+                if (this.OriginalAudio.Data.LongLength != this.OriginalAudio.BeatGrid.LongLength * 2 || this.beatGridV1ToolStripMenuItem.Checked)
+                {
+                    // Make cursor for Form busy
+                    Cursor previousCursor = this.Cursor;
+                    this.Cursor = Cursors.WaitCursor;
 
-					await BeatGridFinder_V2.GenerateBeatGridAsync(this.OriginalAudio);
+                    await BeatGridFinder_V2.GenerateBeatGridAsync(this.OriginalAudio);
 
-					// Restore previous cursor
-					this.Cursor = previousCursor;
-				}
+                    // Restore previous cursor
+                    this.Cursor = previousCursor;
+                }
 
                 this.beatGridV1ToolStripMenuItem.Checked = false;
-			}
+            }
 
-			this.OriginalAudio.DrawBeatGrid = activated;
+            this.OriginalAudio.DrawBeatGrid = activated;
 
-			if (activated && !this.OriginalAudio.Playing)
-			{
-				// Redraw waveform
-				await this.RefreshWaveformAsync();
-			}
-		}
-
-
+            if (activated && !this.OriginalAudio.Playing)
+            {
+                // Redraw waveform
+                await this.RefreshWaveformAsync();
+            }
+        }
 
 
-		private void InvokeIfRequired(Action action)
+
+
+        private void InvokeIfRequired(Action action)
         {
             if (this.IsDisposed)
             {
@@ -1923,7 +1987,7 @@ namespace ModularAudience.Forms.Modules
                 trackView.Show();
                 cv.Show();
             }
-            if (keyData == (Keys.Control | Keys.L))
+            if (keyData == (Keys.L))
             {
                 this.ToggleLoop(null, this.OriginalAudio.LoopEnabled);
                 return true;
@@ -2359,5 +2423,253 @@ namespace ModularAudience.Forms.Modules
             this.OriginalAudio.Rename(newName);
             this.Text = "#" + this.TrackViewId.ToString("D2") + " - " + newName;
         }
+
+        private void checkBox_sync_CheckedChanged(object sender, EventArgs e)
+        {
+            if (ModifierKeys.HasFlag(Keys.Control))
+            {
+                // Alle TrackViews synchronisieren
+                foreach (var tv in WindowMain.TrackViews)
+                {
+                    if (tv != this)
+                    {
+                        tv.checkBox_sync.Checked = this.checkBox_sync.Checked;
+                    }
+                }
+            }
+        }
+
+        private static IReadOnlyList<TrackView> GetSyncedGroup(TrackView origin)
+        {
+            if (origin == null || origin.IsDisposed)
+            {
+                return Array.Empty<TrackView>();
+            }
+
+            if (!origin.Synced)
+            {
+                return new[] { origin };
+            }
+
+            try
+            {
+                var group = WindowMain.TrackViews
+                    .Where(tv => tv != null && !tv.IsDisposed && tv.Synced)
+                    .Distinct()
+                    .ToList();
+
+                if (!group.Contains(origin))
+                {
+                    group.Insert(0, origin);
+                }
+
+                return group;
+            }
+            catch
+            {
+                return new[] { origin };
+            }
+        }
+
+        private async Task ResetStartingPointCoreAsync()
+        {
+            await this.OriginalAudio.StopAsync();
+            this.OriginalAudio.StartingOffset = 0;
+            this.OriginalAudio.SetPosition(0);
+            this.ToggleLoop(null, true);
+            this.lastClickFrame = 0;
+            this.offsetFrames = 0;
+            this.UpdateOffsetScrollbar();
+            await this.RefreshWaveformAsync();
+            this.InvokeIfRequired(() => this.button_playback.Text = "▶");
+        }
+
+        private async Task ResetStartingPointAsync()
+        {
+            var group = GetPlaybackGroup(this);
+            if (group.Count == 0)
+            {
+                return;
+            }
+
+            var stopTasks = group.Select(tv => tv.OriginalAudio.StopAsync());
+            await Task.WhenAll(stopTasks);
+
+            var refreshTasks = new List<Task>();
+
+            foreach (var tv in group)
+            {
+                tv.OriginalAudio.StartingOffset = 0;
+                tv.OriginalAudio.SetPosition(0);
+                tv.ToggleLoop(null, true);
+                tv.lastClickFrame = 0;
+                tv.offsetFrames = 0;
+                tv.UpdateOffsetScrollbar();
+                tv.InvokeIfRequired(() => tv.button_playback.Text = "▶");
+                refreshTasks.Add(tv.RefreshWaveformAsync());
+            }
+
+            await Task.WhenAll(refreshTasks);
+        }
+
+
+        private async Task PrepareRestartFromStartCoreAsync()
+        {
+            await this.OriginalAudio.StopAsync();
+
+            int channels = Math.Max(1, this.OriginalAudio.Channels);
+            long startFrame = this.OriginalAudio.StartingOffset > 0
+                ? this.OriginalAudio.StartingOffset / channels
+                : 0;
+
+            this.OriginalAudio.SetPosition(startFrame);
+            this.lastClickFrame = startFrame;
+
+            long desiredOffset = Math.Max(0, startFrame - this.GetCaretAnchorFrame());
+            this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
+            this.UpdateOffsetScrollbar();
+            await this.RefreshWaveformAsync();
+        }
+
+        private async Task RestartPlaybackFromStartAsync()
+        {
+            var group = GetPlaybackGroup(this);
+            if (group.Count == 0)
+            {
+                return;
+            }
+
+            var stopTasks = group.Select(tv => tv.OriginalAudio.StopAsync());
+            await Task.WhenAll(stopTasks);
+
+            var refreshTasks = new List<Task>();
+
+            foreach (var tv in group)
+            {
+                int channels = Math.Max(1, tv.OriginalAudio.Channels);
+                long startFrame = tv.OriginalAudio.StartingOffset > 0
+                    ? tv.OriginalAudio.StartingOffset / channels
+                    : 0;
+
+                long totalFrames = tv.GetTotalFrames();
+                if (totalFrames > 0)
+                {
+                    long maxStart = Math.Max(0L, totalFrames - 1);
+                    startFrame = Math.Clamp(startFrame, 0L, maxStart);
+                }
+                else
+                {
+                    startFrame = 0;
+                }
+
+                tv.OriginalAudio.SetPosition(startFrame);
+                tv.lastClickFrame = startFrame;
+
+                long desiredOffset = Math.Max(0, startFrame - tv.GetCaretAnchorFrame());
+                tv.offsetFrames = Math.Min(tv.GetMaxOffsetFrames(), desiredOffset);
+                tv.UpdateOffsetScrollbar();
+                refreshTasks.Add(tv.RefreshWaveformAsync());
+            }
+
+            await Task.WhenAll(refreshTasks);
+
+            await StartPlaybackForGroupAsync(group, this);
+        }
+
+        private static IReadOnlyList<TrackView> GetPlaybackGroup(TrackView origin)
+        {
+            if (origin == null || origin.IsDisposed)
+            {
+                return Array.Empty<TrackView>();
+            }
+
+            var selfOnly = new[] { origin };
+
+            try
+            {
+                var synced = WindowMain.SyncedTrackViews;
+                if (synced == null)
+                {
+                    return selfOnly;
+                }
+
+                if (!synced.Contains(origin))
+                {
+                    return selfOnly;
+                }
+
+                var group = synced
+                    .Where(tv => tv != null && !tv.IsDisposed)
+                    .Distinct()
+                    .ToList();
+
+                if (group.Count == 0)
+                {
+                    return selfOnly;
+                }
+
+                return group;
+            }
+            catch
+            {
+                return selfOnly;
+            }
+        }
+
+        private static async Task StartPlaybackForGroupAsync(IReadOnlyList<TrackView> group, TrackView initiator)
+        {
+            if (group == null || group.Count == 0 || initiator == null || initiator.IsDisposed)
+            {
+                return;
+            }
+
+            void SetButtonsStopped()
+            {
+                foreach (var tv in group)
+                {
+                    tv.InvokeIfRequired(() => tv.button_playback.Text = "▶");
+                }
+            }
+
+            foreach (var tv in group)
+            {
+                tv.InvokeIfRequired(() => tv.button_playback.Text = "■");
+            }
+
+            float mainVolume = initiator.CurrentVolume;
+            Action onStopped = SetButtonsStopped;
+
+            foreach (var tv in group)
+            {
+                if (tv == initiator)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    _ = tv.OriginalAudio.PlayAsync(CancellationToken.None, null, tv.CurrentVolume);
+                }
+                catch
+                {
+                }
+            }
+
+            try
+            {
+                await initiator.OriginalAudio.PlayAsync(CancellationToken.None, onStopped, mainVolume);
+            }
+            catch
+            {
+                SetButtonsStopped();
+            }
+        }
+
+        private void checkBox_mute_CheckedChanged(object sender, EventArgs e)
+        {
+            this.OriginalAudio.SetVolume(this.checkBox_mute.Checked ? 0f : this.CurrentVolume);
+            this.checkBox_mute.Text = this.checkBox_mute.Checked ? "Muted" : "Mute";
+            this.checkBox_mute.ForeColor = this.checkBox_mute.Checked ? Color.DarkSalmon : SystemColors.ControlText;
+		}
     }
 }

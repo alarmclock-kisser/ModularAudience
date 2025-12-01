@@ -45,7 +45,12 @@ namespace ModularAudience.Forms.Modules
             this.FillComboBoxMethods(this.comboBox_methods);
             this.UpdateControlStates();
 
-            // this.FormClosing 
+            this.FormClosing += (s, e) =>
+            {
+                WindowMain.LoopControlWindow = null;
+                e.Cancel = true;
+                this.Hide();
+            };
 
             this.Show();
         }
@@ -56,7 +61,9 @@ namespace ModularAudience.Forms.Modules
         internal void UpdateControlStates()
         {
             this.FillComboBoxTracks(this.comboBox_track);
+            var audio = this.ResultAudioObj ?? this.SelectedAudio;
 
+            this.textBox_trackInfo.Text = audio?.GetInfoString() ?? string.Empty;
 
         }
 
@@ -95,7 +102,7 @@ namespace ModularAudience.Forms.Modules
         {
             panel.SuspendLayout();
             panel.Controls.Clear();
-            _paramControls.Clear();
+            this._paramControls.Clear();
 
             var method = StaticAudioObjMethods.FirstOrDefault(m => m.Name.Equals(this.SelectedMethod, StringComparison.OrdinalIgnoreCase));
             if (method == null)
@@ -155,7 +162,7 @@ namespace ModularAudience.Forms.Modules
                     };
                     panel.Controls.Add(lbl);
                     y += rowH;
-                    _paramControls[p] = null; // Merk: this param is handled automatically
+                    this._paramControls[p] = null; // Merk: this param is handled automatically
                     continue;
                 }
 
@@ -224,7 +231,7 @@ namespace ModularAudience.Forms.Modules
                 }
 
                 panel.Controls.Add(inputCtrl);
-                _paramControls[p] = inputCtrl;
+                this._paramControls[p] = inputCtrl;
 
                 // Optional: tooltip with default value
                 if (p.HasDefaultValue)
@@ -303,7 +310,9 @@ namespace ModularAudience.Forms.Modules
                     var single = this.SelectedAudio;
                     List<AudioObj> list;
                     if (single != null)
+                    {
                         list = [single];
+                    }
                     else
                     {
                         // fallback: all non-disposed trackviews with audio
@@ -316,13 +325,21 @@ namespace ModularAudience.Forms.Modules
                     }
 
                     if (pType == typeof(AudioObj[]))
+                    {
                         args[i] = list.ToArray();
+                    }
                     else if (pType == typeof(List<AudioObj>))
+                    {
                         args[i] = list;
+                    }
                     else if (pType == typeof(ICollection<AudioObj>))
+                    {
                         args[i] = (ICollection<AudioObj>) list;
+                    }
                     else
+                    {
                         args[i] = list.AsEnumerable();
+                    }
 
                     continue;
                 }
@@ -369,7 +386,9 @@ namespace ModularAudience.Forms.Modules
                 {
                     // Fallback: default value / null / activator
                     if (p.HasDefaultValue)
+                    {
                         args[i] = p.DefaultValue;
+                    }
                     else
                     {
                         var underlying = Nullable.GetUnderlyingType(pType) ?? pType;
@@ -442,8 +461,8 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-		private async void button_apply_Click(object sender, EventArgs e)
-		{
+        private async void button_apply_Click(object sender, EventArgs e)
+        {
             if (this.ResultAudioObj == null || this.SelectedAudio == null)
             {
                 return;
@@ -456,18 +475,20 @@ namespace ModularAudience.Forms.Modules
             {
                 this.ResultAudioObj = null;
             }
-		}
+        }
 
 
 
 
-		private static object? ReadControlValueAndConvert(Control ctrl, Type targetType)
+        private static object? ReadControlValueAndConvert(Control ctrl, Type targetType)
         {
             // Handle checkbox
             if (ctrl is CheckBox cb)
             {
                 if (targetType == typeof(bool) || targetType == typeof(Boolean))
+                {
                     return cb.Checked;
+                }
 
                 // attempt to convert
                 return Convert.ChangeType(cb.Checked, Nullable.GetUnderlyingType(targetType) ?? targetType, System.Globalization.CultureInfo.InvariantCulture);
@@ -479,7 +500,11 @@ namespace ModularAudience.Forms.Modules
                 var sel = combo.SelectedItem?.ToString();
                 if (targetType.IsEnum)
                 {
-                    if (sel == null) return Enum.GetValues(targetType).GetValue(0);
+                    if (sel == null)
+                    {
+                        return Enum.GetValues(targetType).GetValue(0);
+                    }
+
                     return Enum.Parse(targetType, sel);
                 }
                 return sel;
@@ -492,17 +517,27 @@ namespace ModularAudience.Forms.Modules
                 if (string.IsNullOrEmpty(text))
                 {
                     if (Nullable.GetUnderlyingType(targetType) != null)
+                    {
                         return null;
-                    if (targetType == typeof(string)) return string.Empty;
+                    }
+
+                    if (targetType == typeof(string))
+                    {
+                        return string.Empty;
+                    }
                 }
 
                 var convType = Nullable.GetUnderlyingType(targetType) ?? targetType;
 
                 if (convType == typeof(string))
+                {
                     return text;
+                }
 
                 if (convType.IsEnum)
+                {
                     return Enum.Parse(convType, text, ignoreCase: true);
+                }
 
                 var tc = TypeDescriptor.GetConverter(convType);
                 if (tc != null && tc.CanConvertFrom(typeof(string)))
@@ -520,14 +555,46 @@ namespace ModularAudience.Forms.Modules
 
         private static string GetFriendlyTypeName(Type t)
         {
-            if (t == typeof(string)) return "string";
-            if (t == typeof(int)) return "int";
-            if (t == typeof(long)) return "long";
-            if (t == typeof(float)) return "float";
-            if (t == typeof(double)) return "double";
-            if (t == typeof(bool)) return "bool";
-            if (t.IsEnum) return $"enum {t.Name}";
-            if (Nullable.GetUnderlyingType(t) != null) return $"{GetFriendlyTypeName(Nullable.GetUnderlyingType(t)!)}?";
+            if (t == typeof(string))
+            {
+                return "string";
+            }
+
+            if (t == typeof(int))
+            {
+                return "int";
+            }
+
+            if (t == typeof(long))
+            {
+                return "long";
+            }
+
+            if (t == typeof(float))
+            {
+                return "float";
+            }
+
+            if (t == typeof(double))
+            {
+                return "double";
+            }
+
+            if (t == typeof(bool))
+            {
+                return "bool";
+            }
+
+            if (t.IsEnum)
+            {
+                return $"enum {t.Name}";
+            }
+
+            if (Nullable.GetUnderlyingType(t) != null)
+            {
+                return $"{GetFriendlyTypeName(Nullable.GetUnderlyingType(t)!)}?";
+            }
+
             return t.Name;
         }
 
@@ -548,16 +615,25 @@ namespace ModularAudience.Forms.Modules
         private static bool ParameterTypeMatches(Type paramType, Type targetType)
         {
             // exakt gleiche Typen
-            if (paramType == targetType) return true;
+            if (paramType == targetType)
+            {
+                return true;
+            }
 
             // Array (AudioObj[])
-            if (paramType.IsArray && paramType.GetElementType() == targetType) return true;
+            if (paramType.IsArray && paramType.GetElementType() == targetType)
+            {
+                return true;
+            }
 
             // Generische Typen wie IEnumerable<AudioObj>, List<AudioObj>, ICollection<AudioObj>
             if (paramType.IsGenericType)
             {
                 var args = paramType.GetGenericArguments();
-                if (args.Any(a => a == targetType)) return true;
+                if (args.Any(a => a == targetType))
+                {
+                    return true;
+                }
             }
 
             // Zusätzlich: typkompatible IEnumerable (falls jemand z.B. eine nicht-generische IEnumerable verwendet)
@@ -571,6 +647,6 @@ namespace ModularAudience.Forms.Modules
             return false;
         }
 
-        
+
     }
 }

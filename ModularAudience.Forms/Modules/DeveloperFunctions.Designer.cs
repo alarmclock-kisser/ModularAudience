@@ -196,6 +196,9 @@
             this.Controls.Add(this.button_run);
             this.Controls.Add(this.panel_parameters);
             this.Controls.Add(this.comboBox_methods);
+            this.MaximizeBox = false;
+            this.MaximumSize = new Size(640, 480);
+            this.MinimumSize = new Size(640, 480);
             this.Name = "DeveloperFunctions";
             this.Text = "Developer Functions";
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_maxProcessors).EndInit();

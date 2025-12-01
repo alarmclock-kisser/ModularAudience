@@ -264,12 +264,12 @@ namespace ModularAudience.Audio
                     resultBitmap = await this.DrawTimingMarkersAsync(resultBitmap, samplesPerPixel, timingMarkersInterval, inverseGraphColor, false, offset.Value).ConfigureAwait(false);
                 }
 
-				if (this.DrawBeatGrid)
-				{
-					resultBitmap = await this.DrawBeatGridAsync(resultBitmap, samplesPerPixel, offset.Value);
-				}
+                if (this.DrawBeatGrid)
+                {
+                    resultBitmap = await this.DrawBeatGridAsync(resultBitmap, samplesPerPixel, offset.Value);
+                }
 
-				return resultBitmap;
+                return resultBitmap;
             }
             finally
             {
@@ -509,13 +509,13 @@ namespace ModularAudience.Audio
                 bitmap = await this.DrawTimingMarkersAsync(bitmap, samplesPerPixel, timingMarkersInterval, inverseGraphColor, false, offset.Value);
             }
 
-			if (this.DrawBeatGrid)
-			{
-				bitmap = await this.DrawBeatGridAsync(bitmap, samplesPerPixel, offset.Value);
-			}
+            if (this.DrawBeatGrid)
+            {
+                bitmap = await this.DrawBeatGridAsync(bitmap, samplesPerPixel, offset.Value);
+            }
 
 
-			return bitmap;
+            return bitmap;
         }
 
         [SupportedOSPlatform("windows")]
@@ -562,92 +562,92 @@ namespace ModularAudience.Audio
             }).ConfigureAwait(false);
         }
 
-		[SupportedOSPlatform("windows")]
-		public async Task<Bitmap> DrawBeatGridAsync(Bitmap waveForm, int samplesPerPixel, long offsetFrames = 0, Color? gridColor = null)
-		{
-			bool[] grid = this.BeatGrid;
-			if (grid == null || grid.LongLength <= 0)
-			{
-				return waveForm;
-			}
+        [SupportedOSPlatform("windows")]
+        public async Task<Bitmap> DrawBeatGridAsync(Bitmap waveForm, int samplesPerPixel, long offsetFrames = 0, Color? gridColor = null)
+        {
+            bool[] grid = this.BeatGrid;
+            if (grid == null || grid.LongLength <= 0)
+            {
+                return waveForm;
+            }
 
-			gridColor ??= Color.Red;
+            gridColor ??= Color.Red;
 
-			return await Task.Run(() =>
-			{
-				int width = waveForm.Width;
-				int height = waveForm.Height;
-				if (width <= 0 || height <= 0)
-				{
-					return waveForm;
-				}
+            return await Task.Run(() =>
+            {
+                int width = waveForm.Width;
+                int height = waveForm.Height;
+                if (width <= 0 || height <= 0)
+                {
+                    return waveForm;
+                }
 
-				long gridLenLong = grid.LongLength;
-				int gridLen = gridLenLong > int.MaxValue ? int.MaxValue : (int) gridLenLong;
-				if (gridLen == 0)
-				{
-					return waveForm;
-				}
+                long gridLenLong = grid.LongLength;
+                int gridLen = gridLenLong > int.MaxValue ? int.MaxValue : (int) gridLenLong;
+                if (gridLen == 0)
+                {
+                    return waveForm;
+                }
 
-				// Calculate visible range based on offset and samplesPerPixel
-				long visibleStartFrame = offsetFrames;
-				long visibleEndFrame = offsetFrames + (long) width * samplesPerPixel;
+                // Calculate visible range based on offset and samplesPerPixel
+                long visibleStartFrame = offsetFrames;
+                long visibleEndFrame = offsetFrames + (long) width * samplesPerPixel;
 
-				// Clamp to valid range
-				visibleStartFrame = Math.Max(0, visibleStartFrame);
-				visibleEndFrame = Math.Min(gridLen, visibleEndFrame);
+                // Clamp to valid range
+                visibleStartFrame = Math.Max(0, visibleStartFrame);
+                visibleEndFrame = Math.Min(gridLen, visibleEndFrame);
 
-				// Collect unique X positions in parallel (thread-safe)
-				var positions = new System.Collections.Concurrent.ConcurrentDictionary<int, byte>();
+                // Collect unique X positions in parallel (thread-safe)
+                var positions = new System.Collections.Concurrent.ConcurrentDictionary<int, byte>();
 
-				Parallel.For((int) visibleStartFrame, (int) visibleEndFrame, i =>
-				{
-					if (!grid[i])
+                Parallel.For((int) visibleStartFrame, (int) visibleEndFrame, i =>
+                {
+                    if (!grid[i])
                     {
                         return;
                     }
 
                     // Calculate pixel position based on current zoom and offset
                     long frameRelativeToView = i - offsetFrames;
-					int x = (int) (frameRelativeToView / samplesPerPixel);
+                    int x = (int) (frameRelativeToView / samplesPerPixel);
 
-					// Only draw if within visible area
-					if (x >= 0 && x < width)
-					{
-						positions.TryAdd(x, 0);
-					}
-				});
+                    // Only draw if within visible area
+                    if (x >= 0 && x < width)
+                    {
+                        positions.TryAdd(x, 0);
+                    }
+                });
 
-				if (positions.IsEmpty)
-				{
-					return waveForm;
-				}
+                if (positions.IsEmpty)
+                {
+                    return waveForm;
+                }
 
-				var xs = positions.Keys.ToArray();
-				Array.Sort(xs);
+                var xs = positions.Keys.ToArray();
+                Array.Sort(xs);
 
-				// Single-threaded GDI draw (Graphics is not thread-safe)
-				using (var g = Graphics.FromImage(waveForm))
-				{
-					// keep lines crisp
-					g.SmoothingMode = SmoothingMode.None;
-					using var pen = new Pen(gridColor.Value, 1f);
-					pen.DashStyle = DashStyle.Dash;
+                // Single-threaded GDI draw (Graphics is not thread-safe)
+                using (var g = Graphics.FromImage(waveForm))
+                {
+                    // keep lines crisp
+                    g.SmoothingMode = SmoothingMode.None;
+                    using var pen = new Pen(gridColor.Value, 1f);
+                    pen.DashStyle = DashStyle.Dash;
 
-					foreach (int x in xs)
-					{
-						float fx = x + 0.5f; // draw on half-pixel for 1px sharp line
-						g.DrawLine(pen, fx, 0f, fx, (float) height);
-					}
-				}
+                    foreach (int x in xs)
+                    {
+                        float fx = x + 0.5f; // draw on half-pixel for 1px sharp line
+                        g.DrawLine(pen, fx, 0f, fx, (float) height);
+                    }
+                }
 
-				return waveForm;
-			}).ConfigureAwait(false);
-		}
+                return waveForm;
+            }).ConfigureAwait(false);
+        }
 
 
 
-		public int CalculateSamplesPerPixelToFit(int width)
+        public int CalculateSamplesPerPixelToFit(int width)
         {
             if (this.Data == null || this.Data.Length == 0 || width <= 0)
             {

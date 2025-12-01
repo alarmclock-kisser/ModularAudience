@@ -50,6 +50,7 @@
             this.checkBox_settings = new CheckBox();
             this.button_apply = new Button();
             this.checkBox_sync = new CheckBox();
+            this.checkBox_mute = new CheckBox();
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_waveform).BeginInit();
             this.contextMenu_waveform.SuspendLayout();
             this.SuspendLayout();
@@ -107,48 +108,48 @@
             // 
             this.contextMenu_waveform.Items.AddRange(new ToolStripItem[] { this.menuItem_copySelection, this.menuItem_removeSelection, this.menuItem_normalizeSelection, this.menuItem_fadeIn, this.menuItem_fadeOut, this.trimSilenceToolStripMenuItem, this.drawBeatGridToolStripMenuItem });
             this.contextMenu_waveform.Name = "contextMenu_waveform";
-            this.contextMenu_waveform.Size = new Size(181, 180);
+            this.contextMenu_waveform.Size = new Size(169, 158);
             this.contextMenu_waveform.Opening += this.contextMenu_waveform_Opening;
             // 
             // menuItem_copySelection
             // 
             this.menuItem_copySelection.Name = "menuItem_copySelection";
-            this.menuItem_copySelection.Size = new Size(180, 22);
+            this.menuItem_copySelection.Size = new Size(168, 22);
             this.menuItem_copySelection.Text = "Copy Selection";
             this.menuItem_copySelection.Click += this.menuItem_copySelection_Click;
             // 
             // menuItem_removeSelection
             // 
             this.menuItem_removeSelection.Name = "menuItem_removeSelection";
-            this.menuItem_removeSelection.Size = new Size(180, 22);
+            this.menuItem_removeSelection.Size = new Size(168, 22);
             this.menuItem_removeSelection.Text = "Remove Selection";
             this.menuItem_removeSelection.Click += this.menuItem_removeSelection_Click;
             // 
             // menuItem_normalizeSelection
             // 
             this.menuItem_normalizeSelection.Name = "menuItem_normalizeSelection";
-            this.menuItem_normalizeSelection.Size = new Size(180, 22);
+            this.menuItem_normalizeSelection.Size = new Size(168, 22);
             this.menuItem_normalizeSelection.Text = "Normalize...";
             this.menuItem_normalizeSelection.Click += this.menuItem_normalizeSelection_Click;
             // 
             // menuItem_fadeIn
             // 
             this.menuItem_fadeIn.Name = "menuItem_fadeIn";
-            this.menuItem_fadeIn.Size = new Size(180, 22);
+            this.menuItem_fadeIn.Size = new Size(168, 22);
             this.menuItem_fadeIn.Text = "Fade In...";
             this.menuItem_fadeIn.Click += this.menuItem_fadeIn_Click;
             // 
             // menuItem_fadeOut
             // 
             this.menuItem_fadeOut.Name = "menuItem_fadeOut";
-            this.menuItem_fadeOut.Size = new Size(180, 22);
+            this.menuItem_fadeOut.Size = new Size(168, 22);
             this.menuItem_fadeOut.Text = "Fade Out...";
             this.menuItem_fadeOut.Click += this.menuItem_fadeOut_Click;
             // 
             // trimSilenceToolStripMenuItem
             // 
             this.trimSilenceToolStripMenuItem.Name = "trimSilenceToolStripMenuItem";
-            this.trimSilenceToolStripMenuItem.Size = new Size(180, 22);
+            this.trimSilenceToolStripMenuItem.Size = new Size(168, 22);
             this.trimSilenceToolStripMenuItem.Text = "Trim Silence...";
             this.trimSilenceToolStripMenuItem.Click += this.menuItem_trimSilence_Click;
             // 
@@ -156,14 +157,14 @@
             // 
             this.drawBeatGridToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { this.beatGridV1ToolStripMenuItem, this.beatGridV2ToolStripMenuItem });
             this.drawBeatGridToolStripMenuItem.Name = "drawBeatGridToolStripMenuItem";
-            this.drawBeatGridToolStripMenuItem.Size = new Size(180, 22);
+            this.drawBeatGridToolStripMenuItem.Size = new Size(168, 22);
             this.drawBeatGridToolStripMenuItem.Text = "Draw Beat-Grid";
             // 
             // beatGridV1ToolStripMenuItem
             // 
             this.beatGridV1ToolStripMenuItem.CheckOnClick = true;
             this.beatGridV1ToolStripMenuItem.Name = "beatGridV1ToolStripMenuItem";
-            this.beatGridV1ToolStripMenuItem.Size = new Size(180, 22);
+            this.beatGridV1ToolStripMenuItem.Size = new Size(121, 22);
             this.beatGridV1ToolStripMenuItem.Text = "Version 1";
             this.beatGridV1ToolStripMenuItem.Click += this.beatgridV1ToolStripMenuItem_Click;
             // 
@@ -171,7 +172,7 @@
             // 
             this.beatGridV2ToolStripMenuItem.CheckOnClick = true;
             this.beatGridV2ToolStripMenuItem.Name = "beatGridV2ToolStripMenuItem";
-            this.beatGridV2ToolStripMenuItem.Size = new Size(180, 22);
+            this.beatGridV2ToolStripMenuItem.Size = new Size(121, 22);
             this.beatGridV2ToolStripMenuItem.Text = "Version 2";
             this.beatGridV2ToolStripMenuItem.Click += this.beatGridV2ToolStripMenuItem_Click;
             // 
@@ -179,7 +180,7 @@
             // 
             this.vScrollBar_volume.LargeChange = 1;
             this.vScrollBar_volume.Location = new Point(104, 12);
-            this.vScrollBar_volume.Maximum = 9999;
+            this.vScrollBar_volume.Maximum = 1000;
             this.vScrollBar_volume.Name = "vScrollBar_volume";
             this.vScrollBar_volume.Size = new Size(17, 160);
             this.vScrollBar_volume.TabIndex = 8;
@@ -246,6 +247,19 @@
             this.checkBox_sync.TabIndex = 14;
             this.checkBox_sync.Text = "Sync Playback";
             this.checkBox_sync.UseVisualStyleBackColor = true;
+            this.checkBox_sync.CheckedChanged += this.checkBox_sync_CheckedChanged;
+            // 
+            // checkBox_mute
+            // 
+            this.checkBox_mute.AutoSize = true;
+            this.checkBox_mute.Location = new Point(9, 60);
+            this.checkBox_mute.Name = "checkBox_mute";
+            this.checkBox_mute.Size = new Size(54, 19);
+            this.checkBox_mute.TabIndex = 15;
+            this.checkBox_mute.TabStop = false;
+            this.checkBox_mute.Text = "Mute";
+            this.checkBox_mute.UseVisualStyleBackColor = true;
+            this.checkBox_mute.CheckedChanged += this.checkBox_mute_CheckedChanged;
             // 
             // TrackView
             // 
@@ -253,6 +267,7 @@
             this.AutoScaleMode = AutoScaleMode.Font;
             this.BackColor = SystemColors.ControlLight;
             this.ClientSize = new Size(1064, 197);
+            this.Controls.Add(this.checkBox_mute);
             this.Controls.Add(this.checkBox_sync);
             this.Controls.Add(this.button_apply);
             this.Controls.Add(this.checkBox_settings);
@@ -298,5 +313,6 @@
 		private ToolStripMenuItem drawBeatGridToolStripMenuItem;
         private ToolStripMenuItem beatGridV1ToolStripMenuItem;
         private ToolStripMenuItem beatGridV2ToolStripMenuItem;
+        private CheckBox checkBox_mute;
     }
 }

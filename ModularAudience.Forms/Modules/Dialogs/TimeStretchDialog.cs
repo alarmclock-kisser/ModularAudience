@@ -24,10 +24,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.Track = trackView.OriginalAudio.Clone();
 
             this.Text = $"Time Stretch - {trackView.Name}";
-			this.StartPosition = FormStartPosition.Manual;
-			this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false);
+            this.StartPosition = FormStartPosition.Manual;
+            this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false);
 
-			this.numericUpDown_chunkSize.Tag = (int) this.numericUpDown_chunkSize.Value;
+            this.numericUpDown_chunkSize.Tag = (int) this.numericUpDown_chunkSize.Value;
             this.numericUpDown_initialBpm.Value = this.Track.Bpm > 0 ? (decimal) this.Track.Bpm : this.Track.ScannedBpm > 30 ? (decimal) this.Track.ScannedBpm : 120;
             this.numericUpDown_threads.Maximum = Math.Max(Environment.ProcessorCount, 1);
             this.numericUpDown_threads.Value = Math.Max(Environment.ProcessorCount - 1, 1);
@@ -261,6 +261,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             this.numericUpDown_chunkSize.Enabled = !this.checkBox_autoChunking.Checked;
             this.numericUpDown_overlap.Enabled = !this.checkBox_autoChunking.Checked;
-		}
+        }
     }
 }

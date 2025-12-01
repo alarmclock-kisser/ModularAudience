@@ -84,23 +84,27 @@ namespace ModularAudience.Audio
             sw.Stop();
             audio["Mp3Export"] = sw.Elapsed.TotalMilliseconds;
 
-            if (writeBpmTag && audio.Bpm > 10)
-            {
-                try
-                {
-                    var tagFile = TagLib.File.Create(outFile);
-                    tagFile.Tag.BeatsPerMinute = (uint) Math.Round(audio.Bpm);
-                    tagFile.Save();
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Failed to write BPM tag: {ex.Message}");
-                }
-            }
+			if (writeBpmTag && audio.Bpm > 10)
+			{
+				try
+				{
+					var tagFile = TagLib.File.Create(outFile);
+					tagFile.Tag.BeatsPerMinute = (uint) Math.Round(audio.Bpm);
+					tagFile.Save();
+				}
+				catch (Exception ex)
+				{
+					Debug.WriteLine($"Failed to write BPM tag: {ex.Message}");
+				}
+			}
 
-            LogCollection.Log($"Exported {audio.Name} to {outFile}");
+			// NEU: Custom Tags aus dem TagEditor anwenden
+			ApplyCustomTagsToFile(audio, outFile);
 
-            return outFile;
+			LogCollection.Log($"Exported {audio.Name} to {outFile}");
+
+
+			return outFile;
         }
 
         public async Task<string?> ExportWavAsync(AudioObj audio, int bitDepth = 24, string? outDir = null, bool writeBpmTag = true, string? customFilePath = null)
@@ -194,23 +198,26 @@ namespace ModularAudience.Audio
                 sw.Stop();
                 audio["WavExport"] = sw.Elapsed.TotalMilliseconds;
 
-                if (writeBpmTag && audio.Bpm > 10)
-                {
-                    try
-                    {
-                        var tagFile = TagLib.File.Create(finalPath);
-                        tagFile.Tag.BeatsPerMinute = (uint) Math.Round(audio.Bpm);
-                        tagFile.Save();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Failed to write BPM tag: {ex.Message}");
-                    }
-                }
+				if (writeBpmTag && audio.Bpm > 10)
+				{
+					try
+					{
+						var tagFile = TagLib.File.Create(finalPath);
+						tagFile.Tag.BeatsPerMinute = (uint) Math.Round(audio.Bpm);
+						tagFile.Save();
+					}
+					catch (Exception ex)
+					{
+						Debug.WriteLine($"Failed to write BPM tag: {ex.Message}");
+					}
+				}
 
-                LogCollection.Log($"Exported {audio.Name} to {finalPath}");
+				ApplyCustomTagsToFile(audio, finalPath);
 
-                return finalPath;
+				LogCollection.Log($"Exported {audio.Name} to {finalPath}");
+
+
+				return finalPath;
             }
             catch (Exception ex)
             {
@@ -220,5 +227,119 @@ namespace ModularAudience.Audio
         }
 
 
-    }
+
+		private static void ApplyCustomTagsToFile(AudioObj audio, string filePath)
+		{
+			if (audio.CustomTags == null || !audio.CustomTags.HasData)
+			{
+				return;
+			}
+
+			try
+			{
+				var tagFile = TagLib.File.Create(filePath);
+				var tag = tagFile.Tag;
+
+				foreach (var kv in audio.CustomTags.Values)
+				{
+					string id = kv.Key.ToUpperInvariant();
+					string value = kv.Value;
+
+					switch (id)
+					{
+						case "TT2": // Title
+							tag.Title = value;
+							break;
+
+						case "TT3": // Subtitle
+							tag.Subtitle = value;
+							break;
+
+						case "TT1": // Grouping
+							tag.Grouping = value;
+							break;
+
+						case "TAL": // Album
+							tag.Album = value;
+							break;
+
+						case "TP1": // Artist / Performers
+							tag.Performers = new[] { value };
+							break;
+
+						case "TP2": // Album Artist / Band
+							tag.AlbumArtists = new[] { value };
+							break;
+
+						case "TP3": // Conductor
+							tag.Conductor = value;
+							break;
+
+						case "TCM": // Composer
+							tag.Composers = new[] { value };
+							break;
+
+						case "TCO": // Genre
+							tag.Genres = new[] { value };
+							break;
+
+						case "COM": // Comment
+							tag.Comment = value;
+							break;
+
+						case "TYE": // Year
+							if (uint.TryParse(value, out var year))
+							{
+								tag.Year = year;
+							}
+							break;
+
+						case "TRK": // Track
+							if (uint.TryParse(value, out var track))
+							{
+								tag.Track = track;
+							}
+							break;
+
+						case "TPA": // Disc / Part of set
+							if (uint.TryParse(value, out var disc))
+							{
+								tag.Disc = disc;
+							}
+							break;
+
+						case "TBP": // BPM
+							if (uint.TryParse(value, out var bpm))
+							{
+								tag.BeatsPerMinute = bpm;
+							}
+							break;
+
+						case "ULT": // Lyrics
+							tag.Lyrics = value;
+							break;
+
+						default:
+							// Fallback: direktes Id3v2-Frame setzen
+							if (tagFile.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
+							{
+								var id3 = (TagLib.Id3v2.Tag) tagFile.GetTag(TagLib.TagTypes.Id3v2);
+								var frame = TagLib.Id3v2.TextInformationFrame.Get(id3, id, true);
+								frame.Text = new[] { value };
+							}
+							break;
+					}
+				}
+
+				tagFile.Save();
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"Failed to write custom tags to {filePath}: {ex.Message}");
+			}
+		}
+
+
+
+	}
 }

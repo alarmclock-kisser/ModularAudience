@@ -88,26 +88,139 @@ namespace ModularAudience.Forms
             UpdateTrackDependentUI();
         }
 
-        private async void WindowMain_FormClosing(object? sender, FormClosingEventArgs e)
-        {
-            // Kinder schliessen (deren FormClosing Handler lassen App-Exit jetzt durch)
-            foreach (var cv in CollectionViews.ToList())
-            {
-                cv.Close();
-            }
-            foreach (var tv in TrackViews.ToList())
-            {
-                tv.Close();
-            }
+		private void WindowMain_FormClosing(object? sender, FormClosingEventArgs e)
+		{
+			// Detach handler to avoid re-entry
+			try { this.FormClosing -= this.WindowMain_FormClosing; } catch { }
 
-            await this.AudioC.ClearAsync();
-            // Nicht abbrechen, echte Beendigung
-            // e.Cancel bleibt false
-            Application.ExitThread();
-            Environment.Exit(0); // harte Prozessbeendigung falls noch Threads leben
-        }
+			// Stop timers and lightweight UI work synchronously (fast)
+			try
+			{
+				if (this.recordingTimer != null)
+				{
+					try { this.recordingTimer.Stop(); } catch { }
+					try { this.recordingTimer.Dispose(); } catch { }
+					this.recordingTimer = null;
+				}
+			}
+			catch { }
 
-        private void Register_ListBox_Log()
+			// Close child windows quickly on UI thread where necessary (best-effort, non-blocking)
+			try
+			{
+				foreach (var tv in TrackViews.ToList())
+				{
+					try
+					{
+						if (tv == null) continue;
+						if (!tv.IsDisposed)
+						{
+							if (tv.InvokeRequired)
+							{
+								try { tv.Invoke((Action) tv.Close); } catch { /* ignore */ }
+							}
+							else
+							{
+								try { tv.Close(); } catch { /* ignore */ }
+							}
+						}
+					}
+					catch { /* ignore individual child errors */ }
+				}
+			}
+			catch { }
+
+			// Fire-and-forget background cleanup so UI closes immediately.
+			// We intentionally DO NOT await this; it's best-effort.
+			try
+			{
+				_ = Task.Run(async () =>
+				{
+					try
+					{
+						// Try clearing audio collection without blocking UI close.
+						// Wrap in try/catch and swallow any exceptions (process may exit immediately).
+						await this.AudioC.ClearAsync().ConfigureAwait(false);
+					}
+					catch { }
+				});
+			}
+			catch { }
+
+			// Exit process immediately and silently to make the application terminate as fast as possible.
+			// Application.ExitThread and Environment.Exit are best-effort; Environment.Exit will terminate process.
+			try { Application.ExitThread(); } catch { }
+			try { Environment.Exit(0); } catch { }
+		}
+
+		private async Task CleanupAsync()
+		{
+			// Kept for compatibility if called elsewhere; perform best-effort synchronous-ish cleanup then return quickly.
+			try
+			{
+				// Close child windows quickly on UI thread where necessary (best-effort)
+				foreach (var tv in TrackViews.ToList())
+				{
+					try
+					{
+						if (tv == null) continue;
+						if (!tv.IsDisposed)
+						{
+							if (tv.InvokeRequired)
+							{
+								try { tv.Invoke((Action) tv.Close); } catch { /* ignore */ }
+							}
+							else
+							{
+								try { tv.Close(); } catch { /* ignore */ }
+							}
+						}
+					}
+					catch { /* ignore individual child errors */ }
+				}
+
+				// Stop and dispose timer if present
+				try
+				{
+					if (this.recordingTimer != null)
+					{
+						try { this.recordingTimer.Stop(); } catch { }
+						try { this.recordingTimer.Dispose(); } catch { }
+						this.recordingTimer = null;
+					}
+				}
+				catch { }
+
+				// Do not block the UI shutdown long — attempt to clear audio collection but with a short timeout.
+				try
+				{
+					var clearTask = this.AudioC.ClearAsync();
+					// Wait briefly to allow cleanup to start but do not block shutdown indefinitely
+					var completed = await Task.WhenAny(clearTask, Task.Delay(2000)).ConfigureAwait(false);
+					if (completed == clearTask)
+					{
+						// allow potential exceptions to surface to the catch below
+						await clearTask.ConfigureAwait(false);
+					}
+				}
+				catch { /* swallow - best-effort */ }
+
+				// Finally try to exit threads cleanly (best-effort)
+				try { Application.ExitThread(); } catch { }
+			}
+			catch (Exception ex)
+			{
+				try { LogCollection.Log($"CleanupAsync: Exception during cleanup: {ex.Message}"); } catch { }
+			}
+			finally
+			{
+				// Last resort: ensure process terminates (non-returning)
+				try { Environment.Exit(0); } catch { }
+			}
+		}
+
+
+		private void Register_ListBox_Log()
         {
             this.listBox_log.Items.Clear();
             this.listBox_log.DataSource = LogCollection.Logs;
@@ -1637,7 +1750,7 @@ namespace ModularAudience.Forms
         private void button_devMode_Click(object sender, EventArgs e)
         {
             DeveloperFunctionsWindow ??= new DeveloperFunctions();
-		}
+        }
     }
 }
 

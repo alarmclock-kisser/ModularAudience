@@ -155,24 +155,24 @@ namespace ModularAudience.Generators
             if (!string.Equals(presetNorm, "- None -", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(presetNorm))
             {
                 string key = presetNorm.Replace(" ", "").Replace("-", "");
-				// Resolve via reflection to avoid huge switch/case
+                // Resolve via reflection to avoid huge switch/case
                 var method = typeof(BreakbeatGenerator).GetMethod($"Preset_{key}", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
                 if (method != null)
                 {
                     LogCollection.Log("Using BreakbeatGenerator '" + method.Name + "'.");
-					var task = (Task<List<bool[]>>) method.Invoke(null, [drumset, bars, density, resolution, swing, complexity, interleaved, seed])!;
+                    var task = (Task<List<bool[]>>) method.Invoke(null, [drumset, bars, density, resolution, swing, complexity, interleaved, seed])!;
                     return await task;
-				}
+                }
                 else
                 {
                     // Unknown preset: fall back to default generation (could log if you add logging)
                     LogCollection.Log("Could not get Method 'Preset_" + key + "', fallback to default break generation.");
-				}
+                }
 
-				// Unknown preset: fall back to default generation (could log if you add logging)
-			}
+                // Unknown preset: fall back to default generation (could log if you add logging)
+            }
 
-			int totalSteps = bars * resolution;
+            int totalSteps = bars * resolution;
             var elements = drumset.ToList();
             var results = new List<bool[]>(elements.Count);
 

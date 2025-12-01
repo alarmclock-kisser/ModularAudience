@@ -16,7 +16,7 @@ namespace ModularAudience.Audio
         public readonly DateTime CreatedAt = DateTime.UtcNow;
         public string Name { get; set; } = string.Empty;
         public string OriginalName { get; private set; } = string.Empty;
-		public string FilePath { get; set; } = string.Empty;
+        public string FilePath { get; set; } = string.Empty;
 
         // Audio data & format
         public float[] Data { get; set; } = [];
@@ -165,7 +165,7 @@ namespace ModularAudience.Audio
                 Id = this.Id,
                 Name = this.Name,
                 OriginalName = this.OriginalName,
-				FilePath = this.FilePath,
+                FilePath = this.FilePath,
                 Data = (float[]) this.Data.Clone(),
                 SampleRate = this.SampleRate,
                 Channels = this.Channels,
@@ -344,7 +344,7 @@ namespace ModularAudience.Audio
             }
         }
 
-        public void Rename (string newName)
+        public void Rename(string newName)
         {
             this.Name = newName;
             this.OriginalName = newName;
@@ -401,8 +401,8 @@ namespace ModularAudience.Audio
             this.Bpm = source.Bpm;
             this.Rename(source.OriginalName);
 
-			// Copy metrics dictionary content
-			this.Metrics.Clear();
+            // Copy metrics dictionary content
+            this.Metrics.Clear();
             foreach (var kv in source.Metrics)
             {
                 this.Metrics[kv.Key] = kv.Value;
@@ -445,97 +445,96 @@ namespace ModularAudience.Audio
             this.Duration = TimeSpan.FromSeconds((double) this.Length / (this.SampleRate * this.Channels));
 
             await Task.CompletedTask;
-		}
+        }
 
-		public long GetSampleAtSeconds(double seconds)
-		{
-			// Guard
-			if (this.SampleRate <= 0 || this.Data == null || this.Data.Length == 0 || this.Channels <= 0)
-			{
-				return 0;
-			}
+        public long GetSampleAtSeconds(double seconds)
+        {
+            // Guard
+            if (this.SampleRate <= 0 || this.Data == null || this.Data.Length == 0 || this.Channels <= 0)
+            {
+                return 0;
+            }
 
-			if (double.IsNaN(seconds) || double.IsInfinity(seconds))
-			{
-				return 0;
-			}
+            if (double.IsNaN(seconds) || double.IsInfinity(seconds))
+            {
+                return 0;
+            }
 
-			// Use base sample rate (frames = samples per channel)
-			long totalFrames = this.Data.Length / this.Channels;
+            // Use base sample rate (frames = samples per channel)
+            long totalFrames = this.Data.Length / this.Channels;
 
-			// Clamp seconds to valid range
-			if (seconds <= 0.0)
-			{
-				return 0;
-			}
+            // Clamp seconds to valid range
+            if (seconds <= 0.0)
+            {
+                return 0;
+            }
 
-			if (seconds >= this.Duration.TotalSeconds)
-			{
-				return totalFrames - 1;
-			}
+            if (seconds >= this.Duration.TotalSeconds)
+            {
+                return totalFrames - 1;
+            }
 
-			// Compute frame index (floor to avoid stepping past requested time)
-			long frameIndex = (long) Math.Floor(seconds * this.SampleRate);
+            // Compute frame index (floor to avoid stepping past requested time)
+            long frameIndex = (long) Math.Floor(seconds * this.SampleRate);
 
-			// Ensure within bounds [0, totalFrames-1]
-			frameIndex = Math.Clamp(frameIndex, 0L, Math.Max(0L, totalFrames - 1));
+            // Ensure within bounds [0, totalFrames-1]
+            frameIndex = Math.Clamp(frameIndex, 0L, Math.Max(0L, totalFrames - 1));
 
-			return frameIndex;
-		}
+            return frameIndex;
+        }
 
-		public long GetNearestSnapSamplePosition(long frameIndex)
-		{
-			if (this.BeatGrid == null || this.BeatGrid.Length == 0)
-			{
-				long totalFrames = this.Length / Math.Max(1, this.Channels);
-				if (totalFrames <= 0)
-				{
-					return 0;
-				}
-				return Math.Clamp(frameIndex, 0L, totalFrames - 1);
-			}
+        public long GetNearestSnapSamplePosition(long frameIndex)
+        {
+            if (this.BeatGrid == null || this.BeatGrid.Length == 0)
+            {
+                long totalFrames = this.Length / Math.Max(1, this.Channels);
+                if (totalFrames <= 0)
+                {
+                    return 0;
+                }
+                return Math.Clamp(frameIndex, 0L, totalFrames - 1);
+            }
 
-			int total = this.BeatGrid.Length;
-			if (total <= 0)
-			{
-				return 0;
-			}
+            int total = this.BeatGrid.Length;
+            if (total <= 0)
+            {
+                return 0;
+            }
 
-			long clamped = Math.Clamp(frameIndex, 0L, total - 1);
-			int center = (int) clamped;
+            long clamped = Math.Clamp(frameIndex, 0L, total - 1);
+            int center = (int) clamped;
 
-			if (this.BeatGrid[center])
-			{
-				return center;
-			}
+            if (this.BeatGrid[center])
+            {
+                return center;
+            }
 
-			int maxDistance = total - 1;
-			for (int d = 1; d <= maxDistance; d++)
-			{
-				int left = center - d;
-				if (left >= 0 && this.BeatGrid[left])
-				{
-					return left;
-				}
+            int maxDistance = total - 1;
+            for (int d = 1; d <= maxDistance; d++)
+            {
+                int left = center - d;
+                if (left >= 0 && this.BeatGrid[left])
+                {
+                    return left;
+                }
 
-				int right = center + d;
-				if (right < total && this.BeatGrid[right])
-				{
-					return right;
-				}
+                int right = center + d;
+                if (right < total && this.BeatGrid[right])
+                {
+                    return right;
+                }
 
-				if (left < 0 && right >= total)
-				{
-					break;
-				}
-			}
+                if (left < 0 && right >= total)
+                {
+                    break;
+                }
+            }
 
-			return center;
-		}
-
-
+            return center;
+        }
 
 
-	}
+
+
+    }
 }
- 

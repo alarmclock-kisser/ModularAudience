@@ -16,8 +16,9 @@ namespace ModularAudience.Forms.Modules
         private TrackView? CurrentTrackView => WindowMain.LastSelectedTrackView;
         private AudioObj? OriginalAudio => this.CurrentTrackView?.OriginalAudio;
         private float Bpm => this.OriginalAudio?.Bpm > 0 ? this.OriginalAudio.Bpm : this.OriginalAudio?.ScannedBpm > 0 ? this.OriginalAudio.ScannedBpm : 120f;
-        private int SampleRangePerBeat => this.OriginalAudio != null ? (int) (this.OriginalAudio.SampleRate * 60f / this.Bpm) * this.OriginalAudio.Channels : 44100;
-        private float CurrentLoopFraction
+		private int SampleRangePerBeat => this.OriginalAudio != null ? (int) (this.OriginalAudio.SampleRate * 60f / this.Bpm * 2f) : 88200;
+
+		private float CurrentLoopFraction
         {
             get
             {
@@ -54,8 +55,9 @@ namespace ModularAudience.Forms.Modules
 
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCenterStartingPoint(this);
+			this.TopMost = true;
 
-            this.BuildLoopControlButtons();
+			this.BuildLoopControlButtons();
             this.EnableAutoRefocusForContainer(this);
 
 
@@ -188,9 +190,10 @@ namespace ModularAudience.Forms.Modules
             // Set loop range
             this.SetLoopRange();
 
-            // Focus TrackView
-            this.CurrentTrackView?.Focus();
-        }
+			// Focus TrackView but also keep this Form front most
+			this.CurrentTrackView?.Focus();
+            this.BringToFront();
+		}
 
         private void UntoggleAllOtherButtons(Button? sender)
         {
@@ -201,76 +204,82 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        private void SetLoopRange()
-        {
-            // Guard
-            if (this.CurrentTrackView == null || this.OriginalAudio == null)
-            {
-                return;
-            }
+		private void SetLoopRange()
+		{
+			// Guard
+			if (this.CurrentTrackView == null || this.OriginalAudio == null)
+			{
+				return;
+			}
 
-            float fraction = this.CurrentLoopFraction;
-            // 0 => disable loop (consistent with existing behavior)
-            if (fraction == 0f)
-            {
-                this.OriginalAudio.UpdateLoopFraction(0, 0, 0, false, false);
-                return;
-            }
+			float fraction = this.CurrentLoopFraction;
 
-            try
-            {
-                // Units:
-                // - TrackView / AudioObj.Position is in frames (frames == samples per channel)
-                // - AudioObj.SelectionStart/End and UpdateLoopFraction expect sample indices (interleaved floats)
-                int channels = Math.Max(1, this.OriginalAudio.Channels);
+			// 0 => disable loop (consistent with existing behavior)
+			if (fraction == 0f)
+			{
+				this.OriginalAudio.UpdateLoopFraction(0, 0, 0, false, true);
+				return;
+			}
 
-                // frames per beat (SampleRangePerBeat already returns frames per beat)
-                long framesPerBeat = Math.Max(1, this.SampleRangePerBeat);
+			try
+			{
+				int channels = Math.Max(1, this.OriginalAudio.Channels);
 
-                // compute distance in frames (at least 1 frame)
-                long deltaFrames = Math.Max(1L, (long) Math.Round(Math.Abs(fraction) * framesPerBeat));
+				// frames per "unit" (hier: 1 Beat *2, siehe SampleRangePerBeat)
+				long framesPerBeat = Math.Max(1, this.SampleRangePerBeat);
 
-                // current playback frame (Position returns frames)
-                long currentFrame = this.OriginalAudio.Position;
+				// gewünschte Loop-Länge in Frames (absoluter Betrag der Fraction)
+				long deltaFrames = Math.Max(
+					1L,
+					(long) Math.Round(Math.Abs(fraction) * framesPerBeat)
+				);
 
-                long startFrame;
-                long endFrame;
+				// aktuelle Wiedergabeposition in Frames
+				long currentFrame = this.OriginalAudio.Position;
 
-                if (fraction < 0f)
-                {
-                    // negative: go back by deltaFrames and loop that distance
-                    startFrame = currentFrame - deltaFrames;
-                    endFrame = startFrame + deltaFrames;
-                }
-                else
-                {
-                    // positive: loop forward from current position for deltaFrames
-                    startFrame = currentFrame;
-                    endFrame = currentFrame + deltaFrames;
-                }
+				long startFrame;
+				long endFrame;
 
-                // clamp to valid frame bounds
-                long totalFrames = Math.Max(0L, this.OriginalAudio.Length / Math.Max(1, channels));
-                startFrame = Math.Clamp(startFrame, 0L, Math.Max(0L, totalFrames - 1));
-                endFrame = Math.Clamp(endFrame, startFrame + 1L, Math.Max(1L, totalFrames));
+				if (fraction < 0f)
+				{
+					// negative Fraction: Loop rückwärts von der aktuellen Position
+					startFrame = currentFrame - deltaFrames;
+					endFrame = currentFrame;
+				}
+				else
+				{
+					// positive Fraction: Loop vorwärts ab aktueller Position
+					startFrame = currentFrame;
+					endFrame = currentFrame + deltaFrames;
+				}
 
-                // convert frames -> interleaved samples (AudioObj expects sample indices)
-                long baseStartSamples = startFrame * channels;
-                long baseEndSamples = endFrame * channels;
-                long fractionSamples = Math.Max(1L, deltaFrames * (long) channels);
+				// Gesamtframes aus Länge in Samples / Channels
+				long totalFrames = Math.Max(0L, this.OriginalAudio.Length / Math.Max(1, channels));
 
-                // Apply loop and snap playback position if necessary (adjustPosition = true)
-                this.OriginalAudio.UpdateLoopFraction(baseStartSamples, baseEndSamples, fractionSamples, true, true);
-            }
-            catch
-            {
-                // swallow errors to preserve UX (consistent with existing style in class)
-            }
-        }
+				// clamp in gültigen Bereich
+				startFrame = Math.Clamp(startFrame, 0L, Math.Max(0L, totalFrames - 1));
+				endFrame = Math.Clamp(endFrame, startFrame + 1L, Math.Max(1L, totalFrames));
+
+				// jetzt sind start/end konsistent → Frames → Samples
+				long baseStartSamples = startFrame * channels;
+				long baseEndSamples = endFrame * channels;
+
+				// fractionSamples = tatsächliche Loop-Spanne, nicht "deltaFrames * channels"
+				long fractionSamples = Math.Max(1L, baseEndSamples - baseStartSamples);
+
+				// Loop anwenden; adjustPosition=true hält den Player in der Loop
+				this.OriginalAudio.UpdateLoopFraction(baseStartSamples, baseEndSamples, fractionSamples, true, true);
+			}
+			catch
+			{
+				// bewusst geschluckt, wie bisher, um keine UI-Glitches zu erzeugen
+			}
+		}
 
 
 
-        internal void UpdateLoopButtonsState()
+
+		internal void UpdateLoopButtonsState()
         {
             // Guard
             if (this.CurrentTrackView == null || this.OriginalAudio == null)
@@ -346,10 +355,17 @@ namespace ModularAudience.Forms.Modules
         // Hilfsmethode: hängt Click/MouseUp-Handler an ein Control, der danach die TrackView refokussiert
         private void AttachAutoRefocusToControl(Control ctrl)
         {
-            if (ctrl == null) return;
+            if (ctrl == null)
+            {
+                return;
+            }
 
             // Verhindere Mehrfach-Anhänge
-            if (this.autoRefocusAttached.Contains(ctrl)) return;
+            if (this.autoRefocusAttached.Contains(ctrl))
+            {
+                return;
+            }
+
             this.autoRefocusAttached.Add(ctrl);
 
             // Handler, der nach Abschluss des aktuellen UI-Event-Dispatchs den Fokus zurücksetzt
@@ -380,10 +396,17 @@ namespace ModularAudience.Forms.Modules
 
         private void EnableAutoRefocusForContainer(Control container)
         {
-            if (container == null) return;
+            if (container == null)
+            {
+                return;
+            }
 
             // Verhindere mehrfaches Registrieren desselben Containers
-            if (this.containerMonitored.Contains(container)) return;
+            if (this.containerMonitored.Contains(container))
+            {
+                return;
+            }
+
             this.containerMonitored.Add(container);
 
             try
@@ -409,7 +432,11 @@ namespace ModularAudience.Forms.Modules
                 {
                     try
                     {
-                        if (e.Control == null) return;
+                        if (e.Control == null)
+                        {
+                            return;
+                        }
+
                         this.AttachAutoRefocusToControl(e.Control);
                         if (e.Control.HasChildren)
                         {

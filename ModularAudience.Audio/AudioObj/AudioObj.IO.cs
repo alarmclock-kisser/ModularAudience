@@ -10,7 +10,9 @@ namespace ModularAudience.Audio
 {
     public partial class AudioObj
     {
-        public void Dispose()
+		public CustomTags CustomTags { get; } = new();
+
+		public void Dispose()
         {
             this.Playing = false;
             this.Paused = false;
@@ -31,7 +33,7 @@ namespace ModularAudience.Audio
 
             this.Name = Path.GetFileNameWithoutExtension(this.FilePath);
             this.OriginalName = this.Name;
-			Stopwatch sw = Stopwatch.StartNew();
+            Stopwatch sw = Stopwatch.StartNew();
 
             try
             {
