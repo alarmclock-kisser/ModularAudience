@@ -38,6 +38,9 @@
             this.label_trackName = new Label();
             this.comboBox_track = new ComboBox();
             this.textBox_trackInfo = new TextBox();
+            this.checkBox_autoParameters = new CheckBox();
+            this.checkBox_optionalParameters = new CheckBox();
+            this.button_apply = new Button();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_maxProcessors).BeginInit();
             this.SuspendLayout();
             // 
@@ -49,6 +52,7 @@
             this.comboBox_methods.Size = new Size(240, 23);
             this.comboBox_methods.TabIndex = 0;
             this.comboBox_methods.Text = "Select a method ...";
+            this.comboBox_methods.SelectedIndexChanged += this.comboBox_methods_SelectedIndexChanged;
             // 
             // panel_parameters
             // 
@@ -60,17 +64,18 @@
             // 
             // button_run
             // 
-            this.button_run.BackColor = SystemColors.Info;
-            this.button_run.Location = new Point(177, 327);
+            this.button_run.BackColor = Color.FromArgb(  255,   192,   192);
+            this.button_run.Location = new Point(258, 406);
             this.button_run.Name = "button_run";
             this.button_run.Size = new Size(75, 23);
             this.button_run.TabIndex = 2;
             this.button_run.Text = "Run";
             this.button_run.UseVisualStyleBackColor = false;
+            this.button_run.Click += this.button_run_Click;
             // 
             // numericUpDown_maxProcessors
             // 
-            this.numericUpDown_maxProcessors.Location = new Point(12, 327);
+            this.numericUpDown_maxProcessors.Location = new Point(339, 406);
             this.numericUpDown_maxProcessors.Maximum = new decimal(new int[] { 1, 0, 0, 0 });
             this.numericUpDown_maxProcessors.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             this.numericUpDown_maxProcessors.Name = "numericUpDown_maxProcessors";
@@ -81,7 +86,7 @@
             // label_info_threads
             // 
             this.label_info_threads.AutoSize = true;
-            this.label_info_threads.Location = new Point(12, 353);
+            this.label_info_threads.Location = new Point(339, 388);
             this.label_info_threads.Name = "label_info_threads";
             this.label_info_threads.Size = new Size(49, 15);
             this.label_info_threads.TabIndex = 4;
@@ -134,11 +139,53 @@
             this.textBox_trackInfo.TabIndex = 9;
             this.textBox_trackInfo.TabStop = false;
             // 
+            // checkBox_autoParameters
+            // 
+            this.checkBox_autoParameters.AutoSize = true;
+            this.checkBox_autoParameters.Font = new Font("Bahnschrift SemiCondensed", 9F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.checkBox_autoParameters.Location = new Point(12, 327);
+            this.checkBox_autoParameters.Margin = new Padding(1, 3, 0, 3);
+            this.checkBox_autoParameters.Name = "checkBox_autoParameters";
+            this.checkBox_autoParameters.Size = new Size(108, 18);
+            this.checkBox_autoParameters.TabIndex = 40;
+            this.checkBox_autoParameters.Text = "Auto Parameters";
+            this.checkBox_autoParameters.UseVisualStyleBackColor = true;
+            this.checkBox_autoParameters.CheckedChanged += this.checkBox_autoParameters_CheckedChanged;
+            // 
+            // checkBox_optionalParameters
+            // 
+            this.checkBox_optionalParameters.AutoSize = true;
+            this.checkBox_optionalParameters.Checked = true;
+            this.checkBox_optionalParameters.CheckState = CheckState.Checked;
+            this.checkBox_optionalParameters.Font = new Font("Bahnschrift SemiCondensed", 9F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.checkBox_optionalParameters.Location = new Point(128, 327);
+            this.checkBox_optionalParameters.Margin = new Padding(1, 3, 1, 3);
+            this.checkBox_optionalParameters.Name = "checkBox_optionalParameters";
+            this.checkBox_optionalParameters.Size = new Size(126, 18);
+            this.checkBox_optionalParameters.TabIndex = 41;
+            this.checkBox_optionalParameters.Text = "Optional Parameters";
+            this.checkBox_optionalParameters.UseVisualStyleBackColor = true;
+            this.checkBox_optionalParameters.CheckedChanged += this.checkBox_optionalParameters_CheckedChanged;
+            // 
+            // button_apply
+            // 
+            this.button_apply.BackColor = SystemColors.Info;
+            this.button_apply.Location = new Point(537, 406);
+            this.button_apply.Name = "button_apply";
+            this.button_apply.Size = new Size(75, 23);
+            this.button_apply.TabIndex = 42;
+            this.button_apply.Text = "Apply";
+            this.button_apply.UseVisualStyleBackColor = false;
+            this.button_apply.Click += this.button_apply_Click;
+            // 
             // DeveloperFunctions
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(624, 441);
+            this.Controls.Add(this.button_apply);
+            this.Controls.Add(this.checkBox_autoParameters);
+            this.Controls.Add(this.checkBox_optionalParameters);
             this.Controls.Add(this.textBox_trackInfo);
             this.Controls.Add(this.comboBox_track);
             this.Controls.Add(this.label_trackName);
@@ -168,5 +215,8 @@
         private Label label_trackName;
         private ComboBox comboBox_track;
         private TextBox textBox_trackInfo;
+        private CheckBox checkBox_autoParameters;
+        private CheckBox checkBox_optionalParameters;
+        private Button button_apply;
     }
 }

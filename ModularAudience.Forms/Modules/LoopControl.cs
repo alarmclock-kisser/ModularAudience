@@ -393,12 +393,12 @@ namespace ModularAudience.Forms.Modules
                 {
                     try
                     {
-                        AttachAutoRefocusToControl(c);
+                        this.AttachAutoRefocusToControl(c);
 
                         if (c.HasChildren)
                         {
                             // Rekursiv auf Unter-Container anwenden
-                            EnableAutoRefocusForContainer(c);
+                            this.EnableAutoRefocusForContainer(c);
                         }
                     }
                     catch { }
@@ -410,10 +410,10 @@ namespace ModularAudience.Forms.Modules
                     try
                     {
                         if (e.Control == null) return;
-                        AttachAutoRefocusToControl(e.Control);
+                        this.AttachAutoRefocusToControl(e.Control);
                         if (e.Control.HasChildren)
                         {
-                            EnableAutoRefocusForContainer(e.Control);
+                            this.EnableAutoRefocusForContainer(e.Control);
                         }
                     }
                     catch { }

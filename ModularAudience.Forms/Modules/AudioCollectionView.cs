@@ -874,26 +874,26 @@ namespace ModularAudience.Forms
 
 		private void AudioCollectionView_ResizeBegin(object? sender, EventArgs e)
 		{
-			// Benutzer hat mit der Maus das Resize gestartet — Starthöhe merken
-			_isUserResizing = true;
-			_resizeStartHeight = this.Height;
-			_resizeStartWidth = this.Width;
+            // Benutzer hat mit der Maus das Resize gestartet — Starthöhe merken
+            this._isUserResizing = true;
+            this._resizeStartHeight = this.Height;
+            this._resizeStartWidth = this.Width;
 		}
 
 		private void AudioCollectionView_ResizeEnd(object? sender, EventArgs e)
 		{
-			if (!_isUserResizing)
+			if (!this._isUserResizing)
 			{
 				return;
 			}
 
 			try
 			{
-				int deltaH = this.Height - _resizeStartHeight;
-				int deltaW = this.Width - _resizeStartWidth;
+				int deltaH = this.Height - this._resizeStartHeight;
+				int deltaW = this.Width - this._resizeStartWidth;
 
-				// Erkennen, ob der User hauptsächlich horizontal resized hat
-				_lastUserResizeWasHorizontal = Math.Abs(deltaW) > Math.Abs(deltaH) && deltaW != 0;
+                // Erkennen, ob der User hauptsächlich horizontal resized hat
+                this._lastUserResizeWasHorizontal = Math.Abs(deltaW) > Math.Abs(deltaH) && deltaW != 0;
 
 				// Nur vertikale Änderung wird zur manuellen Clearance addiert (wie gewünscht)
 				if (deltaH != 0)
@@ -911,7 +911,7 @@ namespace ModularAudience.Forms
 			}
 			finally
 			{
-				_isUserResizing = false;
+                this._isUserResizing = false;
 			}
 		}
 

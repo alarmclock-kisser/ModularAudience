@@ -1636,8 +1636,8 @@ namespace ModularAudience.Forms
 
         private void button_devMode_Click(object sender, EventArgs e)
         {
-
-        }
+            DeveloperFunctionsWindow ??= new DeveloperFunctions();
+		}
     }
 }
 

@@ -7,7 +7,7 @@ namespace ModularAudience.Audio.Processors_V1
 {
     public static class BeatScanner_V2
     {
-        public static async Task<double> ScanBpmAsync(AudioObj obj, int windowSize = 65536, int lookingRange = 2, int? minBpm = null, int? maxBpm = null, bool autoGetTiming = false)
+        public static async Task<double> ScanBpmAsync_V2(AudioObj obj, int windowSize = 65536, int lookingRange = 2, int? minBpm = null, int? maxBpm = null, bool autoGetTiming = false)
         {
             Stopwatch sw = Stopwatch.StartNew();
 
