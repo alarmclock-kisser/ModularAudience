@@ -54,6 +54,7 @@
             this.button_applyCloseAll = new Button();
             this.checkBox_structure = new CheckBox();
             this.button_loopControl = new Button();
+            this.button_devMode = new Button();
             this.SuspendLayout();
             // 
             // button_import
@@ -342,11 +343,23 @@
             this.button_loopControl.UseVisualStyleBackColor = true;
             this.button_loopControl.Click += this.button_loopControl_Click;
             // 
+            // button_devMode
+            // 
+            this.button_devMode.BackColor = Color.DarkGray;
+            this.button_devMode.Location = new Point(131, 286);
+            this.button_devMode.Name = "button_devMode";
+            this.button_devMode.Size = new Size(108, 23);
+            this.button_devMode.TabIndex = 27;
+            this.button_devMode.Text = "Dev Mode";
+            this.button_devMode.UseVisualStyleBackColor = false;
+            this.button_devMode.Click += this.button_devMode_Click;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(704, 321);
+            this.Controls.Add(this.button_devMode);
             this.Controls.Add(this.button_loopControl);
             this.Controls.Add(this.checkBox_structure);
             this.Controls.Add(this.button_applyCloseAll);
@@ -409,5 +422,6 @@
 		private Button button_applyCloseAll;
 		private CheckBox checkBox_structure;
         private Button button_loopControl;
+        private Button button_devMode;
     }
 }

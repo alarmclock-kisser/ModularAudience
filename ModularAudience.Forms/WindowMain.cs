@@ -12,6 +12,7 @@ namespace ModularAudience.Forms
         public readonly AudioCollection AudioC = new();
 
         internal static LoopControl? LoopControlWindow = null;
+        internal static DeveloperFunctions? DeveloperFunctionsWindow = null;
 
         internal static readonly BindingList<AudioCollectionView> CollectionViews = [];
         internal static int TotalTracks => CollectionViews.Sum(cv => cv.AudioCount);
@@ -34,6 +35,7 @@ namespace ModularAudience.Forms
                     UpdateTrackDependentUI();
                     HighlightSelectedTrackView();
                     LoopControlWindow?.UpdateLoopButtonsState();
+                    DeveloperFunctionsWindow?.UpdateControlStates();
                 }
             }
         }
@@ -1632,7 +1634,10 @@ namespace ModularAudience.Forms
             await Task.WhenAll(tasks);
         }
 
-        
+        private void button_devMode_Click(object sender, EventArgs e)
+        {
+
+        }
     }
 }
 
