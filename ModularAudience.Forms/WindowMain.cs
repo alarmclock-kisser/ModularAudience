@@ -1463,6 +1463,20 @@ namespace ModularAudience.Forms
             editor.Show();
         }
 
+        private void button_loopControl_Click(object sender, EventArgs e)
+        {
+            InvokeIfRequired(() =>
+            {
+                if (LoopControlWindow == null || LoopControlWindow.IsDisposed)
+                {
+                    LoopControlWindow = new Modules.LoopControl();
+                }
+
+
+                LoopControlWindow.Show();
+            });
+        }
+
 
 
 
@@ -1479,11 +1493,11 @@ namespace ModularAudience.Forms
 
                     // Sicherstellen, dass Aufnahme-Ordner existiert
                     string recordDir = this.AudioC.RecordPath;
-                    try { System.IO.Directory.CreateDirectory(recordDir); } catch { }
+                    try { Directory.CreateDirectory(recordDir); } catch { }
 
                     // Aufnahme-Dateiname mit .wav-Endung
                     string fileName = "Recording" + DateTime.Now.ToString("_yyyyMMdd_HHmmss") + ".wav";
-                    string fullPath = System.IO.Path.Combine(recordDir, fileName);
+                    string fullPath = Path.Combine(recordDir, fileName);
 
                     // Aufnahme starten (Dateiname mit Timestamp + .wav)
                     await AudioRecorder.StartRecording(fullPath);
@@ -1615,14 +1629,7 @@ namespace ModularAudience.Forms
             await Task.WhenAll(tasks);
         }
 
-        private void button_loopControl_Click(object sender, EventArgs e)
-        {
-            WindowMain.InvokeIfRequired(() =>
-            {
-                var loopControl = new Modules.LoopControl();
-                loopControl.Show();
-            });
-        }
+        
     }
 }
 

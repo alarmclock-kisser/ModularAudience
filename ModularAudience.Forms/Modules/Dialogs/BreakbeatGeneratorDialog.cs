@@ -69,7 +69,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 			if (this.AutoPlayEnabled && this.SelectedTrack is not null)
 			{
 				// Only play if mouse is down on item (to avoid playing when changing selection programmatically)
-				if (Control.MouseButtons == MouseButtons.Left && this.listBox_samples.SelectedIndex >= 0)
+				if (MouseButtons == MouseButtons.Left && this.listBox_samples.SelectedIndex >= 0)
 				{
 					await this.SelectedTrack.PlayAsync(CancellationToken.None);
 				}

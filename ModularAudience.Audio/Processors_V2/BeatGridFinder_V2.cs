@@ -61,7 +61,7 @@ namespace ModularAudience.Audio.Processors_V2
 			int envLen = Math.Max(1, totalFrames / downsampleFactor);
 			var env = new float[envLen];
 
-			System.Threading.Tasks.Parallel.For(0, envLen, idx =>
+            Parallel.For(0, envLen, idx =>
 			{
 				int frameStart = Math.Min(totalFrames - 1, idx * downsampleFactor);
 				int frameEnd = Math.Min(totalFrames - 1, frameStart + downsampleFactor - 1);
@@ -238,7 +238,7 @@ namespace ModularAudience.Audio.Processors_V2
 			}
 			else
 			{
-				System.Threading.Tasks.Parallel.For(0, analysisLen, i =>
+                Parallel.For(0, analysisLen, i =>
 				{
 					int baseIdx = (startSample + i) * channels;
 					float sum = 0f;
@@ -253,7 +253,7 @@ namespace ModularAudience.Audio.Processors_V2
 			int w = Math.Max(1, Math.Min(101, sampleRate / 200));
 			env = FastMovingAverage(env, w);
 
-			System.Threading.Tasks.Parallel.For(0, env.Length, i => env[i] = MathF.Sqrt(env[i]));
+            Parallel.For(0, env.Length, i => env[i] = MathF.Sqrt(env[i]));
 
 			return (mono, env);
 		}

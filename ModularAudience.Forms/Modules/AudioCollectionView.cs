@@ -321,7 +321,7 @@ namespace ModularAudience.Forms
 
         private async void listBox_audios_MouseClick(object? sender, MouseEventArgs e)
         {
-            if (e.Button != MouseButtons.Left || (Control.ModifierKeys & Keys.Control) != 0)
+            if (e.Button != MouseButtons.Left || (ModifierKeys & Keys.Control) != 0)
             {
                 return;
             }
@@ -731,8 +731,8 @@ namespace ModularAudience.Forms
 
             try
             {
-                bool ctrlDown = (Control.ModifierKeys & Keys.Control) != 0;
-                bool shiftDown = (Control.ModifierKeys & Keys.Shift) != 0;
+                bool ctrlDown = (ModifierKeys & Keys.Control) != 0;
+                bool shiftDown = (ModifierKeys & Keys.Shift) != 0;
 
                 List<AudioObj> selectedAudios = this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>().ToList();
                 if (shiftDown)

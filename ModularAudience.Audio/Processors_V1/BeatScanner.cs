@@ -149,7 +149,7 @@ namespace ModularAudience.Audio
 
                 for (int i = n; i < L; i++)
                 {
-                    fft[i] = MathNet.Numerics.Complex32.Zero;
+                    fft[i] = Complex32.Zero;
                 }
 
                 Fourier.Forward(fft, FourierOptions.Matlab);
@@ -304,7 +304,7 @@ namespace ModularAudience.Audio
                 }
                 for (int i = n; i < L; i++)
                 {
-                    fft[i] = MathNet.Numerics.Complex32.Zero;
+                    fft[i] = Complex32.Zero;
                 }
 
                 Fourier.Forward(fft, FourierOptions.Matlab);

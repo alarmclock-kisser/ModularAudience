@@ -493,7 +493,7 @@ namespace ModularAudience.Audio
                     var smoothBitmap = new Bitmap(width, height);
                     using (var gs = Graphics.FromImage(smoothBitmap))
                     {
-                        gs.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        gs.InterpolationMode = InterpolationMode.HighQualityBicubic;
                         gs.DrawImage(bitmap, new Rectangle(0, 0, width, height));
                     }
                     bitmap.Dispose();
@@ -627,9 +627,9 @@ namespace ModularAudience.Audio
 				using (var g = Graphics.FromImage(waveForm))
 				{
 					// keep lines crisp
-					g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
+					g.SmoothingMode = SmoothingMode.None;
 					using var pen = new Pen(gridColor.Value, 1f);
-					pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
+					pen.DashStyle = DashStyle.Dash;
 
 					foreach (int x in xs)
 					{

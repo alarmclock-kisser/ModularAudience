@@ -61,7 +61,7 @@ namespace ModularAudience.Audio.Processors_V1
             int blockCount = (int) Math.Ceiling(totalFrames / (double) analysisWindowFrames);
             float[] envelope = new float[blockCount];
 
-            System.Threading.Tasks.Parallel.For(0, blockCount, new ParallelOptions { CancellationToken = cancellationToken }, blockIndex =>
+            Parallel.For(0, blockCount, new ParallelOptions { CancellationToken = cancellationToken }, blockIndex =>
             {
                 long frameStart = (long) blockIndex * analysisWindowFrames;
                 long frameEnd = Math.Min(totalFrames, frameStart + analysisWindowFrames);
@@ -148,7 +148,7 @@ namespace ModularAudience.Audio.Processors_V1
             }
 
             AudioObj[] clips = new AudioObj[segments.Count];
-            System.Threading.Tasks.Parallel.For(0, segments.Count, new ParallelOptions { CancellationToken = cancellationToken }, i =>
+            Parallel.For(0, segments.Count, new ParallelOptions { CancellationToken = cancellationToken }, i =>
             {
                 var segment = segments[i];
                 int frameLength = segment.EndFrame - segment.StartFrame;

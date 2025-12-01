@@ -530,7 +530,7 @@ namespace ModularAudience.Audio.Processors_V1
 
             for (int i = n; i < L; i++)
             {
-                fft[i] = MathNet.Numerics.Complex32.Zero;
+                fft[i] = Complex32.Zero;
             }
 
             Fourier.Forward(fft, FourierOptions.Matlab);
@@ -731,7 +731,7 @@ namespace ModularAudience.Audio.Processors_V1
             double[] chromaSum = new double[12];
 
             // Parallelisierte Rahmenschleife mit Thread-lokalen Akkus
-            System.Threading.Tasks.Parallel.For(0, nFrames,
+            Parallel.For(0, nFrames,
                 () => new double[12],
                 (frameIdx, state, localChroma) =>
                 {
