@@ -184,9 +184,18 @@ namespace ModularAudience.Forms
 			}
 			else
 			{
+				string initialDir = this.AudioC.ImportDirectory;
+
+                // Set initial dir to Resources if ctrl own
+				if (ModifierKeys.HasFlag(Keys.Control))
+                {
+					initialDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
+					LogCollection.Log("Import: Using Resources folder as initial directory.");
+                }
+
 				using OpenFileDialog openFileDialog = new()
 				{
-					InitialDirectory = this.AudioC.ImportDirectory,
+					InitialDirectory = initialDir,
 					Filter = "Audio File|*.wav;*.mp3;*.flac",
 					Multiselect = true,
 					Title = "Import Audio Files / Loops",

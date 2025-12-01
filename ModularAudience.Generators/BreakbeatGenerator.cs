@@ -582,7 +582,7 @@ namespace ModularAudience.Generators
 
 
 
-        public static async Task<AudioObj> RenderBreakbeatAsync(List<bool[]> breakbeat, IEnumerable<AudioObj> samples, float bpm, int resolution, float swing)
+        public static async Task<AudioObj> RenderBreakbeatAsync(List<bool[]> breakbeat, IEnumerable<AudioObj> samples, float bpm, int resolution, float swing, string? patternName = null)
         {
             // Annahmen:
             // - breakbeat.Count == samples.Count() (jede Spur ein Pattern)
@@ -693,10 +693,13 @@ namespace ModularAudience.Generators
                 }
             }
 
+            patternName ??= "Breakbeat_";
+            patternName = patternName.Replace("_", "") + "_";
+
             // AudioObj erzeugen
             var result = new AudioObj
             {
-                Name = "Breakbeat_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"),
+                Name = patternName + DateTime.Now.ToString("yyyyMMdd_HHmmss"),
                 Data = mixBuffer,
                 SampleRate = sampleRate,
                 Channels = channels,
@@ -705,6 +708,8 @@ namespace ModularAudience.Generators
                 BitDepth = 32,
                 Bpm = bpm
             };
+
+            result.Rename(patternName + DateTime.Now.ToString("yyyyMMdd_HHmmss"));
 
             return await Task.FromResult(result);
         }

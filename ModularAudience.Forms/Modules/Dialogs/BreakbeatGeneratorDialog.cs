@@ -158,7 +158,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
 			LogCollection.Log("Generating Break-Beat with seed: " + this.Seed);
 
-			List<bool[]> breakbeat = await BreakbeatGenerator.GenerateBreakPatternAsync(
+			List<bool[]> breakbeat = await BreakbeatGenerator_V2.GenerateBreakPatternAsync(
 				drumset: mappedDrumset,
 				bars: this.Bars,
 				density: this.Density,
@@ -170,7 +170,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 				preset: this.SelectedPreset
 			);
 
-			var audioObj = await BreakbeatGenerator.RenderBreakbeatAsync(breakbeat, this.AudioC.Audios, this.Bpm, this.Resolution, this.Swing);
+			var audioObj = await BreakbeatGenerator_V2.RenderBreakbeatAsync(breakbeat, this.AudioC.Audios, this.Bpm, this.Resolution, this.Swing, this.SelectedPreset != " - None - " ? this.SelectedPreset : "Breakbeat");
 
 			if (audioObj == null)
 			{

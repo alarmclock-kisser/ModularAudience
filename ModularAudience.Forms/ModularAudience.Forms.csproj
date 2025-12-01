@@ -6,12 +6,25 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>ModularAudience_favicon.ico</ApplicationIcon>
+    <PackageIcon>ModularAudience_favicon.png</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Remove="Helpers\**" />
     <EmbeddedResource Remove="Helpers\**" />
     <None Remove="Helpers\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="ModularAudience_favicon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\ModularAudience.Audio\Resources\ModularAudience_favicon.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

@@ -14,6 +14,10 @@ namespace ModularAudience.Forms.Modules
         public int Hits => this.domainUpDown_hits.SelectedItem is null ? 16 : int.Parse(this.domainUpDown_hits.SelectedItem.ToString() ?? "16");
         public float Volume => (float) this.numericUpDown_volume.Value / 100.0f;
 
+		internal int RerollInterval => (int) this.numericUpDown_rerollInterval.Value;
+		internal int RerollCountdown { get; private set; } = -1;
+		internal bool InterleavedRandom { get; private set; } = false;
+
         internal readonly BindingList<Panel> Panels = [];
 
         private WaveOutEvent? waveOut;
@@ -817,7 +821,8 @@ namespace ModularAudience.Forms.Modules
 				try
 				{
 					bool interleaved = (keyData & Keys.Control) == Keys.Control;
-					this.RandomizeAllPanels(interleaved);
+					this.InterleavedRandom = interleaved;
+                    this.RandomizeAllPanels(interleaved);
 				}
 				catch { }
 				return true;
@@ -896,121 +901,166 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-		private async Task SchedulerLoop(CancellationToken cancellationToken)
-		{
-			// Start etwas in der Zukunft, damit wir Lookahead nutzen können
-			DateTimeOffset nextScheduledTime = DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(this.schedulingLookaheadMs);
-			int stepIndex = 0;
+        private async Task SchedulerLoop(CancellationToken cancellationToken)
+        {
+            // Start etwas in der Zukunft, damit wir Lookahead nutzen können
+            DateTimeOffset nextScheduledTime = DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(this.schedulingLookaheadMs);
+            int stepIndex = 0;
 
-			while (!cancellationToken.IsCancellationRequested)
-			{
-				DateTimeOffset now = DateTimeOffset.UtcNow;
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                DateTimeOffset now = DateTimeOffset.UtcNow;
 
-				// schedule any steps that fall within now + lookahead
-				while (!cancellationToken.IsCancellationRequested)
-				{
-					if (nextScheduledTime <= now + TimeSpan.FromMilliseconds(this.schedulingLookaheadMs))
-					{
-						// read live-safe copies
-						float bpmNow = this.schedulerBpm > 0 ? this.schedulerBpm : this.Bpm;
-						int hitsNow = this.schedulerHits > 0 ? this.schedulerHits : this.Hits;
-						if (hitsNow <= 0)
-						{
-							hitsNow = 1;
-						}
+                // schedule any steps that fall within now + lookahead
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    if (nextScheduledTime <= now + TimeSpan.FromMilliseconds(this.schedulingLookaheadMs))
+                    {
+                        // read live-safe copies
+                        float bpmNow = this.schedulerBpm > 0 ? this.schedulerBpm : this.Bpm;
+                        int hitsNow = this.schedulerHits > 0 ? this.schedulerHits : this.Hits;
+                        if (hitsNow <= 0)
+                        {
+                            hitsNow = 1;
+                        }
 
-						// For each track, if the button at step is active, schedule audio
-						for (int trackIdx = 0; trackIdx < this.Panels.Count; trackIdx++)
-						{
-							if (trackIdx >= this.AudioC.Audios.Count)
-							{
-								continue;
-							}
+                        // For each track, if the button at step is active, schedule audio
+                        for (int trackIdx = 0; trackIdx < this.Panels.Count; trackIdx++)
+                        {
+                            if (trackIdx >= this.AudioC.Audios.Count)
+                            {
+                                continue;
+                            }
 
-							var panel = this.Panels[trackIdx];
-							int btnIdx = 0;
-							foreach (Control ctrl in panel.Controls)
-							{
-								if (ctrl is Button btn)
-								{
-									if (btnIdx == (stepIndex % hitsNow))
-									{
-										if (btn.BackColor == Color.Green)
-										{
-											var audio = this.AudioC.Audios[trackIdx];
-											// schedule audio for exact nextScheduledTime
-											try
-											{
-												this.ScheduleAudioAt(audio, nextScheduledTime, cancellationToken);
-											}
-											catch
-											{
-												// swallow scheduling errors
-											}
-										}
-										break;
-									}
-									btnIdx++;
-								}
-							}
-						}
+                            var panel = this.Panels[trackIdx];
+                            int btnIdx = 0;
+                            foreach (Control ctrl in panel.Controls)
+                            {
+                                if (ctrl is Button btn)
+                                {
+                                    if (btnIdx == (stepIndex % hitsNow))
+                                    {
+                                        if (btn.BackColor == Color.Green)
+                                        {
+                                            var audio = this.AudioC.Audios[trackIdx];
+                                            // schedule audio for exact nextScheduledTime
+                                            try
+                                            {
+                                                this.ScheduleAudioAt(audio, nextScheduledTime, cancellationToken);
+                                            }
+                                            catch
+                                            {
+                                                // swallow scheduling errors
+                                            }
+                                        }
+                                        break;
+                                    }
+                                    btnIdx++;
+                                }
+                            }
+                        }
 
-						// schedule UI update to run exactly at nextScheduledTime
-						_ = Task.Run(async () =>
-						{
-							try
-							{
-								var delay = nextScheduledTime - DateTimeOffset.UtcNow;
-								if (delay > TimeSpan.Zero)
-								{
-									await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-								}
-							}
-							catch (TaskCanceledException) { return; }
-							catch { }
-							try
-							{
-								if (this.IsHandleCreated && !this.IsDisposed)
-								{
-									this.Invoke((MethodInvoker) (() =>
-									{
-										this.currentStep = stepIndex % (this.schedulerHits > 0 ? this.schedulerHits : this.Hits);
-										this.HandleCurrentStepUI(this.currentStep, this.Hits);
-									}));
-								}
-							}
-							catch { }
-						}, cancellationToken);
+                        // schedule UI update to run exactly at nextScheduledTime
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var delay = nextScheduledTime - DateTimeOffset.UtcNow;
+                                if (delay > TimeSpan.Zero)
+                                {
+                                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                                }
+                            }
+                            catch (TaskCanceledException) { return; }
+                            catch { }
+                            try
+                            {
+                                if (this.IsHandleCreated && !this.IsDisposed)
+                                {
+                                    this.Invoke((MethodInvoker) (() =>
+                                    {
+                                        this.currentStep = stepIndex % (this.schedulerHits > 0 ? this.schedulerHits : this.Hits);
+                                        this.HandleCurrentStepUI(this.currentStep, this.Hits);
+                                    }));
+                                }
+                            }
+                            catch { }
+                        }, cancellationToken);
 
-						// Schritt vorwärts: Intervall aus aktuellen Scheduler-Werten berechnen
-						int intervalMs = ComputeIntervalMsFromValues(
-							this.schedulerBpm > 0 ? this.schedulerBpm : this.Bpm,
-							this.schedulerHits > 0 ? this.schedulerHits : this.Hits);
+                        // Schritt vorwärts: Intervall aus aktuellen Scheduler-Werten berechnen
+                        int intervalMs = ComputeIntervalMsFromValues(
+                            this.schedulerBpm > 0 ? this.schedulerBpm : this.Bpm,
+                            this.schedulerHits > 0 ? this.schedulerHits : this.Hits);
 
-						nextScheduledTime = nextScheduledTime + TimeSpan.FromMilliseconds(intervalMs);
-						stepIndex++;
-					}
-					else
-					{
-						break;
-					}
-				}
+                        nextScheduledTime = nextScheduledTime + TimeSpan.FromMilliseconds(intervalMs);
+                        stepIndex++;
 
-				// kurze Pause, responsive zu Änderungen
-				try
-				{
-					await Task.Delay(Math.Max(5, this.schedulingLookaheadMs / 4), cancellationToken).ConfigureAwait(false);
-				}
-				catch (TaskCanceledException)
-				{
-					break;
-				}
-			}
-		}
+                        // Reroll-Logik: wenn RerollInterval > 0, zählen wir abgeschlossene Pattern-Zyklen
+                        try
+                        {
+                            int hitsForCycle = hitsNow;
+                            if (hitsForCycle > 0 && (stepIndex % hitsForCycle) == 0)
+                            {
+                                // Wir sind am Ende eines vollen Durchlaufs (hits Schritte)
+                                if (this.RerollInterval > 0)
+                                {
+                                    // Initialisieren falls notwendig
+                                    if (this.RerollCountdown <= 0)
+                                    {
+                                        this.RerollCountdown = this.RerollInterval;
+                                    }
 
+                                    this.RerollCountdown--;
 
+                                    if (this.RerollCountdown <= 0)
+                                    {
+                                        // Execute reroll on UI thread (RandomizeAllPanels verändert UI)
+                                        try
+                                        {
+                                            if (this.IsHandleCreated && !this.IsDisposed)
+                                            {
+                                                this.Invoke((MethodInvoker) (() =>
+                                                {
+                                                    try
+                                                    {
+                                                        // Führe Randomize aus, nutze aktuellen InterleavedRandom-Status
+                                                        this.RandomizeAllPanels(this.InterleavedRandom);
+                                                    }
+                                                    catch { }
+                                                }));
+                                            }
+                                        }
+                                        catch { }
+                                        finally
+                                        {
+                                            // Reset Countdown auf aktuellen Interval-Wert (sofern noch >0)
+                                            this.RerollCountdown = this.RerollInterval > 0 ? this.RerollInterval : -1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
 
-		private void ScheduleAudioAt(AudioObj audio, DateTimeOffset playAt, CancellationToken cancellationToken)
+                // kurze Pause, responsive zu Änderungen
+                try
+                {
+                    await Task.Delay(Math.Max(5, this.schedulingLookaheadMs / 4), cancellationToken).ConfigureAwait(false);
+                }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
+            }
+        }
+
+        private void ScheduleAudioAt(AudioObj audio, DateTimeOffset playAt, CancellationToken cancellationToken)
         {
             if (audio.Data == null || audio.Data.LongLength == 0)
             {
@@ -1113,85 +1163,106 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-		private void StartPlayback()
-		{
-			if (this.isPlaying)
-			{
-				return;
-			}
+        private void StartPlayback()
+        {
+            if (this.isPlaying)
+            {
+                return;
+            }
 
-			this.isPlaying = true;
-			this.currentStep = 0;
-			this.button_playback.Text = "■";
+            this.isPlaying = true;
+            this.currentStep = 0;
+            this.button_playback.Text = "■";
 
-			// initiale Scheduler-Werte von UI übernehmen (auf UI-Thread)
-			this.schedulerBpm = this.Bpm;
-			this.schedulerHits = this.Hits;
+            // initiale Scheduler-Werte von UI übernehmen (auf UI-Thread)
+            this.schedulerBpm = this.Bpm;
+            this.schedulerHits = this.Hits;
 
-			// Play scheduler
-			this.schedulerCts = new CancellationTokenSource();
-			this.schedulerTask = Task.Run(() => this.SchedulerLoop(this.schedulerCts.Token));
+            // Reroll-Countdown neu initialisieren, falls RerollInterval aktiv ist
+            try
+            {
+                if (this.RerollInterval > 0)
+                {
+                    this.RerollCountdown = this.RerollInterval;
+                }
+                else
+                {
+                    this.RerollCountdown = -1;
+                }
+            }
+            catch { this.RerollCountdown = -1; }
 
-			// Keep numericUpDown subscription to update BPM live
-			this.numericUpDown_bpm.ValueChanged += this.Bpm_ValueChanged;
-		}
+            // Play scheduler
+            this.schedulerCts = new CancellationTokenSource();
+            this.schedulerTask = Task.Run(() => this.SchedulerLoop(this.schedulerCts.Token));
 
-		private void StopPlayback()
-		{
-			if (!this.isPlaying)
-			{
-				return;
-			}
+            // Keep numericUpDown subscription to update BPM live
+            this.numericUpDown_bpm.ValueChanged += this.Bpm_ValueChanged;
+        }
 
-			this.isPlaying = false;
-			this.button_playback.Text = "▶";
+        private void StopPlayback()
+        {
+            if (!this.isPlaying)
+            {
+                return;
+            }
 
-			// Cancel scheduler and wait
-			try
-			{
-				this.schedulerCts?.Cancel();
-				this.schedulerTask?.Wait(500);
-			}
-			catch { }
-			finally
-			{
-				try { this.schedulerCts?.Dispose(); } catch { }
-				this.schedulerCts = null;
-				this.schedulerTask = null;
-			}
+            this.isPlaying = false;
+            this.button_playback.Text = "▶";
 
-			// Reset UI highlight
-			this.currentStep = -1;
-			try
-			{
-				if (this.IsHandleCreated && !this.IsDisposed)
-				{
-					this.Invoke((MethodInvoker) (() =>
-					{
-						this.HandleCurrentStepUI(0, this.Hits);
-					}));
-				}
-			}
-			catch { }
+            // Cancel scheduler and wait
+            try
+            {
+                this.schedulerCts?.Cancel();
+                this.schedulerTask?.Wait(500);
+            }
+            catch { }
+            finally
+            {
+                try { this.schedulerCts?.Dispose(); } catch { }
+                this.schedulerCts = null;
+                this.schedulerTask = null;
+            }
 
-			// Unsubscribe BPM update
-			try
-			{
-				this.numericUpDown_bpm.ValueChanged -= this.Bpm_ValueChanged;
-			}
-			catch { }
+            // Reset UI highlight
+            this.currentStep = -1;
+            try
+            {
+                if (this.IsHandleCreated && !this.IsDisposed)
+                {
+                    this.Invoke((MethodInvoker) (() =>
+                    {
+                        this.HandleCurrentStepUI(0, this.Hits);
+                    }));
+                }
+            }
+            catch { }
 
-			// Stop playback but keep output alive for fast restart
-			lock (this.outputLock)
-			{
-				try { this.waveOut?.Stop(); } catch { }
-			}
-		}
+            // Unsubscribe BPM update
+            try
+            {
+                this.numericUpDown_bpm.ValueChanged -= this.Bpm_ValueChanged;
+            }
+            catch { }
+
+            // Stop playback but keep output alive for fast restart
+            lock (this.outputLock)
+            {
+                try { this.waveOut?.Stop(); } catch { }
+            }
+
+            // Reroll-Countdown zurücksetzen, damit beim nächsten Start neu initialisiert wird
+            try
+            {
+                this.RerollCountdown = -1;
+            }
+            catch { }
+        }
 
 
 
 
-		public async Task<AudioObj> GenerateSampleAsync()
+        public async Task<AudioObj> GenerateSampleAsync()
 		{
 			// UI-state sicher erfassen (auf UI-Thread)
 			int hits = this.Hits;

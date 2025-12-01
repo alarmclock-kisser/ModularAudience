@@ -9,7 +9,7 @@ namespace ModularAudience.Generators
     {
         // Preset: Amen-style snare ladder/scale using only the provided snare tracks (preserving order)
         // Parameters match GenerateBreakPatternAsync
-        public static async Task<List<bool[]>> Preset_AmenSnareScale(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null)
+        public static async Task<List<bool[]>> Preset_AmenSnareScale_Old(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null)
         {
             if (bars <= 0) throw new ArgumentOutOfRangeException(nameof(bars));
             if (resolution <= 0) throw new ArgumentOutOfRangeException(nameof(resolution));
@@ -155,5 +155,340 @@ namespace ModularAudience.Generators
 
             return await Task.FromResult(result);
         }
+
+        public static async Task<List<bool[]>> Preset_AmenSnareScale(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null)
+        {
+            if (bars <= 0) throw new ArgumentOutOfRangeException(nameof(bars));
+            if (resolution <= 0) throw new ArgumentOutOfRangeException(nameof(resolution));
+
+            var elements = drumset.ToList();
+            int totalSteps = bars * resolution;
+
+            var basePatterns = await GenerateBreakPatternAsync(elements, bars, density, resolution, swing, complexity, false, seed);
+            var patterns = basePatterns.Select(p => p.ToArray()).ToList();
+
+            var snareIndices = elements
+                .Select((e, i) => new { e, i })
+                .Where(x => x.e == DrumsetElement.Snare || x.e == DrumsetElement.SnareRattle)
+                .Select(x => x.i)
+                .ToList();
+
+            if (snareIndices.Count == 0)
+            {
+                if (interleaved)
+                    patterns = MakeInterleaved(patterns, elements.ToArray());
+                return patterns;
+            }
+
+            int baseSeed = seed ?? NextSeed();
+            var rnd = new Random(baseSeed ^ 0xA553);
+
+            for (int bar = 0; bar < bars; bar++)
+            {
+                int offset = bar * resolution;
+                float barFactor = (bar + 1f) / bars;
+                float inten = Math.Clamp(complexity * barFactor, 0.4f, 2.0f);
+
+                int backbeatA = offset + resolution / 4;
+                int backbeatB = offset + (3 * resolution) / 4;
+
+                foreach (var snIdx in snareIndices)
+                {
+                    if (backbeatA >= 0 && backbeatA < totalSteps)
+                        patterns[snIdx][backbeatA] = true;
+                    if (backbeatB >= 0 && backbeatB < totalSteps)
+                        patterns[snIdx][backbeatB] = true;
+                }
+
+                int tailStart = offset + (3 * resolution) / 4;
+                int tailEnd = offset + resolution - 1;
+                for (int pos = tailStart; pos <= tailEnd; pos++)
+                {
+                    foreach (var snIdx in snareIndices)
+                    {
+                        double p = 0.25 * inten;
+                        if (bar == bars - 1) p *= 1.4;
+                        if (rnd.NextDouble() < p)
+                            patterns[snIdx][pos] = true;
+                    }
+                }
+
+                if (bar == bars - 1)
+                {
+                    int rollCenter = offset + (3 * resolution) / 4;
+                    int rollLen = Math.Max(2, resolution / 8);
+                    foreach (var snIdx in snareIndices)
+                    {
+                        for (int r = -rollLen; r <= rollLen; r++)
+                        {
+                            int pos = rollCenter + r;
+                            if (pos < offset || pos >= offset + resolution) continue;
+                            double p = 0.4 + 0.4 * (1.0 - Math.Abs(r) / (double) rollLen);
+                            if (rnd.NextDouble() < p * inten)
+                                patterns[snIdx][pos] = true;
+                        }
+                    }
+                }
+            }
+
+            if (interleaved)
+                patterns = MakeInterleaved(patterns, elements.ToArray());
+
+            return patterns;
+        }
+
+        public static async Task<List<bool[]>> Preset_JungleRoller(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null)
+        {
+            if (bars <= 0) throw new ArgumentOutOfRangeException(nameof(bars));
+            if (resolution <= 0) throw new ArgumentOutOfRangeException(nameof(resolution));
+
+            var elements = drumset.ToList();
+            int totalSteps = bars * resolution;
+
+            float baseDensity = Math.Clamp(density * 1.3f, 0.25f, 0.9f);
+            float baseComplexity = Math.Clamp(complexity * 1.4f, 0.6f, 4.0f);
+            float baseSwing = Math.Clamp(swing + 0.04f, 0f, 0.2f);
+
+            var patterns = await GenerateBreakPatternAsync(elements, bars, baseDensity, resolution, baseSwing, baseComplexity, false, seed);
+            patterns = patterns.Select(p => p.ToArray()).ToList();
+
+            var snareIndices = elements
+                .Select((e, i) => new { e, i })
+                .Where(x => x.e == DrumsetElement.Snare || x.e == DrumsetElement.SnareRattle)
+                .Select(x => x.i)
+                .ToList();
+
+            if (snareIndices.Count > 0)
+            {
+                int baseSeed = seed ?? NextSeed();
+                var rnd = new Random(baseSeed ^ 0xB00B);
+
+                for (int bar = 0; bar < bars; bar++)
+                {
+                    int offset = bar * resolution;
+                    float barFactor = (bar + 1f) / bars;
+
+                    foreach (var snIdx in snareIndices)
+                    {
+                        for (int local = 0; local < resolution; local++)
+                        {
+                            int pos = offset + local;
+                            if (!patterns[snIdx][pos]) continue;
+
+                            if (rnd.NextDouble() < 0.6 * barFactor)
+                            {
+                                int rollLen = rnd.Next(2, Math.Max(3, resolution / 8));
+                                for (int r = 1; r <= rollLen; r++)
+                                {
+                                    int rp = pos + r;
+                                    if (rp >= offset + resolution || rp >= totalSteps) break;
+                                    double p = 0.7 + 0.3 * (1.0 - r / (double) rollLen);
+                                    if (rnd.NextDouble() < p)
+                                        patterns[snIdx][rp] = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            var thinkIndices = elements
+                .Select((e, i) => new { e, i })
+                .Where(x => x.e == DrumsetElement.ThinkBreak)
+                .Select(x => x.i)
+                .ToList();
+
+            if (thinkIndices.Count > 0)
+            {
+                int baseSeed = (seed ?? NextSeed()) ^ 0xC0DE;
+                var rnd = new Random(baseSeed);
+
+                foreach (var tbIdx in thinkIndices)
+                {
+                    var line = patterns[tbIdx];
+                    for (int bar = 0; bar < bars; bar++)
+                    {
+                        if (rnd.NextDouble() < 0.5)
+                        {
+                            var tmp = new bool[resolution];
+                            int offset = bar * resolution;
+                            for (int i = 0; i < resolution; i++)
+                                tmp[i] = line[offset + i];
+
+                            Array.Reverse(tmp);
+                            for (int i = 0; i < resolution; i++)
+                                line[offset + i] = tmp[i];
+                        }
+                    }
+                }
+            }
+
+            if (interleaved)
+                patterns = MakeInterleaved(patterns, elements.ToArray());
+
+            return patterns;
+        }
+
+        public static async Task<List<bool[]>> Preset_FunkShuffle(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null)
+        {
+            if (bars <= 0) throw new ArgumentOutOfRangeException(nameof(bars));
+            if (resolution <= 0) throw new ArgumentOutOfRangeException(nameof(resolution));
+
+            var elements = drumset.ToList();
+            int totalSteps = bars * resolution;
+
+            float baseDensity = Math.Clamp(density * 0.85f, 0.1f, 0.7f);
+            float baseComplexity = Math.Clamp(complexity, 0.5f, 2.0f);
+            float baseSwing = Math.Clamp(Math.Max(swing, 0.18f), 0.15f, 0.35f);
+
+            var patterns = await GenerateBreakPatternAsync(elements, bars, baseDensity, resolution, baseSwing, baseComplexity, false, seed);
+            patterns = patterns.Select(p => p.ToArray()).ToList();
+
+            var hatIndices = elements
+                .Select((e, i) => new { e, i })
+                .Where(x => x.e == DrumsetElement.HiHatClosed || x.e == DrumsetElement.Shaker || x.e == DrumsetElement.Ride)
+                .Select(x => x.i)
+                .ToList();
+
+            var snareIndices = elements
+                .Select((e, i) => new { e, i })
+                .Where(x => x.e == DrumsetElement.Snare || x.e == DrumsetElement.Clap || x.e == DrumsetElement.Rim)
+                .Select(x => x.i)
+                .ToList();
+
+            int baseSeed = seed ?? NextSeed();
+            var rnd = new Random(baseSeed ^ 0xF00D);
+
+            if (hatIndices.Count > 0)
+            {
+                foreach (var hIdx in hatIndices)
+                {
+                    var line = patterns[hIdx];
+                    for (int bar = 0; bar < bars; bar++)
+                    {
+                        int offset = bar * resolution;
+                        for (int s = 0; s < resolution; s++)
+                        {
+                            int pos = offset + s;
+                            bool isTripletSlot = (s % 2 == 1);
+                            if (!isTripletSlot) continue;
+                            if (rnd.NextDouble() < 0.45)
+                                line[pos] = true;
+                        }
+                    }
+                }
+            }
+
+            if (snareIndices.Count > 0)
+            {
+                foreach (var snIdx in snareIndices)
+                {
+                    var line = patterns[snIdx];
+                    for (int bar = 0; bar < bars; bar++)
+                    {
+                        int offset = bar * resolution;
+                        int q = resolution / 4;
+                        int posA = offset + q;
+                        int posB = offset + 3 * q;
+                        if (posA >= 0 && posA < totalSteps) line[posA] = true;
+                        if (posB >= 0 && posB < totalSteps) line[posB] = true;
+
+                        if (rnd.NextDouble() < 0.55)
+                        {
+                            int ghost = posB - 1;
+                            if (ghost >= offset && ghost < offset + resolution)
+                                line[ghost] = true;
+                        }
+                    }
+                }
+            }
+
+            if (interleaved)
+                patterns = MakeInterleaved(patterns, elements.ToArray());
+
+            return patterns;
+        }
+
+        public static async Task<List<bool[]>> Preset_DnBStepper(IEnumerable<DrumsetElement> drumset, int bars, float density, int resolution = DefaultResolution, float swing = 0.0f, float complexity = 1.0f, bool interleaved = false, int? seed = null)
+        {
+            if (bars <= 0) throw new ArgumentOutOfRangeException(nameof(bars));
+            if (resolution <= 0) throw new ArgumentOutOfRangeException(nameof(resolution));
+
+            var elements = drumset.ToList();
+            int totalSteps = bars * resolution;
+
+            float baseDensity = Math.Clamp(density * 0.9f, 0.15f, 0.8f);
+            float baseComplexity = Math.Clamp(complexity, 0.6f, 2.5f);
+            float baseSwing = Math.Clamp(swing * 0.5f, 0f, 0.08f);
+
+            var patterns = await GenerateBreakPatternAsync(elements, bars, baseDensity, resolution, baseSwing, baseComplexity, false, seed);
+            patterns = patterns.Select(p => p.ToArray()).ToList();
+
+            var kickIndices = elements
+                .Select((e, i) => new { e, i })
+                .Where(x => x.e == DrumsetElement.Kick)
+                .Select(x => x.i)
+                .ToList();
+
+            var snareIndices = elements
+                .Select((e, i) => new { e, i })
+                .Where(x => x.e == DrumsetElement.Snare || x.e == DrumsetElement.SnareRattle || x.e == DrumsetElement.Clap)
+                .Select(x => x.i)
+                .ToList();
+
+            int baseSeed = seed ?? NextSeed();
+            var rnd = new Random(baseSeed ^ 0x5E7);
+
+            for (int bar = 0; bar < bars; bar++)
+            {
+                int offset = bar * resolution;
+                int q = resolution / 4;
+
+                foreach (var kIdx in kickIndices)
+                {
+                    var line = patterns[kIdx];
+                    int k0 = offset;
+                    if (k0 >= 0 && k0 < totalSteps) line[k0] = true;
+
+                    int k2 = offset + 2 * q;
+                    if (k2 >= 0 && k2 < totalSteps && rnd.NextDouble() < 0.9)
+                        line[k2] = true;
+
+                    if (rnd.NextDouble() < 0.6)
+                    {
+                        int late = offset + 3 * q + rnd.Next(-2, 3);
+                        if (late >= offset && late < offset + resolution)
+                            line[late] = true;
+                    }
+                }
+
+                foreach (var snIdx in snareIndices)
+                {
+                    var line = patterns[snIdx];
+                    int sA = offset + q;
+                    int sB = offset + 3 * q;
+                    if (sA >= 0 && sA < totalSteps) line[sA] = true;
+                    if (sB >= 0 && sB < totalSteps) line[sB] = true;
+
+                    if (rnd.NextDouble() < 0.45)
+                    {
+                        int ghost = sB - 1;
+                        if (ghost >= offset && ghost < offset + resolution)
+                            line[ghost] = true;
+                    }
+                }
+            }
+
+            if (interleaved)
+                patterns = MakeInterleaved(patterns, elements.ToArray());
+
+            return patterns;
+        }
+
+
+
+
+
+
     }
 }

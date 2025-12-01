@@ -39,9 +39,11 @@
             this.numericUpDown_volume = new NumericUpDown();
             this.label_info_volume = new Label();
             this.button_export = new Button();
+            this.numericUpDown_rerollInterval = new NumericUpDown();
             this.panel_pattern.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_bpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_volume).BeginInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_rerollInterval).BeginInit();
             this.SuspendLayout();
             // 
             // panel_pattern
@@ -129,7 +131,7 @@
             // label_info_dragndrop
             // 
             this.label_info_dragndrop.AutoSize = true;
-            this.label_info_dragndrop.Location = new Point(326, 9);
+            this.label_info_dragndrop.Location = new Point(254, 9);
             this.label_info_dragndrop.Name = "label_info_dragndrop";
             this.label_info_dragndrop.Size = new Size(138, 15);
             this.label_info_dragndrop.TabIndex = 10;
@@ -166,11 +168,20 @@
             this.button_export.UseVisualStyleBackColor = false;
             this.button_export.Click += this.button_export_Click;
             // 
+            // numericUpDown_rerollInterval
+            // 
+            this.numericUpDown_rerollInterval.Location = new Point(551, 12);
+            this.numericUpDown_rerollInterval.Maximum = new decimal(new int[] { 32, 0, 0, 0 });
+            this.numericUpDown_rerollInterval.Name = "numericUpDown_rerollInterval";
+            this.numericUpDown_rerollInterval.Size = new Size(60, 23);
+            this.numericUpDown_rerollInterval.TabIndex = 14;
+            // 
             // DrumRollEditor
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(704, 441);
+            this.Controls.Add(this.numericUpDown_rerollInterval);
             this.Controls.Add(this.button_export);
             this.Controls.Add(this.label_info_volume);
             this.Controls.Add(this.numericUpDown_volume);
@@ -190,6 +201,7 @@
             this.panel_pattern.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_bpm).EndInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_volume).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_rerollInterval).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -207,5 +219,6 @@
         private NumericUpDown numericUpDown_volume;
         private Label label_info_volume;
         private Button button_export;
+        private NumericUpDown numericUpDown_rerollInterval;
     }
 }
