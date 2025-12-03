@@ -426,6 +426,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     // Zusätzlich: falls möglich, direkt ins AudioObj spiegeln
                     ApplyToAudioObjProperties(audio, tag.Id, value);
                 }
+
+                // Apply aggregated mappings (BPM, Length, Key, ...) from modified tags to the AudioObj
+                ApplyModifiedTagsToAudio(audio, modified);
             }
 
             // Tags sind jetzt im AudioObj gespeichert, aber noch nicht auf die Files geschrieben.
@@ -563,8 +566,92 @@ namespace ModularAudience.Forms.Modules.Dialogs
 			}
 		}
 
-        private void AddEntries(string[] ids, string[] names, bool isMeta)
+        // Apply a set of modified tags to an AudioObj's runtime properties (Bpm, Duration/Length, Key, etc.)
+        private static void ApplyModifiedTagsToAudio(AudioObj audio, IEnumerable<TagEntry> modifiedTags)
         {
+            if (audio == null || modifiedTags == null)
+            {
+                return;
+            }
+
+            foreach (var tag in modifiedTags)
+            {
+                if (string.IsNullOrWhiteSpace(tag.CurrentValue))
+                    continue;
+
+                var id = tag.Id.ToUpperInvariant();
+                var val = tag.CurrentValue.Trim();
+
+                try
+                {
+                    switch (id)
+                    {
+                        case "TBP": // BPM: handle legacy integer-misplaced decimals (e.g. 13990 -> 139.90)
+                        {
+                            string norm = val.Replace(',', '.');
+                            if (float.TryParse(norm, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsedBpm) ||
+                                float.TryParse(norm, NumberStyles.Float, CultureInfo.CurrentCulture, out parsedBpm))
+                            {
+                                // Heuristic: if value is extremely large (e.g. >1000) it likely misses a decimal/centiplier
+                                if (parsedBpm > 1000f)
+                                {
+                                    parsedBpm = parsedBpm / 100.0f;
+                                }
+
+                                audio.Bpm = parsedBpm;
+                            }
+                        }
+                        break;
+
+                        case "TLE": // Length: try to parse TimeSpan (hh:mm:ss, mm:ss) or seconds as number
+                        {
+                            // Try TimeSpan first
+                            if (TimeSpan.TryParse(val, CultureInfo.InvariantCulture, out var ts) || TimeSpan.TryParse(val, CultureInfo.CurrentCulture, out ts))
+                            {
+                                audio.Duration = ts;
+                                if (audio.SampleRate > 0 && audio.Channels > 0)
+                                {
+                                    long frames = (long)Math.Round(ts.TotalSeconds * audio.SampleRate);
+                                    audio.Length = Math.Max(0L, frames * Math.Max(1, audio.Channels));
+                                }
+                            }
+                            else if (double.TryParse(val.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) ||
+                                     double.TryParse(val.Replace(',', '.'), NumberStyles.Float, CultureInfo.CurrentCulture, out seconds))
+                            {
+                                if (seconds > 0)
+                                {
+                                    var duration = TimeSpan.FromSeconds(seconds);
+                                    audio.Duration = duration;
+                                    if (audio.SampleRate > 0 && audio.Channels > 0)
+                                    {
+                                        long frames = (long)Math.Round(duration.TotalSeconds * audio.SampleRate);
+                                        audio.Length = Math.Max(0L, frames * Math.Max(1, audio.Channels));
+                                    }
+                                }
+                            }
+                        }
+                        break;
+
+                        case "TKE": // Initial Key -> map to AudioObj.Key
+                            audio.Key = val;
+                            break;
+
+                        default:
+                            break;
+                    }
+                }
+                catch
+                {
+                    // best-effort: ignore parse/apply errors for individual tags
+                }
+            }
+
+            // Ensure UI updates reflecting changed track metadata
+            try { WindowMain.UpdateTrackDependentUI(); } catch { }
+        }
+
+		private void AddEntries(string[] ids, string[] names, bool isMeta)
+		{
             Dictionary<string, string?>? previousValues = null;
             bool multipleAudios = this.Audios.Count > 1; // Flag für mehrere Audios
             var uniqueIds = new HashSet<string>(UniquePerFileTagIds, StringComparer.OrdinalIgnoreCase);

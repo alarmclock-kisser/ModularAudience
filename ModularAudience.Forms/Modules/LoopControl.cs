@@ -16,7 +16,8 @@ namespace ModularAudience.Forms.Modules
         private TrackView? CurrentTrackView => WindowMain.LastSelectedTrackView;
         private AudioObj? OriginalAudio => this.CurrentTrackView?.OriginalAudio;
         private float Bpm => this.OriginalAudio?.Bpm > 0 ? this.OriginalAudio.Bpm : this.OriginalAudio?.ScannedBpm > 0 ? this.OriginalAudio.ScannedBpm : 120f;
-		private int SampleRangePerBeat => this.OriginalAudio != null ? (int) (this.OriginalAudio.SampleRate * 60f / this.Bpm * 2f) : 88200;
+        private int SampleRangePerBeat => (this.OriginalAudio != null ? (int) (this.OriginalAudio.SampleRate * 60f / this.Bpm * 2f) : 88200) * this.Multiplier;
+        private int Multiplier => (int) this.numericUpDown_multiplier.Value;
 
 		private float CurrentLoopFraction
         {
@@ -55,9 +56,9 @@ namespace ModularAudience.Forms.Modules
 
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCenterStartingPoint(this);
-			this.TopMost = true;
+            this.TopMost = true;
 
-			this.BuildLoopControlButtons();
+            this.BuildLoopControlButtons();
             this.EnableAutoRefocusForContainer(this);
 
 
@@ -188,12 +189,12 @@ namespace ModularAudience.Forms.Modules
             this.UntoggleAllOtherButtons(clickedButton);
 
             // Set loop range
-            this.SetLoopRange();
+            this.SetLoopRange(this.panel_buttons.Controls.OfType<Button>().Any(b => b.BackColor == Color.LightBlue) == false);
 
 			// Focus TrackView but also keep this Form front most
 			this.CurrentTrackView?.Focus();
             this.BringToFront();
-		}
+        }
 
         private void UntoggleAllOtherButtons(Button? sender)
         {
@@ -204,82 +205,82 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-		private void SetLoopRange()
-		{
-			// Guard
-			if (this.CurrentTrackView == null || this.OriginalAudio == null)
-			{
-				return;
-			}
+        private void SetLoopRange(bool applyToCurrentRange = false)
+        {
+            // Guard
+            if (this.CurrentTrackView == null || this.OriginalAudio == null)
+            {
+                return;
+            }
 
-			float fraction = this.CurrentLoopFraction;
+            float fraction = this.CurrentLoopFraction;
 
-			// 0 => disable loop (consistent with existing behavior)
-			if (fraction == 0f)
-			{
-				this.OriginalAudio.UpdateLoopFraction(0, 0, 0, false, true);
-				return;
-			}
+            // 0 => disable loop (consistent with existing behavior)
+            if (fraction == 0f)
+            {
+                this.OriginalAudio.UpdateLoopFraction(0, 0, 0, false, applyToCurrentRange);
+                return;
+            }
 
-			try
-			{
-				int channels = Math.Max(1, this.OriginalAudio.Channels);
+            try
+            {
+                int channels = Math.Max(1, this.OriginalAudio.Channels);
 
-				// frames per "unit" (hier: 1 Beat *2, siehe SampleRangePerBeat)
-				long framesPerBeat = Math.Max(1, this.SampleRangePerBeat);
+                // frames per "unit" (hier: 1 Beat *2, siehe SampleRangePerBeat)
+                long framesPerBeat = Math.Max(1, this.SampleRangePerBeat);
 
-				// gewünschte Loop-Länge in Frames (absoluter Betrag der Fraction)
-				long deltaFrames = Math.Max(
-					1L,
-					(long) Math.Round(Math.Abs(fraction) * framesPerBeat)
-				);
+                // gewünschte Loop-Länge in Frames (absoluter Betrag der Fraction)
+                long deltaFrames = Math.Max(
+                    1L,
+                    (long) Math.Round(Math.Abs(fraction) * framesPerBeat)
+                );
 
-				// aktuelle Wiedergabeposition in Frames
-				long currentFrame = this.OriginalAudio.Position;
+                // aktuelle Wiedergabeposition in Frames
+                long currentFrame = this.OriginalAudio.Position;
 
-				long startFrame;
-				long endFrame;
+                long startFrame;
+                long endFrame;
 
-				if (fraction < 0f)
-				{
-					// negative Fraction: Loop rückwärts von der aktuellen Position
-					startFrame = currentFrame - deltaFrames;
-					endFrame = currentFrame;
-				}
-				else
-				{
-					// positive Fraction: Loop vorwärts ab aktueller Position
-					startFrame = currentFrame;
-					endFrame = currentFrame + deltaFrames;
-				}
+                if (fraction < 0f)
+                {
+                    // negative Fraction: Loop rückwärts von der aktuellen Position
+                    startFrame = currentFrame - deltaFrames;
+                    endFrame = currentFrame;
+                }
+                else
+                {
+                    // positive Fraction: Loop vorwärts ab aktueller Position
+                    startFrame = currentFrame;
+                    endFrame = currentFrame + deltaFrames;
+                }
 
-				// Gesamtframes aus Länge in Samples / Channels
-				long totalFrames = Math.Max(0L, this.OriginalAudio.Length / Math.Max(1, channels));
+                // Gesamtframes aus Länge in Samples / Channels
+                long totalFrames = Math.Max(0L, this.OriginalAudio.Length / Math.Max(1, channels));
 
-				// clamp in gültigen Bereich
-				startFrame = Math.Clamp(startFrame, 0L, Math.Max(0L, totalFrames - 1));
-				endFrame = Math.Clamp(endFrame, startFrame + 1L, Math.Max(1L, totalFrames));
+                // clamp in gültigen Bereich
+                startFrame = Math.Clamp(startFrame, 0L, Math.Max(0L, totalFrames - 1));
+                endFrame = Math.Clamp(endFrame, startFrame + 1L, Math.Max(1L, totalFrames));
 
-				// jetzt sind start/end konsistent → Frames → Samples
-				long baseStartSamples = startFrame * channels;
-				long baseEndSamples = endFrame * channels;
+                // jetzt sind start/end konsistent → Frames → Samples
+                long baseStartSamples = startFrame * channels;
+                long baseEndSamples = endFrame * channels;
 
-				// fractionSamples = tatsächliche Loop-Spanne, nicht "deltaFrames * channels"
-				long fractionSamples = Math.Max(1L, baseEndSamples - baseStartSamples);
+                // fractionSamples = tatsächliche Loop-Spanne, nicht "deltaFrames * channels"
+                long fractionSamples = Math.Max(1L, baseEndSamples - baseStartSamples);
 
-				// Loop anwenden; adjustPosition=true hält den Player in der Loop
-				this.OriginalAudio.UpdateLoopFraction(baseStartSamples, baseEndSamples, fractionSamples, true, true);
-			}
-			catch
-			{
-				// bewusst geschluckt, wie bisher, um keine UI-Glitches zu erzeugen
-			}
-		}
-
-
+                // Loop anwenden; adjustPosition=true hält den Player in der Loop
+                this.OriginalAudio.UpdateLoopFraction(baseStartSamples, baseEndSamples, fractionSamples, true, true);
+            }
+            catch
+            {
+                // bewusst geschluckt, wie bisher, um keine UI-Glitches zu erzeugen
+            }
+        }
 
 
-		internal void UpdateLoopButtonsState()
+
+
+        internal void UpdateLoopButtonsState()
         {
             // Guard
             if (this.CurrentTrackView == null || this.OriginalAudio == null)
@@ -448,5 +449,13 @@ namespace ModularAudience.Forms.Modules
             }
             catch { }
         }
+
+        private void numericUpDown_multiplier_ValueChanged(object sender, EventArgs e)
+        {
+           if (this.panel_buttons.Controls.OfType<Button>().Any();
+            {
+                this.SetLoopRange();
+            }
+		}
     }
 }
