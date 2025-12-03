@@ -17,6 +17,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private System.Windows.Forms.Timer? ProcessingTimer = null;
         private DateTime ProcessingStarted = DateTime.MinValue;
 
+
+        private static float LastTargetBpm = 120f;
+
         public TimeStretchDialog(TrackView trackView)
         {
             this.InitializeComponent();
@@ -29,8 +32,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.numericUpDown_chunkSize.Tag = (int) this.numericUpDown_chunkSize.Value;
             this.numericUpDown_initialBpm.Value = this.Track.Bpm > 0 ? (decimal) this.Track.Bpm : this.Track.ScannedBpm > 30 ? (decimal) this.Track.ScannedBpm : 120;
+            this.numericUpDown_threads.Minimum = 1;
             this.numericUpDown_threads.Maximum = Math.Max(Environment.ProcessorCount, 1);
             this.numericUpDown_threads.Value = Math.Max(Environment.ProcessorCount - 1, 1);
+            this.numericUpDown_targetBpm.Value = (decimal) LastTargetBpm;
 
 
             this.FormClosing += this.TimeStretchDialog_FormClosing;
@@ -63,6 +68,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             double factor = (double) this.numericUpDown_initialBpm.Value / (double) this.numericUpDown_targetBpm.Value;
             this.numericUpDown_stretchFactor.Value = Math.Clamp((decimal) factor, this.numericUpDown_stretchFactor.Minimum, this.numericUpDown_stretchFactor.Maximum);
+            LastTargetBpm = (float) this.numericUpDown_targetBpm.Value;
         }
 
         private void numericUpDown_stretchFactor_ValueChanged(object sender, EventArgs e)

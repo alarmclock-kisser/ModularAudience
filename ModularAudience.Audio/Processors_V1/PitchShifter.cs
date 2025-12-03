@@ -292,6 +292,60 @@ namespace ModularAudience.Audio.Processors_V1
             return results.Where(r => r != null).ToList();
         }
 
+        public static async Task<AudioObj> CreatePitchShiftWithoutTimestretchAsync(AudioObj sample, float semitoneDelta = 1.0f, IProgress<double>? progress = null)
+        {
+            if (sample == null)
+            {
+                throw new ArgumentNullException(nameof(sample));
+            }
+            
+            // 1) Resample (changes duration)
+            var resampled = await PitchShiftOneAsync(sample, semitoneDelta, new Progress<double>(p =>
+            {
+                progress?.Report(Math.Clamp(p * 0.5, 0.0, 1.0)); // first half
+            })).ConfigureAwait(false);
+
+            // 2) Time-stretch resampled back to original frame count
+            int originalFrames = (int) Math.Max(0, (sample.Data?.LongLength ?? 0) / Math.Max(1, sample.Channels));
+            int resampledFrames = (int) Math.Max(0, (resampled.Data?.LongLength ?? 0) / Math.Max(1, resampled.Channels));
+            int targetFrames = Math.Max(1, originalFrames);
+            float[] stretchedData;
+            if (resampledFrames == 0)
+            {
+                stretchedData = [];
+            }
+            else if (resampledFrames == targetFrames)
+            {
+                stretchedData = resampled.Data ?? [];
+            }
+            else
+            {
+                // perform phase-vocoder based time-stretch per channel
+                stretchedData = PhaseVocoderTimeStretch(resampled.Data ?? [], resampled.Channels, resampledFrames, targetFrames, new Progress<double>(p =>
+                {
+                    // map second half of progress (0.0..1.0) to 0.5..1.0 portion
+                    progress?.Report(Math.Clamp(0.5 + p * 0.5, 0.0, 1.0));
+                }));
+            }
+            
+            // build result clone and set data
+            var result = resampled.Clone();
+            result.Data = stretchedData;
+            result.Length = stretchedData.LongLength;
+
+            // Update duration
+            try
+            {
+                int sr = Math.Max(1, result.SampleRate);
+                result.Duration = TimeSpan.FromSeconds((double) (result.Length / Math.Max(1, result.Channels)) / sr);
+            }
+            catch { }
+            // ensure BPM copied
+            try { result.Bpm = sample.Bpm; } catch { }
+            progress?.Report(1.0);
+            return result;
+        }
+
         private static Task<AudioObj> PitchShiftOneAsync(AudioObj sample, float semitones, IProgress<double>? progress = null)
         {
             return Task.Run(() =>

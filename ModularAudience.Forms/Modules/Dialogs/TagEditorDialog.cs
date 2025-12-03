@@ -2,10 +2,12 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Formats.Tar;
+using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Globalization;
 using System.Windows.Forms;
+using System.Xml;
 using TagLib;
 
 
@@ -196,7 +198,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 							   StringComparison.Ordinal);
 		}
 
-		private readonly List<TagEntry> tagEntries = new();
+		private readonly List<TagEntry> tagEntries = [];
 		private readonly Dictionary<string, TagEntry> tagEntriesById =
 			new(StringComparer.OrdinalIgnoreCase);
 
@@ -205,7 +207,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 		public TagEditorDialog(IEnumerable<AudioObj> audios)
 		{
 			this.InitializeComponent();
-			this.Audios = audios?.ToList() ?? new List<AudioObj>();
+			this.Audios = audios?.ToList() ?? [];
 
 			// ContextMenu an ListBox hängen
 			this.listBox_tags.ContextMenuStrip = this.contextMenuStrip_tagMenu;
@@ -220,89 +222,66 @@ namespace ModularAudience.Forms.Modules.Dialogs
 			};
 		}
 
-		// ===================== Initialisierung =====================
+        // ===================== Initialisierung =====================
 
-		private void InitializeTagEntries(bool preserveModifications)
-		{
-			Dictionary<string, string?>? previousValues = null;
+        private void InitializeTagEntries(bool preserveModifications)
+        {
+            Dictionary<string, string?>? previousValues = null;
 
-			if (preserveModifications && this.tagEntries.Count > 0)
-			{
-				previousValues = this.tagEntries.ToDictionary(
-					t => t.Id,
-					t => t.CurrentValue,
-					StringComparer.OrdinalIgnoreCase);
-			}
+            if (preserveModifications && this.tagEntries.Count > 0)
+            {
+                previousValues = this.tagEntries.ToDictionary(
+                    t => t.Id,
+                    t => t.CurrentValue,
+                    StringComparer.OrdinalIgnoreCase);
+            }
 
-			this.tagEntries.Clear();
-			this.tagEntriesById.Clear();
-			this.currentTagIdForEdit = null;
+            this.tagEntries.Clear();
+            this.tagEntriesById.Clear();
+            this.currentTagIdForEdit = null;
 
-			if (this.Audios.Count == 0)
-			{
-				this.button_write.Enabled = false;
-				return;
-			}
+            if (this.Audios.Count == 0)
+            {
+                this.button_write.Enabled = false;
+                return;
+            }
 
-			var firstAudio = this.Audios[0];
-			bool multipleAudios = this.Audios.Count > 1;
+            var firstAudio = this.Audios[0];
+            bool multipleAudios = this.Audios.Count > 1;
 
-			var uniqueIds = new HashSet<string>(UniquePerFileTagIds, StringComparer.OrdinalIgnoreCase);
+            var uniqueIds = new HashSet<string>(UniquePerFileTagIds, StringComparer.OrdinalIgnoreCase);
 
-			TagLib.File? tagFile = null;
-			try
-			{
-				if (!string.IsNullOrEmpty(firstAudio.FilePath) && System.IO.File.Exists(firstAudio.FilePath))
-				{
-					tagFile = TagLib.File.Create(firstAudio.FilePath);
-				}
-			}
-			catch
-			{
-				// Wenn Tag-Lesen fehlschlägt, bleiben OriginalValues einfach null
-			}
+            // Hier stellen wir sicher, dass wir CustomTags oder Tags aus der Datei einlesen
+            TagLib.File? tagFile = null;
+            try
+            {
+                if (!string.IsNullOrEmpty(firstAudio.FilePath) && System.IO.File.Exists(firstAudio.FilePath))
+                {
+                    tagFile = TagLib.File.Create(firstAudio.FilePath);
+                }
+            }
+            catch
+            {
+                // Wenn Tag-Lesen fehlschlägt, bleiben OriginalValues einfach null
+            }
 
-			void AddEntries(string[] ids, string[] names, bool isMeta)
-			{
-				for (int i = 0; i < ids.Length; i++)
-				{
-					string id = ids[i];
-					if (multipleAudios && uniqueIds.Contains(id))
-					{
-						// nicht anzeigen, wenn wir mehrere Files bearbeiten
-						continue;
-					}
+            // Nun holen wir die Meta-Tags, wenn aktiviert
+            if (this.checkBox_metaTags.Checked)
+            {
+                this.AddEntries(MetaTagIds, MetaTagNames, true);
+            }
 
-					string name = i < names.Length ? names[i] : id;
+            // Fügen die Tags für die Haupt-Tags (EditableTagIds) hinzu
+            this.AddEntries(EditableTagIds, EditableTagNames, false);
 
-					string? originalValue = tagFile != null ? ReadTagFromFile(tagFile, id) : null;
+            tagFile?.Dispose();
 
-					var entry = new TagEntry(id, name, originalValue, isMeta);
+            // Tags in der ListBox anzeigen
+            this.RefreshTagListBox();
+            this.UpdateTitle();
+        }
 
-					if (previousValues != null && previousValues.TryGetValue(id, out var prev))
-					{
-						entry.CurrentValue = prev;
-					}
-
-					this.tagEntries.Add(entry);
-					this.tagEntriesById[id] = entry;
-				}
-			}
-
-			AddEntries(EditableTagIds, EditableTagNames, false);
-
-			if (this.checkBox_metaTags.Checked)
-			{
-				AddEntries(MetaTagIds, MetaTagNames, true);
-			}
-
-			tagFile?.Dispose();
-
-			this.RefreshTagListBox();
-			this.UpdateTitle();
-		}
-
-		private static string? ReadTagFromFile(TagLib.File file, string id)
+        private static string? ReadTagFromFile(TagLib.File file, string id)
 		{
 			var tag = file.Tag;
 			string upper = id.ToUpperInvariant();
@@ -354,40 +333,50 @@ namespace ModularAudience.Forms.Modules.Dialogs
 			if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
 			{
 				var id3 = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
-				var frame = TagLib.Id3v2.TextInformationFrame.Get(id3, upper, false);
-				if (frame != null && frame.Text != null && frame.Text.Length > 0)
+
+				if (upper.Length == 4)
 				{
-					return string.Join("; ", frame.Text);
+					var frame = TagLib.Id3v2.TextInformationFrame.Get(id3, upper, false);
+					if (frame != null && frame.Text != null && frame.Text.Length > 0)
+						return string.Join("; ", frame.Text);
+				}
+				else
+				{
+					// Fallback: Suche unter vorhandenen TextInformationFrames nach FrameId, die mit 'upper' endet
+					var frame = id3.GetFrames()
+					              .OfType<TagLib.Id3v2.TextInformationFrame>()
+					              .FirstOrDefault(f => f.FrameId.ToString().EndsWith(upper, StringComparison.OrdinalIgnoreCase));
+					if (frame != null && frame.Text != null && frame.Text.Length > 0)
+						return string.Join("; ", frame.Text);
 				}
 			}
 
 			return null;
 		}
 
-		private void RefreshTagListBox()
-		{
-			this.listBox_tags.BeginUpdate();
-			this.listBox_tags.Items.Clear();
+        private void RefreshTagListBox()
+        {
+            this.listBox_tags.BeginUpdate();
+            this.listBox_tags.Items.Clear();
 
-			foreach (var entry in this.tagEntries)
-			{
-				this.listBox_tags.Items.Add(this.GetDisplayText(entry));
-			}
+            foreach (var entry in this.tagEntries)
+            {
+                this.listBox_tags.Items.Add(this.GetDisplayText(entry));
+            }
 
-			this.listBox_tags.EndUpdate();
-		}
+            this.listBox_tags.EndUpdate();
+        }
 
-		private string GetDisplayText(TagEntry entry)
-		{
-			string prefix = entry.IsModified ? "* " : "  ";
-			string valuePart = string.IsNullOrWhiteSpace(entry.CurrentValue)
-				? string.Empty
-				: " = " + entry.CurrentValue;
+        private string GetDisplayText(TagEntry entry)
+        {
+            string prefix = entry.IsModified ? "* " : "  "; // Markiert geänderte Tags mit *
+            string valuePart = string.IsNullOrWhiteSpace(entry.CurrentValue) ? string.Empty : " = " + entry.CurrentValue;
 
-			return prefix + entry.Name + valuePart;
-		}
+            return prefix + entry.Name + valuePart;
+        }
 
-		private void UpdateTitle()
+
+        private void UpdateTitle()
 		{
 			int modifiedCount = this.tagEntries.Count(t => t.IsModified);
 			this.Text = $"Tag Editor Dialog ({this.Audios.Count})";
@@ -410,41 +399,41 @@ namespace ModularAudience.Forms.Modules.Dialogs
 			}
 		}
 
-		private void button_write_Click(object sender, EventArgs e)
-		{
-			if (this.Audios.Count == 0)
-			{
-				return;
-			}
+        private void button_write_Click(object sender, EventArgs e)
+        {
+            if (this.Audios.Count == 0)
+            {
+                return;
+            }
 
-			var modified = this.tagEntries.Where(t => t.IsModified).ToList();
-			if (modified.Count == 0)
-			{
-				// Nichts geändert → einfach schließen
-				this.Close();
-				return;
-			}
+            var modified = this.tagEntries.Where(t => t.IsModified).ToList();
+            if (modified.Count == 0)
+            {
+                // Nichts geändert → einfach schließen
+                this.Close();
+                return;
+            }
 
-			foreach (var audio in this.Audios)
-			{
-				foreach (var tag in modified)
-				{
-					var value = tag.CurrentValue ?? string.Empty;
+            foreach (var audio in this.Audios)
+            {
+                foreach (var tag in modified)
+                {
+                    var value = tag.CurrentValue ?? string.Empty;
 
-					// leerer String ist „setzen“, null wäre „nicht anfassen“
-					audio.CustomTags[tag.Id] = value;
+                    // Temporäre CustomTags aktualisieren
+                    audio.CustomTags[tag.Id] = value;
 
-					// Zusätzlich: falls möglich, direkt ins AudioObj spiegeln
-					ApplyToAudioObjProperties(audio, tag.Id, value);
-				}
-			}
+                    // Zusätzlich: falls möglich, direkt ins AudioObj spiegeln
+                    ApplyToAudioObjProperties(audio, tag.Id, value);
+                }
+            }
+
+            // Tags sind jetzt im AudioObj gespeichert, aber noch nicht auf die Files geschrieben.
+            this.Close();
+        }
 
 
-			// Tags sind jetzt im AudioObj gespeichert, aber noch nicht auf die Files geschrieben.
-			this.Close();
-		}
-
-		private void checkBox_metaTags_CheckedChanged(object sender, EventArgs e)
+        private void checkBox_metaTags_CheckedChanged(object sender, EventArgs e)
 		{
 			// Meta-Tags ein-/ausblenden, bestehende Eingaben behalten
 			this.InitializeTagEntries(true);
@@ -490,7 +479,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
 				foreach (var audio in this.Audios)
 				{
-					var val = GetTagValueForAudio(audio, entry.Id);
+					var val = this.GetTagValueForAudio(audio, entry.Id);
 
 					if (first)
 					{
@@ -542,36 +531,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
 		}
 
 
-
-		private string? GetTagValueForAudio(AudioObj audio, string id)
-		{
-			// 1. In-Memory-CustomTags falls vorhanden
-			if (audio.CustomTags != null)
-			{
-				var fromCustom = audio.CustomTags[id];
-				if (!string.IsNullOrEmpty(fromCustom))
-				{
-					return fromCustom;
-				}
-			}
-
-			// 2. Fallback: direkt aus Datei lesen
-			if (string.IsNullOrEmpty(audio.FilePath) || !System.IO.File.Exists(audio.FilePath))
-			{
-				return null;
-			}
-
-			try
-			{
-				using var f = TagLib.File.Create(audio.FilePath);
-				return ReadTagFromFile(f, id);
-			}
-			catch
-			{
-				return null;
-			}
-		}
-
 		private static void ApplyToAudioObjProperties(AudioObj audio, string tagId, string value)
 		{
 			if (audio == null)
@@ -604,7 +563,97 @@ namespace ModularAudience.Forms.Modules.Dialogs
 			}
 		}
 
+        private void AddEntries(string[] ids, string[] names, bool isMeta)
+        {
+            Dictionary<string, string?>? previousValues = null;
+            bool multipleAudios = this.Audios.Count > 1; // Flag für mehrere Audios
+            var uniqueIds = new HashSet<string>(UniquePerFileTagIds, StringComparer.OrdinalIgnoreCase);
+
+            // Diese Schleife durchläuft alle IDs (Tags), die wir hinzufügen möchten
+            for (int i = 0; i < ids.Length; i++)
+            {
+                string id = ids[i];
+
+                // Überprüfen, ob wir mehrere Audios haben und ob die ID in UniquePerFileTagIds enthalten ist
+                if (multipleAudios && uniqueIds.Contains(id))
+                {
+                    continue;
+                }
+
+                string name = i < names.Length ? names[i] : id;
+
+                // Versuchen, den Wert aus den CustomTags der Audios zu holen
+                string? originalValue = null;
+                foreach (var audio in this.Audios)
+                {
+                    // Hole den Wert aus CustomTags des aktuellen Audioobjekts
+                    if (audio.CustomTags != null && audio.CustomTags.Values.ContainsKey(id))
+                    {
+                        originalValue = audio.CustomTags.Values[id];
+                        if (!string.IsNullOrEmpty(originalValue)) break;
+                    }
+                }
+
+                // Wenn kein temporärer Wert (CustomTag) vorhanden ist, lade den Wert aus der Datei
+                if (string.IsNullOrEmpty(originalValue))
+                {
+                    TagLib.File? tagFile = null;
+                    if (!string.IsNullOrEmpty(this.Audios[0].FilePath) && System.IO.File.Exists(this.Audios[0].FilePath))
+                    {
+                        tagFile = TagLib.File.Create(this.Audios[0].FilePath);
+                    }
+
+                    originalValue = tagFile != null ? ReadTagFromFile(tagFile, id) : null;
+                }
+
+                // Erstelle das TagEntry mit der gefundenen originalen Wert und weiteren Informationen
+                var entry = new TagEntry(id, name, originalValue, isMeta);
+
+                // Falls wir vorher gespeicherte Werte haben (beispielsweise durch das Bearbeiten und Speichern früher), setzen wir den aktuellen Wert
+                if (previousValues != null && previousValues.TryGetValue(id, out var prev))
+                {
+                    entry.CurrentValue = prev;
+                }
+
+                // Das TagEntry zur Liste hinzufügen
+                this.tagEntries.Add(entry);
+
+                // Speichere das TagEntry in der dictionary (nach Tag-ID geordnet)
+                this.tagEntriesById[id] = entry;
+            }
+        }
+
+        private string? GetTagValueForAudio(AudioObj audio, string id)
+        {
+            // 1. In-Memory-CustomTags falls vorhanden
+            if (audio.CustomTags != null)
+            {
+                var fromCustom = audio.CustomTags.Values.ContainsKey(id) ? audio.CustomTags.Values[id] : null;
+                if (!string.IsNullOrEmpty(fromCustom))
+                {
+                    return fromCustom;
+                }
+            }
+
+            // 2. Fallback: direkt aus Datei lesen
+            if (string.IsNullOrEmpty(audio.FilePath) || !System.IO.File.Exists(audio.FilePath))
+            {
+                return null;
+            }
+
+            try
+            {
+                using var f = TagLib.File.Create(audio.FilePath);
+                return ReadTagFromFile(f, id);
+            }
+            catch
+            {
+                return null;
+            }
+        }
 
 
-	}
+
+
+    }
 }

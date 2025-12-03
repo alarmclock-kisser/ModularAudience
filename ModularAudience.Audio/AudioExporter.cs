@@ -52,7 +52,7 @@ namespace ModularAudience.Audio
                 return "Out directory does not exist: " + outDir;
             }
 
-            string outFile = Path.Combine(outDir, $"{audio.Name} [{audio.Bpm:F1}] {bitrate}kBit.mp3");
+            string outFile = Path.Combine(outDir, $"{SanitizeName(audio.Name)} [{audio.Bpm:F1}] {bitrate}kBit.mp3");
 
             Stopwatch sw = Stopwatch.StartNew();
 
@@ -131,6 +131,7 @@ namespace ModularAudience.Audio
 
                 string baseFileName = $"{audio.Name.Replace("▶ ", "").Replace("|| ", "")}{(audio.Bpm > 10 ? (" [" + audio.Bpm.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) + "]") : "")}".Trim();
                 finalPath = Path.Combine(targetDirectory!, $"{baseFileName}.wav");
+                baseFileName = SanitizeName(baseFileName);
             }
 
             if (string.IsNullOrEmpty(targetDirectory))
@@ -341,5 +342,96 @@ namespace ModularAudience.Audio
 
 
 
-	}
+
+        public static string SanitizeName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return "untitled";
+            }
+
+            // Normalize Unicode
+            name = name.Normalize(System.Text.NormalizationForm.FormC);
+
+            // Invalid filename chars from the runtime
+            char[] invalidChars = Path.GetInvalidFileNameChars();
+
+            var sb = new System.Text.StringBuilder(name.Length);
+            bool lastWasUnderscore = false;
+
+            foreach (char ch in name)
+            {
+                // drop control chars and replace invalid chars with a single underscore
+                if (char.IsControl(ch) || System.Array.IndexOf(invalidChars, ch) >= 0)
+                {
+                    if (!lastWasUnderscore)
+                    {
+                        sb.Append('_');
+                        lastWasUnderscore = true;
+                    }
+                    continue;
+                }
+
+                // collapse runs of whitespace to a single space
+                if (char.IsWhiteSpace(ch))
+                {
+                    if (sb.Length == 0 || char.IsWhiteSpace(sb[sb.Length - 1]))
+                    {
+                        continue;
+                    }
+                    sb.Append(' ');
+                    lastWasUnderscore = false;
+                    continue;
+                }
+
+                sb.Append(ch);
+                lastWasUnderscore = false;
+            }
+
+            string result = sb.ToString().Trim();
+
+            // collapse multiple underscores
+            result = System.Text.RegularExpressions.Regex.Replace(result, "_{2,}", "_", System.Text.RegularExpressions.RegexOptions.None);
+
+            // remove trailing dots/spaces (Windows forbids filenames ending with dot/space)
+            result = result.TrimEnd('.', ' ');
+
+            if (string.IsNullOrWhiteSpace(result))
+            {
+                result = "untitled";
+            }
+
+            // Avoid reserved device names (CON, PRN, AUX, NUL, COM1..COM9, LPT1..LPT9)
+            string baseName = result;
+            int dotIndex = result.IndexOf('.');
+            if (dotIndex >= 0)
+            {
+                baseName = result.Substring(0, dotIndex);
+            }
+
+            var reserved = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+            {
+                "CON","PRN","AUX","NUL"
+            };
+            for (int i = 1; i <= 9; i++)
+            {
+                reserved.Add("COM" + i);
+                reserved.Add("LPT" + i);
+            }
+
+            if (reserved.Contains(baseName))
+            {
+                result = result + "_file";
+            }
+
+            // Limit filename length (leave headroom for paths); trim again if needed
+            const int MaxLength = 200;
+            if (result.Length > MaxLength)
+            {
+                result = result.Substring(0, MaxLength).TrimEnd('.', ' ');
+            }
+
+            return result;
+        }
+    }
 }

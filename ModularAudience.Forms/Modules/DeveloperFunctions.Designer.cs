@@ -49,7 +49,7 @@
             this.comboBox_methods.FormattingEnabled = true;
             this.comboBox_methods.Location = new Point(12, 12);
             this.comboBox_methods.Name = "comboBox_methods";
-            this.comboBox_methods.Size = new Size(240, 23);
+            this.comboBox_methods.Size = new Size(354, 23);
             this.comboBox_methods.TabIndex = 0;
             this.comboBox_methods.Text = "Select a method ...";
             this.comboBox_methods.SelectedIndexChanged += this.comboBox_methods_SelectedIndexChanged;
@@ -59,7 +59,7 @@
             this.panel_parameters.BackColor = SystemColors.ControlLight;
             this.panel_parameters.Location = new Point(12, 41);
             this.panel_parameters.Name = "panel_parameters";
-            this.panel_parameters.Size = new Size(240, 280);
+            this.panel_parameters.Size = new Size(354, 280);
             this.panel_parameters.TabIndex = 1;
             // 
             // button_run

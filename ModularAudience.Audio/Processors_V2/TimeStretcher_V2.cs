@@ -187,6 +187,7 @@ public static class TimeStretcher_V2
                 ctLocal.ThrowIfCancellationRequested();
 
                 track.Data = finalOut;
+                track.Bpm = (float) ((double) track.Bpm * stretchFactor);
 
                 progress?.Report(1.0);
             }
