@@ -29,6 +29,7 @@ namespace ModularAudience.Forms.Modules
         private bool ShowOptionalParameters => this.checkBox_optionalParameters.Checked;
 
         public AudioObj? ResultAudioObj { get; private set; } = null;
+        public AudioObj? ProcessedAudioObj { get; private set; }
 
         private bool _isRunning = false;
         private CancellationTokenSource? _cancellationTokenSource = null;
@@ -463,6 +464,8 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            this.ProcessedAudioObj = this.SelectedAudio;
+
             var parameters = method.GetParameters();
             var args = new object?[parameters.Length];
 
@@ -858,20 +861,18 @@ namespace ModularAudience.Forms.Modules
 
         private async void button_apply_Click(object sender, EventArgs e)
         {
-            if (this.ResultAudioObj == null || this.SelectedAudio == null)
+            if (this.ResultAudioObj == null || this.ProcessedAudioObj == null)
             {
                 return;
             }
 
             bool ctrlFlag = ModifierKeys.HasFlag(Keys.Control);
 
-            this.SelectedAudio.ReplaceWith(this.ResultAudioObj, ctrlFlag);
+            this.ProcessedAudioObj?.ReplaceWith(this.ResultAudioObj, ctrlFlag);
             if (ctrlFlag)
             {
-                
+                this.ResultAudioObj = null;
             }
-
-            this.ResultAudioObj = null;
         }
 
         private static string GetFriendlyTypeName(Type t)

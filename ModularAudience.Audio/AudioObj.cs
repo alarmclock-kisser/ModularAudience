@@ -400,6 +400,7 @@ namespace ModularAudience.Audio
             this.StartingOffset = source.StartingOffset;
             this.Bpm = source.Bpm;
             this.Rename(source.OriginalName);
+            this.Id = source.Id;
 
             // Copy metrics dictionary content
             this.Metrics.Clear();
