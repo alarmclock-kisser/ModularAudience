@@ -47,6 +47,8 @@ namespace ModularAudience.Forms.Modules
         {
             this.InitializeComponent();
 
+            WindowMain.DeveloperFunctionsWindow = this;
+
             // Timer initialisieren (0.5s Intervall)
             this._elapsedTimer = new System.Windows.Forms.Timer
             {
