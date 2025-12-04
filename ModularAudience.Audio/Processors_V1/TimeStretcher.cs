@@ -8,13 +8,23 @@ using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using System.Text;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace ModularAudience.Audio.Processors_V1
 {
     public static class TimeStretcher
     {
-        public static async Task<AudioObj> TimeStretchAllThreadsAsync(AudioObj obj, int chunkSize = 16384, float overlap = 0.5f, double factor = 1.000, bool keepData = false, float normalize = 1.0f, int? maxWorkers = null, IProgress<double>? progress = null)
+        public static async Task<AudioObj> TimeStretchAllThreadsAsync(
+    AudioObj obj,
+    int chunkSize = 16384,
+    float overlap = 0.5f,
+    double factor = 1.000,
+    bool keepData = false,
+    float normalize = 1.0f,
+    int? maxWorkers = null,
+    IProgress<double>? progress = null,
+    bool offload = false)
         {
             if (maxWorkers == null)
             {
@@ -25,15 +35,27 @@ namespace ModularAudience.Audio.Processors_V1
                 maxWorkers = Math.Clamp(maxWorkers.Value, 1, Environment.ProcessorCount);
             }
 
+            if (offload)
+            {
+                return await TimeStretchOffloadedAsync(
+                    obj,
+                    chunkSize,
+                    overlap,
+                    factor,
+                    keepData,
+                    normalize,
+                    maxWorkers.Value,
+                    progress,
+                    adjustBpm: true);
+            }
+
             float[] backupData = obj.Data;
             int sampleRate = obj.SampleRate;
             int overlapSize = obj.OverlapSize;
 
-            // STOPWATCH
             double totalMs = 0;
-            Stopwatch sw = Stopwatch.StartNew();
+            var sw = Stopwatch.StartNew();
 
-            // Get chunks
             var chunkEnumerable = await obj.GetChunksAsync(chunkSize, overlap, keepData, maxWorkers.Value);
             var chunks = chunkEnumerable as IList<float[]> ?? chunkEnumerable.ToList();
             if (chunks.Count == 0)
@@ -41,20 +63,14 @@ namespace ModularAudience.Audio.Processors_V1
                 obj.Data = backupData;
                 return obj;
             }
+
             var tracker = CreateTracker(progress, chunks.Count, normalize > 0);
             tracker?.ReportWork(chunks.Count);
             obj["chunk"] = sw.Elapsed.TotalMilliseconds;
             totalMs += sw.Elapsed.TotalMilliseconds;
             sw.Restart();
 
-
-            // Task for FFT on every chunk
-            var fftTasks = chunks.Select(chunk =>
-            {
-                // FFT forward using nuget (float[] -> complex[])
-                return FourierTransformForwardAsync(chunk, tracker);
-            });
-
+            var fftTasks = chunks.Select(chunk => FourierTransformForwardAsync(chunk, tracker));
             var fftChunks = await Task.WhenAll(fftTasks);
             if (fftChunks.Length == 0)
             {
@@ -65,13 +81,8 @@ namespace ModularAudience.Audio.Processors_V1
             totalMs += sw.Elapsed.TotalMilliseconds;
             sw.Restart();
 
-            // Task for stretch on every fftChunk
             var stretchTasks = fftChunks.Select(transformedChunk =>
-            {
-                // Stretch complex-chunks using algorithm
-                return StretchChunkAsync(transformedChunk, chunkSize, overlapSize, sampleRate, factor, tracker);
-            });
-
+                StretchChunkAsync(transformedChunk, chunkSize, overlapSize, sampleRate, factor, tracker));
             var stretchChunks = await Task.WhenAll(stretchTasks);
             if (stretchChunks.Length == 0)
             {
@@ -82,16 +93,9 @@ namespace ModularAudience.Audio.Processors_V1
             totalMs += sw.Elapsed.TotalMilliseconds;
             sw.Restart();
 
-            // Set obj.StretchFactor
             obj.StretchFactor = factor;
 
-            // Task for IFFT on every stretchChunk
-            var ifftTasks = stretchChunks.Select(stretchChunk =>
-            {
-                // FFT inverse using nuget (complex[] -> float[])
-                return FourierTransformInverseAsync(stretchChunk, tracker);
-            });
-
+            var ifftTasks = stretchChunks.Select(stretchChunk => FourierTransformInverseAsync(stretchChunk, tracker));
             var ifftChunks = await Task.WhenAll(ifftTasks);
             if (ifftChunks.Length == 0)
             {
@@ -113,6 +117,8 @@ namespace ModularAudience.Audio.Processors_V1
             totalMs += sw.Elapsed.TotalMilliseconds;
 
             obj.Bpm = (float) (obj.Bpm / factor);
+            obj.Length = obj.Data.LongLength;
+            obj.Duration = TimeSpan.FromSeconds(obj.Length / (double) (sampleRate * obj.Channels));
 
             sw.Restart();
 
@@ -131,7 +137,17 @@ namespace ModularAudience.Audio.Processors_V1
             return obj;
         }
 
-        internal static async Task<AudioObj> TimeStretchMostThreadsAsync(AudioObj obj, int chunkSize = 16384, float overlap = 0.5f, double factor = 1.000, bool keepData = false, float normalize = 1.0f, int? maxWorkers = null, IProgress<double>? progress = null)
+
+        internal static async Task<AudioObj> TimeStretchMostThreadsAsync(
+            AudioObj obj,
+            int chunkSize = 16384,
+            float overlap = 0.5f,
+            double factor = 1.000,
+            bool keepData = false,
+            float normalize = 1.0f,
+            int? maxWorkers = null,
+            IProgress<double>? progress = null,
+            bool offload = false)
         {
             if (maxWorkers == null)
             {
@@ -142,7 +158,20 @@ namespace ModularAudience.Audio.Processors_V1
                 maxWorkers = Math.Clamp(maxWorkers.Value, 1, Environment.ProcessorCount);
             }
 
-            // Die ParallelOptions mit der maximalen Thread-Anzahl festlegen
+            if (offload)
+            {
+                return await TimeStretchOffloadedAsync(
+                    obj,
+                    chunkSize,
+                    overlap,
+                    factor,
+                    keepData,
+                    normalize,
+                    maxWorkers.Value,
+                    progress,
+                    adjustBpm: false);
+            }
+
             var parallelOptions = new ParallelOptions
             {
                 MaxDegreeOfParallelism = maxWorkers.Value > 0 ? maxWorkers.Value : Environment.ProcessorCount
@@ -152,9 +181,8 @@ namespace ModularAudience.Audio.Processors_V1
             int sampleRate = obj.SampleRate;
             int overlapSize = obj.OverlapSize;
 
-            Stopwatch sw = Stopwatch.StartNew();
+            var sw = Stopwatch.StartNew();
 
-            // Get chunks
             var chunkEnumerable = await obj.GetChunksAsync(chunkSize, overlap, keepData, maxWorkers.Value);
             var chunks = chunkEnumerable as IList<float[]> ?? chunkEnumerable.ToList();
             if (chunks.Count == 0)
@@ -162,17 +190,20 @@ namespace ModularAudience.Audio.Processors_V1
                 obj.Data = backupData;
                 return obj;
             }
+
             var tracker = CreateTracker(progress, chunks.Count, normalize > 0);
             tracker?.ReportWork(chunks.Count);
             obj["chunk"] = sw.Elapsed.TotalMilliseconds;
             sw.Restart();
 
-            // Asynchrone FFT auf allen Chunks
             var fftChunks = new Complex[chunks.Count][];
-            await Parallel.ForEachAsync(chunks.Select((chunk, index) => new { chunk, index }), parallelOptions, async (item, token) =>
-            {
-                fftChunks[item.index] = await FourierTransformForwardAsync(item.chunk, tracker);
-            });
+            await Parallel.ForEachAsync(
+                chunks.Select((chunk, index) => new { chunk, index }),
+                parallelOptions,
+                async (item, token) =>
+                {
+                    fftChunks[item.index] = await FourierTransformForwardAsync(item.chunk, tracker);
+                });
 
             if (fftChunks.Length == 0)
             {
@@ -182,12 +213,14 @@ namespace ModularAudience.Audio.Processors_V1
             obj["fft"] = sw.Elapsed.TotalMilliseconds;
             sw.Restart();
 
-            // Asynchrones Time-Stretching
             var stretchChunks = new Complex[fftChunks.Length][];
-            await Parallel.ForEachAsync(fftChunks.Select((chunk, index) => new { chunk, index }), parallelOptions, async (item, token) =>
-            {
-                stretchChunks[item.index] = await StretchChunkAsync(item.chunk, chunkSize, overlapSize, sampleRate, factor, tracker);
-            });
+            await Parallel.ForEachAsync(
+                fftChunks.Select((chunk, index) => new { chunk, index }),
+                parallelOptions,
+                async (item, token) =>
+                {
+                    stretchChunks[item.index] = await StretchChunkAsync(item.chunk, chunkSize, overlapSize, sampleRate, factor, tracker);
+                });
 
             if (stretchChunks.Length == 0)
             {
@@ -197,15 +230,16 @@ namespace ModularAudience.Audio.Processors_V1
             obj["stretch"] = sw.Elapsed.TotalMilliseconds;
             sw.Restart();
 
-            // Set obj.StretchFactor
             obj.StretchFactor = factor;
 
-            // Asynchrone IFFT
             var ifftChunks = new float[stretchChunks.Length][];
-            await Parallel.ForEachAsync(stretchChunks.Select((chunk, index) => new { chunk, index }), parallelOptions, async (item, token) =>
-            {
-                ifftChunks[item.index] = await FourierTransformInverseAsync(item.chunk, tracker);
-            });
+            await Parallel.ForEachAsync(
+                stretchChunks.Select((chunk, index) => new { chunk, index }),
+                parallelOptions,
+                async (item, token) =>
+                {
+                    ifftChunks[item.index] = await FourierTransformInverseAsync(item.chunk, tracker);
+                });
 
             if (ifftChunks.Length == 0)
             {
@@ -232,6 +266,10 @@ namespace ModularAudience.Audio.Processors_V1
             }
             obj["normalize"] = sw.Elapsed.TotalMilliseconds;
             sw.Restart();
+
+            obj.Bpm = obj.Bpm / (float) factor;
+            obj.Length = obj.Data.LongLength;
+            obj.Duration = TimeSpan.FromSeconds(obj.Length / (double) (sampleRate * obj.Channels));
 
             tracker?.Complete();
 
@@ -465,5 +503,192 @@ namespace ModularAudience.Audio.Processors_V1
                 this.progress.Report(1.0);
             }
         }
+
+
+
+        private static async Task<AudioObj> TimeStretchOffloadedAsync(
+    AudioObj obj,
+    int chunkSize,
+    float overlap,
+    double factor,
+    bool keepData,
+    float normalize,
+    int maxWorkers,
+    IProgress<double>? progress,
+    bool adjustBpm)
+        {
+            float[] backupData = obj.Data;
+            int sampleRate = obj.SampleRate;
+            int overlapSize = obj.OverlapSize;
+
+            if (backupData == null || backupData.Length == 0 || sampleRate <= 0)
+            {
+                return obj;
+            }
+
+            string baseTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MA_TimeStretch");
+            string tempDir = System.IO.Path.Combine(baseTemp, "TS_" + Guid.NewGuid().ToString("N"));
+            var tempFiles = new List<string>();
+
+            try
+            {
+                System.IO.Directory.CreateDirectory(tempDir);
+
+                var chunkEnumerable = await obj.GetChunksAsync(chunkSize, overlap, keepData, maxWorkers);
+                int index = 0;
+
+                foreach (var chunk in chunkEnumerable)
+                {
+                    if (chunk == null || chunk.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    var fft = await FourierTransformForwardAsync(chunk, null);
+                    if (fft == null || fft.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    var stretched = await StretchChunkAsync(fft, chunkSize, overlapSize, sampleRate, factor, null);
+                    if (stretched == null || stretched.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    var ifft = await FourierTransformInverseAsync(stretched, null);
+                    if (ifft == null || ifft.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    string filePath = System.IO.Path.Combine(tempDir, index.ToString("D6") + ".bin");
+                    using (var fs = new System.IO.FileStream(
+                               filePath,
+                               System.IO.FileMode.Create,
+                               System.IO.FileAccess.Write,
+                               System.IO.FileShare.None,
+                               4096,
+                               System.IO.FileOptions.SequentialScan))
+                    using (var bw = new System.IO.BinaryWriter(fs, Encoding.UTF8, false))
+                    {
+                        bw.Write(ifft.Length);
+                        for (int i = 0; i < ifft.Length; i++)
+                        {
+                            bw.Write(ifft[i]);
+                        }
+                    }
+
+                    tempFiles.Add(filePath);
+                    index++;
+                }
+
+                if (tempFiles.Count == 0)
+                {
+                    obj.Data = backupData;
+                    return obj;
+                }
+
+                obj.StretchFactor = factor;
+                if (adjustBpm && obj.Bpm > 0f)
+                {
+                    obj.Bpm = (float) (obj.Bpm / factor);
+                }
+
+                const int batchSize = 8;
+                var batchList = new List<float[]>(batchSize);
+                int processedFiles = 0;
+                int totalFiles = tempFiles.Count;
+
+                foreach (var path in tempFiles)
+                {
+                    using (var fs = new System.IO.FileStream(
+                               path,
+                               System.IO.FileMode.Open,
+                               System.IO.FileAccess.Read,
+                               System.IO.FileShare.Read,
+                               4096,
+                               System.IO.FileOptions.SequentialScan))
+                    using (var br = new System.IO.BinaryReader(fs, Encoding.UTF8, false))
+                    {
+                        int len = br.ReadInt32();
+                        if (len <= 0)
+                        {
+                            continue;
+                        }
+
+                        var data = new float[len];
+                        for (int i = 0; i < len; i++)
+                        {
+                            data[i] = br.ReadSingle();
+                        }
+
+                        batchList.Add(data);
+                    }
+
+                    processedFiles++;
+
+                    if (batchList.Count >= batchSize)
+                    {
+                        await obj.AggregateStretchedChunksAsync(batchList, obj.StretchFactor, maxWorkers);
+                        batchList.Clear();
+                    }
+
+                    if (progress != null && totalFiles > 0)
+                    {
+                        double frac = (double) processedFiles / totalFiles;
+                        progress.Report(Math.Clamp(frac, 0.0, 1.0));
+                    }
+                }
+
+                if (batchList.Count > 0)
+                {
+                    await obj.AggregateStretchedChunksAsync(batchList, obj.StretchFactor, maxWorkers);
+                    batchList.Clear();
+                }
+
+                if (obj.Data == null || obj.Data.LongLength <= 0)
+                {
+                    obj.Data = backupData;
+                    return obj;
+                }
+
+                if (normalize > 0)
+                {
+                    await obj.NormalizeAsync(normalize, maxWorkers);
+                    progress?.Report(1.0);
+                }
+
+                return obj;
+            }
+            finally
+            {
+                try
+                {
+                    foreach (var f in tempFiles)
+                    {
+                        try
+                        {
+                            if (System.IO.File.Exists(f))
+                            {
+                                System.IO.File.Delete(f);
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    if (System.IO.Directory.Exists(tempDir))
+                    {
+                        System.IO.Directory.Delete(tempDir, true);
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+
     }
 }

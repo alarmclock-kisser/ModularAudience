@@ -1050,15 +1050,18 @@ namespace ModularAudience.Forms.Modules
                 {
                     this.button_playback.Text = "▶";
 
-                    // Broadcast pause to other synced TrackViews (fire-and-forget)
-                    /*try
+                    if (!ModifierKeys.HasFlag(Keys.Control))
                     {
-                        foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
+                        // Broadcast pause to other synced TrackViews (fire-and-forget)
+                        try
                         {
-                            try { _ = tv.OriginalAudio.PauseAsync(); } catch { }
+                            foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
+                            {
+                                try { _ = tv.OriginalAudio.PauseAsync(); } catch { }
+                            }
                         }
+                        catch { }
                     }
-                    catch { }*/
                 }
             }
             else

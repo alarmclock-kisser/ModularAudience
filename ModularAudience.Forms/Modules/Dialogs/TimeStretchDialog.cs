@@ -126,7 +126,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                                                 keepData: false,
                                                 normalize: 1.0f,
                                                 maxWorkers: (int) this.numericUpDown_threads.Value,
-                                                progress: progress);
+                                                progress: progress,
+                                                offload: this.checkBox_offload.Checked);
                     }
                     this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
                     closeAfterSuccess = true;
@@ -149,7 +150,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                                             keepData: false,
                                             normalize: 1.0f,
                                             maxWorkers: (int) this.numericUpDown_threads.Value,
-                                            progress: progress);
+                                            progress: progress,
+                                            offload: this.checkBox_offload.Checked);
 
                     await this.trackView.OriginalAudio.CreateUndoStepAsync();
                     await this.trackView.ApplyStretchedAudioAsync(result);
