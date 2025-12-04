@@ -131,7 +131,7 @@ namespace ModularAudience.Audio
 
                 string baseFileName = $"{audio.Name.Replace("▶ ", "").Replace("|| ", "")}{(audio.Bpm > 10 ? (" [" + audio.Bpm.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) + "]") : "")}".Trim();
                 finalPath = Path.Combine(targetDirectory!, $"{baseFileName}.wav");
-                baseFileName = SanitizeName(baseFileName);
+                finalPath = SanitizeName(baseFileName);
             }
 
             if (string.IsNullOrEmpty(targetDirectory))

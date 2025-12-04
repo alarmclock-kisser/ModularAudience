@@ -452,7 +452,7 @@ namespace ModularAudience.Forms.Modules
 
         private void numericUpDown_multiplier_ValueChanged(object sender, EventArgs e)
         {
-           if (this.panel_buttons.Controls.OfType<Button>().Any())
+           if (this.panel_buttons.Controls.OfType<Button>().Any(b => b.BackColor == Color.LightBlue))
             {
                 this.SetLoopRange();
             }
