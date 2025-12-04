@@ -201,7 +201,7 @@ namespace ModularAudience.Forms.Modules
             bool anyActiveNow = this.panel_buttons.Controls.OfType<Button>().Any(b => b.BackColor == Color.LightBlue);
 
             // Set loop range accordingly
-            this.SetLoopRange(!anyActiveNow, hadActiveBefore);
+            this.SetLoopRange(!anyActiveNow, hadActiveBefore && !(ModifierKeys.HasFlag(Keys.Control)));
 
 			// Focus TrackView but also keep this Form front most
 			this.CurrentTrackView?.Focus();
@@ -232,6 +232,9 @@ namespace ModularAudience.Forms.Modules
                 this.lastLoopStartSamples = -1;
                 this.lastLoopEndSamples = -1;
                 this.lastAppliedLoopFraction = 0f;
+
+                this.OriginalAudio.Metrics["loop.ui.fraction"] = 0f;
+
                 return;
             }
 
@@ -419,10 +422,17 @@ namespace ModularAudience.Forms.Modules
                 this.lastLoopStartSamples = baseStartSamples;
                 this.lastLoopEndSamples = baseEndSamples;
                 this.lastAppliedLoopFraction = fraction;
+
+                try
+                {
+                    // Persistenter UI-Fraction-Wert inkl. Vorzeichen
+                    this.OriginalAudio.Metrics["loop.ui.fraction"] = fraction;
+                }
+                catch { }
             }
             catch
             {
-                // bewusst geschluckt, wie bisher, um keine UI-Glitches zu erzeugen
+                // bewusst geschlickt, wie bisher, um keine UI-Glitches zu erzeugen
             }
         }
 
@@ -448,35 +458,47 @@ namespace ModularAudience.Forms.Modules
                 btn.Enabled = true;
             }
 
-            if (this.OriginalAudio.LoopFraction != 0)
+            float? GetPersistedUiFraction()
             {
-                // Find the button that matches the current loop fraction and toggle it
-                float targetFraction = this.OriginalAudio.LoopFraction;
-                Button? matchingButton = this.panel_buttons.Controls.OfType<Button>()
-                    .FirstOrDefault(b =>
-                    {
-                        string tag = b.Tag?.ToString() ?? "0";
-                        // Try invariant parse first, fallback to current culture
-                        if (float.TryParse(tag, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float val))
-                        {
-                            return Math.Abs(val - targetFraction) < 0.0001f;
-                        }
-                        if (float.TryParse(tag, out val))
-                        {
-                            return Math.Abs(val - targetFraction) < 0.0001f;
-                        }
-                        return false;
-                    });
-                if (matchingButton != null)
+                try
                 {
-                    matchingButton.BackColor = Color.LightBlue;
-                    // Untoggle all other buttons
-                    this.UntoggleAllOtherButtons(matchingButton);
+                    if (this.OriginalAudio.Metrics != null &&
+                        this.OriginalAudio.Metrics.TryGetValue("loop.ui.fraction", out var raw))
+                    {
+                        if (raw is double d)
+                        {
+                            return (float) d;
+                        }
+                    }
                 }
+                catch { }
+                return null;
+            }
+
+            // Verwende persistenten UI-Fraction-Wert, sonst LoopFraction
+            float targetFraction = GetPersistedUiFraction() ?? this.OriginalAudio.LoopFraction;
+
+            // Button anhand des exakten Fraction-Wertes (mit Vorzeichen) finden
+            Button? matchingButton = this.panel_buttons.Controls.OfType<Button>()
+                .FirstOrDefault(b =>
+                {
+                    string tag = b.Tag?.ToString() ?? "0";
+                    if (float.TryParse(tag, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float val) ||
+                        float.TryParse(tag, out val))
+                    {
+                        return Math.Abs(val - targetFraction) < 0.0001f;
+                    }
+                    return false;
+                });
+
+            if (matchingButton != null)
+            {
+                matchingButton.BackColor = Color.LightBlue;
+                this.UntoggleAllOtherButtons(matchingButton);
             }
             else
             {
-                // No loop active, untoggle all buttons
+                // Fallback: keine Übereinstimmung -> alles untoggeln
                 this.UntoggleAllOtherButtons(null);
             }
         }

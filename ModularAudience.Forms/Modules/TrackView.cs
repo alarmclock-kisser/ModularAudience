@@ -677,7 +677,7 @@ namespace ModularAudience.Forms.Modules
 
         private void vScrollBar_volume_Scroll(object? sender, ScrollEventArgs e)
         {
-            this.ApplyVolumeFromScrollbar();
+            this.SetVolumeSynced(this.vScrollBar_volume.Value, this.checkBox_mute.Checked);
         }
 
         private void hScrollBar_offset_Scroll(object? sender, ScrollEventArgs e)
@@ -1043,43 +1043,53 @@ namespace ModularAudience.Forms.Modules
 
         private async Task TogglePauseAsync()
         {
-            if (this.OriginalAudio.Playing || this.OriginalAudio.Paused)
+            var group = GetPlaybackGroup(this);
+
+            // Fall 1: Diese Spur spielt -> nur spielende pausieren
+            if (this.OriginalAudio.Playing)
             {
                 await this.OriginalAudio.PauseAsync();
-                if (this.OriginalAudio.Paused)
-                {
-                    this.button_playback.Text = "▶";
+                this.button_playback.Text = "▶";
 
-                    if (!ModifierKeys.HasFlag(Keys.Control))
+                if (!ModifierKeys.HasFlag(Keys.Control))
+                {
+                    foreach (var tv in group.Where(tv => tv != this && !tv.IsDisposed && tv.OriginalAudio.Playing))
                     {
-                        // Broadcast pause to other synced TrackViews (fire-and-forget)
-                        try
-                        {
-                            foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
-                            {
-                                try { _ = tv.OriginalAudio.PauseAsync(); } catch { }
-                            }
-                        }
-                        catch { }
+                        try { _ = tv.OriginalAudio.PauseAsync(); } catch { }
                     }
                 }
+                return;
             }
-            else
+
+            // Fall 2: Diese Spur ist pausiert -> nur pausierte fortsetzen
+            if (this.OriginalAudio.Paused)
             {
-                this.ApplyLoopFractionToAudio();
-                Action onStopped = () => this.InvokeIfRequired(() => this.button_playback.Text = "▶");
-                await this.OriginalAudio.PlayAsync(CancellationToken.None, onStopped, this.CurrentVolume);
+                await this.OriginalAudio.PauseAsync(); // toggle = Resume
                 this.button_playback.Text = "■";
 
-                // Broadcast play to other synced TrackViews (fire-and-forget)
-                try
+                if (!ModifierKeys.HasFlag(Keys.Control))
                 {
-                    foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
+                    foreach (var tv in group.Where(tv => tv != this && !tv.IsDisposed && tv.OriginalAudio.Paused))
                     {
-                        try { _ = tv.OriginalAudio.PlayAsync(CancellationToken.None, null, this.CurrentVolume); } catch { }
+                        try { _ = tv.OriginalAudio.PauseAsync(); } catch { }
                     }
                 }
-                catch { }
+                return;
+            }
+
+            // Fall 3: Weder Playing noch Paused -> nur diese Spur starten, 
+            // und optional andere pausierte fortsetzen (logisch konsistent mit Resume)
+            this.ApplyLoopFractionToAudio();
+            Action onStopped = () => this.InvokeIfRequired(() => this.button_playback.Text = "▶");
+            await this.OriginalAudio.PlayAsync(CancellationToken.None, onStopped, this.CurrentVolume);
+            this.button_playback.Text = "■";
+
+            if (!ModifierKeys.HasFlag(Keys.Control))
+            {
+                foreach (var tv in group.Where(tv => tv != this && !tv.IsDisposed && tv.OriginalAudio.Paused))
+                {
+                    try { _ = tv.OriginalAudio.PauseAsync(); } catch { }
+                }
             }
         }
 
@@ -2670,9 +2680,46 @@ namespace ModularAudience.Forms.Modules
 
         private void checkBox_mute_CheckedChanged(object sender, EventArgs e)
         {
-            this.OriginalAudio.SetVolume(this.checkBox_mute.Checked ? 0f : this.CurrentVolume);
-            this.checkBox_mute.Text = this.checkBox_mute.Checked ? "Muted" : "Mute";
-            this.checkBox_mute.ForeColor = this.checkBox_mute.Checked ? Color.DarkSalmon : SystemColors.ControlText;
-		}
+            this.SetVolumeSynced(this.vScrollBar_volume.Value, this.checkBox_mute.Checked);
+        }
+
+        internal void SetVolumeSynced(int scrollbarValue, bool muted)
+        {
+            // Ctrl gedrückt -> nur lokal anwenden
+            bool broadcast = !ModifierKeys.HasFlag(Keys.Control);
+
+            this.suppressSettingsCheckbox = true; // kurz UI-Suppress falls nötig
+            try
+            {
+                // Scrollbar setzen ohne Events zu schleifen
+                int clamped = Math.Clamp(scrollbarValue, this.vScrollBar_volume.Minimum, this.vScrollBar_volume.Maximum);
+                if (this.vScrollBar_volume.Value != clamped)
+                    this.vScrollBar_volume.Value = clamped;
+
+                // Mute setzen
+                if (this.checkBox_mute.Checked != muted)
+                    this.checkBox_mute.Checked = muted;
+
+                // Lautstärke anwenden
+                float vol = this.CurrentVolume;
+                this.label_volume.Text = (vol * 100f).ToString("F1") + "%";
+                this.OriginalAudio.SetVolume(muted ? 0f : vol);
+
+                // An andere synced TrackViews senden (nur wenn nicht Ctrl)
+                if (broadcast)
+                {
+                    foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
+                    {
+                        tv.SetVolumeSynced(clamped, muted);
+                    }
+                }
+            }
+            catch { }
+            finally
+            {
+                this.suppressSettingsCheckbox = false;
+            }
+        }
+
     }
 }
