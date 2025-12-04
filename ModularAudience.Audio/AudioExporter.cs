@@ -336,11 +336,11 @@ namespace ModularAudience.Audio
                             break;
 
                         case "TP1": // Artist / Performers
-                            tag.Performers = [value];
+                            tag.Performers = new[] { value };
                             break;
 
                         case "TP2": // Album Artist / Band
-                            tag.AlbumArtists = [value];
+                            tag.AlbumArtists = new[] { value };
                             break;
 
                         case "TP3": // Conductor
@@ -348,11 +348,11 @@ namespace ModularAudience.Audio
                             break;
 
                         case "TCM": // Composer
-                            tag.Composers = [value];
+                            tag.Composers = new[] { value };
                             break;
 
                         case "TCO": // Genre
-                            tag.Genres = [value];
+                            tag.Genres = new[] { value };
                             break;
 
                         case "COM": // Comment
@@ -397,7 +397,7 @@ namespace ModularAudience.Audio
                             {
                                 var id3 = (TagLib.Id3v2.Tag) tagFile.GetTag(TagLib.TagTypes.Id3v2);
                                 var frame = TagLib.Id3v2.TextInformationFrame.Get(id3, id, true);
-                                frame.Text = [value];
+                                frame.Text = new[] { value };
                             }
                             break;
                     }
