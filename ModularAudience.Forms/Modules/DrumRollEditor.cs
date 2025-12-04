@@ -843,6 +843,17 @@ namespace ModularAudience.Forms.Modules
                 return true;
             }
 
+            // Button E + Ctrl -> Export
+            if (keyData == (Keys.Control | Keys.E))
+            {
+                try
+                {
+                    this.button_export_Click(this, EventArgs.Empty);
+                }
+                catch { }
+                return true;
+            }
+
             // Space / Back handled weiterhin in OnKeyDown - fallthrough ansonsten
             return base.ProcessCmdKey(ref msg, keyData);
         }
@@ -1410,7 +1421,7 @@ namespace ModularAudience.Forms.Modules
                 this.CollectionView.AudioC.Audios.Add(mixed);
             }
             this.CollectionView.Show();
-            this.CollectionView.BringToFront();
+            this.Focus();
 
             if (ctrlFlag)
             {

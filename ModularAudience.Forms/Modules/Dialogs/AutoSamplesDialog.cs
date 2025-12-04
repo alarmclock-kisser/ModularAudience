@@ -19,6 +19,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private CancellationTokenSource? cuttingCts;
 
 
+        private decimal _lastFractionValue = 4m;
+
+
+
         public AutoSamplesDialog(AudioObj audio)
         {
             this.InitializeComponent();
@@ -222,5 +226,87 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.DialogResult = DialogResult.OK;
         }
+
+        private async void button_split_Click(object sender, EventArgs e)
+        {
+            var samples = await AutoSampleCutter.CutFractionSamplesAsync(this.OriginalAudio, (float) this.numericUpDown_fractions.Value);
+            
+            foreach (var sample in samples)
+            {
+                this.ResultSamples.Add(sample);
+            }
+
+            this.DialogResult = DialogResult.OK;
+        }
+
+        private void numericUpDown_fractions_ValueChanged(object sender, EventArgs e)
+        {
+            decimal newVal = this.numericUpDown_fractions.Value;
+
+            if (_lastFractionValue <= 0m)
+            {
+                _lastFractionValue = newVal;
+                return;
+            }
+
+            decimal oldVal = _lastFractionValue;
+            int dir = Math.Sign(newVal - oldVal);
+
+            if (dir == 0)
+            {
+                _lastFractionValue = newVal;
+                return;
+            }
+
+            decimal min = this.numericUpDown_fractions.Minimum;
+            decimal max = this.numericUpDown_fractions.Maximum;
+
+            decimal next = newVal;
+
+            if (oldVal >= 1m)
+            {
+                if (dir < 0)
+                {
+                    if (oldVal > 1m)
+                    {
+                        next = oldVal - 1m;
+                        if (next < 1m) next = 1m;
+                    }
+                    else
+                    {
+                        next = oldVal / 2m;
+                    }
+                }
+                else
+                {
+                    next = oldVal + 1m;
+                }
+            }
+            else
+            {
+                if (dir < 0)
+                {
+                    next = oldVal / 2m;
+                }
+                else
+                {
+                    next = oldVal * 2m;
+                    if (next >= 1m)
+                        next = 1m;
+                }
+            }
+
+            if (next < min) next = min;
+            if (next > max) next = max;
+
+            if (this.numericUpDown_fractions.Value != next)
+            {
+                this.numericUpDown_fractions.Value = next;
+            }
+
+            _lastFractionValue = next;
+        }
+
+
     }
 }

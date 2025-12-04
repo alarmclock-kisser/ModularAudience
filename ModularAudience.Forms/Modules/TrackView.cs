@@ -2448,7 +2448,7 @@ namespace ModularAudience.Forms.Modules
 
             if (!origin.Synced)
             {
-                return new[] { origin };
+                return [origin];
             }
 
             try
@@ -2467,7 +2467,7 @@ namespace ModularAudience.Forms.Modules
             }
             catch
             {
-                return new[] { origin };
+                return [origin];
             }
         }
 

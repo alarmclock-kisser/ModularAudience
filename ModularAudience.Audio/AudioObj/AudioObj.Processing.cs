@@ -58,10 +58,40 @@ namespace ModularAudience.Audio
                 clone.SelectionEnd = endSample.Value;
                 await clone.EraseSelectionAsync(true);
 
-                string fraction = "1/" + ((int) (1 / this.LoopFraction)).ToString();
-                double loopStartTime = (double) startSample.Value / this.SampleRate / this.Channels;
+                // Robust Fraction-Text: bevorzugt "1/n" bei Teilungen, sonst ganzzahlig oder mit einer Dezimalstelle
+                string fraction;
+                float lf = this.LoopFraction;
+                if (lf > 0f && lf < 1f)
+                {
+                    // Prüfe auf näherungsweise Kehrwert eines Integers (z. B. 0.5 -> 1/2)
+                    double recip = 1.0 / lf;
+                    int recipInt = (int) System.Math.Round(recip);
+                    if (System.Math.Abs(recip - recipInt) < 1e-3 && recipInt > 1)
+                    {
+                        fraction = "1/" + recipInt.ToString(CultureInfo.InvariantCulture);
+                    }
+                    else
+                    {
+                        fraction = lf.ToString("F1", CultureInfo.InvariantCulture);
+                    }
+                }
+                else if (lf >= 1f)
+                {
+                    int whole = (int) System.Math.Round(lf);
+                    fraction = System.Math.Abs(lf - whole) < 1e-3
+                        ? whole.ToString(CultureInfo.InvariantCulture)
+                        : lf.ToString("F1", CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    // Fallback, falls LoopFraction nicht gesetzt ist
+                    long len = endSample.Value - startSample.Value;
+                    fraction = len > 0 ? "1" : "0";
+                }
 
-                clone.Rename($"{this.OriginalName} (Looped {fraction} at {loopStartTime:F1}");
+                double loopStartTime = (double) startSample.Value / System.Math.Max(1, this.SampleRate) / System.Math.Max(1, this.Channels);
+
+                clone.Rename($"{this.OriginalName} (Looped {fraction} at {loopStartTime:F1}s)");
             }
 
             return clone;

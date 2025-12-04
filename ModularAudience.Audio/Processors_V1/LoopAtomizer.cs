@@ -103,6 +103,7 @@ namespace ModularAudience.Audio.Processors_V1
                 }
                 var rep = IsolateAndFinalize(candidates[bestIdx], sr);
                 rep.Name = $"{(string.IsNullOrWhiteSpace(audioObj.Name) ? "atom" : audioObj.Name)}_atom_{ci + 1:D2}";
+                rep.Rename(rep.Name);
                 representatives.Add(rep);
             }
 
@@ -826,7 +827,10 @@ namespace ModularAudience.Audio.Processors_V1
                 SampleRate = sampleRate,
                 Length = outData.LongLength
             };
-            try { obj.Name = (string.IsNullOrWhiteSpace(baseName) ? "slice" : baseName); } catch { }
+            try {
+                obj.Name = (string.IsNullOrWhiteSpace(baseName) ? "slice" : baseName);
+                obj.Rename(obj.Name);
+            } catch { }
             return obj;
         }
 

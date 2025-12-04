@@ -2,6 +2,7 @@ using ModularAudience.Audio;
 using ModularAudience.Forms.Modules;
 using System.ComponentModel;
 using ModularAudience.Audio.Processors_V1;
+using System.Runtime.CompilerServices;
 
 namespace ModularAudience.Forms
 {
@@ -964,6 +965,8 @@ namespace ModularAudience.Forms
             {
                 // keine Änderung erforderlich
             }
+
+            UpdateTrackDependentUI();
         }
 
         private void checkBox_singleCollection_CheckedChanged(object? sender, EventArgs e)
@@ -1320,7 +1323,7 @@ namespace ModularAudience.Forms
             Instance.button_scanBpm.Enabled = LastSelectedTrackView != null;
             Instance.button_scanTiming.Enabled = LastSelectedTrackView != null;
             Instance.button_scanKey.Enabled = LastSelectedTrackView != null;
-            Instance.button_timeStretch.Enabled = LastSelectedTrackView != null;
+            Instance.button_timeStretch.Enabled = LastSelectedTrackView != null || CollectionViews.Count > 0;
             Instance.button_export.Enabled = LastSelectedTrackView != null;
             Instance.comboBox_exportFormat.Enabled = LastSelectedTrackView != null;
             Instance.comboBox_exportBits.Enabled = LastSelectedTrackView != null;
@@ -1417,16 +1420,34 @@ namespace ModularAudience.Forms
 
         private void button_timeStretch_Click(object sender, EventArgs e)
         {
-            if (LastSelectedTrackView == null || LastSelectedTrackView.IsDisposed)
+            // Alle ausgewählten Audios aus nicht-disponierten CollectionViews sammeln
+            var selectedAudios = CollectionViews
+                .Where(cv => cv != null && !cv.IsDisposed)
+                .SelectMany(cv => cv.SelectedAudios)
+                .ToList();
+
+            // Fall 1: Keine TrackView aktiv/offen, aber es gibt ausgewählte Audios in Collections -> nutze alle ausgewählten
+            bool noTrackViewOpenOrSelected = LastSelectedTrackView == null || LastSelectedTrackView.IsDisposed;
+            if (noTrackViewOpenOrSelected && selectedAudios.Count > 0)
             {
-                MessageBox.Show(this, "No track selected.", "Time Stretch", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                using var dlg = new Modules.Dialogs.TimeStretchDialog(null, selectedAudios);
+                dlg.ShowDialog(this);
+                UpdateTrackDependentUI();
+                RefreshAllCollectionViews();
                 return;
             }
 
-            using var dlg = new Modules.Dialogs.TimeStretchDialog(LastSelectedTrackView);
-            dlg.ShowDialog(this);
+            // Fall 2: TrackView vorhanden -> nur den ausgewählten Track verwenden
+            if (LastSelectedTrackView != null && !LastSelectedTrackView.IsDisposed)
+            {
+                using var dlg = new Modules.Dialogs.TimeStretchDialog(LastSelectedTrackView);
+                dlg.ShowDialog(this);
+                UpdateTrackDependentUI();
+                return;
+            }
 
-            UpdateTrackDependentUI();
+            // Sonst: nichts ausgewählt
+            MessageBox.Show(this, "No track selected.", "Time Stretch", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         private async void button_export_Click(object sender, EventArgs e)

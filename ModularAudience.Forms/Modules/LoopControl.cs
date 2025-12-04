@@ -48,6 +48,11 @@ namespace ModularAudience.Forms.Modules
         private readonly HashSet<Control> autoRefocusAttached = [];
         private readonly HashSet<Control> containerMonitored = [];
 
+        // Track last applied loop to support relative scaling when switching buttons
+        private long lastLoopStartSamples = -1;
+        private long lastLoopEndSamples = -1;
+        private float lastAppliedLoopFraction = 0f; // value from button (can be negative)
+        private bool lastActionWasMultiplierChange = false;
 
 
         public LoopControl()
@@ -183,13 +188,20 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            // State before toggle
+            bool hadActiveBefore = this.panel_buttons.Controls.OfType<Button>().Any(b => b.BackColor == Color.LightBlue);
+
+            // Toggle clicked
             clickedButton.BackColor = clickedButton.BackColor != Color.LightBlue ? Color.LightBlue : SystemColors.Control;
 
             // Untoggle all other buttons
             this.UntoggleAllOtherButtons(clickedButton);
 
-            // Set loop range
-            this.SetLoopRange(this.panel_buttons.Controls.OfType<Button>().Any(b => b.BackColor == Color.LightBlue) == false);
+            // Determine new state
+            bool anyActiveNow = this.panel_buttons.Controls.OfType<Button>().Any(b => b.BackColor == Color.LightBlue);
+
+            // Set loop range accordingly
+            this.SetLoopRange(!anyActiveNow, hadActiveBefore);
 
 			// Focus TrackView but also keep this Form front most
 			this.CurrentTrackView?.Focus();
@@ -205,71 +217,208 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        private void SetLoopRange(bool applyToCurrentRange = false)
+        private void SetLoopRange(bool noButtonSelectedAfterToggle = false, bool hadActiveBefore = false)
         {
             // Guard
             if (this.CurrentTrackView == null || this.OriginalAudio == null)
-            {
                 return;
-            }
 
             float fraction = this.CurrentLoopFraction;
 
-            // 0 => disable loop (consistent with existing behavior)
-            if (fraction == 0f)
+            // If no button is selected after toggle -> disable loop and reset tracking
+            if (noButtonSelectedAfterToggle || fraction == 0f)
             {
-                this.OriginalAudio.UpdateLoopFraction(0, 0, 0, false, applyToCurrentRange);
+                this.OriginalAudio.UpdateLoopFraction(0, 0, 0, false, true);
+                this.lastLoopStartSamples = -1;
+                this.lastLoopEndSamples = -1;
+                this.lastAppliedLoopFraction = 0f;
                 return;
+            }
+
+            static int SignEps(float x)
+            {
+                const float eps = 1e-6f;
+                return x > eps ? 1 : (x < -eps ? -1 : 0);
             }
 
             try
             {
                 int channels = Math.Max(1, this.OriginalAudio.Channels);
 
-                // frames per "unit" (hier: 1 Beat *2, siehe SampleRangePerBeat)
                 long framesPerBeat = Math.Max(1, this.SampleRangePerBeat);
+                long totalFrames = Math.Max(0L, this.OriginalAudio.Length / Math.Max(1, channels));
+                long totalSamples = Math.Max(0L, this.OriginalAudio.Length);
 
-                // gewünschte Loop-Länge in Frames (absoluter Betrag der Fraction)
-                long deltaFrames = Math.Max(
-                    1L,
-                    (long) Math.Round(Math.Abs(fraction) * framesPerBeat)
-                );
+                // Capture current position and previous loop bounds before any change
+                long currentSamplesBefore = this.OriginalAudio.Position * Math.Max(1, this.OriginalAudio.Channels);
+                long prevStartSamples = this.lastLoopStartSamples;
+                long prevEndSamples = this.lastLoopEndSamples;
 
-                // aktuelle Wiedergabeposition in Frames
-                long currentFrame = this.OriginalAudio.Position;
+                bool havePrevLoop = prevStartSamples >= 0 && prevEndSamples > prevStartSamples;
+
+                int signNow = SignEps(fraction);
+                int signPrev = SignEps(this.lastAppliedLoopFraction);
+                bool signChanged = hadActiveBefore && havePrevLoop && signNow != 0 && signPrev != 0 && signNow != signPrev;
+
+                bool doRelativeScale =
+                    hadActiveBefore &&
+                    !this.lastActionWasMultiplierChange &&
+                    havePrevLoop &&
+                    Math.Abs(this.lastAppliedLoopFraction) > 1e-9f;
+
+                bool anchoredAbsoluteByMultiplier =
+                    hadActiveBefore &&
+                    this.lastActionWasMultiplierChange &&
+                    havePrevLoop;
 
                 long startFrame;
                 long endFrame;
+                bool anchorAtStart = fraction >= 0f; // positive -> anchor at start, negative -> anchor at end
 
-                if (fraction < 0f)
+                if (doRelativeScale)
                 {
-                    // negative Fraction: Loop rückwärts von der aktuellen Position
-                    startFrame = currentFrame - deltaFrames;
-                    endFrame = currentFrame;
+                    long prevLenSamples = Math.Max(1L, prevEndSamples - prevStartSamples);
+                    double ratio = Math.Abs(fraction) / Math.Max(1e-9, Math.Abs(this.lastAppliedLoopFraction));
+                    long newLenSamples = Math.Max(1L, (long) Math.Round(prevLenSamples * ratio));
+
+                    if (fraction >= 0f)
+                    {
+                        // Normal: anchor at previous start.
+                        // If we switched from negative->positive, anchor at previous END (shared boundary).
+                        long anchorStartSamples = signChanged ? prevEndSamples : prevStartSamples;
+
+                        long desiredEndSamples = anchorStartSamples + newLenSamples;
+                        long clampedEnd = Math.Clamp(desiredEndSamples, anchorStartSamples + 1L, Math.Max(1L, totalSamples));
+                        long clampedStart = Math.Clamp(anchorStartSamples, 0L, Math.Max(0L, clampedEnd - 1));
+
+                        startFrame = clampedStart / channels;
+                        endFrame = clampedEnd / channels;
+                        anchorAtStart = true;
+                    }
+                    else
+                    {
+                        // Normal: anchor at previous end.
+                        // If we switched from positive->negative, anchor at previous START (shared boundary).
+                        long anchorEndSamples = signChanged ? prevStartSamples : prevEndSamples;
+
+                        long desiredStartSamples = anchorEndSamples - newLenSamples;
+                        long clampedStart = Math.Clamp(desiredStartSamples, 0L, Math.Max(0L, anchorEndSamples - 1));
+                        long clampedEnd = Math.Clamp(anchorEndSamples, clampedStart + 1L, Math.Max(1L, totalSamples));
+
+                        startFrame = clampedStart / channels;
+                        endFrame = clampedEnd / channels;
+                        anchorAtStart = false;
+                    }
+                }
+                else if (anchoredAbsoluteByMultiplier)
+                {
+                    long targetLenFrames = Math.Max(1L, (long) Math.Round(Math.Abs(fraction) * framesPerBeat));
+                    long targetLenSamples = Math.Max(1L, targetLenFrames * channels);
+
+                    if (fraction >= 0f)
+                    {
+                        long anchorStartSamples = signChanged ? prevEndSamples : prevStartSamples;
+
+                        long desiredEndSamples = anchorStartSamples + targetLenSamples;
+                        long clampedEnd = Math.Clamp(desiredEndSamples, anchorStartSamples + 1L, Math.Max(1L, totalSamples));
+                        long clampedStart = Math.Clamp(anchorStartSamples, 0L, Math.Max(0L, clampedEnd - 1));
+
+                        startFrame = clampedStart / channels;
+                        endFrame = clampedEnd / channels;
+                        anchorAtStart = true;
+                    }
+                    else
+                    {
+                        long anchorEndSamples = signChanged ? prevStartSamples : prevEndSamples;
+
+                        long desiredStartSamples = anchorEndSamples - targetLenSamples;
+                        long clampedStart = Math.Clamp(desiredStartSamples, 0L, Math.Max(0L, anchorEndSamples - 1));
+                        long clampedEnd = Math.Clamp(anchorEndSamples, clampedStart + 1L, Math.Max(1L, totalSamples));
+
+                        startFrame = clampedStart / channels;
+                        endFrame = clampedEnd / channels;
+                        anchorAtStart = false;
+                    }
                 }
                 else
                 {
-                    // positive Fraction: Loop vorwärts ab aktueller Position
-                    startFrame = currentFrame;
-                    endFrame = currentFrame + deltaFrames;
+                    long deltaFrames = Math.Max(1L, (long) Math.Round(Math.Abs(fraction) * framesPerBeat));
+                    long currentFrame = this.OriginalAudio.Position;
+
+                    if (fraction < 0f)
+                    {
+                        startFrame = currentFrame - deltaFrames;
+                        endFrame = currentFrame;
+                        anchorAtStart = false;
+                    }
+                    else
+                    {
+                        startFrame = currentFrame;
+                        endFrame = currentFrame + deltaFrames;
+                        anchorAtStart = true;
+                    }
+
+                    startFrame = Math.Clamp(startFrame, 0L, Math.Max(0L, totalFrames - 1));
+                    endFrame = Math.Clamp(endFrame, startFrame + 1L, Math.Max(1L, totalFrames));
                 }
 
-                // Gesamtframes aus Länge in Samples / Channels
-                long totalFrames = Math.Max(0L, this.OriginalAudio.Length / Math.Max(1, channels));
-
-                // clamp in gültigen Bereich
-                startFrame = Math.Clamp(startFrame, 0L, Math.Max(0L, totalFrames - 1));
-                endFrame = Math.Clamp(endFrame, startFrame + 1L, Math.Max(1L, totalFrames));
-
-                // jetzt sind start/end konsistent → Frames → Samples
                 long baseStartSamples = startFrame * channels;
                 long baseEndSamples = endFrame * channels;
-
-                // fractionSamples = tatsächliche Loop-Spanne, nicht "deltaFrames * channels"
                 long fractionSamples = Math.Max(1L, baseEndSamples - baseStartSamples);
 
-                // Loop anwenden; adjustPosition=true hält den Player in der Loop
-                this.OriginalAudio.UpdateLoopFraction(baseStartSamples, baseEndSamples, fractionSamples, true, true);
+                bool insideNewLoop = currentSamplesBefore >= baseStartSamples && currentSamplesBefore < baseEndSamples;
+
+                long desiredSamples = currentSamplesBefore;
+                bool forceJump = false;
+
+                // Special: when switching sign, keep "phase" around the shared boundary
+                if (signChanged && havePrevLoop)
+                {
+                    long prevLen = Math.Max(1L, prevEndSamples - prevStartSamples);
+
+                    // + -> -
+                    if (signPrev > 0 && signNow < 0)
+                    {
+                        long offsetFromPrevStart = Math.Clamp(currentSamplesBefore - prevStartSamples, 0L, prevLen - 1);
+                        desiredSamples = Math.Clamp(baseEndSamples - offsetFromPrevStart, baseStartSamples, baseEndSamples - 1);
+                        forceJump = true;
+                    }
+                    // - -> +
+                    else if (signPrev < 0 && signNow > 0)
+                    {
+                        long offsetFromPrevEnd = Math.Clamp(prevEndSamples - currentSamplesBefore, 0L, prevLen - 1);
+                        desiredSamples = Math.Clamp(baseStartSamples + offsetFromPrevEnd, baseStartSamples, baseEndSamples - 1);
+                        forceJump = true;
+                    }
+                }
+                else if (havePrevLoop && insideNewLoop)
+                {
+                    // Existing continuity alignment
+                    if (anchorAtStart)
+                    {
+                        long prevRel = Math.Max(0L, currentSamplesBefore - prevStartSamples);
+                        desiredSamples = Math.Clamp(baseStartSamples + Math.Min(prevRel, fractionSamples - 1), baseStartSamples, baseEndSamples - 1);
+                    }
+                    else
+                    {
+                        long prevRelFromEnd = Math.Max(0L, prevEndSamples - currentSamplesBefore);
+                        desiredSamples = Math.Clamp(baseEndSamples - Math.Min(prevRelFromEnd, fractionSamples - 1), baseStartSamples, baseEndSamples - 1);
+                    }
+                }
+
+                // Apply loop; request adjustPosition if outside OR we deliberately want to re-anchor on sign switch
+                this.OriginalAudio.UpdateLoopFraction(baseStartSamples, baseEndSamples, fractionSamples, true, (!insideNewLoop) || forceJump);
+
+                // Force exact position if needed (prevents weird "same offset" feel)
+                if (insideNewLoop || forceJump)
+                {
+                    try { this.OriginalAudio.JumpToSamples(desiredSamples); } catch { }
+                }
+
+                // Track last applied loop and fraction for future relative scaling
+                this.lastLoopStartSamples = baseStartSamples;
+                this.lastLoopEndSamples = baseEndSamples;
+                this.lastAppliedLoopFraction = fraction;
             }
             catch
             {
@@ -339,15 +488,82 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            var copiedLoop = await this.OriginalAudio.CreateLoopAsync();
+            // Prefer the currently active button label for naming (fixes the "off by one step" naming)
+            string GetUiFractionLabel()
+            {
+                var btn = this.panel_buttons.Controls
+                    .OfType<Button>()
+                    .FirstOrDefault(b => b.BackColor == Color.LightBlue);
+
+                string txt = btn?.Text?.Trim() ?? string.Empty;
+
+                // "/4" -> "1/4"
+                if (txt.StartsWith("/", StringComparison.Ordinal))
+                {
+                    return "1" + txt;
+                }
+
+                // "1", "2", "4", "8", "16" -> as-is
+                if (!string.IsNullOrWhiteSpace(txt))
+                {
+                    return txt;
+                }
+
+                // Fallback: derive from LoopFraction (best-effort)
+                float lf = this.OriginalAudio.LoopFraction;
+                if (lf > 0f && lf < 1f)
+                {
+                    double recip = 1.0 / lf;
+                    int recipInt = (int) Math.Round(recip);
+                    if (Math.Abs(recip - recipInt) < 1e-3 && recipInt > 1)
+                    {
+                        return "1/" + recipInt.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                    return lf.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+                }
+                if (lf >= 1f)
+                {
+                    int whole = (int) Math.Round(lf);
+                    return Math.Abs(lf - whole) < 1e-3
+                        ? whole.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        : lf.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+                }
+
+                return "1";
+            }
+
+            long? startSample = this.lastLoopStartSamples >= 0 ? this.lastLoopStartSamples : null;
+            long? endSample = this.lastLoopEndSamples > this.lastLoopStartSamples ? this.lastLoopEndSamples : null;
+
+            var copiedLoop = await this.OriginalAudio.CreateLoopAsync(startSample, endSample);
 
             if (copiedLoop != null)
             {
-                this.CollectionView ??= new AudioCollectionView([]);
+                // Override the name to match UI label (fix)
+                double loopStartTime = 0.0;
+                if (startSample.HasValue)
+                {
+                    loopStartTime = (double) startSample.Value
+                                    / Math.Max(1, this.OriginalAudio.SampleRate)
+                                    / Math.Max(1, this.OriginalAudio.Channels);
+                }
+
+                string uiLabel = GetUiFractionLabel();
+                copiedLoop.Rename($"{this.OriginalAudio.OriginalName} (Looped {uiLabel} at {loopStartTime:F1}s)");
+
+                if (this.CollectionView == null)
+                {
+                    this.CollectionView = new([]);
+                    this.CollectionView.Rename("Loops - '" + this.OriginalAudio.OriginalName + "'");
+                    this.CollectionView.FormClosing += (s, e) =>
+                    {
+                        this.CollectionView = null;
+                    };
+                }
                 this.CollectionView.AudioC.Audios.Add(copiedLoop);
-                this.CollectionView.Rename("Loop" + (this.CollectionView.AudioC.Audios.Count == 1 ? "" : "(s)") + " - '" + this.OriginalAudio.OriginalName + "'");
             }
         }
+
 
 
 
@@ -374,7 +590,7 @@ namespace ModularAudience.Forms.Modules
             {
                 try
                 {
-                    // BeginInvoke stellt sicher, dass das auslösende Event komplett ausgeführt wurde
+                    // BeginInvoke stellt sicher, dass das auslösende Event komplettExecuted
                     this.BeginInvoke((Action) (() =>
                     {
                         try { this.CurrentTrackView?.Focus(); } catch { }
@@ -454,7 +670,9 @@ namespace ModularAudience.Forms.Modules
         {
            if (this.panel_buttons.Controls.OfType<Button>().Any(b => b.BackColor == Color.LightBlue))
             {
-                this.SetLoopRange();
+                this.lastActionWasMultiplierChange = true;
+                this.SetLoopRange(false, true);
+                this.lastActionWasMultiplierChange = false;
             }
 		}
     }

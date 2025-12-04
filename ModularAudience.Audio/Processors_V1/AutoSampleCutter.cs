@@ -1,5 +1,6 @@
 ﻿using ModularAudience.Audio;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -33,6 +34,141 @@ namespace ModularAudience.Audio.Processors_V1
 
             return Task.Run(() => ExtractInternal(audio, minDurationMs, maxDurationMs, silenceDurationMs, progress, cancellationToken), cancellationToken);
         }
+
+        public static async Task<IEnumerable<AudioObj>> CutFractionSamplesAsync(AudioObj audio, float fractions = 2)
+        {
+            if (audio == null)
+            {
+                throw new ArgumentNullException(nameof(audio));
+            }
+
+            if (fractions == 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(fractions), "fractions must not be 0.");
+            }
+
+            if (audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
+            {
+                return Array.Empty<AudioObj>();
+            }
+
+            int channels = Math.Max(1, audio.Channels);
+            int totalFrames = audio.Data.Length / channels;
+
+            if (totalFrames <= 0)
+            {
+                return Array.Empty<AudioObj>();
+            }
+
+            var results = new System.Collections.Concurrent.ConcurrentBag<AudioObj>();
+
+            if (fractions >= 1f)
+            {
+                int parts = (int) Math.Round(fractions);
+                parts = Math.Max(1, parts);
+
+                int baseFrames = totalFrames / parts;
+                int remainder = totalFrames % parts;
+
+                System.Threading.Tasks.Parallel.For(0, parts, i =>
+                {
+                    int framesThis = baseFrames + (i < remainder ? 1 : 0);
+                    if (framesThis <= 0)
+                        return;
+
+                    int startFrame;
+                    if (i < remainder)
+                    {
+                        startFrame = i * (baseFrames + 1);
+                    }
+                    else
+                    {
+                        startFrame = remainder * (baseFrames + 1) + (i - remainder) * baseFrames;
+                    }
+
+                    if (startFrame >= totalFrames)
+                        return;
+
+                    if (startFrame + framesThis > totalFrames)
+                    {
+                        framesThis = totalFrames - startFrame;
+                        if (framesThis <= 0)
+                            return;
+                    }
+
+                    int sampleStart = startFrame * channels;
+                    int sampleCount = framesThis * channels;
+
+                    var newData = new float[sampleCount];
+                    Array.Copy(audio.Data, sampleStart, newData, 0, sampleCount);
+
+                    var part = new AudioObj
+                    {
+                        Id = audio.Id,
+                        Name = $"{audio.Name}_part{i + 1}_{parts}",
+                        FilePath = audio.FilePath,
+                        Data = newData,
+                        SampleRate = audio.SampleRate,
+                        Channels = audio.Channels,
+                        BitDepth = audio.BitDepth,
+                        Length = newData.Length,
+                        Duration = TimeSpan.FromSeconds(framesThis / (double) audio.SampleRate),
+                        Bpm = audio.Bpm,
+                        Timing = audio.Timing,
+                        Volume = audio.Volume
+                    };
+                    part.Rename(part.Name);
+
+                    results.Add(part);
+                });
+            }
+            else
+            {
+                double repeatFactor = 1.0 / Math.Abs(fractions);
+                if (repeatFactor < 1.0)
+                    repeatFactor = 1.0;
+
+                int newFrames = (int) Math.Round(totalFrames * repeatFactor);
+                newFrames = Math.Max(1, newFrames);
+
+                var newData = new float[newFrames * channels];
+
+                for (int frame = 0; frame < newFrames; frame++)
+                {
+                    int srcFrame = frame % totalFrames;
+                    int srcIndex = srcFrame * channels;
+                    int dstIndex = frame * channels;
+
+                    for (int ch = 0; ch < channels; ch++)
+                    {
+                        newData[dstIndex + ch] = audio.Data[srcIndex + ch];
+                    }
+                }
+
+                var concat = new AudioObj
+                {
+                    Id = audio.Id,
+                    Name = $"{audio.Name}_x{repeatFactor:0.###}",
+                    FilePath = audio.FilePath,
+                    Data = newData,
+                    SampleRate = audio.SampleRate,
+                    Channels = audio.Channels,
+                    BitDepth = audio.BitDepth,
+                    Length = newData.Length,
+                    Duration = TimeSpan.FromSeconds(newFrames / (double) audio.SampleRate),
+                    Bpm = audio.Bpm,
+                    Timing = audio.Timing,
+                    Volume = audio.Volume
+                };
+                concat.Rename(concat.Name);
+
+                results.Add(concat);
+            }
+
+            var list = results.ToList();
+            return await Task.FromResult(list);
+        }
+
 
         private static IReadOnlyList<AudioObj> ExtractInternal(
             AudioObj audio,

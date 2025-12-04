@@ -43,10 +43,13 @@
             this.button_cutV2 = new Button();
             this.button_atomize = new Button();
             this.button_autoCut = new Button();
+            this.button_split = new Button();
+            this.numericUpDown_fractions = new NumericUpDown();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_minDuration).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_maxDuration).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_silenceDuration).BeginInit();
             this.groupBox_options.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_fractions).BeginInit();
             this.SuspendLayout();
             // 
             // button_cut
@@ -207,11 +210,36 @@
             this.button_autoCut.UseVisualStyleBackColor = false;
             this.button_autoCut.Click += this.button_autoCut_Click;
             // 
+            // button_split
+            // 
+            this.button_split.BackColor = SystemColors.Info;
+            this.button_split.Location = new Point(12, 137);
+            this.button_split.Name = "button_split";
+            this.button_split.Size = new Size(75, 23);
+            this.button_split.TabIndex = 15;
+            this.button_split.Text = "Split";
+            this.button_split.UseVisualStyleBackColor = false;
+            this.button_split.Click += this.button_split_Click;
+            // 
+            // numericUpDown_fractions
+            // 
+            this.numericUpDown_fractions.DecimalPlaces = 4;
+            this.numericUpDown_fractions.Location = new Point(93, 137);
+            this.numericUpDown_fractions.Maximum = new decimal(new int[] { 256, 0, 0, 0 });
+            this.numericUpDown_fractions.Minimum = new decimal(new int[] { 5, 0, 0, 196608 });
+            this.numericUpDown_fractions.Name = "numericUpDown_fractions";
+            this.numericUpDown_fractions.Size = new Size(60, 23);
+            this.numericUpDown_fractions.TabIndex = 9;
+            this.numericUpDown_fractions.Value = new decimal(new int[] { 4, 0, 0, 0 });
+            this.numericUpDown_fractions.ValueChanged += this.numericUpDown_fractions_ValueChanged;
+            // 
             // AutoSamplesDialog
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(344, 221);
+            this.Controls.Add(this.numericUpDown_fractions);
+            this.Controls.Add(this.button_split);
             this.Controls.Add(this.button_autoCut);
             this.Controls.Add(this.button_atomize);
             this.Controls.Add(this.button_cutV2);
@@ -228,6 +256,7 @@
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_silenceDuration).EndInit();
             this.groupBox_options.ResumeLayout(false);
             this.groupBox_options.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_fractions).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -249,5 +278,7 @@
         private Button button_cutV2;
         private Button button_atomize;
         private Button button_autoCut;
+        private Button button_split;
+        private NumericUpDown numericUpDown_fractions;
     }
 }
