@@ -122,8 +122,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                                                 track,
                                                 (int) this.numericUpDown_chunkSize.Value,
                                                 (float) this.numericUpDown_overlap.Value,
-                                                (double) this.numericUpDown_stretchFactor.Value,
-                                                keepData: false,
+                                                (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2* (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
+												keepData: false,
                                                 normalize: 1.0f,
                                                 maxWorkers: (int) this.numericUpDown_threads.Value,
                                                 progress: progress,
@@ -146,8 +146,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                                             this.Tracks.First(),
                                             (int) this.numericUpDown_chunkSize.Value,
                                             (float) this.numericUpDown_overlap.Value,
-                                            (double) this.numericUpDown_stretchFactor.Value,
-                                            keepData: false,
+										    (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
+											keepData: false,
                                             normalize: 1.0f,
                                             maxWorkers: (int) this.numericUpDown_threads.Value,
                                             progress: progress,
@@ -302,8 +302,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         // Process each track in-place with V2
                         await TimeStretcher_V2.Timestretch_V2Async(
                             t,
-                            (double)this.numericUpDown_stretchFactor.Value,
-                            chunkSize,
+							(double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
+							chunkSize,
                             overlap,
                             perTrackProgress,
                             this.ProcessingCancellationSource.Token);
@@ -326,8 +326,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                     await TimeStretcher_V2.Timestretch_V2Async(
                         track,
-                        (double)this.numericUpDown_stretchFactor.Value,
-                        chunkSize,
+						(double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
+						chunkSize,
                         overlap,
                         perTrackProgress,
                         this.ProcessingCancellationSource.Token);

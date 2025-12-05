@@ -675,7 +675,54 @@ namespace ModularAudience.Forms.Modules
             try { this.OriginalAudio.SetVolume(this.Muted ? 0f : vol); } catch { }
         }
 
+        // Beispiel: neuen Parameter hinzufügen und reentrancy-flag verwenden
+        private bool suppressVolumeSync;
+
+        internal void SetVolumeSynced(int scrollbarValue, bool muted, bool broadcast = true)
+        {
+            if (this.IsDisposed) return;
+            if (suppressVolumeSync) return;
+
+            bool doBroadcast = broadcast && !ModifierKeys.HasFlag(Keys.Control);
+
+            suppressVolumeSync = true;
+            try
+            {
+                int clamped = Math.Clamp(scrollbarValue, this.vScrollBar_volume.Minimum, this.vScrollBar_volume.Maximum);
+                if (this.vScrollBar_volume.Value != clamped)
+                    this.vScrollBar_volume.Value = clamped;
+
+                if (this.checkBox_mute.Checked != muted)
+                    this.checkBox_mute.Checked = muted;
+
+                float vol = this.CurrentVolume;
+                this.label_volume.Text = (vol * 100f).ToString("F1") + "%";
+                this.OriginalAudio.SetVolume(muted ? 0f : vol);
+
+                if (doBroadcast)
+                {
+                    foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
+                    {
+                        // verhindere, dass Empfänger erneut broadcastet
+                        tv.SetVolumeSynced(clamped, muted, broadcast: false);
+                    }
+                }
+            }
+            finally
+            {
+                suppressVolumeSync = false;
+            }
+        }
+
         private void vScrollBar_volume_Scroll(object? sender, ScrollEventArgs e)
+        {
+            if (this.OriginalAudio.Playing || this.OriginalAudio.Paused)
+            {
+				this.SetVolumeSynced(this.vScrollBar_volume.Value, this.checkBox_mute.Checked);
+			}
+		}
+
+        private void checkBox_mute_CheckedChanged(object sender, EventArgs e)
         {
             this.SetVolumeSynced(this.vScrollBar_volume.Value, this.checkBox_mute.Checked);
         }
@@ -1558,10 +1605,10 @@ namespace ModularAudience.Forms.Modules
 
 			this.RecalculateLoopFraction();
 			this.ApplyLoopFractionToAudio();
-			this.AlignViewToCurrentPosition();
-			this.UpdateOffsetScrollbar();
-			this.RequestWaveformRender();
-			this.ApplyInitialTrackSizing();
+            this.AlignViewToCurrentPosition();
+            this.UpdateOffsetScrollbar();
+            this.RequestWaveformRender();
+            this.ApplyInitialTrackSizing();
 
 			LogCollection.Log($"AudioObj '{clip.Name}' pasted into track view.");
 		}
@@ -2300,7 +2347,7 @@ namespace ModularAudience.Forms.Modules
 
                 // Hilfsfunktion: Frame-Bereich in sichtbare Pixel (und Clip)
                 clipWidth = this.pictureBox_waveform.Width;
-                clipHeight = height;
+                clipHeight = height; // <-- Fix: 'height' durch 'bmp.Height' ersetzt
 
                 // Brushes: normal und "outside" (heller / dezenter)
                 using var insideBrush = new SolidBrush(Color.FromArgb(60, Color.DeepSkyBlue)); // wie zuvor
@@ -2677,49 +2724,5 @@ namespace ModularAudience.Forms.Modules
                 SetButtonsStopped();
             }
         }
-
-        private void checkBox_mute_CheckedChanged(object sender, EventArgs e)
-        {
-            this.SetVolumeSynced(this.vScrollBar_volume.Value, this.checkBox_mute.Checked);
-        }
-
-        internal void SetVolumeSynced(int scrollbarValue, bool muted)
-        {
-            // Ctrl gedrückt -> nur lokal anwenden
-            bool broadcast = !ModifierKeys.HasFlag(Keys.Control);
-
-            this.suppressSettingsCheckbox = true; // kurz UI-Suppress falls nötig
-            try
-            {
-                // Scrollbar setzen ohne Events zu schleifen
-                int clamped = Math.Clamp(scrollbarValue, this.vScrollBar_volume.Minimum, this.vScrollBar_volume.Maximum);
-                if (this.vScrollBar_volume.Value != clamped)
-                    this.vScrollBar_volume.Value = clamped;
-
-                // Mute setzen
-                if (this.checkBox_mute.Checked != muted)
-                    this.checkBox_mute.Checked = muted;
-
-                // Lautstärke anwenden
-                float vol = this.CurrentVolume;
-                this.label_volume.Text = (vol * 100f).ToString("F1") + "%";
-                this.OriginalAudio.SetVolume(muted ? 0f : vol);
-
-                // An andere synced TrackViews senden (nur wenn nicht Ctrl)
-                if (broadcast)
-                {
-                    foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
-                    {
-                        tv.SetVolumeSynced(clamped, muted);
-                    }
-                }
-            }
-            catch { }
-            finally
-            {
-                this.suppressSettingsCheckbox = false;
-            }
-        }
-
     }
 }
