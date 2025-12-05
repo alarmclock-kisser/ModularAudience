@@ -1426,17 +1426,6 @@ namespace ModularAudience.Forms
                 .SelectMany(cv => cv.SelectedAudios)
                 .ToList();
 
-            // Fall 1: Keine TrackView aktiv/offen, aber es gibt ausgewählte Audios in Collections -> nutze alle ausgewählten
-            bool noTrackViewOpenOrSelected = LastSelectedTrackView == null || LastSelectedTrackView.IsDisposed;
-            if (noTrackViewOpenOrSelected && selectedAudios.Count > 0)
-            {
-                using var dlg = new Modules.Dialogs.TimeStretchDialog(null, selectedAudios);
-                dlg.ShowDialog(this);
-                UpdateTrackDependentUI();
-                RefreshAllCollectionViews();
-                return;
-            }
-
             // Fall 2: TrackView vorhanden -> nur den ausgewählten Track verwenden
             if (LastSelectedTrackView != null && !LastSelectedTrackView.IsDisposed)
             {

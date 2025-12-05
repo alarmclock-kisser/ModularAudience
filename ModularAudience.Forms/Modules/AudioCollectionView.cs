@@ -268,7 +268,19 @@ namespace ModularAudience.Forms
                         }
                     };
 
-                    contextMenu.Items.AddRange([renameItem, editTagsItem, deleteItem, toNewCollectionItem, addIndexToNamesItem, aggregateMixSelectedItem]);
+                    ToolStripMenuItem timestretchItem = new("Time-Stretch Selected");
+                    timestretchItem.Enabled = this.listBox_audios.SelectedItems.Count > 0 || (this.listBox_audios.SelectedItems.Count == 0 && index >= 0 && index < this.listBox_audios.Items.Count);
+                    timestretchItem.Click += (s, ev) =>
+                    {
+                        List<AudioObj> toStretch = this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>().ToList();
+                        using var dlg = new Modules.Dialogs.TimeStretchDialog(null, toStretch);
+                        dlg.ShowDialog(this);
+                        WindowMain.UpdateTrackDependentUI();
+                        WindowMain.RefreshAllCollectionViews();
+                        return;
+                    };
+
+                    contextMenu.Items.AddRange([renameItem, editTagsItem, deleteItem, toNewCollectionItem, addIndexToNamesItem, aggregateMixSelectedItem, timestretchItem]);
                     contextMenu.Show(this.listBox_audios, e.Location);
                 }
             }
