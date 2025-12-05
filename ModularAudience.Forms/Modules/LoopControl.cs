@@ -18,6 +18,8 @@ namespace ModularAudience.Forms.Modules
         private float Bpm => this.OriginalAudio?.Bpm > 0 ? this.OriginalAudio.Bpm : this.OriginalAudio?.ScannedBpm > 0 ? this.OriginalAudio.ScannedBpm : 120f;
         private int SampleRangePerBeat => (this.OriginalAudio != null ? (int) (this.OriginalAudio.SampleRate * 60f / this.Bpm * 2f) : 88200) * this.Multiplier;
         private int Multiplier => (int) this.numericUpDown_multiplier.Value;
+        private int JumpMs => (int) this.numericUpDown_jump.Value;
+        private int JumpSamples => (this.OriginalAudio != null ? (int) (this.OriginalAudio.SampleRate * this.JumpMs / 1000f) : 44100);
 
 		private float CurrentLoopFraction
         {
@@ -53,9 +55,11 @@ namespace ModularAudience.Forms.Modules
         private long lastLoopEndSamples = -1;
         private float lastAppliedLoopFraction = 0f; // value from button (can be negative)
         private bool lastActionWasMultiplierChange = false;
+		private int lastJumpMs = 1;
 
 
-        public LoopControl()
+
+		public LoopControl()
         {
             this.InitializeComponent();
 
@@ -66,8 +70,10 @@ namespace ModularAudience.Forms.Modules
             this.BuildLoopControlButtons();
             this.EnableAutoRefocusForContainer(this);
 
+            this.numericUpDown_jump.Click += this.numericUpDown_jump_Click;
 
-            this.UpdateLoopButtonsState();
+
+			this.UpdateLoopButtonsState();
 
             this.FormClosing += (s, e) =>
             {
@@ -203,8 +209,8 @@ namespace ModularAudience.Forms.Modules
             // Set loop range accordingly
             this.SetLoopRange(!anyActiveNow, hadActiveBefore && !(ModifierKeys.HasFlag(Keys.Control)));
 
-			// Focus TrackView but also keep this Form front most
-			this.CurrentTrackView?.Focus();
+            // Focus TrackView but also keep this Form front most
+            this.CurrentTrackView?.Focus();
             this.BringToFront();
         }
 
@@ -505,8 +511,8 @@ namespace ModularAudience.Forms.Modules
 
         private async void button_copy_Click(object sender, EventArgs e)
         {
-            if (this.OriginalAudio == null)
-            {
+            if (this.OriginalAudio == null || !this.panel_buttons.Controls.OfType<Button>().Any(b => b.BackColor == Color.LightBlue))
+			{
                 return;
             }
 
@@ -690,12 +696,154 @@ namespace ModularAudience.Forms.Modules
 
         private void numericUpDown_multiplier_ValueChanged(object sender, EventArgs e)
         {
-           if (this.panel_buttons.Controls.OfType<Button>().Any(b => b.BackColor == Color.LightBlue))
+            if (this.panel_buttons.Controls.OfType<Button>().Any(b => b.BackColor == Color.LightBlue))
             {
                 this.lastActionWasMultiplierChange = true;
                 this.SetLoopRange(false, true);
                 this.lastActionWasMultiplierChange = false;
             }
+        }
+
+        private void button_backward_Click(object sender, EventArgs e)
+        {
+			// Jump backwards by JumpSamples and Update loop accordingly
+			if (this.OriginalAudio == null)
+            {
+                return;
+            }
+            
+            this.JumpByMilliseconds(-1);
 		}
-    }
+
+		private void button_forward_Click(object sender, EventArgs e)
+        {
+			// Jump forwards by JumpSamples and Update loop accordingly
+            if (this.OriginalAudio == null)
+            {
+                return;
+            }
+           
+            this.JumpByMilliseconds(1);
+		}
+
+		private void numericUpDown_jump_ValueChanged(object sender, EventArgs e)
+        {
+            if (ModifierKeys.HasFlag(Keys.Shift))
+            {
+                if (numericUpDown_jump.Value > this.lastJumpMs)
+                {
+                    numericUpDown_jump.Value = 2 * this.lastJumpMs;
+                }
+                else if (numericUpDown_jump.Value < this.lastJumpMs)
+                {
+                    numericUpDown_jump.Value = Math.Max(1, this.lastJumpMs / 2);
+                }
+			}
+
+			this.lastJumpMs = (int) numericUpDown_jump.Value;
+		}
+
+        private void numericUpDown_jump_Click(object? sender, EventArgs e)
+        {
+			// If not ctrl is held, ignore
+            if (!ModifierKeys.HasFlag(Keys.Control))
+            {
+                return;
+			}
+
+			int msPerBeat = (int) Math.Round(60000f / this.Bpm) / 4;
+            this.numericUpDown_jump.Value = msPerBeat;
+		}
+
+
+
+
+		private void JumpByMilliseconds(int direction)
+		{
+			if (this.OriginalAudio == null)
+			{
+				return;
+			}
+
+			int channels = Math.Max(1, this.OriginalAudio.Channels);
+			long totalSamples = Math.Max(0L, this.OriginalAudio.Length);
+
+			// JumpSamples ist in Frames gerechnet (SampleRate * ms / 1000)
+			long deltaFrames = this.JumpSamples * direction;
+			long currentSamples = this.OriginalAudio.Position * channels;
+			long deltaSamples = deltaFrames * channels;
+
+			long targetSamples = currentSamples + deltaSamples;
+
+			// Clamp innerhalb des Files
+			targetSamples = Math.Clamp(targetSamples, 0L, Math.Max(0L, totalSamples - 1));
+
+			// Playhead springen (immer!)
+			try
+			{
+				this.OriginalAudio.JumpToSamples(targetSamples);
+			}
+			catch
+			{
+				// Ignorieren, kein UI-Crash
+			}
+
+			// UI sofort aktualisieren (Caret/Waveform neu rendern)
+			try { this.CurrentTrackView?.RequestWaveformRender(); } catch { }
+
+			// Wenn es keinen aktiven Loop gibt, sind wir fertig
+			bool haveLoop = this.lastLoopStartSamples >= 0 &&
+							this.lastLoopEndSamples > this.lastLoopStartSamples &&
+							this.OriginalAudio.LoopFraction != 0;
+
+			if (!haveLoop)
+			{
+				return;
+			}
+
+			// Aktiven Loop um dieselbe Distanz verschieben (Start & End)
+			long len = this.lastLoopEndSamples - this.lastLoopStartSamples;
+			if (len <= 0)
+			{
+				return;
+			}
+
+			long newStart = this.lastLoopStartSamples + deltaSamples;
+			long newEnd = this.lastLoopEndSamples + deltaSamples;
+
+			// Loop innerhalb des Files clampen, Länge bleibt gleich
+			if (newStart < 0)
+			{
+				newStart = 0;
+				newEnd = Math.Min(len, totalSamples);
+			}
+			else if (newEnd > totalSamples)
+			{
+				newEnd = totalSamples;
+				newStart = Math.Max(0, newEnd - len);
+			}
+
+			long fractionSamples = Math.Max(1L, newEnd - newStart);
+
+			// Loop an neuer Position setzen und weiterspielen
+			this.OriginalAudio.UpdateLoopFraction(newStart, newEnd, fractionSamples, true, true);
+
+			// State im LoopControl aktualisieren
+			this.lastLoopStartSamples = newStart;
+			this.lastLoopEndSamples = newEnd;
+
+			try
+			{
+				// Fraction bleibt gleich, wir verschieben nur räumlich
+				this.OriginalAudio.Metrics["loop.ui.fraction"] = this.lastAppliedLoopFraction;
+			}
+			catch
+			{
+			}
+
+			// Nach Loop-Verschiebung erneut UI-Refresh anstoßen
+			try { this.CurrentTrackView?.RequestWaveformRender(); } catch { }
+		}
+
+	}
 }

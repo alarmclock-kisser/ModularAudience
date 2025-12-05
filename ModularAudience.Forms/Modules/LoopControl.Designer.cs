@@ -33,8 +33,13 @@
             this.button_copy = new Button();
             this.numericUpDown_multiplier = new NumericUpDown();
             this.label_info_multiplier = new Label();
+            this.numericUpDown_jump = new NumericUpDown();
+            this.button_forward = new Button();
+            this.button_backward = new Button();
+            this.label_info_jump = new Label();
             this.panel_buttons.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_multiplier).BeginInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_jump).BeginInit();
             this.SuspendLayout();
             // 
             // panel_buttons
@@ -88,11 +93,59 @@
             this.label_info_multiplier.TabIndex = 4;
             this.label_info_multiplier.Text = "Multi";
             // 
+            // numericUpDown_jump
+            // 
+            this.numericUpDown_jump.Location = new Point(368, 41);
+            this.numericUpDown_jump.Maximum = new decimal(new int[] { 10000, 0, 0, 0 });
+            this.numericUpDown_jump.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+            this.numericUpDown_jump.Name = "numericUpDown_jump";
+            this.numericUpDown_jump.Size = new Size(50, 23);
+            this.numericUpDown_jump.TabIndex = 5;
+            this.numericUpDown_jump.Value = new decimal(new int[] { 1, 0, 0, 0 });
+            this.numericUpDown_jump.ValueChanged += this.numericUpDown_jump_ValueChanged;
+            // 
+            // button_forward
+            // 
+            this.button_forward.Font = new Font("Bahnschrift Light Condensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.button_forward.Location = new Point(424, 41);
+            this.button_forward.Name = "button_forward";
+            this.button_forward.Size = new Size(23, 23);
+            this.button_forward.TabIndex = 6;
+            this.button_forward.TabStop = false;
+            this.button_forward.Text = "→";
+            this.button_forward.UseVisualStyleBackColor = true;
+            this.button_forward.Click += this.button_forward_Click;
+            // 
+            // button_backward
+            // 
+            this.button_backward.Font = new Font("Bahnschrift Light Condensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.button_backward.Location = new Point(339, 41);
+            this.button_backward.Name = "button_backward";
+            this.button_backward.Size = new Size(23, 23);
+            this.button_backward.TabIndex = 7;
+            this.button_backward.TabStop = false;
+            this.button_backward.Text = "←";
+            this.button_backward.UseVisualStyleBackColor = true;
+            this.button_backward.Click += this.button_backward_Click;
+            // 
+            // label_info_jump
+            // 
+            this.label_info_jump.AutoSize = true;
+            this.label_info_jump.Location = new Point(368, 23);
+            this.label_info_jump.Name = "label_info_jump";
+            this.label_info_jump.Size = new Size(55, 15);
+            this.label_info_jump.TabIndex = 8;
+            this.label_info_jump.Text = "Jump ms";
+            // 
             // LoopControl
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(484, 111);
+            this.Controls.Add(this.label_info_jump);
+            this.Controls.Add(this.button_backward);
+            this.Controls.Add(this.button_forward);
+            this.Controls.Add(this.numericUpDown_jump);
             this.Controls.Add(this.label_info_multiplier);
             this.Controls.Add(this.numericUpDown_multiplier);
             this.Controls.Add(this.button_copy);
@@ -105,6 +158,7 @@
             this.Text = "Loop Control";
             this.panel_buttons.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_multiplier).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_jump).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -116,5 +170,9 @@
         private Button button_copy;
         private NumericUpDown numericUpDown_multiplier;
         private Label label_info_multiplier;
+        private NumericUpDown numericUpDown_jump;
+        private Button button_forward;
+        private Button button_backward;
+        private Label label_info_jump;
     }
 }
