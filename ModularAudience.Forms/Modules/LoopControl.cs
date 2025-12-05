@@ -55,7 +55,7 @@ namespace ModularAudience.Forms.Modules
         private long lastLoopEndSamples = -1;
         private float lastAppliedLoopFraction = 0f; // value from button (can be negative)
         private bool lastActionWasMultiplierChange = false;
-		private int lastJumpMs = 1;
+		private float lastJumpMs = 1;
 
 
 
@@ -458,6 +458,11 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            this.numericUpDown_jump.ValueChanged -= this.numericUpDown_jump_ValueChanged;
+            this.numericUpDown_jump.Value = (decimal) (60000f / this.Bpm / 4);
+            this.lastJumpMs = (float) this.numericUpDown_jump.Value;
+            this.numericUpDown_jump.ValueChanged += this.numericUpDown_jump_ValueChanged;
+
             // Enable all buttons
             foreach (var btn in this.panel_buttons.Controls.OfType<Button>())
             {
@@ -507,6 +512,7 @@ namespace ModularAudience.Forms.Modules
                 // Fallback: keine Übereinstimmung -> alles untoggeln
                 this.UntoggleAllOtherButtons(null);
             }
+
         }
 
         private async void button_copy_Click(object sender, EventArgs e)
@@ -726,21 +732,22 @@ namespace ModularAudience.Forms.Modules
             this.JumpByMilliseconds(1);
 		}
 
-		private void numericUpDown_jump_ValueChanged(object sender, EventArgs e)
+		private void numericUpDown_jump_ValueChanged(object? sender, EventArgs e)
         {
-            if (ModifierKeys.HasFlag(Keys.Shift))
+            if (!ModifierKeys.HasFlag(Keys.Shift) && !ModifierKeys.HasFlag(Keys.Control))
             {
-                if (numericUpDown_jump.Value > this.lastJumpMs)
+                if ((float) this.numericUpDown_jump.Value > this.lastJumpMs)
                 {
-                    numericUpDown_jump.Value = 2 * this.lastJumpMs;
+                    this.lastJumpMs *= 2;
+                    this.lastJumpMs = (float) Math.Clamp((decimal) this.lastJumpMs, 1m, this.numericUpDown_jump.Maximum);
+                    this.numericUpDown_jump.Value = (decimal) this.lastJumpMs;
                 }
-                else if (numericUpDown_jump.Value < this.lastJumpMs)
+                else if ((float) this.numericUpDown_jump.Value < this.lastJumpMs)
                 {
-                    numericUpDown_jump.Value = Math.Max(1, this.lastJumpMs / 2);
+                    this.lastJumpMs = Math.Max(1, this.lastJumpMs / 2);
+                    this.numericUpDown_jump.Value = (decimal) this.lastJumpMs;
                 }
 			}
-
-			this.lastJumpMs = (int) numericUpDown_jump.Value;
 		}
 
         private void numericUpDown_jump_Click(object? sender, EventArgs e)
@@ -751,9 +758,10 @@ namespace ModularAudience.Forms.Modules
                 return;
 			}
 
-			int msPerBeat = (int) Math.Round(60000f / this.Bpm) / 4;
+			int msPerBeat = (int) Math.Round(60000f / this.Bpm);
             this.numericUpDown_jump.Value = msPerBeat;
-		}
+            this.lastJumpMs = msPerBeat;
+        }
 
 
 

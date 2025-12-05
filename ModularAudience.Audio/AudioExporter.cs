@@ -32,12 +32,12 @@ namespace ModularAudience.Audio
 
             public Releaser(System.Threading.SemaphoreSlim sem)
             {
-                _sem = sem;
+                this._sem = sem;
             }
 
             public void Dispose()
             {
-                _sem.Release();
+                this._sem.Release();
                 // Kein Entfernen aus _pathLocks, um Race Conditions zu vermeiden
             }
         }

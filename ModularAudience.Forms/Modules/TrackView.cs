@@ -681,11 +681,11 @@ namespace ModularAudience.Forms.Modules
         internal void SetVolumeSynced(int scrollbarValue, bool muted, bool broadcast = true)
         {
             if (this.IsDisposed) return;
-            if (suppressVolumeSync) return;
+            if (this.suppressVolumeSync) return;
 
             bool doBroadcast = broadcast && !ModifierKeys.HasFlag(Keys.Control);
 
-            suppressVolumeSync = true;
+            this.suppressVolumeSync = true;
             try
             {
                 int clamped = Math.Clamp(scrollbarValue, this.vScrollBar_volume.Minimum, this.vScrollBar_volume.Maximum);
@@ -710,7 +710,7 @@ namespace ModularAudience.Forms.Modules
             }
             finally
             {
-                suppressVolumeSync = false;
+                this.suppressVolumeSync = false;
             }
         }
 

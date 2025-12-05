@@ -243,18 +243,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             decimal newVal = this.numericUpDown_fractions.Value;
 
-            if (_lastFractionValue <= 0m)
+            if (this._lastFractionValue <= 0m)
             {
-                _lastFractionValue = newVal;
+                this._lastFractionValue = newVal;
                 return;
             }
 
-            decimal oldVal = _lastFractionValue;
+            decimal oldVal = this._lastFractionValue;
             int dir = Math.Sign(newVal - oldVal);
 
             if (dir == 0)
             {
-                _lastFractionValue = newVal;
+                this._lastFractionValue = newVal;
                 return;
             }
 
@@ -304,7 +304,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.numericUpDown_fractions.Value = next;
             }
 
-            _lastFractionValue = next;
+            this._lastFractionValue = next;
         }
 
 

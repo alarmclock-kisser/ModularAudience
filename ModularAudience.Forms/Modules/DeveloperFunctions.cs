@@ -733,7 +733,7 @@ namespace ModularAudience.Forms.Modules
                     try
                     {
                         string txt = result.ToString() ?? string.Empty;
-                        ShowResultValueDialog(method.Name + " result", txt);
+                        this.ShowResultValueDialog(method.Name + " result", txt);
                     }
                     catch { }
                 }
