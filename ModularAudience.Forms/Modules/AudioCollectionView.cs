@@ -13,7 +13,6 @@ namespace ModularAudience.Forms
 
         internal IEnumerable<AudioObj> SelectedAudios => this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>();
 
-
         private const double AutoPlayMaxSeconds = 10.0;
         private readonly Lock autoPlayGate = new();
         private CancellationTokenSource? autoPlayCts;
@@ -35,6 +34,9 @@ namespace ModularAudience.Forms
         private bool _isUserResizing;
         private int _resizeStartWidth;
         private bool _lastUserResizeWasHorizontal;
+
+        private Point _dragStartPoint;
+        private bool _dragPending;
 
         public AudioCollectionView(IEnumerable<AudioObj> audios)
         {
@@ -69,6 +71,7 @@ namespace ModularAudience.Forms
             this.listBox_audios.AllowDrop = true;
             this.listBox_audios.DrawMode = DrawMode.OwnerDrawFixed;
             this.listBox_audios.MouseDown += this.listBox_audios_MouseDown;
+            this.listBox_audios.MouseMove += this.listBox_audios_MouseMove_DragStart;
             this.listBox_audios.MouseClick += this.listBox_audios_MouseClick;
             this.listBox_audios.DoubleClick += this.listBox_audios_DoubleClick;
             this.listBox_audios.SelectedIndexChanged += this.listBox_audios_SelectedIndexChanged;
@@ -283,6 +286,57 @@ namespace ModularAudience.Forms
                     contextMenu.Items.AddRange([renameItem, editTagsItem, deleteItem, toNewCollectionItem, addIndexToNamesItem, aggregateMixSelectedItem, timestretchItem]);
                     contextMenu.Show(this.listBox_audios, e.Location);
                 }
+            }
+            else if (e.Button == MouseButtons.Left)
+            {
+                // Prepare possible drag, but do not start yet (allows double-click to work)
+                int index = this.listBox_audios.IndexFromPoint(e.Location);
+                if (index != ListBox.NoMatches)
+                {
+                    if (!this.listBox_audios.GetSelected(index))
+                    {
+                        this.listBox_audios.SelectedIndex = index;
+                    }
+                    // mark drag as pending and store start point
+                    this._dragPending = true;
+                    this._dragStartPoint = e.Location;
+                }
+            }
+        }
+
+        private void listBox_audios_MouseMove_DragStart(object? sender, MouseEventArgs e)
+        {
+            if (!_dragPending || e.Button != MouseButtons.Left)
+            {
+                return;
+            }
+
+            // Only start drag when movement exceeds system drag threshold
+            int dx = Math.Abs(e.X - _dragStartPoint.X);
+            int dy = Math.Abs(e.Y - _dragStartPoint.Y);
+            int thresh = SystemInformation.DragSize.Width / 2; // conservative threshold
+            if (dx < thresh && dy < thresh)
+            {
+                return;
+            }
+
+            _dragPending = false; // avoid re-entry
+
+            if (this.listBox_audios.SelectedItems.Count > 0)
+            {
+                try
+                {
+                    var selected = this.listBox_audios.SelectedItems;
+                    var list = selected.Cast<AudioObj>().OfType<AudioObj>().ToList();
+
+                    var dataObj = new DataObject();
+                    dataObj.SetData(typeof(ListBox.SelectedObjectCollection), selected);
+                    dataObj.SetData(typeof(List<AudioObj>), list);
+                    dataObj.SetData(typeof(IEnumerable<AudioObj>), list);
+
+                    this.listBox_audios.DoDragDrop(dataObj, DragDropEffects.Copy);
+                }
+                catch { }
             }
         }
 

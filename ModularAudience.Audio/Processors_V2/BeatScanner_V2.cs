@@ -1,9 +1,8 @@
 ﻿using MathNet.Numerics;
 using MathNet.Numerics.IntegralTransforms;
-using ModularAudience.Audio;
 using System.Diagnostics;
 
-namespace ModularAudience.Audio.Processors_V1
+namespace ModularAudience.Audio.Processors_V2
 {
     public static class BeatScanner_V2
     {
@@ -40,7 +39,7 @@ namespace ModularAudience.Audio.Processors_V1
                 }
 
                 // Auto-range if not provided
-                var (minEff, maxEff) = ResolveTempoBounds(minBpm, maxBpm, obj.ScannedBpm > 0 ? (double?) obj.ScannedBpm : null);
+                var (minEff, maxEff) = ResolveTempoBounds(minBpm, maxBpm, obj.ScannedBpm > 0 ?  obj.ScannedBpm : null);
 
                 double bpm = await EstimateBpmAsync(monoData, obj.SampleRate, minEff, maxEff).ConfigureAwait(false);
 
@@ -111,7 +110,7 @@ namespace ModularAudience.Audio.Processors_V1
                 int beatLag = -1;
                 if (bpmHint > 0)
                 {
-                    double lagF = (noveltyRate * 60.0) / bpmHint;
+                    double lagF = noveltyRate * 60.0 / bpmHint;
                     beatLag = (int) Math.Round(lagF);
                     // clamp
                     beatLag = Math.Clamp(beatLag, 2, Math.Max(2, novelty.Length / 8));
@@ -150,7 +149,7 @@ namespace ModularAudience.Audio.Processors_V1
                     {
                         sum += novelty[i];
                     }
-                    beatStrengths[b] = sum / Math.Max(1, (e - a + 1));
+                    beatStrengths[b] = sum / Math.Max(1, e - a + 1);
                 }
 
                 // Evaluate candidate meters
@@ -194,7 +193,7 @@ namespace ModularAudience.Audio.Processors_V1
                     double coverage = Math.Min(1.0, nBars / 4.0);
 
                     double score = 0.55 * ac + 0.20 * contrast + 0.50 * tplCorr;
-                    score *= (0.7 + 0.3 * coverage);
+                    score *= 0.7 + 0.3 * coverage;
 
                     if (K == 2)
                     {
@@ -249,7 +248,7 @@ namespace ModularAudience.Audio.Processors_V1
                 }
 
                 // Normalize to [0.125..1.0]
-                double normalized = bestK <= 4 ? bestK / 4.0 : (bestK <= 8 ? bestK / 8.0 : bestK / 12.0);
+                double normalized = bestK <= 4 ? bestK / 4.0 : bestK <= 8 ? bestK / 8.0 : bestK / 12.0;
                 normalized = Math.Clamp(normalized, 0.125, 1.0);
 
                 // Persist timing
@@ -376,7 +375,7 @@ namespace ModularAudience.Audio.Processors_V1
 
                     double pv = PeakAtBpm(acf, noveltyRate, cand);
                     // prefer simpler (lower) BPM when peaks are close
-                    if (pv > bestPeak * 1.05 || (pv > bestPeak * 0.95 && cand < bestBpm))
+                    if (pv > bestPeak * 1.05 || pv > bestPeak * 0.95 && cand < bestBpm)
                     {
                         bestPeak = pv;
                         bestBpm = cand;
@@ -417,7 +416,7 @@ namespace ModularAudience.Audio.Processors_V1
             }
             else if (minEff <= 0)
             {
-                minEff = Math.Max(30, (int) Math.Round((maxEff / 2.0)));
+                minEff = Math.Max(30, (int) Math.Round(maxEff / 2.0));
             }
             else if (maxEff <= 0)
             {
@@ -465,7 +464,7 @@ namespace ModularAudience.Audio.Processors_V1
                 Complex32[] fft = new Complex32[fftSize];
                 for (int i = 0; i < fftSize; i++)
                 {
-                    float s = (start + i) < n ? samples[start + i] : 0f;
+                    float s = start + i < n ? samples[start + i] : 0f;
                     fft[i] = new Complex32((float) (s * window[i]), 0f);
                 }
 
@@ -577,7 +576,7 @@ namespace ModularAudience.Audio.Processors_V1
                 double y1 = acf[bestLag - 1];
                 double y2 = acf[bestLag];
                 double y3 = acf[bestLag + 1];
-                double denom = (y1 - 2 * y2 + y3);
+                double denom = y1 - 2 * y2 + y3;
                 if (Math.Abs(denom) > 1e-12)
                 {
                     double delta = 0.5 * (y1 - y3) / denom;
@@ -595,7 +594,7 @@ namespace ModularAudience.Audio.Processors_V1
                 return 0.0;
             }
 
-            double lag = (frameRate * 60.0) / bpm;
+            double lag = frameRate * 60.0 / bpm;
             int k = (int) Math.Round(lag);
             k = Math.Clamp(k, 1, acf.Length - 1);
             return Math.Max(0.0, acf[k]);
@@ -617,7 +616,7 @@ namespace ModularAudience.Audio.Processors_V1
             if (K % 3 == 0)
             {
                 tpl[K / 3] = Math.Max(tpl[K / 3], 0.8);
-                tpl[(2 * K) / 3] = Math.Max(tpl[(2 * K) / 3], 0.7);
+                tpl[2 * K / 3] = Math.Max(tpl[2 * K / 3], 0.7);
             }
 
             return tpl;
@@ -707,7 +706,7 @@ namespace ModularAudience.Audio.Processors_V1
             double[] w = new double[n];
             for (int i = 0; i < n; i++)
             {
-                w[i] = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / Math.Max(1, (n - 1))));
+                w[i] = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / Math.Max(1, n - 1)));
             }
             return w;
         }
@@ -742,7 +741,7 @@ namespace ModularAudience.Audio.Processors_V1
                     Complex32[] fft = new Complex32[fftSize];
                     for (int i = 0; i < fftSize; i++)
                     {
-                        float s = (start + i) < mono.Length ? mono[start + i] : 0f;
+                        float s = start + i < mono.Length ? mono[start + i] : 0f;
                         fft[i] = new Complex32((float) (s * window[i]), 0f);
                     }
 
@@ -782,8 +781,8 @@ namespace ModularAudience.Audio.Processors_V1
                             double wHigh = midi - mLow;
                             double wLow = 1.0 - wHigh;
 
-                            int pcLow = ((mLow % 12) + 12) % 12;
-                            int pcHigh = ((mHigh % 12) + 12) % 12;
+                            int pcLow = (mLow % 12 + 12) % 12;
+                            int pcHigh = (mHigh % 12 + 12) % 12;
 
                             // Gewichte mit 1/h abschwächen
                             double contrib = mag2 / h;
@@ -923,7 +922,7 @@ namespace ModularAudience.Audio.Processors_V1
         {
             // 0=C, 1=C#, ..., 11=B
             string[] names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-            string root = names[((key % 12) + 12) % 12];
+            string root = names[(key % 12 + 12) % 12];
             return isMinor ? $"{root} minor" : $"{root} major";
         }
     }

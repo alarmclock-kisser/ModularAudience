@@ -1,5 +1,4 @@
-﻿using ModularAudience.Audio;
-using MathNet.Numerics;
+﻿using MathNet.Numerics;
 using MathNet.Numerics.IntegralTransforms;
 using System;
 using System.Collections.Concurrent;
@@ -9,7 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ModularAudience.Audio
+namespace ModularAudience.Audio.Processors_V1
 {
     public static class BeatScanner
     {
@@ -197,7 +196,7 @@ namespace ModularAudience.Audio
                     double y1 = fft[bestLag - 1].Real;
                     double y2 = fft[bestLag].Real;
                     double y3 = fft[bestLag + 1].Real;
-                    double denom = (y1 - 2 * y2 + y3);
+                    double denom = y1 - 2 * y2 + y3;
                     if (Math.Abs(denom) > 1e-12)
                     {
                         double delta = 0.5 * (y1 - y3) / denom; // in [-1,1]
@@ -220,7 +219,7 @@ namespace ModularAudience.Audio
                     bpm /= 2.0;
                 }
 
-                return (bpm >= minBpm && bpm <= maxBpm) ? bpm : 0.0;
+                return bpm >= minBpm && bpm <= maxBpm ? bpm : 0.0;
             });
         }
 
@@ -357,7 +356,7 @@ namespace ModularAudience.Audio
                     {
                         sum += novelty[i];
                     }
-                    beatStrengths[b] = sum / Math.Max(1, (e - a + 1));
+                    beatStrengths[b] = sum / Math.Max(1, e - a + 1);
                 }
 
                 // 4) Kandidaten scoren: Periodizität + Kontrast + Template-Korrelation (mit Phasen-Shift)
@@ -417,7 +416,7 @@ namespace ModularAudience.Audio
 
                     // Gewichte: Template etwas stärker, Kontrast etwas schwächer
                     double score = 0.55 * ac + 0.20 * contrast + 0.50 * tplCorr;
-                    score *= (0.7 + 0.3 * coverage);
+                    score *= 0.7 + 0.3 * coverage;
 
                     // Subharmonik-Penalties/Boosts
                     if (K == 2)
@@ -519,7 +518,7 @@ namespace ModularAudience.Audio
             if (K % 3 == 0)
             {
                 tpl[K / 3] = Math.Max(tpl[K / 3], 0.8);
-                tpl[(2 * K) / 3] = Math.Max(tpl[(2 * K) / 3], 0.7);
+                tpl[2 * K / 3] = Math.Max(tpl[2 * K / 3], 0.7);
             }
 
             return tpl;

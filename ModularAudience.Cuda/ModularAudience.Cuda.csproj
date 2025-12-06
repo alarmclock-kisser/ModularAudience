@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ManagedCuda-12" Version="12.8.60" />
+    <PackageReference Include="ManagedCuda-CUFFT" Version="12.8.60" />
+    <PackageReference Include="ManagedCuda-NVRTC" Version="12.8.60" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ModularAudience.Audio\ModularAudience.Audio.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Kernels\PTX\" />
+  </ItemGroup>
+
+</Project>
