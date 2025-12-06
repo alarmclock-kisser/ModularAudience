@@ -81,6 +81,11 @@ namespace ModularAudience.Forms
             this.listBox_audios.DrawItem += this.listBox_audios_DrawItem;
 
 
+            // Explicit DnD handlers to support inter-collection drag/drop
+            this.listBox_audios.DragEnter += this.listBox_audios_DragEnter;
+            this.listBox_audios.DragOver += this.listBox_audios_DragOver;
+            this.listBox_audios.DragDrop += this.listBox_audios_DragDrop;
+
             this.FormClosing += async (s, e) =>
             {
                 e.Cancel = true;
@@ -333,11 +338,159 @@ namespace ModularAudience.Forms
                     dataObj.SetData(typeof(ListBox.SelectedObjectCollection), selected);
                     dataObj.SetData(typeof(List<AudioObj>), list);
                     dataObj.SetData(typeof(IEnumerable<AudioObj>), list);
+                    dataObj.SetData(typeof(AudioObj[]), list.ToArray());
+                    // include source for move semantics
+                    dataObj.SetData(typeof(ListBox), this.listBox_audios);
+                    var srcForm = this.FindForm() as AudioCollectionView;
+                    if (srcForm != null)
+                    {
+                        dataObj.SetData(typeof(AudioCollection), srcForm.AudioC);
+                    }
 
-                    this.listBox_audios.DoDragDrop(dataObj, DragDropEffects.Copy);
+                    // Allow both internal move and external copy targets
+                    this.listBox_audios.DoDragDrop(dataObj, DragDropEffects.Move | DragDropEffects.Copy);
                 }
                 catch { }
             }
+        }
+
+        private void listBox_audios_DragEnter(object? sender, DragEventArgs e)
+        {
+            if (e.Data == null)
+            {
+                e.Effect = DragDropEffects.None;
+                return;
+            }
+
+            bool hasAudio = e.Data.GetDataPresent(typeof(AudioObj[])) || e.Data.GetDataPresent(typeof(IEnumerable<AudioObj>));
+            if (!hasAudio)
+            {
+                e.Effect = DragDropEffects.None;
+                return;
+            }
+
+            // Default: Move within collections unless Ctrl is held -> Copy
+            bool ctrl = (Control.ModifierKeys & Keys.Control) != 0;
+            if (e.AllowedEffect.HasFlag(DragDropEffects.Move) && !ctrl)
+            {
+                e.Effect = DragDropEffects.Move;
+            }
+            else if (e.AllowedEffect.HasFlag(DragDropEffects.Copy))
+            {
+                e.Effect = DragDropEffects.Copy;
+            }
+            else
+            {
+                e.Effect = DragDropEffects.None;
+            }
+        }
+
+        private void listBox_audios_DragOver(object? sender, DragEventArgs e)
+        {
+            // Keep effect updated while hovering
+            listBox_audios_DragEnter(sender, e);
+        }
+
+        private void listBox_audios_DragDrop(object? sender, DragEventArgs e)
+        {
+            if (e.Data == null)
+            {
+                return;
+            }
+
+            List<AudioObj> dragged = new();
+            if (e.Data.GetDataPresent(typeof(AudioObj[])))
+            {
+                if (e.Data.GetData(typeof(AudioObj[])) is AudioObj[] arr && arr.Length > 0)
+                {
+                    dragged.AddRange(arr);
+                }
+            }
+            else if (e.Data.GetDataPresent(typeof(IEnumerable<AudioObj>)))
+            {
+                if (e.Data.GetData(typeof(IEnumerable<AudioObj>)) is IEnumerable<AudioObj> en)
+                {
+                    dragged.AddRange(en);
+                }
+            }
+
+            if (dragged.Count == 0)
+            {
+                return;
+            }
+
+            // Determine drop index
+            Point clientPoint = this.listBox_audios.PointToClient(new Point(e.X, e.Y));
+            int dropIndex = this.listBox_audios.IndexFromPoint(clientPoint);
+            if (dropIndex == ListBox.NoMatches)
+            {
+                dropIndex = this.AudioC.Audios.Count; // append
+            }
+
+            // Source info (if available)
+            AudioCollection? srcCollection = null;
+            ListBox? srcListBox = null;
+            if (e.Data.GetDataPresent(typeof(AudioCollection)))
+            {
+                srcCollection = e.Data.GetData(typeof(AudioCollection)) as AudioCollection;
+            }
+            if (e.Data.GetDataPresent(typeof(ListBox)))
+            {
+                srcListBox = e.Data.GetData(typeof(ListBox)) as ListBox;
+            }
+
+            bool sameList = srcListBox != null && ReferenceEquals(srcListBox, this.listBox_audios);
+            bool move = e.Effect == DragDropEffects.Move;
+
+            if (sameList)
+            {
+                // Reorder within same list
+                foreach (var audio in dragged)
+                {
+                    int currentIndex = this.AudioC.Audios.IndexOf(audio);
+                    if (currentIndex < 0)
+                    {
+                        continue;
+                    }
+                    if (dropIndex > currentIndex)
+                    {
+                        dropIndex--; // account for remove shifting
+                    }
+                    this.AudioC.Audios.RemoveAt(currentIndex);
+                    dropIndex = Math.Clamp(dropIndex, 0, this.AudioC.Audios.Count);
+                    this.AudioC.Audios.Insert(dropIndex, audio);
+                    dropIndex++;
+                }
+            }
+            else
+            {
+                // Inter-collection: move or copy
+                foreach (var audio in dragged)
+                {
+                    if (move && srcCollection != null)
+                    {
+                        // remove from source
+                        try
+                        {
+                            srcCollection.Audios.Remove(audio);
+                        }
+                        catch { }
+                    }
+                    // insert into target at dropIndex
+                    dropIndex = Math.Clamp(dropIndex, 0, this.AudioC.Audios.Count);
+                    this.AudioC.Audios.Insert(dropIndex, audio);
+                    dropIndex++;
+                }
+            }
+
+            // Refresh bindings
+            try
+            {
+                this.listBox_audios.DataSource = null;
+                this.listBox_audios.DataSource = this.AudioC.Audios;
+                this.listBox_audios.DisplayMember = "Name";
+            }
+            catch { }
         }
 
         private static string SanitizePathSegment(string? value)
