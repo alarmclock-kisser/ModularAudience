@@ -37,6 +37,8 @@ namespace ModularAudience.Forms
 
         private Point _dragStartPoint;
         private bool _dragPending;
+        // Drag-drop visual insert indicator index (0..Count), -1 when not active
+        private int _dragInsertIndex = -1;
 
         public AudioCollectionView(IEnumerable<AudioObj> audios)
         {
@@ -85,6 +87,7 @@ namespace ModularAudience.Forms
             this.listBox_audios.DragEnter += this.listBox_audios_DragEnter;
             this.listBox_audios.DragOver += this.listBox_audios_DragOver;
             this.listBox_audios.DragDrop += this.listBox_audios_DragDrop;
+            this.listBox_audios.DragLeave += this.listBox_audios_DragLeave;
 
             this.FormClosing += async (s, e) =>
             {
@@ -140,6 +143,30 @@ namespace ModularAudience.Forms
                     TextRenderer.DrawText(e.Graphics, durationText, e.Font, durationRect, textColor, TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
                 }
             }
+
+            // Draw insertion indicator line if dragging over and this item borders the insertion point
+            if (this._dragInsertIndex >= 0)
+            {
+                try
+                {
+                    using var pen = new Pen(SystemColors.HotTrack, 2);
+                    // Draw line above this item
+                    if (this._dragInsertIndex == e.Index)
+                    {
+                        int y = e.Bounds.Top;
+                        e.Graphics.DrawLine(pen, e.Bounds.Left + 2, y, e.Bounds.Right - 2, y);
+                    }
+                    // Draw line below last item (append case) or between this and next item
+                    if ((e.Index == this.listBox_audios.Items.Count - 1 && this._dragInsertIndex == this.listBox_audios.Items.Count)
+                        || this._dragInsertIndex == e.Index + 1)
+                    {
+                        int y = e.Bounds.Bottom - 1;
+                        e.Graphics.DrawLine(pen, e.Bounds.Left + 2, y, e.Bounds.Right - 2, y);
+                    }
+                }
+                catch { }
+            }
+
             e.DrawFocusRectangle();
         }
 
@@ -389,6 +416,52 @@ namespace ModularAudience.Forms
         {
             // Keep effect updated while hovering
             listBox_audios_DragEnter(sender, e);
+
+            if (e.Effect == DragDropEffects.None)
+            {
+                if (this._dragInsertIndex != -1)
+                {
+                    this._dragInsertIndex = -1;
+                    this.listBox_audios.Invalidate();
+                }
+                return;
+            }
+
+            try
+            {
+                // Compute insertion index (between items) based on cursor position
+                Point client = this.listBox_audios.PointToClient(new Point(e.X, e.Y));
+                int index = this.listBox_audios.IndexFromPoint(client);
+                int newInsertIndex;
+                if (index == ListBox.NoMatches)
+                {
+                    newInsertIndex = this.listBox_audios.Items.Count; // append
+                }
+                else
+                {
+                    Rectangle itemRect = this.listBox_audios.GetItemRectangle(index);
+                    bool before = client.Y < itemRect.Top + itemRect.Height / 2;
+                    newInsertIndex = before ? index : index + 1;
+                    newInsertIndex = Math.Clamp(newInsertIndex, 0, this.listBox_audios.Items.Count);
+                }
+
+                if (newInsertIndex != this._dragInsertIndex)
+                {
+                    this._dragInsertIndex = newInsertIndex;
+                    this.listBox_audios.Invalidate();
+                }
+            }
+            catch { }
+        }
+
+        private void listBox_audios_DragLeave(object? sender, EventArgs e)
+        {
+            // Clear insertion indicator
+            if (this._dragInsertIndex != -1)
+            {
+                this._dragInsertIndex = -1;
+                this.listBox_audios.Invalidate();
+            }
         }
 
         private void listBox_audios_DragDrop(object? sender, DragEventArgs e)
@@ -416,16 +489,20 @@ namespace ModularAudience.Forms
 
             if (dragged.Count == 0)
             {
+                this._dragInsertIndex = -1;
+                this.listBox_audios.Invalidate();
                 return;
             }
 
-            // Determine drop index
-            Point clientPoint = this.listBox_audios.PointToClient(new Point(e.X, e.Y));
-            int dropIndex = this.listBox_audios.IndexFromPoint(clientPoint);
-            if (dropIndex == ListBox.NoMatches)
+            // Determine drop index (prefer live indicator if available)
+            int dropIndex = this._dragInsertIndex;
+            if (dropIndex < 0)
             {
-                dropIndex = this.AudioC.Audios.Count; // append
+                Point clientPoint = this.listBox_audios.PointToClient(new Point(e.X, e.Y));
+                int idx = this.listBox_audios.IndexFromPoint(clientPoint);
+                dropIndex = (idx == ListBox.NoMatches) ? this.AudioC.Audios.Count : idx;
             }
+            dropIndex = Math.Clamp(dropIndex, 0, this.AudioC.Audios.Count);
 
             // Source info (if available)
             AudioCollection? srcCollection = null;
@@ -491,6 +568,11 @@ namespace ModularAudience.Forms
                 this.listBox_audios.DisplayMember = "Name";
             }
             catch { }
+            finally
+            {
+                this._dragInsertIndex = -1;
+                this.listBox_audios.Invalidate();
+            }
         }
 
         private static string SanitizePathSegment(string? value)
@@ -1242,7 +1324,6 @@ namespace ModularAudience.Forms
         {
             this.Text = newName;
         }
-
 
 
 
