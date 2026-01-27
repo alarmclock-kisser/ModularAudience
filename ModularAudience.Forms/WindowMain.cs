@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio.Processors_V1;
+using ModularAudience.Audio.Processors_V3;
 
 namespace ModularAudience.Forms
 {
@@ -27,6 +28,14 @@ namespace ModularAudience.Forms
 		internal static readonly BindingList<TrackView> TrackViews = [];
 		internal static List<int> TrackViewIds { get; set; } = [];
 		private static TrackView? _lastSelectedTrackView = null;
+		private CancellationTokenSource? _syncerCts;
+		private NudgingPlaybackSyncer? _syncer;
+		private CancellationTokenSource? _pausingCts;
+		private PausingPlaybackSyncer? _pausingSyncer;
+		private bool _nudgingActive;
+		private bool _pausingActive;
+		private bool _shiftPressed;
+		private GlobalKeyMessageFilter? _keyFilter;
 		internal static TrackView? LastSelectedTrackView
 		{
 			get => _lastSelectedTrackView;
@@ -70,6 +79,7 @@ namespace ModularAudience.Forms
 		{
 			Instance = this;
 			this.InitializeComponent();
+			this.KeyPreview = true;
 			this.StartPosition = FormStartPosition.Manual;
 			this.Location = WindowsScreenHelper.GetCornerPosition(this, false, true);
 
@@ -88,11 +98,23 @@ namespace ModularAudience.Forms
 			this.textBox_scanBpmResult.DoubleClick += this.textBox_scanBpmResult_DoubleClick;
 
 			this.InitializeExportControls();
+
+			this._keyFilter = new GlobalKeyMessageFilter();
+			this._keyFilter.KeyChanged += this.GlobalKeyChanged;
+			Application.AddMessageFilter(this._keyFilter);
 			UpdateTrackDependentUI();
 		}
 
 		private void WindowMain_FormClosing(object? sender, FormClosingEventArgs e)
 		{
+			this.StopSyncer();
+			this.StopPausingSyncer();
+			if (this._keyFilter != null)
+			{
+				try { Application.RemoveMessageFilter(this._keyFilter); } catch { }
+				this._keyFilter.KeyChanged -= this.GlobalKeyChanged;
+				this._keyFilter = null;
+			}
 			// Detach handler to avoid re-entry
 			try { this.FormClosing -= this.WindowMain_FormClosing; } catch { }
 
@@ -1768,6 +1790,147 @@ namespace ModularAudience.Forms
 		{
 			CudaFunctionsWindow ??= new CudaFunctions();
 			CudaFunctionsWindow.Show();
+		}
+
+		private sealed class GlobalKeyMessageFilter : IMessageFilter
+		{
+			public event Action<Keys, bool>? KeyChanged;
+
+			public bool PreFilterMessage(ref Message m)
+			{
+				const int WM_KEYDOWN = 0x0100;
+				const int WM_KEYUP = 0x0101;
+				const int WM_SYSKEYDOWN = 0x0104;
+				const int WM_SYSKEYUP = 0x0105;
+
+				if (m.Msg == WM_KEYDOWN || m.Msg == WM_SYSKEYDOWN)
+				{
+					Keys key = (Keys) ((int) m.WParam & 0xFFFF);
+					this.KeyChanged?.Invoke(key, true);
+				}
+				else if (m.Msg == WM_KEYUP || m.Msg == WM_SYSKEYUP)
+				{
+					Keys key = (Keys) ((int) m.WParam & 0xFFFF);
+					this.KeyChanged?.Invoke(key, false);
+				}
+
+				return false; // do not block message
+			}
+		}
+
+		private void GlobalKeyChanged(Keys key, bool isDown)
+		{
+			if (key == Keys.CapsLock)
+			{
+				if (!isDown)
+				{
+					bool capsOn = Control.IsKeyLocked(Keys.CapsLock);
+					if (capsOn)
+					{
+						this.StartSyncer();
+					}
+					else
+					{
+						this.StopSyncer();
+					}
+				}
+				return;
+			}
+
+			if (key == Keys.ShiftKey || key == Keys.LShiftKey || key == Keys.RShiftKey)
+			{
+				if (isDown)
+				{
+					if (!this._shiftPressed)
+					{
+						this._shiftPressed = true;
+						this.StartPausingSyncer();
+					}
+				}
+				else
+				{
+					if (this._shiftPressed)
+					{
+						this._shiftPressed = false;
+						this.StopPausingSyncer();
+					}
+				}
+			}
+		}
+
+		private void StartSyncer()
+		{
+			try { this._syncerCts?.Cancel(); } catch { }
+			try { this._syncerCts?.Dispose(); } catch { }
+			this._syncer = null;
+			this._nudgingActive = false;
+
+			var playingTracks = TrackViews
+				.Where(tv => tv != null && !tv.IsDisposed && tv.OriginalAudio.PlayerPlaying)
+				.Select(tv => tv.OriginalAudio)
+				.ToList();
+
+			if (playingTracks.Count < 2)
+			{
+				LogCollection.Log("SYNCER : ON (no-op, need >=2 playing tracks)");
+				return;
+			}
+
+			this._syncerCts = new CancellationTokenSource();
+			//this._syncer = new PausingPlaybackSyncer(playingTracks, this._syncerCts.Token, frequency: 0.1, grain: 10);
+			this._syncer = new NudgingPlaybackSyncer(playingTracks, this._syncerCts.Token, checkInterval: 0.1, maxNudgeFactor: 0.05);
+			this._nudgingActive = true;
+			LogCollection.Log($"SYNCER : ON ({playingTracks.Count} tracks)");
+		}
+
+		private void StopSyncer()
+		{
+			try { this._syncerCts?.Cancel(); } catch { }
+			try { this._syncerCts?.Dispose(); } catch { }
+			this._syncerCts = null;
+			this._syncer = null;
+			if (this._nudgingActive)
+			{
+				LogCollection.Log("SYNCER : OFF");
+			}
+			this._nudgingActive = false;
+		}
+
+		private void StartPausingSyncer()
+		{
+			try { this._pausingCts?.Cancel(); } catch { }
+			try { this._pausingCts?.Dispose(); } catch { }
+			this._pausingSyncer = null;
+			this._pausingActive = false;
+
+			var playingTracks = TrackViews
+				.Where(tv => tv != null && !tv.IsDisposed && tv.OriginalAudio.PlayerPlaying)
+				.Select(tv => tv.OriginalAudio)
+				.ToList();
+
+			if (playingTracks.Count < 2)
+			{
+				LogCollection.Log("SYNCER (pause) : ON (no-op, need >=2 playing tracks)");
+				return;
+			}
+
+			this._pausingCts = new CancellationTokenSource();
+			this._pausingSyncer = new PausingPlaybackSyncer(playingTracks, this._pausingCts.Token, frequency: 0.1, grain: 10);
+			this._pausingActive = true;
+			LogCollection.Log($"SYNCER (pause) : ON ({playingTracks.Count} tracks)");
+		}
+
+		private void StopPausingSyncer()
+		{
+			try { this._pausingCts?.Cancel(); } catch { }
+			try { this._pausingCts?.Dispose(); } catch { }
+			this._pausingCts = null;
+			this._pausingSyncer = null;
+			if (this._pausingActive)
+			{
+				LogCollection.Log("SYNCER (pause) : OFF");
+			}
+			this._pausingActive = false;
 		}
 	}
 }
