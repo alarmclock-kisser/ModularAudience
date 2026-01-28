@@ -92,7 +92,7 @@ namespace ModularAudience.Forms.Modules
 
             this.FormClosing += (s, e) =>
             {
-                WindowMain.LoopControlWindow = null;
+                WindowMain.DeveloperFunctionsWindow = null;
                 e.Cancel = true;
                 this.Hide();
             };
@@ -722,26 +722,36 @@ namespace ModularAudience.Forms.Modules
                 // - if method returned an AudioObj -> use returned (new) AudioObj
                 // - if method returned non-AudioObj value -> keep ResultAudioObj = null and display value
                 // - if method returned null and we passed an audio arg -> use the passed audio (in-place mutation)
-                if (result is AudioObj returnedAo)
-                {
-                    this.ResultAudioObj = returnedAo;
-                }
-                else if (result != null)
-                {
-                    // Nicht-Audio-Ergebnis: ResultAudioObj bleibt null, Ergebnis zur Auswahl anzeigen
-                    this.ResultAudioObj = null;
-                    try
-                    {
-                        string txt = result.ToString() ?? string.Empty;
-                        this.ShowResultValueDialog(method.Name + " result", txt);
-                    }
-                    catch { }
-                }
-                else
-                {
-                    // result == null
-                    this.ResultAudioObj = firstAudioArg;
-                }
+				if (result is AudioObj returnedAo)
+				{
+					this.ResultAudioObj = returnedAo;
+				}
+				else if (result is IEnumerable<AudioObj> audioEnumerable)
+				{
+					var list = audioEnumerable.Where(a => a != null).ToList();
+					if (list.Count > 0)
+					{
+						var view = new AudioCollectionView(list);
+						view.Show();
+					}
+					this.ResultAudioObj = null;
+				}
+				else if (result != null)
+				{
+					// Nicht-Audio-Ergebnis: ResultAudioObj bleibt null, Ergebnis zur Auswahl anzeigen
+					this.ResultAudioObj = null;
+					try
+					{
+						string txt = result.ToString() ?? string.Empty;
+						this.ShowResultValueDialog(method.Name + " result", txt);
+					}
+					catch { }
+				}
+				else
+				{
+					// result == null
+					this.ResultAudioObj = firstAudioArg;
+				}
             }
             catch (TargetInvocationException tie)
             {
@@ -859,7 +869,7 @@ namespace ModularAudience.Forms.Modules
             catch { }
         }
 
-        private async void button_apply_Click(object sender, EventArgs e)
+        private void button_apply_Click(object sender, EventArgs e)
         {
             if (this.ResultAudioObj == null || this.ProcessedAudioObj == null)
             {
