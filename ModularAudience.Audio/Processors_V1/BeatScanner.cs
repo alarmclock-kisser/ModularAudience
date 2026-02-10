@@ -6,12 +6,20 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
+using NAudio.CoreAudioApi;
+using NAudio.Wave;
 
 namespace ModularAudience.Audio.Processors_V1
 {
     public static class BeatScanner
     {
+        private static CancellationTokenSource? liveBpmCts = null;
+        public static int MaxLiveBpmDurationSeconds { get; set; } = 60;
+
+        public static double? LiveScanBpm { get; private set; } = null;
+
         public static async Task<double> ScanBpmAsync(AudioObj obj, int windowSize = 65536, int lookingRange = 2, int minBpm = 60, int maxBpm = 200, bool autoGetTiming = false)
         {
             if (obj == null || obj.Data == null || obj.Data.Length <= 0)
@@ -501,6 +509,191 @@ namespace ModularAudience.Audio.Processors_V1
                 return (float) normalized;
             });
         }
+
+        public static async Task<double> EstimateLiveBpmAsync(double updateIntervalSeconds = 0.8, CancellationToken ct = default)
+        {
+            // Capture loopback audio from the active playback device, accumulate samples and periodically
+            // estimate BPM on the currently captured audio. Update LiveScanBpm every updateIntervalSeconds.
+            // When cancelled or when MaxLiveBpmDurationSeconds is exceeded, compute BPM on the full
+            // captured audio and return it.
+
+            if (updateIntervalSeconds <= 0)
+            {
+                updateIntervalSeconds = 0.8;
+            }
+
+            // Avoid concurrent live estimations
+            if (liveBpmCts != null)
+            {
+                // Cancel previous run
+                try { liveBpmCts.Cancel(); } catch { }
+                liveBpmCts = null;
+            }
+
+            var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            liveBpmCts = linkedCts;
+            CancellationToken token = linkedCts.Token;
+
+            List<float> sampleBuffer = new();
+            object bufLock = new();
+
+            WasapiLoopbackCapture? capture = null;
+
+            try
+            {
+                // Try to pick an active playback device, fallback to default
+                MMDevice? device = null;
+                try { device = AudioRecorder.GetActivePlaybackDevice() ?? AudioRecorder.GetDefaultPlaybackDevice(); } catch { device = null; }
+
+                if (device == null)
+                {
+                    return 0.0;
+                }
+
+                capture = new WasapiLoopbackCapture(device);
+                var wf = capture.WaveFormat;
+
+                capture.DataAvailable += (s, e) =>
+                {
+                    try
+                    {
+                        int bytes = e.BytesRecorded;
+                        if (bytes <= 0) return;
+
+                        int channels = wf.Channels;
+
+                        if (wf.Encoding == WaveFormatEncoding.IeeeFloat && wf.BitsPerSample == 32)
+                        {
+                            int floatCount = bytes / 4;
+                            float[] floats = new float[floatCount];
+                            Buffer.BlockCopy(e.Buffer, 0, floats, 0, bytes);
+
+                            int frames = floatCount / channels;
+                            lock (bufLock)
+                            {
+                                for (int f = 0; f < frames; f++)
+                                {
+                                    double sum = 0.0;
+                                    for (int c = 0; c < channels; c++)
+                                    {
+                                        sum += floats[f * channels + c];
+                                    }
+                                    sampleBuffer.Add((float)(sum / channels));
+                                }
+                            }
+                        }
+                        else if (wf.Encoding == WaveFormatEncoding.Pcm && wf.BitsPerSample == 16)
+                        {
+                            int sampleCount = bytes / 2;
+                            short[] shorts = new short[sampleCount];
+                            Buffer.BlockCopy(e.Buffer, 0, shorts, 0, bytes);
+
+                            int frames = sampleCount / channels;
+                            lock (bufLock)
+                            {
+                                for (int f = 0; f < frames; f++)
+                                {
+                                    double sum = 0.0;
+                                    for (int c = 0; c < channels; c++)
+                                    {
+                                        sum += shorts[f * channels + c] / 32768.0;
+                                    }
+                                    sampleBuffer.Add((float)(sum / channels));
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Unsupported format - ignore
+                        }
+                    }
+                    catch { }
+                };
+
+                capture.StartRecording();
+
+                Stopwatch overall = Stopwatch.StartNew();
+
+                double finalBpm = 0.0;
+
+                // Periodically estimate BPM
+                while (!token.IsCancellationRequested && overall.Elapsed.TotalSeconds < MaxLiveBpmDurationSeconds)
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(updateIntervalSeconds), token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) { break; }
+
+                    float[] snapshot;
+                    int sr = capture.WaveFormat.SampleRate;
+                    lock (bufLock)
+                    {
+                        if (sampleBuffer.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        // Cap snapshot to reasonable length (MaxLiveBpmDurationSeconds seconds)
+                        int maxSamples = sr * Math.Max(1, Math.Min(MaxLiveBpmDurationSeconds, (int)MaxLiveBpmDurationSeconds));
+                        int take = Math.Min(sampleBuffer.Count, maxSamples);
+                        snapshot = sampleBuffer.Skip(Math.Max(0, sampleBuffer.Count - take)).Take(take).ToArray();
+                    }
+
+                    try
+                    {
+                        double bpm = await EstimateBpmAsync(snapshot, sr).ConfigureAwait(false);
+                        if (bpm > 0.0)
+                        {
+                            LiveScanBpm = bpm;
+                        }
+                    }
+                    catch { }
+                }
+
+                // Stop capture and compute final BPM on full buffer
+                try { capture.StopRecording(); } catch { }
+
+                float[] whole;
+                int wholeSr = capture.WaveFormat.SampleRate;
+                lock (bufLock)
+                {
+                    whole = sampleBuffer.ToArray();
+                }
+
+                if (whole.Length > 0)
+                {
+                    try
+                    {
+                        finalBpm = await EstimateBpmAsync(whole, wholeSr).ConfigureAwait(false);
+                        if (finalBpm > 0.0)
+                        {
+                            LiveScanBpm = finalBpm;
+                        }
+                    }
+                    catch { }
+                }
+
+                return finalBpm;
+            }
+            catch (OperationCanceledException)
+            {
+                // cancelled - return current LiveScanBpm or 0
+                return LiveScanBpm ?? 0.0;
+            }
+            catch
+            {
+                return 0.0;
+            }
+            finally
+            {
+                try { capture?.Dispose(); } catch { }
+                try { linkedCts.Dispose(); } catch { }
+                liveBpmCts = null;
+            }
+        }
+
+
 
         private static double[] BuildMeterTemplate(int K)
         {
