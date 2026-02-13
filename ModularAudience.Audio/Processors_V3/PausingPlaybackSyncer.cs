@@ -33,7 +33,7 @@ namespace ModularAudience.Audio.Processors_V3
             {
                 while (!this.token.IsCancellationRequested)
                 {
-                    await SyncOnceAsync().ConfigureAwait(false);
+                    await this.SyncOnceAsync().ConfigureAwait(false);
                     await Task.Delay(TimeSpan.FromSeconds(this.intervalSeconds), this.token).ConfigureAwait(false);
                 }
             }
@@ -43,7 +43,7 @@ namespace ModularAudience.Audio.Processors_V3
             }
             finally
             {
-                await RestoreInitialStatesAsync().ConfigureAwait(false);
+                await this.RestoreInitialStatesAsync().ConfigureAwait(false);
             }
         }
 

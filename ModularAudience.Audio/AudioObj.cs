@@ -534,8 +534,59 @@ namespace ModularAudience.Audio
             return center;
         }
 
+        public async Task ResampleAsync(int sampleRate)
+        {
+            // Guard against invalid sample rates
+            if (sampleRate <= 0)
+            {
+                throw new ArgumentException("Invalid sample rate.", nameof(sampleRate));
+            }
 
+            // Resample async and parallel if possible (offload to thread pool)
+            await Task.Run(() =>
+            {
+                // Simple nearest-neighbor resampling for demonstration (replace with better algorithm if needed)
+                int newLength = (int) ((long) this.Data.Length * sampleRate / this.SampleRate);
+                float[] newData = new float[newLength];
+                for (int i = 0; i < newLength; i++)
+                {
+                    int oldIndex = (int) ((long) i * this.SampleRate / sampleRate);
+                    oldIndex = Math.Min(oldIndex, this.Data.Length - 1);
+                    newData[i] = this.Data[oldIndex];
+                }
+                this.Data = newData;
+                this.SampleRate = sampleRate;
+                this.Length = newData.Length;
+                this.Duration = TimeSpan.FromSeconds((double) this.Length / (this.SampleRate * this.Channels));
+            }).ConfigureAwait(false);
+        }
 
+        public async Task RechannelAsync(int channels)
+        {
+            // Guard against invalid channel counts
+            if (channels <= 0)
+            {
+                throw new ArgumentException("Invalid channel count.", nameof(channels));
+            }
 
+            // Rechannel async and parallel if possible (offload to thread pool)
+            await Task.Run(() =>
+            {
+                // Simple rechanneling (replace with better algorithm if needed)
+                int totalSamples = this.Data.Length / this.Channels;
+                float[] newData = new float[totalSamples * channels];
+                for (int i = 0; i < totalSamples; i++)
+                {
+                    for (int c = 0; c < channels; c++)
+                    {
+                        newData[i * channels + c] = this.Data[i * this.Channels + c % this.Channels];
+                    }
+                }
+                this.Data = newData;
+                this.Channels = channels;
+                this.Length = newData.Length;
+                this.Duration = TimeSpan.FromSeconds((double)this.Length / (this.SampleRate * this.Channels));
+            }).ConfigureAwait(false);
+        }
     }
 }

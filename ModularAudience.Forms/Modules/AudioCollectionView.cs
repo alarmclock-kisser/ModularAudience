@@ -315,7 +315,22 @@ namespace ModularAudience.Forms
                         return;
                     };
 
-                    contextMenu.Items.AddRange([renameItem, editTagsItem, deleteItem, toNewCollectionItem, addIndexToNamesItem, aggregateMixSelectedItem, timestretchItem]);
+                    ToolStripMenuItem demucsItem = new("Demucs Separate Selected");
+                    demucsItem.Enabled = this.listBox_audios.SelectedItems.Count == 1;
+                    demucsItem.Click += async (s, ev) =>
+                    {
+                        AudioObj? toSeparate = this.listBox_audios.SelectedItem as AudioObj;
+                        if (toSeparate == null)
+                        {
+                            return;
+                        }
+                        using var separationForm = new OnnxDemucsDialog(toSeparate);
+                        separationForm.ShowDialog(this);
+                        WindowMain.UpdateTrackDependentUI();
+                        WindowMain.RefreshAllCollectionViews();
+                    };
+
+                    contextMenu.Items.AddRange([renameItem, editTagsItem, deleteItem, toNewCollectionItem, addIndexToNamesItem, aggregateMixSelectedItem, timestretchItem, demucsItem]);
                     contextMenu.Show(this.listBox_audios, e.Location);
                 }
             }
@@ -338,21 +353,21 @@ namespace ModularAudience.Forms
 
         private void listBox_audios_MouseMove_DragStart(object? sender, MouseEventArgs e)
         {
-            if (!_dragPending || e.Button != MouseButtons.Left)
+            if (!this._dragPending || e.Button != MouseButtons.Left)
             {
                 return;
             }
 
             // Only start drag when movement exceeds system drag threshold
-            int dx = Math.Abs(e.X - _dragStartPoint.X);
-            int dy = Math.Abs(e.Y - _dragStartPoint.Y);
+            int dx = Math.Abs(e.X - this._dragStartPoint.X);
+            int dy = Math.Abs(e.Y - this._dragStartPoint.Y);
             int thresh = SystemInformation.DragSize.Width / 2; // conservative threshold
             if (dx < thresh && dy < thresh)
             {
                 return;
             }
 
-            _dragPending = false; // avoid re-entry
+            this._dragPending = false; // avoid re-entry
 
             if (this.listBox_audios.SelectedItems.Count > 0)
             {
@@ -415,7 +430,7 @@ namespace ModularAudience.Forms
         private void listBox_audios_DragOver(object? sender, DragEventArgs e)
         {
             // Keep effect updated while hovering
-            listBox_audios_DragEnter(sender, e);
+            this.listBox_audios_DragEnter(sender, e);
 
             if (e.Effect == DragDropEffects.None)
             {

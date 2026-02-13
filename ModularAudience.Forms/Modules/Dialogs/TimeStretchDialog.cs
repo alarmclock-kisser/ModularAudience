@@ -42,7 +42,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.Close();
             }
 
-            this.Text = $"Time Stretch - {trackView?.Name ?? Tracks.Count() + " Tracks"}";
+            this.Text = $"Time Stretch - {trackView?.Name ?? this.Tracks.Count() + " Tracks"}";
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false);
 
