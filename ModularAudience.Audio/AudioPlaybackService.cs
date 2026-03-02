@@ -31,6 +31,12 @@ namespace ModularAudience.Audio
 
         public int Read(float[] buffer, int offset, int count)
         {
+            // Elevate audio callback thread priority to prevent stutter from background processing
+            if (Thread.CurrentThread.Priority < ThreadPriority.AboveNormal)
+            {
+                try { Thread.CurrentThread.Priority = ThreadPriority.AboveNormal; } catch { }
+            }
+
             ISampleProvider? p;
             lock (this.gate) { p = this.current; }
             if (p == null) { Array.Clear(buffer, offset, count); return count; }
