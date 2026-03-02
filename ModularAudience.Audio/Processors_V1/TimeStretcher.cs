@@ -35,6 +35,20 @@ namespace ModularAudience.Audio.Processors_V1
                 maxWorkers = Math.Clamp(maxWorkers.Value, 1, Environment.ProcessorCount);
             }
 
+            if (maxWorkers != Environment.ProcessorCount)
+            {
+                return await TimeStretchMostThreadsAsync(
+                    obj,
+                    chunkSize,
+                    overlap,
+                    factor,
+                    keepData,
+                    normalize,
+                    maxWorkers.Value,
+                    progress,
+                    offload: false);
+            }
+
             if (offload)
             {
                 return await TimeStretchOffloadedAsync(
@@ -48,6 +62,8 @@ namespace ModularAudience.Audio.Processors_V1
                     progress,
                     adjustBpm: true);
             }
+
+            LogCollection.Log("TimeStretchAllThreadsAsync: Starting time stretch with maxWorkers = " + maxWorkers.Value);
 
             float[] backupData = obj.Data;
             int sampleRate = obj.SampleRate;
@@ -151,7 +167,16 @@ namespace ModularAudience.Audio.Processors_V1
         {
             if (maxWorkers == null)
             {
-                maxWorkers = Environment.ProcessorCount;
+                return await TimeStretchAllThreadsAsync(
+                    obj,
+                    chunkSize,
+                    overlap,
+                    factor,
+                    keepData,
+                    normalize,
+                    Environment.ProcessorCount,
+                    progress,
+                    offload);
             }
             else
             {
@@ -171,6 +196,8 @@ namespace ModularAudience.Audio.Processors_V1
                     progress,
                     adjustBpm: false);
             }
+
+            LogCollection.Log("TimeStretchMostThreadsAsync: Starting time stretch with maxWorkers = " + maxWorkers.Value);
 
             var parallelOptions = new ParallelOptions
             {
