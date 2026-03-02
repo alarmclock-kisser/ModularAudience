@@ -165,8 +165,16 @@ namespace ModularAudience.Audio.Processors_V3
         private static double WrapPhase(double diff, double period)
         {
             double half = period / 2.0;
-            while (diff > half) diff -= period;
-            while (diff < -half) diff += period;
+            while (diff > half)
+            {
+                diff -= period;
+            }
+
+            while (diff < -half)
+            {
+                diff += period;
+            }
+
             return diff;
         }
 

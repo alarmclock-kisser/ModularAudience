@@ -227,7 +227,9 @@ namespace ModularAudience.Forms.Modules
         {
             // Guard
             if (this.CurrentTrackView == null || this.OriginalAudio == null)
+            {
                 return;
+            }
 
             float fraction = this.CurrentLoopFraction;
 

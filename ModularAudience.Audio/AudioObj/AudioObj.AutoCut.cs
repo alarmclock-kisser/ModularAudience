@@ -64,7 +64,7 @@ namespace ModularAudience.Audio
             {
                 // Create single AudioObj with all samples separated by silence gaps
                 var paletteAudio = this.CreatePaletteLoop(regions, silenceWindowMs);
-                if (paletteAudio != null)
+                if (paletteAudio is not null)
                 {
                     results.Add(paletteAudio);
                 }

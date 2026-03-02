@@ -7,7 +7,7 @@ using System.Data;
 using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
-using System.Threading.Tasks; // <-- Hinzufügen für Task und Progress<T>
+using System.Threading.Tasks;
 
 namespace ModularAudience.Forms.Modules.Dialogs
 {

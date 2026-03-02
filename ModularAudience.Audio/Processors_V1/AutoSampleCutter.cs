@@ -74,7 +74,9 @@ namespace ModularAudience.Audio.Processors_V1
                 {
                     int framesThis = baseFrames + (i < remainder ? 1 : 0);
                     if (framesThis <= 0)
+                    {
                         return;
+                    }
 
                     int startFrame;
                     if (i < remainder)
@@ -87,13 +89,17 @@ namespace ModularAudience.Audio.Processors_V1
                     }
 
                     if (startFrame >= totalFrames)
+                    {
                         return;
+                    }
 
                     if (startFrame + framesThis > totalFrames)
                     {
                         framesThis = totalFrames - startFrame;
                         if (framesThis <= 0)
+                        {
                             return;
+                        }
                     }
 
                     int sampleStart = startFrame * channels;
@@ -126,7 +132,9 @@ namespace ModularAudience.Audio.Processors_V1
             {
                 double repeatFactor = 1.0 / Math.Abs(fractions);
                 if (repeatFactor < 1.0)
+                {
                     repeatFactor = 1.0;
+                }
 
                 int newFrames = (int) Math.Round(totalFrames * repeatFactor);
                 newFrames = Math.Max(1, newFrames);

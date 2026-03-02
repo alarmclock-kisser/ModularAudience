@@ -45,7 +45,10 @@ namespace ModularAudience.Audio
         // Sorgt für eindeutige Dateinamen, falls bereits vorhanden
         private static string EnsureUniquePath(string path)
         {
-            if (!File.Exists(path)) return path;
+            if (!File.Exists(path))
+            {
+                return path;
+            }
 
             string dir = Path.GetDirectoryName(path)!;
             string name = Path.GetFileNameWithoutExtension(path);

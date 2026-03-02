@@ -558,7 +558,10 @@ namespace ModularAudience.Audio.Processors_V1
                     try
                     {
                         int bytes = e.BytesRecorded;
-                        if (bytes <= 0) return;
+                        if (bytes <= 0)
+                        {
+                            return;
+                        }
 
                         int channels = wf.Channels;
 
