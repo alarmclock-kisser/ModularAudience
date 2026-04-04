@@ -72,6 +72,7 @@
             this.listBox_samples.Size = new Size(140, 244);
             this.listBox_samples.TabIndex = 0;
             this.listBox_samples.SelectedIndexChanged += this.listBox_samples_SelectedIndexChanged;
+            this.listBox_samples.SelectedIndexChanged += new EventHandler(this.listBox_samples_SelectedIndexChanged);
             // 
             // comboBox_drumset
             // 

@@ -15,6 +15,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
     {
         internal readonly AudioCollection AudioC = new();
         internal AudioCollectionView? CollectionView { get; private set; } = null;
+        private bool sampleSelectionFromUserInput;
 
         internal AudioObj? SelectedTrack => this.listBox_samples.SelectedItem as AudioObj;
 
@@ -51,6 +52,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.listBox_samples.DisplayMember = "Name";
             this.listBox_samples.SelectedIndex = this.listBox_samples.Items.Count > 0 ? 0 : -1;
             this.listBox_samples.DrawItem += this.listBox_samples_DrawItem;
+            this.listBox_samples.MouseDown += this.listBox_samples_MouseDown;
+            this.listBox_samples.KeyDown += this.listBox_samples_KeyDown;
 
             this.numericUpDown_seed.Value = new Random().Next(0, 999999998);
 
@@ -66,13 +69,36 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private async void listBox_samples_SelectedIndexChanged(object sender, EventArgs e)
         {
             this.comboBox_drumset.SelectedItem = this.SelectedTrack?.Tag ?? null;
-            if (this.AutoPlayEnabled && this.SelectedTrack is not null)
+            if (this.sampleSelectionFromUserInput && this.AutoPlayEnabled && this.SelectedTrack is not null)
             {
-                // Only play if mouse is down on item (to avoid playing when changing selection programmatically)
-                if (MouseButtons == MouseButtons.Left && this.listBox_samples.SelectedIndex >= 0)
+                try
                 {
                     await this.SelectedTrack.PlayAsync(CancellationToken.None);
                 }
+                finally
+                {
+                    this.sampleSelectionFromUserInput = false;
+                }
+            }
+            else
+            {
+                this.sampleSelectionFromUserInput = false;
+            }
+        }
+
+        private void listBox_samples_MouseDown(object? sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                this.sampleSelectionFromUserInput = true;
+            }
+        }
+
+        private void listBox_samples_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode is Keys.Up or Keys.Down)
+            {
+                this.sampleSelectionFromUserInput = true;
             }
         }
 
@@ -96,6 +122,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.AudioC.Audios[i].Tag = drumsetMapping[i];
             }
 
+            this.sampleSelectionFromUserInput = false;
             this.listBox_samples.SelectedIndex = -1;
             this.listBox_samples.SelectedIndex = this.listBox_samples.Items.Count > 0 ? 0 : -1;
         }
