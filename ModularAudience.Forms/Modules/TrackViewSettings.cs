@@ -68,11 +68,7 @@
             this.FormClosing += this.TrackViewSettings_FormClosing;
             this.VisibleChanged += this.TrackViewSettings_VisibleChanged;
 
-            this.button_colorWave.Click += this.button_colorWave_Click;
-            this.button_colorBack.Click += this.button_colorBack_Click;
             this.button_colorBack.MouseDown += this.button_colorBack_MouseDown;
-            this.button_colorCaret.Click += this.button_colorCaret_Click;
-            this.button_colorSelection.Click += this.button_colorSelection_Click;
             this.checkBox_smoothen.CheckedChanged += (_, __) => this.NotifyTrackChanged();
             this.checkBox_drawEachChannel.CheckedChanged += (_, __) => this.NotifyTrackChanged();
             this.checkBox_timeMarkers.CheckedChanged += (_, __) => this.NotifyTrackChanged();

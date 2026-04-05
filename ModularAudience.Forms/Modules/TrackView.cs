@@ -10,6 +10,7 @@ using ModularAudience.Audio.Processors_V1;
 using System.Threading.Tasks;
 using MathNet.Numerics.Optimization.TrustRegion;
 using ModularAudience.Audio.Processors_V2;
+using ModularAudience.Audio.Processors_V4;
 
 namespace ModularAudience.Forms.Modules
 {
@@ -1747,6 +1748,7 @@ namespace ModularAudience.Forms.Modules
         {
             bool hasSelection = this.HasValidSelection();
             this.menuItem_copySelection.Enabled = hasSelection;
+            this.menuItem_splitEqualParts.Enabled = (this.OriginalAudio.Data?.Length ?? 0) > 0;
             this.menuItem_removeSelection.Enabled = hasSelection && !this.OriginalAudio.Playing;
         }
 
@@ -1758,6 +1760,75 @@ namespace ModularAudience.Forms.Modules
         private async void menuItem_removeSelection_Click(object? sender, EventArgs e)
         {
             await this.RemoveSelectionAsync();
+        }
+
+        private async Task SplitWaveSelectionEvenlyAsync(int partCount)
+        {
+            if (this.OriginalAudio.Data == null || this.OriginalAudio.Data.Length == 0)
+            {
+                return;
+            }
+
+            bool previousWaitCursor = this.UseWaitCursor;
+            this.UseWaitCursor = true;
+            this.menuItem_splitEqualParts.Enabled = false;
+
+            try
+            {
+                long? startSample = this.HasValidSelection() ? this.OriginalAudio.SelectionStart : null;
+                long? endSample = this.HasValidSelection() ? this.OriginalAudio.SelectionEnd : null;
+                string baseName = string.IsNullOrWhiteSpace(this.OriginalAudio.Name) ? "Audio" : this.OriginalAudio.Name.Trim();
+                if (startSample.HasValue && endSample.HasValue)
+                {
+                    baseName += "_Selection";
+                }
+
+                IReadOnlyList<AudioObj> slices = await EqualSliceProcessor_V4.SliceAsync(this.OriginalAudio, partCount, startSample, endSample, baseName);
+                if (slices.Count == 0)
+                {
+                    MessageBox.Show(this, "The current selection/audio cannot be split into that many equal parts.", "Split Into Equal Parts", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                AudioCollectionView slicesView = new(slices);
+                slicesView.Rename($"{baseName}_Split{partCount:D2}");
+                LogCollection.Log($"TrackView split '{this.OriginalAudio.Name}' into {slices.Count} equal parts.");
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log(ex);
+                MessageBox.Show(this, "Split failed: " + ex.Message, "Split Into Equal Parts", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                this.menuItem_splitEqualParts.Enabled = true;
+                this.UseWaitCursor = previousWaitCursor;
+            }
+        }
+
+        private async void menuItem_splitEqualParts2_Click(object? sender, EventArgs e)
+        {
+            await this.SplitWaveSelectionEvenlyAsync(2);
+        }
+
+        private async void menuItem_splitEqualParts4_Click(object? sender, EventArgs e)
+        {
+            await this.SplitWaveSelectionEvenlyAsync(4);
+        }
+
+        private async void menuItem_splitEqualParts8_Click(object? sender, EventArgs e)
+        {
+            await this.SplitWaveSelectionEvenlyAsync(8);
+        }
+
+        private async void menuItem_splitEqualParts16_Click(object? sender, EventArgs e)
+        {
+            await this.SplitWaveSelectionEvenlyAsync(16);
+        }
+
+        private async void menuItem_splitEqualParts32_Click(object? sender, EventArgs e)
+        {
+            await this.SplitWaveSelectionEvenlyAsync(32);
         }
 
         private async void menuItem_normalizeSelection_Click(object? sender, EventArgs e)

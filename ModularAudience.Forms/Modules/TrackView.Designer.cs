@@ -35,6 +35,12 @@
             this.pictureBox_waveform = new PictureBox();
             this.contextMenu_waveform = new ContextMenuStrip(this.components);
             this.menuItem_copySelection = new ToolStripMenuItem();
+            this.menuItem_splitEqualParts = new ToolStripMenuItem();
+            this.menuItem_splitEqualParts2 = new ToolStripMenuItem();
+            this.menuItem_splitEqualParts4 = new ToolStripMenuItem();
+            this.menuItem_splitEqualParts8 = new ToolStripMenuItem();
+            this.menuItem_splitEqualParts16 = new ToolStripMenuItem();
+            this.menuItem_splitEqualParts32 = new ToolStripMenuItem();
             this.menuItem_removeSelection = new ToolStripMenuItem();
             this.menuItem_normalizeSelection = new ToolStripMenuItem();
             this.menuItem_fadeIn = new ToolStripMenuItem();
@@ -106,9 +112,9 @@
             // 
             // contextMenu_waveform
             // 
-            this.contextMenu_waveform.Items.AddRange(new ToolStripItem[] { this.menuItem_copySelection, this.menuItem_removeSelection, this.menuItem_normalizeSelection, this.menuItem_fadeIn, this.menuItem_fadeOut, this.trimSilenceToolStripMenuItem, this.drawBeatGridToolStripMenuItem });
+            this.contextMenu_waveform.Items.AddRange(new ToolStripItem[] { this.menuItem_copySelection, this.menuItem_splitEqualParts, this.menuItem_removeSelection, this.menuItem_normalizeSelection, this.menuItem_fadeIn, this.menuItem_fadeOut, this.trimSilenceToolStripMenuItem, this.drawBeatGridToolStripMenuItem });
             this.contextMenu_waveform.Name = "contextMenu_waveform";
-            this.contextMenu_waveform.Size = new Size(169, 158);
+            this.contextMenu_waveform.Size = new Size(187, 180);
             this.contextMenu_waveform.Opening += this.contextMenu_waveform_Opening;
             // 
             // menuItem_copySelection
@@ -117,6 +123,48 @@
             this.menuItem_copySelection.Size = new Size(168, 22);
             this.menuItem_copySelection.Text = "Copy Selection";
             this.menuItem_copySelection.Click += this.menuItem_copySelection_Click;
+            // 
+            // menuItem_splitEqualParts
+            // 
+            this.menuItem_splitEqualParts.DropDownItems.AddRange(new ToolStripItem[] { this.menuItem_splitEqualParts2, this.menuItem_splitEqualParts4, this.menuItem_splitEqualParts8, this.menuItem_splitEqualParts16, this.menuItem_splitEqualParts32 });
+            this.menuItem_splitEqualParts.Name = "menuItem_splitEqualParts";
+            this.menuItem_splitEqualParts.Size = new Size(186, 22);
+            this.menuItem_splitEqualParts.Text = "Split Into Equal Parts";
+            // 
+            // menuItem_splitEqualParts2
+            // 
+            this.menuItem_splitEqualParts2.Name = "menuItem_splitEqualParts2";
+            this.menuItem_splitEqualParts2.Size = new Size(80, 22);
+            this.menuItem_splitEqualParts2.Text = "2";
+            this.menuItem_splitEqualParts2.Click += this.menuItem_splitEqualParts2_Click;
+            // 
+            // menuItem_splitEqualParts4
+            // 
+            this.menuItem_splitEqualParts4.Name = "menuItem_splitEqualParts4";
+            this.menuItem_splitEqualParts4.Size = new Size(80, 22);
+            this.menuItem_splitEqualParts4.Text = "4";
+            this.menuItem_splitEqualParts4.Click += this.menuItem_splitEqualParts4_Click;
+            // 
+            // menuItem_splitEqualParts8
+            // 
+            this.menuItem_splitEqualParts8.Name = "menuItem_splitEqualParts8";
+            this.menuItem_splitEqualParts8.Size = new Size(80, 22);
+            this.menuItem_splitEqualParts8.Text = "8";
+            this.menuItem_splitEqualParts8.Click += this.menuItem_splitEqualParts8_Click;
+            // 
+            // menuItem_splitEqualParts16
+            // 
+            this.menuItem_splitEqualParts16.Name = "menuItem_splitEqualParts16";
+            this.menuItem_splitEqualParts16.Size = new Size(80, 22);
+            this.menuItem_splitEqualParts16.Text = "16";
+            this.menuItem_splitEqualParts16.Click += this.menuItem_splitEqualParts16_Click;
+            // 
+            // menuItem_splitEqualParts32
+            // 
+            this.menuItem_splitEqualParts32.Name = "menuItem_splitEqualParts32";
+            this.menuItem_splitEqualParts32.Size = new Size(80, 22);
+            this.menuItem_splitEqualParts32.Text = "32";
+            this.menuItem_splitEqualParts32.Click += this.menuItem_splitEqualParts32_Click;
             // 
             // menuItem_removeSelection
             // 
@@ -303,6 +351,12 @@
         private CheckBox checkBox_settings;
         private ContextMenuStrip contextMenu_waveform;
         private ToolStripMenuItem menuItem_copySelection;
+        private ToolStripMenuItem menuItem_splitEqualParts;
+        private ToolStripMenuItem menuItem_splitEqualParts2;
+        private ToolStripMenuItem menuItem_splitEqualParts4;
+        private ToolStripMenuItem menuItem_splitEqualParts8;
+        private ToolStripMenuItem menuItem_splitEqualParts16;
+        private ToolStripMenuItem menuItem_splitEqualParts32;
         private ToolStripMenuItem menuItem_removeSelection;
         private ToolStripMenuItem menuItem_normalizeSelection;
         private ToolStripMenuItem menuItem_fadeIn;

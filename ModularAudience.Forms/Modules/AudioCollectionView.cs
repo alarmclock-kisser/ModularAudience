@@ -1,7 +1,10 @@
 ﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Processors_V1;
+using ModularAudience.Audio.Processors_V4;
+using ModularAudience.Generators;
 using ModularAudience.Forms.Modules;
 using ModularAudience.Forms.Modules.Dialogs;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 
@@ -40,6 +43,9 @@ namespace ModularAudience.Forms
         private bool _dragPending;
         // Drag-drop visual insert indicator index (0..Count), -1 when not active
         private int _dragInsertIndex = -1;
+        private AtomizeSensitivity atomizeSensitivity = AtomizeSensitivity.Balanced;
+        private int atomizeMinSliceMs = 80;
+        private int atomizeTailPaddingMs = 30;
 
         public AudioCollectionView(IEnumerable<AudioObj> audios)
         {
@@ -182,169 +188,8 @@ namespace ModularAudience.Forms
                     {
                         this.listBox_audios.SelectedIndex = index;
                     }
-                    ContextMenuStrip contextMenu = new();
-                    ToolStripMenuItem renameItem = new("Rename");
-                    renameItem.Enabled = this.listBox_audios.SelectedItems.Count == 1 || (this.listBox_audios.SelectedItems.Count == 0 && index >= 0 && index < this.listBox_audios.Items.Count);
-                    renameItem.Click += (s, ev) =>
-                    {
-                        AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
-                        if (selectedAudio != null)
-                        {
-                            string input = Microsoft.VisualBasic.Interaction.InputBox("Enter new name:", "Rename Audio", selectedAudio.Name);
-                            if (!string.IsNullOrWhiteSpace(input))
-                            {
-                                selectedAudio.Rename(input);
-                                this.listBox_audios.Refresh();
-
-                                WindowMain.TrackViews.Where(tv => tv.OriginalAudio.Id == selectedAudio.Id).ToList().ForEach(tv => tv.Rename(input));
-                            }
-                        }
-                    };
-                    ToolStripMenuItem cloneItem = new("Clone");
-                    cloneItem.Enabled = this.listBox_audios.SelectedItems.Count == 1 || (this.listBox_audios.SelectedItems.Count == 0 && index >= 0 && index < this.listBox_audios.Items.Count);
-                    cloneItem.Click += (s, ev) =>
-                    {
-                        AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
-                        if (selectedAudio != null)
-                        {
-                            AudioObj cloned = selectedAudio.Clone();
-                            cloned.Name = selectedAudio.Name + " (Clone)";
-                            this.AudioC.Audios.Add(cloned);
-                        }
-                    };
-                    ToolStripMenuItem editTagsItem = new("Edit Tags" + (this.listBox_audios.Items.Count > 1 ? " (Many)" : ""));
-                    editTagsItem.Enabled = this.listBox_audios.SelectedItems.Count >= 1 || (this.listBox_audios.SelectedItems.Count == 0 && index >= 0 && index < this.listBox_audios.Items.Count);
-                    editTagsItem.Click += (s, ev) =>
-                    {
-                        List<AudioObj> toEdit = this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>().ToList();
-                        if (toEdit.Count == 0)
-                        {
-                            if (index >= 0 && index < this.listBox_audios.Items.Count && this.listBox_audios.Items[index] is AudioObj fallback)
-                            {
-                                toEdit.Add(fallback);
-                            }
-                        }
-                        if (toEdit.Count == 0)
-                        {
-                            return;
-                        }
-                        using TagEditorDialog tagEditor = new(toEdit);
-                        tagEditor.ShowDialog(this);
-                    };
-
-					ToolStripMenuItem deleteItem = new("Delete");
-                    deleteItem.Enabled = this.listBox_audios.SelectedItems.Count > 0 || (this.listBox_audios.SelectedItems.Count == 0 && index >= 0 && index < this.listBox_audios.Items.Count);
-                    deleteItem.Click += async (s, ev) =>
-                    {
-                        List<AudioObj> toDelete = this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>().ToList();
-                        if (toDelete.Count == 0)
-                        {
-                            if (index >= 0 && index < this.listBox_audios.Items.Count && this.listBox_audios.Items[index] is AudioObj fallback)
-                            {
-                                toDelete.Add(fallback);
-                            }
-                        }
-
-                        if (toDelete.Count == 0)
-                        {
-                            return;
-                        }
-
-                        int previousTopIndex = this.listBox_audios.TopIndex;
-
-                        foreach (AudioObj audio in toDelete)
-                        {
-                            await this.AudioC.RemoveAsync(audio.Id);
-                        }
-
-                        this.listBox_audios.DataSource = null;
-                        this.listBox_audios.DataSource = this.AudioC.Audios;
-                        this.listBox_audios.DisplayMember = "Name";
-                    };
-                    ToolStripMenuItem toNewCollectionItem = new("To new Collection");
-                    toNewCollectionItem.Enabled = this.listBox_audios.SelectedItems.Count > 0 || (this.listBox_audios.SelectedItems.Count == 0 && index >= 0 && index < this.listBox_audios.Items.Count);
-                    toNewCollectionItem.Click += (s, ev) =>
-                    {
-                        List<AudioObj> toMove = this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>().ToList();
-                        if (toMove.Count == 0 && index >= 0 && index < this.listBox_audios.Items.Count && this.listBox_audios.Items[index] is AudioObj fallback)
-                        {
-                            toMove.Add(fallback);
-                        }
-                        if (toMove.Count == 0)
-                        {
-                            return;
-                        }
-                        // Neue Collection erstellen und hinzufügen
-                        var newView = new AudioCollectionView(toMove);
-                        newView.Show();
-                        // Aus aktueller Collection entfernen
-                        foreach (var audio in toMove)
-                        {
-                            this.AudioC.Audios.Remove(audio);
-                        }
-                    };
-                    ToolStripMenuItem addIndexToNamesItem = new("Add Index to Names")
-                    {
-                        CheckOnClick = true,
-                        Checked = this.AudioC.AddIndexToNames
-                    };
-                    addIndexToNamesItem.CheckedChanged += (s, ev) =>
-                    {
-                        // Setze den Wert explizit (ToggleAddIndexToNames akzeptiert bool?)
-                        this.AudioC.ToggleAddIndexToNames(addIndexToNamesItem.Checked);
-                        this.listBox_audios.Refresh();
-                    };
-                    ToolStripMenuItem aggregateMixSelectedItem = new("Aggregate Mix Selected");
-                    aggregateMixSelectedItem.Enabled = this.listBox_audios.SelectedItems.Count > 1 || (this.listBox_audios.SelectedItems.Count == 0 && index >= 0 && index < this.listBox_audios.Items.Count);
-                    aggregateMixSelectedItem.Click += async (s, ev) =>
-                    {
-                        List<AudioObj> toMix = this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>().ToList();
-                        if (toMix.Count == 0 && index >= 0 && index < this.listBox_audios.Items.Count && this.listBox_audios.Items[index] is AudioObj fallback)
-                        {
-                            toMix.Add(fallback);
-                        }
-                        if (toMix.Count == 0)
-                        {
-                            return;
-                        }
-                        var mixedAudio = await TracksMixer.AggregateMixTracks(toMix);
-                        if (mixedAudio != null)
-                        {
-                            mixedAudio.Name = "Mix of " + string.Join(" + ", toMix.Select(a => a.Name));
-                            mixedAudio.Rename(mixedAudio.Name);
-                            this.AudioC.Audios.Add(mixedAudio);
-                        }
-                    };
-
-                    ToolStripMenuItem timestretchItem = new("Time-Stretch Selected");
-                    timestretchItem.Enabled = this.listBox_audios.SelectedItems.Count > 0 || (this.listBox_audios.SelectedItems.Count == 0 && index >= 0 && index < this.listBox_audios.Items.Count);
-                    timestretchItem.Click += (s, ev) =>
-                    {
-                        List<AudioObj> toStretch = this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>().ToList();
-                        using var dlg = new Modules.Dialogs.TimeStretchDialog(null, toStretch);
-                        dlg.ShowDialog(this);
-                        WindowMain.UpdateTrackDependentUI();
-                        WindowMain.RefreshAllCollectionViews();
-                        return;
-                    };
-
-                    ToolStripMenuItem demucsItem = new("Demucs Separate Selected");
-                    demucsItem.Enabled = this.listBox_audios.SelectedItems.Count == 1;
-                    demucsItem.Click += async (s, ev) =>
-                    {
-                        AudioObj? toSeparate = this.listBox_audios.SelectedItem as AudioObj;
-                        if (toSeparate == null)
-                        {
-                            return;
-                        }
-                        using var separationForm = new OnnxDemucsDialog(toSeparate);
-                        separationForm.ShowDialog(this);
-                        WindowMain.UpdateTrackDependentUI();
-                        WindowMain.RefreshAllCollectionViews();
-                    };
-
-                    contextMenu.Items.AddRange([renameItem, cloneItem, editTagsItem, deleteItem, toNewCollectionItem, addIndexToNamesItem, aggregateMixSelectedItem, timestretchItem, demucsItem]);
-                    contextMenu.Show(this.listBox_audios, e.Location);
+                    this.UpdateContextMenuState();
+                    this.contextMenuStrip_audios.Show(this.listBox_audios, e.Location);
                 }
             }
             else if (e.Button == MouseButtons.Left)
@@ -909,6 +754,396 @@ namespace ModularAudience.Forms
 
         }
 
+        private void contextMenuStrip_audios_Opening(object sender, CancelEventArgs e)
+        {
+            this.UpdateContextMenuState();
+            e.Cancel = this.GetContextAudios().Count == 0;
+        }
+
+        private void UpdateContextMenuState()
+        {
+            int selectedCount = this.GetContextAudios().Count;
+            bool hasAny = selectedCount > 0;
+            bool hasSingle = selectedCount == 1;
+
+            this.menuToolStripItem_rename.Enabled = hasSingle;
+            this.menuToolStripItem_clone.Enabled = hasSingle;
+            this.menuToolStripItem_editTags.Enabled = hasAny;
+            this.menuToolStripItem_editTags.Text = selectedCount > 1 ? "Edit Tags (Many)" : "Edit Tags";
+            this.menuToolStripItem_splitEqualParts.Enabled = hasSingle;
+            this.menuToolStripItem_atomize.Enabled = hasSingle;
+            this.menuToolStripItem_atomizeRun.Enabled = hasSingle;
+            this.menuToolStripItem_delete.Enabled = hasAny;
+            this.menuToolStripItem_toNewCollection.Enabled = hasAny;
+            this.menuToolStripItem_addIndexToNames.Checked = this.AudioC.AddIndexToNames;
+            this.menuToolStripItem_aggregateMixSelected.Enabled = selectedCount > 1;
+            this.menuToolStripItem_timeStretchSelected.Enabled = hasAny;
+            this.menuToolStripItem_demucsSeparateSelected.Enabled = hasSingle;
+
+            this.menuToolStripItem_atomizeSensitivityConservative.Checked = this.atomizeSensitivity == AtomizeSensitivity.Conservative;
+            this.menuToolStripItem_atomizeSensitivityBalanced.Checked = this.atomizeSensitivity == AtomizeSensitivity.Balanced;
+            this.menuToolStripItem_atomizeSensitivityAggressive.Checked = this.atomizeSensitivity == AtomizeSensitivity.Aggressive;
+
+            this.menuToolStripItem_atomizeMinSlice40.Checked = this.atomizeMinSliceMs == 40;
+            this.menuToolStripItem_atomizeMinSlice80.Checked = this.atomizeMinSliceMs == 80;
+            this.menuToolStripItem_atomizeMinSlice140.Checked = this.atomizeMinSliceMs == 140;
+
+            this.menuToolStripItem_atomizeTail10.Checked = this.atomizeTailPaddingMs == 10;
+            this.menuToolStripItem_atomizeTail30.Checked = this.atomizeTailPaddingMs == 30;
+            this.menuToolStripItem_atomizeTail60.Checked = this.atomizeTailPaddingMs == 60;
+        }
+
+        private List<AudioObj> GetContextAudios()
+        {
+            List<AudioObj> selected = this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>().ToList();
+            if (selected.Count == 0 && this.listBox_audios.SelectedItem is AudioObj audio)
+            {
+                selected.Add(audio);
+            }
+
+            return selected;
+        }
+
+        private AudioObj? GetSingleContextAudio()
+        {
+            List<AudioObj> selected = this.GetContextAudios();
+            return selected.Count == 1 ? selected[0] : null;
+        }
+
+        private void ResetAudioListBinding()
+        {
+            this.listBox_audios.DataSource = null;
+            this.listBox_audios.DataSource = this.AudioC.Audios;
+            this.listBox_audios.DisplayMember = "Name";
+        }
+
+        private void menuToolStripItem_rename_Click(object sender, EventArgs e)
+        {
+            AudioObj? selectedAudio = this.GetSingleContextAudio();
+            if (selectedAudio == null)
+            {
+                return;
+            }
+
+            string input = Microsoft.VisualBasic.Interaction.InputBox("Enter new name:", "Rename Audio", selectedAudio.Name);
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return;
+            }
+
+            selectedAudio.Rename(input);
+            this.listBox_audios.Refresh();
+            WindowMain.TrackViews.Where(tv => tv.OriginalAudio.Id == selectedAudio.Id).ToList().ForEach(tv => tv.Rename(input));
+        }
+
+        private void menuToolStripItem_clone_Click(object sender, EventArgs e)
+        {
+            AudioObj? selectedAudio = this.GetSingleContextAudio();
+            if (selectedAudio == null)
+            {
+                return;
+            }
+
+            AudioObj cloned = selectedAudio.Clone();
+            cloned.Name = selectedAudio.Name + " (Clone)";
+            this.AudioC.Audios.Add(cloned);
+        }
+
+        private void menuToolStripItem_editTags_Click(object sender, EventArgs e)
+        {
+            List<AudioObj> toEdit = this.GetContextAudios();
+            if (toEdit.Count == 0)
+            {
+                return;
+            }
+
+            using TagEditorDialog tagEditor = new(toEdit);
+            tagEditor.ShowDialog(this);
+        }
+
+        private async Task SplitCurrentAudioEvenlyAsync(int partCount)
+        {
+            AudioObj? source = this.GetSingleContextAudio();
+            if (source == null)
+            {
+                return;
+            }
+
+            bool previousUseWaitCursor = this.UseWaitCursor;
+            this.UseWaitCursor = true;
+            this.menuToolStripItem_splitEqualParts.Enabled = false;
+
+            try
+            {
+                await this.CancelAutoPlayAsync(stopCollection: true);
+                IReadOnlyList<AudioObj> slices = await EqualSliceProcessor_V4.SliceAsync(source, partCount);
+                if (slices.Count == 0)
+                {
+                    MessageBox.Show(this, "The selected audio cannot be split into that many equal parts.", "Split Into Equal Parts", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var slicesView = new AudioCollectionView(slices);
+                string baseName = string.IsNullOrWhiteSpace(source.Name) ? "Audio" : source.Name.Trim();
+                slicesView.Rename($"{baseName}_Split{partCount:D2}");
+                LogCollection.Log($"Split '{source.Name}' into {slices.Count} equal parts.");
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log(ex);
+                MessageBox.Show(this, "Split failed: " + ex.Message, "Split Into Equal Parts", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                this.menuToolStripItem_splitEqualParts.Enabled = true;
+                this.UseWaitCursor = previousUseWaitCursor;
+            }
+        }
+
+        private async void menuToolStripItem_splitEqualParts2_Click(object sender, EventArgs e)
+        {
+            await this.SplitCurrentAudioEvenlyAsync(2);
+        }
+
+        private async void menuToolStripItem_splitEqualParts4_Click(object sender, EventArgs e)
+        {
+            await this.SplitCurrentAudioEvenlyAsync(4);
+        }
+
+        private async void menuToolStripItem_splitEqualParts8_Click(object sender, EventArgs e)
+        {
+            await this.SplitCurrentAudioEvenlyAsync(8);
+        }
+
+        private async void menuToolStripItem_splitEqualParts16_Click(object sender, EventArgs e)
+        {
+            await this.SplitCurrentAudioEvenlyAsync(16);
+        }
+
+        private async void menuToolStripItem_splitEqualParts32_Click(object sender, EventArgs e)
+        {
+            await this.SplitCurrentAudioEvenlyAsync(32);
+        }
+
+        private async void menuToolStripItem_atomize_Click(object sender, EventArgs e)
+        {
+            AudioObj? source = this.GetSingleContextAudio();
+            if (source == null)
+            {
+                return;
+            }
+
+            bool previousUseWaitCursor = this.UseWaitCursor;
+            this.UseWaitCursor = true;
+            this.menuToolStripItem_atomize.Enabled = false;
+
+            try
+            {
+                await this.CancelAutoPlayAsync(stopCollection: true);
+
+                LoopAtomizerSettings settings = this.CreateLoopAtomizerSettings();
+                LoopAtomizerResult result = await LoopAtomizer_V4.AtomizeAsync(source, settings);
+                List<AudioObj> atomics = result.Atomics.ToList();
+                if (atomics.Count == 0)
+                {
+                    MessageBox.Show(this, "No atomic hits could be extracted with the current atomize settings. Try Aggressive sensitivity or a smaller Min Slice.", "Atomize", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                if (result.IsLikelyDrumLoop)
+                {
+                    foreach (AudioObj atomic in atomics)
+                    {
+                        if (TryMapAtomizedLabelToDrumsetElement(atomic.SampleTag, out DrumsetElement element))
+                        {
+                            atomic.Tag = element;
+                        }
+                    }
+                }
+
+                var atomicsView = new AudioCollectionView(atomics);
+                string baseName = string.IsNullOrWhiteSpace(source.Name) ? "Audio" : source.Name.Trim();
+                atomicsView.Rename(baseName + "_Atomics");
+
+                if (result.IsLikelyDrumLoop)
+                {
+                    string summary = string.Join(", ", atomics.Where(a => a.Tag is DrumsetElement).Select(a => $"{a.Name}={a.Tag}"));
+                    if (!string.IsNullOrWhiteSpace(summary))
+                    {
+                        LogCollection.Log("Atomize classified hits: " + summary);
+                    }
+                }
+                else
+                {
+                    LogCollection.Log($"Atomize extracted {atomics.Count} atomic sample(s) from '{source.Name}'.");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log(ex);
+                MessageBox.Show(this, "Atomize failed: " + ex.Message, "Atomize", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                this.menuToolStripItem_atomize.Enabled = true;
+                this.UseWaitCursor = previousUseWaitCursor;
+            }
+        }
+
+        private static bool TryMapAtomizedLabelToDrumsetElement(string? label, out DrumsetElement element)
+        {
+            return Enum.TryParse(label, ignoreCase: true, out element);
+        }
+
+        private LoopAtomizerSettings CreateLoopAtomizerSettings()
+        {
+            return new LoopAtomizerSettings
+            {
+                Sensitivity = this.atomizeSensitivity,
+                MinSliceMs = this.atomizeMinSliceMs,
+                TailPaddingMs = this.atomizeTailPaddingMs,
+                AllowSingleAtomFallback = false
+            };
+        }
+
+        private void menuToolStripItem_atomizeSensitivityConservative_Click(object sender, EventArgs e)
+        {
+            this.atomizeSensitivity = AtomizeSensitivity.Conservative;
+            this.UpdateContextMenuState();
+        }
+
+        private void menuToolStripItem_atomizeSensitivityBalanced_Click(object sender, EventArgs e)
+        {
+            this.atomizeSensitivity = AtomizeSensitivity.Balanced;
+            this.UpdateContextMenuState();
+        }
+
+        private void menuToolStripItem_atomizeSensitivityAggressive_Click(object sender, EventArgs e)
+        {
+            this.atomizeSensitivity = AtomizeSensitivity.Aggressive;
+            this.UpdateContextMenuState();
+        }
+
+        private void menuToolStripItem_atomizeMinSlice40_Click(object sender, EventArgs e)
+        {
+            this.atomizeMinSliceMs = 40;
+            this.UpdateContextMenuState();
+        }
+
+        private void menuToolStripItem_atomizeMinSlice80_Click(object sender, EventArgs e)
+        {
+            this.atomizeMinSliceMs = 80;
+            this.UpdateContextMenuState();
+        }
+
+        private void menuToolStripItem_atomizeMinSlice140_Click(object sender, EventArgs e)
+        {
+            this.atomizeMinSliceMs = 140;
+            this.UpdateContextMenuState();
+        }
+
+        private void menuToolStripItem_atomizeTail10_Click(object sender, EventArgs e)
+        {
+            this.atomizeTailPaddingMs = 10;
+            this.UpdateContextMenuState();
+        }
+
+        private void menuToolStripItem_atomizeTail30_Click(object sender, EventArgs e)
+        {
+            this.atomizeTailPaddingMs = 30;
+            this.UpdateContextMenuState();
+        }
+
+        private void menuToolStripItem_atomizeTail60_Click(object sender, EventArgs e)
+        {
+            this.atomizeTailPaddingMs = 60;
+            this.UpdateContextMenuState();
+        }
+
+        private async void menuToolStripItem_delete_Click(object sender, EventArgs e)
+        {
+            List<AudioObj> toDelete = this.GetContextAudios();
+            if (toDelete.Count == 0)
+            {
+                return;
+            }
+
+            foreach (AudioObj audio in toDelete)
+            {
+                await this.AudioC.RemoveAsync(audio.Id);
+            }
+
+            this.ResetAudioListBinding();
+        }
+
+        private void menuToolStripItem_toNewCollection_Click(object sender, EventArgs e)
+        {
+            List<AudioObj> toMove = this.GetContextAudios();
+            if (toMove.Count == 0)
+            {
+                return;
+            }
+
+            var newView = new AudioCollectionView(toMove);
+            newView.Show();
+            foreach (AudioObj audio in toMove)
+            {
+                this.AudioC.Audios.Remove(audio);
+            }
+        }
+
+        private void menuToolStripItem_addIndexToNames_CheckedChanged(object sender, EventArgs e)
+        {
+            this.AudioC.ToggleAddIndexToNames(this.menuToolStripItem_addIndexToNames.Checked);
+            this.listBox_audios.Refresh();
+        }
+
+        private async void menuToolStripItem_aggregateMixSelected_Click(object sender, EventArgs e)
+        {
+            List<AudioObj> toMix = this.GetContextAudios();
+            if (toMix.Count <= 1)
+            {
+                return;
+            }
+
+            AudioObj? mixedAudio = await TracksMixer.AggregateMixTracks(toMix);
+            if (mixedAudio == null)
+            {
+                return;
+            }
+
+            mixedAudio.Name = "Mix of " + string.Join(" + ", toMix.Select(a => a.Name));
+            mixedAudio.Rename(mixedAudio.Name);
+            this.AudioC.Audios.Add(mixedAudio);
+        }
+
+        private void menuToolStripItem_timeStretchSelected_Click(object sender, EventArgs e)
+        {
+            List<AudioObj> toStretch = this.GetContextAudios();
+            if (toStretch.Count == 0)
+            {
+                return;
+            }
+
+            using var dlg = new Modules.Dialogs.TimeStretchDialog(null, toStretch);
+            dlg.ShowDialog(this);
+            WindowMain.UpdateTrackDependentUI();
+            WindowMain.RefreshAllCollectionViews();
+        }
+
+        private void menuToolStripItem_demucsSeparateSelected_Click(object sender, EventArgs e)
+        {
+            AudioObj? toSeparate = this.GetSingleContextAudio();
+            if (toSeparate == null)
+            {
+                return;
+            }
+
+            using var separationForm = new OnnxDemucsDialog(toSeparate);
+            separationForm.ShowDialog(this);
+            WindowMain.UpdateTrackDependentUI();
+            WindowMain.RefreshAllCollectionViews();
+        }
 
         private async void checkBox_autoPlay_CheckedChanged(object? sender, EventArgs e)
         {

@@ -25,6 +25,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         internal readonly AudioCollection AudioC = new();
         internal AudioCollectionView? CollectionView { get; private set; } = null;
+        private CancellationTokenSource? autoPlayCancellationTokenSource;
+        private bool sampleSelectionFromUserInput;
 
         internal AudioObj? SelectedTrack => this.listBox_samples.SelectedItem as AudioObj;
 
@@ -97,13 +99,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private async void listBox_samples_SelectedIndexChanged(object sender, EventArgs e)
         {
             this.comboBox_drumset.SelectedItem = this.SelectedTrack?.Tag ?? null;
-            if (this.AutoPlayEnabled && this.SelectedTrack is not null)
+
+            if (!this.sampleSelectionFromUserInput)
             {
-                // Only play if mouse is down on item (to avoid playing when changing selection programmatically)
-                if (MouseButtons == MouseButtons.Left && this.listBox_samples.SelectedIndex >= 0)
-                {
-                    await this.SelectedTrack.PlayAsync(CancellationToken.None);
-                }
+                return;
+            }
+
+            this.sampleSelectionFromUserInput = false;
+
+            if (this.AutoPlayEnabled && this.SelectedTrack is not null && this.listBox_samples.SelectedIndex >= 0)
+            {
+                await this.PlaySelectedTrackPreviewAsync(this.SelectedTrack);
             }
         }
 
