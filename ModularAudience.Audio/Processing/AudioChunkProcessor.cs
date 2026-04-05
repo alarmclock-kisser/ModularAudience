@@ -26,6 +26,14 @@ namespace ModularAudience.Audio.Processing
 
             audio.ChunkSize = size;
             audio.OverlapSize = (int) (size * overlap);
+
+            // Align overlap to channel count to keep L-R frame boundaries intact
+            int ch = Math.Max(1, audio.Channels);
+            if (ch > 1 && audio.OverlapSize % ch != 0)
+            {
+                audio.OverlapSize = (audio.OverlapSize / ch) * ch;
+            }
+
             int step = size - audio.OverlapSize;
             if (step <= 0)
             {
@@ -82,6 +90,14 @@ namespace ModularAudience.Audio.Processing
             int overlapSize = audio.OverlapSize;
             int originalHopSize = chunkSize - overlapSize;
             int stretchedHopSize = (int) Math.Round(originalHopSize * stretchFactor);
+
+            // Align hop to channel count to keep L-R frame boundaries intact
+            int ch = Math.Max(1, audio.Channels);
+            if (ch > 1 && stretchedHopSize % ch != 0)
+            {
+                stretchedHopSize = Math.Max(ch, (stretchedHopSize / ch) * ch);
+            }
+
             int outputLength = Math.Max(chunkSize, (chunkList.Count - 1) * stretchedHopSize + chunkSize);
 
             double[] window = await Task.Run(() =>

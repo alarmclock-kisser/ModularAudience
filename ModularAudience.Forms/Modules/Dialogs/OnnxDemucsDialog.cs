@@ -1,5 +1,5 @@
 ﻿using ModularAudience.Audio;
-using ModularAudience.Audio.Services;
+using ModularAudience.Onnx;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -14,7 +14,7 @@ namespace ModularAudience.Forms
     {
 
         private readonly AudioObj OriginalAudio;
-        private readonly DemucsOnnxService Onnx = new();
+        private readonly OnnxService Onnx = new();
 
 
         public OnnxDemucsDialog(AudioObj audioObj)
@@ -58,7 +58,10 @@ namespace ModularAudience.Forms
 
             var selectedStems = new List<string>();
             foreach (var item in this.checkedListBox_stems.CheckedItems)
+            {
                 selectedStems.Add(item.ToString()!);
+            }
+
             if (selectedStems.Count == 0)
             {
                 MessageBox.Show("Please select at least one stem to separate.", "No Stems Selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -74,23 +77,39 @@ namespace ModularAudience.Forms
 
 
             AudioCollectionView acv = new([]);
-            foreach (var stem in selectedStems)
+
+            await Task.Run(async () =>
             {
-                var extractor = this.Onnx.GetPartial(stem);
-                float[] extraction = await extractor(this.OriginalAudio, progress);
+                foreach (var stem in selectedStems)
+                {
+                    var extractor = this.Onnx.GetPartial(stem);
 
-                AudioObj extract = await this.OriginalAudio.CloneAsync();
-                extract.Data = extraction;
-                extract.Rename($"{this.OriginalAudio.OriginalName}_{stem}");
-                acv.AudioC.Audios.Add(extract);
+                    float[] extraction =
+                        await extractor(this.OriginalAudio, progress);
 
-                this.progressBar_inferencing.Value = 0;
-            }
+                    AudioObj extract =
+                        await this.OriginalAudio.CloneAsync();
+
+                    extract.Data = extraction;
+                    extract.Rename($"{this.OriginalAudio.OriginalName}_{stem}");
+
+                    // UI Zugriff muss zurück auf UI Thread
+                    this.Invoke(() =>
+                    {
+                        acv.AudioC.Audios.Add(extract);
+                        this.progressBar_inferencing.Value = 0;
+                    });
+                }
+            });
+
         }
 
         private void comboBox_models_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (this.Onnx.IsOnline) return;
+            if (this.Onnx.IsOnline)
+            {
+                return;
+            }
 
             if (this.comboBox_models.SelectedItem != null)
             {

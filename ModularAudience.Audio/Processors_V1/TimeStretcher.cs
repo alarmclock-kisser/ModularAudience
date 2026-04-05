@@ -35,6 +35,20 @@ namespace ModularAudience.Audio.Processors_V1
                 maxWorkers = Math.Clamp(maxWorkers.Value, 1, Environment.ProcessorCount);
             }
 
+            if (maxWorkers != Environment.ProcessorCount)
+            {
+                return await TimeStretchMostThreadsAsync(
+                    obj,
+                    chunkSize,
+                    overlap,
+                    factor,
+                    keepData,
+                    normalize,
+                    maxWorkers.Value,
+                    progress,
+                    offload: false);
+            }
+
             if (offload)
             {
                 return await TimeStretchOffloadedAsync(
@@ -48,6 +62,8 @@ namespace ModularAudience.Audio.Processors_V1
                     progress,
                     adjustBpm: true);
             }
+
+            LogCollection.Log("TimeStretchAllThreadsAsync: Starting time stretch with maxWorkers = " + maxWorkers.Value);
 
             float[] backupData = obj.Data;
             int sampleRate = obj.SampleRate;
@@ -70,8 +86,17 @@ namespace ModularAudience.Audio.Processors_V1
             totalMs += sw.Elapsed.TotalMilliseconds;
             sw.Restart();
 
-            var fftTasks = chunks.Select(chunk => FourierTransformForwardAsync(chunk, tracker));
-            var fftChunks = await Task.WhenAll(fftTasks);
+            var allOpts = new ParallelOptions { MaxDegreeOfParallelism = maxWorkers.Value };
+
+            var fftChunks = new Complex[chunks.Count][];
+            await Parallel.ForEachAsync(
+                Enumerable.Range(0, chunks.Count),
+                allOpts,
+                (i, _) =>
+                {
+                    WithLowPriority(() => fftChunks[i] = FourierTransformForwardCore(chunks[i], tracker));
+                    return ValueTask.CompletedTask;
+                });
             if (fftChunks.Length == 0)
             {
                 obj.Data = backupData;
@@ -81,9 +106,15 @@ namespace ModularAudience.Audio.Processors_V1
             totalMs += sw.Elapsed.TotalMilliseconds;
             sw.Restart();
 
-            var stretchTasks = fftChunks.Select(transformedChunk =>
-                StretchChunkAsync(transformedChunk, chunkSize, overlapSize, sampleRate, factor, tracker));
-            var stretchChunks = await Task.WhenAll(stretchTasks);
+            var stretchChunks = new Complex[fftChunks.Length][];
+            await Parallel.ForEachAsync(
+                Enumerable.Range(0, fftChunks.Length),
+                allOpts,
+                (i, _) =>
+                {
+                    WithLowPriority(() => stretchChunks[i] = StretchChunkCore(fftChunks[i], chunkSize, overlapSize, sampleRate, factor, tracker));
+                    return ValueTask.CompletedTask;
+                });
             if (stretchChunks.Length == 0)
             {
                 obj.Data = backupData;
@@ -95,8 +126,15 @@ namespace ModularAudience.Audio.Processors_V1
 
             obj.StretchFactor = factor;
 
-            var ifftTasks = stretchChunks.Select(stretchChunk => FourierTransformInverseAsync(stretchChunk, tracker));
-            var ifftChunks = await Task.WhenAll(ifftTasks);
+            var ifftChunks = new float[stretchChunks.Length][];
+            await Parallel.ForEachAsync(
+                Enumerable.Range(0, stretchChunks.Length),
+                allOpts,
+                (i, _) =>
+                {
+                    WithLowPriority(() => ifftChunks[i] = FourierTransformInverseCore(stretchChunks[i], tracker));
+                    return ValueTask.CompletedTask;
+                });
             if (ifftChunks.Length == 0)
             {
                 obj.Data = backupData;
@@ -151,7 +189,16 @@ namespace ModularAudience.Audio.Processors_V1
         {
             if (maxWorkers == null)
             {
-                maxWorkers = Environment.ProcessorCount;
+                return await TimeStretchAllThreadsAsync(
+                    obj,
+                    chunkSize,
+                    overlap,
+                    factor,
+                    keepData,
+                    normalize,
+                    Environment.ProcessorCount,
+                    progress,
+                    offload);
             }
             else
             {
@@ -171,6 +218,8 @@ namespace ModularAudience.Audio.Processors_V1
                     progress,
                     adjustBpm: false);
             }
+
+            LogCollection.Log("TimeStretchMostThreadsAsync: Starting time stretch with maxWorkers = " + maxWorkers.Value);
 
             var parallelOptions = new ParallelOptions
             {
@@ -198,11 +247,12 @@ namespace ModularAudience.Audio.Processors_V1
 
             var fftChunks = new Complex[chunks.Count][];
             await Parallel.ForEachAsync(
-                chunks.Select((chunk, index) => new { chunk, index }),
+                Enumerable.Range(0, chunks.Count),
                 parallelOptions,
-                async (item, token) =>
+                (i, _) =>
                 {
-                    fftChunks[item.index] = await FourierTransformForwardAsync(item.chunk, tracker);
+                    WithLowPriority(() => fftChunks[i] = FourierTransformForwardCore(chunks[i], tracker));
+                    return ValueTask.CompletedTask;
                 });
 
             if (fftChunks.Length == 0)
@@ -215,11 +265,12 @@ namespace ModularAudience.Audio.Processors_V1
 
             var stretchChunks = new Complex[fftChunks.Length][];
             await Parallel.ForEachAsync(
-                fftChunks.Select((chunk, index) => new { chunk, index }),
+                Enumerable.Range(0, fftChunks.Length),
                 parallelOptions,
-                async (item, token) =>
+                (i, _) =>
                 {
-                    stretchChunks[item.index] = await StretchChunkAsync(item.chunk, chunkSize, overlapSize, sampleRate, factor, tracker);
+                    WithLowPriority(() => stretchChunks[i] = StretchChunkCore(fftChunks[i], chunkSize, overlapSize, sampleRate, factor, tracker));
+                    return ValueTask.CompletedTask;
                 });
 
             if (stretchChunks.Length == 0)
@@ -234,11 +285,12 @@ namespace ModularAudience.Audio.Processors_V1
 
             var ifftChunks = new float[stretchChunks.Length][];
             await Parallel.ForEachAsync(
-                stretchChunks.Select((chunk, index) => new { chunk, index }),
+                Enumerable.Range(0, stretchChunks.Length),
                 parallelOptions,
-                async (item, token) =>
+                (i, _) =>
                 {
-                    ifftChunks[item.index] = await FourierTransformInverseAsync(item.chunk, tracker);
+                    WithLowPriority(() => ifftChunks[i] = FourierTransformInverseCore(stretchChunks[i], tracker));
+                    return ValueTask.CompletedTask;
                 });
 
             if (ifftChunks.Length == 0)
@@ -376,78 +428,19 @@ namespace ModularAudience.Audio.Processors_V1
 
 
 
-        private static async Task<Complex[]> FourierTransformForwardAsync(float[] samples, ProgressTracker? tracker = null)
+        private static Task<Complex[]> FourierTransformForwardAsync(float[] samples, ProgressTracker? tracker = null)
         {
-            // FFT using nuget (samples.Length is guaranteed 2^n)
-            return await Task.Run(() =>
-            {
-                var complexSamples = samples.Select(s => new Complex(s, 0)).ToArray();
-                Fourier.Forward(complexSamples, FourierOptions.Matlab);
-                tracker?.ReportWork(1);
-                return complexSamples;
-            });
+            return RunLowPriorityAsync(() => FourierTransformForwardCore(samples, tracker));
         }
 
-        private static async Task<float[]> FourierTransformInverseAsync(Complex[] samples, ProgressTracker? tracker = null)
+        private static Task<float[]> FourierTransformInverseAsync(Complex[] samples, ProgressTracker? tracker = null)
         {
-            // IFFT using nuget (samples.Length is guaranteed 2^n)
-            return await Task.Run(() =>
-            {
-                Fourier.Inverse(samples, FourierOptions.Matlab);
-                tracker?.ReportWork(1);
-                return samples.Select(c => (float) c.Real).ToArray();
-            });
+            return RunLowPriorityAsync(() => FourierTransformInverseCore(samples, tracker));
         }
 
-        private static async Task<Complex[]> StretchChunkAsync(Complex[] samples, int chunkSize, int overlapSize, int sampleRate, double factor, ProgressTracker? tracker = null)
+        private static Task<Complex[]> StretchChunkAsync(Complex[] samples, int chunkSize, int overlapSize, int sampleRate, double factor, ProgressTracker? tracker = null)
         {
-            int hopIn = chunkSize - overlapSize;
-            int hopOut = (int) (hopIn * factor + 0.5);
-
-            int totalBins = chunkSize;
-            int totalChunks = samples.Length / chunkSize;
-
-            var output = new Complex[samples.Length];
-
-            await Task.Run(() =>
-            {
-                for (int chunk = 0; chunk < totalChunks; chunk++)
-                {
-                    for (int bin = 0; bin < totalBins; bin++)
-                    {
-                        int idx = chunk * chunkSize + bin;
-                        int prevIdx = (chunk > 0) ? (chunk - 1) * chunkSize + bin : idx;
-
-                        if (bin >= totalBins || chunk == 0)
-                        {
-                            output[idx] = samples[idx];
-                            continue;
-                        }
-
-                        Complex cur = samples[idx];
-                        Complex prev = samples[prevIdx];
-
-                        float phaseCur = (float) Math.Atan2(cur.Imaginary, cur.Real);
-                        float phasePrev = (float) Math.Atan2(prev.Imaginary, prev.Real);
-                        float mag = (float) Math.Sqrt(cur.Real * cur.Real + cur.Imaginary * cur.Imaginary);
-
-                        float deltaPhase = phaseCur - phasePrev;
-                        float freqPerBin = (float) sampleRate / chunkSize;
-                        float expectedPhaseAdv = 2.0f * (float) Math.PI * freqPerBin * bin * hopIn / sampleRate;
-
-                        float delta = deltaPhase - expectedPhaseAdv;
-                        delta = (float) (delta + Math.PI) % (2.0f * (float) Math.PI) - (float) Math.PI;
-
-                        float phaseOut = phasePrev + expectedPhaseAdv + (float) (delta * factor);
-
-                        output[idx] = new Complex(mag * Math.Cos(phaseOut), mag * Math.Sin(phaseOut));
-                    }
-                }
-            });
-
-            tracker?.ReportWork(1);
-
-            return output;
+            return RunLowPriorityAsync(() => StretchChunkCore(samples, chunkSize, overlapSize, sampleRate, factor, tracker));
         }
 
         private static ProgressTracker? CreateTracker(IProgress<double>? progress, int chunkCount, bool includeNormalize)
@@ -504,6 +497,102 @@ namespace ModularAudience.Audio.Processors_V1
             }
         }
 
+        // ---- Low-priority execution helpers (prevent starvation of audio playback threads) ----
+
+        private static void WithLowPriority(Action work)
+        {
+            var prev = Thread.CurrentThread.Priority;
+            Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
+            try
+            {
+                work();
+            }
+            finally
+            {
+                Thread.CurrentThread.Priority = prev;
+            }
+        }
+
+        private static Task<T> RunLowPriorityAsync<T>(Func<T> work)
+        {
+            return Task.Run(() =>
+            {
+                var prev = Thread.CurrentThread.Priority;
+                Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
+                try
+                {
+                    return work();
+                }
+                finally
+                {
+                    Thread.CurrentThread.Priority = prev;
+                }
+            });
+        }
+
+        // ---- Synchronous core methods (used by Parallel.ForEachAsync and async wrappers) ----
+
+        private static Complex[] FourierTransformForwardCore(float[] samples, ProgressTracker? tracker = null)
+        {
+            var complexSamples = samples.Select(s => new Complex(s, 0)).ToArray();
+            Fourier.Forward(complexSamples, FourierOptions.Matlab);
+            tracker?.ReportWork(1);
+            return complexSamples;
+        }
+
+        private static float[] FourierTransformInverseCore(Complex[] samples, ProgressTracker? tracker = null)
+        {
+            Fourier.Inverse(samples, FourierOptions.Matlab);
+            tracker?.ReportWork(1);
+            return samples.Select(c => (float) c.Real).ToArray();
+        }
+
+        private static Complex[] StretchChunkCore(Complex[] samples, int chunkSize, int overlapSize, int sampleRate, double factor, ProgressTracker? tracker = null)
+        {
+            int hopIn = chunkSize - overlapSize;
+            int hopOut = (int) (hopIn * factor + 0.5);
+
+            int totalBins = chunkSize;
+            int totalChunks = samples.Length / chunkSize;
+
+            var output = new Complex[samples.Length];
+
+            for (int chunk = 0; chunk < totalChunks; chunk++)
+            {
+                for (int bin = 0; bin < totalBins; bin++)
+                {
+                    int idx = chunk * chunkSize + bin;
+                    int prevIdx = (chunk > 0) ? (chunk - 1) * chunkSize + bin : idx;
+
+                    if (bin >= totalBins || chunk == 0)
+                    {
+                        output[idx] = samples[idx];
+                        continue;
+                    }
+
+                    Complex cur = samples[idx];
+                    Complex prev = samples[prevIdx];
+
+                    float phaseCur = (float) Math.Atan2(cur.Imaginary, cur.Real);
+                    float phasePrev = (float) Math.Atan2(prev.Imaginary, prev.Real);
+                    float mag = (float) Math.Sqrt(cur.Real * cur.Real + cur.Imaginary * cur.Imaginary);
+
+                    float deltaPhase = phaseCur - phasePrev;
+                    float freqPerBin = (float) sampleRate / chunkSize;
+                    float expectedPhaseAdv = 2.0f * (float) Math.PI * freqPerBin * bin * hopIn / sampleRate;
+
+                    float delta = deltaPhase - expectedPhaseAdv;
+                    delta = (float) (delta + Math.PI) % (2.0f * (float) Math.PI) - (float) Math.PI;
+
+                    float phaseOut = phasePrev + expectedPhaseAdv + (float) (delta * factor);
+
+                    output[idx] = new Complex(mag * Math.Cos(phaseOut), mag * Math.Sin(phaseOut));
+                }
+            }
+
+            tracker?.ReportWork(1);
+            return output;
+        }
 
 
         private static async Task<AudioObj> TimeStretchOffloadedAsync(

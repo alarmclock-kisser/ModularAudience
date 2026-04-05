@@ -680,8 +680,15 @@ namespace ModularAudience.Forms.Modules
 
         internal void SetVolumeSynced(int scrollbarValue, bool muted, bool broadcast = true)
         {
-            if (this.IsDisposed) return;
-            if (this.suppressVolumeSync) return;
+            if (this.IsDisposed)
+            {
+                return;
+            }
+
+            if (this.suppressVolumeSync)
+            {
+                return;
+            }
 
             bool doBroadcast = broadcast && !ModifierKeys.HasFlag(Keys.Control);
 
@@ -690,10 +697,14 @@ namespace ModularAudience.Forms.Modules
             {
                 int clamped = Math.Clamp(scrollbarValue, this.vScrollBar_volume.Minimum, this.vScrollBar_volume.Maximum);
                 if (this.vScrollBar_volume.Value != clamped)
+                {
                     this.vScrollBar_volume.Value = clamped;
+                }
 
                 if (this.checkBox_mute.Checked != muted)
+                {
                     this.checkBox_mute.Checked = muted;
+                }
 
                 float vol = this.CurrentVolume;
                 this.label_volume.Text = (vol * 100f).ToString("F1") + "%";
@@ -1502,9 +1513,11 @@ namespace ModularAudience.Forms.Modules
 				e.SuppressKeyPress = true;
 
 				if (this.OriginalAudio.Playing)
-					await this.StopPlaybackAsync();
+                {
+                    await this.StopPlaybackAsync();
+                }
 
-				await this.OriginalAudio.CreateUndoStepAsync();
+                await this.OriginalAudio.CreateUndoStepAsync();
 				await AudioFadeProcessor.FadeInAsync(this.OriginalAudio);
 
 				this.RequestWaveformRender();
@@ -1518,9 +1531,11 @@ namespace ModularAudience.Forms.Modules
 				e.SuppressKeyPress = true;
 
 				if (this.OriginalAudio.Playing)
-					await this.StopPlaybackAsync();
+                {
+                    await this.StopPlaybackAsync();
+                }
 
-				await this.OriginalAudio.CreateUndoStepAsync();
+                await this.OriginalAudio.CreateUndoStepAsync();
 				await AudioFadeProcessor.FadeOutAsync(this.OriginalAudio);
 
 				this.RequestWaveformRender();

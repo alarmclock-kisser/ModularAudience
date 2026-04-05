@@ -599,16 +599,24 @@ namespace ModularAudience.Cuda
 			int idxVoid = code.IndexOf(" void ", idxGlobal >= 0 ? idxGlobal : 0);
 			if (idxVoid < 0)
 			{
-				if (!silent) CudaService.Log("'void' not found", this.KernelName ?? "N/A", 1);
-				return [];
+				if (!silent)
+                {
+                    CudaService.Log("'void' not found", this.KernelName ?? "N/A", 1);
+                }
+
+                return [];
 			}
 
 			// Find opening parenthesis for parameter list
 			int idxOpen = code.IndexOf('(', idxVoid);
 			if (idxOpen < 0)
 			{
-				if (!silent) CudaService.Log("'(' not found", this.KernelName ?? "N/A", 1);
-				return [];
+				if (!silent)
+                {
+                    CudaService.Log("'(' not found", this.KernelName ?? "N/A", 1);
+                }
+
+                return [];
 			}
 
 			// Find matching closing ')'
@@ -617,14 +625,25 @@ namespace ModularAudience.Cuda
 			while (idxClose < code.Length && depth > 0)
 			{
 				char ch = code[idxClose];
-				if (ch == '(') depth++;
-				else if (ch == ')') depth--;
-				idxClose++;
+				if (ch == '(')
+                {
+                    depth++;
+                }
+                else if (ch == ')')
+                {
+                    depth--;
+                }
+
+                idxClose++;
 			}
 			if (depth != 0)
 			{
-				if (!silent) CudaService.Log("')' not matched", this.KernelName ?? "N/A", 1);
-				return [];
+				if (!silent)
+                {
+                    CudaService.Log("')' not matched", this.KernelName ?? "N/A", 1);
+                }
+
+                return [];
 			}
 			idxClose--; // last processed index is ')'
 

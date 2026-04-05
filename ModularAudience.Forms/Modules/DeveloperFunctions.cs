@@ -1,4 +1,5 @@
 ﻿using ModularAudience.Audio;
+using ModularAudience.Onnx;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -384,8 +385,16 @@ namespace ModularAudience.Forms.Modules
 
                     try
                     {
-                        if (defaultValue < nud.Minimum) defaultValue = nud.Minimum;
-                        if (defaultValue > nud.Maximum) defaultValue = nud.Maximum;
+                        if (defaultValue < nud.Minimum)
+                        {
+                            defaultValue = nud.Minimum;
+                        }
+
+                        if (defaultValue > nud.Maximum)
+                        {
+                            defaultValue = nud.Maximum;
+                        }
+
                         nud.Value = defaultValue;
                     }
                     catch
@@ -722,36 +731,36 @@ namespace ModularAudience.Forms.Modules
                 // - if method returned an AudioObj -> use returned (new) AudioObj
                 // - if method returned non-AudioObj value -> keep ResultAudioObj = null and display value
                 // - if method returned null and we passed an audio arg -> use the passed audio (in-place mutation)
-				if (result is AudioObj returnedAo)
-				{
-					this.ResultAudioObj = returnedAo;
-				}
-				else if (result is IEnumerable<AudioObj> audioEnumerable)
-				{
-					var list = audioEnumerable.Where(a => a != null).ToList();
-					if (list.Count > 0)
-					{
-						var view = new AudioCollectionView(list);
-						view.Show();
-					}
-					this.ResultAudioObj = null;
-				}
-				else if (result != null)
-				{
-					// Nicht-Audio-Ergebnis: ResultAudioObj bleibt null, Ergebnis zur Auswahl anzeigen
-					this.ResultAudioObj = null;
-					try
-					{
-						string txt = result.ToString() ?? string.Empty;
-						this.ShowResultValueDialog(method.Name + " result", txt);
-					}
-					catch { }
-				}
-				else
-				{
-					// result == null
-					this.ResultAudioObj = firstAudioArg;
-				}
+                if (result is AudioObj returnedAo)
+                {
+                    this.ResultAudioObj = returnedAo;
+                }
+                else if (result is IEnumerable<AudioObj> audioEnumerable)
+                {
+                    var list = audioEnumerable.Where(a => a != null).ToList();
+                    if (list.Count > 0)
+                    {
+                        var view = new AudioCollectionView(list);
+                        view.Show();
+                    }
+                    this.ResultAudioObj = null;
+                }
+                else if (result != null)
+                {
+                    // Nicht-Audio-Ergebnis: ResultAudioObj bleibt null, Ergebnis zur Auswahl anzeigen
+                    this.ResultAudioObj = null;
+                    try
+                    {
+                        string txt = result.ToString() ?? string.Empty;
+                        this.ShowResultValueDialog(method.Name + " result", txt);
+                    }
+                    catch { }
+                }
+                else
+                {
+                    // result == null
+                    this.ResultAudioObj = firstAudioArg;
+                }
             }
             catch (TargetInvocationException tie)
             {
@@ -878,7 +887,8 @@ namespace ModularAudience.Forms.Modules
 
             bool ctrlFlag = ModifierKeys.HasFlag(Keys.Control);
 
-            this.ProcessedAudioObj?.ReplaceWith(this.ResultAudioObj, ctrlFlag);
+            // Korrigiert: Kein vollqualifizierter Name nötig, da kein Namenskonflikt mit Namespace und Typ besteht.
+            this.ProcessedAudioObj?.ReplaceWith(this.ResultAudioObj!, ctrlFlag);
             if (ctrlFlag)
             {
                 this.ResultAudioObj = null;
@@ -1082,6 +1092,98 @@ namespace ModularAudience.Forms.Modules
             return null;
         }
 
+        private async void button_test_onnxStems_Click(object sender, EventArgs e)
+        {
+            using var onnx = new OnnxService();
+            if (!onnx.IsOnline)
+            {
+                MessageBox.Show("ONNX session is not initialized. Please check model paths and availability.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
+            string testPath = this.textBox_testPath.Text;
+            if (!File.Exists(testPath))
+            {
+                // Choose random audio < 5 minutes from MyMusic
+                string musicDir = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+                var audioFiles = Directory.GetFiles(musicDir, "*.*", SearchOption.AllDirectories)
+                    .Where(f => f.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
+                                f.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (audioFiles.Count == 0)
+                {
+                    MessageBox.Show("No audio files found in My Music folder for testing.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                var rnd = new Random();
+                string randomFile = audioFiles[rnd.Next(audioFiles.Count)];
+                while (File.Exists(randomFile) && new FileInfo(randomFile).Length < 1 * 1024 * 1024 && new FileInfo(randomFile).Length > 25 * 1024 * 1024) // zwischen 1MB und 25MB (ungefähr <5min)
+                {
+                    randomFile = audioFiles[rnd.Next(audioFiles.Count)];
+                }
+
+                if (!File.Exists(randomFile))
+                {
+                    MessageBox.Show("No suitable audio file found in My Music folder for testing.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                testPath = randomFile;
+            }
+
+            var acv = new AudioCollectionView([]);
+            string[] stems = ["drums", "bass", "other", "vocals"];
+            var audio = new AudioObj(testPath);
+            var results = new Dictionary<string, float[]>();
+            foreach (var ste in stems)
+            {
+                try
+                {
+                    var stemData = await onnx.ExtractStemAsync(audio, ste);
+                    results[ste] = stemData;
+
+                    var clone = await audio.CloneAsync();
+                    clone.Data = stemData;
+                    clone.Rename(audio.OriginalName + $"_{ste}");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error extracting stem '{ste}': {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private void button_browseTestDir_Click(object sender, EventArgs e)
+        {
+            // Dialog öffnen zum Ordner oder Datei auswählen, Pfad in textBox_testPath einfügen
+            using var fbd = new FolderBrowserDialog
+            {
+                Description = "Select a folder or file for testing.",
+                UseDescriptionForTitle = true,
+                ShowNewFolderButton = false,
+                ShowHiddenFiles = true,
+                InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic)
+            };
+
+            if (fbd.ShowDialog() == DialogResult.OK)
+            {
+                this.textBox_testPath.Text = fbd.SelectedPath;
+            }
+        }
+
+        private void textBox_testPath_TextChanged(object sender, EventArgs e)
+        {
+            string? text = this.textBox_testPath.Text;
+            if (Directory.Exists(text) || File.Exists(text))
+            {
+                this.textBox_testPath.ForeColor = SystemColors.WindowText;
+            }
+            else
+            {
+                this.textBox_testPath.ForeColor = Color.Red;
+            }
+        }
     }
 }

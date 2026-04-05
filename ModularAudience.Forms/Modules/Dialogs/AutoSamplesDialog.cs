@@ -270,7 +270,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     if (oldVal > 1m)
                     {
                         next = oldVal - 1m;
-                        if (next < 1m) next = 1m;
+                        if (next < 1m)
+                        {
+                            next = 1m;
+                        }
                     }
                     else
                     {
@@ -292,12 +295,21 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     next = oldVal * 2m;
                     if (next >= 1m)
+                    {
                         next = 1m;
+                    }
                 }
             }
 
-            if (next < min) next = min;
-            if (next > max) next = max;
+            if (next < min)
+            {
+                next = min;
+            }
+
+            if (next > max)
+            {
+                next = max;
+            }
 
             if (this.numericUpDown_fractions.Value != next)
             {

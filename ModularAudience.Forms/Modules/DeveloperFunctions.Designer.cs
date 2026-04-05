@@ -41,6 +41,9 @@
             this.checkBox_autoParameters = new CheckBox();
             this.checkBox_optionalParameters = new CheckBox();
             this.button_apply = new Button();
+            this.button_test_onnxStems = new Button();
+            this.textBox_testPath = new TextBox();
+            this.button_browseTestDir = new Button();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_maxProcessors).BeginInit();
             this.SuspendLayout();
             // 
@@ -65,7 +68,7 @@
             // button_run
             // 
             this.button_run.BackColor = Color.FromArgb(  255,   192,   192);
-            this.button_run.Location = new Point(258, 406);
+            this.button_run.Location = new Point(258, 566);
             this.button_run.Name = "button_run";
             this.button_run.Size = new Size(75, 23);
             this.button_run.TabIndex = 2;
@@ -75,7 +78,7 @@
             // 
             // numericUpDown_maxProcessors
             // 
-            this.numericUpDown_maxProcessors.Location = new Point(339, 406);
+            this.numericUpDown_maxProcessors.Location = new Point(339, 566);
             this.numericUpDown_maxProcessors.Maximum = new decimal(new int[] { 1, 0, 0, 0 });
             this.numericUpDown_maxProcessors.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             this.numericUpDown_maxProcessors.Name = "numericUpDown_maxProcessors";
@@ -86,7 +89,7 @@
             // label_info_threads
             // 
             this.label_info_threads.AutoSize = true;
-            this.label_info_threads.Location = new Point(339, 388);
+            this.label_info_threads.Location = new Point(339, 548);
             this.label_info_threads.Name = "label_info_threads";
             this.label_info_threads.Size = new Size(49, 15);
             this.label_info_threads.TabIndex = 4;
@@ -94,7 +97,7 @@
             // 
             // progressBar_processing
             // 
-            this.progressBar_processing.Location = new Point(12, 406);
+            this.progressBar_processing.Location = new Point(12, 566);
             this.progressBar_processing.Name = "progressBar_processing";
             this.progressBar_processing.Size = new Size(240, 23);
             this.progressBar_processing.TabIndex = 5;
@@ -102,7 +105,7 @@
             // label_elapsedProcessingTime
             // 
             this.label_elapsedProcessingTime.AutoSize = true;
-            this.label_elapsedProcessingTime.Location = new Point(211, 388);
+            this.label_elapsedProcessingTime.Location = new Point(211, 548);
             this.label_elapsedProcessingTime.Name = "label_elapsedProcessingTime";
             this.label_elapsedProcessingTime.Size = new Size(30, 15);
             this.label_elapsedProcessingTime.TabIndex = 6;
@@ -170,7 +173,7 @@
             // button_apply
             // 
             this.button_apply.BackColor = SystemColors.Info;
-            this.button_apply.Location = new Point(537, 406);
+            this.button_apply.Location = new Point(537, 566);
             this.button_apply.Name = "button_apply";
             this.button_apply.Size = new Size(75, 23);
             this.button_apply.TabIndex = 42;
@@ -178,11 +181,43 @@
             this.button_apply.UseVisualStyleBackColor = false;
             this.button_apply.Click += this.button_apply_Click;
             // 
+            // button_test_onnxStems
+            // 
+            this.button_test_onnxStems.Location = new Point(12, 397);
+            this.button_test_onnxStems.Name = "button_test_onnxStems";
+            this.button_test_onnxStems.Size = new Size(95, 23);
+            this.button_test_onnxStems.TabIndex = 43;
+            this.button_test_onnxStems.Text = "Onnx Stems";
+            this.button_test_onnxStems.UseVisualStyleBackColor = true;
+            this.button_test_onnxStems.Click += this.button_test_onnxStems_Click;
+            // 
+            // textBox_testPath
+            // 
+            this.textBox_testPath.Location = new Point(258, 488);
+            this.textBox_testPath.Name = "textBox_testPath";
+            this.textBox_testPath.PlaceholderText = "Test File or Directory Path - random audio file";
+            this.textBox_testPath.Size = new Size(316, 23);
+            this.textBox_testPath.TabIndex = 44;
+            this.textBox_testPath.TextChanged += this.textBox_testPath_TextChanged;
+            // 
+            // button_browseTestDir
+            // 
+            this.button_browseTestDir.Location = new Point(580, 488);
+            this.button_browseTestDir.Name = "button_browseTestDir";
+            this.button_browseTestDir.Size = new Size(32, 23);
+            this.button_browseTestDir.TabIndex = 45;
+            this.button_browseTestDir.Text = "[...]";
+            this.button_browseTestDir.UseVisualStyleBackColor = true;
+            this.button_browseTestDir.Click += this.button_browseTestDir_Click;
+            // 
             // DeveloperFunctions
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
-            this.ClientSize = new Size(624, 441);
+            this.ClientSize = new Size(624, 601);
+            this.Controls.Add(this.button_browseTestDir);
+            this.Controls.Add(this.textBox_testPath);
+            this.Controls.Add(this.button_test_onnxStems);
             this.Controls.Add(this.button_apply);
             this.Controls.Add(this.checkBox_autoParameters);
             this.Controls.Add(this.checkBox_optionalParameters);
@@ -197,8 +232,8 @@
             this.Controls.Add(this.panel_parameters);
             this.Controls.Add(this.comboBox_methods);
             this.MaximizeBox = false;
-            this.MaximumSize = new Size(640, 480);
-            this.MinimumSize = new Size(640, 480);
+            this.MaximumSize = new Size(640, 640);
+            this.MinimumSize = new Size(640, 640);
             this.Name = "DeveloperFunctions";
             this.Text = "Developer Functions";
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_maxProcessors).EndInit();
@@ -221,5 +256,8 @@
         private CheckBox checkBox_autoParameters;
         private CheckBox checkBox_optionalParameters;
         private Button button_apply;
+        private Button button_test_onnxStems;
+        private TextBox textBox_testPath;
+        private Button button_browseTestDir;
     }
 }
