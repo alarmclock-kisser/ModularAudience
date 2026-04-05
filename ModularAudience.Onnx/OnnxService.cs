@@ -38,7 +38,7 @@ namespace ModularAudience.Audio.Services
             try
             {
                 // Nutzt das Microsoft.ML.OnnxRuntime.Gpu Paket
-                options.AppendExecutionProvider_DML(0);
+                options.AppendExecutionProvider_DML(1);
                 options.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
             }
             catch { options.AppendExecutionProvider_CPU(); }

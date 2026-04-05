@@ -26,6 +26,7 @@ namespace ModularAudience.Forms
         private int waveformPreviewIndex = -1;
         private Point lastMousePos;
         private WaveformPreview? waveformPreviewForm;
+        private bool ShowPreview => this.checkBox_preview.Checked;
 
         private const int MaxAutoGrowHeight = 480;
         private int _autoGrowAnchorHeight;
@@ -199,6 +200,18 @@ namespace ModularAudience.Forms
                             }
                         }
                     };
+                    ToolStripMenuItem cloneItem = new("Clone");
+                    cloneItem.Enabled = this.listBox_audios.SelectedItems.Count == 1 || (this.listBox_audios.SelectedItems.Count == 0 && index >= 0 && index < this.listBox_audios.Items.Count);
+                    cloneItem.Click += (s, ev) =>
+                    {
+                        AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
+                        if (selectedAudio != null)
+                        {
+                            AudioObj cloned = selectedAudio.Clone();
+                            cloned.Name = selectedAudio.Name + " (Clone)";
+                            this.AudioC.Audios.Add(cloned);
+                        }
+                    };
                     ToolStripMenuItem editTagsItem = new("Edit Tags" + (this.listBox_audios.Items.Count > 1 ? " (Many)" : ""));
                     editTagsItem.Enabled = this.listBox_audios.SelectedItems.Count >= 1 || (this.listBox_audios.SelectedItems.Count == 0 && index >= 0 && index < this.listBox_audios.Items.Count);
                     editTagsItem.Click += (s, ev) =>
@@ -330,7 +343,7 @@ namespace ModularAudience.Forms
                         WindowMain.RefreshAllCollectionViews();
                     };
 
-                    contextMenu.Items.AddRange([renameItem, editTagsItem, deleteItem, toNewCollectionItem, addIndexToNamesItem, aggregateMixSelectedItem, timestretchItem, demucsItem]);
+                    contextMenu.Items.AddRange([renameItem, cloneItem, editTagsItem, deleteItem, toNewCollectionItem, addIndexToNamesItem, aggregateMixSelectedItem, timestretchItem, demucsItem]);
                     contextMenu.Show(this.listBox_audios, e.Location);
                 }
             }
@@ -1380,12 +1393,12 @@ namespace ModularAudience.Forms
 
             if (this.listBox_audios.Items[this.waveformPreviewIndex] is AudioObj audio)
             {
-                // Vorschau nur anzeigen, wenn Audio < 20s
-                if (audio.Duration.TotalSeconds > 20.0)
+                // Vorschau nur anzeigen, wenn Audio < 60s
+                if (audio.Duration.TotalSeconds > 60.0)
                 {
                     return;
                 }
-                if (audio.WaveformPreview != null)
+                if (audio.WaveformPreview != null && this.ShowPreview)
                 {
                     if (this.waveformPreviewForm == null || this.waveformPreviewForm.IsDisposed)
                     {
