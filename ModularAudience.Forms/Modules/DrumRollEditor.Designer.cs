@@ -65,6 +65,7 @@
             // 
             panel_pattern.BackColor = SystemColors.ControlLight;
             panel_pattern.Controls.Add(button_hit);
+            panel_pattern.Controls.Add(label_info_dragndrop);
             panel_pattern.Location = new Point(12, 56);
             panel_pattern.Name = "panel_pattern";
             panel_pattern.Size = new Size(680, 50);
@@ -118,7 +119,7 @@
             domainUpDown_hits.Items.Add("12");
             domainUpDown_hits.Items.Add("8");
             domainUpDown_hits.Items.Add("4");
-            domainUpDown_hits.Location = new Point(120, 12);
+            domainUpDown_hits.Location = new Point(120, 14);
             domainUpDown_hits.Name = "domainUpDown_hits";
             domainUpDown_hits.ReadOnly = true;
             domainUpDown_hits.Size = new Size(75, 23);
@@ -148,7 +149,7 @@
             // label_info_dragndrop
             // 
             label_info_dragndrop.AutoSize = true;
-            label_info_dragndrop.Location = new Point(254, 54);
+            label_info_dragndrop.Location = new Point(258, -3);
             label_info_dragndrop.Name = "label_info_dragndrop";
             label_info_dragndrop.Size = new Size(138, 15);
             label_info_dragndrop.TabIndex = 10;
@@ -311,7 +312,6 @@
             Controls.Add(button_export);
             Controls.Add(label_info_volume);
             Controls.Add(numericUpDown_volume);
-            Controls.Add(label_info_dragndrop);
             Controls.Add(label_info_hits);
             Controls.Add(label_info_bpm);
             Controls.Add(domainUpDown_hits);
@@ -325,6 +325,7 @@
             Name = "DrumRollEditor";
             Text = "Drum Roll Editor";
             panel_pattern.ResumeLayout(false);
+            panel_pattern.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_bpm).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_volume).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_rerollInterval).EndInit();
