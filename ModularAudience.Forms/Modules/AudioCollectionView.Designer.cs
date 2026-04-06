@@ -100,14 +100,15 @@
             menuToolStripItem_aggregateMixSelected = new ToolStripMenuItem();
             menuToolStripItem_timeStretchSelected = new ToolStripMenuItem();
             menuToolStripItem_demucsSeparateSelected = new ToolStripMenuItem();
+            menuToolStripItem_pinWindow = new ToolStripMenuItem();
             contextMenuStrip_audios.SuspendLayout();
             SuspendLayout();
             // 
             // contextMenuStrip_audios
             // 
-            contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { menuToolStripItem_rename, menuToolStripItem_clone, menuToolStripItem_editTags, menuToolStripItem_splitEqualParts, menuToolStripItem_generateBreakbeat, menuToolStripItem_atomize, menuToolStripItem_delete, menuToolStripItem_toNewCollection, menuToolStripItem_addIndexToNames, menuToolStripItem_aggregateMixSelected, menuToolStripItem_timeStretchSelected, menuToolStripItem_demucsSeparateSelected });
+            contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { menuToolStripItem_rename, menuToolStripItem_clone, menuToolStripItem_editTags, menuToolStripItem_splitEqualParts, menuToolStripItem_generateBreakbeat, menuToolStripItem_atomize, menuToolStripItem_delete, menuToolStripItem_toNewCollection, menuToolStripItem_addIndexToNames, menuToolStripItem_aggregateMixSelected, menuToolStripItem_timeStretchSelected, menuToolStripItem_demucsSeparateSelected, menuToolStripItem_pinWindow });
             contextMenuStrip_audios.Name = "contextMenuStrip_audios";
-            contextMenuStrip_audios.Size = new Size(213, 224);
+            contextMenuStrip_audios.Size = new Size(213, 246);
             contextMenuStrip_audios.Opening += contextMenuStrip_audios_Opening;
             // 
             // listBox_audios
@@ -614,6 +615,14 @@
             menuToolStripItem_demucsSeparateSelected.Text = "Demucs Separate Selected";
             menuToolStripItem_demucsSeparateSelected.Click += menuToolStripItem_demucsSeparateSelected_Click;
             // 
+            // menuToolStripItem_pinWindow
+            // 
+            menuToolStripItem_pinWindow.CheckOnClick = true;
+            menuToolStripItem_pinWindow.Name = "menuToolStripItem_pinWindow";
+            menuToolStripItem_pinWindow.Size = new Size(212, 22);
+            menuToolStripItem_pinWindow.Text = "Pin Window";
+            menuToolStripItem_pinWindow.CheckedChanged += menuToolStripItem_pinWindow_CheckedChanged;
+            // 
             // AudioCollectionView
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -707,5 +716,6 @@
         private ToolStripMenuItem menuToolStripItem_aggregateMixSelected;
         private ToolStripMenuItem menuToolStripItem_timeStretchSelected;
         private ToolStripMenuItem menuToolStripItem_demucsSeparateSelected;
+        private ToolStripMenuItem menuToolStripItem_pinWindow;
     }
 }

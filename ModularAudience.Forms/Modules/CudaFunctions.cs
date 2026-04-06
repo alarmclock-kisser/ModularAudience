@@ -206,7 +206,7 @@ namespace ModularAudience.Forms.Modules
 
 			this.ListBox_FillPointers();
 			this.UpdatePointerDependentUI();
-			WindowMain.RefreshAllCollectionViews();
+            WindowMain.Instance?.RefreshAllCollectionViews();
 		}
 
 		private async Task PullAllAudiosFromDeviceAsync()
@@ -221,7 +221,7 @@ namespace ModularAudience.Forms.Modules
 			await Task.WhenAll(tasks);
 			
 			this.ListBox_FillPointers();
-			WindowMain.RefreshAllCollectionViews();
+            WindowMain.Instance?.RefreshAllCollectionViews();
 		}
 
 		private async Task BuildArgumentsPanelAsync(Panel? panel = null, float inputWidthPart = 0.7f)

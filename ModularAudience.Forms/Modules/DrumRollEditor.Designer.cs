@@ -30,12 +30,12 @@
         {
             panel_pattern = new BufferedPatternPanel();
             button_hit = new Button();
+            label_info_dragndrop = new Label();
             button_playback = new Button();
             numericUpDown_bpm = new NumericUpDown();
             domainUpDown_hits = new DomainUpDown();
             label_info_bpm = new Label();
             label_info_hits = new Label();
-            label_info_dragndrop = new Label();
             numericUpDown_volume = new NumericUpDown();
             label_info_volume = new Label();
             button_export = new Button();
@@ -65,8 +65,7 @@
             // 
             panel_pattern.BackColor = SystemColors.ControlLight;
             panel_pattern.Controls.Add(button_hit);
-            panel_pattern.Controls.Add(label_info_dragndrop);
-            panel_pattern.Location = new Point(12, 56);
+            panel_pattern.Location = new Point(12, 66);
             panel_pattern.Name = "panel_pattern";
             panel_pattern.Size = new Size(680, 50);
             panel_pattern.TabIndex = 0;
@@ -82,9 +81,18 @@
             button_hit.Text = "0";
             button_hit.UseVisualStyleBackColor = true;
             // 
+            // label_info_dragndrop
+            // 
+            label_info_dragndrop.AutoSize = true;
+            label_info_dragndrop.Location = new Point(270, 53);
+            label_info_dragndrop.Name = "label_info_dragndrop";
+            label_info_dragndrop.Size = new Size(138, 15);
+            label_info_dragndrop.TabIndex = 10;
+            label_info_dragndrop.Text = "Drop Sample here to add";
+            // 
             // button_playback
             // 
-            button_playback.Location = new Point(11, 11);
+            button_playback.Location = new Point(11, 28);
             button_playback.Margin = new Padding(2);
             button_playback.Name = "button_playback";
             button_playback.Size = new Size(23, 23);
@@ -99,12 +107,12 @@
             // 
             numericUpDown_bpm.DecimalPlaces = 3;
             numericUpDown_bpm.Increment = new decimal(new int[] { 5, 0, 0, 65536 });
-            numericUpDown_bpm.Location = new Point(39, 12);
+            numericUpDown_bpm.Location = new Point(39, 27);
             numericUpDown_bpm.Maximum = new decimal(new int[] { 360, 0, 0, 0 });
             numericUpDown_bpm.Minimum = new decimal(new int[] { 15, 0, 0, 0 });
             numericUpDown_bpm.Name = "numericUpDown_bpm";
             numericUpDown_bpm.ReadOnly = true;
-            numericUpDown_bpm.Size = new Size(75, 23);
+            numericUpDown_bpm.Size = new Size(90, 23);
             numericUpDown_bpm.TabIndex = 6;
             numericUpDown_bpm.TabStop = false;
             numericUpDown_bpm.Value = new decimal(new int[] { 90, 0, 0, 0 });
@@ -119,10 +127,10 @@
             domainUpDown_hits.Items.Add("12");
             domainUpDown_hits.Items.Add("8");
             domainUpDown_hits.Items.Add("4");
-            domainUpDown_hits.Location = new Point(120, 14);
+            domainUpDown_hits.Location = new Point(140, 27);
             domainUpDown_hits.Name = "domainUpDown_hits";
             domainUpDown_hits.ReadOnly = true;
-            domainUpDown_hits.Size = new Size(75, 23);
+            domainUpDown_hits.Size = new Size(55, 23);
             domainUpDown_hits.TabIndex = 7;
             domainUpDown_hits.TabStop = false;
             domainUpDown_hits.Text = "Hits";
@@ -131,7 +139,7 @@
             // label_info_bpm
             // 
             label_info_bpm.AutoSize = true;
-            label_info_bpm.Location = new Point(39, 38);
+            label_info_bpm.Location = new Point(39, 9);
             label_info_bpm.Name = "label_info_bpm";
             label_info_bpm.Size = new Size(32, 15);
             label_info_bpm.TabIndex = 8;
@@ -140,20 +148,11 @@
             // label_info_hits
             // 
             label_info_hits.AutoSize = true;
-            label_info_hits.Location = new Point(120, 38);
+            label_info_hits.Location = new Point(140, 9);
             label_info_hits.Name = "label_info_hits";
             label_info_hits.Size = new Size(28, 15);
             label_info_hits.TabIndex = 9;
             label_info_hits.Text = "Hits";
-            // 
-            // label_info_dragndrop
-            // 
-            label_info_dragndrop.AutoSize = true;
-            label_info_dragndrop.Location = new Point(258, -3);
-            label_info_dragndrop.Name = "label_info_dragndrop";
-            label_info_dragndrop.Size = new Size(138, 15);
-            label_info_dragndrop.TabIndex = 10;
-            label_info_dragndrop.Text = "Drop Sample here to add";
             // 
             // numericUpDown_volume
             // 
@@ -284,7 +283,7 @@
             // checkBox_interleaved
             // 
             checkBox_interleaved.AutoSize = true;
-            checkBox_interleaved.Location = new Point(481, 5);
+            checkBox_interleaved.Location = new Point(481, 2);
             checkBox_interleaved.Name = "checkBox_interleaved";
             checkBox_interleaved.Size = new Size(84, 19);
             checkBox_interleaved.TabIndex = 25;
@@ -298,6 +297,7 @@
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(704, 441);
             Controls.Add(checkBox_interleaved);
+            Controls.Add(label_info_dragndrop);
             Controls.Add(label_info_reroll);
             Controls.Add(button_randomize);
             Controls.Add(numericUpDown_randomVariation);
@@ -325,7 +325,6 @@
             Name = "DrumRollEditor";
             Text = "Drum Roll Editor";
             panel_pattern.ResumeLayout(false);
-            panel_pattern.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_bpm).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_volume).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_rerollInterval).EndInit();

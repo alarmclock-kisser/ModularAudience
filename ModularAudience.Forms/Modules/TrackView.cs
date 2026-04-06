@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using MathNet.Numerics.Optimization.TrustRegion;
 using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio.Processors_V4;
+using ModularAudience.Forms.Helpers;
 
 namespace ModularAudience.Forms.Modules
 {
@@ -143,7 +144,7 @@ namespace ModularAudience.Forms.Modules
                     WindowMain.LastSelectedTrackView = null;
                 }
                 // Remove from TrackViews collection
-                WindowMain.InvokeIfRequired(() =>
+            WindowMainStaticHelpers.InvokeIfRequired(WindowMain.Instance, () =>
                 {
                     WindowMain.TrackViews.Remove(this);
                     WindowMain.TrackViewIds.Remove(this.TrackViewId);
@@ -2247,7 +2248,7 @@ namespace ModularAudience.Forms.Modules
                 }
             });
 
-            WindowMain.RefreshAllCollectionViews();
+            WindowMain.Instance?.RefreshAllCollectionViews();
 
             if (andClose)
             {

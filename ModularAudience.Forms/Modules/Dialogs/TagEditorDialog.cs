@@ -218,7 +218,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
 			this.FormClosing += (s, e) =>
 			{
-				WindowMain.UpdateTrackDependentUI();
+            WindowMain.Instance?.UpdateTrackDependentUI();
 			};
 		}
 
@@ -653,7 +653,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             // Ensure UI updates reflecting changed track metadata
-            try { WindowMain.UpdateTrackDependentUI(); } catch { }
+                try { WindowMain.Instance?.UpdateTrackDependentUI(); } catch { }
         }
 
 		private void AddEntries(string[] ids, string[] names, bool isMeta)
