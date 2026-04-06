@@ -84,6 +84,9 @@ namespace ModularAudience.Forms
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, true);
 
+            // Shift + LeftClick on the form background should bring all open forms of this app to the front
+            this.MouseDown += this.WindowMain_MouseDown_BringAllToFront;
+
             this.Register_ListBox_Log();
             TrackViews.ListChanged += this.TrackViews_ListChanged;
             CollectionViews.ListChanged += this.CollectionViews_ListChanged;
@@ -104,6 +107,70 @@ namespace ModularAudience.Forms
             this._keyFilter.KeyChanged += this.GlobalKeyChanged;
             Application.AddMessageFilter(this._keyFilter);
             this.UpdateTrackDependentUI();
+        }
+
+        private void WindowMain_MouseDown_BringAllToFront(object? sender, MouseEventArgs e)
+        {
+            try
+            {
+                if (e.Button != MouseButtons.Left)
+                {
+                    return;
+                }
+
+                if ((ModifierKeys & Keys.Shift) != Keys.Shift)
+                {
+                    return;
+                }
+
+                // Iterate over Application.OpenForms and try to bring each to the foreground
+                foreach (Form open in Application.OpenForms.Cast<Form>().ToArray())
+                {
+                    try
+                    {
+                        if (open.IsDisposed)
+                        {
+                            continue;
+                        }
+
+                        if (open.InvokeRequired)
+                        {
+                            open.Invoke((Action)(() => BringFormToFrontSafe(open)));
+                        }
+                        else
+                        {
+                            BringFormToFrontSafe(open);
+                        }
+                    }
+                    catch
+                    {
+                        // best-effort: ignore individual failures
+                    }
+                }
+            }
+            catch
+            {
+                // swallow - this action is best-effort
+            }
+        }
+
+        private static void BringFormToFrontSafe(Form form)
+        {
+            try
+            {
+                if (form.WindowState == FormWindowState.Minimized)
+                {
+                    form.WindowState = FormWindowState.Normal;
+                }
+
+                // Attempt to bring to front and activate
+                form.BringToFront();
+                try { form.Activate(); } catch { }
+            }
+            catch
+            {
+                // ignore
+            }
         }
 
         private void WindowMain_FormClosing(object? sender, FormClosingEventArgs e)
