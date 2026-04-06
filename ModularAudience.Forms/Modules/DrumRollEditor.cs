@@ -5,35 +5,6 @@ using System.ComponentModel;
 
 namespace ModularAudience.Forms.Modules
 {
-    internal sealed class BufferedPatternPanel : Panel
-    {
-        public BufferedPatternPanel()
-        {
-            this.DoubleBuffered = true;
-            this.ResizeRedraw = true;
-        }
-    }
-
-    internal sealed class SoftLimiterSampleProvider(ISampleProvider source) : ISampleProvider
-    {
-        public WaveFormat WaveFormat => source.WaveFormat;
-
-        public int Read(float[] buffer, int offset, int count)
-        {
-            int read = source.Read(buffer, offset, count);
-            const float drive = 1.1f;
-            const float makeup = 0.88f;
-
-            for (int i = 0; i < read; i++)
-            {
-                float sample = buffer[offset + i] * drive;
-                buffer[offset + i] = MathF.Tanh(sample) * makeup;
-            }
-
-            return read;
-        }
-    }
-
     public partial class DrumRollEditor : Form
     {
         private sealed class PatternRowState
