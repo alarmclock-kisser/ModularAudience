@@ -46,6 +46,13 @@ namespace ModularAudience.Forms
         private AtomizeSensitivity atomizeSensitivity = AtomizeSensitivity.Balanced;
         private int atomizeMinSliceMs = 80;
         private int atomizeTailPaddingMs = 30;
+        private float breakbeatBpm = 87.5f;
+        private int breakbeatBars = 4;
+        private int breakbeatHitsPerBar = 12;
+        private float breakbeatDensity = 0.45f;
+        private float breakbeatComplexity = 1.15f;
+        private int breakbeatResolution = 16;
+        private float breakbeatSwing = 0.06f;
 
         public AudioCollectionView(IEnumerable<AudioObj> audios)
         {
@@ -771,6 +778,8 @@ namespace ModularAudience.Forms
             this.menuToolStripItem_editTags.Enabled = hasAny;
             this.menuToolStripItem_editTags.Text = selectedCount > 1 ? "Edit Tags (Many)" : "Edit Tags";
             this.menuToolStripItem_splitEqualParts.Enabled = hasSingle;
+            this.menuToolStripItem_generateBreakbeat.Enabled = selectedCount > 1;
+            this.menuToolStripItem_generateBreakbeatRun.Enabled = selectedCount > 1;
             this.menuToolStripItem_atomize.Enabled = hasSingle;
             this.menuToolStripItem_atomizeRun.Enabled = hasSingle;
             this.menuToolStripItem_delete.Enabled = hasAny;
@@ -791,6 +800,41 @@ namespace ModularAudience.Forms
             this.menuToolStripItem_atomizeTail10.Checked = this.atomizeTailPaddingMs == 10;
             this.menuToolStripItem_atomizeTail30.Checked = this.atomizeTailPaddingMs == 30;
             this.menuToolStripItem_atomizeTail60.Checked = this.atomizeTailPaddingMs == 60;
+
+            this.menuToolStripItem_generateBreakbeatBpm80.Checked = Math.Abs(this.breakbeatBpm - 80f) < 0.01f;
+            this.menuToolStripItem_generateBreakbeatBpm875.Checked = Math.Abs(this.breakbeatBpm - 87.5f) < 0.01f;
+            this.menuToolStripItem_generateBreakbeatBpm100.Checked = Math.Abs(this.breakbeatBpm - 100f) < 0.01f;
+            this.menuToolStripItem_generateBreakbeatBpm120.Checked = Math.Abs(this.breakbeatBpm - 120f) < 0.01f;
+            this.menuToolStripItem_generateBreakbeatBpm140.Checked = Math.Abs(this.breakbeatBpm - 140f) < 0.01f;
+
+            this.menuToolStripItem_generateBreakbeatBars1.Checked = this.breakbeatBars == 1;
+            this.menuToolStripItem_generateBreakbeatBars2.Checked = this.breakbeatBars == 2;
+            this.menuToolStripItem_generateBreakbeatBars4.Checked = this.breakbeatBars == 4;
+            this.menuToolStripItem_generateBreakbeatBars8.Checked = this.breakbeatBars == 8;
+
+            this.menuToolStripItem_generateBreakbeatHits6.Checked = this.breakbeatHitsPerBar == 6;
+            this.menuToolStripItem_generateBreakbeatHits8.Checked = this.breakbeatHitsPerBar == 8;
+            this.menuToolStripItem_generateBreakbeatHits12.Checked = this.breakbeatHitsPerBar == 12;
+            this.menuToolStripItem_generateBreakbeatHits16.Checked = this.breakbeatHitsPerBar == 16;
+            this.menuToolStripItem_generateBreakbeatHits24.Checked = this.breakbeatHitsPerBar == 24;
+
+            this.menuToolStripItem_generateBreakbeatDensitySparse.Checked = Math.Abs(this.breakbeatDensity - 0.28f) < 0.01f;
+            this.menuToolStripItem_generateBreakbeatDensityBalanced.Checked = Math.Abs(this.breakbeatDensity - 0.45f) < 0.01f;
+            this.menuToolStripItem_generateBreakbeatDensityDense.Checked = Math.Abs(this.breakbeatDensity - 0.62f) < 0.01f;
+            this.menuToolStripItem_generateBreakbeatDensityMax.Checked = Math.Abs(this.breakbeatDensity - 0.82f) < 0.01f;
+
+            this.menuToolStripItem_generateBreakbeatComplexityLow.Checked = Math.Abs(this.breakbeatComplexity - 0.75f) < 0.01f;
+            this.menuToolStripItem_generateBreakbeatComplexityBalanced.Checked = Math.Abs(this.breakbeatComplexity - 1.15f) < 0.01f;
+            this.menuToolStripItem_generateBreakbeatComplexityBusy.Checked = Math.Abs(this.breakbeatComplexity - 1.45f) < 0.01f;
+            this.menuToolStripItem_generateBreakbeatComplexityWild.Checked = Math.Abs(this.breakbeatComplexity - 1.90f) < 0.01f;
+
+            this.menuToolStripItem_generateBreakbeatResolution16.Checked = this.breakbeatResolution == 16;
+            this.menuToolStripItem_generateBreakbeatResolution32.Checked = this.breakbeatResolution == 32;
+
+            this.menuToolStripItem_generateBreakbeatSwing0.Checked = Math.Abs(this.breakbeatSwing) < 0.001f;
+            this.menuToolStripItem_generateBreakbeatSwing6.Checked = Math.Abs(this.breakbeatSwing - 0.06f) < 0.001f;
+            this.menuToolStripItem_generateBreakbeatSwing12.Checked = Math.Abs(this.breakbeatSwing - 0.12f) < 0.001f;
+            this.menuToolStripItem_generateBreakbeatSwing18.Checked = Math.Abs(this.breakbeatSwing - 0.18f) < 0.001f;
         }
 
         private List<AudioObj> GetContextAudios()
@@ -923,6 +967,347 @@ namespace ModularAudience.Forms
         private async void menuToolStripItem_splitEqualParts32_Click(object sender, EventArgs e)
         {
             await this.SplitCurrentAudioEvenlyAsync(32);
+        }
+
+        private async void menuToolStripItem_generateBreakbeatRun_Click(object sender, EventArgs e)
+        {
+            List<AudioObj> selected = this.GetContextAudios();
+            if (selected.Count <= 1)
+            {
+                return;
+            }
+
+            bool previousUseWaitCursor = this.UseWaitCursor;
+            this.UseWaitCursor = true;
+            this.menuToolStripItem_generateBreakbeat.Enabled = false;
+
+            try
+            {
+                await this.CancelAutoPlayAsync(stopCollection: true);
+
+                List<AudioObj> sources = selected.Select(audio => audio.Clone()).ToList();
+                DrumsetElement[] mappedElements = this.MapSelectedAudiosToDrumset(selected);
+                int seed = Random.Shared.Next(1, int.MaxValue);
+                List<bool[]> pattern = await BreakbeatGenerator_V2.GenerateBreakPatternAsync(
+                    drumset: mappedElements,
+                    bars: this.breakbeatBars,
+                    density: this.breakbeatDensity,
+                    resolution: this.breakbeatResolution,
+                    swing: this.breakbeatSwing,
+                    complexity: this.breakbeatComplexity,
+                    interleaved: false,
+                    seed: seed,
+                    preset: " - None - ");
+
+                this.RetargetPatternHitCount(pattern, mappedElements, this.breakbeatHitsPerBar * this.breakbeatBars, this.breakbeatResolution);
+
+                AudioObj rendered = await BreakbeatGenerator_V2.RenderBreakbeatAsync(
+                    pattern,
+                    sources,
+                    this.breakbeatBpm,
+                    this.breakbeatResolution,
+                    this.breakbeatSwing,
+                    "Breakbeat");
+
+                if (rendered == null)
+                {
+                    MessageBox.Show(this, "Breakbeat generation returned no rendered audio.", "Generate Breakbeat", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                string collectionName = this.BuildBreakbeatCollectionName(selected);
+                rendered.Rename(collectionName);
+                var resultView = new AudioCollectionView([rendered]);
+                resultView.Rename(collectionName);
+
+                LogCollection.Log($"Generated breakbeat from {selected.Count} selected atomic sample(s) at {this.breakbeatBpm:F1} BPM, {this.breakbeatBars} bar(s), target {this.breakbeatHitsPerBar} hits/bar.");
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log(ex);
+                MessageBox.Show(this, "Generate Breakbeat failed: " + ex.Message, "Generate Breakbeat", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                this.menuToolStripItem_generateBreakbeat.Enabled = true;
+                this.UseWaitCursor = previousUseWaitCursor;
+            }
+        }
+
+        private string BuildBreakbeatCollectionName(IReadOnlyList<AudioObj> selected)
+        {
+            string prefix = selected.Count == 0
+                ? (string.IsNullOrWhiteSpace(this.Text) ? "Breakbeat" : this.Text)
+                : string.Join("+", selected.Take(3).Select(x => string.IsNullOrWhiteSpace(x.Name) ? "Sample" : x.Name.Trim()));
+
+            if (selected.Count > 3)
+            {
+                prefix += $"+{selected.Count - 3}";
+            }
+
+            return prefix + "_Breakbeat";
+        }
+
+        private DrumsetElement[] MapSelectedAudiosToDrumset(IReadOnlyList<AudioObj> selected)
+        {
+            string[] names = selected.Select(audio => audio.Name ?? string.Empty).ToArray();
+            DrumsetElement[] fallback = BreakbeatGenerator_V2.MatchSampleNamesToDrumsetElements(names);
+            DrumsetElement[] mapped = new DrumsetElement[selected.Count];
+
+            for (int i = 0; i < selected.Count; i++)
+            {
+                AudioObj audio = selected[i];
+                if (audio.Tag is DrumsetElement tagged)
+                {
+                    mapped[i] = tagged;
+                    continue;
+                }
+
+                if (Enum.TryParse(audio.SampleTag, true, out DrumsetElement sampleTagElement))
+                {
+                    mapped[i] = sampleTagElement;
+                    continue;
+                }
+
+                DrumsetElement inferred = fallback[i];
+                double durationMs = ResolveDuration(audio).TotalMilliseconds;
+                if (inferred == DrumsetElement.HiHatClosed && durationMs > 220)
+                {
+                    inferred = DrumsetElement.HiHatOpen;
+                }
+                else if (inferred == DrumsetElement.CrashShort && durationMs > 650)
+                {
+                    inferred = DrumsetElement.CrashLong;
+                }
+                else if (inferred == DrumsetElement.Snare && durationMs > 450)
+                {
+                    inferred = DrumsetElement.SnareRattle;
+                }
+
+                mapped[i] = inferred;
+            }
+
+            return mapped;
+        }
+
+        private void RetargetPatternHitCount(List<bool[]> pattern, DrumsetElement[] elements, int targetHits, int resolution)
+        {
+            int currentHits = pattern.Sum(line => line.Count(hit => hit));
+            if (currentHits == targetHits)
+            {
+                return;
+            }
+
+            int maxAttempts = Math.Max(64, targetHits * 12);
+            int attempts = 0;
+            while (currentHits < targetHits && attempts++ < maxAttempts)
+            {
+                if (!this.TryAddPatternHit(pattern, elements, resolution))
+                {
+                    break;
+                }
+
+                currentHits++;
+            }
+
+            attempts = 0;
+            while (currentHits > targetHits && attempts++ < maxAttempts)
+            {
+                if (!this.TryRemovePatternHit(pattern, elements, resolution))
+                {
+                    break;
+                }
+
+                currentHits--;
+            }
+        }
+
+        private bool TryAddPatternHit(List<bool[]> pattern, DrumsetElement[] elements, int resolution)
+        {
+            int bestTrack = -1;
+            int bestStep = -1;
+            double bestScore = double.MinValue;
+
+            for (int track = 0; track < pattern.Count; track++)
+            {
+                bool[] line = pattern[track];
+                for (int step = 0; step < line.Length; step++)
+                {
+                    if (line[step])
+                    {
+                        continue;
+                    }
+
+                    double score = this.ScorePatternPosition(elements[track], line, step, resolution, adding: true);
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestTrack = track;
+                        bestStep = step;
+                    }
+                }
+            }
+
+            if (bestTrack < 0 || bestStep < 0)
+            {
+                return false;
+            }
+
+            pattern[bestTrack][bestStep] = true;
+            return true;
+        }
+
+        private bool TryRemovePatternHit(List<bool[]> pattern, DrumsetElement[] elements, int resolution)
+        {
+            int bestTrack = -1;
+            int bestStep = -1;
+            double bestScore = double.MinValue;
+
+            for (int track = 0; track < pattern.Count; track++)
+            {
+                bool[] line = pattern[track];
+                for (int step = 0; step < line.Length; step++)
+                {
+                    if (!line[step] || this.IsAnchorStep(elements[track], step % resolution, resolution))
+                    {
+                        continue;
+                    }
+
+                    double score = this.ScorePatternPosition(elements[track], line, step, resolution, adding: false);
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestTrack = track;
+                        bestStep = step;
+                    }
+                }
+            }
+
+            if (bestTrack < 0 || bestStep < 0)
+            {
+                return false;
+            }
+
+            pattern[bestTrack][bestStep] = false;
+            return true;
+        }
+
+        private double ScorePatternPosition(DrumsetElement element, bool[] line, int step, int resolution, bool adding)
+        {
+            int stepInBar = step % resolution;
+            bool neighbor = (step > 0 && line[step - 1]) || (step < line.Length - 1 && line[step + 1]);
+            bool anchor = this.IsAnchorStep(element, stepInBar, resolution);
+            double score = anchor ? 5.0 : 1.0;
+
+            if (stepInBar % Math.Max(1, resolution / 4) == 0)
+            {
+                score += 2.0;
+            }
+            else if (stepInBar % Math.Max(1, resolution / 8) == 0)
+            {
+                score += 0.8;
+            }
+
+            if (neighbor)
+            {
+                score += adding ? 0.9 : 1.8;
+            }
+
+            score += element switch
+            {
+                DrumsetElement.Kick => adding ? 2.8 : 0.4,
+                DrumsetElement.Snare or DrumsetElement.SnareRattle => adding ? 2.2 : 0.6,
+                DrumsetElement.HiHatClosed or DrumsetElement.Shaker => adding ? 1.6 : 2.0,
+                DrumsetElement.HiHatOpen or DrumsetElement.CrashLong or DrumsetElement.CrashShort => adding ? -1.2 : 3.2,
+                DrumsetElement.Ride => adding ? 1.1 : 1.9,
+                DrumsetElement.TomHigh or DrumsetElement.TomMid or DrumsetElement.TomLow or DrumsetElement.FloorTom => adding ? 0.4 : 2.1,
+                _ => adding ? 0.7 : 1.5
+            };
+
+            return score;
+        }
+
+        private bool IsAnchorStep(DrumsetElement element, int stepInBar, int resolution)
+        {
+            int quarter = Math.Max(1, resolution / 4);
+            return element switch
+            {
+                DrumsetElement.Kick => stepInBar == 0 || stepInBar == quarter * 2,
+                DrumsetElement.Snare or DrumsetElement.SnareRattle or DrumsetElement.Clap or DrumsetElement.Rim => stepInBar == quarter || stepInBar == quarter * 3,
+                DrumsetElement.HiHatClosed or DrumsetElement.Ride or DrumsetElement.Shaker => stepInBar % quarter == 0,
+                _ => false
+            };
+        }
+
+        private void menuToolStripItem_generateBreakbeatBpm80_Click(object sender, EventArgs e) => this.SetBreakbeatBpm(80f);
+        private void menuToolStripItem_generateBreakbeatBpm875_Click(object sender, EventArgs e) => this.SetBreakbeatBpm(87.5f);
+        private void menuToolStripItem_generateBreakbeatBpm100_Click(object sender, EventArgs e) => this.SetBreakbeatBpm(100f);
+        private void menuToolStripItem_generateBreakbeatBpm120_Click(object sender, EventArgs e) => this.SetBreakbeatBpm(120f);
+        private void menuToolStripItem_generateBreakbeatBpm140_Click(object sender, EventArgs e) => this.SetBreakbeatBpm(140f);
+        private void menuToolStripItem_generateBreakbeatBars1_Click(object sender, EventArgs e) => this.SetBreakbeatBars(1);
+        private void menuToolStripItem_generateBreakbeatBars2_Click(object sender, EventArgs e) => this.SetBreakbeatBars(2);
+        private void menuToolStripItem_generateBreakbeatBars4_Click(object sender, EventArgs e) => this.SetBreakbeatBars(4);
+        private void menuToolStripItem_generateBreakbeatBars8_Click(object sender, EventArgs e) => this.SetBreakbeatBars(8);
+        private void menuToolStripItem_generateBreakbeatHits6_Click(object sender, EventArgs e) => this.SetBreakbeatHits(6);
+        private void menuToolStripItem_generateBreakbeatHits8_Click(object sender, EventArgs e) => this.SetBreakbeatHits(8);
+        private void menuToolStripItem_generateBreakbeatHits12_Click(object sender, EventArgs e) => this.SetBreakbeatHits(12);
+        private void menuToolStripItem_generateBreakbeatHits16_Click(object sender, EventArgs e) => this.SetBreakbeatHits(16);
+        private void menuToolStripItem_generateBreakbeatHits24_Click(object sender, EventArgs e) => this.SetBreakbeatHits(24);
+        private void menuToolStripItem_generateBreakbeatDensitySparse_Click(object sender, EventArgs e) => this.SetBreakbeatDensity(0.28f);
+        private void menuToolStripItem_generateBreakbeatDensityBalanced_Click(object sender, EventArgs e) => this.SetBreakbeatDensity(0.45f);
+        private void menuToolStripItem_generateBreakbeatDensityDense_Click(object sender, EventArgs e) => this.SetBreakbeatDensity(0.62f);
+        private void menuToolStripItem_generateBreakbeatDensityMax_Click(object sender, EventArgs e) => this.SetBreakbeatDensity(0.82f);
+        private void menuToolStripItem_generateBreakbeatComplexityLow_Click(object sender, EventArgs e) => this.SetBreakbeatComplexity(0.75f);
+        private void menuToolStripItem_generateBreakbeatComplexityBalanced_Click(object sender, EventArgs e) => this.SetBreakbeatComplexity(1.15f);
+        private void menuToolStripItem_generateBreakbeatComplexityBusy_Click(object sender, EventArgs e) => this.SetBreakbeatComplexity(1.45f);
+        private void menuToolStripItem_generateBreakbeatComplexityWild_Click(object sender, EventArgs e) => this.SetBreakbeatComplexity(1.90f);
+        private void menuToolStripItem_generateBreakbeatResolution16_Click(object sender, EventArgs e) => this.SetBreakbeatResolution(16);
+        private void menuToolStripItem_generateBreakbeatResolution32_Click(object sender, EventArgs e) => this.SetBreakbeatResolution(32);
+        private void menuToolStripItem_generateBreakbeatSwing0_Click(object sender, EventArgs e) => this.SetBreakbeatSwing(0f);
+        private void menuToolStripItem_generateBreakbeatSwing6_Click(object sender, EventArgs e) => this.SetBreakbeatSwing(0.06f);
+        private void menuToolStripItem_generateBreakbeatSwing12_Click(object sender, EventArgs e) => this.SetBreakbeatSwing(0.12f);
+        private void menuToolStripItem_generateBreakbeatSwing18_Click(object sender, EventArgs e) => this.SetBreakbeatSwing(0.18f);
+
+        private void SetBreakbeatBpm(float bpm)
+        {
+            this.breakbeatBpm = bpm;
+            this.UpdateContextMenuState();
+        }
+
+        private void SetBreakbeatBars(int bars)
+        {
+            this.breakbeatBars = bars;
+            this.UpdateContextMenuState();
+        }
+
+        private void SetBreakbeatHits(int hitsPerBar)
+        {
+            this.breakbeatHitsPerBar = hitsPerBar;
+            this.UpdateContextMenuState();
+        }
+
+        private void SetBreakbeatDensity(float density)
+        {
+            this.breakbeatDensity = density;
+            this.UpdateContextMenuState();
+        }
+
+        private void SetBreakbeatComplexity(float complexity)
+        {
+            this.breakbeatComplexity = complexity;
+            this.UpdateContextMenuState();
+        }
+
+        private void SetBreakbeatResolution(int resolution)
+        {
+            this.breakbeatResolution = resolution;
+            this.UpdateContextMenuState();
+        }
+
+        private void SetBreakbeatSwing(float swing)
+        {
+            this.breakbeatSwing = swing;
+            this.UpdateContextMenuState();
         }
 
         private async void menuToolStripItem_atomize_Click(object sender, EventArgs e)

@@ -1608,9 +1608,17 @@ namespace ModularAudience.Forms
 
         private void button_drumRoll_Click(object sender, EventArgs e)
         {
-            // New drum roll editor window with all selected tracks
-            DrumRollEditor editor = new(SelectedTracks);
-            editor.Show();
+            try
+            {
+                // New drum roll editor window with all selected tracks
+                DrumRollEditor editor = new(SelectedTracks.ToList());
+                editor.Show();
+            }
+            catch (Exception ex)
+            {
+                try { LogCollection.Log($"DrumRoll button error: {ex.Message}"); } catch { }
+                MessageBox.Show(ex.Message, "Drum Roll Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void button_loopControl_Click(object sender, EventArgs e)
