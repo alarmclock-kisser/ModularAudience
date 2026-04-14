@@ -2,6 +2,7 @@
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using System.ComponentModel;
+using System.IO;
 
 namespace ModularAudience.Forms.Modules
 {
@@ -31,11 +32,15 @@ namespace ModularAudience.Forms.Modules
 
         private readonly AudioCollection AudioC = new();
         private AudioCollectionView? CollectionView = null;
+        private readonly List<CancellationTokenSource?> launchpadPlaybackCancellationTokens = [];
+        private readonly Lock launchpadLock = new();
+        private readonly List<AudioObj> pendingInitialSamples = [];
 
         public float Bpm => (float) this.numericUpDown_bpm.Value;
         public int Hits => this.domainUpDown_hits.SelectedItem is null ? 16 : int.Parse(this.domainUpDown_hits.SelectedItem.ToString() ?? "16");
         public float Volume => (float) this.numericUpDown_volume.Value / 100.0f;
         private bool InterleavedPlaybackEnabled => this.checkBox_interleaved.Checked;
+        private bool LaunchpadModeEnabled => this.checkBox_launchpad.Checked;
 
         internal int RerollInterval => (int) this.numericUpDown_rerollInterval.Value;
         internal int RerollCountdown { get; private set; } = -1;
@@ -78,10 +83,7 @@ namespace ModularAudience.Forms.Modules
 
             if (samples != null)
             {
-                foreach (AudioObj sample in samples)
-                {
-                    this.AudioC.Audios.Add(sample.Clone());
-                }
+                this.pendingInitialSamples.AddRange(samples.Where(sample => sample != null));
             }
 
             this.StartPosition = FormStartPosition.Manual;
@@ -104,9 +106,121 @@ namespace ModularAudience.Forms.Modules
 
         }
 
+        private void AddEditorSamplesCore(IEnumerable<AudioObj> samples)
+        {
+            foreach (AudioObj sample in samples)
+            {
+                if (sample == null)
+                {
+                    continue;
+                }
+
+                this.AudioC.Audios.Add(CreateEditorAudio(sample));
+            }
+        }
+
+        private async Task AddEditorSamplesAsync(IEnumerable<AudioObj> samples)
+        {
+            List<AudioObj> editorSamples = samples
+                .Where(sample => sample != null)
+                .Select(CreateEditorAudio)
+                .ToList();
+
+            if (editorSamples.Count == 0)
+            {
+                return;
+            }
+
+            List<List<bool>>? restoreStates = this.initialPatternLoadCompleted
+                ? this.CapturePatternButtonStates()
+                : null;
+
+            this.AudioC.Audios.ListChanged -= this.AudioC_Audios_ListChanged;
+            try
+            {
+                foreach (AudioObj editorSample in editorSamples)
+                {
+                    this.AudioC.Audios.Add(editorSample);
+                }
+            }
+            finally
+            {
+                this.AudioC.Audios.ListChanged += this.AudioC_Audios_ListChanged;
+            }
+
+            if (!this.initialPatternLoadCompleted)
+            {
+                return;
+            }
+
+            await this.RebuildPatternPanelsAsync(restoreStates);
+            await this.ResizePanelsAndButtonsAsync();
+        }
+
+        private static AudioObj CreateEditorAudio(AudioObj source)
+        {
+            AudioObj editorAudio = new()
+            {
+                Id = source.Id,
+                FilePath = source.FilePath,
+                Data = source.Data,
+                SampleRate = source.SampleRate,
+                SampleRateFactor = source.SampleRateFactor,
+                Channels = source.Channels,
+                BitDepth = source.BitDepth,
+                Length = source.Length,
+                Duration = source.Duration,
+                Tag = source.Tag,
+                Bpm = source.Bpm,
+                ScannedBpm = source.ScannedBpm,
+                Timing = source.Timing,
+                ScannedTiming = source.ScannedTiming,
+                Key = source.Key,
+                ScannedKey = source.ScannedKey,
+                Volume = source.Volume,
+                ChunkSize = source.ChunkSize,
+                OverlapSize = source.OverlapSize,
+                StretchFactor = source.StretchFactor,
+                ScrollOffset = source.ScrollOffset,
+                StartingOffset = source.StartingOffset,
+                SampleTag = source.SampleTag,
+                DrawBeatGrid = source.DrawBeatGrid,
+                BeatGrid = source.BeatGrid
+            };
+
+            editorAudio.Rename(GetPreferredAudioName(source));
+            editorAudio.Tag = source.Tag;
+            editorAudio.SelectionStart = source.SelectionStart;
+            editorAudio.SelectionEnd = source.SelectionEnd;
+            editorAudio.LoopEnabled = source.LoopEnabled;
+
+            return editorAudio;
+        }
+
+        private static string GetPreferredAudioName(AudioObj audio, int index = -1)
+        {
+            string?[] candidates =
+            [
+                audio.Name,
+                audio.OriginalName,
+                string.IsNullOrWhiteSpace(audio.FilePath) ? null : Path.GetFileNameWithoutExtension(audio.FilePath)
+            ];
+
+            foreach (string? candidate in candidates)
+            {
+                if (!string.IsNullOrWhiteSpace(candidate) && !string.Equals(candidate, "untitled", StringComparison.OrdinalIgnoreCase))
+                {
+                    return candidate.Trim();
+                }
+            }
+
+            return index >= 0 ? $"Sample {index + 1}" : "Sample";
+        }
+
         private void Form_Closing(object? sender, FormClosingEventArgs e)
         {
             this.StopPlayback();
+            this.StopLaunchpadPlayback();
 
             // Events entfernen
             this.AudioC.Audios.ListChanged -= this.AudioC_Audios_ListChanged;
@@ -161,6 +275,13 @@ namespace ModularAudience.Forms.Modules
 
                 this.initialPatternLoadCompleted = true;
                 await this.RebuildPatternPanelsAsync();
+
+                if (this.pendingInitialSamples.Count > 0)
+                {
+                    await this.AddEditorSamplesAsync(this.pendingInitialSamples);
+                    this.pendingInitialSamples.Clear();
+                }
+
                 await this.ResizePanelsAndButtonsAsync();
             }
             catch (Exception ex)
@@ -201,6 +322,7 @@ namespace ModularAudience.Forms.Modules
             if (e.Data != null)
             {
                 if (e.Data.GetDataPresent(typeof(AudioObj)) ||
+                    e.Data.GetDataPresent(typeof(AudioObj[])) ||
                     e.Data.GetDataPresent(typeof(List<AudioObj>)) ||
                     e.Data.GetDataPresent(typeof(IEnumerable<AudioObj>)) ||
                     e.Data.GetDataPresent(typeof(ListBox.SelectedObjectCollection)))
@@ -221,92 +343,64 @@ namespace ModularAudience.Forms.Modules
             e.Effect = DragDropEffects.None;
         }
 
-        private void DrumRollEditor_DragDrop(object? sender, DragEventArgs e)
+        private async void DrumRollEditor_DragDrop(object? sender, DragEventArgs e)
         {
             if (e.Data == null)
             {
                 return;
             }
 
-            // Einzelnes AudioObj
-            if (e.Data.GetDataPresent(typeof(AudioObj)))
+            List<AudioObj> droppedSamples = ExtractDroppedSamples(e.Data);
+            if (droppedSamples.Count == 0)
             {
-                var audio = e.Data.GetData(typeof(AudioObj)) as AudioObj;
-                if (audio != null && !this.AudioC.Audios.Contains(audio))
-                {
-                    this.AudioC.Audios.Add(audio);
-                }
                 return;
             }
-            // Liste von AudioObj
-            if (e.Data.GetDataPresent(typeof(List<AudioObj>)))
+
+            await this.AddEditorSamplesAsync(droppedSamples);
+        }
+
+        private static List<AudioObj> ExtractDroppedSamples(IDataObject data)
+        {
+            if (data.GetDataPresent(typeof(AudioObj[])) && data.GetData(typeof(AudioObj[])) is AudioObj[] audioArray)
             {
-                var audioList = e.Data.GetData(typeof(List<AudioObj>)) as List<AudioObj>;
-                if (audioList != null)
-                {
-                    foreach (var audio in audioList)
-                    {
-                        if (!this.AudioC.Audios.Contains(audio))
-                        {
-                            this.AudioC.Audios.Add(audio);
-                        }
-                    }
-                }
-                return;
+                return audioArray.Where(audio => audio != null).ToList();
             }
-            // IEnumerable<AudioObj>
-            if (e.Data.GetDataPresent(typeof(IEnumerable<AudioObj>)))
+
+            if (data.GetDataPresent(typeof(List<AudioObj>)) && data.GetData(typeof(List<AudioObj>)) is List<AudioObj> audioList)
             {
-                var enumerable = e.Data.GetData(typeof(IEnumerable<AudioObj>)) as IEnumerable<AudioObj>;
-                if (enumerable != null)
-                {
-                    foreach (var audio in enumerable)
-                    {
-                        if (audio is AudioObj a && !this.AudioC.Audios.Contains(a))
-                        {
-                            this.AudioC.Audios.Add(a);
-                        }
-                    }
-                }
-                return;
+                return audioList.Where(audio => audio != null).ToList();
             }
-            // Drag aus ListBox.SelectedObjectCollection
-            if (e.Data.GetDataPresent(typeof(ListBox.SelectedObjectCollection)))
+
+            if (data.GetDataPresent(typeof(IEnumerable<AudioObj>)) && data.GetData(typeof(IEnumerable<AudioObj>)) is IEnumerable<AudioObj> enumerable)
             {
-                var selected = e.Data.GetData(typeof(ListBox.SelectedObjectCollection)) as ListBox.SelectedObjectCollection;
-                if (selected != null)
-                {
-                    foreach (var item in selected)
-                    {
-                        if (item is AudioObj audio && !this.AudioC.Audios.Contains(audio))
-                        {
-                            this.AudioC.Audios.Add(audio);
-                        }
-                    }
-                }
-                return;
+                return enumerable.Where(audio => audio != null).ToList();
             }
-            // Drag als Serializable
-            if (e.Data.GetDataPresent(DataFormats.Serializable))
+
+            if (data.GetDataPresent(typeof(ListBox.SelectedObjectCollection)) && data.GetData(typeof(ListBox.SelectedObjectCollection)) is ListBox.SelectedObjectCollection selected)
             {
-                var data = e.Data.GetData(DataFormats.Serializable);
-                if (data is AudioObj audio && !this.AudioC.Audios.Contains(audio))
+                return selected.Cast<object>().OfType<AudioObj>().ToList();
+            }
+
+            if (data.GetDataPresent(typeof(AudioObj)) && data.GetData(typeof(AudioObj)) is AudioObj audio)
+            {
+                return [audio];
+            }
+
+            if (data.GetDataPresent(DataFormats.Serializable))
+            {
+                object? serializable = data.GetData(DataFormats.Serializable);
+                if (serializable is AudioObj serializableAudio)
                 {
-                    this.AudioC.Audios.Add(audio);
-                    return;
+                    return [serializableAudio];
                 }
-                if (data is IEnumerable<AudioObj> list)
+
+                if (serializable is IEnumerable<AudioObj> serializableList)
                 {
-                    foreach (var a in list)
-                    {
-                        if (!this.AudioC.Audios.Contains(a))
-                        {
-                            this.AudioC.Audios.Add(a);
-                        }
-                    }
-                    return;
+                    return serializableList.Where(audioItem => audioItem != null).ToList();
                 }
             }
+
+            return [];
         }
 
 
@@ -340,7 +434,7 @@ namespace ModularAudience.Forms.Modules
                         rebuiltRows.Add(new PatternRowState
                         {
                             Audio = audio,
-                            Name = string.IsNullOrWhiteSpace(audio.Name) ? "untitled" : audio.Name,
+                            Name = GetPreferredAudioName(audio, i),
                             Steps = steps
                         });
                     }
@@ -353,6 +447,7 @@ namespace ModularAudience.Forms.Modules
                     this.patternRows.Clear();
                     this.patternRows.AddRange(rows);
                     this.Panels.Clear();
+                    this.SyncLaunchpadPlaybackSlots();
                     this.FitWindowHeightToPattern();
                     this.UpdatePatternViewport();
                     this.panel_pattern.Visible = this.patternRows.Count > 0;
@@ -459,7 +554,7 @@ namespace ModularAudience.Forms.Modules
                         this.button_export.Bottom,
                         Math.Max(
                             this.button_playback.Bottom,
-                            Math.Max(this.button_randomize.Bottom, this.checkBox_interleaved.Bottom))));
+                            Math.Max(this.button_randomize.Bottom, Math.Max(this.checkBox_interleaved.Bottom, this.checkBox_launchpad.Bottom)))));
 
                 int top = Math.Max(0, headerBottom + 6);
                 int bottomMargin = 20;
@@ -1220,7 +1315,7 @@ namespace ModularAudience.Forms.Modules
                     this.button_export.Bottom,
                     Math.Max(
                         this.button_playback.Bottom,
-                        Math.Max(this.button_randomize.Bottom, this.checkBox_interleaved.Bottom))));
+                        Math.Max(this.button_randomize.Bottom, Math.Max(this.checkBox_interleaved.Bottom, this.checkBox_launchpad.Bottom)))));
 
             int top = Math.Max(0, headerBottom + 6);
             int left = Math.Max(0, this.panel_pattern.Left);
@@ -1686,14 +1781,166 @@ namespace ModularAudience.Forms.Modules
                 int stepIndex = this.GetStepIndexFromPoint(contentPoint, rowIndex, layout);
                 if (stepIndex >= 0)
                 {
-                    this.ToggleStep(rowIndex, stepIndex);
+                    if (this.LaunchpadModeEnabled)
+                    {
+                        if ((ModifierKeys & Keys.Control) == Keys.Control)
+                        {
+                            this.StopLaunchpadRowPlayback(rowIndex);
+                        }
+                        else
+                        {
+                            _ = this.PlayLaunchpadRowAsync(rowIndex);
+                        }
+                    }
+                    else
+                    {
+                        this.ToggleStep(rowIndex, stepIndex);
+                    }
                 }
+            }
+        }
+
+        private void SyncLaunchpadPlaybackSlots()
+        {
+            lock (this.launchpadLock)
+            {
+                while (this.launchpadPlaybackCancellationTokens.Count < this.patternRows.Count)
+                {
+                    this.launchpadPlaybackCancellationTokens.Add(null);
+                }
+
+                for (int i = this.patternRows.Count; i < this.launchpadPlaybackCancellationTokens.Count; i++)
+                {
+                    CancellationTokenSource? token = this.launchpadPlaybackCancellationTokens[i];
+                    if (token == null)
+                    {
+                        continue;
+                    }
+
+                    try { token.Cancel(); } catch { }
+                    try { token.Dispose(); } catch { }
+                }
+
+                if (this.launchpadPlaybackCancellationTokens.Count > this.patternRows.Count)
+                {
+                    this.launchpadPlaybackCancellationTokens.RemoveRange(this.patternRows.Count, this.launchpadPlaybackCancellationTokens.Count - this.patternRows.Count);
+                }
+            }
+        }
+
+        private void StopLaunchpadPlayback()
+        {
+            int tokenCount;
+            lock (this.launchpadLock)
+            {
+                tokenCount = this.launchpadPlaybackCancellationTokens.Count;
+            }
+
+            for (int i = 0; i < tokenCount; i++)
+            {
+                this.StopLaunchpadRowPlayback(i);
+            }
+        }
+
+        private void StopLaunchpadRowPlayback(int rowIndex)
+        {
+            CancellationTokenSource? tokenSource;
+            lock (this.launchpadLock)
+            {
+                if (rowIndex < 0 || rowIndex >= this.launchpadPlaybackCancellationTokens.Count)
+                {
+                    return;
+                }
+
+                tokenSource = this.launchpadPlaybackCancellationTokens[rowIndex];
+                this.launchpadPlaybackCancellationTokens[rowIndex] = null;
+            }
+
+            if (tokenSource == null)
+            {
+                return;
+            }
+
+            try
+            {
+                tokenSource.Cancel();
+            }
+            catch { }
+            finally
+            {
+                try { tokenSource.Dispose(); } catch { }
+            }
+        }
+
+        private async Task PlayLaunchpadRowAsync(int rowIndex)
+        {
+            if (rowIndex < 0 || rowIndex >= this.patternRows.Count)
+            {
+                return;
+            }
+
+            AudioObj audio = this.patternRows[rowIndex].Audio;
+            if (audio.Data == null || audio.Data.Length == 0)
+            {
+                return;
+            }
+
+            if (rowIndex >= this.launchpadPlaybackCancellationTokens.Count)
+            {
+                this.SyncLaunchpadPlaybackSlots();
+            }
+
+            this.StopLaunchpadRowPlayback(rowIndex);
+
+            var cancellationTokenSource = new CancellationTokenSource();
+            lock (this.launchpadLock)
+            {
+                if (rowIndex < 0 || rowIndex >= this.launchpadPlaybackCancellationTokens.Count)
+                {
+                    return;
+                }
+
+                this.launchpadPlaybackCancellationTokens[rowIndex] = cancellationTokenSource;
+            }
+
+            try
+            {
+                await audio.PlayAsync(
+                    cancellationTokenSource.Token,
+                    desiredLatency: OutputDesiredLatencyMs,
+                    initialVolume: Math.Clamp(this.Volume, 0f, 1f)).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                try { LogCollection.Log($"DrumRollEditor launchpad playback failed for '{audio.Name}': {ex.Message}"); } catch { }
+            }
+            finally
+            {
+                lock (this.launchpadLock)
+                {
+                    if (rowIndex < this.launchpadPlaybackCancellationTokens.Count && ReferenceEquals(this.launchpadPlaybackCancellationTokens[rowIndex], cancellationTokenSource))
+                    {
+                        this.launchpadPlaybackCancellationTokens[rowIndex] = null;
+                    }
+                }
+
+                cancellationTokenSource.Dispose();
             }
         }
 
         private void DrumRollEditor_Resize(object? sender, EventArgs e)
         {
-            _ = this.ResizePanelsAndButtonsAsync();
+            try
+            {
+                _ = this.ResizePanelsAndButtonsAsync();
+            }
+            catch (Exception ex)
+            {
+                try { LogCollection.Log($"DrumRollEditor Resize error: {ex.Message}"); } catch { }
+            }
         }
 
 

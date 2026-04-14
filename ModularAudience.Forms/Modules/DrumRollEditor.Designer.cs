@@ -51,6 +51,7 @@
             button_randomize = new Button();
             label_info_reroll = new Label();
             checkBox_interleaved = new CheckBox();
+            checkBox_launchpad = new CheckBox();
             panel_pattern.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_bpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_volume).BeginInit();
@@ -63,12 +64,15 @@
             // 
             // panel_pattern
             // 
+            panel_pattern.AllowDrop = true;
             panel_pattern.BackColor = SystemColors.ControlLight;
             panel_pattern.Controls.Add(button_hit);
             panel_pattern.Location = new Point(12, 66);
             panel_pattern.Name = "panel_pattern";
             panel_pattern.Size = new Size(680, 50);
             panel_pattern.TabIndex = 0;
+            panel_pattern.DragDrop += DrumRollEditor_DragDrop;
+            panel_pattern.DragEnter += DrumRollEditor_DragEnter;
             panel_pattern.Paint += panel_pattern_Paint;
             panel_pattern.MouseClick += panel_pattern_MouseClick;
             // 
@@ -83,12 +87,15 @@
             // 
             // label_info_dragndrop
             // 
+            label_info_dragndrop.AllowDrop = true;
             label_info_dragndrop.AutoSize = true;
             label_info_dragndrop.Location = new Point(270, 53);
             label_info_dragndrop.Name = "label_info_dragndrop";
             label_info_dragndrop.Size = new Size(138, 15);
             label_info_dragndrop.TabIndex = 10;
             label_info_dragndrop.Text = "Drop Sample here to add";
+            label_info_dragndrop.DragDrop += DrumRollEditor_DragDrop;
+            label_info_dragndrop.DragEnter += DrumRollEditor_DragEnter;
             // 
             // button_playback
             // 
@@ -291,11 +298,22 @@
             checkBox_interleaved.UseVisualStyleBackColor = true;
             checkBox_interleaved.CheckedChanged += checkBox_interleaved_CheckedChanged;
             // 
+            // checkBox_launchpad
+            // 
+            checkBox_launchpad.AutoSize = true;
+            checkBox_launchpad.Location = new Point(371, 2);
+            checkBox_launchpad.Name = "checkBox_launchpad";
+            checkBox_launchpad.Size = new Size(104, 19);
+            checkBox_launchpad.TabIndex = 26;
+            checkBox_launchpad.Text = "Launchpad";
+            checkBox_launchpad.UseVisualStyleBackColor = true;
+            // 
             // DrumRollEditor
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(704, 441);
+            Controls.Add(checkBox_launchpad);
             Controls.Add(checkBox_interleaved);
             Controls.Add(label_info_dragndrop);
             Controls.Add(label_info_reroll);
@@ -361,5 +379,6 @@
         private Button button_randomize;
         private Label label_info_reroll;
         private CheckBox checkBox_interleaved;
+        private CheckBox checkBox_launchpad;
     }
 }
