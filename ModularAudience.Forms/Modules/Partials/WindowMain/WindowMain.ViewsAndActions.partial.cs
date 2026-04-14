@@ -320,6 +320,18 @@ namespace ModularAudience.Forms
                 this.textBox_scanTimingResult.Text = "";
                 this.textBox_scanKeyResult.Text = "";
             }
+
+            // Update window title with a simple traffic indicator (total loaded tracks)
+            try
+            {
+                string baseTitle = "ModularAudience (Main Control)";
+                int traffic = TotalTracks;
+                this.Text = traffic > 0 ? $"{baseTitle} - Traffic: {traffic}" : baseTitle;
+            }
+            catch
+            {
+                // best-effort, ignore failures
+            }
         }
 
         private void HighlightSelectedTrackView()
