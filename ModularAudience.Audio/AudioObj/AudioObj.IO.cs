@@ -129,8 +129,18 @@ namespace ModularAudience.Audio
                 Debug.WriteLine($"Fehler beim Lesen des Tags {tag.ToUpperInvariant()}: {ex.Message} ({ex.InnerException?.Message ?? " - "})");
             }
 
+            if (bpm > 0.0f && (bpm < 30.0f || bpm > 360.0f))
+            {
+                bpm = 0.0f;
+            }
+
             if (bpm <= 0.0f && roughBpm > 0.0f)
             {
+                if (roughBpm < 30.0f || roughBpm > 360.0f)
+                {
+                    roughBpm = 0.0f;
+                }
+
                 bpm = roughBpm;
             }
 

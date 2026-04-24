@@ -47,7 +47,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false);
 
             this.numericUpDown_chunkSize.Tag = (int) this.numericUpDown_chunkSize.Value;
-            this.numericUpDown_initialBpm.Value = this.Tracks.First().Bpm > 0 ? (decimal) this.Tracks.First().Bpm : this.Tracks.First().ScannedBpm > 30 ? (decimal) this.Tracks.First().ScannedBpm : (decimal)LastInitialBpm;
+            this.numericUpDown_initialBpm.Value = this.GetSafeInitialBpm(this.Tracks.First());
             this.numericUpDown_threads.Minimum = 1;
             this.numericUpDown_threads.Maximum = Math.Max(Environment.ProcessorCount, 1);
             this.numericUpDown_threads.Value = Math.Max(Environment.ProcessorCount - 1, 1);
@@ -372,6 +372,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             this.numericUpDown_chunkSize.Enabled = !this.checkBox_autoChunking.Checked;
             this.numericUpDown_overlap.Enabled = !this.checkBox_autoChunking.Checked;
+        }
+
+        private decimal GetSafeInitialBpm(AudioObj track)
+        {
+            decimal bpm = track.Bpm > 0
+                ? (decimal) track.Bpm
+                : track.ScannedBpm > 0
+                    ? (decimal) track.ScannedBpm
+                    : (decimal) LastInitialBpm;
+
+            return Math.Clamp(bpm, this.numericUpDown_initialBpm.Minimum, this.numericUpDown_initialBpm.Maximum);
         }
     }
 }
