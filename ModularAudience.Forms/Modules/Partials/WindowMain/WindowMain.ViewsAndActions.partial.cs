@@ -305,8 +305,6 @@ namespace ModularAudience.Forms
             this.button_scanKey.Enabled = selectedAudio != null;
             this.button_timeStretch.Enabled = LastSelectedTrackView != null || CollectionViews.Count > 0;
             this.button_export.Enabled = LastSelectedTrackView != null;
-            this.comboBox_exportFormat.Enabled = LastSelectedTrackView != null;
-            this.comboBox_exportBits.Enabled = LastSelectedTrackView != null;
             this.button_autoSamples.Enabled = LastSelectedTrackView != null;
             this.textBox_info.Text = LastSelectedTrackView != null ? LastSelectedTrackView.OriginalAudio.GetInfoString() : this.textBox_info.Text;
 
