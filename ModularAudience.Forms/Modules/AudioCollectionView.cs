@@ -738,7 +738,32 @@ namespace ModularAudience.Forms
 
         private void listBox_audios_SelectedIndexChanged(object? sender, EventArgs e)
         {
+            try
+            {
+                AudioObj? selectedAudio = this.GetSingleContextAudio();
+                if (WindowMain.Instance == null || WindowMain.Instance.IsDisposed)
+                {
+                    return;
+                }
 
+                WindowMainStaticHelpers.InvokeIfRequired(WindowMain.Instance, () =>
+                {
+                    if (selectedAudio != null)
+                    {
+                        WindowMain.Instance.UpdateInfoText(selectedAudio);
+                        WindowMain.Instance.UpdateTrackDependentUI();
+                    }
+                    else if (WindowMain.LastSelectedTrackView == null)
+                    {
+                        WindowMain.Instance.UpdateInfoText(null);
+                        WindowMain.Instance.UpdateTrackDependentUI();
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                try { LogCollection.Log($"AudioCollectionView selection info update failed: {ex.Message}"); } catch { }
+            }
         }
 
         private void contextMenuStrip_audios_Opening(object sender, CancelEventArgs e)

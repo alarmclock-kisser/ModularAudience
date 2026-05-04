@@ -298,21 +298,23 @@ namespace ModularAudience.Forms
 
         internal void UpdateTrackDependentUI()
         {
-            this.button_scanBpm.Enabled = LastSelectedTrackView != null;
-            this.button_scanTiming.Enabled = LastSelectedTrackView != null;
-            this.button_scanKey.Enabled = LastSelectedTrackView != null;
+            AudioObj? selectedAudio = this.GetSelectedAudioForCommands();
+
+            this.button_scanBpm.Enabled = selectedAudio != null;
+            this.button_scanTiming.Enabled = selectedAudio != null;
+            this.button_scanKey.Enabled = selectedAudio != null;
             this.button_timeStretch.Enabled = LastSelectedTrackView != null || CollectionViews.Count > 0;
             this.button_export.Enabled = LastSelectedTrackView != null;
             this.comboBox_exportFormat.Enabled = LastSelectedTrackView != null;
             this.comboBox_exportBits.Enabled = LastSelectedTrackView != null;
             this.button_autoSamples.Enabled = LastSelectedTrackView != null;
-            this.textBox_info.Text = LastSelectedTrackView != null ? LastSelectedTrackView.OriginalAudio.GetInfoString() : "";
+            this.textBox_info.Text = LastSelectedTrackView != null ? LastSelectedTrackView.OriginalAudio.GetInfoString() : this.textBox_info.Text;
 
-            if (LastSelectedTrackView != null)
+            if (selectedAudio != null)
             {
-                this.textBox_scanBpmResult.Text = LastSelectedTrackView.OriginalAudio.ScannedBpm > 0 ? $"{LastSelectedTrackView.OriginalAudio.ScannedBpm:F3} BPM" : "";
-                this.textBox_scanTimingResult.Text = LastSelectedTrackView.OriginalAudio.ScannedTiming > 0.0f ? WindowMainFormatHelpers.GetTimingString(LastSelectedTrackView.OriginalAudio.ScannedTiming) : "";
-                this.textBox_scanKeyResult.Text = !string.IsNullOrEmpty(LastSelectedTrackView.OriginalAudio.ScannedKey) ? LastSelectedTrackView.OriginalAudio.ScannedKey : "";
+                this.textBox_scanBpmResult.Text = selectedAudio.ScannedBpm > 0 ? $"{selectedAudio.ScannedBpm:F3} BPM" : "";
+                this.textBox_scanTimingResult.Text = selectedAudio.ScannedTiming > 0.0f ? WindowMainFormatHelpers.GetTimingString(selectedAudio.ScannedTiming) : "";
+                this.textBox_scanKeyResult.Text = !string.IsNullOrEmpty(selectedAudio.ScannedKey) ? selectedAudio.ScannedKey : "";
             }
             else
             {
@@ -320,18 +322,24 @@ namespace ModularAudience.Forms
                 this.textBox_scanTimingResult.Text = "";
                 this.textBox_scanKeyResult.Text = "";
             }
+        }
 
-            // Update window title with a simple traffic indicator (total loaded tracks)
-            try
+        internal AudioObj? GetSelectedAudioForCommands()
+        {
+            if (LastSelectedTrackView != null && !LastSelectedTrackView.IsDisposed)
             {
-                string baseTitle = "ModularAudience (Main Control)";
-                int traffic = TotalTracks;
-                this.Text = traffic > 0 ? $"{baseTitle} - Traffic: {traffic}" : baseTitle;
+                return LastSelectedTrackView.OriginalAudio;
             }
-            catch
-            {
-                // best-effort, ignore failures
-            }
+
+            return CollectionViews
+                .Where(cv => cv != null && !cv.IsDisposed)
+                .SelectMany(cv => cv.SelectedAudios)
+                .FirstOrDefault();
+        }
+
+        internal void UpdateInfoText(AudioObj? audio)
+        {
+            this.textBox_info.Text = audio != null ? audio.GetInfoString() : string.Empty;
         }
 
         private void HighlightSelectedTrackView()
@@ -408,6 +416,12 @@ namespace ModularAudience.Forms
 
         private void button_newBag_Click(object sender, EventArgs e)
         {
+            if (this.AllInOneBag)
+            {
+                MessageBox.Show(this, "Cannot create a new collection while in single collection mode.", "New Collection", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             AudioCollectionView collection = new([]);
             collection.Show();
         }
@@ -423,6 +437,20 @@ namespace ModularAudience.Forms
             {
                 try { LogCollection.Log($"DrumRoll button error: {ex.Message}"); } catch { }
                 MessageBox.Show(ex.Message, "Drum Roll Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void button_pianoRoll_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                PianoRollEditor editor = new(SelectedTracks.ToList());
+                editor.Show();
+            }
+            catch (Exception ex)
+            {
+                try { LogCollection.Log($"PianoRoll button error: {ex.Message}"); } catch { }
+                MessageBox.Show(ex.Message, "Piano Roll Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 

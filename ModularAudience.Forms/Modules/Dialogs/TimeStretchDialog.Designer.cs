@@ -28,264 +28,262 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.numericUpDown_initialBpm = new NumericUpDown();
-            this.label_info_initialBpm = new Label();
-            this.label_info_targetBpm = new Label();
-            this.numericUpDown_targetBpm = new NumericUpDown();
-            this.label_info_stretchFactor = new Label();
-            this.numericUpDown_stretchFactor = new NumericUpDown();
-            this.button_stretch = new Button();
-            this.button_cancel = new Button();
-            this.label_info_chunkSize = new Label();
-            this.numericUpDown_chunkSize = new NumericUpDown();
-            this.label_info_overlap = new Label();
-            this.numericUpDown_overlap = new NumericUpDown();
-            this.progressBar_stretching = new ProgressBar();
-            this.label_info_threads = new Label();
-            this.numericUpDown_threads = new NumericUpDown();
-            this.button_stretchV2 = new Button();
-            this.label_processingTime = new Label();
-            this.checkBox_autoChunking = new CheckBox();
-            this.checkBox_offload = new CheckBox();
-            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_initialBpm).BeginInit();
-            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_targetBpm).BeginInit();
-            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_stretchFactor).BeginInit();
-            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_chunkSize).BeginInit();
-            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_overlap).BeginInit();
-            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_threads).BeginInit();
-            this.SuspendLayout();
+            numericUpDown_initialBpm = new NumericUpDown();
+            label_info_initialBpm = new Label();
+            label_info_targetBpm = new Label();
+            numericUpDown_targetBpm = new NumericUpDown();
+            label_info_stretchFactor = new Label();
+            numericUpDown_stretchFactor = new NumericUpDown();
+            button_stretch = new Button();
+            button_cancel = new Button();
+            label_info_chunkSize = new Label();
+            numericUpDown_chunkSize = new NumericUpDown();
+            label_info_overlap = new Label();
+            numericUpDown_overlap = new NumericUpDown();
+            progressBar_stretching = new ProgressBar();
+            label_info_threads = new Label();
+            numericUpDown_threads = new NumericUpDown();
+            button_stretchV2 = new Button();
+            label_processingTime = new Label();
+            checkBox_autoChunking = new CheckBox();
+            checkBox_offload = new CheckBox();
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_initialBpm).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_targetBpm).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_stretchFactor).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_chunkSize).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_overlap).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_threads).BeginInit();
+            SuspendLayout();
             // 
             // numericUpDown_initialBpm
             // 
-            this.numericUpDown_initialBpm.DecimalPlaces = 4;
-            this.numericUpDown_initialBpm.Increment = new decimal(new int[] { 5, 0, 0, 65536 });
-            this.numericUpDown_initialBpm.Location = new Point(12, 104);
-            this.numericUpDown_initialBpm.Maximum = new decimal(new int[] { 360, 0, 0, 0 });
-            this.numericUpDown_initialBpm.Minimum = new decimal(new int[] { 30, 0, 0, 0 });
-            this.numericUpDown_initialBpm.Name = "numericUpDown_initialBpm";
-            this.numericUpDown_initialBpm.Size = new Size(75, 23);
-            this.numericUpDown_initialBpm.TabIndex = 0;
-            this.numericUpDown_initialBpm.Value = new decimal(new int[] { 120, 0, 0, 0 });
-            this.numericUpDown_initialBpm.ValueChanged += this.numericUpDown_initialBpm_ValueChanged;
+            numericUpDown_initialBpm.DecimalPlaces = 4;
+            numericUpDown_initialBpm.Increment = new decimal(new int[] { 5, 0, 0, 65536 });
+            numericUpDown_initialBpm.Location = new Point(12, 104);
+            numericUpDown_initialBpm.Maximum = new decimal(new int[] { 360, 0, 0, 0 });
+            numericUpDown_initialBpm.Minimum = new decimal(new int[] { 30, 0, 0, 0 });
+            numericUpDown_initialBpm.Name = "numericUpDown_initialBpm";
+            numericUpDown_initialBpm.Size = new Size(75, 23);
+            numericUpDown_initialBpm.TabIndex = 0;
+            numericUpDown_initialBpm.Value = new decimal(new int[] { 120, 0, 0, 0 });
+            numericUpDown_initialBpm.ValueChanged += numericUpDown_initialBpm_ValueChanged;
             // 
             // label_info_initialBpm
             // 
-            this.label_info_initialBpm.AutoSize = true;
-            this.label_info_initialBpm.Location = new Point(12, 86);
-            this.label_info_initialBpm.Name = "label_info_initialBpm";
-            this.label_info_initialBpm.Size = new Size(64, 15);
-            this.label_info_initialBpm.TabIndex = 1;
-            this.label_info_initialBpm.Text = "Initial BPM";
+            label_info_initialBpm.AutoSize = true;
+            label_info_initialBpm.Location = new Point(12, 86);
+            label_info_initialBpm.Name = "label_info_initialBpm";
+            label_info_initialBpm.Size = new Size(64, 15);
+            label_info_initialBpm.TabIndex = 1;
+            label_info_initialBpm.Text = "Initial BPM";
             // 
             // label_info_targetBpm
             // 
-            this.label_info_targetBpm.AutoSize = true;
-            this.label_info_targetBpm.Location = new Point(93, 86);
-            this.label_info_targetBpm.Name = "label_info_targetBpm";
-            this.label_info_targetBpm.Size = new Size(68, 15);
-            this.label_info_targetBpm.TabIndex = 3;
-            this.label_info_targetBpm.Text = "Target BPM";
+            label_info_targetBpm.AutoSize = true;
+            label_info_targetBpm.Location = new Point(93, 86);
+            label_info_targetBpm.Name = "label_info_targetBpm";
+            label_info_targetBpm.Size = new Size(68, 15);
+            label_info_targetBpm.TabIndex = 3;
+            label_info_targetBpm.Text = "Target BPM";
             // 
             // numericUpDown_targetBpm
             // 
-            this.numericUpDown_targetBpm.DecimalPlaces = 4;
-            this.numericUpDown_targetBpm.Increment = new decimal(new int[] { 5, 0, 0, 65536 });
-            this.numericUpDown_targetBpm.Location = new Point(93, 104);
-            this.numericUpDown_targetBpm.Maximum = new decimal(new int[] { 360, 0, 0, 0 });
-            this.numericUpDown_targetBpm.Minimum = new decimal(new int[] { 30, 0, 0, 0 });
-            this.numericUpDown_targetBpm.Name = "numericUpDown_targetBpm";
-            this.numericUpDown_targetBpm.Size = new Size(75, 23);
-            this.numericUpDown_targetBpm.TabIndex = 2;
-            this.numericUpDown_targetBpm.Value = new decimal(new int[] { 150, 0, 0, 0 });
-            this.numericUpDown_targetBpm.ValueChanged += this.numericUpDown_targetBpm_ValueChanged;
+            numericUpDown_targetBpm.DecimalPlaces = 4;
+            numericUpDown_targetBpm.Increment = new decimal(new int[] { 5, 0, 0, 65536 });
+            numericUpDown_targetBpm.Location = new Point(93, 104);
+            numericUpDown_targetBpm.Maximum = new decimal(new int[] { 360, 0, 0, 0 });
+            numericUpDown_targetBpm.Minimum = new decimal(new int[] { 30, 0, 0, 0 });
+            numericUpDown_targetBpm.Name = "numericUpDown_targetBpm";
+            numericUpDown_targetBpm.Size = new Size(75, 23);
+            numericUpDown_targetBpm.TabIndex = 2;
+            numericUpDown_targetBpm.Value = new decimal(new int[] { 150, 0, 0, 0 });
+            numericUpDown_targetBpm.ValueChanged += numericUpDown_targetBpm_ValueChanged;
             // 
             // label_info_stretchFactor
             // 
-            this.label_info_stretchFactor.AutoSize = true;
-            this.label_info_stretchFactor.Location = new Point(174, 86);
-            this.label_info_stretchFactor.Name = "label_info_stretchFactor";
-            this.label_info_stretchFactor.Size = new Size(80, 15);
-            this.label_info_stretchFactor.TabIndex = 5;
-            this.label_info_stretchFactor.Text = "Stretch Factor";
+            label_info_stretchFactor.AutoSize = true;
+            label_info_stretchFactor.Location = new Point(174, 86);
+            label_info_stretchFactor.Name = "label_info_stretchFactor";
+            label_info_stretchFactor.Size = new Size(80, 15);
+            label_info_stretchFactor.TabIndex = 5;
+            label_info_stretchFactor.Text = "Stretch Factor";
             // 
             // numericUpDown_stretchFactor
             // 
-            this.numericUpDown_stretchFactor.DecimalPlaces = 18;
-            this.numericUpDown_stretchFactor.Increment = new decimal(new int[] { 1, 0, 0, 262144 });
-            this.numericUpDown_stretchFactor.Location = new Point(174, 104);
-            this.numericUpDown_stretchFactor.Maximum = new decimal(new int[] { 10, 0, 0, 0 });
-            this.numericUpDown_stretchFactor.Minimum = new decimal(new int[] { 1, 0, 0, 131072 });
-            this.numericUpDown_stretchFactor.Name = "numericUpDown_stretchFactor";
-            this.numericUpDown_stretchFactor.Size = new Size(150, 23);
-            this.numericUpDown_stretchFactor.TabIndex = 4;
-            this.numericUpDown_stretchFactor.Value = new decimal(new int[] { 1, 0, 0, 0 });
-            this.numericUpDown_stretchFactor.ValueChanged += this.numericUpDown_stretchFactor_ValueChanged;
+            numericUpDown_stretchFactor.DecimalPlaces = 18;
+            numericUpDown_stretchFactor.Increment = new decimal(new int[] { 1, 0, 0, 262144 });
+            numericUpDown_stretchFactor.Location = new Point(174, 104);
+            numericUpDown_stretchFactor.Maximum = new decimal(new int[] { 10, 0, 0, 0 });
+            numericUpDown_stretchFactor.Minimum = new decimal(new int[] { 1, 0, 0, 131072 });
+            numericUpDown_stretchFactor.Name = "numericUpDown_stretchFactor";
+            numericUpDown_stretchFactor.Size = new Size(150, 23);
+            numericUpDown_stretchFactor.TabIndex = 4;
+            numericUpDown_stretchFactor.Value = new decimal(new int[] { 1, 0, 0, 0 });
+            numericUpDown_stretchFactor.ValueChanged += numericUpDown_stretchFactor_ValueChanged;
             // 
             // button_stretch
             // 
-            this.button_stretch.BackColor = SystemColors.Info;
-            this.button_stretch.Location = new Point(377, 166);
-            this.button_stretch.Name = "button_stretch";
-            this.button_stretch.Size = new Size(75, 23);
-            this.button_stretch.TabIndex = 6;
-            this.button_stretch.Text = "Stretch";
-            this.button_stretch.UseVisualStyleBackColor = false;
-            this.button_stretch.Click += this.button_stretch_Click;
+            button_stretch.BackColor = SystemColors.Info;
+            button_stretch.Location = new Point(377, 166);
+            button_stretch.Name = "button_stretch";
+            button_stretch.Size = new Size(75, 23);
+            button_stretch.TabIndex = 6;
+            button_stretch.Text = "Stretch";
+            button_stretch.UseVisualStyleBackColor = false;
+            button_stretch.Click += button_stretch_Click;
             // 
             // button_cancel
             // 
-            this.button_cancel.Location = new Point(316, 166);
-            this.button_cancel.Name = "button_cancel";
-            this.button_cancel.Size = new Size(55, 23);
-            this.button_cancel.TabIndex = 7;
-            this.button_cancel.Text = "Cancel";
-            this.button_cancel.UseVisualStyleBackColor = true;
-            this.button_cancel.Click += this.button_cancel_Click;
+            button_cancel.Location = new Point(316, 166);
+            button_cancel.Name = "button_cancel";
+            button_cancel.Size = new Size(55, 23);
+            button_cancel.TabIndex = 7;
+            button_cancel.Text = "Cancel";
+            button_cancel.UseVisualStyleBackColor = true;
+            button_cancel.Click += button_cancel_Click;
             // 
             // label_info_chunkSize
             // 
-            this.label_info_chunkSize.AutoSize = true;
-            this.label_info_chunkSize.Location = new Point(12, 33);
-            this.label_info_chunkSize.Name = "label_info_chunkSize";
-            this.label_info_chunkSize.Size = new Size(65, 15);
-            this.label_info_chunkSize.TabIndex = 9;
-            this.label_info_chunkSize.Text = "Chunk Size";
+            label_info_chunkSize.AutoSize = true;
+            label_info_chunkSize.Location = new Point(12, 33);
+            label_info_chunkSize.Name = "label_info_chunkSize";
+            label_info_chunkSize.Size = new Size(65, 15);
+            label_info_chunkSize.TabIndex = 9;
+            label_info_chunkSize.Text = "Chunk Size";
             // 
             // numericUpDown_chunkSize
             // 
-            this.numericUpDown_chunkSize.Enabled = false;
-            this.numericUpDown_chunkSize.Location = new Point(12, 51);
-            this.numericUpDown_chunkSize.Maximum = new decimal(new int[] { 65536, 0, 0, 0 });
-            this.numericUpDown_chunkSize.Minimum = new decimal(new int[] { 128, 0, 0, 0 });
-            this.numericUpDown_chunkSize.Name = "numericUpDown_chunkSize";
-            this.numericUpDown_chunkSize.Size = new Size(75, 23);
-            this.numericUpDown_chunkSize.TabIndex = 8;
-            this.numericUpDown_chunkSize.Value = new decimal(new int[] { 16384, 0, 0, 0 });
-            this.numericUpDown_chunkSize.ValueChanged += this.numericUpDown_chunkSize_ValueChanged;
+            numericUpDown_chunkSize.Enabled = false;
+            numericUpDown_chunkSize.Location = new Point(12, 51);
+            numericUpDown_chunkSize.Maximum = new decimal(new int[] { 65536, 0, 0, 0 });
+            numericUpDown_chunkSize.Minimum = new decimal(new int[] { 128, 0, 0, 0 });
+            numericUpDown_chunkSize.Name = "numericUpDown_chunkSize";
+            numericUpDown_chunkSize.Size = new Size(75, 23);
+            numericUpDown_chunkSize.TabIndex = 8;
+            numericUpDown_chunkSize.Value = new decimal(new int[] { 8192, 0, 0, 0 });
+            numericUpDown_chunkSize.ValueChanged += numericUpDown_chunkSize_ValueChanged;
             // 
             // label_info_overlap
             // 
-            this.label_info_overlap.AutoSize = true;
-            this.label_info_overlap.Location = new Point(93, 33);
-            this.label_info_overlap.Name = "label_info_overlap";
-            this.label_info_overlap.Size = new Size(61, 15);
-            this.label_info_overlap.TabIndex = 11;
-            this.label_info_overlap.Text = "Overlap %";
+            label_info_overlap.AutoSize = true;
+            label_info_overlap.Location = new Point(93, 33);
+            label_info_overlap.Name = "label_info_overlap";
+            label_info_overlap.Size = new Size(61, 15);
+            label_info_overlap.TabIndex = 11;
+            label_info_overlap.Text = "Overlap %";
             // 
             // numericUpDown_overlap
             // 
-            this.numericUpDown_overlap.DecimalPlaces = 4;
-            this.numericUpDown_overlap.Enabled = false;
-            this.numericUpDown_overlap.Location = new Point(93, 51);
-            this.numericUpDown_overlap.Maximum = new decimal(new int[] { 99, 0, 0, 131072 });
-            this.numericUpDown_overlap.Name = "numericUpDown_overlap";
-            this.numericUpDown_overlap.Size = new Size(75, 23);
-            this.numericUpDown_overlap.TabIndex = 10;
-            this.numericUpDown_overlap.Value = new decimal(new int[] { 5, 0, 0, 65536 });
+            numericUpDown_overlap.DecimalPlaces = 4;
+            numericUpDown_overlap.Enabled = false;
+            numericUpDown_overlap.Location = new Point(93, 51);
+            numericUpDown_overlap.Maximum = new decimal(new int[] { 99, 0, 0, 131072 });
+            numericUpDown_overlap.Name = "numericUpDown_overlap";
+            numericUpDown_overlap.Size = new Size(75, 23);
+            numericUpDown_overlap.TabIndex = 10;
+            numericUpDown_overlap.Value = new decimal(new int[] { 5, 0, 0, 65536 });
             // 
             // progressBar_stretching
             // 
-            this.progressBar_stretching.Location = new Point(12, 166);
-            this.progressBar_stretching.Maximum = 1000;
-            this.progressBar_stretching.Name = "progressBar_stretching";
-            this.progressBar_stretching.Size = new Size(298, 23);
-            this.progressBar_stretching.Style = ProgressBarStyle.Continuous;
-            this.progressBar_stretching.TabIndex = 12;
+            progressBar_stretching.Location = new Point(12, 166);
+            progressBar_stretching.Maximum = 1000;
+            progressBar_stretching.Name = "progressBar_stretching";
+            progressBar_stretching.Size = new Size(298, 23);
+            progressBar_stretching.Style = ProgressBarStyle.Continuous;
+            progressBar_stretching.TabIndex = 12;
             // 
             // label_info_threads
             // 
-            this.label_info_threads.AutoSize = true;
-            this.label_info_threads.Location = new Point(377, 9);
-            this.label_info_threads.Name = "label_info_threads";
-            this.label_info_threads.Size = new Size(49, 15);
-            this.label_info_threads.TabIndex = 14;
-            this.label_info_threads.Text = "Threads";
+            label_info_threads.AutoSize = true;
+            label_info_threads.Location = new Point(377, 9);
+            label_info_threads.Name = "label_info_threads";
+            label_info_threads.Size = new Size(49, 15);
+            label_info_threads.TabIndex = 14;
+            label_info_threads.Text = "Threads";
             // 
             // numericUpDown_threads
             // 
-            this.numericUpDown_threads.Location = new Point(377, 27);
-            this.numericUpDown_threads.Maximum = new decimal(new int[] { 0, 0, 0, 0 });
-            this.numericUpDown_threads.Name = "numericUpDown_threads";
-            this.numericUpDown_threads.Size = new Size(75, 23);
-            this.numericUpDown_threads.TabIndex = 13;
+            numericUpDown_threads.Location = new Point(377, 27);
+            numericUpDown_threads.Maximum = new decimal(new int[] { 0, 0, 0, 0 });
+            numericUpDown_threads.Name = "numericUpDown_threads";
+            numericUpDown_threads.Size = new Size(75, 23);
+            numericUpDown_threads.TabIndex = 13;
             // 
             // button_stretchV2
             // 
-            this.button_stretchV2.BackColor = SystemColors.Info;
-            this.button_stretchV2.Location = new Point(377, 137);
-            this.button_stretchV2.Name = "button_stretchV2";
-            this.button_stretchV2.Size = new Size(75, 23);
-            this.button_stretchV2.TabIndex = 15;
-            this.button_stretchV2.Text = "Stretch V2";
-            this.button_stretchV2.UseVisualStyleBackColor = false;
-            this.button_stretchV2.Click += this.button_stretchV2_Click;
+            button_stretchV2.BackColor = SystemColors.Info;
+            button_stretchV2.Location = new Point(377, 137);
+            button_stretchV2.Name = "button_stretchV2";
+            button_stretchV2.Size = new Size(75, 23);
+            button_stretchV2.TabIndex = 15;
+            button_stretchV2.Text = "Stretch V2";
+            button_stretchV2.UseVisualStyleBackColor = false;
+            button_stretchV2.Click += button_stretchV2_Click;
             // 
             // label_processingTime
             // 
-            this.label_processingTime.AutoSize = true;
-            this.label_processingTime.Location = new Point(240, 148);
-            this.label_processingTime.Name = "label_processingTime";
-            this.label_processingTime.Size = new Size(25, 15);
-            this.label_processingTime.TabIndex = 16;
-            this.label_processingTime.Text = "-:--";
+            label_processingTime.AutoSize = true;
+            label_processingTime.Location = new Point(240, 148);
+            label_processingTime.Name = "label_processingTime";
+            label_processingTime.Size = new Size(25, 15);
+            label_processingTime.TabIndex = 16;
+            label_processingTime.Text = "-:--";
             // 
             // checkBox_autoChunking
             // 
-            this.checkBox_autoChunking.AutoSize = true;
-            this.checkBox_autoChunking.Checked = true;
-            this.checkBox_autoChunking.CheckState = CheckState.Checked;
-            this.checkBox_autoChunking.Location = new Point(174, 52);
-            this.checkBox_autoChunking.Name = "checkBox_autoChunking";
-            this.checkBox_autoChunking.Size = new Size(52, 19);
-            this.checkBox_autoChunking.TabIndex = 17;
-            this.checkBox_autoChunking.Text = "Auto";
-            this.checkBox_autoChunking.UseVisualStyleBackColor = true;
-            this.checkBox_autoChunking.CheckedChanged += this.checkBox_autoChunking_CheckedChanged;
+            checkBox_autoChunking.AutoSize = true;
+            checkBox_autoChunking.Location = new Point(174, 52);
+            checkBox_autoChunking.Name = "checkBox_autoChunking";
+            checkBox_autoChunking.Size = new Size(52, 19);
+            checkBox_autoChunking.TabIndex = 17;
+            checkBox_autoChunking.Text = "Auto";
+            checkBox_autoChunking.UseVisualStyleBackColor = true;
+            checkBox_autoChunking.CheckedChanged += checkBox_autoChunking_CheckedChanged;
             // 
             // checkBox_offload
             // 
-            this.checkBox_offload.AutoSize = true;
-            this.checkBox_offload.Location = new Point(377, 112);
-            this.checkBox_offload.Name = "checkBox_offload";
-            this.checkBox_offload.Size = new Size(66, 19);
-            this.checkBox_offload.TabIndex = 18;
-            this.checkBox_offload.Text = "Offload";
-            this.checkBox_offload.UseVisualStyleBackColor = true;
+            checkBox_offload.AutoSize = true;
+            checkBox_offload.Location = new Point(377, 112);
+            checkBox_offload.Name = "checkBox_offload";
+            checkBox_offload.Size = new Size(66, 19);
+            checkBox_offload.TabIndex = 18;
+            checkBox_offload.Text = "Offload";
+            checkBox_offload.UseVisualStyleBackColor = true;
             // 
             // TimeStretchDialog
             // 
-            this.AutoScaleDimensions = new SizeF(7F, 15F);
-            this.AutoScaleMode = AutoScaleMode.Font;
-            this.ClientSize = new Size(464, 201);
-            this.Controls.Add(this.checkBox_offload);
-            this.Controls.Add(this.checkBox_autoChunking);
-            this.Controls.Add(this.label_processingTime);
-            this.Controls.Add(this.button_stretchV2);
-            this.Controls.Add(this.label_info_threads);
-            this.Controls.Add(this.numericUpDown_threads);
-            this.Controls.Add(this.progressBar_stretching);
-            this.Controls.Add(this.label_info_overlap);
-            this.Controls.Add(this.numericUpDown_overlap);
-            this.Controls.Add(this.label_info_chunkSize);
-            this.Controls.Add(this.numericUpDown_chunkSize);
-            this.Controls.Add(this.button_cancel);
-            this.Controls.Add(this.button_stretch);
-            this.Controls.Add(this.label_info_stretchFactor);
-            this.Controls.Add(this.numericUpDown_stretchFactor);
-            this.Controls.Add(this.label_info_targetBpm);
-            this.Controls.Add(this.numericUpDown_targetBpm);
-            this.Controls.Add(this.label_info_initialBpm);
-            this.Controls.Add(this.numericUpDown_initialBpm);
-            this.Name = "TimeStretchDialog";
-            this.Text = "TimeStretchDialog";
-            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_initialBpm).EndInit();
-            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_targetBpm).EndInit();
-            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_stretchFactor).EndInit();
-            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_chunkSize).EndInit();
-            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_overlap).EndInit();
-            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_threads).EndInit();
-            this.ResumeLayout(false);
-            this.PerformLayout();
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            ClientSize = new Size(464, 201);
+            Controls.Add(checkBox_offload);
+            Controls.Add(checkBox_autoChunking);
+            Controls.Add(label_processingTime);
+            Controls.Add(button_stretchV2);
+            Controls.Add(label_info_threads);
+            Controls.Add(numericUpDown_threads);
+            Controls.Add(progressBar_stretching);
+            Controls.Add(label_info_overlap);
+            Controls.Add(numericUpDown_overlap);
+            Controls.Add(label_info_chunkSize);
+            Controls.Add(numericUpDown_chunkSize);
+            Controls.Add(button_cancel);
+            Controls.Add(button_stretch);
+            Controls.Add(label_info_stretchFactor);
+            Controls.Add(numericUpDown_stretchFactor);
+            Controls.Add(label_info_targetBpm);
+            Controls.Add(numericUpDown_targetBpm);
+            Controls.Add(label_info_initialBpm);
+            Controls.Add(numericUpDown_initialBpm);
+            Name = "TimeStretchDialog";
+            Text = "TimeStretchDialog";
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_initialBpm).EndInit();
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_targetBpm).EndInit();
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_stretchFactor).EndInit();
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_chunkSize).EndInit();
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_overlap).EndInit();
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_threads).EndInit();
+            ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion

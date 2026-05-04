@@ -312,7 +312,43 @@ namespace ModularAudience.Forms
             }
         }
 
+        private void comboBox_exportBits_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            GlobalExportBits = WindowMainFormatHelpers.ResolveBitSelection(
+                WindowMainFormatHelpers.NormalizeFormatExtension(this.comboBox_exportFormat.SelectedItem as string),
+                this.comboBox_exportBits.SelectedItem);
+        }
 
+        private void checkBox_oneBag_CheckedChanged(object sender, EventArgs e)
+        {
+            this.button_newBag.Enabled = !this.checkBox_oneBag.Checked;
+        }
+
+        private void button_bringAllToFront_Click(object sender, EventArgs e)
+        {
+            foreach (Form open in Application.OpenForms.Cast<Form>().ToArray())
+            {
+                try
+                {
+                    if (open.IsDisposed)
+                    {
+                        continue;
+                    }
+                    if (open.InvokeRequired)
+                    {
+                        open.Invoke((Action)(() => BringFormToFrontSafe(open)));
+                    }
+                    else
+                    {
+                        BringFormToFrontSafe(open);
+                    }
+                }
+                catch
+                {
+                    // best-effort: ignore individual failures
+                }
+            }
+        }
     }
 }
 

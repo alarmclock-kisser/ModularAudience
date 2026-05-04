@@ -5,6 +5,11 @@ namespace ModularAudience.Forms
 {
     public partial class WindowMain
     {
+        public static string GlobalExportFormat { get; private set; } = "wav";
+        public static int GlobalExportBits { get; private set; } = 16;
+
+        public bool AllInOneBag => this.checkBox_oneBag.Checked;
+
         private void InitializeExportControls()
         {
             var orderedFormats = AudioExporter.AvailableExportFormats.Keys
@@ -131,6 +136,8 @@ namespace ModularAudience.Forms
             {
                 this.UpdateExportBitOptions(selectMiddleOnChange: true);
             }
+
+            GlobalExportFormat = this.comboBox_exportFormat.SelectedItem as string ?? "wav";
         }
     }
 }

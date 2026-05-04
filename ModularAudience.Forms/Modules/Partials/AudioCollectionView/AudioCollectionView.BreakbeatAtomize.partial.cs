@@ -364,10 +364,13 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            using var dlg = new Modules.Dialogs.TimeStretchDialog(null, toStretch);
-            dlg.ShowDialog(this);
-            WindowMain.Instance?.UpdateTrackDependentUI();
-            WindowMain.Instance?.RefreshAllCollectionViews();
+            var dlg = new Modules.Dialogs.TimeStretchDialog(null, toStretch);
+            dlg.FormClosed += (_, _) =>
+            {
+                WindowMain.Instance?.UpdateTrackDependentUI();
+                WindowMain.Instance?.RefreshAllCollectionViews();
+            };
+            dlg.Show(this);
         }
 
         private void menuToolStripItem_demucsSeparateSelected_Click(object sender, EventArgs e)

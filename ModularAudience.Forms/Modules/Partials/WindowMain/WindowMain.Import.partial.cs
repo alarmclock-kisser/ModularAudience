@@ -214,7 +214,15 @@ namespace ModularAudience.Forms
                 SuppressCollectionViewPositioning = true;
                 try
                 {
-                    if (this.StructuredImports)
+                    if (this.AllInOneBag)
+                    {
+                        foreach (var audio in importedAudios)
+                        {
+                            CollectionViews.LastOrDefault()?.AudioC.Audios.Add(audio);
+                        }
+                    }
+
+                    else if (this.StructuredImports)
                     {
                         var groups = pairs.GroupBy(x => Path.GetDirectoryName(x.Path) ?? string.Empty);
                         foreach (var g in groups)

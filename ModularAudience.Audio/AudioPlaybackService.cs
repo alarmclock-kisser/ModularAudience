@@ -1,6 +1,8 @@
 ﻿using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using System;
+using System.Runtime.InteropServices;
+using System.Threading;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,6 +10,18 @@ using System.Threading.Tasks;
 
 namespace ModularAudience.Audio
 {
+    internal static class NativeMethods
+    {
+        public const int THREAD_PRIORITY_TIME_CRITICAL = 15;
+
+        [DllImport("kernel32.dll")]
+        public static extern IntPtr GetCurrentThread();
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SetThreadPriority(IntPtr hThread, int nPriority);
+    }
+
     internal sealed class SwitchingSampleProvider : ISampleProvider
     {
         private ISampleProvider? current;
@@ -31,11 +45,13 @@ namespace ModularAudience.Audio
 
         public int Read(float[] buffer, int offset, int count)
         {
-            // Elevate audio callback thread priority to prevent stutter from background processing
-            if (Thread.CurrentThread.Priority < ThreadPriority.AboveNormal)
+            // Attempt to give the audio callback OS-level time-critical priority to avoid preemption
+            try
             {
-                try { Thread.CurrentThread.Priority = ThreadPriority.AboveNormal; } catch { }
+                // THREAD_PRIORITY_TIME_CRITICAL == 15
+                NativeMethods.SetThreadPriority(NativeMethods.GetCurrentThread(), NativeMethods.THREAD_PRIORITY_TIME_CRITICAL);
             }
+            catch { }
 
             ISampleProvider? p;
             lock (this.gate) { p = this.current; }
@@ -285,7 +301,14 @@ namespace ModularAudience.Audio
             this.volumeControl = new VolumeSampleProvider(this.switching) { Volume = Math.Clamp(initialVolume, 0f, 1f) };
 
             // WaveOut initialisieren (falls noch nicht)
-            this.player.DesiredLatency = desiredLatency;
+            // Increase internal buffering to reduce underruns on busy systems
+            try
+            {
+                this.player.DesiredLatency = Math.Max(desiredLatency, 120);
+                this.player.NumberOfBuffers = Math.Max(this.player.NumberOfBuffers, 4);
+            }
+            catch { }
+
             this.player.Volume = 1.0f; // keep device stream at unity, control via VolumeSampleProvider
             this.waveProvider = new SampleToWaveProvider(this.volumeControl);
             this.player.Init(this.waveProvider);
@@ -316,7 +339,13 @@ namespace ModularAudience.Audio
             // Volume control wraps switching provider
             this.volumeControl = new VolumeSampleProvider(this.switching) { Volume = Math.Clamp(initialVolume, 0f, 1f) };
 
-            this.player.DesiredLatency = desiredLatency;
+            try
+            {
+                this.player.DesiredLatency = Math.Max(desiredLatency, 120);
+                this.player.NumberOfBuffers = Math.Max(this.player.NumberOfBuffers, 4);
+            }
+            catch { }
+
             this.player.Volume = 1.0f; // keep device stream at unity, control via VolumeSampleProvider
             this.waveProvider = new SampleToWaveProvider(this.volumeControl);
             this.player.Init(this.waveProvider);

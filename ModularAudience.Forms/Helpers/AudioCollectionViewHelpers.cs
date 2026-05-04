@@ -18,16 +18,16 @@ namespace ModularAudience.Forms.Helpers
             return string.IsNullOrWhiteSpace(result) ? "Audio" : result;
         }
 
-        internal static string EnsureWavExtension(string filePath)
+        internal static string EnsureAudioFileExtension(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))
             {
                 return filePath;
             }
 
-            return string.Equals(Path.GetExtension(filePath), ".wav", StringComparison.OrdinalIgnoreCase)
+            return string.Equals(Path.GetExtension(filePath), "." + WindowMain.GlobalExportFormat, StringComparison.OrdinalIgnoreCase)
                 ? filePath
-                : Path.ChangeExtension(filePath, ".wav");
+                : Path.ChangeExtension(filePath, WindowMain.GlobalExportFormat);
         }
 
         internal static bool TryMapAtomizedLabelToDrumsetElement(string? label, out DrumsetElement element)

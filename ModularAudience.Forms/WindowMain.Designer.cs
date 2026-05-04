@@ -43,6 +43,7 @@
             button_autoSamples = new Button();
             button_newBag = new Button();
             button_drumRoll = new Button();
+            button_pianoRoll = new Button();
             textBox_info = new TextBox();
             button_record = new Button();
             textBox_recordingTime = new TextBox();
@@ -56,6 +57,8 @@
             button_loopControl = new Button();
             button_devMode = new Button();
             button_cuda = new Button();
+            checkBox_oneBag = new CheckBox();
+            button_bringAllToFront = new Button();
             SuspendLayout();
             // 
             // button_import
@@ -188,6 +191,7 @@
             comboBox_exportBits.Size = new Size(60, 23);
             comboBox_exportBits.TabIndex = 12;
             comboBox_exportBits.TabStop = false;
+            comboBox_exportBits.SelectedIndexChanged += comboBox_exportBits_SelectedIndexChanged;
             // 
             // button_autoSamples
             // 
@@ -203,7 +207,7 @@
             // button_newBag
             // 
             button_newBag.BackColor = Color.FromArgb(192, 255, 192);
-            button_newBag.Location = new Point(12, 99);
+            button_newBag.Location = new Point(12, 120);
             button_newBag.Name = "button_newBag";
             button_newBag.Size = new Size(75, 23);
             button_newBag.TabIndex = 14;
@@ -214,6 +218,7 @@
             // 
             // button_drumRoll
             // 
+            button_drumRoll.Enabled = false;
             button_drumRoll.Location = new Point(149, 70);
             button_drumRoll.Name = "button_drumRoll";
             button_drumRoll.Size = new Size(90, 23);
@@ -222,6 +227,17 @@
             button_drumRoll.Text = "Drum Roll";
             button_drumRoll.UseVisualStyleBackColor = true;
             button_drumRoll.Click += button_drumRoll_Click;
+            // 
+            // button_pianoRoll
+            // 
+            button_pianoRoll.Location = new Point(149, 99);
+            button_pianoRoll.Name = "button_pianoRoll";
+            button_pianoRoll.Size = new Size(90, 23);
+            button_pianoRoll.TabIndex = 16;
+            button_pianoRoll.TabStop = false;
+            button_pianoRoll.Text = "Piano Roll";
+            button_pianoRoll.UseVisualStyleBackColor = true;
+            button_pianoRoll.Click += button_pianoRoll_Click;
             // 
             // textBox_info
             // 
@@ -232,7 +248,7 @@
             textBox_info.PlaceholderText = "No track currently selected.";
             textBox_info.ReadOnly = true;
             textBox_info.Size = new Size(181, 210);
-            textBox_info.TabIndex = 16;
+            textBox_info.TabIndex = 17;
             textBox_info.TabStop = false;
             // 
             // button_record
@@ -241,7 +257,7 @@
             button_record.Location = new Point(12, 199);
             button_record.Name = "button_record";
             button_record.Size = new Size(23, 23);
-            button_record.TabIndex = 17;
+            button_record.TabIndex = 18;
             button_record.TabStop = false;
             button_record.Text = "●";
             button_record.UseVisualStyleBackColor = true;
@@ -253,7 +269,7 @@
             textBox_recordingTime.Name = "textBox_recordingTime";
             textBox_recordingTime.PlaceholderText = "Not recording";
             textBox_recordingTime.Size = new Size(80, 23);
-            textBox_recordingTime.TabIndex = 18;
+            textBox_recordingTime.TabIndex = 19;
             textBox_recordingTime.TabStop = false;
             // 
             // label_stopRecordInfo
@@ -263,17 +279,17 @@
             label_stopRecordInfo.Location = new Point(12, 181);
             label_stopRecordInfo.Name = "label_stopRecordInfo";
             label_stopRecordInfo.Size = new Size(154, 15);
-            label_stopRecordInfo.TabIndex = 19;
+            label_stopRecordInfo.TabIndex = 20;
             label_stopRecordInfo.Text = "Ctrl-Click to stop recording.";
             label_stopRecordInfo.Visible = false;
             // 
             // button_newTrack
             // 
             button_newTrack.BackColor = Color.FromArgb(192, 192, 255);
-            button_newTrack.Location = new Point(12, 70);
+            button_newTrack.Location = new Point(12, 91);
             button_newTrack.Name = "button_newTrack";
             button_newTrack.Size = new Size(75, 23);
-            button_newTrack.TabIndex = 20;
+            button_newTrack.TabIndex = 21;
             button_newTrack.Text = "New Track";
             button_newTrack.UseVisualStyleBackColor = false;
             button_newTrack.Click += button_newTrack_Click;
@@ -282,10 +298,11 @@
             // 
             listBox_log.Font = new Font("Bahnschrift SemiLight", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
             listBox_log.FormattingEnabled = true;
+            listBox_log.HorizontalScrollbar = true;
             listBox_log.Location = new Point(245, 175);
             listBox_log.Name = "listBox_log";
             listBox_log.Size = new Size(260, 134);
-            listBox_log.TabIndex = 21;
+            listBox_log.TabIndex = 22;
             listBox_log.TabStop = false;
             listBox_log.DoubleClick += listBox_log_DoubleClick;
             // 
@@ -294,7 +311,7 @@
             button_breakbeatArchitect.Location = new Point(245, 70);
             button_breakbeatArchitect.Name = "button_breakbeatArchitect";
             button_breakbeatArchitect.Size = new Size(90, 23);
-            button_breakbeatArchitect.TabIndex = 22;
+            button_breakbeatArchitect.TabIndex = 23;
             button_breakbeatArchitect.TabStop = false;
             button_breakbeatArchitect.Text = "Break Beat";
             button_breakbeatArchitect.UseVisualStyleBackColor = true;
@@ -305,7 +322,7 @@
             button_pitchShift.Location = new Point(245, 41);
             button_pitchShift.Name = "button_pitchShift";
             button_pitchShift.Size = new Size(90, 23);
-            button_pitchShift.TabIndex = 23;
+            button_pitchShift.TabIndex = 24;
             button_pitchShift.TabStop = false;
             button_pitchShift.Text = "Pitch Shift";
             button_pitchShift.UseVisualStyleBackColor = true;
@@ -317,7 +334,7 @@
             button_applyCloseAll.Location = new Point(12, 286);
             button_applyCloseAll.Name = "button_applyCloseAll";
             button_applyCloseAll.Size = new Size(113, 23);
-            button_applyCloseAll.TabIndex = 24;
+            button_applyCloseAll.TabIndex = 25;
             button_applyCloseAll.TabStop = false;
             button_applyCloseAll.Text = "Apply + Close All";
             button_applyCloseAll.UseVisualStyleBackColor = false;
@@ -331,7 +348,7 @@
             checkBox_structure.Location = new Point(12, 41);
             checkBox_structure.Name = "checkBox_structure";
             checkBox_structure.Size = new Size(103, 19);
-            checkBox_structure.TabIndex = 25;
+            checkBox_structure.TabIndex = 26;
             checkBox_structure.Text = "Keep Structure";
             checkBox_structure.UseVisualStyleBackColor = true;
             // 
@@ -340,7 +357,7 @@
             button_loopControl.Location = new Point(245, 12);
             button_loopControl.Name = "button_loopControl";
             button_loopControl.Size = new Size(90, 23);
-            button_loopControl.TabIndex = 26;
+            button_loopControl.TabIndex = 27;
             button_loopControl.Text = "Loop Control";
             button_loopControl.UseVisualStyleBackColor = true;
             button_loopControl.Click += button_loopControl_Click;
@@ -351,7 +368,7 @@
             button_devMode.Location = new Point(131, 286);
             button_devMode.Name = "button_devMode";
             button_devMode.Size = new Size(108, 23);
-            button_devMode.TabIndex = 27;
+            button_devMode.TabIndex = 28;
             button_devMode.Text = "Dev Mode";
             button_devMode.UseVisualStyleBackColor = false;
             button_devMode.Click += button_devMode_Click;
@@ -361,16 +378,41 @@
             button_cuda.Location = new Point(415, 12);
             button_cuda.Name = "button_cuda";
             button_cuda.Size = new Size(90, 23);
-            button_cuda.TabIndex = 28;
+            button_cuda.TabIndex = 29;
             button_cuda.Text = "CUDA";
             button_cuda.UseVisualStyleBackColor = true;
             button_cuda.Click += button_cuda_Click;
+            // 
+            // checkBox_oneBag
+            // 
+            checkBox_oneBag.AutoSize = true;
+            checkBox_oneBag.Location = new Point(12, 66);
+            checkBox_oneBag.Name = "checkBox_oneBag";
+            checkBox_oneBag.Size = new Size(103, 19);
+            checkBox_oneBag.TabIndex = 30;
+            checkBox_oneBag.Text = "All-in-one bag";
+            checkBox_oneBag.UseVisualStyleBackColor = true;
+            checkBox_oneBag.CheckedChanged += checkBox_oneBag_CheckedChanged;
+            // 
+            // button_bringAllToFront
+            // 
+            button_bringAllToFront.BackColor = Color.CornflowerBlue;
+            button_bringAllToFront.Location = new Point(12, 258);
+            button_bringAllToFront.Name = "button_bringAllToFront";
+            button_bringAllToFront.Size = new Size(113, 23);
+            button_bringAllToFront.TabIndex = 31;
+            button_bringAllToFront.TabStop = false;
+            button_bringAllToFront.Text = "Bring all to Front";
+            button_bringAllToFront.UseVisualStyleBackColor = false;
+            button_bringAllToFront.Click += button_bringAllToFront_Click;
             // 
             // WindowMain
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(704, 321);
+            Controls.Add(button_bringAllToFront);
+            Controls.Add(checkBox_oneBag);
             Controls.Add(button_cuda);
             Controls.Add(button_devMode);
             Controls.Add(button_loopControl);
@@ -424,6 +466,7 @@
         private Button button_autoSamples;
         private Button button_newBag;
         private Button button_drumRoll;
+        private Button button_pianoRoll;
         private TextBox textBox_info;
         private Button button_record;
         private TextBox textBox_recordingTime;
@@ -437,5 +480,7 @@
         private Button button_loopControl;
         private Button button_devMode;
 		private Button button_cuda;
-	}
+        private CheckBox checkBox_oneBag;
+        private Button button_bringAllToFront;
+    }
 }

@@ -18,6 +18,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private CancellationTokenSource? ProcessingCancellationSource = null;
         private System.Windows.Forms.Timer? ProcessingTimer = null;
         private DateTime ProcessingStarted = DateTime.MinValue;
+        private bool isUpdatingInitialBpm;
+        private decimal previousInitialBpmValue;
+        private bool isUpdatingTargetBpm;
+        private decimal previousTargetBpmValue;
 
 
         private static float LastTargetBpm = 120f;
@@ -26,6 +30,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public TimeStretchDialog(TrackView? trackView = null, IEnumerable<AudioObj>? audios = null)
         {
             this.InitializeComponent();
+            this.previousInitialBpmValue = this.numericUpDown_initialBpm.Value;
+            this.previousTargetBpmValue = this.numericUpDown_targetBpm.Value;
             if (audios?.Count() > 0)
             {
                 this.Tracks = audios;
@@ -43,6 +49,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             this.Text = $"Time Stretch - {trackView?.Name ?? this.Tracks.Count() + " Tracks"}";
+            if (audios?.Count() == 1)
+            {
+                this.Text = $"Time Stretch - {audios.First().Name}";
+            }
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false);
 
@@ -50,7 +60,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_initialBpm.Value = this.Tracks.First().Bpm > 0 ? (decimal) this.Tracks.First().Bpm : this.Tracks.First().ScannedBpm > 30 ? (decimal) this.Tracks.First().ScannedBpm : (decimal)LastInitialBpm;
             this.numericUpDown_threads.Minimum = 1;
             this.numericUpDown_threads.Maximum = Math.Max(Environment.ProcessorCount, 1);
-            this.numericUpDown_threads.Value = Math.Max(Environment.ProcessorCount - 1, 1);
+            this.numericUpDown_threads.Value = Math.Max(Environment.ProcessorCount / 2, 1);
             this.numericUpDown_targetBpm.Value = (decimal) LastTargetBpm;
 
 
@@ -74,17 +84,91 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_chunkSize.Tag = (int) this.numericUpDown_chunkSize.Value;
         }
 
-        private void numericUpDown_initialBpm_ValueChanged(object sender, EventArgs e)
+        private void numericUpDown_initialBpm_ValueChanged(object? sender, EventArgs e)
         {
-            double factor = (double) this.numericUpDown_initialBpm.Value / (double) this.numericUpDown_targetBpm.Value;
+            if (this.isUpdatingInitialBpm)
+            {
+                return;
+            }
+
+            decimal currentValue = this.numericUpDown_initialBpm.Value;
+
+            // If ctrl down, double / halve the initial BPM
+            if (System.Windows.Forms.Control.ModifierKeys.HasFlag(Keys.Control) && currentValue != this.previousInitialBpmValue)
+            {
+                decimal adjustedValue = currentValue;
+
+                if (currentValue > this.previousInitialBpmValue)
+                {
+                    adjustedValue = Math.Min(this.previousInitialBpmValue * 2, this.numericUpDown_initialBpm.Maximum);
+                }
+                else if (currentValue < this.previousInitialBpmValue)
+                {
+                    adjustedValue = Math.Max(this.previousInitialBpmValue / 2, this.numericUpDown_initialBpm.Minimum);
+                }
+
+                if (adjustedValue != currentValue)
+                {
+                    this.isUpdatingInitialBpm = true;
+                    try
+                    {
+                        this.numericUpDown_initialBpm.Value = adjustedValue;
+                        currentValue = adjustedValue;
+                    }
+                    finally
+                    {
+                        this.isUpdatingInitialBpm = false;
+                    }
+                }
+            }
+
+            double factor = (double) currentValue / (double) this.numericUpDown_targetBpm.Value;
             this.numericUpDown_stretchFactor.Value = Math.Clamp((decimal) factor, this.numericUpDown_stretchFactor.Minimum, this.numericUpDown_stretchFactor.Maximum);
+            this.previousInitialBpmValue = this.numericUpDown_initialBpm.Value;
             LastInitialBpm = (float) this.numericUpDown_initialBpm.Value;
         }
 
         private void numericUpDown_targetBpm_ValueChanged(object sender, EventArgs e)
         {
-            double factor = (double) this.numericUpDown_initialBpm.Value / (double) this.numericUpDown_targetBpm.Value;
+            if (this.isUpdatingTargetBpm)
+            {
+                return;
+            }
+
+            decimal currentValue = this.numericUpDown_targetBpm.Value;
+
+            // If ctrl down, double / halve the target BPM
+            if (System.Windows.Forms.Control.ModifierKeys.HasFlag(Keys.Control) && currentValue != this.previousTargetBpmValue)
+            {
+                decimal adjustedValue = currentValue;
+
+                if (currentValue > this.previousTargetBpmValue)
+                {
+                    adjustedValue = Math.Min(this.previousTargetBpmValue * 2, this.numericUpDown_targetBpm.Maximum);
+                }
+                else if (currentValue < this.previousTargetBpmValue)
+                {
+                    adjustedValue = Math.Max(this.previousTargetBpmValue / 2, this.numericUpDown_targetBpm.Minimum);
+                }
+
+                if (adjustedValue != currentValue)
+                {
+                    this.isUpdatingTargetBpm = true;
+                    try
+                    {
+                        this.numericUpDown_targetBpm.Value = adjustedValue;
+                        currentValue = adjustedValue;
+                    }
+                    finally
+                    {
+                        this.isUpdatingTargetBpm = false;
+                    }
+                }
+            }
+
+            double factor = (double) this.numericUpDown_initialBpm.Value / (double) currentValue;
             this.numericUpDown_stretchFactor.Value = Math.Clamp((decimal) factor, this.numericUpDown_stretchFactor.Minimum, this.numericUpDown_stretchFactor.Maximum);
+            this.previousTargetBpmValue = this.numericUpDown_targetBpm.Value;
             LastTargetBpm = (float) this.numericUpDown_targetBpm.Value;
         }
 
@@ -115,11 +199,15 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                 if (this.Tracks.Count() > 1 || this.trackView == null)
                 {
-                    foreach (var track in this.Tracks)
+                    // Set window title to indicate multi-track processing
+                    this.Text = $"Time Stretch - {this.Tracks.Count()} Tracks (Processing...)";
+
+                    for (int i = 0; i < this.Tracks.Count(); i++)
                     {
-                        this.numericUpDown_initialBpm.Value = track.Bpm > 0 ? (decimal)track.Bpm : track.ScannedBpm > 30 ? (decimal)track.ScannedBpm : (decimal)LastInitialBpm;
+                        this.Text = $"Time Stretch - {this.Tracks.Count()} Tracks (Processing {i + 1}/{this.Tracks.Count()})";
+                        this.numericUpDown_initialBpm.Value = this.Tracks.ElementAt(i).Bpm > 0 ? (decimal)this.Tracks.ElementAt(i).Bpm : this.Tracks.ElementAt(i).ScannedBpm > 30 ? (decimal)this.Tracks.ElementAt(i).ScannedBpm : (decimal)LastInitialBpm;
                         await TimeStretcher.TimeStretchAllThreadsAsync(
-                                                track,
+                                                this.Tracks.ElementAt(i),
                                                 (int) this.numericUpDown_chunkSize.Value,
                                                 (float) this.numericUpDown_overlap.Value,
                                                 (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2* (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
@@ -165,7 +253,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, $"Fehler beim Time-Stretch: {ex.Message}", "Time Stretch", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, $"Error Time-Stretching: {ex.Message}", "Time Stretch", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 this.progressBar_stretching.Value = this.progressBar_stretching.Minimum;
             }
             finally
@@ -197,7 +285,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_initialBpm.Enabled = !processing;
             this.numericUpDown_targetBpm.Enabled = !processing;
             this.numericUpDown_stretchFactor.Enabled = !processing;
-            this.UseWaitCursor = processing;
+            // this.UseWaitCursor = processing;
         }
 
         private void TimeStretchDialog_FormClosing(object? sender, FormClosingEventArgs e)

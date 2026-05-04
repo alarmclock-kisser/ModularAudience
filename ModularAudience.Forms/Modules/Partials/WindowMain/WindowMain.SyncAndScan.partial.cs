@@ -10,38 +10,47 @@ namespace ModularAudience.Forms
     {
         private async void button_scanBpm_Click(object sender, EventArgs e)
         {
-            if (LastSelectedTrackView == null)
+            AudioObj? audio = this.GetSelectedAudioForCommands();
+
+            if (audio == null)
             {
+                LogCollection.Log("No audio selected for BPM scanning.");
                 return;
             }
 
-            double scannedBpm = await BeatScanner.ScanBpmAsync(LastSelectedTrackView.OriginalAudio);
+            double scannedBpm = await BeatScanner.ScanBpmAsync(audio);
             this.textBox_scanBpmResult.Text = scannedBpm.ToString("F3") + " BPM";
-            LastSelectedTrackView.OriginalAudio.ScannedBpm = (float)scannedBpm;
+            audio.ScannedBpm = (float)scannedBpm;
         }
 
         private async void button_scanTiming_Click(object sender, EventArgs e)
         {
-            if (LastSelectedTrackView == null)
+            AudioObj? audio = this.GetSelectedAudioForCommands();
+
+            if (audio == null)
             {
+                LogCollection.Log("No audio selected for BPM scanning.");
                 return;
             }
 
-            float scannedTiming = await BeatScanner_V2.ScanTimingAsync(LastSelectedTrackView.OriginalAudio);
+            float scannedTiming = await BeatScanner_V2.ScanTimingAsync(audio);
             this.textBox_scanTimingResult.Text = WindowMainFormatHelpers.GetTimingString(scannedTiming);
-            LastSelectedTrackView.OriginalAudio.ScannedTiming = scannedTiming;
+            audio.ScannedTiming = scannedTiming;
         }
 
         private async void button_scanKey_Click(object sender, EventArgs e)
         {
-            if (LastSelectedTrackView == null)
+            AudioObj? audio = this.GetSelectedAudioForCommands();
+
+            if (audio == null)
             {
+                LogCollection.Log("No audio selected for BPM scanning.");
                 return;
             }
 
-            string scannedKey = await BeatScanner_V2.ScanKeyAsync(LastSelectedTrackView.OriginalAudio);
+            string scannedKey = await BeatScanner_V2.ScanKeyAsync(audio);
             this.textBox_scanKeyResult.Text = scannedKey;
-            LastSelectedTrackView.OriginalAudio.ScannedKey = scannedKey;
+            audio.ScannedKey = scannedKey;
         }
 
         private void textBox_scanBpmResult_DoubleClick(object? sender, EventArgs e)
@@ -132,9 +141,13 @@ namespace ModularAudience.Forms
 
             if (LastSelectedTrackView != null && !LastSelectedTrackView.IsDisposed)
             {
-                using var dlg = new Modules.Dialogs.TimeStretchDialog(LastSelectedTrackView);
-                dlg.ShowDialog(this);
-                UpdateTrackDependentUI();
+                var dlg = new Modules.Dialogs.TimeStretchDialog(LastSelectedTrackView);
+                dlg.FormClosed += (_, _) =>
+                {
+                    UpdateTrackDependentUI();
+                    RefreshAllCollectionViews();
+                };
+                dlg.Show(this);
                 return;
             }
 

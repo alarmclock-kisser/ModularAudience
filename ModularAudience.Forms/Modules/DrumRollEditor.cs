@@ -3,6 +3,8 @@ using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using System.ComponentModel;
 using System.IO;
+using System.Diagnostics;
+using System.Runtime;
 
 namespace ModularAudience.Forms.Modules
 {
@@ -27,7 +29,7 @@ namespace ModularAudience.Forms.Modules
         private const int PatternStepMinWidth = 6;
         private const int TargetRowHeight = 24;
         private const int SchedulingLookaheadMs = 60;
-        private const int OutputDesiredLatencyMs = 45;
+        private const int OutputDesiredLatencyMs = 120; // increased to reduce underruns/stuttering
         private const int VisualDelayCompensationMs = 20;
 
         private readonly AudioCollection AudioC = new();
@@ -60,6 +62,8 @@ namespace ModularAudience.Forms.Modules
         // Scheduler-specific
         private CancellationTokenSource? schedulerCts;
         private Task? schedulerTask;
+        private System.Runtime.GCLatencyMode? previousGcLatencyMode = null;
+        private ProcessPriorityClass? previousProcessPriority = null;
         private readonly Lock outputLock = new();
         private volatile int currentStep = 0;
         private bool isPlaying = false;
@@ -986,7 +990,7 @@ namespace ModularAudience.Forms.Modules
                     this.waveOut = new WaveOutEvent()
                     {
                         DesiredLatency = OutputDesiredLatencyMs,
-                        NumberOfBuffers = 2
+                        NumberOfBuffers = 4
                     };
                     this.waveOut.Init(new SoftLimiterSampleProvider(this.mixer));
                 }
@@ -1010,6 +1014,21 @@ namespace ModularAudience.Forms.Modules
             {
                 return;
             }
+            // Attempt to raise GC and process priority to reduce GC-induced stutters
+            try
+            {
+                this.previousGcLatencyMode = System.Runtime.GCSettings.LatencyMode;
+                System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
+            }
+            catch { this.previousGcLatencyMode = null; }
+
+            try
+            {
+                var proc = Process.GetCurrentProcess();
+                this.previousProcessPriority = proc.PriorityClass;
+                proc.PriorityClass = ProcessPriorityClass.High;
+            }
+            catch { this.previousProcessPriority = null; }
 
             this.isPlaying = true;
             this.currentStep = 0;
@@ -1033,9 +1052,13 @@ namespace ModularAudience.Forms.Modules
             }
             catch { this.RerollCountdown = -1; }
 
-            // Play scheduler
+            // Play scheduler on a dedicated thread with elevated priority
             this.schedulerCts = new CancellationTokenSource();
-            this.schedulerTask = Task.Run(() => this.SchedulerLoop(this.schedulerCts.Token));
+            this.schedulerTask = Task.Factory.StartNew(() =>
+            {
+                try { Thread.CurrentThread.Priority = ThreadPriority.AboveNormal; } catch { }
+                try { this.SchedulerLoop(this.schedulerCts.Token).GetAwaiter().GetResult(); } catch { }
+            }, this.schedulerCts.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
             // Keep numericUpDown subscription to update BPM live
             this.numericUpDown_bpm.ValueChanged += this.Bpm_ValueChanged;
@@ -1064,6 +1087,27 @@ namespace ModularAudience.Forms.Modules
                 this.schedulerCts = null;
                 this.schedulerTask = null;
             }
+
+            // restore GC and process priority
+            try
+            {
+                if (this.previousGcLatencyMode.HasValue)
+                {
+                    System.Runtime.GCSettings.LatencyMode = this.previousGcLatencyMode.Value;
+                }
+            }
+            catch { }
+            this.previousGcLatencyMode = null;
+
+            try
+            {
+                if (this.previousProcessPriority.HasValue)
+                {
+                    Process.GetCurrentProcess().PriorityClass = this.previousProcessPriority.Value;
+                }
+            }
+            catch { }
+            this.previousProcessPriority = null;
 
             // Reset UI highlight
             try
