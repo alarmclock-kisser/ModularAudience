@@ -15,6 +15,7 @@ namespace ModularAudience.Forms.Modules
             public required AudioObj Audio { get; init; }
             public required string Name { get; init; }
             public required bool[] Steps { get; init; }
+            public bool IsLocked { get; set; }
         }
 
         private readonly record struct PatternLayoutInfo(int ContentWidth, int ContentHeight, int RowHeight, int NameWidth, int StepWidth, bool ShowStepNumbers);
@@ -28,6 +29,7 @@ namespace ModularAudience.Forms.Modules
         private const int PatternNameMaxWidth = 240;
         private const int PatternStepMinWidth = 6;
         private const int TargetRowHeight = 24;
+        private const int PatternLockWidth = 22;
         private const int SchedulingLookaheadMs = 60;
         private const int OutputDesiredLatencyMs = 120; // increased to reduce underruns/stuttering
         private const int VisualDelayCompensationMs = 20;
@@ -53,6 +55,7 @@ namespace ModularAudience.Forms.Modules
         private readonly SemaphoreSlim rebuildSemaphore = new(1, 1);
         private readonly Random random = new();
         private ContextMenuStrip? rowContextMenu;
+        private ToolStripMenuItem? lockRowToolStripMenuItem;
         private int contextMenuRowIndex = -1;
 
         private WaveOutEvent? waveOut;
@@ -417,6 +420,9 @@ namespace ModularAudience.Forms.Modules
             {
                 var audioSnapshot = this.AudioC.Audios.ToList();
                 int hits = Math.Max(1, this.Hits);
+                Dictionary<AudioObj, bool> lockStates = this.patternRows
+                    .GroupBy(row => row.Audio)
+                    .ToDictionary(group => group.Key, group => group.First().IsLocked);
 
                 var rows = await Task.Run(() =>
                 {
@@ -439,7 +445,8 @@ namespace ModularAudience.Forms.Modules
                         {
                             Audio = audio,
                             Name = GetPreferredAudioName(audio, i),
-                            Steps = steps
+                            Steps = steps,
+                            IsLocked = lockStates.TryGetValue(audio, out bool isLocked) && isLocked
                         });
                     }
 
@@ -593,23 +600,40 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            List<int> unlockedRows = this.patternRows
+                .Select((row, index) => (row, index))
+                .Where(item => !item.row.IsLocked)
+                .Select(item => item.index)
+                .ToList();
+
+            if (unlockedRows.Count == 0)
+            {
+                return;
+            }
+
             double density = (double) this.numericUpDown_randomDensity.Value / 100d;
             double accent = (double) this.numericUpDown_randomAccent.Value / 100d;
             double streak = (double) this.numericUpDown_randomStreak.Value / 100d;
             double variation = (double) this.numericUpDown_randomVariation.Value / 100d;
 
-            foreach (var row in this.patternRows)
+            foreach (int rowIndex in unlockedRows)
             {
-                Array.Clear(row.Steps, 0, row.Steps.Length);
+                Array.Clear(this.patternRows[rowIndex].Steps, 0, this.patternRows[rowIndex].Steps.Length);
             }
 
             if (interleaved)
             {
                 for (int step = 0; step < hits; step++)
                 {
+                    bool hasLockedHit = this.patternRows.Any(row => row.IsLocked && step < row.Steps.Length && row.Steps[step]);
+                    if (hasLockedHit)
+                    {
+                        continue;
+                    }
+
                     int selectedRow = -1;
                     double bestScore = 0d;
-                    for (int rowIndex = 0; rowIndex < this.patternRows.Count; rowIndex++)
+                    foreach (int rowIndex in unlockedRows)
                     {
                         double rowDensity = this.GetRowDensity(density, variation);
                         double chance = this.GetStepChance(rowDensity, accent, step, hits);
@@ -633,8 +657,9 @@ namespace ModularAudience.Forms.Modules
             }
             else
             {
-                foreach (var row in this.patternRows)
+                foreach (int rowIndex in unlockedRows)
                 {
+                    PatternRowState row = this.patternRows[rowIndex];
                     double rowDensity = this.GetRowDensity(density, variation);
                     for (int step = 0; step < hits; step++)
                     {
@@ -1444,7 +1469,13 @@ namespace ModularAudience.Forms.Modules
         private Rectangle GetNameBounds(int rowIndex, PatternLayoutInfo layout)
         {
             Rectangle rowRect = this.GetRowBounds(rowIndex, layout);
-            return new Rectangle(rowRect.Left + 4, rowRect.Top, layout.NameWidth - 4, rowRect.Height);
+            return new Rectangle(rowRect.Left + PatternLockWidth + 6, rowRect.Top, Math.Max(16, layout.NameWidth - PatternLockWidth - 6), rowRect.Height);
+        }
+
+        private Rectangle GetLockBounds(int rowIndex, PatternLayoutInfo layout)
+        {
+            Rectangle rowRect = this.GetRowBounds(rowIndex, layout);
+            return new Rectangle(rowRect.Left + 2, rowRect.Top + 2, PatternLockWidth - 4, Math.Max(16, rowRect.Height - 4));
         }
 
         private Rectangle GetStepBounds(int rowIndex, int stepIndex, PatternLayoutInfo layout)
@@ -1574,6 +1605,17 @@ namespace ModularAudience.Forms.Modules
             this.panel_pattern.Invalidate();
         }
 
+        private void ToggleRowLock(int rowIndex)
+        {
+            if (rowIndex < 0 || rowIndex >= this.patternRows.Count)
+            {
+                return;
+            }
+
+            this.patternRows[rowIndex].IsLocked = !this.patternRows[rowIndex].IsLocked;
+            this.panel_pattern.Invalidate();
+        }
+
         private void RandomizeSingleRow(int rowIndex)
         {
             if (rowIndex < 0 || rowIndex >= this.patternRows.Count)
@@ -1582,6 +1624,11 @@ namespace ModularAudience.Forms.Modules
             }
 
             PatternRowState row = this.patternRows[rowIndex];
+            if (row.IsLocked)
+            {
+                return;
+            }
+
             int hits = Math.Max(1, this.Hits);
             double density = this.GetRowDensity((double) this.numericUpDown_randomDensity.Value / 100d, (double) this.numericUpDown_randomVariation.Value / 100d);
             double accent = (double) this.numericUpDown_randomAccent.Value / 100d;
@@ -1747,6 +1794,18 @@ namespace ModularAudience.Forms.Modules
                     e.Graphics.FillRectangle(rowIndex % 2 == 0 ? rowBrushEven : rowBrushOdd, rowRect);
 
                     Rectangle nameRect = this.GetNameBounds(rowIndex, layout);
+                    Rectangle lockRect = this.GetLockBounds(rowIndex, layout);
+                    if (lockRect.IntersectsWith(clipRect))
+                    {
+                        TextRenderer.DrawText(
+                            e.Graphics,
+                            row.IsLocked ? "🔒" : "🔓",
+                            this.Font,
+                            lockRect,
+                            row.IsLocked ? Color.Firebrick : Color.DimGray,
+                            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                    }
+
                     if (nameRect.IntersectsWith(clipRect) && nameRect.Width > 32)
                     {
                         TextRenderer.DrawText(
@@ -1816,12 +1875,24 @@ namespace ModularAudience.Forms.Modules
             if (e.Button == MouseButtons.Right)
             {
                 this.contextMenuRowIndex = rowIndex;
+                if (this.lockRowToolStripMenuItem != null && rowIndex >= 0 && rowIndex < this.patternRows.Count)
+                {
+                    bool isLocked = this.patternRows[rowIndex].IsLocked;
+                    this.lockRowToolStripMenuItem.Text = isLocked ? "Unlock Row" : "Lock Row";
+                }
                 this.rowContextMenu?.Show(this.panel_pattern, e.Location);
                 return;
             }
 
             if (e.Button == MouseButtons.Left)
             {
+                Rectangle lockRect = this.GetLockBounds(rowIndex, layout);
+                if (lockRect.Contains(contentPoint))
+                {
+                    this.ToggleRowLock(rowIndex);
+                    return;
+                }
+
                 int stepIndex = this.GetStepIndexFromPoint(contentPoint, rowIndex, layout);
                 if (stepIndex >= 0)
                 {
