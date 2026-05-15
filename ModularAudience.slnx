@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="BenchmarkSuite1/BenchmarkSuite1.csproj" />
   <Project Path="ModularAudience.Audio/ModularAudience.Audio.csproj" />
   <Project Path="ModularAudience.Cuda/ModularAudience.Cuda.csproj" Id="48e6abf6-de92-410b-8a76-3739fbbf0abf" />
   <Project Path="ModularAudience.Forms/ModularAudience.Forms.csproj" />
