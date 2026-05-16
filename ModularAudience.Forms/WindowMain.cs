@@ -205,7 +205,11 @@ namespace ModularAudience.Forms
                 {
                     try
                     {
-                        if (tv == null) continue;
+                        if (tv == null)
+                        {
+                            continue;
+                        }
+
                         if (!tv.IsDisposed)
                         {
                             if (tv.InvokeRequired)
@@ -256,7 +260,11 @@ namespace ModularAudience.Forms
                 {
                     try
                     {
-                        if (tv == null) continue;
+                        if (tv == null)
+                        {
+                            continue;
+                        }
+
                         if (!tv.IsDisposed)
                         {
                             if (tv.InvokeRequired)

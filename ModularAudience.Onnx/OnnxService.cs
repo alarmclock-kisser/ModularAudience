@@ -107,17 +107,31 @@ namespace ModularAudience.Onnx
 
         public async Task<float[]> ExtractStemAsync(AudioObj audio, string stemName, IProgress<double>? progress = null)
         {
-            if (this._session == null) throw new InvalidOperationException("ONNX Session ist nicht geladen.");
+            if (this._session == null)
+            {
+                throw new InvalidOperationException("ONNX Session ist nicht geladen.");
+            }
 
             // 1. Setup & Normalisierung 
-            if (audio.SampleRate != 44100) await audio.ResampleAsync(44100);
-            if (audio.Channels != 2) await audio.RechannelAsync(2);
+            if (audio.SampleRate != 44100)
+            {
+                await audio.ResampleAsync(44100);
+            }
+
+            if (audio.Channels != 2)
+            {
+                await audio.RechannelAsync(2);
+            }
+
             await audio.NormalizeAsync(1.0f); // Demucs braucht exakt Pegel zwischen -1.0 und 1.0
 
             float[] interleaved = audio.Data;
             int totalFrames = interleaved.Length / 2;
             int stemIdx = Array.IndexOf(this._stems, stemName.ToLower());
-            if (stemIdx < 0) stemIdx = 3; // Fallback Vocals
+            if (stemIdx < 0)
+            {
+                stemIdx = 3; // Fallback Vocals
+            }
 
             string inputName = _session.InputNames.First();
 
@@ -147,9 +161,17 @@ namespace ModularAudience.Onnx
                 // Dummy Inputs für die Hidden-States erzeugen (Verhindert Missing-Input Fehler)
                 foreach (var kv in _session.InputMetadata)
                 {
-                    if (kv.Key == inputName) continue;
+                    if (kv.Key == inputName)
+                    {
+                        continue;
+                    }
+
                     var dims = kv.Value.Dimensions.Select(d => d > 0 ? d : 1).ToArray();
-                    if (dims.Length == 0) dims = new[] { 1 };
+                    if (dims.Length == 0)
+                    {
+                        dims = new[] { 1 };
+                    }
+
                     int totalElements = dims.Aggregate(1, (a, b) => a * b);
                     inputs.Add(NamedOnnxValue.CreateFromTensor(kv.Key, new DenseTensor<float>(new float[totalElements], dims)));
                 }
@@ -164,7 +186,9 @@ namespace ModularAudience.Onnx
                 var audioOutputs = results.Where(r => r.AsTensor<float>().Length > 100000).ToList();
 
                 if (audioOutputs.Count == 0)
+                {
                     throw new Exception("Fehler: Das Modell hat keine Audiodaten, sondern nur kleine States zurückgegeben.");
+                }
 
                 Tensor<float> outputTensor;
                 int activeStemIdx = stemIdx;
@@ -229,7 +253,10 @@ namespace ModularAudience.Onnx
                     int baseIdx = (safeStemIdx * stemStride) + (i * frameStride);
 
                     // Absoluter Sicherheitsanker gegen den IndexOutOfRangeException
-                    if (baseIdx >= outRaw.Length) break;
+                    if (baseIdx >= outRaw.Length)
+                    {
+                        break;
+                    }
 
                     float left = outRaw[baseIdx];
 

@@ -1370,10 +1370,14 @@ namespace ModularAudience.Forms.Modules
             var randomizeItem = new ToolStripMenuItem("Randomize Row");
             randomizeItem.Click += this.randomizeRowToolStripMenuItem_Click;
 
+            this.lockRowToolStripMenuItem = new ToolStripMenuItem("Lock Row");
+            this.lockRowToolStripMenuItem.Click += (_, _) => this.ToggleRowLock(this.contextMenuRowIndex);
+
             this.rowContextMenu.Items.Add(editItem);
             this.rowContextMenu.Items.Add(removeItem);
             this.rowContextMenu.Items.Add(new ToolStripSeparator());
             this.rowContextMenu.Items.Add(randomizeItem);
+            this.rowContextMenu.Items.Add(this.lockRowToolStripMenuItem);
         }
 
         private void UpdatePatternViewport()
