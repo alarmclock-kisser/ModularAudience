@@ -96,5 +96,52 @@ namespace ModularAudience.Audio
 
             return clone;
         }
+
+        public async Task<float[]> GetMonoSamplesAsync(bool set = false)
+        {
+            return await Task.Run(() =>
+            {
+                // Validierung
+                if (this.Data == null || this.Data.Length == 0 || this.Channels <= 0)
+                {
+                    return Array.Empty<float>();
+                }
+
+                // Wenn bereits Mono, einfach zurückgeben
+                if (this.Channels == 1)
+                {
+                    return set ? this.Data : (float[]) this.Data.Clone();
+                }
+
+                // Berechnung der Anzahl der Samples pro Kanal
+                int monoSampleCount = this.Data.Length / this.Channels;
+                float[] monoData = new float[monoSampleCount];
+
+                // Konvertierung: Wir nehmen den Durchschnitt der Kanäle (Downmixing)
+                // Das ist klanglich neutraler als nur den ersten Kanal zu nehmen.
+                for (int i = 0; i < monoSampleCount; i++)
+                {
+                    float sum = 0;
+                    for (int ch = 0; ch < this.Channels; ch++)
+                    {
+                        // Index berechnen: (Sample-Index * Anzahl der Kanäle) + aktueller Kanal
+                        sum += this.Data[i * this.Channels + ch];
+                    }
+                    monoData[i] = sum / this.Channels;
+                }
+
+                // Wenn 'set' true ist, ersetzen wir das Original-Array (Memory Management)
+                if (set)
+                {
+                    this.Data = monoData;
+                    // Hinweis: Die Channels-Eigenschaft sollte im restlichen Code 
+                    // nach diesem Aufruf auf 1 gesetzt werden.
+                    // Falls du das nicht manuell machst, füge hier ein:
+                    // this.Channels = 1; 
+                }
+
+                return monoData;
+            });
+        }
     }
 }
