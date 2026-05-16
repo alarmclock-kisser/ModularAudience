@@ -47,6 +47,7 @@
             this.label_processingTime = new Label();
             this.checkBox_autoChunking = new CheckBox();
             this.checkBox_offload = new CheckBox();
+            this.checkBox_fixed = new CheckBox();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_initialBpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_targetBpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_stretchFactor).BeginInit();
@@ -249,11 +250,22 @@
             this.checkBox_offload.Text = "Offload";
             this.checkBox_offload.UseVisualStyleBackColor = true;
             // 
+            // checkBox_fixed
+            // 
+            this.checkBox_fixed.AutoSize = true;
+            this.checkBox_fixed.Location = new Point(12, 133);
+            this.checkBox_fixed.Name = "checkBox_fixed";
+            this.checkBox_fixed.Size = new Size(53, 19);
+            this.checkBox_fixed.TabIndex = 19;
+            this.checkBox_fixed.Text = "Fixed";
+            this.checkBox_fixed.UseVisualStyleBackColor = true;
+            // 
             // TimeStretchDialog
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(464, 201);
+            this.Controls.Add(this.checkBox_fixed);
             this.Controls.Add(this.checkBox_offload);
             this.Controls.Add(this.checkBox_autoChunking);
             this.Controls.Add(this.label_processingTime);
@@ -306,5 +318,6 @@
         private Label label_processingTime;
         private CheckBox checkBox_autoChunking;
         private CheckBox checkBox_offload;
+        private CheckBox checkBox_fixed;
     }
 }

@@ -205,7 +205,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     for (int i = 0; i < this.Tracks.Count(); i++)
                     {
                         this.Text = $"Time Stretch - {this.Tracks.Count()} Tracks (Processing {i + 1}/{this.Tracks.Count()})";
-                        this.numericUpDown_initialBpm.Value = this.Tracks.ElementAt(i).Bpm > 0 ? (decimal)this.Tracks.ElementAt(i).Bpm : this.Tracks.ElementAt(i).ScannedBpm > 30 ? (decimal)this.Tracks.ElementAt(i).ScannedBpm : (decimal)LastInitialBpm;
+                        this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked? this.numericUpDown_initialBpm.Value : this.Tracks.ElementAt(i).Bpm > 0 ? (decimal)this.Tracks.ElementAt(i).Bpm : this.Tracks.ElementAt(i).ScannedBpm > 30 ? (decimal)this.Tracks.ElementAt(i).ScannedBpm : (decimal)LastInitialBpm;
                         await TimeStretcher.TimeStretchAllThreadsAsync(
                                                 this.Tracks.ElementAt(i),
                                                 (int) this.numericUpDown_chunkSize.Value,
@@ -385,7 +385,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     index = 0;
                     foreach (var t in this.Tracks)
                     {
-                        this.numericUpDown_initialBpm.Value = t.Bpm > 0 ? (decimal)t.Bpm : t.ScannedBpm > 30 ? (decimal)t.ScannedBpm : (decimal)LastInitialBpm;
+                        this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked ? this.numericUpDown_initialBpm.Value : t.Bpm > 0 ? (decimal)t.Bpm : t.ScannedBpm > 30 ? (decimal)t.ScannedBpm : (decimal)LastInitialBpm;
 
                         // Process each track in-place with V2
                         await TimeStretcher_V2.Timestretch_V2Async(

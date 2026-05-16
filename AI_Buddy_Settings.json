@@ -1,12 +1,12 @@
 {
   "AIProvider": "QwenAI",
-  "AIPromptURL": "http://127.0.0.1:8080",
+  "AIPromptURL": "http://127.0.0.1:8080/v1/generate",
   "AIPromptKey": null,
   "PromptLLMName": "qwen-coder-3b-it",
   "IsPromptResponseStreaming": true,
   "CodingLanguage": "C#",
   "TestFramework": "MSTest",
-  "DateLastModified": "2026-05-16T07:06:53.0403411+02:00",
+  "DateLastModified": "2026-05-16T07:10:08.5033224+02:00",
   "LastPrompt": null,
   "SettingsFilename": "AI_Buddy_Settings.json"
 }
