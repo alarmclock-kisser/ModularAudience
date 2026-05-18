@@ -48,6 +48,7 @@
             this.checkBox_autoChunking = new CheckBox();
             this.checkBox_offload = new CheckBox();
             this.checkBox_fixed = new CheckBox();
+            this.checkBox_trim = new CheckBox();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_initialBpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_targetBpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_stretchFactor).BeginInit();
@@ -60,11 +61,11 @@
             // 
             this.numericUpDown_initialBpm.DecimalPlaces = 4;
             this.numericUpDown_initialBpm.Increment = new decimal(new int[] { 5, 0, 0, 65536 });
-            this.numericUpDown_initialBpm.Location = new Point(12, 104);
+            this.numericUpDown_initialBpm.Location = new Point(12, 112);
             this.numericUpDown_initialBpm.Maximum = new decimal(new int[] { 360, 0, 0, 0 });
             this.numericUpDown_initialBpm.Minimum = new decimal(new int[] { 30, 0, 0, 0 });
             this.numericUpDown_initialBpm.Name = "numericUpDown_initialBpm";
-            this.numericUpDown_initialBpm.Size = new Size(75, 23);
+            this.numericUpDown_initialBpm.Size = new Size(70, 23);
             this.numericUpDown_initialBpm.TabIndex = 0;
             this.numericUpDown_initialBpm.Value = new decimal(new int[] { 120, 0, 0, 0 });
             this.numericUpDown_initialBpm.ValueChanged += this.numericUpDown_initialBpm_ValueChanged;
@@ -72,7 +73,7 @@
             // label_info_initialBpm
             // 
             this.label_info_initialBpm.AutoSize = true;
-            this.label_info_initialBpm.Location = new Point(12, 86);
+            this.label_info_initialBpm.Location = new Point(12, 94);
             this.label_info_initialBpm.Name = "label_info_initialBpm";
             this.label_info_initialBpm.Size = new Size(64, 15);
             this.label_info_initialBpm.TabIndex = 1;
@@ -81,7 +82,7 @@
             // label_info_targetBpm
             // 
             this.label_info_targetBpm.AutoSize = true;
-            this.label_info_targetBpm.Location = new Point(93, 86);
+            this.label_info_targetBpm.Location = new Point(88, 94);
             this.label_info_targetBpm.Name = "label_info_targetBpm";
             this.label_info_targetBpm.Size = new Size(68, 15);
             this.label_info_targetBpm.TabIndex = 3;
@@ -91,11 +92,11 @@
             // 
             this.numericUpDown_targetBpm.DecimalPlaces = 4;
             this.numericUpDown_targetBpm.Increment = new decimal(new int[] { 5, 0, 0, 65536 });
-            this.numericUpDown_targetBpm.Location = new Point(93, 104);
+            this.numericUpDown_targetBpm.Location = new Point(88, 112);
             this.numericUpDown_targetBpm.Maximum = new decimal(new int[] { 360, 0, 0, 0 });
             this.numericUpDown_targetBpm.Minimum = new decimal(new int[] { 30, 0, 0, 0 });
             this.numericUpDown_targetBpm.Name = "numericUpDown_targetBpm";
-            this.numericUpDown_targetBpm.Size = new Size(75, 23);
+            this.numericUpDown_targetBpm.Size = new Size(70, 23);
             this.numericUpDown_targetBpm.TabIndex = 2;
             this.numericUpDown_targetBpm.Value = new decimal(new int[] { 150, 0, 0, 0 });
             this.numericUpDown_targetBpm.ValueChanged += this.numericUpDown_targetBpm_ValueChanged;
@@ -103,7 +104,7 @@
             // label_info_stretchFactor
             // 
             this.label_info_stretchFactor.AutoSize = true;
-            this.label_info_stretchFactor.Location = new Point(174, 86);
+            this.label_info_stretchFactor.Location = new Point(164, 93);
             this.label_info_stretchFactor.Name = "label_info_stretchFactor";
             this.label_info_stretchFactor.Size = new Size(80, 15);
             this.label_info_stretchFactor.TabIndex = 5;
@@ -113,11 +114,11 @@
             // 
             this.numericUpDown_stretchFactor.DecimalPlaces = 18;
             this.numericUpDown_stretchFactor.Increment = new decimal(new int[] { 1, 0, 0, 262144 });
-            this.numericUpDown_stretchFactor.Location = new Point(174, 104);
+            this.numericUpDown_stretchFactor.Location = new Point(164, 111);
             this.numericUpDown_stretchFactor.Maximum = new decimal(new int[] { 10, 0, 0, 0 });
             this.numericUpDown_stretchFactor.Minimum = new decimal(new int[] { 1, 0, 0, 131072 });
             this.numericUpDown_stretchFactor.Name = "numericUpDown_stretchFactor";
-            this.numericUpDown_stretchFactor.Size = new Size(150, 23);
+            this.numericUpDown_stretchFactor.Size = new Size(146, 23);
             this.numericUpDown_stretchFactor.TabIndex = 4;
             this.numericUpDown_stretchFactor.Value = new decimal(new int[] { 1, 0, 0, 0 });
             this.numericUpDown_stretchFactor.ValueChanged += this.numericUpDown_stretchFactor_ValueChanged;
@@ -146,7 +147,7 @@
             // label_info_chunkSize
             // 
             this.label_info_chunkSize.AutoSize = true;
-            this.label_info_chunkSize.Location = new Point(12, 33);
+            this.label_info_chunkSize.Location = new Point(11, 41);
             this.label_info_chunkSize.Name = "label_info_chunkSize";
             this.label_info_chunkSize.Size = new Size(65, 15);
             this.label_info_chunkSize.TabIndex = 9;
@@ -154,11 +155,11 @@
             // 
             // numericUpDown_chunkSize
             // 
-            this.numericUpDown_chunkSize.Location = new Point(12, 51);
+            this.numericUpDown_chunkSize.Location = new Point(12, 59);
             this.numericUpDown_chunkSize.Maximum = new decimal(new int[] { 65536, 0, 0, 0 });
             this.numericUpDown_chunkSize.Minimum = new decimal(new int[] { 128, 0, 0, 0 });
             this.numericUpDown_chunkSize.Name = "numericUpDown_chunkSize";
-            this.numericUpDown_chunkSize.Size = new Size(75, 23);
+            this.numericUpDown_chunkSize.Size = new Size(70, 23);
             this.numericUpDown_chunkSize.TabIndex = 8;
             this.numericUpDown_chunkSize.Value = new decimal(new int[] { 8192, 0, 0, 0 });
             this.numericUpDown_chunkSize.ValueChanged += this.numericUpDown_chunkSize_ValueChanged;
@@ -166,7 +167,7 @@
             // label_info_overlap
             // 
             this.label_info_overlap.AutoSize = true;
-            this.label_info_overlap.Location = new Point(93, 33);
+            this.label_info_overlap.Location = new Point(88, 41);
             this.label_info_overlap.Name = "label_info_overlap";
             this.label_info_overlap.Size = new Size(61, 15);
             this.label_info_overlap.TabIndex = 11;
@@ -176,10 +177,10 @@
             // 
             this.numericUpDown_overlap.DecimalPlaces = 4;
             this.numericUpDown_overlap.Increment = new decimal(new int[] { 5, 0, 0, 131072 });
-            this.numericUpDown_overlap.Location = new Point(93, 51);
+            this.numericUpDown_overlap.Location = new Point(88, 59);
             this.numericUpDown_overlap.Maximum = new decimal(new int[] { 90, 0, 0, 131072 });
             this.numericUpDown_overlap.Name = "numericUpDown_overlap";
-            this.numericUpDown_overlap.Size = new Size(75, 23);
+            this.numericUpDown_overlap.Size = new Size(70, 23);
             this.numericUpDown_overlap.TabIndex = 10;
             this.numericUpDown_overlap.Value = new decimal(new int[] { 5, 0, 0, 65536 });
             // 
@@ -232,7 +233,7 @@
             // checkBox_autoChunking
             // 
             this.checkBox_autoChunking.AutoSize = true;
-            this.checkBox_autoChunking.Location = new Point(174, 52);
+            this.checkBox_autoChunking.Location = new Point(164, 60);
             this.checkBox_autoChunking.Name = "checkBox_autoChunking";
             this.checkBox_autoChunking.Size = new Size(52, 19);
             this.checkBox_autoChunking.TabIndex = 17;
@@ -253,18 +254,29 @@
             // checkBox_fixed
             // 
             this.checkBox_fixed.AutoSize = true;
-            this.checkBox_fixed.Location = new Point(12, 133);
+            this.checkBox_fixed.Location = new Point(12, 141);
             this.checkBox_fixed.Name = "checkBox_fixed";
             this.checkBox_fixed.Size = new Size(53, 19);
             this.checkBox_fixed.TabIndex = 19;
             this.checkBox_fixed.Text = "Fixed";
             this.checkBox_fixed.UseVisualStyleBackColor = true;
             // 
+            // checkBox_trim
+            // 
+            this.checkBox_trim.AutoSize = true;
+            this.checkBox_trim.Location = new Point(377, 56);
+            this.checkBox_trim.Name = "checkBox_trim";
+            this.checkBox_trim.Size = new Size(90, 19);
+            this.checkBox_trim.TabIndex = 20;
+            this.checkBox_trim.Text = "Trim Silence";
+            this.checkBox_trim.UseVisualStyleBackColor = true;
+            // 
             // TimeStretchDialog
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(464, 201);
+            this.Controls.Add(this.checkBox_trim);
             this.Controls.Add(this.checkBox_fixed);
             this.Controls.Add(this.checkBox_offload);
             this.Controls.Add(this.checkBox_autoChunking);
@@ -319,5 +331,6 @@
         private CheckBox checkBox_autoChunking;
         private CheckBox checkBox_offload;
         private CheckBox checkBox_fixed;
+        private CheckBox checkBox_trim;
     }
 }

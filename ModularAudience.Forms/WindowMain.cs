@@ -55,11 +55,11 @@ namespace ModularAudience.Forms
 
 
         // Map AudioObj.Id -> Collection number (01-based) to restore distribution
-        private static readonly Dictionary<Guid, int> AudioCollectionTags = [];
-        private static readonly HashSet<string> AllowedImportExtensions = new(StringComparer.OrdinalIgnoreCase) { ".wav", ".mp3", ".flac" };
+        internal static readonly Dictionary<Guid, int> AudioCollectionTags = [];
+        internal static readonly HashSet<string> AllowedImportExtensions = new(StringComparer.OrdinalIgnoreCase) { ".wav", ".mp3", ".flac" };
         private static readonly Random ResourceRandom = new();
         private static readonly Size CollectionCascadeOffset = new(26, 28);
-        private const int CollectionBaseMargin = 5;
+        private const int CollectionBaseMargin = 2;
         private static readonly Padding TrackViewScreenMargin = new(20, 20, 20, 20);
         private static readonly Size TrackViewSpacing = new(15, 12);
         private bool suppressExportFormatEvent;
@@ -330,6 +330,11 @@ namespace ModularAudience.Forms
         private void checkBox_oneBag_CheckedChanged(object sender, EventArgs e)
         {
             this.button_newBag.Enabled = !this.checkBox_oneBag.Checked;
+
+            if (this.checkBox_oneBag.Checked)
+            {
+                this.MergeCollectionsToSingle();
+            }
         }
 
         private void button_bringAllToFront_Click(object sender, EventArgs e)

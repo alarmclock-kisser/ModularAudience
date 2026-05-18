@@ -27,6 +27,11 @@ namespace ModularAudience.Audio
             return AudioAmplitudeProcessor.NormalizeAsync(this, maxAmplitude, maxWorkers);
         }
 
+        public Task<float> GetPeakAmplitudeAsync(int maxWorkers = 4)
+        {
+            return AudioAmplitudeProcessor.GetPeakAmplitudeAsync(this, maxWorkers);
+        }
+
         public Task<(long StartIndex, long EndIndex)> TrimSilenceAsync(float? threshold = null, int maxWorkers = 4)
         {
             return AudioSilenceProcessor.TrimSilenceAsync(this, threshold, maxWorkers);

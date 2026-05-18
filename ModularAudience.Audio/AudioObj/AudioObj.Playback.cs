@@ -18,13 +18,11 @@ namespace ModularAudience.Audio
             {
                 if (this.PlayerPlaying)
                 {
-                    long gp = 0;
-                    try { gp = this.playback.GetPositionBytes(); }
-                    catch { gp = 0; }
-
-                    long delta = gp - this.positionOriginBytes;
-                    if (delta < 0) { delta = 0; }
-                    long absolute = this.SkippedPositionBytes + delta;
+                    int channels = Math.Max(1, this.Channels);
+                    long absoluteSamples;
+                    try { absoluteSamples = this.playback.GetSourceSamplePosition(); }
+                    catch { absoluteSamples = this.SkippedPositionBytes / sizeof(float); }
+                    long absolute = Math.Max(0, absoluteSamples / channels) * channels * sizeof(float);
 
                     if (this.playbackLoopApplied && this.playbackLoopLengthBytes > 0)
                     {
@@ -64,6 +62,7 @@ namespace ModularAudience.Audio
 
         public TimeSpan CurrentTime => TimeSpan.FromSeconds((double) this.Position / Math.Max(1, this.SampleRate));
         public double SizeInKb => this.Data.Length * sizeof(float) / 1024.0;
+        public long CurrentPlaybackSamples => this.CurrentPlaybackPositionBytes / sizeof(float);
 
         public async Task PlayAsync(CancellationToken cancellationToken, Action? onPlaybackStopped = null, float? initialVolume = null, int desiredLatency = 50)
         {
@@ -339,6 +338,12 @@ namespace ModularAudience.Audio
             }
         }
 
+        public async Task ApplyCombinedSampleRateAsync()
+        {
+            float combinedFactor = (float) Math.Clamp(this.ManualSampleRateFactor * this.SyncNudgeSampleRateFactor, 0.5, 2.0);
+            await this.AdjustSampleRate(combinedFactor).ConfigureAwait(false);
+        }
+
         public void JumpToSamples(long startSampleIndex)
         {
             int ch = Math.Max(1, this.Channels);
@@ -369,6 +374,20 @@ namespace ModularAudience.Audio
                 long frames = startSampleIndex / ch;
                 this.SetPosition(frames);
             }
+        }
+
+        public void SwapPlaybackData(float[] data, int sampleRate, int channels, long startSampleIndex)
+        {
+            int ch = Math.Max(1, channels);
+            long clampedSampleIndex = Math.Clamp(startSampleIndex, 0, Math.Max(0, data.LongLength - ch));
+            this.playback.SwapRawData(data, sampleRate, channels, clampedSampleIndex);
+
+            int bytesPerFrame = ch * sizeof(float);
+            long startFrames = clampedSampleIndex / ch;
+            this.SkippedPositionBytes = startFrames * bytesPerFrame;
+
+            try { this.positionOriginBytes = this.playback.GetPositionBytes(); }
+            catch { this.positionOriginBytes = 0; }
         }
     }
 }

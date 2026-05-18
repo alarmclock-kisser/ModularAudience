@@ -206,6 +206,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     {
                         this.Text = $"Time Stretch - {this.Tracks.Count()} Tracks (Processing {i + 1}/{this.Tracks.Count()})";
                         this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked? this.numericUpDown_initialBpm.Value : this.Tracks.ElementAt(i).Bpm > 0 ? (decimal)this.Tracks.ElementAt(i).Bpm : this.Tracks.ElementAt(i).ScannedBpm > 30 ? (decimal)this.Tracks.ElementAt(i).ScannedBpm : (decimal)LastInitialBpm;
+                        float originalPeak = await this.Tracks.ElementAt(i).GetPeakAmplitudeAsync((int) this.numericUpDown_threads.Value);
                         await TimeStretcher.TimeStretchAllThreadsAsync(
                                                 this.Tracks.ElementAt(i),
                                                 (int) this.numericUpDown_chunkSize.Value,
@@ -216,6 +217,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
                                                 maxWorkers: (int) this.numericUpDown_threads.Value,
                                                 progress: progress,
                                                 offload: this.checkBox_offload.Checked);
+
+                        if (this.checkBox_trim.Checked)
+                        {
+                            // Trim silence after stretching
+                            await this.Tracks.ElementAt(i).TrimSilenceAsync(null, (int) this.numericUpDown_threads.Value);
+                        }
+
+                        if (originalPeak > 0f)
+                        {
+                            await this.Tracks.ElementAt(i).NormalizeAsync(originalPeak, (int) this.numericUpDown_threads.Value);
+                        }
                     }
                     this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
                     closeAfterSuccess = true;
@@ -230,19 +242,34 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         throw new InvalidOperationException("Kein TrackView zum Anwenden des Time-Stretch gefunden.");
                     }
 
+                    bool resumePlaybackAfterReplace = this.trackView.OriginalAudio.PlayerPlaying;
+                    float originalPeak = await this.Tracks.First().GetPeakAmplitudeAsync((int) this.numericUpDown_threads.Value);
+
                     var result = await TimeStretcher.TimeStretchAllThreadsAsync(
                                             this.Tracks.First(),
                                             (int) this.numericUpDown_chunkSize.Value,
                                             (float) this.numericUpDown_overlap.Value,
 										    (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
 											keepData: false,
-                                            normalize: 1.0f,
+                                            normalize: 0.0f,
                                             maxWorkers: (int) this.numericUpDown_threads.Value,
                                             progress: progress,
                                             offload: this.checkBox_offload.Checked);
 
+                    if (this.checkBox_trim.Checked)
+                    {
+                        // Trim silence after stretching
+                        await result.TrimSilenceAsync(null, (int) this.numericUpDown_threads.Value);
+                    }
+
+                    if (originalPeak > 0f)
+                    {
+                        await result.NormalizeAsync(originalPeak, (int) this.numericUpDown_threads.Value);
+                    }
+
                     await this.trackView.OriginalAudio.CreateUndoStepAsync();
-                    await this.trackView.ApplyStretchedAudioAsync(result);
+                    double stretchFactor = (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value;
+                    await this.trackView.ApplyStretchedAudioAsync(result, stretchFactor, resumePlaybackAfterReplace);
                     this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
                     closeAfterSuccess = true;
                     this.SetProcessingState(false);
@@ -411,6 +438,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     // Single track: process, then apply to TrackView
                     var track = this.Tracks.First();
+                    bool resumePlaybackAfterReplace = this.trackView.OriginalAudio.PlayerPlaying;
+                    float originalPeak = await track.GetPeakAmplitudeAsync((int) this.numericUpDown_threads.Value);
 
                     await TimeStretcher_V2.Timestretch_V2Async(
                         track,
@@ -420,7 +449,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         perTrackProgress,
                         this.ProcessingCancellationSource.Token);
 
-                    await this.trackView.ApplyStretchedAudioAsync(track);
+                    if (originalPeak > 0f)
+                    {
+                        await track.NormalizeAsync(originalPeak, (int) this.numericUpDown_threads.Value);
+                    }
+
+                    double stretchFactor = (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value;
+                    await this.trackView.ApplyStretchedAudioAsync(track, stretchFactor, resumePlaybackAfterReplace);
                     this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
                     closeAfterSuccess = true;
                     this.SetProcessingState(false);

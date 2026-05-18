@@ -87,6 +87,7 @@ namespace ModularAudience.Forms
 
             this.listBox_audios.SelectedIndex = -1;
             this.listBox_audios.AllowDrop = true;
+            this.AllowDrop = true;
             this.listBox_audios.DrawMode = DrawMode.OwnerDrawFixed;
             this.listBox_audios.MouseDown += this.listBox_audios_MouseDown;
             this.listBox_audios.MouseMove += this.listBox_audios_MouseMove_DragStart;
@@ -104,6 +105,10 @@ namespace ModularAudience.Forms
             this.listBox_audios.DragOver += this.listBox_audios_DragOver;
             this.listBox_audios.DragDrop += this.listBox_audios_DragDrop;
             this.listBox_audios.DragLeave += this.listBox_audios_DragLeave;
+            this.DragEnter += this.listBox_audios_DragEnter;
+            this.DragOver += this.listBox_audios_DragOver;
+            this.DragDrop += this.listBox_audios_DragDrop;
+            this.DragLeave += this.listBox_audios_DragLeave;
 
             this.FormClosing += async (s, e) =>
             {
@@ -271,6 +276,20 @@ namespace ModularAudience.Forms
                 return;
             }
 
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                var items = e.Data.GetData(DataFormats.FileDrop) as string[] ?? Array.Empty<string>();
+                if (items.Any(p => !string.IsNullOrWhiteSpace(p) &&
+                    (Directory.Exists(p) || WindowMain.AllowedImportExtensions.Contains(Path.GetExtension(p)))))
+                {
+                    e.Effect = DragDropEffects.Copy;
+                    return;
+                }
+
+                e.Effect = DragDropEffects.None;
+                return;
+            }
+
             bool hasAudio = e.Data.GetDataPresent(typeof(AudioObj[])) || e.Data.GetDataPresent(typeof(IEnumerable<AudioObj>));
             if (!hasAudio)
             {
@@ -353,6 +372,14 @@ namespace ModularAudience.Forms
                 return;
             }
 
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                this.HandleFileDrop(e);
+                this._dragInsertIndex = -1;
+                this.listBox_audios.Invalidate();
+                return;
+            }
+
             List<AudioObj> dragged = new();
             if (e.Data.GetDataPresent(typeof(AudioObj[])))
             {
@@ -413,7 +440,7 @@ namespace ModularAudience.Forms
                     }
                     if (dropIndex > currentIndex)
                     {
-                        dropIndex--; // account for remove shifting
+                        dropIndex--;
                     }
                     this.AudioC.Audios.RemoveAt(currentIndex);
                     dropIndex = Math.Clamp(dropIndex, 0, this.AudioC.Audios.Count);
@@ -423,26 +450,23 @@ namespace ModularAudience.Forms
             }
             else
             {
-                // Inter-collection: move or copy
                 foreach (var audio in dragged)
                 {
                     if (move && srcCollection != null)
                     {
-                        // remove from source
                         try
                         {
                             srcCollection.Audios.Remove(audio);
                         }
                         catch { }
                     }
-                    // insert into target at dropIndex
+
                     dropIndex = Math.Clamp(dropIndex, 0, this.AudioC.Audios.Count);
                     this.AudioC.Audios.Insert(dropIndex, audio);
                     dropIndex++;
                 }
             }
 
-            // Refresh bindings
             try
             {
                 this.listBox_audios.DataSource = null;
@@ -454,6 +478,66 @@ namespace ModularAudience.Forms
             {
                 this._dragInsertIndex = -1;
                 this.listBox_audios.Invalidate();
+            }
+        }
+
+        private async void HandleFileDrop(DragEventArgs e)
+        {
+            if (e.Data?.GetData(DataFormats.FileDrop) is not string[] dropped)
+            {
+                return;
+            }
+
+            var collectedPaths = new List<string>();
+            foreach (var path in dropped.Where(p => !string.IsNullOrWhiteSpace(p)))
+            {
+                try
+                {
+                    if (Directory.Exists(path))
+                    {
+                        var found = Directory.EnumerateFiles(path, "*.*", SearchOption.AllDirectories)
+                            .Where(f => WindowMain.AllowedImportExtensions.Contains(Path.GetExtension(f)));
+                        collectedPaths.AddRange(found);
+                    }
+                    else if (File.Exists(path) && WindowMain.AllowedImportExtensions.Contains(Path.GetExtension(path)))
+                    {
+                        collectedPaths.Add(path);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log($"DragDrop ACV: error scanning '{path}': {ex.Message}");
+                }
+            }
+
+            var validPaths = collectedPaths.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (validPaths.Count == 0)
+            {
+                LogCollection.Log("DragDrop ACV: No allowed audio files found in drop.");
+                return;
+            }
+
+            try
+            {
+                if (WindowMain.Instance == null || WindowMain.Instance.IsDisposed)
+                {
+                    return;
+                }
+
+                var loaded = await WindowMain.Instance.AudioC.LoadManyAsync(validPaths);
+                var importedAudios = loaded.Where(a => a != null).Cast<AudioObj>().ToList();
+                int collectionNumber = WindowMain.GetCollectionNumber(this);
+                foreach (var audio in importedAudios)
+                {
+                    this.AudioC.Audios.Add(audio);
+                    WindowMain.AudioCollectionTags[audio.Id] = collectionNumber;
+                    WindowMain.Instance.AudioC.Audios.Remove(audio);
+                    LogCollection.Log($"{audio.Name} imported into {this.Text}.");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"DragDrop ACV import failed: {ex.Message}");
             }
         }
 

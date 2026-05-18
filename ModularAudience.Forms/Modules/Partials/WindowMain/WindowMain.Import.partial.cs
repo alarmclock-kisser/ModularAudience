@@ -191,10 +191,11 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            var loaded = await this.AudioC.LoadManyAsync(validPaths);
+            var loaded = (await this.AudioC.LoadManyAsync(validPaths)).ToList();
             var pairs = validPaths
-                .Select((p, i) => new { Path = Path.GetFullPath(p), Audio = i < loaded.Count() ? loaded.ElementAt(i) : null })
+                .Select((p, i) => (Path: Path.GetFullPath(p), Audio: i < loaded.Count ? loaded[i] : null))
                 .Where(x => x.Audio != null)
+                .Select(x => (x.Path, Audio: x.Audio!))
                 .ToList();
 
             var importedAudios = pairs.Select(x => x.Audio!).ToList();
@@ -208,18 +209,38 @@ namespace ModularAudience.Forms
                 LogCollection.Log(fromResources ? $"{audio.Name} imported from resources." : $"{audio.Name} imported.");
             }
 
+            this.PlaceImportedAudios(pairs, importedAudios);
+
+            foreach (var audio in importedAudios)
+            {
+                this.AudioC.Audios.Remove(audio);
+            }
+        }
+
+        internal void PlaceImportedAudios(List<(string Path, AudioObj Audio)> importedPairs, List<AudioObj> importedAudios)
+        {
             WindowMainStaticHelpers.InvokeIfRequired(Instance, () =>
             {
                 bool prevSuppress = SuppressCollectionViewPositioning;
                 SuppressCollectionViewPositioning = true;
                 try
                 {
+                    var pairs = importedPairs;
                     if (this.AllInOneBag)
                     {
+                        var targetView = CollectionViews.LastOrDefault(cv => cv != null && !cv.IsDisposed);
+                        if (targetView == null)
+                        {
+                            targetView = new AudioCollectionView([]);
+                        }
+
+                        int num = GetCollectionNumber(targetView);
                         foreach (var audio in importedAudios)
                         {
-                            CollectionViews.LastOrDefault()?.AudioC.Audios.Add(audio);
+                            targetView.AudioC.Audios.Add(audio);
+                            AudioCollectionTags[audio.Id] = num;
                         }
+                        targetView.Show();
                     }
 
                     else if (this.StructuredImports)
@@ -227,7 +248,7 @@ namespace ModularAudience.Forms
                         var groups = pairs.GroupBy(x => Path.GetDirectoryName(x.Path) ?? string.Empty);
                         foreach (var g in groups)
                         {
-                            var audios = g.Select(x => x.Audio!).ToList();
+                            var audios = g.Select(x => x.Audio).ToList();
                             if (audios.Count == 0)
                             {
                                 continue;
@@ -252,7 +273,7 @@ namespace ModularAudience.Forms
                     }
                     else
                     {
-                        var audioList = pairs.Select(x => x.Audio!).ToList();
+                        var audioList = pairs.Select(x => x.Audio).ToList();
                         var last = CollectionViews.LastOrDefault();
                         if (last == null)
                         {

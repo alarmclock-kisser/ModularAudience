@@ -180,13 +180,12 @@ namespace ModularAudience.Audio.Processors_V3
 
 		private static async Task ApplyRateAsync(AudioObj track, float rate)
 		{
-			// Avoid flooding AdjustSampleRate; only adjust if significantly different
-			if (Math.Abs(track.SampleRateFactor - rate) < 0.0005f)
+			if (Math.Abs(track.SyncNudgeSampleRateFactor - rate) < 0.0005f)
 			{
 				return;
 			}
-			track.SampleRateFactor = rate;
-			await track.AdjustSampleRate(rate).ConfigureAwait(false);
+			track.SyncNudgeSampleRateFactor = rate;
+			await track.ApplyCombinedSampleRateAsync().ConfigureAwait(false);
 		}
 
 		private async Task SmoothResetRatesAsync()
@@ -199,9 +198,9 @@ namespace ModularAudience.Audio.Processors_V3
 				float blend = i / (float) steps;
 				foreach (var t in playable)
 				{
-					float rate = (float) (t.SampleRateFactor + (1.0 - t.SampleRateFactor) * blend);
-					t.SampleRateFactor = rate;
-					try { await t.AdjustSampleRate(rate).ConfigureAwait(false); } catch { }
+					float rate = (float) (t.SyncNudgeSampleRateFactor + (1.0 - t.SyncNudgeSampleRateFactor) * blend);
+					t.SyncNudgeSampleRateFactor = rate;
+					try { await t.ApplyCombinedSampleRateAsync().ConfigureAwait(false); } catch { }
 				}
 				await Task.Delay(stepDelayMs).ConfigureAwait(false);
 			}

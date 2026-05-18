@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static ModularAudience.Audio.SwitchingSampleProvider;
 
 namespace ModularAudience.Audio
 {
@@ -57,6 +58,25 @@ namespace ModularAudience.Audio
             lock (this.gate) { p = this.current; }
             if (p == null) { Array.Clear(buffer, offset, count); return count; }
             return p.Read(buffer, offset, count);
+        }
+    }
+
+    internal sealed class RateAdjustedSampleProvider : ISampleProvider
+    {
+        private readonly ISampleProvider source;
+
+        public RateAdjustedSampleProvider(ISampleProvider source, double rate)
+        {
+            this.source = source ?? throw new ArgumentNullException(nameof(source));
+            int adjustedRate = Math.Max(8000, (int) Math.Round(this.source.WaveFormat.SampleRate * Math.Clamp(rate, 0.5, 2.0)));
+            this.WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(adjustedRate, this.source.WaveFormat.Channels);
+        }
+
+        public WaveFormat WaveFormat { get; }
+
+        public int Read(float[] buffer, int offset, int count)
+        {
+            return this.source.Read(buffer, offset, count);
         }
     }
 
@@ -163,6 +183,8 @@ namespace ModularAudience.Audio
         private float[]? rawData; // store original data for seeking while paused
         private int rawSampleRate;
         private int rawChannels;
+        private long positionOriginOutputSamples;
+        private double positionOriginSourceSamples;
 
         // Loop config (array-based playback)
         private bool loopEnabled;
@@ -315,6 +337,7 @@ namespace ModularAudience.Audio
 
             // Start (nicht blocking)
             await Task.Run(() => this.player.Play());
+            this.SetPositionMapping(0);
         }
 
         public async Task InitializePlayback(float[] data, int sampleRate, int channels, long startSampleIndex = 0, int? deviceSampleRate = null, int desiredLatency = 50, float initialVolume = 1.0f)
@@ -351,6 +374,7 @@ namespace ModularAudience.Audio
             this.player.Init(this.waveProvider);
 
             await Task.Run(() => this.player.Play());
+            this.SetPositionMapping(Math.Clamp(startSampleIndex, 0, data.LongLength));
         }
 
         private ISampleProvider CreateArraySource(long startSampleIndex)
@@ -380,28 +404,38 @@ namespace ModularAudience.Audio
                 return;
             }
 
+            factor = Math.Clamp(factor, 0.5f, 2.0f);
+            long currentOutputSamples = this.GetPlayerOutputSampleCount();
+            long currentSourceSamples = this.GetCurrentSourceSampleIndex(currentOutputSamples);
             this.PlaybackRate = factor;
 
-            // Neue Pipeline auf Basis derselben Quelle aufbauen und atomar umschalten
-            ISampleProvider? currentSource;
-            lock (this.graphGate)
+            ISampleProvider? newPipeline;
+            if (this.rawData != null)
             {
-                currentSource = this.pipeline; // aktuelle Pipeline-Quelle ist die erste Stufe der Kette
+                currentSourceSamples = this.ClampSourceSampleIndex(currentSourceSamples);
+                ISampleProvider baseSource = this.CreateArraySource(currentSourceSamples);
+                newPipeline = BuildPipeline(baseSource, this.PlaybackRate, this.switching.WaveFormat);
             }
-            if (currentSource == null)
+            else
             {
-                return;
+                ISampleProvider? baseSource;
+                lock (this.graphGate)
+                {
+                    baseSource = this.reader ?? this.pipeline;
+                }
+                if (baseSource == null)
+                {
+                    return;
+                }
+                newPipeline = BuildPipeline(baseSource, this.PlaybackRate, this.switching.WaveFormat);
             }
 
-            // currentSource ist bereits das Ergebnis vorheriger Resampler.
-            // Baue die Pipeline neu basierend auf der ursprünglichen Quelle, wenn möglich.
-            ISampleProvider baseSource = this.reader ?? currentSource;
-            var newPipeline = BuildPipeline(baseSource, this.PlaybackRate, this.switching.WaveFormat);
             lock (this.graphGate)
             {
                 this.pipeline = newPipeline;
                 this.switching.SetCurrent(this.pipeline);
             }
+            this.SetPositionMapping(currentSourceSamples, currentOutputSamples);
 
             await Task.CompletedTask; // API bleibt async
         }
@@ -430,20 +464,15 @@ namespace ModularAudience.Audio
                 this.pipeline = newPipeline;
                 this.switching.SetCurrent(this.pipeline);
             }
+            this.SetPositionMapping(startSampleIndex);
         }
 
-        // Graph aufbauen: Quelle -> (Resample auf R*f) -> (Resample auf DeviceRate) -> konstant D
+        // Graph aufbauen: Quelle -> virtuelle Samplerate R*f -> Resample auf DeviceRate
         private static ISampleProvider BuildPipeline(ISampleProvider source, double rate, WaveFormat deviceFormat)
         {
-            //1) Quelle ggf. auf "virtuelle" Abtastrate R * rate bringen (erzeugt Varispeed-Effekt)
-            int sourceRate = source.WaveFormat.SampleRate;
             int channels = source.WaveFormat.Channels;
-
-            // WdlResamplingSampleProvider erzeugt einen Provider mit neuem WaveFormat (SampleRate)
-            var spedUp = new WdlResamplingSampleProvider(source, Math.Max(8000, (int) Math.Round(sourceRate * rate)));
-
-            //2) Auf die konstante Device-Rate zurück resamplen
-            var toDevice = new WdlResamplingSampleProvider(spedUp, deviceFormat.SampleRate);
+            var rateAdjusted = new RateAdjustedSampleProvider(source, rate);
+            var toDevice = new WdlResamplingSampleProvider(rateAdjusted, deviceFormat.SampleRate);
 
             // Sicherheitscheck: Kanäle konsistent halten
             if (toDevice.WaveFormat.Channels != deviceFormat.Channels)
@@ -451,7 +480,7 @@ namespace ModularAudience.Audio
                 if (deviceFormat.Channels == 1 && channels > 1)
                 {
                     toDevice = new WdlResamplingSampleProvider(
-                        new StereoToMonoSampleProvider(spedUp) { LeftVolume = 0.5f, RightVolume = 0.5f },
+                        new StereoToMonoSampleProvider(rateAdjusted) { LeftVolume = 0.5f, RightVolume = 0.5f },
                         deviceFormat.SampleRate);
                 }
                 // sonst: beibehalten, typ. wandelt das Ausgabegerät im Shared-Mode
@@ -486,6 +515,34 @@ namespace ModularAudience.Audio
             try { return this.player.GetPosition(); } catch { return 0; }
         }
 
+        public long GetSourceSamplePosition()
+        {
+            return this.GetCurrentSourceSampleIndex();
+        }
+
+        public void SwapRawData(float[] data, int sampleRate, int channels, long startSampleIndex)
+        {
+            if (data == null || data.Length == 0 || this.switching == null)
+            {
+                return;
+            }
+
+            this.rawData = data;
+            this.rawSampleRate = sampleRate;
+            this.rawChannels = channels;
+            this.Channels = channels;
+
+            startSampleIndex = Math.Clamp(startSampleIndex, 0, data.LongLength);
+            ISampleProvider source = this.CreateArraySource(startSampleIndex);
+            var newPipeline = BuildPipeline(source, this.PlaybackRate, this.switching.WaveFormat);
+            lock (this.graphGate)
+            {
+                this.pipeline = newPipeline;
+                this.switching.SetCurrent(this.pipeline);
+            }
+            this.SetPositionMapping(startSampleIndex);
+        }
+
         public void SetVolume(float volume)
         {
             if (this.volumeControl != null)
@@ -511,6 +568,8 @@ namespace ModularAudience.Audio
             this.rawData = null;
             this.rawSampleRate = 0;
             this.rawChannels = 0;
+            this.positionOriginOutputSamples = 0;
+            this.positionOriginSourceSamples = 0;
             // keep loop configuration; caller decides whether to clear
         }
 
@@ -521,13 +580,8 @@ namespace ModularAudience.Audio
             {
                 return;
             }
-            // Current absolute sample index based on bytes
-            long currentBytes = 0;
-            try { currentBytes = this.player.GetPosition(); } catch { currentBytes = 0; }
-            int ch = Math.Max(1, this.rawChannels);
-            long currentSamples = currentBytes / sizeof(float); // bytes from WaveOutEvent.GetPosition are device bytes; we treat as floats for simplicity
-            // If loop enabled clamp; if outside and adjustPosition jump to loop start
-            long startSampleIndex = currentSamples;
+            long currentOutputSamples = this.GetPlayerOutputSampleCount();
+            long startSampleIndex = this.GetCurrentSourceSampleIndex(currentOutputSamples);
             if (this.loopEnabled)
             {
                 long ls = Math.Clamp(this.loopStartSamples, 0, this.rawData.LongLength - 1);
@@ -551,6 +605,65 @@ namespace ModularAudience.Audio
                 this.pipeline = newPipeline;
                 this.switching.SetCurrent(this.pipeline);
             }
+            this.SetPositionMapping(startSampleIndex, currentOutputSamples);
+        }
+
+        private long GetPlayerOutputSampleCount()
+        {
+            try { return Math.Max(0, this.player.GetPosition() / sizeof(float)); }
+            catch { return Math.Max(0, this.positionOriginOutputSamples); }
+        }
+
+        private long GetCurrentSourceSampleIndex(long? outputSampleCount = null)
+        {
+            if (this.rawData == null)
+            {
+                return 0;
+            }
+
+            long currentOutputSamples = outputSampleCount ?? this.GetPlayerOutputSampleCount();
+            long deltaOutputSamples = Math.Max(0, currentOutputSamples - this.positionOriginOutputSamples);
+            double sourcePosition = this.positionOriginSourceSamples + (deltaOutputSamples * this.PlaybackRate);
+
+            if (this.loopEnabled)
+            {
+                long ls = Math.Clamp(this.loopStartSamples, 0, this.rawData.LongLength - 1);
+                long le = Math.Clamp(this.loopEndSamples, ls + 1, this.rawData.LongLength);
+                long loopLen = Math.Max(1, le - ls);
+                if (sourcePosition < ls)
+                {
+                    sourcePosition = ls;
+                }
+                else
+                {
+                    sourcePosition = ls + ((sourcePosition - ls) % loopLen);
+                }
+            }
+
+            return this.ClampSourceSampleIndex((long) Math.Floor(sourcePosition));
+        }
+
+        private long ClampSourceSampleIndex(long sourceSampleIndex)
+        {
+            if (this.rawData == null)
+            {
+                return Math.Max(0, sourceSampleIndex);
+            }
+
+            if (this.loopEnabled)
+            {
+                long ls = Math.Clamp(this.loopStartSamples, 0, this.rawData.LongLength - 1);
+                long le = Math.Clamp(this.loopEndSamples, ls + 1, this.rawData.LongLength);
+                return Math.Clamp(sourceSampleIndex, ls, le - 1);
+            }
+
+            return Math.Clamp(sourceSampleIndex, 0, this.rawData.LongLength);
+        }
+
+        private void SetPositionMapping(long sourceSampleIndex, long? outputSampleCount = null)
+        {
+            this.positionOriginSourceSamples = Math.Max(0, sourceSampleIndex);
+            this.positionOriginOutputSamples = outputSampleCount ?? this.GetPlayerOutputSampleCount();
         }
 
         public void Dispose()

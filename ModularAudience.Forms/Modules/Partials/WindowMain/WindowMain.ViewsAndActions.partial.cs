@@ -20,6 +20,9 @@ namespace ModularAudience.Forms
             {
                 this.ReflowTrackViews();
             }
+
+            this.RefreshTrackAudibility();
+            this.UpdateTrackDependentUI();
         }
 
         private void ReflowTrackViews()
@@ -319,6 +322,14 @@ namespace ModularAudience.Forms
                 this.textBox_scanBpmResult.Text = "";
                 this.textBox_scanTimingResult.Text = "";
                 this.textBox_scanKeyResult.Text = "";
+            }
+        }
+
+        internal void RefreshTrackAudibility()
+        {
+            foreach (var trackView in TrackViews.Where(tv => tv != null && !tv.IsDisposed))
+            {
+                trackView.ApplyAudibilityState();
             }
         }
 

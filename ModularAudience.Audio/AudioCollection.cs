@@ -305,12 +305,12 @@ namespace ModularAudience.Audio
         // Export
         public async Task<string?> ExportAsync(Guid id, string format = ".wav", int bits = 24)
         {
-            format = AudioExporter.AvailableExportFormats.ContainsKey(format) ? format : ".wav";
+            format = AudioExporter.IsMp3Format(format) ? ".mp3" : ".wav";
             bits = AudioExporter.AvailableExportFormats[format].Contains(bits) ? bits : AudioExporter.AvailableExportFormats[format].Last();
             var audio = this[id];
             if (audio != null)
             {
-                return format == ".mp3"
+                return AudioExporter.IsMp3Format(format)
                     ? await this.Exporter.ExportMp3Async(audio, bits)
                     : await this.Exporter.ExportWavAsync(audio, bits);
             }
@@ -319,7 +319,7 @@ namespace ModularAudience.Audio
 
         public async Task<IEnumerable<string>> ExportManyAsync(IEnumerable<Guid> ids, string format = ".wav", int bits = 24)
         {
-            format = AudioExporter.AvailableExportFormats.ContainsKey(format) ? format : ".wav";
+            format = AudioExporter.IsMp3Format(format) ? ".mp3" : ".wav";
             bits = AudioExporter.AvailableExportFormats[format].Contains(bits) ? bits : AudioExporter.AvailableExportFormats[format].Last();
 
             var tasks = ids.Select(id =>
@@ -327,7 +327,7 @@ namespace ModularAudience.Audio
                 var audio = this[id];
                 if (audio != null)
                 {
-                    return format == ".mp3"
+                    return AudioExporter.IsMp3Format(format)
                         ? this.Exporter.ExportMp3Async(audio, bits)
                         : this.Exporter.ExportWavAsync(audio, bits);
                 }

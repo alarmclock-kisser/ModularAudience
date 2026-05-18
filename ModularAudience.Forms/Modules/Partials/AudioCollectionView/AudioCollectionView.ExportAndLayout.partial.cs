@@ -54,7 +54,7 @@ namespace ModularAudience.Forms
                     }
 
                     Directory.CreateDirectory(directory);
-                    if (WindowMain.GlobalExportFormat.Equals("mp3", StringComparison.OrdinalIgnoreCase))
+                    if (WindowMain.GlobalExportFormat.Contains("3", StringComparison.OrdinalIgnoreCase))
                     {
                         await this.AudioC.Exporter.ExportMp3Async(audio, WindowMain.GlobalExportBits, Environment.ProcessorCount / 2, finalFile);
                     }
@@ -99,7 +99,7 @@ namespace ModularAudience.Forms
                     }
 
                     Directory.CreateDirectory(directory);
-                    if (WindowMain.GlobalExportFormat.Equals("mp3", StringComparison.OrdinalIgnoreCase))
+                    if (AudioExporter.IsMp3Format(WindowMain.GlobalExportFormat))
                     {
                         await this.AudioC.Exporter.ExportMp3Async(audio, WindowMain.GlobalExportBits, Environment.ProcessorCount / 2, finalFile);
                     }
@@ -134,7 +134,7 @@ namespace ModularAudience.Forms
                     Directory.CreateDirectory(exportFolder);
                 }
 
-                var tasks = selectedAudios.Select(a => WindowMain.GlobalExportFormat.Equals("mp3", StringComparison.OrdinalIgnoreCase)
+                var tasks = selectedAudios.Select(a => AudioExporter.IsMp3Format(WindowMain.GlobalExportFormat)
                     ? this.AudioC.Exporter.ExportMp3Async(a, WindowMain.GlobalExportBits, Environment.ProcessorCount / 2, Path.Combine(exportFolder, AudioCollectionViewHelpers.SanitizePathSegment(a.Name) + ".mp3"))
                     : this.AudioC.Exporter.ExportWavAsync(a, WindowMain.GlobalExportBits, exportFolder, writeBpmTag: true, customFilePath: Path.Combine(exportFolder, AudioCollectionViewHelpers.SanitizePathSegment(a.Name) + ".wav")));
                 await Task.WhenAll(tasks);

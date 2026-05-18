@@ -50,7 +50,9 @@ namespace ModularAudience.Forms
             }
 
             string? selectedFormat = this.comboBox_exportFormat.SelectedItem as string;
-            if (string.IsNullOrWhiteSpace(selectedFormat) || !AudioExporter.AvailableExportFormats.ContainsKey(selectedFormat))
+            selectedFormat = AudioExporter.IsMp3Format(selectedFormat) ? ".mp3" : ".wav";
+
+            if (!AudioExporter.AvailableExportFormats.ContainsKey(selectedFormat))
             {
                 string fallback = AudioExporter.AvailableExportFormats.Keys.First();
                 this.suppressExportFormatEvent = true;
@@ -117,7 +119,7 @@ namespace ModularAudience.Forms
                 exportFilePath = saveFileDialog.FileName;
             }
 
-            string? resultPath = normalizedFormat.Equals("mp3", StringComparison.OrdinalIgnoreCase)
+            string? resultPath = AudioExporter.IsMp3Format(normalizedFormat)
                 ? await this.AudioC.Exporter.ExportMp3Async(LastSelectedTrackView.OriginalAudio, bits, Environment.ProcessorCount - 1, exportFilePath)
                 : await this.AudioC.Exporter.ExportWavAsync(LastSelectedTrackView.OriginalAudio, bits, exportFilePath);
 

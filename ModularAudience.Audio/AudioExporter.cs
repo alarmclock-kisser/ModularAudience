@@ -77,6 +77,11 @@ namespace ModularAudience.Audio
             }
         }
 
+        public static bool IsMp3Format(string? format)
+        {
+            return !string.IsNullOrWhiteSpace(format) && format.Contains('3');
+        }
+
         public async Task<string?> ExportMp3Async(AudioObj audio, int bitrate = 192, int maxWorkers = 4, string? outDir = null, bool writeBpmTag = true)
         {
             maxWorkers = Math.Clamp(maxWorkers, 1, Environment.ProcessorCount);
@@ -92,16 +97,41 @@ namespace ModularAudience.Audio
                 outDir = this.ExportDirectory;
             }
 
-            outDir = SanitizeName(outDir);
+            string targetPath;
+            string? targetDirectory;
+            bool hasMp3FileName = IsMp3Format(Path.GetExtension(outDir)) || IsMp3Format(Path.GetFileName(outDir));
 
-            // Get export dir
-            if (!Directory.Exists(outDir))
+            if (hasMp3FileName)
             {
-                return "Out directory does not exist: " + outDir;
+                targetPath = Path.ChangeExtension(outDir, ".mp3");
+                targetDirectory = Path.GetDirectoryName(targetPath);
+            }
+            else
+            {
+                targetDirectory = outDir;
+                string baseOutFile = Path.Combine(targetDirectory, $"{SanitizeName(audio.Name)} [{audio.Bpm:F1}] {bitrate}kBit.mp3");
+                targetPath = baseOutFile;
             }
 
-            string baseOutFile = Path.Combine(outDir, $"{SanitizeName(audio.Name)} [{audio.Bpm:F1}] {bitrate}kBit.mp3");
-            string outFile = EnsureUniquePath(baseOutFile);
+            if (string.IsNullOrWhiteSpace(targetDirectory))
+            {
+                return "Out directory does not exist: (null)";
+            }
+
+            try
+            {
+                if (!Directory.Exists(targetDirectory))
+                {
+                    Directory.CreateDirectory(targetDirectory);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"Failed to ensure export directory '{targetDirectory}': {ex.Message}");
+                return null;
+            }
+
+            string outFile = EnsureUniquePath(targetPath);
 
             Stopwatch sw = Stopwatch.StartNew();
 
@@ -151,10 +181,11 @@ namespace ModularAudience.Audio
                         }
                     }
 
-                    // Custom Tags aus dem TagEditor anwenden
+                    // Custom Tags aus dem TagEditor anwenden & get file size in MB:F2
                     ApplyCustomTagsToFile(audio, outFile);
+                    float fileSizeMb = new FileInfo(outFile).Length / (1024f * 1024f);
 
-                    LogCollection.Log($"Exported {audio.Name} to {outFile}");
+                    LogCollection.Log($"Exported {audio.Name} to {outFile} ({fileSizeMb:F2} MB)");
                 }
 
                 return outFile;
@@ -288,8 +319,9 @@ namespace ModularAudience.Audio
                     }
 
                     ApplyCustomTagsToFile(audio, finalPath);
+                    float fileSizeMb = new FileInfo(finalPath).Length / (1024f * 1024f);
 
-                    LogCollection.Log($"Exported {audio.Name} to {finalPath}");
+                    LogCollection.Log($"Exported {audio.Name} to {finalPath} ({fileSizeMb:F2} MB)");
                 }
 
                 return finalPath;

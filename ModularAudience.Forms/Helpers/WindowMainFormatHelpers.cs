@@ -37,6 +37,11 @@ namespace ModularAudience.Forms.Helpers
 
         internal static string NormalizeFormatExtension(string? formatCandidate)
         {
+            if (AudioExporter.IsMp3Format(formatCandidate))
+            {
+                return ".mp3";
+            }
+
             if (string.IsNullOrWhiteSpace(formatCandidate))
             {
                 return ".wav";
@@ -53,6 +58,8 @@ namespace ModularAudience.Forms.Helpers
 
         internal static int ResolveBitSelection(string formatKey, object? selectedBit)
         {
+            formatKey = AudioExporter.IsMp3Format(formatKey) ? ".mp3" : ".wav";
+
             if (selectedBit is int bitValue)
             {
                 return bitValue;
@@ -60,7 +67,7 @@ namespace ModularAudience.Forms.Helpers
 
             if (AudioExporter.AvailableExportFormats.TryGetValue(formatKey, out var bits) && bits.Length > 0)
             {
-                if (formatKey.Equals(".wav", StringComparison.OrdinalIgnoreCase) && bits.Contains(24))
+                if (!AudioExporter.IsMp3Format(formatKey) && bits.Contains(24))
                 {
                     return 24;
                 }

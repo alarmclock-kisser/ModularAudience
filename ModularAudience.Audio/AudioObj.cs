@@ -22,6 +22,8 @@ namespace ModularAudience.Audio
         public float[] Data { get; set; } = [];
         public int SampleRate { get; set; }
         public double SampleRateFactor { get; set; } = 1.0;
+        public double ManualSampleRateFactor { get; set; } = 1.0;
+        public double SyncNudgeSampleRateFactor { get; set; } = 1.0;
         public int AdjustedSampleRate => (int) (this.SampleRate * this.SampleRateFactor);
         public int Channels { get; set; }
         public int BitDepth { get; set; }

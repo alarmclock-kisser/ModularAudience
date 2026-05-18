@@ -33,6 +33,7 @@ namespace ModularAudience.Forms.Modules
         private float CurrentVolume => 1f - (float) this.vScrollBar_volume.Value / Math.Max(1, this.vScrollBar_volume.Maximum);
         internal bool Synced => this.checkBox_sync.Checked;
         internal bool Muted => this.checkBox_mute.Checked;
+        internal bool Soloed => this.checkBox_solo.Checked;
 
 		private readonly Timer frameTimer;
         private bool frameBusy;
@@ -43,7 +44,7 @@ namespace ModularAudience.Forms.Modules
 
         private CancellationTokenSource? playbackCts;
 
-        private int samplesPerPixel = 128;
+        private int samplesPerPixel = 512;
         private long offsetFrames;
         private long selectStartFrame = -1;
         private long selectEndFrame = -1;
@@ -60,6 +61,7 @@ namespace ModularAudience.Forms.Modules
         private long loopBaseEndSamples;
         private long loopFractionSamples;
         private bool suppressSettingsCheckbox;
+        private int _lastRateContextMenuValue;
         private readonly int designerClientWidth;
         private readonly int designerWaveWidth;
 
@@ -98,7 +100,7 @@ namespace ModularAudience.Forms.Modules
 
             this.EnablePictureBoxDoubleBuffering();
             this.InitializeTrackControls();
-            this.ApplyInitialTrackSizing();
+            // this.ApplyInitialTrackSizing();
             this.PositionSettingsWindow();
             this.RecalculateLoopFraction();
             this.ApplyLoopFractionToAudio();
@@ -201,6 +203,12 @@ namespace ModularAudience.Forms.Modules
             this.vScrollBar_volume.Value = (int) Math.Clamp(this.vScrollBar_volume.Maximum * 0.2f, this.vScrollBar_volume.Minimum, this.vScrollBar_volume.Maximum - 1);
             this.ApplyVolumeFromScrollbar();
 
+            this.hScrollBar_rate.Minimum = -500;
+            this.hScrollBar_rate.Maximum = 500;
+            this.hScrollBar_rate.SmallChange = 1;
+            this.hScrollBar_rate.LargeChange = 1;
+            this.SetPlaybackRateFromScrollbar(0, updateScrollbar: true, fireAndForget: false);
+
             this.UpdateOffsetScrollbar();
 
             this.pictureBox_waveform.MouseDown += this.Wave_MouseDown;
@@ -275,7 +283,7 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            var location = new Point(this.Location.X + this.Width + 5, this.Location.Y);
+            var location = new Point(this.Location.X + this.Width + 2, this.Location.Y);
             this.Settings.Location = location;
         }
 
@@ -674,11 +682,46 @@ namespace ModularAudience.Forms.Modules
         {
             float vol = this.CurrentVolume;
             this.label_volume.Text = (vol * 100f).ToString("F1") + "%";
-            try { this.OriginalAudio.SetVolume(this.Muted ? 0f : vol); } catch { }
+            this.ApplyAudibilityState(vol);
+        }
+
+        internal bool IsEffectivelyMuted()
+        {
+            bool anySoloActive = WindowMain.TrackViews.Any(tv => tv != null && !tv.IsDisposed && tv.Soloed);
+            return this.Muted || (anySoloActive && !this.Soloed);
+        }
+
+        internal void ApplyAudibilityState()
+        {
+            this.ApplyAudibilityState(this.CurrentVolume);
+        }
+
+        private void ApplyAudibilityState(float baseVolume)
+        {
+            float effectiveVolume = this.IsEffectivelyMuted() ? 0f : Math.Clamp(baseVolume, 0f, 1f);
+            try { this.OriginalAudio.SetVolume(effectiveVolume); } catch { }
         }
 
         // Beispiel: neuen Parameter hinzufügen und reentrancy-flag verwenden
         private bool suppressVolumeSync;
+        private bool suppressRateSync;
+        private int lastAppliedRateScrollbarValue = int.MinValue;
+
+        private async Task FadeInCurrentPlaybackAsync(float targetVolume, int steps = 3, int durationMs = 12)
+        {
+            targetVolume = Math.Clamp(targetVolume, 0f, 1f);
+            steps = Math.Max(1, steps);
+            durationMs = Math.Max(1, durationMs);
+
+            this.OriginalAudio.SetVolume(0f);
+
+            for (int i = 1; i <= steps; i++)
+            {
+                float nextVolume = targetVolume * i / steps;
+                this.OriginalAudio.SetVolume(nextVolume);
+                await Task.Delay(Math.Max(1, durationMs / steps)).ConfigureAwait(false);
+            }
+        }
 
         internal void SetVolumeSynced(int scrollbarValue, bool muted, bool broadcast = true)
         {
@@ -710,7 +753,7 @@ namespace ModularAudience.Forms.Modules
 
                 float vol = this.CurrentVolume;
                 this.label_volume.Text = (vol * 100f).ToString("F1") + "%";
-                this.OriginalAudio.SetVolume(muted ? 0f : vol);
+                this.ApplyAudibilityState(vol);
 
                 if (doBroadcast)
                 {
@@ -738,6 +781,159 @@ namespace ModularAudience.Forms.Modules
         private void checkBox_mute_CheckedChanged(object sender, EventArgs e)
         {
             this.SetVolumeSynced(this.vScrollBar_volume.Value, this.checkBox_mute.Checked);
+            WindowMain.Instance?.RefreshTrackAudibility();
+        }
+
+        private void checkBox_solo_CheckedChanged(object? sender, EventArgs e)
+        {
+            WindowMain.Instance?.RefreshTrackAudibility();
+        }
+
+        private void hScrollBar_rate_Scroll(object? sender, ScrollEventArgs e)
+        {
+            this.SetPlaybackRateSynced(e.NewValue);
+        }
+
+        private void hScrollBar_rate_ValueChanged(object? sender, EventArgs e)
+        {
+            this.SetPlaybackRateSynced(this.hScrollBar_rate.Value);
+        }
+
+        private void hScrollBar_rate_MouseDown(object? sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right)
+            {
+                this._lastRateContextMenuValue = this.GetRateScrollbarValueFromMouseX(e.X);
+                return;
+            }
+
+            if (e.Button != MouseButtons.Left)
+            {
+                return;
+            }
+
+            if ((ModifierKeys & Keys.Control) == Keys.Control)
+            {
+                if (this.hScrollBar_rate.Value != 0)
+                {
+                    this.hScrollBar_rate.Value = 0;
+                }
+                this.SetPlaybackRateSynced(0);
+                return;
+            }
+
+            this.SetPlaybackRateSynced(this.GetRateScrollbarValueFromMouseX(e.X));
+        }
+
+        private void menuItem_rateResetCenter_Click(object? sender, EventArgs e)
+        {
+            if (this.hScrollBar_rate.Value != 0)
+            {
+                this.hScrollBar_rate.Value = 0;
+            }
+
+            this.SetPlaybackRateSynced(0);
+        }
+
+        private void contextMenu_rate_Opening(object? sender, CancelEventArgs e)
+        {
+            float factor = MapRateScrollbarToFactor(this._lastRateContextMenuValue);
+            this.menuItem_rateJumpHere.Text = $"Jump here ({factor * 100f:F1}%)";
+        }
+
+        private void menuItem_rateJumpHere_Click(object? sender, EventArgs e)
+        {
+            this.SetPlaybackRateSynced(this._lastRateContextMenuValue);
+        }
+
+        internal void SetPlaybackRateSynced(int scrollbarValue, bool broadcast = true)
+        {
+            if (this.IsDisposed)
+            {
+                return;
+            }
+
+            if (this.suppressRateSync)
+            {
+                return;
+            }
+
+            bool doBroadcast = broadcast && this.Synced && !ModifierKeys.HasFlag(Keys.Control);
+
+            this.suppressRateSync = true;
+            try
+            {
+                bool changed = this.SetPlaybackRateFromScrollbar(scrollbarValue, updateScrollbar: true, fireAndForget: true);
+
+                if (doBroadcast && changed)
+                {
+                    foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
+                    {
+                        tv.SetPlaybackRateSynced(scrollbarValue, broadcast: false);
+                    }
+                }
+            }
+            finally
+            {
+                this.suppressRateSync = false;
+            }
+        }
+
+        private bool SetPlaybackRateFromScrollbar(int scrollbarValue, bool updateScrollbar, bool fireAndForget)
+        {
+            int clampedValue = Math.Clamp(scrollbarValue, this.hScrollBar_rate.Minimum, this.hScrollBar_rate.Maximum);
+            if (updateScrollbar && this.hScrollBar_rate.Value != clampedValue)
+            {
+                this.hScrollBar_rate.Value = clampedValue;
+            }
+
+            float factor = MapRateScrollbarToFactor(clampedValue);
+            this.label_info_rate.Text = $"Rate: {factor * 100f:F1}%";
+
+            bool changed = this.lastAppliedRateScrollbarValue != clampedValue;
+            this.lastAppliedRateScrollbarValue = clampedValue;
+            this.OriginalAudio.ManualSampleRateFactor = factor;
+
+            if (fireAndForget)
+            {
+                if (changed)
+                {
+                    _ = this.ApplyPlaybackRateAsync();
+                }
+
+                return changed;
+            }
+
+            this.OriginalAudio.SampleRateFactor = Math.Clamp(this.OriginalAudio.ManualSampleRateFactor * this.OriginalAudio.SyncNudgeSampleRateFactor, 0.5, 2.0);
+            return changed;
+        }
+
+        private static float MapRateScrollbarToFactor(int scrollbarValue)
+        {
+            double normalized = Math.Clamp(scrollbarValue / 500.0, -1.0, 1.0);
+            double factor = Math.Pow(2.0, normalized);
+            return (float) factor;
+        }
+
+        private int GetRateScrollbarValueFromMouseX(int mouseX)
+        {
+            int width = Math.Max(1, this.hScrollBar_rate.ClientSize.Width - 1);
+            double fraction = Math.Clamp(mouseX / (double) width, 0.0, 1.0);
+            int min = this.hScrollBar_rate.Minimum;
+            int max = this.hScrollBar_rate.Maximum;
+            return min + (int) Math.Round((max - min) * fraction);
+        }
+
+        private async Task ApplyPlaybackRateAsync()
+        {
+            try
+            {
+                await this.OriginalAudio.ApplyCombinedSampleRateAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                try { LogCollection.Log(ex); } catch { }
+            }
         }
 
         private void hScrollBar_offset_Scroll(object? sender, ScrollEventArgs e)
@@ -2012,17 +2208,38 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        public async Task ApplyStretchedAudioAsync(AudioObj result)
+        public async Task ApplyStretchedAudioAsync(AudioObj result, double? stretchFactorOverride = null, bool resumePlaybackAfterReplace = false)
         {
             if (result == null)
             {
                 return;
             }
 
+            var original = this.OriginalAudio;
+            bool wasPlaying = original.PlayerPlaying;
+            bool wasPaused = original.Paused;
+            int sourceChannels = Math.Max(1, original.Channels);
+            double stretchFactor = stretchFactorOverride
+                ?? (Math.Abs(result.StretchFactor) > double.Epsilon ? result.StretchFactor : 1.0);
+            if (Math.Abs(stretchFactor) <= double.Epsilon)
+            {
+                stretchFactor = 1.0;
+            }
+
+            DateTime playbackSnapshotUtc = DateTime.UtcNow;
+            long sourcePositionSamples = original.Position * sourceChannels;
+
             await this.StopPlaybackAsync();
+
+            if (wasPlaying)
+            {
+                double lagSeconds = Math.Max(0.0, (DateTime.UtcNow - playbackSnapshotUtc).TotalSeconds);
+                long lagSamples = (long) Math.Round(lagSeconds * Math.Max(1, original.SampleRate) * sourceChannels);
+                sourcePositionSamples += Math.Max(0L, lagSamples);
+            }
+
             this.CancelPendingRender();
 
-            var original = this.OriginalAudio;
             float[] newData = result.Data ?? [];
             original.Data = newData;
             LogCollection.Log($"ApplyStretched: AudioObj.Data replaced in '{original.Name}'");
@@ -2057,9 +2274,15 @@ namespace ModularAudience.Forms.Modules
                 original.Metrics[metric.Key] = metric.Value;
             }
 
-            this.OriginalAudio.SetPosition(0);
+            long resumedSamples = (long) Math.Round(sourcePositionSamples * stretchFactor);
+            resumedSamples = Math.Clamp(resumedSamples, 0L, Math.Max(0L, sampleCount - channels));
+            long resumedFrames = resumedSamples / channels;
+
+            long resumedStartSample = resumedFrames * Math.Max(1, original.Channels);
+            this.OriginalAudio.SetPosition(resumedFrames);
+            this.OriginalAudio.StartingOffset = resumedStartSample;
             this.offsetFrames = 0;
-            this.lastClickFrame = 0;
+            this.lastClickFrame = resumedFrames;
             this.selectStartFrame = -1;
             this.selectEndFrame = -1;
             this.pendingSelect = false;
@@ -2076,6 +2299,27 @@ namespace ModularAudience.Forms.Modules
             this.UpdateOffsetScrollbar();
             await this.RefreshWaveformAsync();
             this.UpdateTimeDisplay();
+
+            bool shouldResumePlayback = resumePlaybackAfterReplace || wasPlaying;
+            if (shouldResumePlayback)
+            {
+                try
+                {
+                    await original.PlayAsync(
+                        CancellationToken.None,
+                        () => this.InvokeIfRequired(() => this.button_playback.Text = "▶"),
+                        this.CurrentVolume).ConfigureAwait(false);
+                    this.InvokeIfRequired(() => this.button_playback.Text = "■");
+                }
+                catch
+                {
+                    this.InvokeIfRequired(() => this.button_playback.Text = "▶");
+                }
+            }
+            else if (wasPaused)
+            {
+                this.InvokeIfRequired(() => this.button_playback.Text = "▶");
+            }
         }
 
 
