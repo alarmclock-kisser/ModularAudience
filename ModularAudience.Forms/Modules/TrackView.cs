@@ -682,6 +682,7 @@ namespace ModularAudience.Forms.Modules
         {
             float vol = this.CurrentVolume;
             this.label_volume.Text = (vol * 100f).ToString("F1") + "%";
+            this.OriginalAudio.Volume = vol * 100f;
             this.ApplyAudibilityState(vol);
         }
 
@@ -691,15 +692,19 @@ namespace ModularAudience.Forms.Modules
             return this.Muted || (anySoloActive && !this.Soloed);
         }
 
+        internal float GetEffectivePlaybackVolume()
+        {
+            return this.IsEffectivelyMuted() ? 0f : Math.Clamp(this.CurrentVolume, 0f, 1f);
+        }
+
         internal void ApplyAudibilityState()
         {
-            this.ApplyAudibilityState(this.CurrentVolume);
+            this.ApplyAudibilityState(this.GetEffectivePlaybackVolume());
         }
 
         private void ApplyAudibilityState(float baseVolume)
         {
-            float effectiveVolume = this.IsEffectivelyMuted() ? 0f : Math.Clamp(baseVolume, 0f, 1f);
-            try { this.OriginalAudio.SetVolume(effectiveVolume); } catch { }
+            try { this.OriginalAudio.SetPlaybackVolume(Math.Clamp(baseVolume, 0f, 1f)); } catch { }
         }
 
         // Beispiel: neuen Parameter hinzufügen und reentrancy-flag verwenden
@@ -753,6 +758,7 @@ namespace ModularAudience.Forms.Modules
 
                 float vol = this.CurrentVolume;
                 this.label_volume.Text = (vol * 100f).ToString("F1") + "%";
+                this.OriginalAudio.Volume = vol * 100f;
                 this.ApplyAudibilityState(vol);
 
                 if (doBroadcast)
@@ -3027,7 +3033,7 @@ namespace ModularAudience.Forms.Modules
                 tv.InvokeIfRequired(() => tv.button_playback.Text = "■");
             }
 
-            float mainVolume = initiator.CurrentVolume;
+            float mainVolume = initiator.GetEffectivePlaybackVolume();
             Action onStopped = SetButtonsStopped;
 
             foreach (var tv in group)
@@ -3039,7 +3045,8 @@ namespace ModularAudience.Forms.Modules
 
                 try
                 {
-                    _ = tv.OriginalAudio.PlayAsync(CancellationToken.None, null, tv.CurrentVolume);
+                    float trackVolume = tv.GetEffectivePlaybackVolume();
+                    _ = tv.OriginalAudio.PlayAsync(CancellationToken.None, null, trackVolume);
                 }
                 catch
                 {

@@ -307,6 +307,11 @@ namespace ModularAudience.Audio
             this.playback.SetVolume(volume);
         }
 
+        public void SetPlaybackVolume(float volume)
+        {
+            this.playback.SetVolume(Math.Clamp(volume, 0.0f, 1.0f));
+        }
+
         public void SetPosition(long framePosition)
         {
             int channels = Math.Max(1, this.Channels);

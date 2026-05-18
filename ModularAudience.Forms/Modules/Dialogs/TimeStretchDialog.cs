@@ -221,7 +221,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         if (this.checkBox_trim.Checked)
                         {
                             // Trim silence after stretching
-                            await this.Tracks.ElementAt(i).TrimSilenceAsync(null, (int) this.numericUpDown_threads.Value);
+                            await BeatGridFinder.TrimSilenceAsync(this.Tracks.ElementAt(i));
                         }
 
                         if (originalPeak > 0f)
@@ -259,7 +259,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     if (this.checkBox_trim.Checked)
                     {
                         // Trim silence after stretching
-                        await result.TrimSilenceAsync(null, (int) this.numericUpDown_threads.Value);
+                        await BeatGridFinder.TrimSilenceAsync(result);
                     }
 
                     if (originalPeak > 0f)
