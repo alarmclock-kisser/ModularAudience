@@ -269,10 +269,10 @@ public static class AudioRecorder
                 if (obj.Data.LongLength > 0)
                 {
                     await obj.NormalizeAsync();
-                    // Create temp AudioExporter to save normalized file
+                    // Overwrite the original recording file in-place (no copy)
                     var exporter = new AudioExporter();
                     string outDir = Path.GetDirectoryName(RecordedFile) ?? RecordsPath;
-                    await exporter.ExportWavAsync(obj, 24, outDir);
+                    await exporter.ExportWavAsync(obj, 24, outDir, writeBpmTag: false, customFilePath: RecordedFile);
                 }
                 Console.WriteLine("Normalisierung abgeschlossen.");
             }

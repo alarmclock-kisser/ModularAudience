@@ -133,7 +133,7 @@ namespace ModularAudience.Onnx
                 stemIdx = 3; // Fallback Vocals
             }
 
-            string inputName = _session.InputNames.First();
+            string inputName = this._session.InputNames.First();
 
             // Die bewiesene magische Länge deines Modells für den Eingang!
             int framesPerChunk = 343980;
@@ -159,7 +159,7 @@ namespace ModularAudience.Onnx
                 var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) };
 
                 // Dummy Inputs für die Hidden-States erzeugen (Verhindert Missing-Input Fehler)
-                foreach (var kv in _session.InputMetadata)
+                foreach (var kv in this._session.InputMetadata)
                 {
                     if (kv.Key == inputName)
                     {
@@ -177,7 +177,7 @@ namespace ModularAudience.Onnx
                 }
 
                 // 3. INFERENZ
-                using var results = _session.Run(inputs);
+                using var results = this._session.Run(inputs);
 
                 // -----------------------------------------------------------------------------------
                 // 4. OUTPUT EXTRAKTION - DER FIX GEGEN OUT-OF-RANGE & STILLE!

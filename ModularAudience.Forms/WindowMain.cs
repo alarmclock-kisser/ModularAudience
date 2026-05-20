@@ -75,11 +75,15 @@ namespace ModularAudience.Forms
         // Copy + Paste AudioObj
         internal static AudioObj? ClipboardAudioObj = null;
 
+        // Playlist FilePaths
+        internal static List<string> PlaylistFilePaths = [];
+
 
         public WindowMain()
         {
             Instance = this;
             this.InitializeComponent();
+            this.Tag = this.Text;
             this.KeyPreview = true;
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, true);
@@ -102,6 +106,7 @@ namespace ModularAudience.Forms
             this.textBox_scanBpmResult.DoubleClick += this.textBox_scanBpmResult_DoubleClick;
 
             this.InitializeExportControls();
+            this.InitPlaylist();
 
             this._keyFilter = new GlobalKeyMessageFilter();
             this._keyFilter.KeyChanged += this.GlobalKeyChanged;
@@ -135,7 +140,7 @@ namespace ModularAudience.Forms
 
                         if (open.InvokeRequired)
                         {
-                            open.Invoke((Action)(() => BringFormToFrontSafe(open)));
+                            open.Invoke((Action) (() => BringFormToFrontSafe(open)));
                         }
                         else
                         {
@@ -177,6 +182,7 @@ namespace ModularAudience.Forms
         {
             this.StopSyncer();
             this.StopPausingSyncer();
+            this.DisposePlaylist();
             if (this._keyFilter != null)
             {
                 try { Application.RemoveMessageFilter(this._keyFilter); } catch { }
@@ -214,7 +220,7 @@ namespace ModularAudience.Forms
                         {
                             if (tv.InvokeRequired)
                             {
-                                try { tv.Invoke((Action)tv.Close); } catch { /* ignore */ }
+                                try { tv.Invoke((Action) tv.Close); } catch { /* ignore */ }
                             }
                             else
                             {
@@ -269,7 +275,7 @@ namespace ModularAudience.Forms
                         {
                             if (tv.InvokeRequired)
                             {
-                                try { tv.Invoke((Action)tv.Close); } catch { /* ignore */ }
+                                try { tv.Invoke((Action) tv.Close); } catch { /* ignore */ }
                             }
                             else
                             {
@@ -349,7 +355,7 @@ namespace ModularAudience.Forms
                     }
                     if (open.InvokeRequired)
                     {
-                        open.Invoke((Action)(() => BringFormToFrontSafe(open)));
+                        open.Invoke((Action) (() => BringFormToFrontSafe(open)));
                     }
                     else
                     {
@@ -362,6 +368,8 @@ namespace ModularAudience.Forms
                 }
             }
         }
+
+        // button_playlist_Click is implemented in WindowMain.Playlist.partial.cs
     }
 }
 

@@ -23,6 +23,19 @@ namespace ModularAudience.Forms.Helpers
             }
         }
 
+        internal static async Task InvokeIfRequiredAsync(WindowMain? instance, Func<Task> asyncAction)
+        {
+            if (instance == null || instance.IsDisposed) return;
+            try
+            {
+                if (instance.InvokeRequired)
+                    await (Task) instance.Invoke(asyncAction)!;
+                else
+                    await asyncAction();
+            }
+            catch { }
+        }
+
         internal static void UnselectAll(BindingList<AudioCollectionView> views, AudioCollectionView? except = null)
         {
             views.Where(cv => cv != except).ToList().ForEach(cv => cv.UnselectAll());

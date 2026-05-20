@@ -49,7 +49,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public PianoRollEditor()
         {
-            InitializeComponent();
+            this.InitializeComponent();
             this.KeyPreview = true;
             this.panel_roll.Visible = false;
 

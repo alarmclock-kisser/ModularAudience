@@ -144,8 +144,8 @@ namespace ModularAudience.Forms
                 var dlg = new Modules.Dialogs.TimeStretchDialog(LastSelectedTrackView);
                 dlg.FormClosed += (_, _) =>
                 {
-                    UpdateTrackDependentUI();
-                    RefreshAllCollectionViews();
+                    this.UpdateTrackDependentUI();
+                    this.RefreshAllCollectionViews();
                 };
                 dlg.Show(this);
                 return;
@@ -170,6 +170,9 @@ namespace ModularAudience.Forms
                     string fileName = "Recording" + DateTime.Now.ToString("_yyyyMMdd_HHmmss") + ".wav";
                     string fullPath = Path.Combine(recordDir, fileName);
                     await AudioRecorder.StartRecording(fullPath);
+
+                    // Start playlist track-log tied to this recording
+                    this.StartTrackLog(fullPath);
 
                     this.button_record.ForeColor = Color.Red;
                     this.label_stopRecordInfo.Visible = false;
@@ -226,6 +229,9 @@ namespace ModularAudience.Forms
                     try { this.recordingTimer.Stop(); this.recordingTimer.Dispose(); } catch { }
                     this.recordingTimer = null;
                 }
+
+                // Finalise the playlist track-log for this recording
+                this.FinaliseTrackLog();
 
                 this.button_record.ForeColor = Color.Black;
                 this.button_record.Enabled = true;

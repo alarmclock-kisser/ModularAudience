@@ -5,6 +5,7 @@ using ModularAudience.Audio;
 using ModularAudience.Audio.Processors_V2;
 using MathNet.Numerics;
 using System.Threading;
+using ModularAudience.Forms.Modules;
 
 namespace ModularAudience.Forms.Modules.Dialogs
 {
@@ -13,6 +14,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
         internal IEnumerable<AudioObj> Tracks;
         private readonly TrackView? trackView;
         private bool isProcessing;
+
+        /// <summary>
+        /// When true the dialog only collects parameters; clicking Stretch / Stretch V2
+        /// saves <see cref="ConfirmedSettings"/> and closes without processing any audio.
+        /// </summary>
+        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+        public bool IsConfigureMode { get; set; }
+
+        /// <summary>Stretch settings confirmed by the user (populated when <see cref="IsConfigureMode"/> is true).</summary>
+        public PlaylistStretchSettings? ConfirmedSettings { get; private set; }
+
+        /// <summary>True if the user confirmed via Stretch V2, false for Stretch V1.</summary>
+        public bool ConfirmedUsedV2 { get; private set; }
 
 
         private CancellationTokenSource? ProcessingCancellationSource = null;
@@ -180,6 +194,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async void button_stretch_Click(object sender, EventArgs e)
         {
+            if (this.IsConfigureMode)
+            {
+                this.SaveConfirmedSettings(useV2: false);
+                this.DialogResult = DialogResult.OK;
+                this.Close();
+                return;
+            }
+
             if (this.isProcessing)
             {
                 return;
@@ -330,8 +352,33 @@ namespace ModularAudience.Forms.Modules.Dialogs
             catch { }
         }
 
+        private void SaveConfirmedSettings(bool useV2)
+        {
+            this.ConfirmedUsedV2 = useV2;
+            this.ConfirmedSettings = new PlaylistStretchSettings(
+                TargetBpm:    (float) this.numericUpDown_targetBpm.Value,
+                StretchFactor: (float) this.numericUpDown_stretchFactor.Value,
+                ChunkSize:    (int) this.numericUpDown_chunkSize.Value,
+                Overlap:      (float) this.numericUpDown_overlap.Value,
+                Threads:      (int) this.numericUpDown_threads.Value,
+                UseV2:        useV2,
+                AutoChunking: this.checkBox_autoChunking.Checked,
+                Offload:      this.checkBox_offload.Checked,
+                Trim:         this.checkBox_trim.Checked,
+                Fixed:        this.checkBox_fixed.Checked
+            );
+        }
+
         private async void button_stretchV2_Click(object sender, EventArgs e)
         {
+            if (this.IsConfigureMode)
+            {
+                this.SaveConfirmedSettings(useV2: true);
+                this.DialogResult = DialogResult.OK;
+                this.Close();
+                return;
+            }
+
             if (this.isProcessing)
             {
                 // Cancel running processing

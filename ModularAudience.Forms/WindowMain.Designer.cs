@@ -28,8 +28,17 @@
         /// </summary>
         private void InitializeComponent()
         {
+            this.components = new System.ComponentModel.Container();
             this.button_import = new Button();
             this.button_browse = new Button();
+            this.contextMenuStrip_playlist = new ContextMenuStrip(this.components);
+            this.toolStripMenuItem_playPause = new ToolStripMenuItem();
+            this.toolStripMenuItem_prev = new ToolStripMenuItem();
+            this.toolStripMenuItem_skip = new ToolStripMenuItem();
+            this.toolStripMenuItem_shuffle = new ToolStripMenuItem();
+            this.toolStripMenuItem_clear = new ToolStripMenuItem();
+            this.toolStripMenuItem_timestretchEach = new ToolStripMenuItem();
+            this.toolTip_playlist = new ToolTip(this.components);
             this.button_scanBpm = new Button();
             this.textBox_scanBpmResult = new TextBox();
             this.textBox_scanTimingResult = new TextBox();
@@ -59,6 +68,9 @@
             this.button_cuda = new Button();
             this.checkBox_oneBag = new CheckBox();
             this.button_bringAllToFront = new Button();
+            this.button_playlist = new Button();
+            this.label_currentlyEnqueued = new Label();
+            this.contextMenuStrip_playlist.SuspendLayout();
             this.SuspendLayout();
             // 
             // button_import
@@ -207,12 +219,13 @@
             // button_newBag
             // 
             this.button_newBag.BackColor = Color.FromArgb(  192,   255,   192);
-            this.button_newBag.Location = new Point(12, 120);
+            this.button_newBag.Font = new Font("Segoe UI", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.button_newBag.Location = new Point(69, 90);
             this.button_newBag.Name = "button_newBag";
-            this.button_newBag.Size = new Size(75, 23);
+            this.button_newBag.Size = new Size(51, 23);
             this.button_newBag.TabIndex = 14;
             this.button_newBag.TabStop = false;
-            this.button_newBag.Text = "New Bag";
+            this.button_newBag.Text = "+ Bag";
             this.button_newBag.UseVisualStyleBackColor = false;
             this.button_newBag.Click += this.button_newBag_Click;
             // 
@@ -287,11 +300,12 @@
             // button_newTrack
             // 
             this.button_newTrack.BackColor = Color.FromArgb(  192,   192,   255);
-            this.button_newTrack.Location = new Point(12, 91);
+            this.button_newTrack.Font = new Font("Segoe UI", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.button_newTrack.Location = new Point(12, 90);
             this.button_newTrack.Name = "button_newTrack";
-            this.button_newTrack.Size = new Size(75, 23);
+            this.button_newTrack.Size = new Size(51, 23);
             this.button_newTrack.TabIndex = 21;
-            this.button_newTrack.Text = "New Track";
+            this.button_newTrack.Text = "+ Track";
             this.button_newTrack.UseVisualStyleBackColor = false;
             this.button_newTrack.Click += this.button_newTrack_Click;
             // 
@@ -407,11 +421,96 @@
             this.button_bringAllToFront.UseVisualStyleBackColor = false;
             this.button_bringAllToFront.Click += this.button_bringAllToFront_Click;
             // 
+            // contextMenuStrip_playlist
+            // 
+            this.contextMenuStrip_playlist.Items.AddRange(new ToolStripItem[] {
+                this.toolStripMenuItem_playPause,
+                this.toolStripMenuItem_prev,
+                this.toolStripMenuItem_skip,
+                new ToolStripSeparator(),
+                this.toolStripMenuItem_shuffle,
+                this.toolStripMenuItem_clear,
+                new ToolStripSeparator(),
+                this.toolStripMenuItem_timestretchEach
+            });
+            this.contextMenuStrip_playlist.Name = "contextMenuStrip_playlist";
+            this.contextMenuStrip_playlist.Size = new Size(181, 148);
+            // 
+            // toolStripMenuItem_playPause
+            // 
+            this.toolStripMenuItem_playPause.Name = "toolStripMenuItem_playPause";
+            this.toolStripMenuItem_playPause.Size = new Size(180, 22);
+            this.toolStripMenuItem_playPause.Text = "▶ Play / || Pause";
+            this.toolStripMenuItem_playPause.Click += this.playlistMenu_PlayPause_Click;
+            // 
+            // toolStripMenuItem_prev
+            // 
+            this.toolStripMenuItem_prev.Name = "toolStripMenuItem_prev";
+            this.toolStripMenuItem_prev.Size = new Size(180, 22);
+            this.toolStripMenuItem_prev.Text = "⏮ Rewind / Previous";
+            this.toolStripMenuItem_prev.Click += this.playlistMenu_Prev_Click;
+            // 
+            // toolStripMenuItem_skip
+            // 
+            this.toolStripMenuItem_skip.Name = "toolStripMenuItem_skip";
+            this.toolStripMenuItem_skip.Size = new Size(180, 22);
+            this.toolStripMenuItem_skip.Text = "⏭ Skip Track";
+            this.toolStripMenuItem_skip.Click += this.playlistMenu_Skip_Click;
+            // 
+            // toolStripMenuItem_shuffle
+            // 
+            this.toolStripMenuItem_shuffle.Name = "toolStripMenuItem_shuffle";
+            this.toolStripMenuItem_shuffle.Size = new Size(180, 22);
+            this.toolStripMenuItem_shuffle.Text = "🔀 Shuffle Remaining";
+            this.toolStripMenuItem_shuffle.Click += this.playlistMenu_Shuffle_Click;
+            // 
+            // toolStripMenuItem_clear
+            // 
+            this.toolStripMenuItem_clear.Name = "toolStripMenuItem_clear";
+            this.toolStripMenuItem_clear.Size = new Size(180, 22);
+            this.toolStripMenuItem_clear.Text = "✖ Clear Playlist";
+            this.toolStripMenuItem_clear.Click += this.playlistMenu_Clear_Click;
+            // 
+            // toolStripMenuItem_timestretchEach
+            // 
+            this.toolStripMenuItem_timestretchEach.CheckOnClick = false;
+            this.toolStripMenuItem_timestretchEach.Name = "toolStripMenuItem_timestretchEach";
+            this.toolStripMenuItem_timestretchEach.Size = new Size(180, 22);
+            this.toolStripMenuItem_timestretchEach.Text = "⏱ Timestretch each...";
+            this.toolStripMenuItem_timestretchEach.Click += this.playlistMenu_TimestretchEach_Click;
+            // 
+            // button_playlist
+            // 
+            this.button_playlist.BackColor = Color.FromArgb(  255,   224,   192);
+            this.button_playlist.ContextMenuStrip = this.contextMenuStrip_playlist;
+            this.button_playlist.Font = new Font("Segoe UI Semilight", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.button_playlist.Location = new Point(12, 119);
+            this.button_playlist.Name = "button_playlist";
+            this.button_playlist.Size = new Size(51, 23);
+            this.button_playlist.TabIndex = 32;
+            this.button_playlist.TabStop = false;
+            this.button_playlist.Text = "▶ List";
+            this.button_playlist.UseVisualStyleBackColor = false;
+            this.button_playlist.Click += this.button_playlist_Click;
+            this.button_playlist.MouseHover += this.button_playlist_MouseHover;
+            // 
+            // label_currentlyEnqueued
+            // 
+            this.label_currentlyEnqueued.AutoSize = true;
+            this.label_currentlyEnqueued.Font = new Font("Bahnschrift Light SemiCondensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.label_currentlyEnqueued.Location = new Point(-1, 312);
+            this.label_currentlyEnqueued.Name = "label_currentlyEnqueued";
+            this.label_currentlyEnqueued.Size = new Size(174, 13);
+            this.label_currentlyEnqueued.TabIndex = 33;
+            this.label_currentlyEnqueued.Text = "No track currently enqueued in playlist.";
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
-            this.ClientSize = new Size(634, 321);
+            this.ClientSize = new Size(634, 326);
+            this.Controls.Add(this.label_currentlyEnqueued);
+            this.Controls.Add(this.button_playlist);
             this.Controls.Add(this.button_bringAllToFront);
             this.Controls.Add(this.checkBox_oneBag);
             this.Controls.Add(this.button_cuda);
@@ -442,10 +541,11 @@
             this.Controls.Add(this.button_scanBpm);
             this.Controls.Add(this.button_browse);
             this.Controls.Add(this.button_import);
-            this.MaximumSize = new Size(650, 360);
-            this.MinimumSize = new Size(650, 360);
+            this.MaximumSize = new Size(650, 365);
+            this.MinimumSize = new Size(650, 365);
             this.Name = "WindowMain";
             this.Text = "ModularAudience (Main Control)";
+            this.contextMenuStrip_playlist.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -483,5 +583,15 @@
 		private Button button_cuda;
         private CheckBox checkBox_oneBag;
         private Button button_bringAllToFront;
+        private Button button_playlist;
+        private Label label_currentlyEnqueued;
+        private ContextMenuStrip contextMenuStrip_playlist;
+        private ToolStripMenuItem toolStripMenuItem_playPause;
+        private ToolStripMenuItem toolStripMenuItem_prev;
+        private ToolStripMenuItem toolStripMenuItem_skip;
+        private ToolStripMenuItem toolStripMenuItem_shuffle;
+        private ToolStripMenuItem toolStripMenuItem_clear;
+        private ToolStripMenuItem toolStripMenuItem_timestretchEach;
+        private ToolTip toolTip_playlist;
     }
 }
