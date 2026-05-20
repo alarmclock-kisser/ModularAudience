@@ -14,6 +14,8 @@ using System.Security.Authentication;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace ModularAudience.Forms.Modules.Dialogs
@@ -31,16 +33,22 @@ namespace ModularAudience.Forms.Modules.Dialogs
         internal AudioObj? SelectedTrack => this.listBox_samples.SelectedItem as AudioObj;
 
         private bool AutoPlayEnabled => this.checkBox_autoPlay.Checked;
-        private int Bars => (int)this.numericUpDown_bars.Value;
-        private int Bpm => (int)this.numericUpDown_bpm.Value;
-        private float Density => (float)this.numericUpDown_density.Value;
-        private int Resolution => (int)this.numericUpDown_resolution.Value;
-        private float Swing => (float)this.numericUpDown_swing.Value;
-        private float Complexity => (float)this.numericUpDown_complexity.Value;
-        private int Seed => (int)this.numericUpDown_seed.Value;
+        private int Bars => (int) this.numericUpDown_bars.Value;
+        private int Bpm => (int) this.numericUpDown_bpm.Value;
+        private float Density => (float) this.numericUpDown_density.Value;
+        private int Resolution => (int) this.numericUpDown_resolution.Value;
+        private float Swing => (float) this.numericUpDown_swing.Value;
+        private float Complexity => (float) this.numericUpDown_complexity.Value;
+        private int Seed => (int) this.numericUpDown_seed.Value;
 
         private bool Interleaved => this.checkBox_interleaved.Checked;
         internal string SelectedPreset => this.comboBox_preset.SelectedItem as string ?? " - None - ";
+
+        internal bool BotActivated { get; private set; } = false;
+
+        private CancellationTokenSource? botCancellationTokenSource;
+        private Task? botLoopTask;
+        private AudioObj? botCurrentPlaybackAudio;
 
 
 
@@ -85,8 +93,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false);
 
-            this.FormClosing += (s, e) =>
+            this.FormClosing += async (s, e) =>
             {
+                await this.StopBotAsync(stopPlaybackImmediately: true);
                 this.CancelAutoPlayPreview();
                 this.pictureBox_beatMap.Image?.Dispose();
                 this.pictureBox_beatMap.Image = null;
@@ -174,7 +183,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 return;
             }
-            AudioObj item = (AudioObj)this.listBox_samples.Items[e.Index];
+            AudioObj item = (AudioObj) this.listBox_samples.Items[e.Index];
             // Determine the color based on whether the item has a tag
             Color textColor = item.Tag is not null ? Color.Gray : e.ForeColor;
             // Draw the background
@@ -1838,6 +1847,417 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             public required List<bool[]> Pattern { get; init; }
             public required string PatternName { get; init; }
+        }
+
+        private sealed class BotGenerationSnapshot
+        {
+            public required int Bars { get; init; }
+            public required float Bpm { get; init; }
+            public required float Complexity { get; init; }
+            public required float Density { get; init; }
+            public required bool Interleaved { get; init; }
+            public required DrumsetElement[] MappedDrumset { get; init; }
+            public required string PatternNameBase { get; init; }
+            public required int Resolution { get; init; }
+            public required IReadOnlyList<string> RowLabels { get; init; }
+            public required int Seed { get; init; }
+            public required List<AudioObj> Samples { get; init; }
+            public required float Swing { get; init; }
+            public required string SelectedPreset { get; init; }
+        }
+
+        private sealed class BotPreparedBreakbeat
+        {
+            public required AudioObj Audio { get; init; }
+            public required List<bool[]> Pattern { get; init; }
+            public required string PatternName { get; init; }
+            public required IReadOnlyList<string> RowLabels { get; init; }
+        }
+
+        private async Task StartBotAsync()
+        {
+            if (this.AudioC.Audios.Count == 0)
+            {
+                LogCollection.Log("Breakbeat bot skipped because no samples are loaded.");
+                return;
+            }
+
+            await this.StopBotAsync(stopPlaybackImmediately: true);
+
+            this.BotActivated = true;
+            this.UpdateBotButtonState();
+            LogCollection.Log("Breakbeat bot started.");
+
+            var cancellationTokenSource = new CancellationTokenSource();
+            this.botCancellationTokenSource = cancellationTokenSource;
+            this.botLoopTask = this.RunBotLoopAsync(cancellationTokenSource.Token);
+            _ = this.ObserveBotLoopAsync(this.botLoopTask, cancellationTokenSource);
+        }
+
+        private async Task StopBotAsync(bool stopPlaybackImmediately)
+        {
+            this.BotActivated = false;
+            this.UpdateBotButtonState(stopping: !stopPlaybackImmediately && this.botLoopTask is not null);
+
+            CancellationTokenSource? cancellationTokenSource = this.botCancellationTokenSource;
+            if (cancellationTokenSource != null && !cancellationTokenSource.IsCancellationRequested)
+            {
+                try
+                {
+                    cancellationTokenSource.Cancel();
+                }
+                catch
+                {
+                }
+            }
+
+            if (stopPlaybackImmediately && this.botCurrentPlaybackAudio is not null)
+            {
+                try
+                {
+                    await this.botCurrentPlaybackAudio.StopAsync();
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log($"Breakbeat bot stop failed: {ex.Message}");
+                }
+            }
+
+            Task? loopTask = this.botLoopTask;
+            if (loopTask is null)
+            {
+                this.UpdateBotButtonState();
+                return;
+            }
+
+            try
+            {
+                await loopTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private async Task ObserveBotLoopAsync(Task loopTask, CancellationTokenSource cancellationTokenSource)
+        {
+            try
+            {
+                await loopTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log("Breakbeat bot failed.");
+                LogCollection.Log(ex);
+
+                if (!this.IsDisposed)
+                {
+                    await this.InvokeOnUiAsync(() =>
+                    {
+                        MessageBox.Show(this, ex.Message, "Breakbeat Bot", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    });
+                }
+            }
+            finally
+            {
+                if (ReferenceEquals(this.botCancellationTokenSource, cancellationTokenSource))
+                {
+                    this.botCancellationTokenSource = null;
+                }
+
+                if (ReferenceEquals(this.botLoopTask, loopTask))
+                {
+                    this.botLoopTask = null;
+                }
+
+                this.botCurrentPlaybackAudio = null;
+                this.BotActivated = false;
+
+                cancellationTokenSource.Dispose();
+
+                if (!this.IsDisposed)
+                {
+                    await this.InvokeOnUiAsync(() => this.UpdateBotButtonState());
+                }
+
+                LogCollection.Log("Breakbeat bot stopped.");
+            }
+        }
+
+        private async Task RunBotLoopAsync(CancellationToken cancellationToken)
+        {
+            int generationNumber = 1;
+            BotPreparedBreakbeat current = await this.GenerateBotPreparedBreakbeatAsync(generationNumber, cancellationToken);
+            Task<BotPreparedBreakbeat>? nextTask = this.GenerateBotPreparedBreakbeatAsync(generationNumber + 1, cancellationToken);
+
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    int rerollInterval = await this.InvokeOnUiAsync(() => Math.Max(1, (int) this.numericUpDown_reroll.Value));
+                    bool shouldAutoExport = await this.InvokeOnUiAsync(() => this.checkBox_autoExport.Checked);
+                    bool exportThisGeneration = shouldAutoExport && generationNumber % rerollInterval == 0;
+
+                    await this.PresentBotPreparedBreakbeatAsync(current, exportThisGeneration, generationNumber, cancellationToken);
+
+                    for (int pass = 0; pass < rerollInterval; pass++)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await this.PlayBotPreparedBreakbeatAsync(current, cancellationToken);
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    generationNumber++;
+                    current = nextTask is not null
+                        ? await nextTask
+                        : await this.GenerateBotPreparedBreakbeatAsync(generationNumber, cancellationToken);
+
+                    nextTask = this.GenerateBotPreparedBreakbeatAsync(generationNumber + 1, cancellationToken);
+                }
+            }
+            finally
+            {
+                if (nextTask is not null)
+                {
+                    try
+                    {
+                        await nextTask;
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+        }
+
+        private async Task<BotPreparedBreakbeat> GenerateBotPreparedBreakbeatAsync(int generationNumber, CancellationToken cancellationToken)
+        {
+            BotGenerationSnapshot snapshot = await this.CaptureBotGenerationSnapshotAsync(generationNumber);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            List<bool[]> breakbeat = await BreakbeatGenerator_V2.GenerateBreakPatternAsync(
+                drumset: snapshot.MappedDrumset,
+                bars: snapshot.Bars,
+                density: snapshot.Density,
+                resolution: snapshot.Resolution,
+                swing: snapshot.Swing,
+                complexity: snapshot.Complexity,
+                interleaved: snapshot.Interleaved,
+                seed: snapshot.Seed,
+                preset: snapshot.SelectedPreset
+            );
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            string patternName = $"{snapshot.PatternNameBase}_{generationNumber:D3}";
+            AudioObj audioObj = await BreakbeatGenerator_V2.RenderBreakbeatAsync(breakbeat, snapshot.Samples, snapshot.Bpm, snapshot.Resolution, snapshot.Swing, patternName);
+            if (audioObj == null)
+            {
+                throw new InvalidOperationException("Breakbeat bot could not render the generated audio.");
+            }
+
+            return new BotPreparedBreakbeat
+            {
+                Audio = audioObj,
+                Pattern = breakbeat,
+                PatternName = patternName,
+                RowLabels = snapshot.RowLabels
+            };
+        }
+
+        private async Task<BotGenerationSnapshot> CaptureBotGenerationSnapshotAsync(int generationNumber)
+        {
+            return await this.InvokeOnUiAsync(() =>
+            {
+                DrumsetElement[] mappedDrumset = this.GetMappedDrumset();
+                string patternNameBase = this.SelectedPreset != " - None - "
+                    ? this.SelectedPreset.Replace(" ", string.Empty)
+                    : "BotBreakbeat";
+
+                return new BotGenerationSnapshot
+                {
+                    Bars = this.Bars,
+                    Bpm = this.Bpm,
+                    Complexity = this.Complexity,
+                    Density = this.Density,
+                    Interleaved = this.Interleaved,
+                    MappedDrumset = mappedDrumset,
+                    PatternNameBase = patternNameBase,
+                    Resolution = this.Resolution,
+                    RowLabels = this.GetBeatMapRowLabels().ToArray(),
+                    Seed = unchecked(this.Seed + (generationNumber * 7919)),
+                    Samples = this.AudioC.Audios.Select(audio => audio.Clone()).ToList(),
+                    Swing = this.Swing,
+                    SelectedPreset = this.SelectedPreset
+                };
+            });
+        }
+
+        private DrumsetElement[] GetMappedDrumset()
+        {
+            DrumsetElement[] mappedDrumset = new DrumsetElement[this.AudioC.Audios.Count];
+            for (int i = 0; i < this.AudioC.Audios.Count; i++)
+            {
+                mappedDrumset[i] = this.AudioC.Audios[i].Tag is DrumsetElement element ? element : DrumsetElement.Snare;
+            }
+
+            return mappedDrumset;
+        }
+
+        private async Task PresentBotPreparedBreakbeatAsync(BotPreparedBreakbeat prepared, bool autoExport, int generationNumber, CancellationToken cancellationToken)
+        {
+            await this.InvokeOnUiAsync(() =>
+            {
+                this.ShowBeatMap(prepared.Pattern, prepared.RowLabels);
+
+                if (this.CollectionView == null || this.CollectionView.IsDisposed)
+                {
+                    this.CollectionView = new AudioCollectionView([]);
+                }
+
+                this.CollectionView.AudioC.Audios.Add(prepared.Audio.Clone());
+                this.CollectionView.Show();
+                this.CollectionView.Rename("Break-Beat" + (this.CollectionView.AudioC.Audios.Count == 1 ? string.Empty : "(s)") + " Generated " + this.Bpm.ToString("F1", CultureInfo.InvariantCulture) + " BPM");
+            });
+
+            if (!autoExport)
+            {
+                return;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await this.ExportBotPreparedBreakbeatAsync(prepared, generationNumber);
+        }
+
+        private async Task ExportBotPreparedBreakbeatAsync(BotPreparedBreakbeat prepared, int generationNumber)
+        {
+            string format = await this.InvokeOnUiAsync(() => WindowMain.GlobalExportFormat);
+            int bits = await this.InvokeOnUiAsync(() => WindowMain.GlobalExportBits);
+
+            string? exportPath = AudioExporter.IsMp3Format(format)
+                ? await this.AudioC.Exporter.ExportMp3Async(prepared.Audio.Clone(), bits, Math.Max(1, Environment.ProcessorCount / 2))
+                : await this.AudioC.Exporter.ExportWavAsync(prepared.Audio.Clone(), bits);
+
+            if (string.IsNullOrWhiteSpace(exportPath))
+            {
+                LogCollection.Log($"Breakbeat bot auto export failed for generation #{generationNumber:D3}.");
+                return;
+            }
+
+            LogCollection.Log($"Breakbeat bot auto exported generation #{generationNumber:D3}: {exportPath}");
+        }
+
+        private async Task PlayBotPreparedBreakbeatAsync(BotPreparedBreakbeat prepared, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            this.botCurrentPlaybackAudio = prepared.Audio;
+            prepared.Audio.StartingOffset = 0;
+            await prepared.Audio.PlayAsync(CancellationToken.None);
+
+            try
+            {
+                while (prepared.Audio.Playing)
+                {
+                    await Task.Delay(80, CancellationToken.None);
+                }
+            }
+            finally
+            {
+                if (ReferenceEquals(this.botCurrentPlaybackAudio, prepared.Audio))
+                {
+                    this.botCurrentPlaybackAudio = null;
+                }
+            }
+        }
+
+        private Task InvokeOnUiAsync(Action action)
+        {
+            if (this.IsDisposed)
+            {
+                return Task.CompletedTask;
+            }
+
+            if (!this.InvokeRequired)
+            {
+                action();
+                return Task.CompletedTask;
+            }
+
+            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            this.BeginInvoke(new MethodInvoker(() =>
+            {
+                try
+                {
+                    action();
+                    completion.SetResult();
+                }
+                catch (Exception ex)
+                {
+                    completion.SetException(ex);
+                }
+            }));
+
+            return completion.Task;
+        }
+
+        private Task<T> InvokeOnUiAsync<T>(Func<T> func)
+        {
+            if (this.IsDisposed)
+            {
+                return Task.FromException<T>(new ObjectDisposedException(this.Name));
+            }
+
+            if (!this.InvokeRequired)
+            {
+                return Task.FromResult(func());
+            }
+
+            var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+            this.BeginInvoke(new MethodInvoker(() =>
+            {
+                try
+                {
+                    completion.SetResult(func());
+                }
+                catch (Exception ex)
+                {
+                    completion.SetException(ex);
+                }
+            }));
+
+            return completion.Task;
+        }
+
+        private void UpdateBotButtonState(bool stopping = false)
+        {
+            this.button_bot.Text = stopping ? "Bot: ..." : this.BotActivated ? "Bot: on" : "Bot: off";
+            this.button_bot.BackColor = this.BotActivated ? Color.LightGreen : SystemColors.Info;
+        }
+
+        private async void button_bot_Click(object sender, EventArgs e)
+        {
+            this.button_bot.Enabled = false;
+
+            try
+            {
+                if (!this.BotActivated)
+                {
+                    await this.StartBotAsync();
+                }
+                else
+                {
+                    await this.StopBotAsync(stopPlaybackImmediately: false);
+                }
+            }
+            finally
+            {
+                this.button_bot.Enabled = true;
+            }
         }
     }
 }

@@ -162,38 +162,42 @@ namespace ModularAudience.Forms
 
             this.lastImportFolder = Path.GetDirectoryName(ofd.FileNames[0]) ?? this.lastImportFolder;
 
-            // Determine insertion index: attempt to use OriginalCurrentPath to find where to insert after.
-            int insertIndex = -1;
+            List<string> validPaths = ofd.FileNames
+                .Where(path => !string.IsNullOrWhiteSpace(path) && AllowedImportExtensions.Contains(Path.GetExtension(path)))
+                .ToList();
+
+            if (validPaths.Count == 0)
+            {
+                return;
+            }
+
+            // PlaylistEngine keeps the currently playing track at index 0 until it finishes.
+            // "Add next" therefore means insert after index 0 while playing, otherwise at the front.
+            int insertIndex = 0;
             try
             {
-                string? cur = this._playlist.OriginalCurrentPath ?? this._playlist.CurrentPath;
-                if (!string.IsNullOrWhiteSpace(cur))
+                if (!this._playlist.IsPlaying || this._playlist.FilePaths.Count == 0)
                 {
-                    insertIndex = this._playlist.FilePaths.IndexOf(cur);
-                    // If not found, try matching by filename without extension (handles temp stretched files)
-                    if (insertIndex < 0)
-                    {
-                        string baseName = Path.GetFileNameWithoutExtension(cur);
-                        if (baseName.Contains("__stretched_"))
-                            baseName = baseName.Split("__stretched_").FirstOrDefault() ?? baseName;
-                        insertIndex = this._playlist.FilePaths.FindIndex(p => Path.GetFileNameWithoutExtension(p).Equals(baseName, StringComparison.OrdinalIgnoreCase));
-                    }
+                    insertIndex = 0;
+                }
+                else
+                {
+                    insertIndex = Math.Min(1, this._playlist.FilePaths.Count);
                 }
             }
-            catch { insertIndex = -1; }
-
-            if (insertIndex < 0) insertIndex = 0; // fallback: insert at front
-
-            foreach (string path in ofd.FileNames.Reverse())
+            catch
             {
-                if (!string.IsNullOrWhiteSpace(path) &&
-                    AllowedImportExtensions.Contains(Path.GetExtension(path)))
-                {
-                    this._playlist.FilePaths.Insert(insertIndex + 1, path);
-                }
+                insertIndex = Math.Min(this._playlist.IsPlaying ? 1 : 0, this._playlist.FilePaths.Count);
             }
 
-            LogCollection.Log($"Playlist: {ofd.FileNames.Length} file(s) added next.");
+            insertIndex = Math.Clamp(insertIndex, 0, this._playlist.FilePaths.Count);
+
+            foreach (string path in validPaths.Reverse<string>())
+            {
+                this._playlist.FilePaths.Insert(insertIndex, path);
+            }
+
+            LogCollection.Log($"Playlist: {validPaths.Count} file(s) added next.");
             this.UpdatePlaylistUI();
         }
 
@@ -212,16 +216,21 @@ namespace ModularAudience.Forms
 
             this.lastImportFolder = Path.GetDirectoryName(ofd.FileNames[0]) ?? this.lastImportFolder;
 
-            foreach (string path in ofd.FileNames)
+            List<string> validPaths = ofd.FileNames
+                .Where(path => !string.IsNullOrWhiteSpace(path) && AllowedImportExtensions.Contains(Path.GetExtension(path)))
+                .ToList();
+
+            if (validPaths.Count == 0)
             {
-                if (!string.IsNullOrWhiteSpace(path) &&
-                    AllowedImportExtensions.Contains(Path.GetExtension(path)))
-                {
-                    this._playlist.FilePaths.Add(path);
-                }
+                return;
             }
 
-            LogCollection.Log($"Playlist: {ofd.FileNames.Length} file(s) enqueued last.");
+            foreach (string path in validPaths)
+            {
+                this._playlist.FilePaths.Add(path);
+            }
+
+            LogCollection.Log($"Playlist: {validPaths.Count} file(s) enqueued last.");
             this.UpdatePlaylistUI();
         }
 
@@ -598,25 +607,44 @@ namespace ModularAudience.Forms
 
             TimeSpan now = DateTime.UtcNow - this._trackLogRecordStart.Value;
 
-            // Close previous entry
             string? prev = this._trackLogCurrentPath;
-            if (prev != null)
+            string? currentOriginalPath = this._playlist.OriginalCurrentPath;
+            string? currentPlaybackPath = this._playlist.CurrentPath;
+            bool hasActiveTrack = this._playlist.IsPlaying || this._playlist.IsPaused;
+
+            string? cur = hasActiveTrack
+                ? (currentOriginalPath ?? currentPlaybackPath)
+                : null;
+
+            string? prevTrackId = prev != null ? Path.GetFileNameWithoutExtension(prev) : null;
+            string? curTrackId = cur != null ? Path.GetFileNameWithoutExtension(cur) : null;
+
+            // Duplicate TrackChanged can occur at track end before the next track is initialized.
+            // In that state, treat the playlist as idle for logging if the engine is not actively playing.
+            if (!hasActiveTrack && prevTrackId != null && curTrackId == prevTrackId)
             {
-                var last = this._trackLog.LastOrDefault(e =>
-                    e.TrackId == Path.GetFileNameWithoutExtension(prev) && e.End == null);
-                if (last != null)
-                    last.End = now;
+                cur = null;
+                curTrackId = null;
             }
 
-            // Open new entry if a track is now playing
-            string? cur = this._playlist.OriginalCurrentPath;
+            if (prevTrackId != null)
+            {
+                var last = this._trackLog.LastOrDefault(e =>
+                    e.TrackId == prevTrackId && e.End == null);
+                if (last != null)
+                {
+                    last.End = now;
+                }
+            }
+
             this._trackLogCurrentPath = cur;
-            if (cur != null)
+
+            if (curTrackId != null && !string.Equals(curTrackId, prevTrackId, StringComparison.OrdinalIgnoreCase))
             {
                 this._trackLog.Add(new TrackLogEntry
                 {
                     Start = now,
-                    TrackId = Path.GetFileNameWithoutExtension(cur)
+                    TrackId = curTrackId
                 });
             }
 
@@ -628,7 +656,9 @@ namespace ModularAudience.Forms
             if (this._trackLogFilePath == null) return;
             try
             {
-                var lines = this._trackLog.Select(e =>
+                var lines = this._trackLog
+                    .Where(e => e.End == null || e.End.Value >= e.Start)
+                    .Select(e =>
                 {
                     string start = FormatLogTs(e.Start);
                     string end   = e.End.HasValue ? FormatLogTs(e.End.Value) : "ongoing";
