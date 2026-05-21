@@ -182,7 +182,7 @@ namespace ModularAudience.Forms.Modules
                 ? audio.OriginalName
                 : !string.IsNullOrWhiteSpace(audio.Name)
                     ? audio.Name
-                    : Path.GetFileNameWithoutExtension(audio.FilePath);
+                    : Path.GetFileNameWithoutExtension(audio.FilePath).Split("__").FirstOrDefault() ?? "Unknown";
             string bpm = audio.Bpm > 0 ? $" [{audio.Bpm:F0}]" : string.Empty;
             string state = audio.PlayerPlaying ? "▶" : audio.Paused ? "||" : "■";
             string shortId = audio.Id.ToString("N")[..6];

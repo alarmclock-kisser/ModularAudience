@@ -410,12 +410,16 @@ namespace ModularAudience.Forms
                 {
                     int? chunkSize  = settings.AutoChunking ? null : (int?) settings.ChunkSize;
                     float? overlap  = settings.AutoChunking ? null : (float?) settings.Overlap;
+
+                    float preRms = PlaylistNormalizer.MeasureRms(audio.Data);
                     await TimeStretcher_V2.Timestretch_V2Async(
                         audio, stretchFactor, chunkSize, overlap,
                         progress: null, ct).ConfigureAwait(false);
+                    PlaylistNormalizer.ApplyRmsGain(audio.Data, preRms);
                 }
                 else
                 {
+                    float preRms = PlaylistNormalizer.MeasureRms(audio.Data);
                     await TimeStretcher.TimeStretchAllThreadsAsync(
                         audio,
                         settings.ChunkSize,
@@ -426,6 +430,7 @@ namespace ModularAudience.Forms
                         maxWorkers: settings.Threads,
                         progress: null,
                         offload: settings.Offload).ConfigureAwait(false);
+                    PlaylistNormalizer.ApplyRmsGain(audio.Data, preRms);
                 }
 
                 if (settings.Trim)
