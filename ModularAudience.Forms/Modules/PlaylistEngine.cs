@@ -252,6 +252,69 @@ namespace ModularAudience.Forms.Modules
         }
 
         /// <summary>
+        /// Remove an active prepared or playing audio by its AudioObj Id.
+        /// Stops playback of that audio, disposes it and removes internal tracking.
+        /// Returns true if the audio was found and removal was initiated.
+        /// </summary>
+        public bool RemoveActiveById(Guid audioId)
+        {
+            PreparedPlaylistTrack? prepared = null;
+            AudioObj? primary = null;
+            AudioObj? secondary = null;
+            WaveOutEvent? wo = null;
+            AudioFileReader? rd = null;
+
+            lock (this._lock)
+            {
+                if (this._activePreparedTracks.TryGetValue(audioId, out var p))
+                {
+                    prepared = p;
+                    this._activePreparedTracks.Remove(audioId);
+                }
+
+                if (this._primaryAudioObj != null && this._primaryAudioObj.Id == audioId)
+                {
+                    primary = this._primaryAudioObj;
+                    this._primaryAudioObj = null;
+                    this._primaryOriginalPath = null;
+                    this.CurrentPath = null;
+                    this.OriginalCurrentPath = null;
+                    wo = this._waveOut;
+                    rd = this._reader;
+                }
+
+                if (this._secondaryAudioObj != null && this._secondaryAudioObj.Id == audioId)
+                {
+                    secondary = this._secondaryAudioObj;
+                    this._secondaryAudioObj = null;
+                    this._secondaryOriginalPath = null;
+                }
+            }
+
+            if (prepared == null && primary == null && secondary == null)
+                return false;
+
+            // Stop and dispose outside lock
+            _ = Task.Run(() =>
+            {
+                try { prepared?.Audio.StopAsync().GetAwaiter().GetResult(); } catch { }
+                try { primary?.StopAsync().GetAwaiter().GetResult(); } catch { }
+                try { secondary?.StopAsync().GetAwaiter().GetResult(); } catch { }
+
+                try { prepared?.Audio.Dispose(); } catch { }
+                try { primary?.Dispose(); } catch { }
+                try { secondary?.Dispose(); } catch { }
+
+                try { wo?.Stop(); } catch { }
+                try { wo?.Dispose(); } catch { }
+                try { rd?.Dispose(); } catch { }
+            });
+
+            TrackChanged?.Invoke();
+            return true;
+        }
+
+        /// <summary>
         /// Rewind: if position > 1 s, seek to start of current track;
         /// otherwise go back to the previous track (if any).
         /// </summary>

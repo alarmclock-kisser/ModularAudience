@@ -19,6 +19,73 @@ namespace ModularAudience.Forms.Modules
             public override string ToString() => this.DisplayText;
         }
 
+        private void checkedListBox_playlistTracks_MouseUp(object? sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right) return;
+            try
+            {
+                int idx = this.checkedListBox_playlistTracks.IndexFromPoint(e.Location);
+                if (idx >= 0 && idx < this.checkedListBox_playlistTracks.Items.Count)
+                {
+                    this.checkedListBox_playlistTracks.SelectedIndex = idx;
+                    // ensure the right-clicked item is selected (not only focused)
+                }
+            }
+            catch { }
+        }
+
+        private void contextMenuStrip_playlistItem_Opening(object? sender, CancelEventArgs e)
+        {
+            // Only allow opening when an item is under mouse / selected
+            try
+            {
+                int idx = this.checkedListBox_playlistTracks.SelectedIndex;
+                e.Cancel = idx < 0 || idx >= this.checkedListBox_playlistTracks.Items.Count;
+            }
+            catch { e.Cancel = true; }
+        }
+
+        private void toolStripMenuItem_removeFromEnsemble_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                int idx = this.checkedListBox_playlistTracks.SelectedIndex;
+                if (idx < 0 || idx >= this.checkedListBox_playlistTracks.Items.Count) return;
+                if (this.checkedListBox_playlistTracks.Items[idx] is PlaylistTargetItem pti)
+                {
+                    var audio = pti.Audio;
+
+                    // Try via WindowMain bridge first
+                    bool removed = false;
+                    try
+                    {
+                        if (WindowMain.Instance != null)
+                        {
+                            removed = WindowMain.Instance.TryRemoveActivePlaylistAudioById(audio.Id);
+                        }
+                    }
+                    catch { removed = false; }
+
+                    if (!removed)
+                    {
+                        // Fallback: stop and dispose audio directly if possible
+                        _ = System.Threading.Tasks.Task.Run(() =>
+                        {
+                            try { audio.StopAsync().GetAwaiter().GetResult(); } catch { }
+                            try { audio.Dispose(); } catch { }
+                        });
+                    }
+
+                    // Remove from UI immediately
+                    this.checkedListBox_playlistTracks.Items.RemoveAt(idx);
+                    this.selectedPlaylistTrackIds.Remove(audio.Id);
+                    this.knownPlaylistTrackIds.Remove(audio.Id);
+                    this.UpdateLoopButtonsState();
+                }
+            }
+            catch { }
+        }
+
         private AudioCollectionView? CollectionView = null;
         private readonly HashSet<Guid> selectedPlaylistTrackIds = [];
         private readonly HashSet<Guid> knownPlaylistTrackIds = [];
@@ -130,6 +197,10 @@ namespace ModularAudience.Forms.Modules
             this.checkedListBox_playlistTracks.ItemCheck += this.checkedListBox_playlistTracks_ItemCheck;
             this.playlistTargetsTimer.Tick += (_, _) => this.RefreshPlaylistTargets();
             this.playlistTargetsTimer.Start();
+
+            // Right-click context menu selection handling
+            this.checkedListBox_playlistTracks.MouseUp += this.checkedListBox_playlistTracks_MouseUp;
+            this.contextMenuStrip_playlistItem.Opening += this.contextMenuStrip_playlistItem_Opening;
 
             this.numericUpDown_jump.Click += this.numericUpDown_jump_Click;
 

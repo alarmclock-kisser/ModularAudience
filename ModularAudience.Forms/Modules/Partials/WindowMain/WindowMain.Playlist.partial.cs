@@ -250,6 +250,16 @@ namespace ModularAudience.Forms
                 .ToArray();
         }
 
+        internal bool TryRemoveActivePlaylistAudioById(Guid audioId)
+        {
+            try
+            {
+                return this._playlist.RemoveActiveById(audioId);
+            }
+            catch { }
+            return false;
+        }
+
         // ── Right-click context menu handlers ──────────────────────────────────
         private void playlistMenu_PlayPause_Click(object sender, EventArgs e)
         {

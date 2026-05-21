@@ -28,6 +28,8 @@
         /// </summary>
         private void InitializeComponent()
         {
+            this.contextMenuStrip_playlistItem = new System.Windows.Forms.ContextMenuStrip();
+            this.toolStripMenuItem_removeFromEnsemble = new System.Windows.Forms.ToolStripMenuItem();
             this.panel_buttons = new Panel();
             this.button_loop = new Button();
             this.button_copy = new Button();
@@ -183,7 +185,21 @@
             this.checkedListBox_playlistTracks.Name = "checkedListBox_playlistTracks";
             this.checkedListBox_playlistTracks.Size = new Size(464, 76);
             this.checkedListBox_playlistTracks.TabIndex = 12;
+            this.checkedListBox_playlistTracks.ContextMenuStrip = this.contextMenuStrip_playlistItem;
             // 
+            // contextMenuStrip_playlistItem
+            // 
+            this.contextMenuStrip_playlistItem.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { this.toolStripMenuItem_removeFromEnsemble });
+            this.contextMenuStrip_playlistItem.Name = "contextMenuStrip_playlistItem";
+            this.contextMenuStrip_playlistItem.Size = new System.Drawing.Size(181, 48);
+            // 
+            // toolStripMenuItem_removeFromEnsemble
+            // 
+            this.toolStripMenuItem_removeFromEnsemble.Name = "toolStripMenuItem_removeFromEnsemble";
+            this.toolStripMenuItem_removeFromEnsemble.Size = new System.Drawing.Size(180, 22);
+            this.toolStripMenuItem_removeFromEnsemble.Text = "Remove from ensemble";
+            this.toolStripMenuItem_removeFromEnsemble.Click += this.toolStripMenuItem_removeFromEnsemble_Click;
+
             // LoopControl
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
@@ -229,5 +245,7 @@
         private Button button_playlistAllOn;
         private Button button_playlistAllOff;
         private CheckedListBox checkedListBox_playlistTracks;
+        private System.Windows.Forms.ContextMenuStrip contextMenuStrip_playlistItem;
+        private System.Windows.Forms.ToolStripMenuItem toolStripMenuItem_removeFromEnsemble;
     }
 }
