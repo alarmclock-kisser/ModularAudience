@@ -74,10 +74,6 @@ namespace ModularAudience.Forms.Modules
             // Never return negative (would mean "start in the past")
             adjustedWait = Math.Max(0.0, adjustedWait);
 
-            ModularAudience.Audio.LogCollection.Log(
-                $"[OnBeatAlign] BPM={bpm:F1} nominalWait={nominalWait:F2}s " +
-                $"beatShift={beatShift:+0.000;-0.000}s → wait={adjustedWait:F2}s");
-
             return adjustedWait;
         }
 

@@ -12,6 +12,13 @@ namespace ModularAudience.Forms
             this.listBox_log.Items.Clear();
             this.listBox_log.DataSource = LogCollection.Logs;
             this.listBox_log.HorizontalScrollbar = true;
+            // Enable double buffering to reduce white/blank flicker when scrolling or updating
+            try
+            {
+                var prop = this.listBox_log.GetType().GetProperty("DoubleBuffered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                prop?.SetValue(this.listBox_log, true, null);
+            }
+            catch { }
 
             LogCollection.Logs.ListChanged += (s, e) =>
             {

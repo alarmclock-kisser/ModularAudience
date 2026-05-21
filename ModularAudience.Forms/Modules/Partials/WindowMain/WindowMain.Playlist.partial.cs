@@ -49,6 +49,14 @@ namespace ModularAudience.Forms
 
             this._playlist.TrackChanged += () =>
             {
+                // Pause is a true pause: do not treat it like track completion/advance.
+                if (this._playlist.IsPaused)
+                {
+                    WindowMainStaticHelpers.InvokeIfRequired(Instance, this.UpdatePlaylistUI);
+                    WindowMainStaticHelpers.InvokeIfRequired(Instance, this.UpdatePlaylistHoverTitle);
+                    return;
+                }
+
                 // Track-log: close previous entry, open new one
                 this.OnPlaylistTrackChanged();
                 WindowMainStaticHelpers.InvokeIfRequired(Instance, this.UpdatePlaylistUI);
@@ -82,15 +90,22 @@ namespace ModularAudience.Forms
 
         private float ResolvePlaylistPlaybackBpm(string originalPath, string playPath)
         {
-            float bpm = PlaylistEngine.ReadMetadata(originalPath).Bpm;
-            if (bpm <= 0 && this._playlistStretchSettings != null)
+            // If the playback path differs from the original (i.e. a preprocessed/stretched temp file),
+            // prefer the user-configured target BPM so the UI and engine reflect the actual playback rate.
+            if (!string.Equals(playPath, originalPath, StringComparison.OrdinalIgnoreCase) && this._playlistStretchSettings != null)
             {
-                bpm = this._playlistStretchSettings.TargetBpm;
+                return this._playlistStretchSettings.TargetBpm;
             }
 
+            float bpm = PlaylistEngine.ReadMetadata(originalPath).Bpm;
             if (bpm <= 0 && !string.Equals(playPath, originalPath, StringComparison.OrdinalIgnoreCase))
             {
                 bpm = PlaylistEngine.ReadMetadata(playPath).Bpm;
+            }
+
+            if (bpm <= 0 && this._playlistStretchSettings != null)
+            {
+                bpm = this._playlistStretchSettings.TargetBpm;
             }
 
             return bpm;
@@ -604,12 +619,14 @@ namespace ModularAudience.Forms
             string durStr = $"{(int) dur.TotalMinutes:D2}:{dur.Seconds:D2}";
 
             string name = this._playlist.CurrentPath != null
-                ? Path.GetFileNameWithoutExtension(this._playlist.CurrentPath).Split("__").FirstOrDefault() ?? "–"
+                ? Path.GetFileNameWithoutExtension(this._playlist.CurrentPath) ?? "–"
                 : "–";
+            if (!string.IsNullOrWhiteSpace(name) && name.Contains("__"))
+                name = name.Split(new[] { "__" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
             if (name.Length > 96) name = name[..63] + "…";
 
+            // Prefer the engine-reported current BPM (already adjusted for any applied stretch).
             float bpm = this._playlist.CurrentBpm;
-            // If BPM unknown but auto-stretch is enabled, show the target BPM
             if (bpm <= 0 && this._playlistStretchSettings != null)
                 bpm = this._playlistStretchSettings.TargetBpm;
             string bpmStr = bpm > 0 ? $"{bpm:F0}" : "?";
@@ -632,10 +649,14 @@ namespace ModularAudience.Forms
             if (string.IsNullOrWhiteSpace(path))
                 return null;
 
-            string name = Path.GetFileNameWithoutExtension(path);
-            if (name.Contains("__stretched_", StringComparison.OrdinalIgnoreCase))
-                name = name.Split("__stretched_", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)[0];
+            string name = Path.GetFileNameWithoutExtension(path) ?? "–";
+            // Remove generated suffixes after a double-underscore and common _stretched_ markers
+            if (name.Contains("__"))
+                name = name.Split(new[] { "__" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
+            if (name.IndexOf("_stretched_", StringComparison.OrdinalIgnoreCase) >= 0)
+                name = name.Split(new[] { "_stretched_" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
 
+            // Prefer engine-reported current BPM (reflects applied stretch). If missing, fall back to stretch settings.
             float bpm = this._playlist.CurrentBpm;
             if (bpm <= 0 && this._playlistStretchSettings != null)
                 bpm = this._playlistStretchSettings.TargetBpm;
@@ -704,6 +725,7 @@ namespace ModularAudience.Forms
         private void OnPlaylistTrackChanged()
         {
             if (this._trackLogFilePath == null || this._trackLogRecordStart == null) return;
+            if (this._playlist.IsPaused) return;
 
             TimeSpan now = DateTime.UtcNow - this._trackLogRecordStart.Value;
 

@@ -127,14 +127,14 @@ namespace ModularAudience.Audio.Processors_V3
                 if (diff > toleranceSeconds)
                 {
                     double pauseMs = Math.Clamp(diff, pulse / 2.0, pulse) * 1000.0;
-                    await PulsePauseAsync(slave, (int) pauseMs).ConfigureAwait(false);
+                    await PulsePauseAsync(slave, (int) pauseMs, this.initialPlayingState).ConfigureAwait(false);
                 }
                 else if (diff < -toleranceSeconds)
                 {
                     if (bestGroup.Count <= 3)
                     {
                         double pauseMs = Math.Clamp(-diff, pulse / 2.0, pulse) * 1000.0;
-                        await PulsePauseAsync(master, (int) pauseMs).ConfigureAwait(false);
+                        await PulsePauseAsync(master, (int) pauseMs, this.initialPlayingState).ConfigureAwait(false);
                     }
                 }
             }
@@ -178,7 +178,7 @@ namespace ModularAudience.Audio.Processors_V3
             return diff;
         }
 
-        private static async Task PulsePauseAsync(AudioObj track, int pauseMs)
+        private static async Task PulsePauseAsync(AudioObj track, int pauseMs, Dictionary<AudioObj, bool> initialPlayingState)
         {
             if (pauseMs <= 0 || !track.PlayerPlaying)
             {
@@ -186,9 +186,17 @@ namespace ModularAudience.Audio.Processors_V3
             }
             try
             {
+                // Remember whether the track was playing at syncer start; if it wasn't, do not resume it here.
+                bool originallyPlaying = initialPlayingState != null && initialPlayingState.TryGetValue(track, out bool was) && was;
+
+                // Pause the track (PauseAsync toggles between pause/resume).
                 await track.PauseAsync().ConfigureAwait(false);
+
+                // Short delay to align phase.
                 await Task.Delay(pauseMs).ConfigureAwait(false);
-                if (track.Paused)
+
+                // Resume only if it was originally playing and is still paused.
+                if (originallyPlaying && track.Paused)
                 {
                     await track.PauseAsync().ConfigureAwait(false);
                 }

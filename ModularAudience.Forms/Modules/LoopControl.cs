@@ -178,12 +178,39 @@ namespace ModularAudience.Forms.Modules
 
         private static string BuildPlaylistDisplayText(AudioObj audio)
         {
-            string name = !string.IsNullOrWhiteSpace(audio.OriginalName)
+            string rawName = !string.IsNullOrWhiteSpace(audio.OriginalName)
                 ? audio.OriginalName
                 : !string.IsNullOrWhiteSpace(audio.Name)
                     ? audio.Name
-                    : Path.GetFileNameWithoutExtension(audio.FilePath).Split("__").FirstOrDefault() ?? "Unknown";
-            string bpm = audio.Bpm > 0 ? $" [{audio.Bpm:F0}]" : string.Empty;
+                    : Path.GetFileNameWithoutExtension(audio.FilePath) ?? "Unknown";
+
+            // If name contains a double-underscore separator used for generated suffixes, keep only the first part.
+            string name = rawName;
+            if (name.Contains("__"))
+            {
+                var parts = name.Split(new[] { "__" }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length > 0)
+                    name = parts[0].Trim();
+            }
+            // Also strip common generated marker like _stretched_ inside the filename if present
+            if (name.IndexOf("_stretched_", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                name = name.Split(new[] { "_stretched_" }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+            }
+            // Show effective playback BPM. If the audio was time-stretched or its sample-rate adjusted,
+            // reflect that in the displayed BPM so the UI matches what is actually playing.
+            float effectiveBpm = 0f;
+            if (audio.Bpm > 0)
+            {
+                double rateFactor = 1.0;
+                try
+                {
+                    rateFactor = audio.StretchFactor * audio.SampleRateFactor * audio.ManualSampleRateFactor * audio.SyncNudgeSampleRateFactor;
+                }
+                catch { }
+                effectiveBpm = (float)(audio.Bpm * rateFactor);
+            }
+            string bpm = effectiveBpm > 0 ? $" [{effectiveBpm:F0}]" : string.Empty;
             string state = audio.PlayerPlaying ? "▶" : audio.Paused ? "||" : "■";
             string shortId = audio.Id.ToString("N")[..6];
             return $"{state} {name}{bpm} · {shortId}";
@@ -195,6 +222,33 @@ namespace ModularAudience.Forms.Modules
                 .Where(audio => audio != null)
                 .DistinctBy(audio => audio.Id)
                 .ToList();
+
+            // Ensure we include paused tracks that are part of active prepared tracks so the UI
+            // doesn't drop them when the pausing syncer temporarily pauses one of the tracks.
+            var extra = WindowMain.Instance?.GetActivePlaylistAudios()
+                .Where(a => a != null && !activePlaylistAudios.Any(x => x.Id == a.Id))
+                .ToList();
+            if (extra != null && extra.Count > 0)
+            {
+                activePlaylistAudios.AddRange(extra);
+            }
+
+            // Also include TrackViews that are playing in the main UI (so LoopControl mirrors
+            // the main window's perceived active tracks). This covers tracks originating from
+            // TrackViews rather than playlist-prepared temp objects.
+            try
+            {
+                var playingFromTrackViews = WindowMain.PlayingTrackViews
+                    .Where(tv => tv != null)
+                    .Select(tv => tv.OriginalAudio)
+                    .Where(a => a != null && !activePlaylistAudios.Any(x => x.Id == a.Id))
+                    .ToList();
+                if (playingFromTrackViews.Count > 0)
+                {
+                    activePlaylistAudios.AddRange(playingFromTrackViews);
+                }
+            }
+            catch { }
 
             HashSet<Guid> activeIds = activePlaylistAudios.Select(audio => audio.Id).ToHashSet();
 
