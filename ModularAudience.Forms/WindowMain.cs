@@ -78,6 +78,9 @@ namespace ModularAudience.Forms
         // Playlist FilePaths
         internal static List<string> PlaylistFilePaths = [];
 
+        // Crossfade duration in seconds
+        public static double CrossfadeDurationSeconds = 0.0;
+
 
         public WindowMain()
         {
@@ -366,6 +369,19 @@ namespace ModularAudience.Forms
                 {
                     // best-effort: ignore individual failures
                 }
+            }
+        }
+
+        private void toolStripMenuItem_crossfade_Click(object sender, EventArgs e)
+        {
+            // Prompt user for crossfade duration VBasic-style input box
+            string input = Microsoft.VisualBasic.Interaction.InputBox(
+                "Enter crossfade duration in seconds (e.g. 2.5):",
+                "Set Crossfade Duration",
+                CrossfadeDurationSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (double.TryParse(input, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double result))
+            {
+                CrossfadeDurationSeconds = result;
             }
         }
 

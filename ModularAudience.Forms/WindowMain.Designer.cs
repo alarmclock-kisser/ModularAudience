@@ -70,6 +70,7 @@
             this.button_bringAllToFront = new Button();
             this.button_playlist = new Button();
             this.label_currentlyEnqueued = new Label();
+            this.toolStripMenuItem_crossfade = new ToolStripMenuItem();
             this.contextMenuStrip_playlist.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -96,6 +97,54 @@
             this.button_browse.Text = "[...]";
             this.button_browse.UseVisualStyleBackColor = true;
             this.button_browse.Click += this.button_browse_Click;
+            // 
+            // contextMenuStrip_playlist
+            // 
+            this.contextMenuStrip_playlist.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_playPause, this.toolStripMenuItem_prev, this.toolStripMenuItem_skip, this.toolStripMenuItem_crossfade, this.toolStripMenuItem_shuffle, this.toolStripMenuItem_clear, this.toolStripMenuItem_timestretchEach });
+            this.contextMenuStrip_playlist.Name = "contextMenuStrip_playlist";
+            this.contextMenuStrip_playlist.Size = new Size(190, 192);
+            // 
+            // toolStripMenuItem_playPause
+            // 
+            this.toolStripMenuItem_playPause.Name = "toolStripMenuItem_playPause";
+            this.toolStripMenuItem_playPause.Size = new Size(189, 22);
+            this.toolStripMenuItem_playPause.Text = "Import Tracks ...";
+            this.toolStripMenuItem_playPause.Click += this.playlistMenu_ImportTracks_Click;
+            // 
+            // toolStripMenuItem_prev
+            // 
+            this.toolStripMenuItem_prev.Name = "toolStripMenuItem_prev";
+            this.toolStripMenuItem_prev.Size = new Size(189, 22);
+            this.toolStripMenuItem_prev.Text = "⏮ Rewind / Previous";
+            this.toolStripMenuItem_prev.Click += this.playlistMenu_Prev_Click;
+            // 
+            // toolStripMenuItem_skip
+            // 
+            this.toolStripMenuItem_skip.Name = "toolStripMenuItem_skip";
+            this.toolStripMenuItem_skip.Size = new Size(189, 22);
+            this.toolStripMenuItem_skip.Text = "⏭ Skip Track";
+            this.toolStripMenuItem_skip.Click += this.playlistMenu_Skip_Click;
+            // 
+            // toolStripMenuItem_shuffle
+            // 
+            this.toolStripMenuItem_shuffle.Name = "toolStripMenuItem_shuffle";
+            this.toolStripMenuItem_shuffle.Size = new Size(189, 22);
+            this.toolStripMenuItem_shuffle.Text = "🔀 Shuffle Remaining";
+            this.toolStripMenuItem_shuffle.Click += this.playlistMenu_Shuffle_Click;
+            // 
+            // toolStripMenuItem_clear
+            // 
+            this.toolStripMenuItem_clear.Name = "toolStripMenuItem_clear";
+            this.toolStripMenuItem_clear.Size = new Size(189, 22);
+            this.toolStripMenuItem_clear.Text = "✖ Clear Playlist";
+            this.toolStripMenuItem_clear.Click += this.playlistMenu_Clear_Click;
+            // 
+            // toolStripMenuItem_timestretchEach
+            // 
+            this.toolStripMenuItem_timestretchEach.Name = "toolStripMenuItem_timestretchEach";
+            this.toolStripMenuItem_timestretchEach.Size = new Size(189, 22);
+            this.toolStripMenuItem_timestretchEach.Text = "⏱ Timestretch each...";
+            this.toolStripMenuItem_timestretchEach.Click += this.playlistMenu_TimestretchEach_Click;
             // 
             // button_scanBpm
             // 
@@ -421,64 +470,6 @@
             this.button_bringAllToFront.UseVisualStyleBackColor = false;
             this.button_bringAllToFront.Click += this.button_bringAllToFront_Click;
             // 
-            // contextMenuStrip_playlist
-            // 
-            this.contextMenuStrip_playlist.Items.AddRange(new ToolStripItem[] {
-                this.toolStripMenuItem_playPause,
-                this.toolStripMenuItem_prev,
-                this.toolStripMenuItem_skip,
-                new ToolStripSeparator(),
-                this.toolStripMenuItem_shuffle,
-                this.toolStripMenuItem_clear,
-                new ToolStripSeparator(),
-                this.toolStripMenuItem_timestretchEach
-            });
-            this.contextMenuStrip_playlist.Name = "contextMenuStrip_playlist";
-            this.contextMenuStrip_playlist.Size = new Size(181, 148);
-            // 
-            // toolStripMenuItem_playPause
-            // 
-            this.toolStripMenuItem_playPause.Name = "toolStripMenuItem_playPause";
-            this.toolStripMenuItem_playPause.Size = new Size(180, 22);
-            this.toolStripMenuItem_playPause.Text = "▶ Play / || Pause";
-            this.toolStripMenuItem_playPause.Click += this.playlistMenu_PlayPause_Click;
-            // 
-            // toolStripMenuItem_prev
-            // 
-            this.toolStripMenuItem_prev.Name = "toolStripMenuItem_prev";
-            this.toolStripMenuItem_prev.Size = new Size(180, 22);
-            this.toolStripMenuItem_prev.Text = "⏮ Rewind / Previous";
-            this.toolStripMenuItem_prev.Click += this.playlistMenu_Prev_Click;
-            // 
-            // toolStripMenuItem_skip
-            // 
-            this.toolStripMenuItem_skip.Name = "toolStripMenuItem_skip";
-            this.toolStripMenuItem_skip.Size = new Size(180, 22);
-            this.toolStripMenuItem_skip.Text = "⏭ Skip Track";
-            this.toolStripMenuItem_skip.Click += this.playlistMenu_Skip_Click;
-            // 
-            // toolStripMenuItem_shuffle
-            // 
-            this.toolStripMenuItem_shuffle.Name = "toolStripMenuItem_shuffle";
-            this.toolStripMenuItem_shuffle.Size = new Size(180, 22);
-            this.toolStripMenuItem_shuffle.Text = "🔀 Shuffle Remaining";
-            this.toolStripMenuItem_shuffle.Click += this.playlistMenu_Shuffle_Click;
-            // 
-            // toolStripMenuItem_clear
-            // 
-            this.toolStripMenuItem_clear.Name = "toolStripMenuItem_clear";
-            this.toolStripMenuItem_clear.Size = new Size(180, 22);
-            this.toolStripMenuItem_clear.Text = "✖ Clear Playlist";
-            this.toolStripMenuItem_clear.Click += this.playlistMenu_Clear_Click;
-            // 
-            // toolStripMenuItem_timestretchEach
-            // 
-            this.toolStripMenuItem_timestretchEach.CheckOnClick = false;
-            this.toolStripMenuItem_timestretchEach.Name = "toolStripMenuItem_timestretchEach";
-            this.toolStripMenuItem_timestretchEach.Size = new Size(180, 22);
-            this.toolStripMenuItem_timestretchEach.Text = "⏱ Timestretch each...";
-            this.toolStripMenuItem_timestretchEach.Click += this.playlistMenu_TimestretchEach_Click;
-            // 
             // button_playlist
             // 
             this.button_playlist.BackColor = Color.FromArgb(  255,   224,   192);
@@ -491,7 +482,7 @@
             this.button_playlist.TabStop = false;
             this.button_playlist.Text = "▶ List";
             this.button_playlist.UseVisualStyleBackColor = false;
-            this.button_playlist.Click += this.button_playlist_Click;
+            this.button_playlist.Click += this.button_playlist_TogglePlayPause_Click;
             this.button_playlist.MouseHover += this.button_playlist_MouseHover;
             // 
             // label_currentlyEnqueued
@@ -503,6 +494,13 @@
             this.label_currentlyEnqueued.Size = new Size(174, 13);
             this.label_currentlyEnqueued.TabIndex = 33;
             this.label_currentlyEnqueued.Text = "No track currently enqueued in playlist.";
+            // 
+            // toolStripMenuItem_crossfade
+            // 
+            this.toolStripMenuItem_crossfade.Name = "toolStripMenuItem_crossfade";
+            this.toolStripMenuItem_crossfade.Size = new Size(189, 22);
+            this.toolStripMenuItem_crossfade.Text = "≋ Crossfade...";
+            this.toolStripMenuItem_crossfade.Click += this.toolStripMenuItem_crossfade_Click;
             // 
             // WindowMain
             // 
@@ -593,5 +591,6 @@
         private ToolStripMenuItem toolStripMenuItem_clear;
         private ToolStripMenuItem toolStripMenuItem_timestretchEach;
         private ToolTip toolTip_playlist;
+        private ToolStripMenuItem toolStripMenuItem_crossfade;
     }
 }

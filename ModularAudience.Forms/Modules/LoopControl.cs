@@ -11,10 +11,39 @@ namespace ModularAudience.Forms.Modules
 {
     public partial class LoopControl : Form
     {
+        private sealed class PlaylistTargetItem
+        {
+            public required AudioObj Audio { get; init; }
+            public required string DisplayText { get; init; }
+
+            public override string ToString() => this.DisplayText;
+        }
+
         private AudioCollectionView? CollectionView = null;
+        private readonly HashSet<Guid> selectedPlaylistTrackIds = [];
+        private readonly HashSet<Guid> knownPlaylistTrackIds = [];
+        private readonly System.Windows.Forms.Timer playlistTargetsTimer = new() { Interval = 250 };
+        private bool suppressPlaylistChecklistEvents;
 
         private TrackView? CurrentTrackView => WindowMain.LastSelectedTrackView;
-        private AudioObj? OriginalAudio => this.CurrentTrackView?.OriginalAudio;
+        private AudioObj? SelectedTrackAudio => this.CurrentTrackView?.OriginalAudio;
+        private IReadOnlyList<AudioObj> PlaylistAudios => WindowMain.Instance?.GetActivePlaylistAudios() ?? [];
+        private IReadOnlyList<AudioObj> SelectedPlaylistAudios => this.checkedListBox_playlistTracks.CheckedItems
+            .OfType<PlaylistTargetItem>()
+            .Select(item => item.Audio)
+            .Where(audio => audio != null)
+            .DistinctBy(audio => audio.Id)
+            .ToList();
+        private IReadOnlyList<AudioObj> TargetAudios => (this.SelectedTrackAudio != null
+                ? new[] { this.SelectedTrackAudio }
+                : Enumerable.Empty<AudioObj?>())
+            .Concat(this.SelectedPlaylistAudios)
+            .Where(audio => audio != null)
+            .Cast<AudioObj>()
+            .DistinctBy(audio => audio.Id)
+            .ToList();
+        private AudioObj? PlaylistAudio => this.SelectedPlaylistAudios.FirstOrDefault() ?? this.PlaylistAudios.FirstOrDefault();
+        private AudioObj? OriginalAudio => this.TargetAudios.FirstOrDefault() ?? this.PlaylistAudio;
         private float Bpm => this.OriginalAudio?.Bpm > 0 ? this.OriginalAudio.Bpm : this.OriginalAudio?.ScannedBpm > 0 ? this.OriginalAudio.ScannedBpm : 120f;
         private int SampleRangePerBeat => (this.OriginalAudio != null ? (int) (this.OriginalAudio.SampleRate * 60f / this.Bpm * 2f) : 88200) * this.Multiplier;
         private int Multiplier => (int) this.numericUpDown_multiplier.Value;
@@ -46,6 +75,35 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
+        private void button_playlistAllOn_Click(object? sender, EventArgs e)
+        {
+            this.SetAllPlaylistTrackChecks(true);
+        }
+
+        private void button_playlistAllOff_Click(object? sender, EventArgs e)
+        {
+            this.SetAllPlaylistTrackChecks(false);
+        }
+
+        private void SetAllPlaylistTrackChecks(bool isChecked)
+        {
+            this.suppressPlaylistChecklistEvents = true;
+            try
+            {
+                for (int i = 0; i < this.checkedListBox_playlistTracks.Items.Count; i++)
+                {
+                    this.checkedListBox_playlistTracks.SetItemChecked(i, isChecked);
+                }
+            }
+            finally
+            {
+                this.suppressPlaylistChecklistEvents = false;
+            }
+
+            this.SyncSelectedPlaylistTrackIdsFromUi();
+            this.UpdateLoopButtonsState();
+        }
+
 
         private readonly HashSet<Control> autoRefocusAttached = [];
         private readonly HashSet<Control> containerMonitored = [];
@@ -69,9 +127,13 @@ namespace ModularAudience.Forms.Modules
 
             this.BuildLoopControlButtons();
             this.EnableAutoRefocusForContainer(this);
+            this.checkedListBox_playlistTracks.ItemCheck += this.checkedListBox_playlistTracks_ItemCheck;
+            this.playlistTargetsTimer.Tick += (_, _) => this.RefreshPlaylistTargets();
+            this.playlistTargetsTimer.Start();
 
             this.numericUpDown_jump.Click += this.numericUpDown_jump_Click;
 
+            this.RefreshPlaylistTargets();
 
 			this.UpdateLoopButtonsState();
 
@@ -79,9 +141,124 @@ namespace ModularAudience.Forms.Modules
             {
                 // Hide instead of close
                 WindowMain.LoopControlWindow = null;
+                this.playlistTargetsTimer.Stop();
                 this.Hide();
             };
 
+        }
+
+        private void checkedListBox_playlistTracks_ItemCheck(object? sender, ItemCheckEventArgs e)
+        {
+            if (this.suppressPlaylistChecklistEvents)
+            {
+                return;
+            }
+
+            try
+            {
+                this.BeginInvoke((Action) (() =>
+                {
+                    this.SyncSelectedPlaylistTrackIdsFromUi();
+                    this.UpdateLoopButtonsState();
+                }));
+            }
+            catch
+            {
+            }
+        }
+
+        private void SyncSelectedPlaylistTrackIdsFromUi()
+        {
+            this.selectedPlaylistTrackIds.Clear();
+            foreach (PlaylistTargetItem item in this.checkedListBox_playlistTracks.CheckedItems.OfType<PlaylistTargetItem>())
+            {
+                this.selectedPlaylistTrackIds.Add(item.Audio.Id);
+            }
+        }
+
+        private void RefreshPlaylistTargets()
+        {
+            List<AudioObj> activePlaylistAudios = this.PlaylistAudios
+                .Where(audio => audio != null)
+                .DistinctBy(audio => audio.Id)
+                .ToList();
+
+            // Debug: log what the UI actually receives
+            ModularAudience.Audio.LogCollection.Log($"[LoopControl] RefreshPlaylistTargets: {activePlaylistAudios.Count} active playlist audio(s): [{string.Join(", ", activePlaylistAudios.Select(a => $"{a.Name ?? "?"}(playing={a.Playing},playerPlaying={a.PlayerPlaying})"))}]");
+
+            HashSet<Guid> activeIds = activePlaylistAudios.Select(audio => audio.Id).ToHashSet();
+
+            foreach (AudioObj audio in activePlaylistAudios.Where(audio => !this.knownPlaylistTrackIds.Contains(audio.Id)))
+            {
+                this.selectedPlaylistTrackIds.Add(audio.Id);
+            }
+
+            this.knownPlaylistTrackIds.Clear();
+            this.knownPlaylistTrackIds.UnionWith(activeIds);
+            this.selectedPlaylistTrackIds.RemoveWhere(id => !activeIds.Contains(id));
+
+            this.suppressPlaylistChecklistEvents = true;
+            try
+            {
+                this.checkedListBox_playlistTracks.Items.Clear();
+
+                foreach (AudioObj audio in activePlaylistAudios)
+                {
+                    string name = !string.IsNullOrWhiteSpace(audio.OriginalName)
+                        ? audio.OriginalName
+                        : !string.IsNullOrWhiteSpace(audio.Name)
+                            ? audio.Name
+                            : Path.GetFileNameWithoutExtension(audio.FilePath);
+                    string bpm = audio.Bpm > 0 ? $" [{audio.Bpm:F0}]" : string.Empty;
+                    string state = audio.PlayerPlaying ? "▶" : audio.Paused ? "||" : "■";
+                    string shortId = audio.Id.ToString("N")[..6];
+                    var item = new PlaylistTargetItem
+                    {
+                        Audio = audio,
+                        DisplayText = $"{state} {name}{bpm} · {shortId}"
+                    };
+
+                    int index = this.checkedListBox_playlistTracks.Items.Add(item);
+                    this.checkedListBox_playlistTracks.SetItemChecked(index, this.selectedPlaylistTrackIds.Contains(audio.Id));
+                }
+            }
+            finally
+            {
+                this.suppressPlaylistChecklistEvents = false;
+            }
+
+            int selectedCount = this.selectedPlaylistTrackIds.Count;
+            int playlistCount = activePlaylistAudios.Count;
+            bool hasTrackTarget = this.SelectedTrackAudio != null;
+            bool hasPlaylistTarget = selectedCount > 0;
+
+            if (hasTrackTarget && hasPlaylistTarget)
+            {
+                string trackName = this.SelectedTrackAudio?.OriginalName ?? this.SelectedTrackAudio?.Name ?? "selected";
+                this.label_targetMode.Text = $"Target: track + playlist — {trackName} + {selectedCount}/{playlistCount} checked";
+            }
+            else if (hasTrackTarget)
+            {
+                string trackName = this.SelectedTrackAudio?.OriginalName ?? this.SelectedTrackAudio?.Name ?? "selected";
+                this.label_targetMode.Text = $"Target: selected track — {trackName}";
+            }
+            else if (playlistCount == 0)
+            {
+                this.label_targetMode.Text = "Target: no active playlist tracks";
+            }
+            else
+            {
+                this.label_targetMode.Text = $"Target: playlist overlap selection — {selectedCount}/{playlistCount} checked";
+            }
+
+            bool hasPlaylistEntries = playlistCount > 0;
+            this.button_playlistAllOn.Enabled = hasPlaylistEntries;
+            this.button_playlistAllOff.Enabled = hasPlaylistEntries;
+
+            if (this.Visible)
+            {
+                this.UpdateLoopButtonsState();
+            }
         }
 
 
@@ -226,7 +403,7 @@ namespace ModularAudience.Forms.Modules
         private void SetLoopRange(bool noButtonSelectedAfterToggle = false, bool hadActiveBefore = false)
         {
             // Guard
-            if (this.CurrentTrackView == null || this.OriginalAudio == null)
+            if (this.OriginalAudio == null || this.TargetAudios.Count == 0)
             {
                 return;
             }
@@ -236,12 +413,15 @@ namespace ModularAudience.Forms.Modules
             // If no button is selected after toggle -> disable loop and reset tracking
             if (noButtonSelectedAfterToggle || fraction == 0f)
             {
-                this.OriginalAudio.UpdateLoopFraction(0, 0, 0, false, true);
+                foreach (AudioObj targetAudio in this.TargetAudios)
+                {
+                    targetAudio.UpdateLoopFraction(0, 0, 0, false, true);
+                    targetAudio.Metrics["loop.ui.fraction"] = 0f;
+                }
+
                 this.lastLoopStartSamples = -1;
                 this.lastLoopEndSamples = -1;
                 this.lastAppliedLoopFraction = 0f;
-
-                this.OriginalAudio.Metrics["loop.ui.fraction"] = 0f;
 
                 return;
             }
@@ -418,25 +598,27 @@ namespace ModularAudience.Forms.Modules
                 }
 
                 // Apply loop; request adjustPosition if outside OR we deliberately want to re-anchor on sign switch
-                this.OriginalAudio.UpdateLoopFraction(baseStartSamples, baseEndSamples, fractionSamples, true, (!insideNewLoop) || forceJump);
-
-                // Force exact position if needed (prevents weird "same offset" feel)
-                if (insideNewLoop || forceJump)
+                foreach (AudioObj targetAudio in this.TargetAudios)
                 {
-                    try { this.OriginalAudio.JumpToSamples(desiredSamples); } catch { }
+                    targetAudio.UpdateLoopFraction(baseStartSamples, baseEndSamples, fractionSamples, true, (!insideNewLoop) || forceJump);
+
+                    // Force exact position if needed (prevents weird "same offset" feel)
+                    if (insideNewLoop || forceJump)
+                    {
+                        try { targetAudio.JumpToSamples(desiredSamples); } catch { }
+                    }
+
+                    try
+                    {
+                        targetAudio.Metrics["loop.ui.fraction"] = fraction;
+                    }
+                    catch { }
                 }
 
                 // Track last applied loop and fraction for future relative scaling
                 this.lastLoopStartSamples = baseStartSamples;
                 this.lastLoopEndSamples = baseEndSamples;
                 this.lastAppliedLoopFraction = fraction;
-
-                try
-                {
-                    // Persistenter UI-Fraction-Wert inkl. Vorzeichen
-                    this.OriginalAudio.Metrics["loop.ui.fraction"] = fraction;
-                }
-                catch { }
             }
             catch
             {
@@ -450,7 +632,7 @@ namespace ModularAudience.Forms.Modules
         internal void UpdateLoopButtonsState()
         {
             // Guard
-            if (this.CurrentTrackView == null || this.OriginalAudio == null)
+            if (this.OriginalAudio == null || this.TargetAudios.Count == 0)
             {
                 // Disable all buttons
                 foreach (var btn in this.panel_buttons.Controls.OfType<Button>())
@@ -770,7 +952,7 @@ namespace ModularAudience.Forms.Modules
 
 		private void JumpByMilliseconds(int direction)
 		{
-			if (this.OriginalAudio == null)
+            if (this.OriginalAudio == null || this.TargetAudios.Count == 0)
 			{
 				return;
 			}
@@ -789,14 +971,17 @@ namespace ModularAudience.Forms.Modules
 			targetSamples = Math.Clamp(targetSamples, 0L, Math.Max(0L, totalSamples - 1));
 
 			// Playhead springen (immer!)
-			try
-			{
-				this.OriginalAudio.JumpToSamples(targetSamples);
-			}
-			catch
-			{
-				// Ignorieren, kein UI-Crash
-			}
+            foreach (AudioObj targetAudio in this.TargetAudios)
+            {
+                try
+                {
+                    targetAudio.JumpToSamples(targetSamples);
+                }
+                catch
+                {
+                    // Ignorieren, kein UI-Crash
+                }
+            }
 
 			// UI sofort aktualisieren (Caret/Waveform neu rendern)
 			try { this.CurrentTrackView?.RequestWaveformRender(); } catch { }
@@ -836,20 +1021,26 @@ namespace ModularAudience.Forms.Modules
 			long fractionSamples = Math.Max(1L, newEnd - newStart);
 
 			// Loop an neuer Position setzen und weiterspielen
-			this.OriginalAudio.UpdateLoopFraction(newStart, newEnd, fractionSamples, true, true);
+            foreach (AudioObj targetAudio in this.TargetAudios)
+            {
+                targetAudio.UpdateLoopFraction(newStart, newEnd, fractionSamples, true, true);
+            }
 
 			// State im LoopControl aktualisieren
 			this.lastLoopStartSamples = newStart;
 			this.lastLoopEndSamples = newEnd;
 
-			try
-			{
-				// Fraction bleibt gleich, wir verschieben nur räumlich
-				this.OriginalAudio.Metrics["loop.ui.fraction"] = this.lastAppliedLoopFraction;
-			}
-			catch
-			{
-			}
+            foreach (AudioObj targetAudio in this.TargetAudios)
+            {
+                try
+                {
+                    // Fraction bleibt gleich, wir verschieben nur räumlich
+                    targetAudio.Metrics["loop.ui.fraction"] = this.lastAppliedLoopFraction;
+                }
+                catch
+                {
+                }
+            }
 
 			// Nach Loop-Verschiebung erneut UI-Refresh anstoßen
 			try { this.CurrentTrackView?.RequestWaveformRender(); } catch { }

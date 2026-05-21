@@ -20,6 +20,7 @@
   - Remove the effect as soon as the scrollbar thumb stops moving (i.e., when its position becomes steady), even if the user continues to hold the thumb; do not wait for mouse/button release.
   - Support Ctrl+Left-click on hScrollBar_rate to reliably reset the rate to center (value 0).
   - Add an explicit "Center/Reset Rate" entry to the rate scrollbar's right-click context menu.
+- LoopControl for playlist playback must target all concurrently active playlist overlap tracks, not just a single playlist track.
 
 ## UI Interaction Rules
 - Prefer keyboard modifiers and context-menu entries for common quick actions (e.g., centering controls, resetting values).

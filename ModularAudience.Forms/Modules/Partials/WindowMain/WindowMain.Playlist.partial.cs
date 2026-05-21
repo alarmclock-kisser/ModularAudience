@@ -1,11 +1,13 @@
 using ModularAudience.Audio;
 using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio.Processors_V2;
+using ModularAudience.Audio.Processors_V3;
 using ModularAudience.Forms.Helpers;
 using ModularAudience.Forms.Modules;
 using ModularAudience.Forms.Modules.Dialogs;
 using NAudio.Wave;
 using System.Text;
+using System.Threading;
 
 namespace ModularAudience.Forms
 {
@@ -36,7 +38,7 @@ namespace ModularAudience.Forms
         private string? _trackLogFilePath;               // set when a recording begins
         private DateTime? _trackLogRecordStart;          // UTC time when recording started
         private readonly List<TrackLogEntry> _trackLog = [];
-        private string? _trackLogCurrentPath;            // path of the track currently playing
+        private HashSet<string> _trackLogActivePaths = new(StringComparer.OrdinalIgnoreCase);
 
         // ── Initializer (called from constructor) ──────────────────────────────
         private void InitPlaylist()
@@ -54,6 +56,9 @@ namespace ModularAudience.Forms
             };
 
             this._playlist.BeforeTrackPlay = this.PreprocessPlaylistTrackAsync;
+            this._playlist.CrossfadeDurationProvider = () => WindowMain.CrossfadeDurationSeconds;
+            this._playlist.ResolvePlaybackBpm = this.ResolvePlaylistPlaybackBpm;
+            this._playlist.CrossfadeStartedAsync = this.HandlePlaylistCrossfadeStartedAsync;
 
             this._playlistTimer = new System.Windows.Forms.Timer { Interval = 1000 };
             this._playlistTimer.Tick += (_, _) => this.UpdatePlaylistUI();
@@ -73,6 +78,73 @@ namespace ModularAudience.Forms
                 }
             }
             catch { }
+        }
+
+        private float ResolvePlaylistPlaybackBpm(string originalPath, string playPath)
+        {
+            float bpm = PlaylistEngine.ReadMetadata(originalPath).Bpm;
+            if (bpm <= 0 && this._playlistStretchSettings != null)
+            {
+                bpm = this._playlistStretchSettings.TargetBpm;
+            }
+
+            if (bpm <= 0 && !string.Equals(playPath, originalPath, StringComparison.OrdinalIgnoreCase))
+            {
+                bpm = PlaylistEngine.ReadMetadata(playPath).Bpm;
+            }
+
+            return bpm;
+        }
+
+        private async Task HandlePlaylistCrossfadeStartedAsync(AudioObj currentTrack, AudioObj nextTrack)
+        {
+            if (Instance == null || Instance.IsDisposed)
+            {
+                return;
+            }
+
+            try
+            {
+                await Task.Delay(20).ConfigureAwait(false);
+
+                using CancellationTokenSource syncWindow = new(TimeSpan.FromMilliseconds(500));
+                List<AudioObj> playingTracks = new();
+
+                playingTracks.AddRange(this._playlist.ActiveAudioObjs.Where(audio => audio.PlayerPlaying));
+                playingTracks.AddRange(TrackViews
+                    .Where(tv => tv != null && !tv.IsDisposed && tv.OriginalAudio.PlayerPlaying)
+                    .Select(tv => tv.OriginalAudio));
+
+                playingTracks = playingTracks
+                    .Where(audio => audio != null && audio.PlayerPlaying)
+                    .Distinct()
+                    .ToList();
+
+                if (playingTracks.Count < 2)
+                {
+                    playingTracks = Enumerable
+                        .Repeat(currentTrack, 1)
+                        .Concat(Enumerable.Repeat(nextTrack, 1))
+                        .Where(audio => audio.PlayerPlaying)
+                        .Distinct()
+                        .ToList();
+                }
+
+                var syncer = new PausingPlaybackSyncer(playingTracks, syncWindow.Token, frequency: 0.05, grain: 12);
+                LogCollection.Log("Playlist crossfade: 500 ms beat sync window started.");
+
+                try
+                {
+                    await Task.Delay(500, syncWindow.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"Playlist crossfade sync failed: {ex.Message}");
+            }
         }
 
         // ── OFD / button_playlist_Click ────────────────────────────────────────
@@ -119,6 +191,31 @@ namespace ModularAudience.Forms
                                   $"({this._playlist.FilePaths.Count} total).");
                 this.UpdatePlaylistUI();
             }
+        }
+
+        private void button_playlist_TogglePlayPause_Click(object sender, EventArgs e)
+        {
+            this._playlist.TogglePlayPause();
+            this.UpdatePlaylistButtonText();
+            this.UpdatePlaylistUI();
+        }
+
+        private void playlistMenu_ImportTracks_Click(object sender, EventArgs e)
+        {
+            this.button_playlist_Click(sender, e);
+        }
+
+        internal AudioObj? GetPlaylistPrimaryAudio()
+        {
+            return this._playlist.PrimaryAudioObj;
+        }
+
+        internal IReadOnlyList<AudioObj> GetActivePlaylistAudios()
+        {
+            return this._playlist.ActiveAudioObjs
+                .Where(audio => audio != null)
+                .DistinctBy(audio => audio.Id)
+                .ToArray();
         }
 
         // ── Right-click context menu handlers ──────────────────────────────────
@@ -563,17 +660,9 @@ namespace ModularAudience.Forms
             this._trackLogFilePath = Path.ChangeExtension(recordingFilePath, ".txt");
             this._trackLogRecordStart = DateTime.UtcNow;
             this._trackLog.Clear();
-            this._trackLogCurrentPath = this._playlist.OriginalCurrentPath;
+            this._trackLogActivePaths.Clear();
 
-            // If a track is already playing when recording starts, open an entry for it at t=0
-            if (this._trackLogCurrentPath != null)
-            {
-                this._trackLog.Add(new TrackLogEntry
-                {
-                    Start = TimeSpan.Zero,
-                    TrackId = Path.GetFileNameWithoutExtension(this._trackLogCurrentPath)
-                });
-            }
+            this.SyncPlaylistTrackLog(TimeSpan.Zero);
 
             this.FlushTrackLog();
         }
@@ -595,7 +684,7 @@ namespace ModularAudience.Forms
             // Reset so future recordings start fresh
             this._trackLogFilePath   = null;
             this._trackLogRecordStart = null;
-            this._trackLogCurrentPath = null;
+            this._trackLogActivePaths.Clear();
         }
 
         /// <summary>
@@ -607,48 +696,39 @@ namespace ModularAudience.Forms
 
             TimeSpan now = DateTime.UtcNow - this._trackLogRecordStart.Value;
 
-            string? prev = this._trackLogCurrentPath;
-            string? currentOriginalPath = this._playlist.OriginalCurrentPath;
-            string? currentPlaybackPath = this._playlist.CurrentPath;
-            bool hasActiveTrack = this._playlist.IsPlaying || this._playlist.IsPaused;
+            this.SyncPlaylistTrackLog(now);
+            this.FlushTrackLog();
+        }
 
-            string? cur = hasActiveTrack
-                ? (currentOriginalPath ?? currentPlaybackPath)
-                : null;
+        private void SyncPlaylistTrackLog(TimeSpan now)
+        {
+            HashSet<string> activePaths = this._playlist.ActiveOriginalPaths
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            string? prevTrackId = prev != null ? Path.GetFileNameWithoutExtension(prev) : null;
-            string? curTrackId = cur != null ? Path.GetFileNameWithoutExtension(cur) : null;
-
-            // Duplicate TrackChanged can occur at track end before the next track is initialized.
-            // In that state, treat the playlist as idle for logging if the engine is not actively playing.
-            if (!hasActiveTrack && prevTrackId != null && curTrackId == prevTrackId)
+            foreach (string endedPath in this._trackLogActivePaths.Except(activePaths, StringComparer.OrdinalIgnoreCase).ToList())
             {
-                cur = null;
-                curTrackId = null;
-            }
+                string endedTrackId = Path.GetFileNameWithoutExtension(endedPath);
+                TrackLogEntry? last = this._trackLog.LastOrDefault(e =>
+                    e.TrackId == endedTrackId &&
+                    e.End == null);
 
-            if (prevTrackId != null)
-            {
-                var last = this._trackLog.LastOrDefault(e =>
-                    e.TrackId == prevTrackId && e.End == null);
                 if (last != null)
                 {
                     last.End = now;
                 }
             }
 
-            this._trackLogCurrentPath = cur;
-
-            if (curTrackId != null && !string.Equals(curTrackId, prevTrackId, StringComparison.OrdinalIgnoreCase))
+            foreach (string startedPath in activePaths.Except(this._trackLogActivePaths, StringComparer.OrdinalIgnoreCase))
             {
                 this._trackLog.Add(new TrackLogEntry
                 {
                     Start = now,
-                    TrackId = curTrackId
+                    TrackId = Path.GetFileNameWithoutExtension(startedPath)
                 });
             }
 
-            this.FlushTrackLog();
+            this._trackLogActivePaths = activePaths;
         }
 
         private void FlushTrackLog()

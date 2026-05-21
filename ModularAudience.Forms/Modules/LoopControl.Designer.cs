@@ -37,6 +37,10 @@
             this.button_forward = new Button();
             this.button_backward = new Button();
             this.label_info_jump = new Label();
+            this.label_targetMode = new Label();
+            this.button_playlistAllOn = new Button();
+            this.button_playlistAllOff = new Button();
+            this.checkedListBox_playlistTracks = new CheckedListBox();
             this.panel_buttons.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_multiplier).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_jump).BeginInit();
@@ -137,11 +141,58 @@
             this.label_info_jump.TabIndex = 8;
             this.label_info_jump.Text = "Jump ms";
             // 
+            // label_targetMode
+            // 
+            this.label_targetMode.AutoEllipsis = true;
+            this.label_targetMode.Location = new Point(12, 4);
+            this.label_targetMode.Name = "label_targetMode";
+            this.label_targetMode.Size = new Size(464, 18);
+            this.label_targetMode.TabIndex = 9;
+            this.label_targetMode.Text = "Target: none";
+            // 
+            // button_playlistAllOn
+            // 
+            this.button_playlistAllOn.Font = new Font("Bahnschrift Light Condensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            this.button_playlistAllOn.Location = new Point(426, 3);
+            this.button_playlistAllOn.Name = "button_playlistAllOn";
+            this.button_playlistAllOn.Size = new Size(23, 19);
+            this.button_playlistAllOn.TabIndex = 10;
+            this.button_playlistAllOn.TabStop = false;
+            this.button_playlistAllOn.Text = "+";
+            this.button_playlistAllOn.UseVisualStyleBackColor = true;
+            this.button_playlistAllOn.Click += this.button_playlistAllOn_Click;
+            // 
+            // button_playlistAllOff
+            // 
+            this.button_playlistAllOff.Font = new Font("Bahnschrift Light Condensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            this.button_playlistAllOff.Location = new Point(453, 3);
+            this.button_playlistAllOff.Name = "button_playlistAllOff";
+            this.button_playlistAllOff.Size = new Size(23, 19);
+            this.button_playlistAllOff.TabIndex = 11;
+            this.button_playlistAllOff.TabStop = false;
+            this.button_playlistAllOff.Text = "−";
+            this.button_playlistAllOff.UseVisualStyleBackColor = true;
+            this.button_playlistAllOff.Click += this.button_playlistAllOff_Click;
+            // 
+            // checkedListBox_playlistTracks
+            // 
+            this.checkedListBox_playlistTracks.CheckOnClick = true;
+            this.checkedListBox_playlistTracks.Font = new Font("Segoe UI", 8F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            this.checkedListBox_playlistTracks.FormattingEnabled = true;
+            this.checkedListBox_playlistTracks.Location = new Point(12, 102);
+            this.checkedListBox_playlistTracks.Name = "checkedListBox_playlistTracks";
+            this.checkedListBox_playlistTracks.Size = new Size(464, 76);
+            this.checkedListBox_playlistTracks.TabIndex = 12;
+            // 
             // LoopControl
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
-            this.ClientSize = new Size(484, 111);
+            this.ClientSize = new Size(484, 187);
+            this.Controls.Add(this.button_playlistAllOff);
+            this.Controls.Add(this.button_playlistAllOn);
+            this.Controls.Add(this.checkedListBox_playlistTracks);
+            this.Controls.Add(this.label_targetMode);
             this.Controls.Add(this.label_info_jump);
             this.Controls.Add(this.button_backward);
             this.Controls.Add(this.button_forward);
@@ -151,9 +202,9 @@
             this.Controls.Add(this.button_copy);
             this.Controls.Add(this.panel_buttons);
             this.MaximizeBox = false;
-            this.MaximumSize = new Size(500, 150);
+            this.MaximumSize = new Size(500, 226);
             this.MinimizeBox = false;
-            this.MinimumSize = new Size(500, 150);
+            this.MinimumSize = new Size(500, 226);
             this.Name = "LoopControl";
             this.Text = "Loop Control";
             this.panel_buttons.ResumeLayout(false);
@@ -174,5 +225,9 @@
         private Button button_forward;
         private Button button_backward;
         private Label label_info_jump;
+        private Label label_targetMode;
+        private Button button_playlistAllOn;
+        private Button button_playlistAllOff;
+        private CheckedListBox checkedListBox_playlistTracks;
     }
 }

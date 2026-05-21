@@ -311,16 +311,15 @@ namespace ModularAudience.Forms
             this._syncer = null;
             this._nudgingActive = false;
 
-            var playingTracks = TrackViews
-                .Where(tv => tv != null && !tv.IsDisposed && tv.OriginalAudio.PlayerPlaying)
-                .Select(tv => tv.OriginalAudio)
-                .ToList();
+            var playingTracks = this.CollectActiveSyncTracks(includePaused: false);
 
             if (playingTracks.Count < 2)
             {
                 LogCollection.Log("SYNCER : ON (no-op, need >=2 playing tracks)");
                 return;
             }
+
+            LogCollection.Log($"SYNCER : tracks => {string.Join(" | ", playingTracks.Select(a => $"{a.Name}<{a.Id.ToString("N")[..6]}>"))}");
 
             this._syncerCts = new CancellationTokenSource();
             this._syncer = new NudgingPlaybackSyncer(playingTracks, this._syncerCts.Token, checkInterval: 0.1, maxNudgeFactor: 0.05);
@@ -348,16 +347,15 @@ namespace ModularAudience.Forms
             this._pausingSyncer = null;
             this._pausingActive = false;
 
-            var playingTracks = TrackViews
-                .Where(tv => tv != null && !tv.IsDisposed && tv.OriginalAudio.PlayerPlaying)
-                .Select(tv => tv.OriginalAudio)
-                .ToList();
+            var playingTracks = this.CollectActiveSyncTracks(includePaused: true);
 
             if (playingTracks.Count < 2)
             {
                 LogCollection.Log("SYNCER (pause) : ON (no-op, need >=2 playing tracks)");
                 return;
             }
+
+            LogCollection.Log($"SYNCER (pause) : tracks => {string.Join(" | ", playingTracks.Select(a => $"{a.Name}<{a.Id.ToString("N")[..6]}>"))}");
 
             this._pausingCts = new CancellationTokenSource();
             this._pausingSyncer = new PausingPlaybackSyncer(playingTracks, this._pausingCts.Token, frequency: 0.1, grain: 10);
@@ -376,6 +374,21 @@ namespace ModularAudience.Forms
                 LogCollection.Log("SYNCER (pause) : OFF");
             }
             this._pausingActive = false;
+        }
+
+        private List<AudioObj> CollectActiveSyncTracks(bool includePaused)
+        {
+            IEnumerable<AudioObj> trackViewAudios = TrackViews
+                .Where(tv => tv != null && !tv.IsDisposed)
+                .Select(tv => tv.OriginalAudio);
+
+            IEnumerable<AudioObj> playlistAudios = this.GetActivePlaylistAudios();
+
+            return trackViewAudios
+                .Concat(playlistAudios)
+                .Where(audio => audio != null && (audio.PlayerPlaying || (includePaused && audio.Paused)))
+                .DistinctBy(audio => audio.Id)
+                .ToList();
         }
     }
 }
