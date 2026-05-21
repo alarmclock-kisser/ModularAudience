@@ -263,18 +263,23 @@ namespace ModularAudience.Forms.Modules
             AudioObj? secondary = null;
             WaveOutEvent? wo = null;
             AudioFileReader? rd = null;
+            string? removedOriginalPath = null;
+            bool removedCurrentPrimary = false;
 
             lock (this._lock)
             {
                 if (this._activePreparedTracks.TryGetValue(audioId, out var p))
                 {
                     prepared = p;
+                    removedOriginalPath = p.OriginalPath;
                     this._activePreparedTracks.Remove(audioId);
                 }
 
                 if (this._primaryAudioObj != null && this._primaryAudioObj.Id == audioId)
                 {
                     primary = this._primaryAudioObj;
+                    removedOriginalPath ??= this._primaryOriginalPath ?? this.OriginalCurrentPath;
+                    removedCurrentPrimary = true;
                     this._primaryAudioObj = null;
                     this._primaryOriginalPath = null;
                     this.CurrentPath = null;
@@ -286,8 +291,26 @@ namespace ModularAudience.Forms.Modules
                 if (this._secondaryAudioObj != null && this._secondaryAudioObj.Id == audioId)
                 {
                     secondary = this._secondaryAudioObj;
+                    removedOriginalPath ??= this._secondaryOriginalPath;
                     this._secondaryAudioObj = null;
                     this._secondaryOriginalPath = null;
+                }
+
+                if (!string.IsNullOrWhiteSpace(removedOriginalPath))
+                {
+                    int queueIndex = this.FilePaths.FindIndex(path =>
+                        string.Equals(path, removedOriginalPath, StringComparison.OrdinalIgnoreCase));
+                    if (queueIndex >= 0)
+                    {
+                        this.FilePaths.RemoveAt(queueIndex);
+                    }
+                }
+
+                if (removedCurrentPrimary)
+                {
+                    this._skipRequested = true;
+                    this.IsPlaying = false;
+                    this.IsPaused = false;
                 }
             }
 
