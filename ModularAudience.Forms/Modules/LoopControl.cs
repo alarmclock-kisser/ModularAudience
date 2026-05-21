@@ -184,7 +184,7 @@ namespace ModularAudience.Forms.Modules
                 .ToList();
 
             // Debug: log what the UI actually receives
-            ModularAudience.Audio.LogCollection.Log($"[LoopControl] RefreshPlaylistTargets: {activePlaylistAudios.Count} active playlist audio(s): [{string.Join(", ", activePlaylistAudios.Select(a => $"{a.Name ?? "?"}(playing={a.Playing},playerPlaying={a.PlayerPlaying})"))}]");
+            // ModularAudience.Audio.LogCollection.Log($"[LoopControl] RefreshPlaylistTargets: {activePlaylistAudios.Count} active playlist audio(s): [{string.Join(", ", activePlaylistAudios.Select(a => $"{a.Name ?? "?"}(playing={a.Playing},playerPlaying={a.PlayerPlaying})"))}]");
 
             HashSet<Guid> activeIds = activePlaylistAudios.Select(audio => audio.Id).ToHashSet();
 

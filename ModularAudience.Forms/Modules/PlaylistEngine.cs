@@ -51,15 +51,9 @@ namespace ModularAudience.Forms.Modules
         public float   CurrentBpm        { get; private set; }
 
         // â”€â”€ Private â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        private WaveOutEvent?    _waveOut;
-        private AudioFileReader? _reader;
-        private AudioObj? _primaryAudioObj;
-        private AudioObj? _secondaryAudioObj;
-        private string? _primaryOriginalPath;
-        private string? _secondaryOriginalPath;
-        private readonly Dictionary<Guid, PreparedPlaylistTrack> _activePreparedTracks = [];
+        private readonly List<PlaylistSlot> _slots = [];
         private CancellationTokenSource? _cts;
-        private string? _previousPath;          // 1-track back-history
+        private string? _previousPath;
         private readonly object _lock = new();
         private volatile bool _skipRequested;
         private volatile bool _disposed;
@@ -84,28 +78,7 @@ namespace ModularAudience.Forms.Modules
             get
             {
                 lock (this._lock)
-                {
-                    List<AudioObj> active = this._activePreparedTracks.Values
-                        .Select(prepared => prepared.Audio)
-                        .Where(audio => audio != null)
-                        .DistinctBy(audio => audio.Id)
-                        .ToList();
-
-                    if (this._primaryAudioObj != null)
-                    {
-                        active.Add(this._primaryAudioObj);
-                    }
-
-                    if (this._secondaryAudioObj != null)
-                    {
-                        active.Add(this._secondaryAudioObj);
-                    }
-
-                    return active
-                        .Where(audio => audio != null)
-                        .DistinctBy(audio => audio.Id)
-                        .ToArray();
-                }
+                    return this._slots.Select(s => s.Audio).DistinctBy(a => a.Id).ToArray();
             }
         }
         public IReadOnlyList<string> ActiveOriginalPaths
@@ -113,24 +86,15 @@ namespace ModularAudience.Forms.Modules
             get
             {
                 lock (this._lock)
-                {
-                    return this._activePreparedTracks.Values
-                        .Select(prepared => prepared.OriginalPath)
-                        .Where(path => !string.IsNullOrWhiteSpace(path))
+                    return this._slots.Select(s => s.OriginalPath)
+                        .Where(p => !string.IsNullOrWhiteSpace(p))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToArray();
-                }
             }
         }
         public AudioObj? PrimaryAudioObj
         {
-            get
-            {
-                lock (this._lock)
-                {
-                    return this._primaryAudioObj;
-                }
-            }
+            get { lock (this._lock) return this._slots.FirstOrDefault(s => s.IsPrimary)?.Audio; }
         }
 
         private const double CrossfadePreprocessLeadSeconds = 15.0;
@@ -143,6 +107,19 @@ namespace ModularAudience.Forms.Modules
             public string? TempPath { get; init; }
         }
 
+        /// <summary>One active audio slot — primary (current) or fading-out (crossfade).</summary>
+        private sealed class PlaylistSlot
+        {
+            public required PreparedPlaylistTrack Track { get; init; }
+            /// <summary>True while this slot drives the main playback position.</summary>
+            public bool IsPrimary { get; set; }
+            /// <summary>True while a fade-out background task is running; slot is removed when done.</summary>
+            public bool FadingOut { get; set; }
+
+            public AudioObj Audio => this.Track.Audio;
+            public string OriginalPath => this.Track.OriginalPath;
+        }
+
         // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         //  Public API
         // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -153,18 +130,10 @@ namespace ModularAudience.Forms.Modules
             if (this._disposed) return;
             lock (this._lock)
             {
-                if (this.IsPaused && this._primaryAudioObj != null)
+                if (this.IsPaused)
                 {
-                    try { this._primaryAudioObj.PauseAsync().GetAwaiter().GetResult(); } catch { }
-                    try { this._secondaryAudioObj?.PauseAsync().GetAwaiter().GetResult(); } catch { }
-                    this.IsPaused = false;
-                    this.IsPlaying = true;
-                    return;
-                }
-
-                if (this.IsPaused && this._waveOut != null)
-                {
-                    this._waveOut.Play();
+                    foreach (var slot in this._slots)
+                        try { slot.Audio.PauseAsync().GetAwaiter().GetResult(); } catch { }
                     this.IsPaused = false;
                     this.IsPlaying = true;
                     return;
@@ -183,21 +152,11 @@ namespace ModularAudience.Forms.Modules
         {
             lock (this._lock)
             {
-                if (this._primaryAudioObj != null && this.IsPlaying && !this.IsPaused)
-                {
-                    try { this._primaryAudioObj.PauseAsync().GetAwaiter().GetResult(); } catch { }
-                    try { this._secondaryAudioObj?.PauseAsync().GetAwaiter().GetResult(); } catch { }
-                    this.IsPaused  = true;
-                    this.IsPlaying = false;
-                    return;
-                }
-
-                if (this._waveOut != null && this.IsPlaying && !this.IsPaused)
-                {
-                    this._waveOut.Pause();
-                    this.IsPaused  = true;
-                    this.IsPlaying = false;
-                }
+                if (!this.IsPlaying || this.IsPaused) return;
+                foreach (var slot in this._slots)
+                    try { slot.Audio.PauseAsync().GetAwaiter().GetResult(); } catch { }
+                this.IsPaused  = true;
+                this.IsPlaying = false;
             }
         }
 
@@ -216,16 +175,15 @@ namespace ModularAudience.Forms.Modules
         /// </summary>
         public void RewindOrPrevious()
         {
-            lock (this._lock)
+            AudioObj? primary;
+            lock (this._lock) primary = this._slots.FirstOrDefault(s => s.IsPrimary)?.Audio;
+
+            if (primary != null && primary.CurrentTime.TotalSeconds > 1.0)
             {
-                if (this._reader != null && this._reader.CurrentTime.TotalSeconds > 1.0)
-                {
-                    this._reader.CurrentTime = TimeSpan.Zero;
-                    return;
-                }
+                primary.StartingOffset = 0;
+                return;
             }
 
-            // Go to previous
             if (this._previousPath != null && File.Exists(this._previousPath))
             {
                 string prev = this._previousPath;
@@ -238,7 +196,6 @@ namespace ModularAudience.Forms.Modules
         public void Skip()
         {
             this._skipRequested = true;
-            lock (this._lock) { this._waveOut?.Stop(); }
         }
 
         /// <summary>Shuffle remaining tracks (not including currently-playing one).</summary>
@@ -290,96 +247,107 @@ namespace ModularAudience.Forms.Modules
 
         private async Task RunLoop(CancellationToken ct)
         {
-            await this.RunCrossfadeLoop(ct).ConfigureAwait(false);
+            await this.RunSlotLoop(ct).ConfigureAwait(false);
         }
 
-        private async Task<bool> PlayTrackAsync(string path, CancellationToken ct)
+        // ── Slot helpers ──────────────────────────────────────────────────────
+
+        private PlaylistSlot AddSlot(PreparedPlaylistTrack track, bool isPrimary)
         {
-            AudioFileReader? reader = null;
-            WaveOutEvent?    waveOut = null;
-
-            try
-            {
-                reader  = new AudioFileReader(path);
-                waveOut = new WaveOutEvent { DesiredLatency = 80 };
-
-                // Raise thread priority inside WaveOut callback
-                waveOut.Init(reader);
-
-                lock (this._lock)
-                {
-                    this._reader  = reader;
-                    this._waveOut = waveOut;
-
-                    this.CurrentPath       = path;
-                    this.CurrentDuration   = reader.TotalTime;
-                    this.CurrentChannels   = reader.WaveFormat.Channels;
-                    this.CurrentSampleRate = reader.WaveFormat.SampleRate;
-                    this.CurrentBitDepth   = reader.WaveFormat.BitsPerSample;
-                    this.IsPlaying = true;
-                    this.IsPaused  = false;
-                }
-
-                // Read BPM tag cheaply
-                this.CurrentBpm = ReadBpmTagLight(path);
-
-                TrackChanged?.Invoke();
-
-                // Intentionally logged before Play(): runs on each new track entry via PlayTrackAsync.
-                string logName = System.IO.Path.GetFileNameWithoutExtension(this.OriginalCurrentPath ?? path);
-                string logBpm  = this.CurrentBpm > 0 ? $" [{this.CurrentBpm:F0} BPM]" : string.Empty;
-                ModularAudience.Audio.LogCollection.Log($"Now playing: {logName}{logBpm}");
-
-                waveOut.Play();
-
-                // Poll until playback ends or we are asked to stop
-                while (!ct.IsCancellationRequested && !this._skipRequested && !this._disposed)
-                {
-                    if (waveOut.PlaybackState == PlaybackState.Stopped)
-                        break;
-
-                    await Task.Delay(100, ct).ConfigureAwait(false);
-                }
-
-                return true;
-            }
-            catch (OperationCanceledException)
-            {
-                return false;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"PlaylistEngine: error playing '{path}': {ex.Message}");
-                return false;
-            }
-            finally
-            {
-                lock (this._lock)
-                {
-                    this._waveOut = null;
-                    this._reader  = null;
-                    this.IsPlaying = false;
-                    this.IsPaused  = false;
-                }
-
-                try { waveOut?.Stop(); }  catch { }
-                try { waveOut?.Dispose(); } catch { }
-                try { reader?.Dispose(); }  catch { }
-            }
+            var slot = new PlaylistSlot { Track = track, IsPrimary = isPrimary };
+            lock (this._lock) this._slots.Add(slot);
+            string logBpm = track.Audio.Bpm > 0 ? $" [{track.Audio.Bpm:F0} BPM]" : string.Empty;
+            ModularAudience.Audio.LogCollection.Log(
+                $"[Slot+] {(isPrimary ? "PRIMARY" : "FADING-IN")} {Path.GetFileNameWithoutExtension(track.OriginalPath)}{logBpm} | slots={this._slots.Count}");
+            return slot;
         }
 
-        private void StopCurrentAndInsert(string pathToInsert)
+        private void RemoveSlotAndDispose(PlaylistSlot slot, string reason)
         {
-            this._skipRequested = true;
-            WaveOutEvent? wo;
+            lock (this._lock) this._slots.Remove(slot);
+            ModularAudience.Audio.LogCollection.Log(
+                $"[Slot-] {reason}: {Path.GetFileNameWithoutExtension(slot.OriginalPath)} | slots={this._slots.Count}");
+            try { slot.Audio.StopAsync().GetAwaiter().GetResult(); } catch { }
+            try { slot.Audio.Dispose(); } catch { }
+            this.DeleteTempFile(slot.Track.TempPath);
+        }
+
+        private Task StartFadeOut(PlaylistSlot slot, double durationSeconds)
+        {
+            slot.FadingOut = true;
+            slot.IsPrimary = false;
+            double dur = Math.Max(0.3, durationSeconds);
+            return Task.Run(async () =>
+            {
+                try
+                {
+                    var started = DateTime.UtcNow;
+                    while (!this._disposed && slot.Audio.Playing)
+                    {
+                        double elapsed = (DateTime.UtcNow - started).TotalSeconds;
+                        float vol = (float) Math.Clamp(1.0 - elapsed / dur, 0.0, 1.0);
+                        try { slot.Audio.SetPlaybackVolume(vol); } catch { }
+                        if (vol <= 0f) break;
+                        await Task.Delay(20).ConfigureAwait(false);
+                    }
+                }
+                catch { }
+                finally { this.RemoveSlotAndDispose(slot, "fade-out"); }
+            });
+        }
+
+        private Task StartFadeIn(PlaylistSlot slot, double durationSeconds)
+        {
+            double dur = Math.Max(0.3, durationSeconds);
+            return Task.Run(async () =>
+            {
+                try
+                {
+                    var started = DateTime.UtcNow;
+                    while (!this._disposed && slot.Audio.Playing)
+                    {
+                        double elapsed = (DateTime.UtcNow - started).TotalSeconds;
+                        float vol = (float) Math.Clamp(elapsed / dur, 0.0, 1.0);
+                        try { slot.Audio.SetPlaybackVolume(vol); } catch { }
+                        if (vol >= 1f) break;
+                        await Task.Delay(20).ConfigureAwait(false);
+                    }
+                    try { slot.Audio.SetPlaybackVolume(1.0f); } catch { }
+                }
+                catch { }
+            });
+        }
+
+        private void UpdateCurrentTrackState(PlaylistSlot primary)
+        {
             lock (this._lock)
             {
-                wo = this._waveOut;
-                this.FilePaths.Insert(0, pathToInsert);
+                this.CurrentPath = primary.Track.PlayPath;
+                this.OriginalCurrentPath = primary.Track.OriginalPath;
+                this.CurrentDuration = primary.Audio.Duration;
+                this.CurrentChannels = primary.Audio.Channels;
+                this.CurrentSampleRate = primary.Audio.SampleRate;
+                this.CurrentBitDepth = primary.Audio.BitDepth;
+                this.CurrentBpm = primary.Audio.Bpm;
+                this.IsPlaying = primary.Audio.Playing || primary.Audio.PlayerPlaying || primary.Audio.Paused;
+                this.IsPaused = primary.Audio.Paused;
             }
-            try { this._primaryAudioObj?.StopAsync().GetAwaiter().GetResult(); } catch { }
-            try { this._secondaryAudioObj?.StopAsync().GetAwaiter().GetResult(); } catch { }
-            wo?.Stop();
+        }
+
+        private void ClearEngineState()
+        {
+            lock (this._lock)
+            {
+                this.CurrentPath = null;
+                this.OriginalCurrentPath = null;
+                this.CurrentDuration = TimeSpan.Zero;
+                this.CurrentChannels = 0;
+                this.CurrentSampleRate = 0;
+                this.CurrentBitDepth = 0;
+                this.CurrentBpm = 0;
+                this.IsPlaying = false;
+                this.IsPaused = false;
+            }
         }
 
         private void StopAndDisposeCurrent()
@@ -387,244 +355,242 @@ namespace ModularAudience.Forms.Modules
             this._cts?.Cancel();
             this._skipRequested = true;
 
-            try { this._primaryAudioObj?.StopAsync().GetAwaiter().GetResult(); } catch { }
-            try { this._secondaryAudioObj?.StopAsync().GetAwaiter().GetResult(); } catch { }
-            try { this._primaryAudioObj?.Dispose(); } catch { }
-            try { this._secondaryAudioObj?.Dispose(); } catch { }
-            this._primaryAudioObj = null;
-            this._primaryOriginalPath = null;
-            this._secondaryAudioObj = null;
-            this._secondaryOriginalPath = null;
-            this._activePreparedTracks.Clear();
-
-            WaveOutEvent?    wo;
-            AudioFileReader? rd;
-            lock (this._lock) { wo = this._waveOut; rd = this._reader; this._waveOut = null; this._reader = null; }
-
-            try { wo?.Stop();    } catch { }
-            try { wo?.Dispose(); } catch { }
-            try { rd?.Dispose(); } catch { }
+            List<PlaylistSlot> toDispose;
+            lock (this._lock)
+            {
+                toDispose = new List<PlaylistSlot>(this._slots);
+                this._slots.Clear();
+            }
+            foreach (var s in toDispose)
+            {
+                try { s.Audio.StopAsync().GetAwaiter().GetResult(); } catch { }
+                try { s.Audio.Dispose(); } catch { }
+                this.DeleteTempFile(s.Track.TempPath);
+            }
 
             try { this._cts?.Dispose(); } catch { }
             this._cts = null;
+        }
+
+        private void StopCurrentAndInsert(string pathToInsert)
+        {
+            lock (this._lock) this.FilePaths.Insert(0, pathToInsert);
+            this._skipRequested = true;
         }
 
         private TimeSpan GetCurrentPosition()
         {
             lock (this._lock)
             {
-                try
-                {
-                    if (this._primaryAudioObj != null)
-                    {
-                        return this._primaryAudioObj.CurrentTime;
-                    }
-
-                    return this._reader?.CurrentTime ?? TimeSpan.Zero;
-                }
+                try { return this._slots.FirstOrDefault(s => s.IsPrimary)?.Audio.CurrentTime ?? TimeSpan.Zero; }
                 catch { return TimeSpan.Zero; }
             }
         }
 
         private double GetCrossfadeDuration()
         {
-            try
-            {
-                return Math.Max(0.0, this.CrossfadeDurationProvider?.Invoke() ?? 0.0);
-            }
-            catch
-            {
-                return 0.0;
-            }
+            try { return Math.Max(0.0, this.CrossfadeDurationProvider?.Invoke() ?? 0.0); }
+            catch { return 0.0; }
         }
 
-        private async Task RunCrossfadeLoop(CancellationToken ct)
+        // ── Main slot loop ─────────────────────────────────────────────────────
+
+        private const int MaxSlots = 4;
+
+        private async Task RunSlotLoop(CancellationToken ct)
         {
-            var fadeOutTasks = new List<Task>();
-            Task<PreparedPlaylistTrack?>? nextPrepareTask = null;
-            string? nextPrepareTaskPath = null;
+            Task<PreparedPlaylistTrack?>? prepareTask = null;
+            string? prepareTaskPath = null;
+            var fadeTasks = new List<Task>();
 
             try
             {
                 while (!ct.IsCancellationRequested && !this._disposed)
                 {
-                    fadeOutTasks.RemoveAll(t => t.IsCompleted);
+                    fadeTasks.RemoveAll(t => t.IsCompleted);
 
-                    string? currentOriginalPath;
+                    string? currentPath;
                     lock (this._lock)
                     {
                         while (this.FilePaths.Count > 1 &&
                                string.Equals(this.FilePaths[0], this.FilePaths[1], StringComparison.OrdinalIgnoreCase))
                         {
-                            ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] duplicate removed: {Path.GetFileNameWithoutExtension(this.FilePaths[1])}");
+                            ModularAudience.Audio.LogCollection.Log(
+                                $"[PlaylistEngine] duplicate removed: {Path.GetFileNameWithoutExtension(this.FilePaths[1])}");
                             this.FilePaths.RemoveAt(1);
                         }
-                        currentOriginalPath = this.FilePaths.Count > 0 ? this.FilePaths[0] : null;
+                        currentPath = this.FilePaths.Count > 0 ? this.FilePaths[0] : null;
                     }
 
-                    if (string.IsNullOrWhiteSpace(currentOriginalPath))
+                    if (string.IsNullOrWhiteSpace(currentPath))
                         break;
 
-                    PreparedPlaylistTrack? currentPrepared;
-                    if (nextPrepareTask != null && string.Equals(nextPrepareTaskPath, currentOriginalPath, StringComparison.OrdinalIgnoreCase))
+                    PreparedPlaylistTrack? current;
+                    if (prepareTask != null && string.Equals(prepareTaskPath, currentPath, StringComparison.OrdinalIgnoreCase))
                     {
-                        ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] reusing pre-prepared: {Path.GetFileNameWithoutExtension(currentOriginalPath)}");
-                        currentPrepared = await nextPrepareTask.ConfigureAwait(false);
-                        nextPrepareTask = null;
-                        nextPrepareTaskPath = null;
+                        current = await prepareTask.ConfigureAwait(false);
+                        prepareTask = null;
+                        prepareTaskPath = null;
+                        ModularAudience.Audio.LogCollection.Log(
+                            $"[PlaylistEngine] reusing pre-prepared: {Path.GetFileNameWithoutExtension(currentPath)}");
                     }
                     else
                     {
-                        if (nextPrepareTask != null)
+                        if (prepareTask != null)
                         {
-                            try { var ab = await nextPrepareTask.ConfigureAwait(false); if (ab != null) { this.UntrackPrepared(ab, "abandoned"); try { ab.Audio.Dispose(); } catch { } this.DeleteTempFile(ab.TempPath); } } catch { }
-                            nextPrepareTask = null;
-                            nextPrepareTaskPath = null;
+                            try
+                            {
+                                var stale = await prepareTask.ConfigureAwait(false);
+                                if (stale != null) { try { stale.Audio.Dispose(); } catch { } this.DeleteTempFile(stale.TempPath); }
+                            }
+                            catch { }
+                            prepareTask = null;
+                            prepareTaskPath = null;
                         }
-                        currentPrepared = await this.PrepareTrackAsync(currentOriginalPath, ct).ConfigureAwait(false);
+                        current = await this.PrepareTrackAsync(currentPath, ct).ConfigureAwait(false);
                     }
 
-                    if (currentPrepared == null)
+                    if (current == null)
                     {
                         lock (this._lock)
                         {
-                            if (this.FilePaths.Count > 0 && string.Equals(this.FilePaths[0], currentOriginalPath, StringComparison.OrdinalIgnoreCase))
+                            if (this.FilePaths.Count > 0 &&
+                                string.Equals(this.FilePaths[0], currentPath, StringComparison.OrdinalIgnoreCase))
                                 this.FilePaths.RemoveAt(0);
                         }
                         continue;
                     }
 
-                    await currentPrepared.Audio.PlayAsync(CancellationToken.None, initialVolume: 1.0f).ConfigureAwait(false);
-                    currentPrepared.Audio.Volume = 100f;
-                    currentPrepared.Audio.SetPlaybackVolume(1.0f);
-                    this.TrackPreparedAsActive(currentPrepared, "initial play");
-                    this.ApplyCurrentTrackState(currentPrepared);
+                    var primarySlot = this.AddSlot(current, isPrimary: true);
+                    await current.Audio.PlayAsync(CancellationToken.None, initialVolume: 1.0f).ConfigureAwait(false);
+                    current.Audio.Volume = 100f;
+                    current.Audio.SetPlaybackVolume(1.0f);
+                    this.UpdateCurrentTrackState(primarySlot);
                     TrackChanged?.Invoke();
-                    ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] Now playing: {Path.GetFileNameWithoutExtension(currentOriginalPath)} | active={this.ActiveAudioObjs.Count}");
+                    ModularAudience.Audio.LogCollection.Log(
+                        $"[PlaylistEngine] NOW PLAYING: {Path.GetFileNameWithoutExtension(currentPath)} | slots={this._slots.Count}");
 
-                    bool crossfadeTriggered = false;
+                    bool crossfadeDone = false;
 
                     while (!ct.IsCancellationRequested && !this._disposed && !this._skipRequested)
                     {
-                        if (!currentPrepared.Audio.Playing)
+                        if (!current.Audio.Playing)
                         {
-                            ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] track ended: {Path.GetFileNameWithoutExtension(currentOriginalPath)}");
+                            ModularAudience.Audio.LogCollection.Log(
+                                $"[PlaylistEngine] track ended: {Path.GetFileNameWithoutExtension(currentPath)}");
                             break;
                         }
 
-                        TimeSpan remaining = currentPrepared.Audio.Duration - currentPrepared.Audio.CurrentTime;
-                        double remainingSeconds = remaining.TotalSeconds;
-                        double crossfadeDuration = this.GetCrossfadeDuration();
-                        double preprocessLeadSeconds = crossfadeDuration + CrossfadePreprocessLeadSeconds;
+                        TimeSpan remaining = current.Audio.Duration - current.Audio.CurrentTime;
+                        double remainingSeconds = Math.Max(0.0, remaining.TotalSeconds);
+                        double cfDuration = this.GetCrossfadeDuration();
+                        double prepLead = cfDuration + CrossfadePreprocessLeadSeconds;
 
-                        string? nextOriginalPath;
+                        string? nextPath;
                         lock (this._lock)
                         {
                             string? candidate = this.FilePaths.Count > 1 ? this.FilePaths[1] : null;
-                            nextOriginalPath = string.Equals(candidate, currentOriginalPath, StringComparison.OrdinalIgnoreCase) ? null : candidate;
+                            nextPath = string.Equals(candidate, currentPath, StringComparison.OrdinalIgnoreCase)
+                                ? null : candidate;
                         }
 
-                        if (!string.IsNullOrWhiteSpace(nextOriginalPath) && remainingSeconds <= preprocessLeadSeconds)
+                        // ── Pre-prepare next track (non-blocking fire-and-forget task) ────────
+                        if (!string.IsNullOrWhiteSpace(nextPath) && remainingSeconds <= prepLead)
                         {
-                            if (nextPrepareTask == null || !string.Equals(nextPrepareTaskPath, nextOriginalPath, StringComparison.OrdinalIgnoreCase))
+                            if (prepareTask == null ||
+                                !string.Equals(prepareTaskPath, nextPath, StringComparison.OrdinalIgnoreCase))
                             {
-                                if (nextPrepareTask != null)
+                                // Discard stale prepare without blocking the loop
+                                if (prepareTask != null)
                                 {
-                                    try { var stale = await nextPrepareTask.ConfigureAwait(false); if (stale != null) { this.UntrackPrepared(stale, "stale"); try { stale.Audio.Dispose(); } catch { } this.DeleteTempFile(stale.TempPath); } } catch { }
+                                    var staleTask = prepareTask;
+                                    _ = Task.Run(async () =>
+                                    {
+                                        try
+                                        {
+                                            var stale = await staleTask.ConfigureAwait(false);
+                                            if (stale != null) { try { stale.Audio.Dispose(); } catch { } this.DeleteTempFile(stale.TempPath); }
+                                        }
+                                        catch { }
+                                    });
                                 }
-                                nextPrepareTask = this.PrepareTrackAsync(nextOriginalPath, ct);
-                                nextPrepareTaskPath = nextOriginalPath;
-                                ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] pre-preparing: {Path.GetFileNameWithoutExtension(nextOriginalPath)} (remaining={remainingSeconds:F1}s)");
+                                prepareTask = this.PrepareTrackAsync(nextPath, ct);
+                                prepareTaskPath = nextPath;
+                                ModularAudience.Audio.LogCollection.Log(
+                                    $"[PlaylistEngine] pre-preparing: {Path.GetFileNameWithoutExtension(nextPath)} (rem={remainingSeconds:F1}s)");
                             }
                         }
 
-                        if (!crossfadeTriggered && !string.IsNullOrWhiteSpace(nextOriginalPath) && crossfadeDuration > 0 && remainingSeconds <= crossfadeDuration)
+                        // ── Crossfade trigger (only when prepare is complete) ──────────────
+                        if (!crossfadeDone && !string.IsNullOrWhiteSpace(nextPath) &&
+                            cfDuration > 0 && remainingSeconds <= cfDuration &&
+                            this._slots.Count < MaxSlots)
                         {
-                            crossfadeTriggered = true;
-                            ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] crossfade trigger: remaining={remainingSeconds:F1}s cf={crossfadeDuration:F1}s");
+                            // Ensure prepare task is running for the next track
+                            if (prepareTask == null ||
+                                !string.Equals(prepareTaskPath, nextPath, StringComparison.OrdinalIgnoreCase))
+                            {
+                                prepareTask = this.PrepareTrackAsync(nextPath, ct);
+                                prepareTaskPath = nextPath;
+                                ModularAudience.Audio.LogCollection.Log(
+                                    $"[PlaylistEngine] crossfade: kicked off prepare (rem={remainingSeconds:F1}s)");
+                            }
+
+                            // Don't block the loop — wait until prepare finishes naturally
+                            if (!prepareTask.IsCompleted)
+                            {
+                                await Task.Delay(25, ct).ConfigureAwait(false);
+                                continue;
+                            }
+
+                            crossfadeDone = true;
+                            ModularAudience.Audio.LogCollection.Log(
+                                $"[PlaylistEngine] crossfade trigger: rem={remainingSeconds:F1}s cf={cfDuration:F1}s");
 
                             PreparedPlaylistTrack? nextTrack;
-                            if (nextPrepareTask != null && string.Equals(nextPrepareTaskPath, nextOriginalPath, StringComparison.OrdinalIgnoreCase))
-                                nextTrack = await nextPrepareTask.ConfigureAwait(false);
-                            else
-                                nextTrack = await this.PrepareTrackAsync(nextOriginalPath, ct).ConfigureAwait(false);
-                            nextPrepareTask = null;
-                            nextPrepareTaskPath = null;
+                            try { nextTrack = await prepareTask.ConfigureAwait(false); }
+                            catch { nextTrack = null; }
+                            prepareTask = null;
+                            prepareTaskPath = null;
 
                             if (nextTrack != null)
                             {
-                                double fadeDuration = crossfadeDuration;
-                                var fadingOut = currentPrepared;
-
-                                nextTrack.Audio.Volume = 100f;
-                                nextTrack.Audio.SetPlaybackVolume(0.0f);
-                                await nextTrack.Audio.PlayAsync(CancellationToken.None, initialVolume: 0.0f).ConfigureAwait(false);
-                                this.TrackPreparedAsActive(nextTrack, "crossfade start");
-
-                                fadeOutTasks.Add(Task.Run(async () =>
-                                {
-                                    try
-                                    {
-                                        var started = DateTime.UtcNow;
-                                        while (!this._disposed && fadingOut.Audio.Playing)
-                                        {
-                                            double elapsed = (DateTime.UtcNow - started).TotalSeconds;
-                                            float vol = (float) Math.Clamp(1.0 - elapsed / Math.Max(0.001, fadeDuration), 0.0, 1.0);
-                                            fadingOut.Audio.SetPlaybackVolume(vol);
-                                            if (vol <= 0f) { try { await fadingOut.Audio.StopAsync().ConfigureAwait(false); } catch { } break; }
-                                            await Task.Delay(25).ConfigureAwait(false);
-                                        }
-                                    }
-                                    catch { }
-                                    finally
-                                    {
-                                        this.UntrackPrepared(fadingOut, "fade-out done");
-                                        try { fadingOut.Audio.Dispose(); } catch { }
-                                        this.DeleteTempFile(fadingOut.TempPath);
-                                        ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] fade-out done: {Path.GetFileNameWithoutExtension(fadingOut.OriginalPath)} | active={this.ActiveAudioObjs.Count}");
-                                    }
-                                }));
-
-                                var fadingIn = nextTrack;
-                                double fadeInDuration = fadeDuration;
-                                fadeOutTasks.Add(Task.Run(async () =>
-                                {
-                                    try
-                                    {
-                                        var started = DateTime.UtcNow;
-                                        while (!this._disposed && fadingIn.Audio.Playing)
-                                        {
-                                            double elapsed = (DateTime.UtcNow - started).TotalSeconds;
-                                            float vol = (float) Math.Clamp(elapsed / Math.Max(0.001, fadeInDuration), 0.0, 1.0);
-                                            fadingIn.Audio.SetPlaybackVolume(vol);
-                                            if (vol >= 1f) break;
-                                            await Task.Delay(25).ConfigureAwait(false);
-                                        }
-                                        fadingIn.Audio.SetPlaybackVolume(1.0f);
-                                    }
-                                    catch { }
-                                }));
-
                                 lock (this._lock)
                                 {
-                                    if (this.FilePaths.Count > 0 && string.Equals(this.FilePaths[0], currentOriginalPath, StringComparison.OrdinalIgnoreCase))
+                                    if (this.FilePaths.Count > 0 &&
+                                        string.Equals(this.FilePaths[0], currentPath, StringComparison.OrdinalIgnoreCase))
                                         this.FilePaths.RemoveAt(0);
-                                    this._previousPath = currentOriginalPath;
+                                    this._previousPath = currentPath;
                                 }
 
-                                this.ApplyCurrentTrackState(nextTrack);
+                                var nextSlot = this.AddSlot(nextTrack, isPrimary: true);
+                                primarySlot.IsPrimary = false;
+                                await nextTrack.Audio.PlayAsync(CancellationToken.None, initialVolume: 0.0f).ConfigureAwait(false);
+                                nextTrack.Audio.Volume = 100f;
+
+                                this.UpdateCurrentTrackState(nextSlot);
                                 TrackChanged?.Invoke();
 
                                 if (this.CrossfadeStartedAsync != null)
-                                    _ = Task.Run(() => this.CrossfadeStartedAsync(fadingOut.Audio, nextTrack.Audio), CancellationToken.None);
+                                    _ = Task.Run(() => this.CrossfadeStartedAsync!(primarySlot.Audio, nextTrack.Audio), CancellationToken.None);
 
-                                ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] crossfade -> {Path.GetFileNameWithoutExtension(nextOriginalPath)} | active={this.ActiveAudioObjs.Count}");
-                                break;
+                                fadeTasks.Add(this.StartFadeOut(primarySlot, cfDuration));
+                                fadeTasks.Add(this.StartFadeIn(nextSlot, cfDuration));
+
+                                ModularAudience.Audio.LogCollection.Log(
+                                    $"[PlaylistEngine] crossfade -> {Path.GetFileNameWithoutExtension(nextPath)} | slots={this._slots.Count}");
+
+                                primarySlot = nextSlot;
+                                current = nextTrack;
+                                currentPath = nextPath;
+                                crossfadeDone = false;
+                                continue;
                             }
                             else
                             {
-                                crossfadeTriggered = false;
-                                ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] crossfade prepare FAILED: {nextOriginalPath}");
+                                crossfadeDone = false;
+                                ModularAudience.Audio.LogCollection.Log(
+                                    $"[PlaylistEngine] crossfade prepare FAILED: {nextPath}");
                             }
                         }
 
@@ -633,70 +599,85 @@ namespace ModularAudience.Forms.Modules
 
                     if (this._skipRequested)
                     {
-                        try { await currentPrepared.Audio.StopAsync().ConfigureAwait(false); } catch { }
-                        this.UntrackPrepared(currentPrepared, "skipped");
-                        try { currentPrepared.Audio.Dispose(); } catch { }
-                        this.DeleteTempFile(currentPrepared.TempPath);
+                        lock (this._lock) this._slots.Remove(primarySlot);
+                        try { await primarySlot.Audio.StopAsync().ConfigureAwait(false); } catch { }
+                        try { primarySlot.Audio.Dispose(); } catch { }
+                        this.DeleteTempFile(current.TempPath);
+
                         lock (this._lock)
                         {
-                            if (this.FilePaths.Count > 0 && string.Equals(this.FilePaths[0], currentOriginalPath, StringComparison.OrdinalIgnoreCase))
+                            if (this.FilePaths.Count > 0 &&
+                                string.Equals(this.FilePaths[0], currentPath, StringComparison.OrdinalIgnoreCase))
                                 this.FilePaths.RemoveAt(0);
                         }
                         this._skipRequested = false;
-                        this.ClearCurrentTrackState();
-                        this.SetSecondaryTrack((PreparedPlaylistTrack?) null);
+                        this.ClearEngineState();
                         TrackChanged?.Invoke();
                     }
-                    else if (!crossfadeTriggered)
+                    else if (!crossfadeDone)
                     {
-                        this.UntrackPrepared(currentPrepared, "natural end");
-                        try { currentPrepared.Audio.Dispose(); } catch { }
-                        this.DeleteTempFile(currentPrepared.TempPath);
+                        lock (this._lock) this._slots.Remove(primarySlot);
+                        try { primarySlot.Audio.Dispose(); } catch { }
+                        this.DeleteTempFile(current.TempPath);
+
                         lock (this._lock)
                         {
-                            if (this.FilePaths.Count > 0 && string.Equals(this.FilePaths[0], currentOriginalPath, StringComparison.OrdinalIgnoreCase))
+                            if (this.FilePaths.Count > 0 &&
+                                string.Equals(this.FilePaths[0], currentPath, StringComparison.OrdinalIgnoreCase))
                                 this.FilePaths.RemoveAt(0);
-                            this._previousPath = currentOriginalPath;
+                            this._previousPath = currentPath;
                         }
-                        this.ClearCurrentTrackState();
-                        this.SetSecondaryTrack((PreparedPlaylistTrack?) null);
+                        this.ClearEngineState();
                         TrackChanged?.Invoke();
                     }
-                    // crossfadeTriggered: old track fading out in background, queue already advanced
                 }
 
-                if (fadeOutTasks.Count > 0)
-                    await Task.WhenAll(fadeOutTasks).ConfigureAwait(false);
+                if (fadeTasks.Count > 0)
+                    try { await Task.WhenAll(fadeTasks).ConfigureAwait(false); } catch { }
             }
             finally
             {
-                if (nextPrepareTask != null)
-                {
-                    try { var ab = await nextPrepareTask.ConfigureAwait(false); if (ab != null) { this.UntrackPrepared(ab, "abandoned"); try { ab.Audio.Dispose(); } catch { } this.DeleteTempFile(ab.TempPath); } } catch { }
-                }
-                if (fadeOutTasks.Count > 0)
-                    try { await Task.WhenAll(fadeOutTasks).ConfigureAwait(false); } catch { }
+                if (prepareTask != null)
+                    try
+                    {
+                        var ab = await prepareTask.ConfigureAwait(false);
+                        if (ab != null) { try { ab.Audio.Dispose(); } catch { } this.DeleteTempFile(ab.TempPath); }
+                    }
+                    catch { }
 
-                this.ClearCurrentTrackState();
-                this.SetSecondaryTrack((PreparedPlaylistTrack?) null);
-                lock (this._lock)
+                if (fadeTasks.Count > 0)
+                    try { await Task.WhenAll(fadeTasks).ConfigureAwait(false); } catch { }
+
+                List<PlaylistSlot> leftover;
+                lock (this._lock) { leftover = new List<PlaylistSlot>(this._slots); this._slots.Clear(); }
+                foreach (var s in leftover)
                 {
-                    this._activePreparedTracks.Clear();
-                    this.IsPlaying = false;
-                    this.IsPaused = false;
-                    this.CurrentPath = null;
-                    this.OriginalCurrentPath = null;
-                    this.CurrentDuration = TimeSpan.Zero;
+                    try { s.Audio.StopAsync().GetAwaiter().GetResult(); } catch { }
+                    try { s.Audio.Dispose(); } catch { }
+                    this.DeleteTempFile(s.Track.TempPath);
                 }
+
+                this.ClearEngineState();
                 TrackChanged?.Invoke();
             }
         }
+
+        private void DeleteTempFile(string? tempPath)
+        {
+            if (string.IsNullOrWhiteSpace(tempPath))
+            {
+                return;
+            }
+
+            try { File.Delete(tempPath); } catch { }
+        }
+
+        // â”€â”€ Tag helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
         private async Task<PreparedPlaylistTrack?> PrepareTrackAsync(string originalPath, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(originalPath) || !File.Exists(originalPath))
-            {
                 return null;
-            }
 
             string playPath = originalPath;
             string? tempPath = null;
@@ -712,13 +693,8 @@ namespace ModularAudience.Forms.Modules
                         tempPath = preprocessed;
                     }
                 }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch
-                {
-                }
+                catch (OperationCanceledException) { throw; }
+                catch { }
             }
 
             try
@@ -751,98 +727,6 @@ namespace ModularAudience.Forms.Modules
                 return null;
             }
         }
-
-        private void ApplyCurrentTrackState(PreparedPlaylistTrack prepared)
-        {
-            lock (this._lock)
-            {
-                this._primaryAudioObj = prepared.Audio;
-                this._primaryOriginalPath = prepared.OriginalPath;
-                this.CurrentPath = prepared.PlayPath;
-                this.OriginalCurrentPath = prepared.OriginalPath;
-                this.CurrentDuration = prepared.Audio.Duration;
-                this.CurrentChannels = prepared.Audio.Channels;
-                this.CurrentSampleRate = prepared.Audio.SampleRate;
-                this.CurrentBitDepth = prepared.Audio.BitDepth;
-                this.CurrentBpm = prepared.Audio.Bpm;
-                this.IsPlaying = prepared.Audio.Playing || prepared.Audio.PlayerPlaying || prepared.Audio.Paused;
-                this.IsPaused = prepared.Audio.Paused;
-            }
-        }
-
-        private void ClearCurrentTrackState()
-        {
-            lock (this._lock)
-            {
-                this._primaryAudioObj = null;
-                this._primaryOriginalPath = null;
-                this.CurrentPath = null;
-                this.OriginalCurrentPath = null;
-                this.CurrentDuration = TimeSpan.Zero;
-                this.CurrentChannels = 0;
-                this.CurrentSampleRate = 0;
-                this.CurrentBitDepth = 0;
-                this.CurrentBpm = 0;
-            }
-        }
-
-        private void SetSecondaryTrack(PreparedPlaylistTrack? prepared)
-        {
-            lock (this._lock)
-            {
-                this._secondaryAudioObj = prepared?.Audio;
-                this._secondaryOriginalPath = prepared?.OriginalPath;
-            }
-        }
-
-        private void TrackPreparedAsActive(PreparedPlaylistTrack prepared, string reason)
-        {
-            lock (this._lock)
-            {
-                this._activePreparedTracks[prepared.Audio.Id] = prepared;
-            }
-
-            try
-            {
-                string logName = Path.GetFileNameWithoutExtension(prepared.OriginalPath);
-                string logBpm = prepared.Audio.Bpm > 0 ? $" [{prepared.Audio.Bpm:F0} BPM]" : string.Empty;
-                int activeCount = this.ActiveAudioObjs.Count;
-                ModularAudience.Audio.LogCollection.Log($"Playlist track initial play ({reason}): {logName}{logBpm} | active={activeCount}");
-            }
-            catch
-            {
-            }
-        }
-
-        private void UntrackPrepared(PreparedPlaylistTrack prepared, string reason)
-        {
-            lock (this._lock)
-            {
-                this._activePreparedTracks.Remove(prepared.Audio.Id);
-            }
-
-            try
-            {
-                string logName = Path.GetFileNameWithoutExtension(prepared.OriginalPath);
-                int activeCount = this.ActiveAudioObjs.Count;
-                ModularAudience.Audio.LogCollection.Log($"Playlist track inactive ({reason}): {logName} | active={activeCount}");
-            }
-            catch
-            {
-            }
-        }
-
-        private void DeleteTempFile(string? tempPath)
-        {
-            if (string.IsNullOrWhiteSpace(tempPath))
-            {
-                return;
-            }
-
-            try { File.Delete(tempPath); } catch { }
-        }
-
-        // â”€â”€ Tag helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>Read Duration + BPM from file tags without loading audio data.</summary>
         public static (TimeSpan Duration, float Bpm, int Channels, int SampleRate, int BitDepth) ReadMetadata(string path)
