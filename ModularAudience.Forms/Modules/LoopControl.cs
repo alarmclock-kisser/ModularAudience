@@ -1095,6 +1095,7 @@ namespace ModularAudience.Forms.Modules
         {
             if (!ModifierKeys.HasFlag(Keys.Shift) && !ModifierKeys.HasFlag(Keys.Control))
             {
+                this.numericUpDown_jump.Click -= this.numericUpDown_jump_ValueChanged;
                 if ((float) this.numericUpDown_jump.Value > this.lastJumpMs)
                 {
                     this.lastJumpMs *= 2;
@@ -1106,7 +1107,8 @@ namespace ModularAudience.Forms.Modules
                     this.lastJumpMs = Math.Max(1, this.lastJumpMs / 2);
                     this.numericUpDown_jump.Value = (decimal) this.lastJumpMs;
                 }
-			}
+                this.numericUpDown_jump.Click += this.numericUpDown_jump_ValueChanged;
+            }
 		}
 
         private void numericUpDown_jump_Click(object? sender, EventArgs e)

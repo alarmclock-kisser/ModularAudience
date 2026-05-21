@@ -28,8 +28,9 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.contextMenuStrip_playlistItem = new System.Windows.Forms.ContextMenuStrip();
-            this.toolStripMenuItem_removeFromEnsemble = new System.Windows.Forms.ToolStripMenuItem();
+            this.components = new System.ComponentModel.Container();
+            this.contextMenuStrip_playlistItem = new ContextMenuStrip(this.components);
+            this.toolStripMenuItem_removeFromEnsemble = new ToolStripMenuItem();
             this.panel_buttons = new Panel();
             this.button_loop = new Button();
             this.button_copy = new Button();
@@ -43,10 +44,24 @@
             this.button_playlistAllOn = new Button();
             this.button_playlistAllOff = new Button();
             this.checkedListBox_playlistTracks = new CheckedListBox();
+            this.contextMenuStrip_playlistItem.SuspendLayout();
             this.panel_buttons.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_multiplier).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_jump).BeginInit();
             this.SuspendLayout();
+            // 
+            // contextMenuStrip_playlistItem
+            // 
+            this.contextMenuStrip_playlistItem.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_removeFromEnsemble });
+            this.contextMenuStrip_playlistItem.Name = "contextMenuStrip_playlistItem";
+            this.contextMenuStrip_playlistItem.Size = new Size(201, 26);
+            // 
+            // toolStripMenuItem_removeFromEnsemble
+            // 
+            this.toolStripMenuItem_removeFromEnsemble.Name = "toolStripMenuItem_removeFromEnsemble";
+            this.toolStripMenuItem_removeFromEnsemble.Size = new Size(200, 22);
+            this.toolStripMenuItem_removeFromEnsemble.Text = "Remove from ensemble";
+            this.toolStripMenuItem_removeFromEnsemble.Click += this.toolStripMenuItem_removeFromEnsemble_Click;
             // 
             // panel_buttons
             // 
@@ -154,7 +169,7 @@
             // 
             // button_playlistAllOn
             // 
-            this.button_playlistAllOn.Font = new Font("Bahnschrift Light Condensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            this.button_playlistAllOn.Font = new Font("Bahnschrift Light Condensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
             this.button_playlistAllOn.Location = new Point(426, 3);
             this.button_playlistAllOn.Name = "button_playlistAllOn";
             this.button_playlistAllOn.Size = new Size(23, 19);
@@ -166,7 +181,7 @@
             // 
             // button_playlistAllOff
             // 
-            this.button_playlistAllOff.Font = new Font("Bahnschrift Light Condensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            this.button_playlistAllOff.Font = new Font("Bahnschrift Light Condensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
             this.button_playlistAllOff.Location = new Point(453, 3);
             this.button_playlistAllOff.Name = "button_playlistAllOff";
             this.button_playlistAllOff.Size = new Size(23, 19);
@@ -178,28 +193,14 @@
             // 
             // checkedListBox_playlistTracks
             // 
-            this.checkedListBox_playlistTracks.CheckOnClick = true;
-            this.checkedListBox_playlistTracks.Font = new Font("Segoe UI", 8F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            this.checkedListBox_playlistTracks.ContextMenuStrip = this.contextMenuStrip_playlistItem;
+            this.checkedListBox_playlistTracks.Font = new Font("Segoe UI", 8F, FontStyle.Regular, GraphicsUnit.Point,  0);
             this.checkedListBox_playlistTracks.FormattingEnabled = true;
             this.checkedListBox_playlistTracks.Location = new Point(12, 102);
             this.checkedListBox_playlistTracks.Name = "checkedListBox_playlistTracks";
-            this.checkedListBox_playlistTracks.Size = new Size(464, 76);
+            this.checkedListBox_playlistTracks.Size = new Size(464, 72);
             this.checkedListBox_playlistTracks.TabIndex = 12;
-            this.checkedListBox_playlistTracks.ContextMenuStrip = this.contextMenuStrip_playlistItem;
             // 
-            // contextMenuStrip_playlistItem
-            // 
-            this.contextMenuStrip_playlistItem.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { this.toolStripMenuItem_removeFromEnsemble });
-            this.contextMenuStrip_playlistItem.Name = "contextMenuStrip_playlistItem";
-            this.contextMenuStrip_playlistItem.Size = new System.Drawing.Size(181, 48);
-            // 
-            // toolStripMenuItem_removeFromEnsemble
-            // 
-            this.toolStripMenuItem_removeFromEnsemble.Name = "toolStripMenuItem_removeFromEnsemble";
-            this.toolStripMenuItem_removeFromEnsemble.Size = new System.Drawing.Size(180, 22);
-            this.toolStripMenuItem_removeFromEnsemble.Text = "Remove from ensemble";
-            this.toolStripMenuItem_removeFromEnsemble.Click += this.toolStripMenuItem_removeFromEnsemble_Click;
-
             // LoopControl
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
@@ -223,6 +224,7 @@
             this.MinimumSize = new Size(500, 226);
             this.Name = "LoopControl";
             this.Text = "Loop Control";
+            this.contextMenuStrip_playlistItem.ResumeLayout(false);
             this.panel_buttons.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_multiplier).EndInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_jump).EndInit();

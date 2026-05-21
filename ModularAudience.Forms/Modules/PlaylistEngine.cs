@@ -452,10 +452,65 @@ namespace ModularAudience.Forms.Modules
 
                 TrackChanged?.Invoke();
 
-                // Intentionally logged before Play(): runs on each new track entry via PlayTrackAsync.
-                string logName = System.IO.Path.GetFileNameWithoutExtension(this.OriginalCurrentPath ?? path);
-                string logBpm  = this.CurrentBpm > 0 ? $" [{this.CurrentBpm:F0} BPM]" : string.Empty;
-                ModularAudience.Audio.LogCollection.Log($"Now playing: {logName}{logBpm}");
+                // If countdown is enabled, announce 3..2..1 with approx. timing before logging Now playing.
+                try
+                {
+                    string logName = System.IO.Path.GetFileNameWithoutExtension(this.OriginalCurrentPath ?? path);
+                    string logBpm  = this.CurrentBpm > 0 ? $" [{this.CurrentBpm:F0} BPM]" : string.Empty;
+                    bool wantCountdown = false;
+                    try { wantCountdown = WindowMain.PlaylistCountdownEnabled; } catch { }
+
+                    if (wantCountdown)
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                double bpm = 0.0;
+                                try { bpm = this.CurrentBpm; } catch { }
+
+                                // If no BPM in tag, try a fast scan (non-blocking to UI), with a short timeout
+                                if (bpm <= 0.0)
+                                {
+                                    try
+                                    {
+                                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                                        // Create a lightweight AudioObj just for scanning metadata if possible
+                                        try
+                                        {
+                                            var ao = new ModularAudience.Audio.AudioObj(path, load: false);
+                                            var scanned = await ModularAudience.Audio.Processors_V1.BeatScanner.ScanBpmAsync(ao).ConfigureAwait(false);
+                                            if (scanned > 0.0)
+                                                bpm = scanned;
+                                        }
+                                        catch { }
+                                    }
+                                    catch { }
+                                }
+
+                                // Fallback interval in ms
+                                int intervalMs = 900;
+                                if (bpm > 0.0)
+                                {
+                                    double beatMs = 60000.0 / bpm; // ms per beat
+                                    // Use quarter-note count: count 3 beats (3,2,1) so interval = beatMs
+                                    intervalMs = (int) Math.Max(150, Math.Round(beatMs));
+                                }
+
+                                try { ModularAudience.Audio.LogCollection.Log($"Countdown: 3 (interval={intervalMs}ms)"); } catch { }
+                                try { await Task.Delay(intervalMs); } catch { }
+                                try { ModularAudience.Audio.LogCollection.Log("Countdown: 2"); } catch { }
+                                try { await Task.Delay(intervalMs); } catch { }
+                                try { ModularAudience.Audio.LogCollection.Log("Countdown: 1"); } catch { }
+                            }
+                            catch { }
+                        });
+                    }
+
+                    // Intentionally logged before Play(): runs on each new track entry via PlayTrackAsync.
+                    ModularAudience.Audio.LogCollection.Log($"Now playing: {logName}{logBpm}");
+                }
+                catch { }
 
                 waveOut.Play();
 

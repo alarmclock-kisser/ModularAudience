@@ -6,6 +6,7 @@ using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio.Processors_V3;
 using ModularAudience.Forms.Helpers;
+using ModularAudience.Forms.Modules.Dialogs;
 
 namespace ModularAudience.Forms
 {
@@ -398,6 +399,15 @@ namespace ModularAudience.Forms
             {
                 CrossSyncDurationMs = Math.Clamp(result, 0, 60_000);
                 Audio.LogCollection.Log($"Cross sync duration set to {CrossSyncDurationMs} ms.");
+            }
+        }
+
+        private void toolStripMenuItem_timestretchEach_DoubleClick(object sender, EventArgs e)
+        {
+            // Do explicitly NOT toggle the menu item on double-click, instead open TimeStretchDialog to configure later enqueued tracks.
+            using (var dialog = new TimeStretchDialog())
+            {
+                dialog.ShowDialog(this);
             }
         }
 

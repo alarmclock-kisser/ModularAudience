@@ -86,7 +86,13 @@ namespace ModularAudience.Forms
                 }
             }
             catch { }
+
+            // Default countdown enabled state
+            try { PlaylistCountdownEnabled = true; } catch { }
         }
+
+        // Toggle controlled by context menu
+        internal static bool PlaylistCountdownEnabled = true;
 
         private float ResolvePlaylistPlaybackBpm(string originalPath, string playPath)
         {
@@ -96,6 +102,8 @@ namespace ModularAudience.Forms
             {
                 return this._playlistStretchSettings.TargetBpm;
             }
+
+
 
             float bpm = PlaylistEngine.ReadMetadata(originalPath).Bpm;
             if (bpm <= 0 && !string.Equals(playPath, originalPath, StringComparison.OrdinalIgnoreCase))
@@ -284,6 +292,19 @@ namespace ModularAudience.Forms
             LogCollection.Log("Playlist cleared.");
             // Force immediate UI update on UI thread; a second update fires via TrackChanged event
             WindowMainStaticHelpers.InvokeIfRequired(Instance, this.UpdatePlaylistUI);
+        }
+
+        private void playlistMenu_Countdown_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (sender is ToolStripMenuItem it)
+                {
+                    PlaylistCountdownEnabled = it.Checked;
+                    LogCollection.Log($"Playlist countdown {(it.Checked ? "enabled" : "disabled")}. ");
+                }
+            }
+            catch { }
         }
 
         private void playlistMenu_AddNext_Click(object? sender, EventArgs e)

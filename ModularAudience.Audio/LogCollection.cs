@@ -10,7 +10,9 @@ namespace ModularAudience.Audio
     public static class LogCollection
     {
         // Fields
-        public static readonly BindingList<string> Logs = [];
+        public static readonly BindingList<string> Logs = new BindingList<string>();
+        // Event used to notify UI code to append a log on the UI thread.
+        public static event Action<string>? NewLogPosted;
         public static int MaxLogCount { get; set; } = 512;
         public static bool AutoScroll { get; set; } = true;
         public static string TimeFormat { get; set; } = "HH:mm:ss.fff";
@@ -26,7 +28,11 @@ namespace ModularAudience.Audio
         public static void Log(string message)
         {
             message = $"{CurrentTimeStamp} {message}";
-            Logs.Add(message);
+            try
+            {
+                NewLogPosted?.Invoke(message);
+            }
+            catch { }
         }
 
         public static void Log(Exception exception)

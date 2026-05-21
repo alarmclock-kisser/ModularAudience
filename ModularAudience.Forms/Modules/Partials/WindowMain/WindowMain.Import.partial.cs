@@ -20,15 +20,26 @@ namespace ModularAudience.Forms
             }
             catch { }
 
-            LogCollection.Logs.ListChanged += (s, e) =>
+            // Subscribe to posted log events and add to the BindingList on the UI thread.
+            LogCollection.NewLogPosted += (msg) =>
             {
-                if (LogCollection.AutoScroll && e.ListChangedType == ListChangedType.ItemAdded)
+                WindowMainStaticHelpers.InvokeIfRequired(Instance, () =>
                 {
-                    WindowMainStaticHelpers.InvokeIfRequired(Instance, () =>
+                    try
                     {
-                        try { this.listBox_log.TopIndex = LogCollection.Logs.Count - 1; } catch { }
-                    });
-                }
+                        // Append and trim to MaxLogCount
+                        LogCollection.Logs.Add(msg);
+                        while (LogCollection.Logs.Count > LogCollection.MaxLogCount)
+                        {
+                            try { LogCollection.Logs.RemoveAt(0); } catch { break; }
+                        }
+                        if (LogCollection.AutoScroll)
+                        {
+                            try { this.listBox_log.TopIndex = LogCollection.Logs.Count - 1; } catch { }
+                        }
+                    }
+                    catch { }
+                });
             };
 
             this.listBox_log.DoubleClick += (s, e) =>
