@@ -71,6 +71,7 @@
             this.button_playlist = new Button();
             this.label_currentlyEnqueued = new Label();
             this.toolStripMenuItem_crossfade = new ToolStripMenuItem();
+            this.toolStripMenuItem_crossSyncDuration = new ToolStripMenuItem();
             this.contextMenuStrip_playlist.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -100,7 +101,7 @@
             // 
             // contextMenuStrip_playlist
             // 
-            this.contextMenuStrip_playlist.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_playPause, this.toolStripMenuItem_prev, this.toolStripMenuItem_skip, this.toolStripMenuItem_crossfade, this.toolStripMenuItem_shuffle, this.toolStripMenuItem_clear, this.toolStripMenuItem_timestretchEach });
+            this.contextMenuStrip_playlist.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_playPause, this.toolStripMenuItem_prev, this.toolStripMenuItem_skip, this.toolStripMenuItem_crossfade, this.toolStripMenuItem_crossSyncDuration, this.toolStripMenuItem_shuffle, this.toolStripMenuItem_clear, this.toolStripMenuItem_timestretchEach });
             this.contextMenuStrip_playlist.Name = "contextMenuStrip_playlist";
             this.contextMenuStrip_playlist.Size = new Size(190, 192);
             // 
@@ -502,6 +503,13 @@
             this.toolStripMenuItem_crossfade.Text = "≋ Crossfade...";
             this.toolStripMenuItem_crossfade.Click += this.toolStripMenuItem_crossfade_Click;
             // 
+            // toolStripMenuItem_crossSyncDuration
+            // 
+            this.toolStripMenuItem_crossSyncDuration.Name = "toolStripMenuItem_crossSyncDuration";
+            this.toolStripMenuItem_crossSyncDuration.Size = new Size(189, 22);
+            this.toolStripMenuItem_crossSyncDuration.Text = "≋ Cross Sync Duration...";
+            this.toolStripMenuItem_crossSyncDuration.Click += this.toolStripMenuItem_crossSyncDuration_Click;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
@@ -592,5 +600,6 @@
         private ToolStripMenuItem toolStripMenuItem_timestretchEach;
         private ToolTip toolTip_playlist;
         private ToolStripMenuItem toolStripMenuItem_crossfade;
+        private ToolStripMenuItem toolStripMenuItem_crossSyncDuration;
     }
 }

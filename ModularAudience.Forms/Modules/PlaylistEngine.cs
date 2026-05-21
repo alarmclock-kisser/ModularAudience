@@ -135,6 +135,32 @@ namespace ModularAudience.Forms.Modules
 
         private const double CrossfadePreprocessLeadSeconds = 15.0;
 
+        // Hard upper bound for the pre-prepare lead, even when the user configured a huge crossfade.
+        // Without this cap a 180 s crossfade would start pre-stretching the next track instantly,
+        // chaining multiple expensive time-stretches and causing the engine to feel "stuck".
+        private const double MaxPreprocessLeadSeconds = 60.0;
+
+        private static double ComputeEffectiveCrossfade(double configuredCrossfade, double currentDurationSeconds, double currentRemainingSeconds)
+        {
+            if (configuredCrossfade <= 0.0)
+            {
+                return 0.0;
+            }
+
+            double cap = configuredCrossfade;
+            if (currentDurationSeconds > 0.0)
+            {
+                // Never crossfade across more than half of the current track,
+                // so the new track is not started practically at the same moment as the previous one.
+                cap = Math.Min(cap, currentDurationSeconds * 0.5);
+            }
+            if (currentRemainingSeconds > 0.0)
+            {
+                cap = Math.Min(cap, currentRemainingSeconds);
+            }
+            return Math.Max(0.0, cap);
+        }
+
         private sealed class PreparedPlaylistTrack
         {
             public required AudioObj Audio { get; init; }
@@ -514,8 +540,10 @@ namespace ModularAudience.Forms.Modules
 
                         TimeSpan remaining = currentPrepared.Audio.Duration - currentPrepared.Audio.CurrentTime;
                         double remainingSeconds = remaining.TotalSeconds;
+                        double currentDurationSeconds = currentPrepared.Audio.Duration.TotalSeconds;
                         double crossfadeDuration = this.GetCrossfadeDuration();
-                        double preprocessLeadSeconds = crossfadeDuration + CrossfadePreprocessLeadSeconds;
+                        double effectiveCrossfade = ComputeEffectiveCrossfade(crossfadeDuration, currentDurationSeconds, remainingSeconds);
+                        double preprocessLeadSeconds = Math.Min(MaxPreprocessLeadSeconds, effectiveCrossfade + CrossfadePreprocessLeadSeconds);
 
                         string? nextOriginalPath;
                         lock (this._lock)
@@ -538,10 +566,10 @@ namespace ModularAudience.Forms.Modules
                             }
                         }
 
-                        if (!crossfadeTriggered && !string.IsNullOrWhiteSpace(nextOriginalPath) && crossfadeDuration > 0 && remainingSeconds <= crossfadeDuration)
+                        if (!crossfadeTriggered && !string.IsNullOrWhiteSpace(nextOriginalPath) && effectiveCrossfade > 0 && remainingSeconds <= effectiveCrossfade)
                         {
                             crossfadeTriggered = true;
-                            ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] crossfade trigger: remaining={remainingSeconds:F1}s cf={crossfadeDuration:F1}s");
+                            ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] crossfade trigger: remaining={remainingSeconds:F1}s cf={crossfadeDuration:F1}s eff={effectiveCrossfade:F1}s");
 
                             PreparedPlaylistTrack? nextTrack;
                             if (nextPrepareTask != null && string.Equals(nextPrepareTaskPath, nextOriginalPath, StringComparison.OrdinalIgnoreCase))
@@ -553,7 +581,19 @@ namespace ModularAudience.Forms.Modules
 
                             if (nextTrack != null)
                             {
-                                double fadeDuration = crossfadeDuration;
+                                // Final cap once we know the next track's actual duration.
+                                double nextDurationSeconds = nextTrack.Audio.Duration.TotalSeconds;
+                                double currentRemainingNow = Math.Max(0.0, (currentPrepared.Audio.Duration - currentPrepared.Audio.CurrentTime).TotalSeconds);
+                                double fadeDuration = effectiveCrossfade;
+                                if (nextDurationSeconds > 0.0)
+                                {
+                                    fadeDuration = Math.Min(fadeDuration, nextDurationSeconds * 0.5);
+                                }
+                                if (currentRemainingNow > 0.0)
+                                {
+                                    fadeDuration = Math.Min(fadeDuration, currentRemainingNow);
+                                }
+                                fadeDuration = Math.Max(0.1, fadeDuration);
                                 var fadingOut = currentPrepared;
 
                                 nextTrack.Audio.Volume = 100f;

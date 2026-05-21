@@ -176,15 +176,25 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
+        private static string BuildPlaylistDisplayText(AudioObj audio)
+        {
+            string name = !string.IsNullOrWhiteSpace(audio.OriginalName)
+                ? audio.OriginalName
+                : !string.IsNullOrWhiteSpace(audio.Name)
+                    ? audio.Name
+                    : Path.GetFileNameWithoutExtension(audio.FilePath);
+            string bpm = audio.Bpm > 0 ? $" [{audio.Bpm:F0}]" : string.Empty;
+            string state = audio.PlayerPlaying ? "▶" : audio.Paused ? "||" : "■";
+            string shortId = audio.Id.ToString("N")[..6];
+            return $"{state} {name}{bpm} · {shortId}";
+        }
+
         private void RefreshPlaylistTargets()
         {
             List<AudioObj> activePlaylistAudios = this.PlaylistAudios
                 .Where(audio => audio != null)
                 .DistinctBy(audio => audio.Id)
                 .ToList();
-
-            // Debug: log what the UI actually receives
-            ModularAudience.Audio.LogCollection.Log($"[LoopControl] RefreshPlaylistTargets: {activePlaylistAudios.Count} active playlist audio(s): [{string.Join(", ", activePlaylistAudios.Select(a => $"{a.Name ?? "?"}(playing={a.Playing},playerPlaying={a.PlayerPlaying})"))}]");
 
             HashSet<Guid> activeIds = activePlaylistAudios.Select(audio => audio.Id).ToHashSet();
 
@@ -200,26 +210,66 @@ namespace ModularAudience.Forms.Modules
             this.suppressPlaylistChecklistEvents = true;
             try
             {
-                this.checkedListBox_playlistTracks.Items.Clear();
+                var listBox = this.checkedListBox_playlistTracks;
 
-                foreach (AudioObj audio in activePlaylistAudios)
+                // Build incremental diff against current items to avoid Items.Clear() flicker on every tick.
+                var existing = listBox.Items.OfType<PlaylistTargetItem>().ToList();
+                var existingById = existing.ToDictionary(item => item.Audio.Id, item => item);
+
+                // 1) Remove items whose audio is no longer active, in reverse order to keep indices stable.
+                for (int i = listBox.Items.Count - 1; i >= 0; i--)
                 {
-                    string name = !string.IsNullOrWhiteSpace(audio.OriginalName)
-                        ? audio.OriginalName
-                        : !string.IsNullOrWhiteSpace(audio.Name)
-                            ? audio.Name
-                            : Path.GetFileNameWithoutExtension(audio.FilePath);
-                    string bpm = audio.Bpm > 0 ? $" [{audio.Bpm:F0}]" : string.Empty;
-                    string state = audio.PlayerPlaying ? "▶" : audio.Paused ? "||" : "■";
-                    string shortId = audio.Id.ToString("N")[..6];
-                    var item = new PlaylistTargetItem
+                    if (listBox.Items[i] is PlaylistTargetItem item && !activeIds.Contains(item.Audio.Id))
                     {
-                        Audio = audio,
-                        DisplayText = $"{state} {name}{bpm} · {shortId}"
-                    };
+                        listBox.Items.RemoveAt(i);
+                    }
+                }
 
-                    int index = this.checkedListBox_playlistTracks.Items.Add(item);
-                    this.checkedListBox_playlistTracks.SetItemChecked(index, this.selectedPlaylistTrackIds.Contains(audio.Id));
+                // 2) Reconcile order, update display text in-place, insert/append missing.
+                for (int targetIndex = 0; targetIndex < activePlaylistAudios.Count; targetIndex++)
+                {
+                    AudioObj audio = activePlaylistAudios[targetIndex];
+                    string display = BuildPlaylistDisplayText(audio);
+                    bool shouldBeChecked = this.selectedPlaylistTrackIds.Contains(audio.Id);
+
+                    int currentIndex = -1;
+                    for (int j = 0; j < listBox.Items.Count; j++)
+                    {
+                        if (listBox.Items[j] is PlaylistTargetItem pti && pti.Audio.Id == audio.Id)
+                        {
+                            currentIndex = j;
+                            break;
+                        }
+                    }
+
+                    if (currentIndex < 0)
+                    {
+                        var newItem = new PlaylistTargetItem { Audio = audio, DisplayText = display };
+                        if (targetIndex >= listBox.Items.Count)
+                        {
+                            int addedIdx = listBox.Items.Add(newItem);
+                            listBox.SetItemChecked(addedIdx, shouldBeChecked);
+                        }
+                        else
+                        {
+                            listBox.Items.Insert(targetIndex, newItem);
+                            listBox.SetItemChecked(targetIndex, shouldBeChecked);
+                        }
+                        continue;
+                    }
+
+                    var existingItem = (PlaylistTargetItem) listBox.Items[currentIndex];
+                    if (!string.Equals(existingItem.DisplayText, display, StringComparison.Ordinal))
+                    {
+                        // Update text in-place by replacing the item but only if text actually changed.
+                        var refreshed = new PlaylistTargetItem { Audio = audio, DisplayText = display };
+                        listBox.Items[currentIndex] = refreshed;
+                        listBox.SetItemChecked(currentIndex, shouldBeChecked);
+                    }
+                    else if (listBox.GetItemChecked(currentIndex) != shouldBeChecked)
+                    {
+                        listBox.SetItemChecked(currentIndex, shouldBeChecked);
+                    }
                 }
             }
             finally

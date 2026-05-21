@@ -81,6 +81,9 @@ namespace ModularAudience.Forms
         // Crossfade duration in seconds
         public static double CrossfadeDurationSeconds = 0.0;
 
+        // Duration in ms for which PausingPlaybackSyncer runs at the start of each crossfade transition
+        public static int CrossSyncDurationMs = 500;
+
 
         public WindowMain()
         {
@@ -381,7 +384,20 @@ namespace ModularAudience.Forms
                 CrossfadeDurationSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
             if (double.TryParse(input, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double result))
             {
-                CrossfadeDurationSeconds = result;
+                CrossfadeDurationSeconds = Math.Max(0.0, result);
+            }
+        }
+
+        private void toolStripMenuItem_crossSyncDuration_Click(object sender, EventArgs e)
+        {
+            string input = Microsoft.VisualBasic.Interaction.InputBox(
+                "Enter cross-sync duration in milliseconds (default 500):",
+                "Set Cross Sync Duration",
+                CrossSyncDurationMs.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (int.TryParse(input, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int result))
+            {
+                CrossSyncDurationMs = Math.Clamp(result, 0, 60_000);
+                Audio.LogCollection.Log($"Cross sync duration set to {CrossSyncDurationMs} ms.");
             }
         }
 
