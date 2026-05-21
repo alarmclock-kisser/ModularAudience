@@ -124,6 +124,14 @@
             this.toolStripMenuItem_playPause.Text = "Import Tracks ...";
             this.toolStripMenuItem_playPause.Click += this.playlistMenu_ImportTracks_Click;
             // 
+            // toolStripMenuItem_autoEnqueueOne
+            // 
+            this.toolStripMenuItem_autoEnqueueOne = new ToolStripMenuItem();
+            this.toolStripMenuItem_autoEnqueueOne.Name = "toolStripMenuItem_autoEnqueueOne";
+            this.toolStripMenuItem_autoEnqueueOne.Size = new Size(200, 22);
+            this.toolStripMenuItem_autoEnqueueOne.Text = "Auto enqueue one";
+            this.toolStripMenuItem_autoEnqueueOne.Click += this.playlistMenu_AutoEnqueueOne_Click;
+            // 
             // toolStripMenuItem_prev
             // 
             this.toolStripMenuItem_prev.Name = "toolStripMenuItem_prev";
@@ -606,6 +614,7 @@
         private Button button_playlist;
         private Label label_currentlyEnqueued;
         private ContextMenuStrip contextMenuStrip_playlist;
+        private ToolStripMenuItem toolStripMenuItem_autoEnqueueOne;
         private ToolStripMenuItem toolStripMenuItem_countdown;
         private ToolStripMenuItem toolStripMenuItem_playPause;
         private ToolStripMenuItem toolStripMenuItem_prev;

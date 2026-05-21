@@ -11,6 +11,30 @@ namespace ModularAudience.Forms.Modules
 {
     public partial class LoopControl : Form
     {
+
+        // Expose whether a playlist item is currently selected and return its path.
+        public bool HasSelectedPlaylistItem()
+        {
+            try
+            {
+                int idx = this.checkedListBox_playlistTracks.SelectedIndex;
+                return idx >= 0 && idx < this.checkedListBox_playlistTracks.Items.Count;
+            }
+            catch { return false; }
+        }
+
+        public string? GetSelectedPlaylistPath()
+        {
+            try
+            {
+                int idx = this.checkedListBox_playlistTracks.SelectedIndex;
+                if (idx < 0 || idx >= this.checkedListBox_playlistTracks.Items.Count) return null;
+                if (this.checkedListBox_playlistTracks.Items[idx] is PlaylistTargetItem pti)
+                    return pti.Audio?.FilePath;
+            }
+            catch { }
+            return null;
+        }
         private sealed class PlaylistTargetItem
         {
             public required AudioObj Audio { get; init; }

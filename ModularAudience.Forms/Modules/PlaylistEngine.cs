@@ -122,6 +122,26 @@ namespace ModularAudience.Forms.Modules
                 }
             }
         }
+
+        /// <summary>
+        /// Prepared original paths whose associated Audio object is not currently playing.
+        /// Used by UI fallback logic to prefer non-playing prepared tracks.
+        /// </summary>
+        public IReadOnlyList<string> PreparedNonPlayingOriginalPaths
+        {
+            get
+            {
+                lock (this._lock)
+                {
+                    return this._activePreparedTracks.Values
+                        .Where(p => p != null && p.Audio != null && !p.Audio.Playing)
+                        .Select(p => p.OriginalPath)
+                        .Where(path => !string.IsNullOrWhiteSpace(path) && !string.Equals(path, this.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                }
+            }
+        }
         public AudioObj? PrimaryAudioObj
         {
             get
@@ -1171,13 +1191,19 @@ namespace ModularAudience.Forms.Modules
                 // This covers both direct playback and already-stretched temp files.
                 PlaylistNormalizer.NormalizeToTarget(audio.Data);
 
-                return new PreparedPlaylistTrack
+                var prepared = new PreparedPlaylistTrack
                 {
                     Audio = audio,
                     OriginalPath = originalPath,
                     PlayPath = playPath,
                     TempPath = tempPath
                 };
+
+                // Make preprepared tracks visible immediately so UI fallback can pick them
+                // (avoids race where Prepare completed but TrackPreparedAsActive wasn't yet called).
+                try { this.TrackPreparedAsActive(prepared, "preprepared"); } catch { }
+
+                return prepared;
             }
             catch
             {

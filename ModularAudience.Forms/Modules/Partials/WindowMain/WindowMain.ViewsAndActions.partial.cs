@@ -536,10 +536,6 @@ namespace ModularAudience.Forms
                 string allLogs = string.Join(Environment.NewLine, LogCollection.Logs);
                 Clipboard.SetText(allLogs);
             }
-            else if (this.listBox_log.SelectedItem != null)
-            {
-                Clipboard.SetText(this.listBox_log.SelectedItem.ToString() ?? "");
-            }
         }
     }
 }
