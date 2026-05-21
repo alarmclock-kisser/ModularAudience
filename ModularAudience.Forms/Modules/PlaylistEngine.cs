@@ -567,37 +567,49 @@ namespace ModularAudience.Forms.Modules
                     ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] Now playing: {Path.GetFileNameWithoutExtension(currentOriginalPath)} | active={this.ActiveAudioObjs.Count}");
 
                     bool crossfadeTriggered = false;
+                    int notPlayingStrikes = 0;
+                    TimeSpan lastObservedPosition = TimeSpan.Zero;
 
                     while (!ct.IsCancellationRequested && !this._disposed && !this._skipRequested)
                     {
                         if (!currentPrepared.Audio.Playing)
                         {
-                            // If the audio is paused (user requested pause) or the engine is paused,
-                            // do not treat this as a natural end. Wait briefly and re-check so that
-                            // a user pause does not cause the engine to advance to the next track.
+                            // User pause or engine pause: do not advance.
                             if (currentPrepared.Audio.Paused || this.IsPaused)
                             {
+                                notPlayingStrikes = 0;
                                 try { await Task.Delay(150, ct).ConfigureAwait(false); } catch { }
                                 continue;
                             }
 
-                            // Defensive guard: sometimes playback reports stopped briefly while the
-                            // expected duration has not been reached (transient). Do not untrack the
-                            // track unless it either reached its nominal end or we are skipping.
-                            try
-                            {
-                                double played = currentPrepared.Audio.CurrentTime.TotalSeconds;
-                                double total = currentPrepared.Audio.Duration.TotalSeconds;
-                                if (total > 0 && played < Math.Max(0.5, total - 0.05) && !this._skipRequested)
-                                {
-                                    // Wait a short moment and re-check instead of removing the track.
-                                    try { await Task.Delay(200, ct).ConfigureAwait(false); } catch { }
-                                    continue;
-                                }
-                            }
-                            catch { }
+                            // A single "not playing" sample is unreliable: the WaveOut buffer can
+                            // momentarily report stopped during a sync-pulse pause, an internal
+                            // reset, or a buffer underrun. Require multiple consecutive strikes
+                            // AND a frozen play position AND being effectively at the end of the
+                            // track before treating it as a real end.
+                            TimeSpan posNow = TimeSpan.Zero;
+                            try { posNow = currentPrepared.Audio.CurrentTime; } catch { }
+                            double playedSec = posNow.TotalSeconds;
+                            double totalSec = currentPrepared.Audio.Duration.TotalSeconds;
+                            bool nearEnd = totalSec <= 0.0 || playedSec >= Math.Max(0.5, totalSec * 0.95);
+                            bool positionFrozen = Math.Abs((posNow - lastObservedPosition).TotalMilliseconds) < 5.0;
+                            lastObservedPosition = posNow;
 
-                            ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] track ended: {Path.GetFileNameWithoutExtension(currentOriginalPath)}");
+                            if (!nearEnd || !positionFrozen)
+                            {
+                                notPlayingStrikes = 0;
+                                try { await Task.Delay(150, ct).ConfigureAwait(false); } catch { }
+                                continue;
+                            }
+
+                            notPlayingStrikes++;
+                            if (notPlayingStrikes < 3)
+                            {
+                                try { await Task.Delay(120, ct).ConfigureAwait(false); } catch { }
+                                continue;
+                            }
+
+                            ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] track ended (confirmed): {Path.GetFileNameWithoutExtension(currentOriginalPath)} pos={playedSec:F2}s/{totalSec:F2}s");
                             // Nahtloser Direktübergang: nur dann direkt starten, wenn KEIN Crossfade
                             // konfiguriert ist. Wenn Crossfade aktiv ist, gehört der Übergang in den
                             // normalen Crossfade-Pfad (der bereits früher auslöst), sonst verhindern
@@ -671,6 +683,9 @@ namespace ModularAudience.Forms.Modules
 
                             break;
                         }
+
+                        notPlayingStrikes = 0;
+                        try { lastObservedPosition = currentPrepared.Audio.CurrentTime; } catch { }
 
                         TimeSpan remaining = currentPrepared.Audio.Duration - currentPrepared.Audio.CurrentTime;
                         double remainingSeconds = remaining.TotalSeconds;
@@ -780,27 +795,24 @@ namespace ModularAudience.Forms.Modules
 
                             if (nextTrack != null)
                             {
-                                // Final cap once we know the next track's actual duration.
+                                // Fade duration: honor the user-configured crossfade as closely as possible.
+                                // - Cap by the next track's own duration (never longer than half of the incoming track).
+                                // - DO NOT cap by currentRemainingNow: the outgoing track will simply end while the
+                                //   fade-out task is still running, which is harmless (volume task self-terminates).
                                 double nextDurationSeconds = nextTrack.Audio.Duration.TotalSeconds;
-                                double currentRemainingNow = Math.Max(0.0, (currentPrepared.Audio.Duration - currentPrepared.Audio.CurrentTime).TotalSeconds);
                                 double fadeDuration = effectiveCrossfade;
                                 if (nextDurationSeconds > 0.0)
                                 {
                                     fadeDuration = Math.Min(fadeDuration, nextDurationSeconds * 0.5);
                                 }
-                                if (currentRemainingNow > 0.0)
-                                {
-                                    fadeDuration = Math.Min(fadeDuration, currentRemainingNow);
-                                }
                                 fadeDuration = Math.Max(0.1, fadeDuration);
                                 var fadingOut = currentPrepared;
 
-                                // Start next track at a small audible baseline so the transition
-                                // is never completely inaudible even for long fade-ins.
-                                const float fadeInBaseline = 0.05f;
+                                // Start incoming track silent. Equal-power curve guarantees an audible ramp
+                                // without a "sticky baseline" hack, and avoids a -6 dB hole in the middle.
                                 nextTrack.Audio.Volume = 100f;
-                                nextTrack.Audio.SetPlaybackVolume(fadeInBaseline);
-                                await nextTrack.Audio.PlayAsync(CancellationToken.None, initialVolume: fadeInBaseline).ConfigureAwait(false);
+                                nextTrack.Audio.SetPlaybackVolume(0.0f);
+                                await nextTrack.Audio.PlayAsync(CancellationToken.None, initialVolume: 0.0f).ConfigureAwait(false);
                                 this.TrackPreparedAsActive(nextTrack, "crossfade start");
 
                                 fadeOutTasks.Add(Task.Run(async () =>
@@ -808,22 +820,19 @@ namespace ModularAudience.Forms.Modules
                                     try
                                     {
                                         var started = DateTime.UtcNow;
-                                        // Drive fade-out by elapsed time rather than relying on the
-                                        // playback state, so we keep the expected overlap even if the
-                                        // outgoing track stops early for some reason.
                                         while (!this._disposed)
                                         {
                                             double elapsed = (DateTime.UtcNow - started).TotalSeconds;
                                             double t = Math.Clamp(elapsed / Math.Max(0.001, fadeDuration), 0.0, 1.0);
-                                            float vol = (float) Math.Clamp(1.0 - t, 0.0, 1.0);
+                                            // Equal-power fade-out: cos(t * pi/2).
+                                            float vol = (float) Math.Cos(t * Math.PI * 0.5);
                                             try { fadingOut.Audio.SetPlaybackVolume(vol); } catch { }
 
-                                            if (elapsed >= fadeDuration)
+                                            if (t >= 1.0)
                                             {
                                                 try { await fadingOut.Audio.StopAsync().ConfigureAwait(false); } catch { }
                                                 break;
                                             }
-
                                             await Task.Delay(25).ConfigureAwait(false);
                                         }
                                     }
@@ -844,44 +853,17 @@ namespace ModularAudience.Forms.Modules
                                     try
                                     {
                                         var started = DateTime.UtcNow;
-                                        const float baseline = fadeInBaseline;
-                                        bool accelerated = false;
-                                        DateTime? accelEnd = null;
-                                        while (!this._disposed && fadingIn.Audio.Playing)
+                                        while (!this._disposed)
                                         {
                                             double elapsed = (DateTime.UtcNow - started).TotalSeconds;
-
-                                            // If the outgoing track disappeared early (unexpected stop),
-                                            // accelerate the fade-in to avoid a long, quiet ramp.
-                                            bool outStillPlaying = true;
-                                            try { outStillPlaying = fadingOut.Audio.Playing; } catch { outStillPlaying = false; }
-                                            if (!outStillPlaying && !accelerated)
-                                            {
-                                                accelerated = true;
-                                                accelEnd = DateTime.UtcNow + TimeSpan.FromMilliseconds(150);
-                                                ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] accelerating fade-in due to early fade-out stop");
-                                            }
-
-                                            if (accelerated && accelEnd.HasValue)
-                                            {
-                                                double remain = Math.Max(0.001, (accelEnd.Value - DateTime.UtcNow).TotalSeconds);
-                                                double total = elapsed + remain;
-                                                double t = Math.Clamp(elapsed / total, 0.0, 1.0);
-                                                float vol = (float)(baseline + (1.0 - baseline) * t);
-                                                fadingIn.Audio.SetPlaybackVolume(vol);
-                                                if (DateTime.UtcNow >= accelEnd.Value) break;
-                                            }
-                                            else
-                                            {
-                                                double t = Math.Clamp(elapsed / Math.Max(0.001, fadeInDuration), 0.0, 1.0);
-                                                float vol = (float)(baseline + (1.0 - baseline) * t);
-                                                fadingIn.Audio.SetPlaybackVolume(vol);
-                                                if (vol >= 1f) break;
-                                            }
-
+                                            double t = Math.Clamp(elapsed / Math.Max(0.001, fadeInDuration), 0.0, 1.0);
+                                            // Equal-power fade-in: sin(t * pi/2).
+                                            float vol = (float) Math.Sin(t * Math.PI * 0.5);
+                                            try { fadingIn.Audio.SetPlaybackVolume(vol); } catch { }
+                                            if (t >= 1.0) break;
                                             await Task.Delay(25).ConfigureAwait(false);
                                         }
-                                        fadingIn.Audio.SetPlaybackVolume(1.0f);
+                                        try { fadingIn.Audio.SetPlaybackVolume(1.0f); } catch { }
                                     }
                                     catch { }
                                 }));

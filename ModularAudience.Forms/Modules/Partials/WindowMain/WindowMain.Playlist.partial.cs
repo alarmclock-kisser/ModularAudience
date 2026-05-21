@@ -128,31 +128,42 @@ namespace ModularAudience.Forms
             {
                 await Task.Delay(20).ConfigureAwait(false);
 
-                using CancellationTokenSource syncWindow = new(TimeSpan.FromMilliseconds(syncDurationMs));
-                List<AudioObj> playingTracks = new();
+                // CRITICAL: The two tracks involved in the crossfade MUST NOT be handed to the
+                // PausingPlaybackSyncer. The syncer works by briefly pausing tracks to nudge
+                // their beat phase – pausing the just-started incoming track would cause the
+                // fade-in volume ramp (which runs on wall-clock time) to advance while audio
+                // is silent, producing the long, quiet ramp the user reported.
+                // We only sync OTHER tracks (e.g. open TrackView audios) against the incoming
+                // track if such third-party tracks exist.
+                Guid currentId = currentTrack?.Id ?? Guid.Empty;
+                Guid nextId = nextTrack?.Id ?? Guid.Empty;
 
-                playingTracks.AddRange(this._playlist.ActiveAudioObjs.Where(audio => audio.PlayerPlaying));
-                playingTracks.AddRange(TrackViews
-                    .Where(tv => tv != null && !tv.IsDisposed && tv.OriginalAudio.PlayerPlaying)
-                    .Select(tv => tv.OriginalAudio));
-
-                playingTracks = playingTracks
-                    .Where(audio => audio != null && audio.PlayerPlaying)
+                List<AudioObj> externalPlayingTracks = TrackViews
+                    .Where(tv => tv != null && !tv.IsDisposed && tv.OriginalAudio != null && tv.OriginalAudio.PlayerPlaying)
+                    .Select(tv => tv.OriginalAudio)
+                    .Where(audio => audio.Id != currentId && audio.Id != nextId)
                     .Distinct()
                     .ToList();
 
-                if (playingTracks.Count < 2)
+                if (externalPlayingTracks.Count == 0 || nextTrack == null)
                 {
-                    playingTracks = Enumerable
-                        .Repeat(currentTrack, 1)
-                        .Concat(Enumerable.Repeat(nextTrack, 1))
-                        .Where(audio => audio.PlayerPlaying)
-                        .Distinct()
-                        .ToList();
+                    // Nothing to sync against – skip silently. The crossfade itself proceeds untouched.
+                    return;
                 }
 
-                var syncer = new PausingPlaybackSyncer(playingTracks, syncWindow.Token, frequency: 0.05, grain: 12);
-                LogCollection.Log($"Playlist crossfade: {syncDurationMs} ms beat sync window started.");
+                // Sync external tracks to align with the new incoming track.
+                List<AudioObj> syncSet = new() { nextTrack };
+                syncSet.AddRange(externalPlayingTracks);
+
+                using CancellationTokenSource syncWindow = new(TimeSpan.FromMilliseconds(syncDurationMs));
+
+                // IMPORTANT: pass the incoming track only so it can be used as master reference.
+                // PausingPlaybackSyncer will only pulse-pause slaves (the external tracks),
+                // never the master with highest volume – but to be safe we keep nextTrack
+                // boosted: it is the freshly-started fade-in target, dropping its volume
+                // momentarily would be inaudible at the start of the fade and acceptable.
+                var syncer = new PausingPlaybackSyncer(syncSet, syncWindow.Token, frequency: 0.05, grain: 12);
+                LogCollection.Log($"Playlist crossfade: {syncDurationMs} ms beat sync window started (slaves={externalPlayingTracks.Count}).");
 
                 try
                 {
