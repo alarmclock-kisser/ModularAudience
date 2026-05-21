@@ -103,11 +103,17 @@ namespace ModularAudience.Forms
                 return;
             }
 
+            int syncDurationMs = Math.Max(0, WindowMain.CrossSyncDurationMs);
+            if (syncDurationMs <= 0)
+            {
+                return;
+            }
+
             try
             {
                 await Task.Delay(20).ConfigureAwait(false);
 
-                using CancellationTokenSource syncWindow = new(TimeSpan.FromMilliseconds(500));
+                using CancellationTokenSource syncWindow = new(TimeSpan.FromMilliseconds(syncDurationMs));
                 List<AudioObj> playingTracks = new();
 
                 playingTracks.AddRange(this._playlist.ActiveAudioObjs.Where(audio => audio.PlayerPlaying));
@@ -131,11 +137,11 @@ namespace ModularAudience.Forms
                 }
 
                 var syncer = new PausingPlaybackSyncer(playingTracks, syncWindow.Token, frequency: 0.05, grain: 12);
-                LogCollection.Log("Playlist crossfade: 500 ms beat sync window started.");
+                LogCollection.Log($"Playlist crossfade: {syncDurationMs} ms beat sync window started.");
 
                 try
                 {
-                    await Task.Delay(500, syncWindow.Token).ConfigureAwait(false);
+                    await Task.Delay(syncDurationMs, syncWindow.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
