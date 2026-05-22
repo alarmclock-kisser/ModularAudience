@@ -72,6 +72,10 @@ namespace ModularAudience.Forms
         // Recording timer
         private System.Windows.Forms.Timer? recordingTimer = null;
         private DateTime _infoCtrlToStopAppeared = DateTime.MinValue;
+        // Track mouse-driven move so we save on mouse up instead of polling
+        private bool _isMouseDownForPosition = false;
+        // Keep reference to log event handler to avoid duplicate subscriptions
+        private Action<DateTime, string>? _logPostedWithTimestampHandler = null;
 
         // Copy + Paste AudioObj
         internal static AudioObj? ClipboardAudioObj = null;
@@ -79,12 +83,18 @@ namespace ModularAudience.Forms
         // Playlist FilePaths
         internal static List<string> PlaylistFilePaths = [];
 
+        // User comment history (newest first) and draft
+        public static List<string> CommentHistory { get; } = [];
+        public static string CommentDraft { get; set; } = string.Empty;
+        // When true, typing in comment dialog should not trigger pausing/syncer key handlers
+        internal bool IsCommentDialogOpen = false;
+
         // Crossfade duration in seconds
         public static double CrossfadeDurationSeconds = 0.0;
 
         // Duration in ms for which PausingPlaybackSyncer runs at the start of each crossfade transition
         public static int CrossSyncDurationMs = 500;
-
+        private System.Windows.Forms.Timer? _positionSaveTimer;
 
         public WindowMain()
         {
@@ -93,7 +103,11 @@ namespace ModularAudience.Forms
             this.Tag = this.Text;
             this.KeyPreview = true;
             this.StartPosition = FormStartPosition.Manual;
-            this.Location = WindowsScreenHelper.GetCornerPosition(this, false, true);
+            // Try restore last saved position (multi-screen aware). Fallback to corner position.
+            if (!WindowsScreenHelper.TryRestoreFormPosition(this))
+            {
+                this.Location = WindowsScreenHelper.GetCornerPosition(this, false, true);
+            }
 
             // Shift + LeftClick on the form background should bring all open forms of this app to the front
             this.MouseDown += this.WindowMain_MouseDown_BringAllToFront;
@@ -103,6 +117,7 @@ namespace ModularAudience.Forms
             CollectionViews.ListChanged += this.CollectionViews_ListChanged;
 
             this.FormClosing += this.WindowMain_FormClosing;
+            this.LocationChanged += this.WindowMain_LocationChanged_ForPositionSave;
             this.LocationChanged += (_, __) => this.PositionCollectionViews();
             this.SizeChanged += (_, __) => this.PositionCollectionViews();
 
@@ -118,7 +133,85 @@ namespace ModularAudience.Forms
             this._keyFilter = new GlobalKeyMessageFilter();
             this._keyFilter.KeyChanged += this.GlobalKeyChanged;
             Application.AddMessageFilter(this._keyFilter);
+            // Save form position when user finishes moving (mouse up) or when keyboard moves it
+            this.MouseDown += this.WindowMain_MouseDown_ForPositionSave;
+            this.MouseUp += this.WindowMain_MouseUp_ForPositionSave;
+            this.KeyDown += this.WindowMain_KeyDown_ForPositionSave;
             this.UpdateTrackDependentUI();
+        }
+
+        private void button_copyLog_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                // Compose full log as newline-joined string from LogCollection.Logs
+                string all = string.Empty;
+                try { all = string.Join(Environment.NewLine, LogCollection.Logs.ToArray()); } catch { all = string.Empty; }
+                if (!string.IsNullOrEmpty(all))
+                {
+                    try
+                    {
+                        Clipboard.SetText(all);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        private void WindowMain_LocationChanged_ForPositionSave(object? sender, EventArgs e)
+        {
+            try
+            {
+                // If user is currently dragging with mouse, defer saving until MouseUp.
+                if (this._isMouseDownForPosition)
+                {
+                    return;
+                }
+
+                // Otherwise, save immediately (keyboard move or programmatic)
+                WindowsScreenHelper.SaveFormPosition(this);
+            }
+            catch { }
+        }
+
+        private void WindowMain_MouseDown_ForPositionSave(object? sender, MouseEventArgs e)
+        {
+            try
+            {
+                if (e.Button == MouseButtons.Left)
+                {
+                    _isMouseDownForPosition = true;
+                }
+            }
+            catch { }
+        }
+
+        private void WindowMain_MouseUp_ForPositionSave(object? sender, MouseEventArgs e)
+        {
+            try
+            {
+                if (e.Button == MouseButtons.Left)
+                {
+                    _isMouseDownForPosition = false;
+                    WindowsScreenHelper.SaveFormPosition(this);
+                }
+            }
+            catch { }
+        }
+
+        private void WindowMain_KeyDown_ForPositionSave(object? sender, KeyEventArgs e)
+        {
+            try
+            {
+                // Arrow keys may move window when user uses accessibility or window-management shortcuts
+                if (e.KeyCode == Keys.Left || e.KeyCode == Keys.Right || e.KeyCode == Keys.Up || e.KeyCode == Keys.Down)
+                {
+                    // small delay to allow Location to update - but save immediately as best-effort
+                    WindowsScreenHelper.SaveFormPosition(this);
+                }
+            }
+            catch { }
         }
 
         private void WindowMain_MouseDown_BringAllToFront(object? sender, MouseEventArgs e)
@@ -187,6 +280,7 @@ namespace ModularAudience.Forms
 
         private void WindowMain_FormClosing(object? sender, FormClosingEventArgs e)
         {
+            try { WindowsScreenHelper.SaveFormPosition(this); } catch { }
             this.StopSyncer();
             this.StopPausingSyncer();
             this.DisposePlaylist();
@@ -207,6 +301,17 @@ namespace ModularAudience.Forms
                     try { this.recordingTimer.Stop(); } catch { }
                     try { this.recordingTimer.Dispose(); } catch { }
                     this.recordingTimer = null;
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (this._positionSaveTimer != null)
+                {
+                    try { this._positionSaveTimer.Stop(); } catch { }
+                    try { this._positionSaveTimer.Dispose(); } catch { }
+                    this._positionSaveTimer = null;
                 }
             }
             catch { }

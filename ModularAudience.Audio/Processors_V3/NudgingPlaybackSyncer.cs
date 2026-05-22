@@ -78,7 +78,7 @@ namespace ModularAudience.Audio.Processors_V3
 				}
 				if (!added)
 				{
-					groups.Add(new List<AudioObj> { t });
+					groups.Add([t]);
 				}
 			}
 

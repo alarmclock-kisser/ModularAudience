@@ -487,7 +487,7 @@ namespace ModularAudience.Forms.Modules
 
         private List<int> GetActiveTrackIndicesForStep(int stepIndex)
         {
-            List<int> activeTracks = new List<int>();
+            List<int> activeTracks = [];
             for (int trackIndex = 0; trackIndex < this.patternRows.Count; trackIndex++)
             {
                 bool[] steps = this.patternRows[trackIndex].Steps;
@@ -502,7 +502,7 @@ namespace ModularAudience.Forms.Modules
 
         private static List<int> GetActiveTrackIndicesForStep(IReadOnlyList<List<bool>> patternStates, int stepIndex)
         {
-            List<int> activeTracks = new List<int>();
+            List<int> activeTracks = [];
             for (int trackIndex = 0; trackIndex < patternStates.Count; trackIndex++)
             {
                 List<bool> steps = patternStates[trackIndex];
@@ -522,7 +522,7 @@ namespace ModularAudience.Forms.Modules
                 return activeTracks;
             }
 
-            return new List<int> { activeTracks[stepIndex % activeTracks.Count] };
+            return [activeTracks[stepIndex % activeTracks.Count]];
         }
 
         private static float ComputeStepGain(int simultaneousTracks)

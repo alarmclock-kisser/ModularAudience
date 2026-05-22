@@ -601,7 +601,7 @@ namespace ModularAudience.Forms.Modules
                     List<AudioObj> list;
                     if (single != null)
                     {
-                        list = new List<AudioObj> { single };
+                        list = [single];
                     }
                     else
                     {

@@ -61,6 +61,7 @@
             this.textBox_recordingTime = new TextBox();
             this.label_stopRecordInfo = new Label();
             this.button_newTrack = new Button();
+            this.button_copyLog = new Button();
             this.listBox_log = new ListBox();
             this.button_breakbeatArchitect = new Button();
             this.button_pitchShift = new Button();
@@ -105,7 +106,7 @@
             // 
             this.contextMenuStrip_playlist.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_playPause, this.toolStripMenuItem_prev, this.toolStripMenuItem_skip, this.toolStripMenuItem_crossfade, this.toolStripMenuItem_crossSyncDuration, this.toolStripMenuItem_shuffle, this.toolStripMenuItem_clear, this.toolStripMenuItem_timestretchEach, this.toolStripMenuItem_countdown });
             this.contextMenuStrip_playlist.Name = "contextMenuStrip_playlist";
-            this.contextMenuStrip_playlist.Size = new Size(201, 208);
+            this.contextMenuStrip_playlist.Size = new Size(201, 202);
             // 
             // toolStripMenuItem_playPause
             // 
@@ -177,7 +178,7 @@
             // 
             // button_scanBpm
             // 
-            this.button_scanBpm.Location = new Point(441, 286);
+            this.button_scanBpm.Location = new Point(384, 291);
             this.button_scanBpm.Name = "button_scanBpm";
             this.button_scanBpm.Size = new Size(75, 23);
             this.button_scanBpm.TabIndex = 3;
@@ -188,7 +189,7 @@
             // 
             // textBox_scanBpmResult
             // 
-            this.textBox_scanBpmResult.Location = new Point(522, 286);
+            this.textBox_scanBpmResult.Location = new Point(465, 291);
             this.textBox_scanBpmResult.Name = "textBox_scanBpmResult";
             this.textBox_scanBpmResult.PlaceholderText = "0.000 BPM";
             this.textBox_scanBpmResult.ReadOnly = true;
@@ -198,7 +199,7 @@
             // 
             // textBox_scanTimingResult
             // 
-            this.textBox_scanTimingResult.Location = new Point(522, 257);
+            this.textBox_scanTimingResult.Location = new Point(465, 262);
             this.textBox_scanTimingResult.Name = "textBox_scanTimingResult";
             this.textBox_scanTimingResult.PlaceholderText = "1 / 1 Timing";
             this.textBox_scanTimingResult.ReadOnly = true;
@@ -208,7 +209,7 @@
             // 
             // button_scanTiming
             // 
-            this.button_scanTiming.Location = new Point(441, 257);
+            this.button_scanTiming.Location = new Point(384, 262);
             this.button_scanTiming.Name = "button_scanTiming";
             this.button_scanTiming.Size = new Size(75, 23);
             this.button_scanTiming.TabIndex = 5;
@@ -219,7 +220,7 @@
             // 
             // textBox_scanKeyResult
             // 
-            this.textBox_scanKeyResult.Location = new Point(522, 228);
+            this.textBox_scanKeyResult.Location = new Point(465, 233);
             this.textBox_scanKeyResult.Name = "textBox_scanKeyResult";
             this.textBox_scanKeyResult.PlaceholderText = "No key scanned";
             this.textBox_scanKeyResult.ReadOnly = true;
@@ -229,7 +230,7 @@
             // 
             // button_scanKey
             // 
-            this.button_scanKey.Location = new Point(441, 228);
+            this.button_scanKey.Location = new Point(384, 233);
             this.button_scanKey.Name = "button_scanKey";
             this.button_scanKey.Size = new Size(75, 23);
             this.button_scanKey.TabIndex = 7;
@@ -240,7 +241,7 @@
             // 
             // button_timeStretch
             // 
-            this.button_timeStretch.Location = new Point(245, 228);
+            this.button_timeStretch.Location = new Point(192, 233);
             this.button_timeStretch.Name = "button_timeStretch";
             this.button_timeStretch.Size = new Size(90, 23);
             this.button_timeStretch.TabIndex = 9;
@@ -254,7 +255,7 @@
             this.button_export.BackColor = Color.FromArgb(  192,   255,   255);
             this.button_export.Location = new Point(12, 228);
             this.button_export.Name = "button_export";
-            this.button_export.Size = new Size(75, 23);
+            this.button_export.Size = new Size(51, 23);
             this.button_export.TabIndex = 10;
             this.button_export.TabStop = false;
             this.button_export.Text = "Export";
@@ -265,9 +266,9 @@
             // 
             this.comboBox_exportFormat.DropDownStyle = ComboBoxStyle.DropDownList;
             this.comboBox_exportFormat.FormattingEnabled = true;
-            this.comboBox_exportFormat.Location = new Point(93, 229);
+            this.comboBox_exportFormat.Location = new Point(69, 229);
             this.comboBox_exportFormat.Name = "comboBox_exportFormat";
-            this.comboBox_exportFormat.Size = new Size(80, 23);
+            this.comboBox_exportFormat.Size = new Size(56, 23);
             this.comboBox_exportFormat.TabIndex = 11;
             this.comboBox_exportFormat.TabStop = false;
             this.comboBox_exportFormat.SelectedIndexChanged += this.comboBox_exportFormat_SelectedIndexChanged;
@@ -276,16 +277,16 @@
             // 
             this.comboBox_exportBits.DropDownStyle = ComboBoxStyle.DropDownList;
             this.comboBox_exportBits.FormattingEnabled = true;
-            this.comboBox_exportBits.Location = new Point(179, 229);
+            this.comboBox_exportBits.Location = new Point(131, 229);
             this.comboBox_exportBits.Name = "comboBox_exportBits";
-            this.comboBox_exportBits.Size = new Size(60, 23);
+            this.comboBox_exportBits.Size = new Size(55, 23);
             this.comboBox_exportBits.TabIndex = 12;
             this.comboBox_exportBits.TabStop = false;
             this.comboBox_exportBits.SelectedIndexChanged += this.comboBox_exportBits_SelectedIndexChanged;
             // 
             // button_autoSamples
             // 
-            this.button_autoSamples.Location = new Point(341, 256);
+            this.button_autoSamples.Location = new Point(288, 261);
             this.button_autoSamples.Name = "button_autoSamples";
             this.button_autoSamples.Size = new Size(90, 23);
             this.button_autoSamples.TabIndex = 13;
@@ -310,7 +311,7 @@
             // button_drumRoll
             // 
             this.button_drumRoll.Enabled = false;
-            this.button_drumRoll.Location = new Point(245, 286);
+            this.button_drumRoll.Location = new Point(192, 291);
             this.button_drumRoll.Name = "button_drumRoll";
             this.button_drumRoll.Size = new Size(90, 23);
             this.button_drumRoll.TabIndex = 15;
@@ -333,7 +334,7 @@
             // textBox_info
             // 
             this.textBox_info.Font = new Font("Bahnschrift", 9F, FontStyle.Regular, GraphicsUnit.Point,  0);
-            this.textBox_info.Location = new Point(441, 12);
+            this.textBox_info.Location = new Point(384, 17);
             this.textBox_info.Multiline = true;
             this.textBox_info.Name = "textBox_info";
             this.textBox_info.PlaceholderText = "No track currently selected.";
@@ -387,6 +388,18 @@
             this.button_newTrack.UseVisualStyleBackColor = false;
             this.button_newTrack.Click += this.button_newTrack_Click;
             // 
+            // button_copyLog
+            // 
+            this.button_copyLog.Font = new Font("Bahnschrift SemiLight Condensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.button_copyLog.Location = new Point(74, 152);
+            this.button_copyLog.Name = "button_copyLog";
+            this.button_copyLog.Size = new Size(51, 23);
+            this.button_copyLog.TabIndex = 34;
+            this.button_copyLog.TabStop = false;
+            this.button_copyLog.Text = "Copy Log";
+            this.button_copyLog.UseVisualStyleBackColor = true;
+            this.button_copyLog.Click += this.button_copyLog_Click;
+            // 
             // listBox_log
             // 
             this.listBox_log.Font = new Font("Bahnschrift Light SemiCondensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
@@ -394,7 +407,7 @@
             this.listBox_log.HorizontalScrollbar = true;
             this.listBox_log.Location = new Point(131, 9);
             this.listBox_log.Name = "listBox_log";
-            this.listBox_log.Size = new Size(300, 212);
+            this.listBox_log.Size = new Size(247, 212);
             this.listBox_log.TabIndex = 22;
             this.listBox_log.TabStop = false;
             this.listBox_log.MouseClick += this.listBox_log_Click;
@@ -402,7 +415,7 @@
             // 
             // button_breakbeatArchitect
             // 
-            this.button_breakbeatArchitect.Location = new Point(341, 286);
+            this.button_breakbeatArchitect.Location = new Point(288, 291);
             this.button_breakbeatArchitect.Name = "button_breakbeatArchitect";
             this.button_breakbeatArchitect.Size = new Size(90, 23);
             this.button_breakbeatArchitect.TabIndex = 23;
@@ -413,7 +426,7 @@
             // 
             // button_pitchShift
             // 
-            this.button_pitchShift.Location = new Point(341, 229);
+            this.button_pitchShift.Location = new Point(288, 234);
             this.button_pitchShift.Name = "button_pitchShift";
             this.button_pitchShift.Size = new Size(90, 23);
             this.button_pitchShift.TabIndex = 24;
@@ -448,7 +461,7 @@
             // 
             // button_loopControl
             // 
-            this.button_loopControl.Location = new Point(245, 256);
+            this.button_loopControl.Location = new Point(192, 261);
             this.button_loopControl.Name = "button_loopControl";
             this.button_loopControl.Size = new Size(90, 23);
             this.button_loopControl.TabIndex = 27;
@@ -461,9 +474,9 @@
             this.button_devMode.BackColor = Color.DarkGray;
             this.button_devMode.Location = new Point(131, 286);
             this.button_devMode.Name = "button_devMode";
-            this.button_devMode.Size = new Size(108, 23);
+            this.button_devMode.Size = new Size(55, 23);
             this.button_devMode.TabIndex = 28;
-            this.button_devMode.Text = "Dev Mode";
+            this.button_devMode.Text = "DEV";
             this.button_devMode.UseVisualStyleBackColor = false;
             this.button_devMode.Click += this.button_devMode_Click;
             // 
@@ -471,7 +484,7 @@
             // 
             this.button_cuda.Location = new Point(131, 258);
             this.button_cuda.Name = "button_cuda";
-            this.button_cuda.Size = new Size(108, 23);
+            this.button_cuda.Size = new Size(55, 23);
             this.button_cuda.TabIndex = 29;
             this.button_cuda.Text = "CUDA";
             this.button_cuda.UseVisualStyleBackColor = true;
@@ -536,7 +549,8 @@
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
-            this.ClientSize = new Size(634, 326);
+            this.ClientSize = new Size(584, 326);
+            this.Controls.Add(this.button_copyLog);
             this.Controls.Add(this.label_currentlyEnqueued);
             this.Controls.Add(this.button_playlist);
             this.Controls.Add(this.button_bringAllToFront);
@@ -569,8 +583,8 @@
             this.Controls.Add(this.button_scanBpm);
             this.Controls.Add(this.button_browse);
             this.Controls.Add(this.button_import);
-            this.MaximumSize = new Size(650, 365);
-            this.MinimumSize = new Size(650, 365);
+            this.MaximumSize = new Size(600, 365);
+            this.MinimumSize = new Size(600, 365);
             this.Name = "WindowMain";
             this.Text = "ModularAudience (Main Control)";
             this.contextMenuStrip_playlist.ResumeLayout(false);
@@ -601,6 +615,7 @@
         private TextBox textBox_recordingTime;
         private Label label_stopRecordInfo;
         private Button button_newTrack;
+        private Button button_copyLog;
         private ListBox listBox_log;
         private Button button_breakbeatArchitect;
         private Button button_pitchShift;

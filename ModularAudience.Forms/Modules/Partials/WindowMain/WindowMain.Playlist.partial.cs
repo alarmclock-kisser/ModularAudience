@@ -241,8 +241,7 @@ namespace ModularAudience.Forms
                 }
 
                 // Sync external tracks to align with the new incoming track.
-                List<AudioObj> syncSet = new() { nextTrack };
-                syncSet.AddRange(externalPlayingTracks);
+                List<AudioObj> syncSet = [nextTrack, .. externalPlayingTracks];
 
                 using CancellationTokenSource syncWindow = new(TimeSpan.FromMilliseconds(syncDurationMs));
 

@@ -656,7 +656,7 @@ namespace ModularAudience.Cuda
 			// Split parameters by comma at top level (no templates used in CUDA C here)
 			string[] args = paramList.Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToArray();
 
-			Dictionary<string, Type> arguments = new();
+			Dictionary<string, Type> arguments = [];
 			for (int i = 0; i < args.Length; i++)
 			{
 				string p = args[i];

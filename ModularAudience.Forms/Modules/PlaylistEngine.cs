@@ -572,7 +572,7 @@ namespace ModularAudience.Forms.Modules
             this.StopAndDisposeCurrent();
             lock (this._lock)
             {
-                this.FilePaths.Clear();
+                this.FilePaths?.Clear();
                 this._banlist.Clear();
                 this.CurrentPath      = null;
                 this.OriginalCurrentPath = null;
@@ -634,7 +634,7 @@ namespace ModularAudience.Forms.Modules
                 }
 
                 // Read BPM tag cheaply
-                this.CurrentBpm = ReadBpmTagLight(path);
+                this.CurrentBpm = ReadBpmTagLight(path ?? "");
 
                 LogPlayback($"PlayTrackAsync: started playback path={path} duration={reader.TotalTime} bpm={this.CurrentBpm}");
 
@@ -643,7 +643,7 @@ namespace ModularAudience.Forms.Modules
                 // If countdown is enabled, announce 3..2..1 with approx. timing before logging Now playing.
                 try
                 {
-                    string logName = System.IO.Path.GetFileNameWithoutExtension(this.OriginalCurrentPath ?? path);
+                    string logName = System.IO.Path.GetFileNameWithoutExtension(this.OriginalCurrentPath ?? path) ?? "";
                     string logBpm  = this.CurrentBpm > 0 ? $" [{this.CurrentBpm:F0} BPM]" : string.Empty;
                     bool wantCountdown = false;
                     try { wantCountdown = WindowMain.PlaylistCountdownEnabled; } catch { }
@@ -666,7 +666,7 @@ namespace ModularAudience.Forms.Modules
                                         // Create a lightweight AudioObj just for scanning metadata if possible
                                         try
                                         {
-                                            var ao = new ModularAudience.Audio.AudioObj(path, load: false);
+                                            var ao = new ModularAudience.Audio.AudioObj(path ?? "", load: false);
                                             var scanned = await ModularAudience.Audio.Processors_V1.BeatScanner.ScanBpmAsync(ao).ConfigureAwait(false);
                                             if (scanned > 0.0)
                                             {
@@ -1109,7 +1109,7 @@ namespace ModularAudience.Forms.Modules
                                                 if (shouldDispose)
                                                 {
                                                     this.UntrackPrepared(stale, "stale");
-                                                    try { stale.Audio.Dispose(); } catch { }
+                                                    try { stale.Audio?.Dispose(); } catch { }
                                                     this.DeleteTempFile(stale.TempPath);
                                                 }
                                                 // else: keep prepared stale track available
@@ -1382,7 +1382,7 @@ namespace ModularAudience.Forms.Modules
                             if (shouldDispose)
                             {
                                 this.UntrackPrepared(ab, "abandoned");
-                                try { ab.Audio.Dispose(); } catch { }
+                                try { ab.Audio?.Dispose(); } catch { }
                                 this.DeleteTempFile(ab.TempPath);
                             }
                             // else: keep preprepared track to allow later use
@@ -1717,11 +1717,16 @@ namespace ModularAudience.Forms.Modules
             int channels = 0, sampleRate = 0, bitDepth = 0;
             try
             {
+                if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                {
+                    return (TimeSpan.Zero, 0f, 0, 0, 0);
+                }
+
                 using var reader = new AudioFileReader(path);
-                duration   = reader.TotalTime;
-                channels   = reader.WaveFormat.Channels;
+                duration = reader.TotalTime;
+                channels = reader.WaveFormat.Channels;
                 sampleRate = reader.WaveFormat.SampleRate;
-                bitDepth   = reader.WaveFormat.BitsPerSample;
+                bitDepth = reader.WaveFormat.BitsPerSample;
             }
             catch { }
 
@@ -1731,29 +1736,35 @@ namespace ModularAudience.Forms.Modules
 
         private static float ReadBpmTagLight(string path)
         {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return 0f;
             try
             {
                 using var file = TagLib.File.Create(path);
+                if (file == null) return 0f;
                 float bpm = 0f;
 
-                if (file.Tag.BeatsPerMinute > 0)
-                {
-                    bpm = (float) file.Tag.BeatsPerMinute;
-                }
+                try { if (file.Tag != null && file.Tag.BeatsPerMinute > 0) bpm = (float)file.Tag.BeatsPerMinute; } catch { }
 
-                if (bpm <= 0 && file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
+                if (bpm <= 0)
                 {
-                    var id3 = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
-                    var frame = TagLib.Id3v2.TextInformationFrame.Get(id3, "TBPM", false);
-                    if (frame != null)
+                    try
                     {
-                        string s = (frame.Text.FirstOrDefault() ?? "0").Replace(',', '.');
-                        if (float.TryParse(s, System.Globalization.NumberStyles.Any,
-                            System.Globalization.CultureInfo.InvariantCulture, out float v) && v > 0)
+                        if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                         {
-                            bpm = v;
+                            var id3 = (TagLib.Id3v2.Tag?)file.GetTag(TagLib.TagTypes.Id3v2);
+                            var frame = id3 != null ? TagLib.Id3v2.TextInformationFrame.Get(id3, "TBPM", false) : null;
+                            if (frame != null)
+                            {
+                                string s = (frame.Text.FirstOrDefault() ?? "0").Replace(',', '.');
+                                if (float.TryParse(s, System.Globalization.NumberStyles.Any,
+                                    System.Globalization.CultureInfo.InvariantCulture, out float v) && v > 0)
+                                {
+                                    bpm = v;
+                                }
+                            }
                         }
                     }
+                    catch { }
                 }
 
                 // Some taggers store BPM * 100 (e.g. 13000 instead of 130)

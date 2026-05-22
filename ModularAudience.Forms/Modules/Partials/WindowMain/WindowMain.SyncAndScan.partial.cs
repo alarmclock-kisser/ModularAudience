@@ -3,6 +3,7 @@ using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio;
 using ModularAudience.Audio.Processors_V3;
 using ModularAudience.Forms.Helpers;
+using System.Runtime.InteropServices;
 
 namespace ModularAudience.Forms
 {
@@ -288,6 +289,12 @@ namespace ModularAudience.Forms
 
             if (key == Keys.ShiftKey || key == Keys.LShiftKey || key == Keys.RShiftKey)
             {
+                // Do not react to Shift while comment dialog is open to avoid accidental pausing
+                if (Instance != null && Instance.IsCommentDialogOpen)
+                {
+                    return;
+                }
+
                 if (isDown)
                 {
                     if (!this._shiftPressed)
@@ -301,6 +308,109 @@ namespace ModularAudience.Forms
                     this._shiftPressed = false;
                     this.StopPausingSyncer();
                 }
+            }
+
+            // Alt + C => prompt for a log comment. Both left and right Alt should work.
+            // If Right-Alt was held, pause playback (using pausing syncer) while the dialog is shown.
+            if (key == Keys.C && isDown)
+            {
+                if ((ModifierKeys & Keys.Alt) == Keys.Alt)
+                {
+                    DateTime timestamp = DateTime.Now;
+
+                    bool rightAltDown = IsKeyDown(VK_RMENU);
+                    bool startedPausingForComment = false;
+                    bool wasPausingBefore = this._pausingActive;
+
+                    if (rightAltDown)
+                    {
+                        // Start pausing syncer if not already active. Remember if we actually started it so we only stop our own start.
+                        this.StartPausingSyncer();
+                        if (!wasPausingBefore && this._pausingActive)
+                        {
+                            startedPausingForComment = true;
+                        }
+                    }
+
+                    try
+                    {
+                        string timePrefix;
+                        try
+                        {
+                            timePrefix = "[" + timestamp.ToString(LogCollection.TimeFormat) + "]";
+                        }
+                        catch
+                        {
+                            timePrefix = string.Empty;
+                        }
+                        string prompt = $"Enter comment to add to log at {timePrefix}";
+                        // Provide history from LogCollection.Logs (newest first)
+                        // Provide only user comment history (newest first)
+                        List<string> history;
+                        try { history = WindowMain.CommentHistory.ToList(); } catch { history = []; }
+
+                        // Provide newest-first ordering
+                        history = history.ToList();
+
+                        // supply draft
+                        string draft = WindowMain.CommentDraft ?? string.Empty;
+
+                        Instance?.IsCommentDialogOpen = true;
+                        try
+                        {
+                            using (var dlg = new Modules.Dialogs.CommentInputDialog(history, prompt, draft))
+                            {
+                                var dr = dlg.ShowDialog(Instance ?? this);
+                            if (dr == DialogResult.OK)
+                            {
+                                string input = dlg.ResultText?.Trim() ?? string.Empty;
+                                if (!string.IsNullOrWhiteSpace(input))
+                                {
+                                    LogCollection.PostComment(timestamp, input);
+                                    try { WindowMain.CommentHistory.Insert(0, input); } catch { }
+                                    try { WindowMain.CommentDraft = string.Empty; } catch { }
+                                }
+                            }
+                            else
+                            {
+                                // Save draft back
+                                try { WindowMain.CommentDraft = dlg.ResultText ?? string.Empty; } catch { }
+                            }
+                            }
+                        }
+                        finally
+                        {
+                            Instance?.IsCommentDialogOpen = false;
+                        }
+                    }
+                    finally
+                    {
+                        if (startedPausingForComment)
+                        {
+                            this.StopPausingSyncer();
+                        }
+                    }
+                }
+
+                return;
+            }
+        }
+
+        // P/Invoke to detect right-alt state (we need to distinguish left vs right Alt)
+        private const int VK_RMENU = 0xA5;
+
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
+
+        private static bool IsKeyDown(int vKey)
+        {
+            try
+            {
+                return (GetAsyncKeyState(vKey) & 0x8000) != 0;
+            }
+            catch
+            {
+                return false;
             }
         }
 

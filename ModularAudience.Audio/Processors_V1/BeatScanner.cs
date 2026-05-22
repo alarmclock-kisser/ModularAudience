@@ -534,7 +534,7 @@ namespace ModularAudience.Audio.Processors_V1
             liveBpmCts = linkedCts;
             CancellationToken token = linkedCts.Token;
 
-            List<float> sampleBuffer = new();
+            List<float> sampleBuffer = [];
             object bufLock = new();
 
             WasapiLoopbackCapture? capture = null;

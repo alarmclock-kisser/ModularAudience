@@ -21,18 +21,68 @@ namespace ModularAudience.Forms
             catch { }
 
             // Subscribe to posted log events and add to the BindingList on the UI thread.
-            LogCollection.NewLogPosted += (msg) =>
+            // Ensure we don't double-subscribe by removing previous handler if present.
+            try
+            {
+                if (Instance?._logPostedWithTimestampHandler != null)
+                {
+                    try { LogCollection.NewLogPostedWithTimestamp -= Instance._logPostedWithTimestampHandler; } catch { }
+                    Instance._logPostedWithTimestampHandler = null;
+                }
+            }
+            catch { }
+
+            Instance?._logPostedWithTimestampHandler = (ts, full) =>
             {
                 WindowMainStaticHelpers.InvokeIfRequired(Instance, () =>
                 {
                     try
                     {
-                        // Append and trim to MaxLogCount
-                        LogCollection.Logs.Add(msg);
+                        // Insert chronologically based on timestamp (ascending). If same timestamp, append.
+                        int insertAt = LogCollection.Logs.Count;
+                        for (int i = 0; i < LogCollection.Logs.Count; i++)
+                        {
+                            string item = LogCollection.Logs[i];
+                            try
+                            {
+                                int a = item.IndexOf('[');
+                                int b = item.IndexOf(']');
+                                if (a >= 0 && b > a)
+                                {
+                                    string inner = item.Substring(a + 1, b - a - 1);
+                                    if (DateTime.TryParseExact(inner, LogCollection.TimeFormat, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime parsed))
+                                    {
+                                        if (ts < parsed)
+                                        {
+                                            insertAt = i;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+
+                        // Avoid inserting exact duplicate if already present at or adjacent to insert position
+                        bool duplicate = false;
+                        try
+                        {
+                            if (insertAt < LogCollection.Logs.Count && LogCollection.Logs[insertAt] == full) duplicate = true;
+                            if (insertAt - 1 >= 0 && LogCollection.Logs[insertAt - 1] == full) duplicate = true;
+                        }
+                        catch { }
+
+                        if (!duplicate)
+                        {
+                            LogCollection.Logs.Insert(insertAt, full);
+                        }
+
+                        // Trim FIFO
                         while (LogCollection.Logs.Count > LogCollection.MaxLogCount)
                         {
                             try { LogCollection.Logs.RemoveAt(0); } catch { break; }
                         }
+
                         if (LogCollection.AutoScroll)
                         {
                             try { this.listBox_log.TopIndex = LogCollection.Logs.Count - 1; } catch { }
@@ -41,6 +91,10 @@ namespace ModularAudience.Forms
                     catch { }
                 });
             };
+
+            try { LogCollection.NewLogPostedWithTimestamp += Instance?._logPostedWithTimestampHandler; } catch { }
+
+            // NOTE: Do not subscribe to NewLogPosted as we handle chronological insertion via NewLogPostedWithTimestamp.
 
             this.listBox_log.DoubleClick += (s, e) =>
             {

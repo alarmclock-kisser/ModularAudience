@@ -129,6 +129,83 @@ namespace ModularAudience.Forms
             return new Point(x, y);
         }
 
+        private static string GetSettingsFolder()
+        {
+            try
+            {
+                string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ModularAudience");
+                try { Directory.CreateDirectory(folder); } catch { }
+                return folder;
+            }
+            catch
+            {
+                return AppDomain.CurrentDomain.BaseDirectory;
+            }
+        }
+
+        private static string GetPositionFilePath()
+        {
+            return Path.Combine(GetSettingsFolder(), "window_position.json");
+        }
+
+        public static void SaveFormPosition(Form form)
+        {
+            try
+            {
+                Screen screen = Screen.FromControl(form);
+                int screenIndex = Array.IndexOf(Screen.AllScreens, screen);
+                var obj = new
+                {
+                    screenIndex,
+                    x = form.Location.X,
+                    y = form.Location.Y,
+                    w = form.Width,
+                    h = form.Height
+                };
+                string json = System.Text.Json.JsonSerializer.Serialize(obj);
+                File.WriteAllText(GetPositionFilePath(), json);
+            }
+            catch { }
+        }
+
+        public static bool TryRestoreFormPosition(Form form)
+        {
+            try
+            {
+                string path = GetPositionFilePath();
+                if (!File.Exists(path)) return false;
+                string json = File.ReadAllText(path);
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                int screenIndex = root.TryGetProperty("screenIndex", out var si) && si.ValueKind == System.Text.Json.JsonValueKind.Number ? si.GetInt32() : 0;
+                int x = root.TryGetProperty("x", out var px) && px.ValueKind == System.Text.Json.JsonValueKind.Number ? px.GetInt32() : form.Location.X;
+                int y = root.TryGetProperty("y", out var py) && py.ValueKind == System.Text.Json.JsonValueKind.Number ? py.GetInt32() : form.Location.Y;
+
+                Screen[] all = Screen.AllScreens;
+                Screen screen;
+                if (screenIndex >= 0 && screenIndex < all.Length)
+                {
+                    screen = all[screenIndex];
+                }
+                else
+                {
+                    screen = Screen.PrimaryScreen ?? all.FirstOrDefault() ?? throw new InvalidOperationException("No screen");
+                }
+
+                // Clamp coordinates to screen working area
+                int clampedX = Math.Max(screen.WorkingArea.X, Math.Min(x, screen.WorkingArea.X + screen.WorkingArea.Width - form.Width));
+                int clampedY = Math.Max(screen.WorkingArea.Y, Math.Min(y, screen.WorkingArea.Y + screen.WorkingArea.Height - form.Height));
+
+                form.StartPosition = FormStartPosition.Manual;
+                form.Location = new Point(clampedX, clampedY);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         internal static Point GetCornerPosition(Form? form = null, bool left = true, bool top = true, int? screenId = null)
         {
             // Calculate starting position based on screen working area and formif given

@@ -1,9 +1,10 @@
 # Copilot Instructions
-
+dass es 
 ## General Guidelines
 - For this repo, LLM failures should always be logged and shown in a copyable OK dialog; raw LLM responses should be logged.
 - Provide concise status messages; execute plans without lengthy announcements and perform steps in a single run when possible.
 - Implement necessary fixes immediately; do not ask for approval or request follow-up questions for obvious corrections.
+- Do not automatically commit or push changes; only restart the app when the user explicitly requests or performs it. When debugging, continue the existing instance; do not restart automatically.
 
 ## Project-Specific Rules
 - The BreakbeatGenerator beatmap should render as a drum-by-step matrix in the picture box.
