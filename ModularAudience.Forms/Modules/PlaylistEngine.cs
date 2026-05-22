@@ -204,6 +204,21 @@ namespace ModularAudience.Forms.Modules
             public string? TempPath { get; init; }
         }
 
+        // Normalize a file path to a canonical key used for dictionaries/banlist.
+        private static string NormalizePathForKey(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+            try
+            {
+                string full = Path.GetFullPath(path).Trim();
+                return full.ToUpperInvariant();
+            }
+            catch
+            {
+                try { return path.Trim().ToUpperInvariant(); } catch { return string.Empty; }
+            }
+        }
+
         /// <summary>
         /// Notification from UI that a path was just inserted as the next track.
         /// The engine will attempt to pre-prepare it (or reuse an in-flight prepare)
@@ -212,6 +227,7 @@ namespace ModularAudience.Forms.Modules
         /// </summary>
         public void NotifyInsertedNext(string originalPath)
         {
+            LogPlayback($"NotifyInsertedNext(originalPath={originalPath}) called");
             if (string.IsNullOrWhiteSpace(originalPath)) return;
 
             _ = Task.Run(async () =>
@@ -356,6 +372,7 @@ namespace ModularAudience.Forms.Modules
         /// <summary>Pause current playback without advancing the queue.</summary>
         public void Pause()
         {
+            LogPlayback($"Pause() called: IsPlaying={this.IsPlaying} IsPaused={this.IsPaused} activePrepared={this._activePreparedTracks.Count}");
             List<AudioObj>? pauseTargets = null;
             lock (this._lock)
             {
@@ -417,6 +434,7 @@ namespace ModularAudience.Forms.Modules
         /// </summary>
         public bool RemoveActiveById(Guid audioId)
         {
+            LogPlayback($"RemoveActiveById({audioId}) called");
             PreparedPlaylistTrack? prepared = null;
             AudioObj? primary = null;
             AudioObj? secondary = null;
@@ -504,6 +522,7 @@ namespace ModularAudience.Forms.Modules
         /// </summary>
         public void RewindOrPrevious()
         {
+            LogPlayback($"RewindOrPrevious() called: CurrentPath={this.CurrentPath} PreviousPath={this._previousPath}");
             lock (this._lock)
             {
                 if (this._reader != null && this._reader.CurrentTime.TotalSeconds > 1.0)
@@ -525,6 +544,7 @@ namespace ModularAudience.Forms.Modules
         /// <summary>Skip the current track and start the next one.</summary>
         public void Skip()
         {
+            LogPlayback($"Skip() called: CurrentPath={this.CurrentPath} IsPlaying={this.IsPlaying}");
             this._skipRequested = true;
             lock (this._lock) { this._waveOut?.Stop(); }
         }
@@ -545,6 +565,7 @@ namespace ModularAudience.Forms.Modules
         /// <summary>Stop playback, clear the queue, dispose all resources.</summary>
         public void Clear()
         {
+            LogPlayback($"Clear() called: FilePaths.Count={this.FilePaths?.Count ?? 0} IsPlaying={this.IsPlaying} IsPaused={this.IsPaused}");
             // Cancel the run-loop task first so IsPlaying cannot be set back to true after we clear
             this._cts?.Cancel();
             this._skipRequested = true;
@@ -569,6 +590,7 @@ namespace ModularAudience.Forms.Modules
 
         public void Dispose()
         {
+            LogPlayback($"Dispose() called: disposed={this._disposed}");
             this._disposed = true;
             this.StopAndDisposeCurrent();
         }
@@ -579,11 +601,13 @@ namespace ModularAudience.Forms.Modules
 
         private async Task RunLoop(CancellationToken ct)
         {
+            LogPlayback($"RunLoop() called: cancellationRequested={ct.IsCancellationRequested}");
             await this.RunCrossfadeLoop(ct).ConfigureAwait(false);
         }
 
         private async Task<bool> PlayTrackAsync(string path, CancellationToken ct)
         {
+            LogPlayback($"PlayTrackAsync(path={path}) called: exists={File.Exists(path ?? string.Empty)}");
             AudioFileReader? reader = null;
             WaveOutEvent?    waveOut = null;
 
@@ -611,6 +635,8 @@ namespace ModularAudience.Forms.Modules
 
                 // Read BPM tag cheaply
                 this.CurrentBpm = ReadBpmTagLight(path);
+
+                LogPlayback($"PlayTrackAsync: started playback path={path} duration={reader.TotalTime} bpm={this.CurrentBpm}");
 
                 TrackChanged?.Invoke();
 
@@ -718,6 +744,7 @@ namespace ModularAudience.Forms.Modules
 
         private void StopCurrentAndInsert(string pathToInsert)
         {
+            LogPlayback($"StopCurrentAndInsert(pathToInsert={pathToInsert}) called");
             this._skipRequested = true;
             WaveOutEvent? wo;
             AudioObj? primary;
@@ -807,6 +834,7 @@ namespace ModularAudience.Forms.Modules
 
         private async Task RunCrossfadeLoop(CancellationToken ct)
         {
+            LogPlayback($"RunCrossfadeLoop() called: cancellationRequested={ct.IsCancellationRequested}");
             var fadeOutTasks = new List<Task>();
             Task<PreparedPlaylistTrack?>? nextPrepareTask = null;
             string? nextPrepareTaskPath = null;
@@ -1383,44 +1411,45 @@ namespace ModularAudience.Forms.Modules
         }
         private async Task<PreparedPlaylistTrack?> PrepareTrackAsync(string originalPath, CancellationToken ct)
         {
+            LogPlayback($"PrepareTrackAsync(originalPath={originalPath}) called: exists={File.Exists(originalPath ?? string.Empty)}");
             if (string.IsNullOrWhiteSpace(originalPath) || !File.Exists(originalPath))
             {
                 return null;
             }
 
             Task<PreparedPlaylistTrack?> task;
+            var key = NormalizePathForKey(originalPath);
             lock (this._lock)
             {
                 // Early-out: if this originalPath is banlisted, do not prepare it.
-                if (!string.IsNullOrWhiteSpace(originalPath) && this._banlist.Contains(originalPath))
+                if (!string.IsNullOrWhiteSpace(key) && this._banlist.Contains(key))
                 {
-                    try { ModularAudience.Audio.LogCollection.Log($"PrepareTrackAsync: skipping banlisted path: {Path.GetFileNameWithoutExtension(originalPath)}"); } catch { }
+                    try { LogDebug($"PrepareTrackAsync: skipping banlisted path: {originalPath}"); } catch { }
                     return null;
                 }
 
                 // Early-out: avoid preparing the currently-playing original or any already-prepared original
-                if (!string.IsNullOrWhiteSpace(this.OriginalCurrentPath) &&
-                    string.Equals(originalPath, this.OriginalCurrentPath, StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrWhiteSpace(this.OriginalCurrentPath) && string.Equals(NormalizePathForKey(this.OriginalCurrentPath), key, StringComparison.OrdinalIgnoreCase))
                 {
-                    try { ModularAudience.Audio.LogCollection.Log($"PrepareTrackAsync: skipping currently playing path: {Path.GetFileNameWithoutExtension(originalPath)}"); } catch { }
+                    try { LogDebug($"PrepareTrackAsync: skipping currently playing path: {originalPath}"); } catch { }
                     return null;
                 }
 
-                if (this._activePreparedTracks.Values.Any(p => string.Equals(p.OriginalPath, originalPath, StringComparison.OrdinalIgnoreCase)))
+                if (this._activePreparedTracks.Values.Any(p => string.Equals(NormalizePathForKey(p.OriginalPath), key, StringComparison.OrdinalIgnoreCase)))
                 {
-                    try { ModularAudience.Audio.LogCollection.Log($"PrepareTrackAsync: skipping already-prepared path: {Path.GetFileNameWithoutExtension(originalPath)}"); } catch { }
+                    try { LogDebug($"PrepareTrackAsync: skipping already-prepared path: {originalPath}"); } catch { }
                     return null;
                 }
 
                 // If a prepare for this path is already in-flight, reuse it.
-                if (this._preparingTasks.TryGetValue(originalPath, out var existing))
+                if (this._preparingTasks.TryGetValue(key, out var existing))
                 {
                     task = existing;
                 }
                 else
                 {
                     task = PrepareTrackCoreAsync(originalPath, ct);
-                    this._preparingTasks[originalPath] = task;
+                    this._preparingTasks[key] = task;
                 }
             }
 
@@ -1434,6 +1463,7 @@ namespace ModularAudience.Forms.Modules
 
             try
             {
+                LogPlayback($"PrepareTrackCoreAsync: original={originalPath}");
                 if (this.BeforeTrackPlay != null)
                 {
                     try
@@ -1501,7 +1531,7 @@ namespace ModularAudience.Forms.Modules
 
                 // Make preprepared tracks visible immediately so UI fallback can pick them
                 // (avoids race where Prepare completed but TrackPreparedAsActive wasn't yet called).
-                try { this.TrackPreparedAsActive(prepared, "preprepared"); } catch { }
+                try { LogPlayback($"PrepareTrackCoreAsync: prepared ready original={originalPath} playPath={playPath} temp={tempPath}"); this.TrackPreparedAsActive(prepared, "preprepared"); } catch (Exception ex) { LogPlayback($"PrepareTrackCoreAsync: TrackPreparedAsActive failed: {ex.Message}"); }
 
                 return prepared;
             }
@@ -1512,7 +1542,7 @@ namespace ModularAudience.Forms.Modules
             }
             finally
             {
-                try { lock (this._lock) { this._preparingTasks.Remove(originalPath); } } catch { }
+                try { lock (this._lock) { this._preparingTasks.Remove(NormalizePathForKey(originalPath)); } } catch { }
             }
         }
 
@@ -1579,16 +1609,38 @@ namespace ModularAudience.Forms.Modules
 
         private void TrackPreparedAsActive(PreparedPlaylistTrack prepared, string reason)
         {
+            LogPlayback($"TrackPreparedAsActive called: original={prepared.OriginalPath} reason={reason}");
+            bool disposePrepared = false;
             lock (this._lock)
             {
+                string key = NormalizePathForKey(prepared.OriginalPath);
                 // If this prepared track's original path is banned, do not activate it.
-                if (!string.IsNullOrWhiteSpace(prepared.OriginalPath) && this._banlist.Contains(prepared.OriginalPath))
+                if (!string.IsNullOrWhiteSpace(key) && this._banlist.Contains(key))
                 {
                     try { LogDebug($"Playlist: prevented activation of banned track: {Path.GetFileNameWithoutExtension(prepared.OriginalPath)}"); } catch { }
+                    disposePrepared = true;
+                    return;
+                }
+
+                // Prevent duplicate activation for the same canonical original path.
+                bool duplicateByPath = this._activePreparedTracks.Values.Any(p =>
+                    p.Audio.Id != prepared.Audio.Id &&
+                    string.Equals(NormalizePathForKey(p.OriginalPath), key, StringComparison.OrdinalIgnoreCase));
+                if (duplicateByPath)
+                {
+                    try { LogDebug($"TrackPreparedAsActive: duplicate detected for {Path.GetFileNameWithoutExtension(prepared.OriginalPath)}; disposing duplicate prepared track"); } catch { }
+                    disposePrepared = true;
                     return;
                 }
 
                 this._activePreparedTracks[prepared.Audio.Id] = prepared;
+            }
+
+            if (disposePrepared)
+            {
+                try { prepared.Audio.Dispose(); } catch { }
+                this.DeleteTempFile(prepared.TempPath);
+                return;
             }
 
             try
@@ -1617,7 +1669,11 @@ namespace ModularAudience.Forms.Modules
                          || string.Equals(reason, "seam hand-off", StringComparison.OrdinalIgnoreCase)
                         ))
                     {
-                        this._banlist.Add(prepared.OriginalPath);
+                        string key = NormalizePathForKey(prepared.OriginalPath);
+                        if (!string.IsNullOrWhiteSpace(key))
+                        {
+                            this._banlist.Add(key);
+                        }
                         try { LogDebug($"Playlist: banlisted track: {Path.GetFileNameWithoutExtension(prepared.OriginalPath)} (reason={reason})"); } catch { }
                     }
                 }
@@ -1643,6 +1699,12 @@ namespace ModularAudience.Forms.Modules
             }
 
             try { File.Delete(tempPath); } catch { }
+        }
+
+        // Safe playback logging helper: must never throw
+        private void LogPlayback(string message)
+        {
+            try { ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine::Playback] {message}"); } catch { }
         }
 
         // â”€â”€ Tag helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
