@@ -480,58 +480,66 @@ namespace ModularAudience.Forms
                         string? candidate = null;
                         try
                         {
-                            if (this._playlist != null && this._playlist.FilePaths.Count <= 1)
+                            if (this._playlist != null && this._playlist.FilePaths.Count > 0)
                             {
-                                var random = new Random();
-
-
-                                // Prefer any prepared track that is NOT the currently playing original.
-                                var preferred = preparedPathsAll
-                                    .Where(p => !string.IsNullOrWhiteSpace(p))
-                                    .Where(p => !string.Equals(p, this._playlist.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase));
-
-                                string currentlyPlayingOriginal = this._playlist.OriginalCurrentPath ?? string.Empty;
-                                int count = preferred.Count();
-                                if (count > 0)
+                                // Attempt to pick a random candidate from the playlist starting at index currentIndex + 4
+                                try
                                 {
-                                    candidate = preferred.ElementAt(random.Next(this._playlist.FilePaths.IndexOf(currentlyPlayingOriginal + 4, count)));
-                                }
-                                else
-                                {
-                                    string currentBasePath = Path.GetFileNameWithoutExtension(this._playlist.OriginalCurrentPath ?? string.Empty);
-                                    var filePaths = Directory.GetFiles(Path.GetDirectoryName(this._playlist.OriginalCurrentPath ?? string.Empty) ?? string.Empty)
-                                        .Where(p => !string.IsNullOrWhiteSpace(p) && AllowedImportExtensions.Contains(Path.GetExtension(p)))
-                                        .ToArray();
+                                    int currentIndex = 0;
+                                    string currentOriginal = this._playlist.OriginalCurrentPath ?? string.Empty;
+                                    try { currentIndex = Math.Max(0, this._playlist.FilePaths.FindIndex(p => string.Equals(p, currentOriginal, StringComparison.OrdinalIgnoreCase))); } catch { currentIndex = 0; }
+                                    int startIndex = currentIndex + 4;
+                                    int count = this._playlist.FilePaths.Count;
 
-                                    candidate = random.Next(filePaths.Length) > 0 ? filePaths[random.Next(filePaths.Length)] : null;
-                                }
+                                    if (startIndex < count)
+                                    {
+                                        var rng = new Random();
+                                        // Build a pool excluding the currently playing original to avoid reselecting it
+                                        var pool = this._playlist.FilePaths.Skip(startIndex)
+                                            .Where(p => !string.Equals(p, currentOriginal, StringComparison.OrdinalIgnoreCase))
+                                            .ToList();
+                                        if (pool.Count > 0)
+                                        {
+                                            candidate = pool[rng.Next(pool.Count)];
+                                            if (!string.IsNullOrWhiteSpace(candidate))
+                                            {
+                                                LogCollection.Log($"Auto enqueue one: selected from playlist [{startIndex}..{count - 1}] -> {Path.GetFileNameWithoutExtension(candidate)}");
+                                                // Remove any existing occurrences after the head to avoid duplicate entries when we insert below
+                                                try
+                                                {
+                                                    for (int i = this._playlist.FilePaths.Count - 1; i >= 1; i--)
+                                                    {
+                                                        if (string.Equals(this._playlist.FilePaths[i], candidate, StringComparison.OrdinalIgnoreCase))
+                                                            this._playlist.FilePaths.RemoveAt(i);
+                                                    }
+                                                }
+                                                catch { }
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        // Fallback: prefer a prepared non-playing original, then any prepared, then directory sample
+                                        candidate = preparedNonPlaying.FirstOrDefault(p => !string.Equals(p, this._playlist.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase));
+                                        if (string.IsNullOrWhiteSpace(candidate))
+                                            candidate = preparedPathsAll.FirstOrDefault(p => !string.Equals(p, this._playlist.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase));
 
-                                if (!string.IsNullOrWhiteSpace(candidate))
-                                {
-                                    LogCollection.Log($"Auto enqueue one: using already pre-prepared track (playlist short) -> {Path.GetFileNameWithoutExtension(candidate)}");
-                                    
-                                    // Remove from (future) consideration if it was selected as candidate, to avoid duplicate selection in the fallback path.
-                                    this._playlist?.FilePaths.Remove(candidate);
+                                        if (string.IsNullOrWhiteSpace(candidate))
+                                        {
+                                            try
+                                            {
+                                                var dir = Path.GetDirectoryName(this._playlist.OriginalCurrentPath ?? string.Empty) ?? string.Empty;
+                                                var filePaths = Directory.Exists(dir)
+                                                    ? Directory.GetFiles(dir).Where(p => !string.IsNullOrWhiteSpace(p) && AllowedImportExtensions.Contains(Path.GetExtension(p))).ToArray()
+                                                    : Array.Empty<string>();
+                                                if (filePaths.Length > 0)
+                                                    candidate = filePaths[new Random().Next(filePaths.Length)];
+                                            }
+                                            catch { }
+                                        }
+                                    }
                                 }
-                            }
-                            else
-                            {
-                                // Existing conservative path: prefer prepared that differs from OriginalCurrentPath,
-                                // else prepared != queue head
-                                candidate = preparedPathsAll
-                                    .Where(p => !string.IsNullOrWhiteSpace(p))
-                                    .Where(p => !string.Equals(p, this._playlist?.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase))
-                                    .FirstOrDefault();
-
-                                if (string.IsNullOrWhiteSpace(candidate))
-                                {
-                                    // Fall back to any prepared that is neither the currently playing original
-                                    // nor the queue head.
-                                    candidate = preparedPathsAll.FirstOrDefault(p =>
-                                        !string.IsNullOrWhiteSpace(p)
-                                        && !string.Equals(p, this._playlist?.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase)
-                                        && !string.Equals(p, this._playlist?.FilePaths.FirstOrDefault() ?? string.Empty, StringComparison.OrdinalIgnoreCase));
-                                }
+                                catch { }
                             }
                         }
                         catch { }
@@ -553,17 +561,27 @@ namespace ModularAudience.Forms
 
                 // Insert as next track (after index 0 if playing)
                 int insertIndex = 0;
-                try { insertIndex = this._playlist.IsPlaying ? Math.Min(1, this._playlist.FilePaths.Count) : 0; } catch { insertIndex = 0; }
-                // If selectedPath equals the current head, adjust to insert after head to avoid immediate duplicate at index 0.
                 try
                 {
-                    if (string.Equals(selectedPath, this._playlist?.FilePaths.FirstOrDefault() ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                    // Mutate the playlist under lock to avoid races and to remove any existing
+                    // occurrences of the selected path so we don't enqueue duplicates.
+                    lock (this._playlist)
                     {
-                        insertIndex = Math.Min(insertIndex + 1, this._playlist.FilePaths.Count);
+                        // Remove existing occurrences of the same path (case-insensitive)
+                        this._playlist.FilePaths.RemoveAll(p => string.Equals(p, selectedPath, StringComparison.OrdinalIgnoreCase));
+
+                        insertIndex = this._playlist.IsPlaying ? Math.Min(1, this._playlist.FilePaths.Count) : 0;
+
+                        // If selectedPath equals the current head, adjust to insert after head to avoid immediate duplicate at index 0.
+                        if (string.Equals(selectedPath, this._playlist.FilePaths.FirstOrDefault() ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                        {
+                            insertIndex = Math.Min(insertIndex + 1, this._playlist.FilePaths.Count);
+                        }
+
+                        this._playlist.FilePaths.Insert(insertIndex, selectedPath);
                     }
                 }
-                catch { }
-                this._playlist.FilePaths.Insert(insertIndex, selectedPath);
+                catch { insertIndex = 0; }
                 LogCollection.Log($"Playlist: auto-enqueued one -> {Path.GetFileNameWithoutExtension(selectedPath)}");
                 this.UpdatePlaylistUI();
 
