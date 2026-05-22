@@ -28,9 +28,15 @@ namespace ModularAudience.Forms.Modules
             try
             {
                 int idx = this.checkedListBox_playlistTracks.SelectedIndex;
-                if (idx < 0 || idx >= this.checkedListBox_playlistTracks.Items.Count) return null;
+                if (idx < 0 || idx >= this.checkedListBox_playlistTracks.Items.Count)
+                {
+                    return null;
+                }
+
                 if (this.checkedListBox_playlistTracks.Items[idx] is PlaylistTargetItem pti)
+                {
                     return pti.Audio?.FilePath;
+                }
             }
             catch { }
             return null;
@@ -45,7 +51,11 @@ namespace ModularAudience.Forms.Modules
 
         private void checkedListBox_playlistTracks_MouseUp(object? sender, MouseEventArgs e)
         {
-            if (e.Button != MouseButtons.Right) return;
+            if (e.Button != MouseButtons.Right)
+            {
+                return;
+            }
+
             try
             {
                 int idx = this.checkedListBox_playlistTracks.IndexFromPoint(e.Location);
@@ -74,7 +84,11 @@ namespace ModularAudience.Forms.Modules
             try
             {
                 int idx = this.checkedListBox_playlistTracks.SelectedIndex;
-                if (idx < 0 || idx >= this.checkedListBox_playlistTracks.Items.Count) return;
+                if (idx < 0 || idx >= this.checkedListBox_playlistTracks.Items.Count)
+                {
+                    return;
+                }
+
                 if (this.checkedListBox_playlistTracks.Items[idx] is PlaylistTargetItem pti)
                 {
                     var audio = pti.Audio;
@@ -285,7 +299,9 @@ namespace ModularAudience.Forms.Modules
             {
                 var parts = name.Split(new[] { "__" }, StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length > 0)
+                {
                     name = parts[0].Trim();
+                }
             }
             // Also strip common generated marker like _stretched_ inside the filename if present
             if (name.IndexOf("_stretched_", StringComparison.OrdinalIgnoreCase) >= 0)

@@ -13,7 +13,10 @@ public static class BeatScanner_V3
     public static async Task<double> EstimateBpmAsync(float[] monoData, double sampleRate, double minBpm, double maxBpm)
     {
         int n = monoData.Length;
-        if (n < 1024) return -1.0;
+        if (n < 1024)
+        {
+            return -1.0;
+        }
 
         // 1) Vorverarbeitung: Erzeuge ein Onset-Signal (Spectral Flux oder Envelope)
         // Wir nutzen hier eine robuste Hüllkurve mit Halbwellendetektion
@@ -23,7 +26,10 @@ public static class BeatScanner_V3
         // Wir suchen nach dem Lag, der die stärkste Periodizität zeigt
         int bestLag = FindBestLag(onsetSignal, sampleRate, minBpm, maxBpm);
 
-        if (bestLag <= 0) return -1.0;
+        if (bestLag <= 0)
+        {
+            return -1.0;
+        }
 
         // 3) VALIDIERUNG: Der entscheidende Schritt gegen die "Halbe-BPM-Falle"
         // Wir prüfen, ob der gefundene Lag eine echte rhythmische Struktur hat
@@ -38,8 +44,15 @@ public static class BeatScanner_V3
         }
 
         // Sicherstellen, dass wir im Bereich bleiben
-        while (bpm < minBpm) bpm *= 2.0;
-        while (bpm > maxBpm) bpm /= 2.0;
+        while (bpm < minBpm)
+        {
+            bpm *= 2.0;
+        }
+
+        while (bpm > maxBpm)
+        {
+            bpm /= 2.0;
+        }
 
         return bpm;
     }
@@ -62,7 +75,11 @@ public static class BeatScanner_V3
         for (int i = window; i < n; i++)
         {
             float sum = 0;
-            for (int j = 0; j < window; j++) sum += onset[i - j];
+            for (int j = 0; j < window; j++)
+            {
+                sum += onset[i - j];
+            }
+
             onset[i] = sum / window;
         }
 
@@ -74,11 +91,21 @@ public static class BeatScanner_V3
         int n = signal.Length;
         // Um die FFT-Effizienz zu nutzen, runden wir auf die nächste Zweierpotenz auf
         int L = 1;
-        while (L < 2 * n) L <<= 1;
+        while (L < 2 * n)
+        {
+            L <<= 1;
+        }
 
         Complex[] fft = new Complex[L];
-        for (int i = 0; i < n; i++) fft[i] = new Complex(signal[i], 0);
-        for (int i = n; i < L; i++) fft[i] = new Complex(0, 0);
+        for (int i = 0; i < n; i++)
+        {
+            fft[i] = new Complex(signal[i], 0);
+        }
+
+        for (int i = n; i < L; i++)
+        {
+            fft[i] = new Complex(0, 0);
+        }
 
         // FFT durchführen
         ForwardFFT(fft);
@@ -137,7 +164,10 @@ public static class BeatScanner_V3
     {
         // Misst, wie konsistent die Peaks über eine kurze Strecke sind
         int samplesToCheck = Math.Min(lag * 3, signal.Length - lag);
-        if (samplesToCheck <= 0) return 0;
+        if (samplesToCheck <= 0)
+        {
+            return 0;
+        }
 
         double sum = 0;
         for (int i = 0; i < samplesToCheck; i += lag)

@@ -25,13 +25,21 @@ namespace ModularAudience.Forms.Helpers
 
         internal static async Task InvokeIfRequiredAsync(WindowMain? instance, Func<Task> asyncAction)
         {
-            if (instance == null || instance.IsDisposed) return;
+            if (instance == null || instance.IsDisposed)
+            {
+                return;
+            }
+
             try
             {
                 if (instance.InvokeRequired)
+                {
                     await (Task) instance.Invoke(asyncAction)!;
+                }
                 else
+                {
                     await asyncAction();
+                }
             }
             catch { }
         }

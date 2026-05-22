@@ -48,10 +48,16 @@ namespace ModularAudience.Forms.Modules
             double nominalWait = remainingSeconds - nominalCrossfadeSeconds;
 
             // Immediate trigger (already at or past the nominal point)
-            if (nominalWait <= 0.0) return 0.0;
+            if (nominalWait <= 0.0)
+            {
+                return 0.0;
+            }
 
             // No BPM → cannot align, use nominal
-            if (bpm <= 0f) return nominalWait;
+            if (bpm <= 0f)
+            {
+                return nominalWait;
+            }
 
             double secondsPerBeat = 60.0 / bpm;
 

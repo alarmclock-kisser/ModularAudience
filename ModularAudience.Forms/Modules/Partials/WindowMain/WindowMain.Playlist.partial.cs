@@ -41,7 +41,11 @@ namespace ModularAudience.Forms
         {
             try
             {
-                if (this.contextMenuStrip_playlist == null) return;
+                if (this.contextMenuStrip_playlist == null)
+                {
+                    return;
+                }
+
                 foreach (ToolStripItem it in this.contextMenuStrip_playlist.Items)
                 {
                     if (it is ToolStripMenuItem mi && string.Equals(mi.Text, "Auto enqueue one", StringComparison.OrdinalIgnoreCase))
@@ -50,7 +54,9 @@ namespace ModularAudience.Forms
                         try
                         {
                             if (LoopControlWindow != null && !LoopControlWindow.IsDisposed)
+                            {
                                 enable = LoopControlWindow.HasSelectedPlaylistItem();
+                            }
 
                             // Also enable when the engine already holds a prepared track that is NOT the
                             // currently playing original path. This avoids enabling the menu solely because
@@ -150,7 +156,10 @@ namespace ModularAudience.Forms
 
                     try
                     {
-                        var autoOne = new ToolStripMenuItem("Auto enqueue one", null, this.playlistMenu_AutoEnqueueOne_Click);
+                        var autoOne = new ToolStripMenuItem("Auto enqueue one", null, this.playlistMenu_AutoEnqueueOne_Click)
+                        {
+                            CheckOnClick = false
+                        };
                         this.contextMenuStrip_playlist.Items.Add(new ToolStripSeparator());
                         this.contextMenuStrip_playlist.Items.Add(autoOne);
                     }
@@ -273,7 +282,9 @@ namespace ModularAudience.Forms
             };
 
             if (ofd.ShowDialog() != DialogResult.OK || ofd.FileNames.Length == 0)
+            {
                 return;
+            }
 
             this.lastImportFolder =
                 Path.GetDirectoryName(ofd.FileNames[0]) ?? this.lastImportFolder;
@@ -390,7 +401,9 @@ namespace ModularAudience.Forms
             };
 
             if (ofd.ShowDialog() != DialogResult.OK || ofd.FileNames.Length == 0)
+            {
                 return;
+            }
 
             this.lastImportFolder = Path.GetDirectoryName(ofd.FileNames[0]) ?? this.lastImportFolder;
 
@@ -442,7 +455,9 @@ namespace ModularAudience.Forms
                 try
                 {
                     if (LoopControlWindow != null && !LoopControlWindow.IsDisposed)
+                    {
                         selectedPath = LoopControlWindow.GetSelectedPlaylistPath();
+                    }
                 }
                 catch { selectedPath = null; }
 
@@ -459,9 +474,16 @@ namespace ModularAudience.Forms
                             Filter = "Audio Files|*.wav;*.mp3;*.flac|All Files|*.*",
                             InitialDirectory = this.lastImportFolder
                         };
-                        if (ofd.ShowDialog() != DialogResult.OK || ofd.FileNames.Length == 0) return;
+                        if (ofd.ShowDialog() != DialogResult.OK || ofd.FileNames.Length == 0)
+                        {
+                            return;
+                        }
+
                         selectedPath = ofd.FileNames[0];
-                        if (!AllowedImportExtensions.Contains(Path.GetExtension(selectedPath))) return;
+                        if (!AllowedImportExtensions.Contains(Path.GetExtension(selectedPath)))
+                        {
+                            return;
+                        }
                     }
                 }
 
@@ -510,7 +532,9 @@ namespace ModularAudience.Forms
                                                     for (int i = this._playlist.FilePaths.Count - 1; i >= 1; i--)
                                                     {
                                                         if (string.Equals(this._playlist.FilePaths[i], candidate, StringComparison.OrdinalIgnoreCase))
+                                                        {
                                                             this._playlist.FilePaths.RemoveAt(i);
+                                                        }
                                                     }
                                                 }
                                                 catch { }
@@ -522,7 +546,9 @@ namespace ModularAudience.Forms
                                         // Fallback: prefer a prepared non-playing original, then any prepared, then directory sample
                                         candidate = preparedNonPlaying.FirstOrDefault(p => !string.Equals(p, this._playlist.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase));
                                         if (string.IsNullOrWhiteSpace(candidate))
+                                        {
                                             candidate = preparedPathsAll.FirstOrDefault(p => !string.Equals(p, this._playlist.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase));
+                                        }
 
                                         if (string.IsNullOrWhiteSpace(candidate))
                                         {
@@ -533,7 +559,9 @@ namespace ModularAudience.Forms
                                                     ? Directory.GetFiles(dir).Where(p => !string.IsNullOrWhiteSpace(p) && AllowedImportExtensions.Contains(Path.GetExtension(p))).ToArray()
                                                     : Array.Empty<string>();
                                                 if (filePaths.Length > 0)
+                                                {
                                                     candidate = filePaths[new Random().Next(filePaths.Length)];
+                                                }
                                             }
                                             catch { }
                                         }
@@ -585,6 +613,9 @@ namespace ModularAudience.Forms
                 LogCollection.Log($"Playlist: auto-enqueued one -> {Path.GetFileNameWithoutExtension(selectedPath)}");
                 this.UpdatePlaylistUI();
 
+                // Notify engine that we inserted a next track so it can start it promptly if timing permits.
+                try { this._playlist?.NotifyInsertedNext(selectedPath); } catch { }
+
                 // Kick off pre-prepare for the newly enqueued track
                 try
                 {
@@ -624,7 +655,9 @@ namespace ModularAudience.Forms
                                         string? pre2 = null;
                                         try { pre2 = await this._playlist.BeforeTrackPlay(nextToPrepare, CancellationToken.None).ConfigureAwait(false); } catch { }
                                         if (!string.IsNullOrWhiteSpace(pre2) && File.Exists(pre2))
+                                        {
                                             LogCollection.Log($"Playlist: additionally pre-prepared {Path.GetFileNameWithoutExtension(nextToPrepare)} (temp)");
+                                        }
                                     }
                                     catch { }
                                 }
@@ -652,7 +685,9 @@ namespace ModularAudience.Forms
             };
 
             if (ofd.ShowDialog() != DialogResult.OK || ofd.FileNames.Length == 0)
+            {
                 return;
+            }
 
             this.lastImportFolder = Path.GetDirectoryName(ofd.FileNames[0]) ?? this.lastImportFolder;
 
@@ -694,7 +729,9 @@ namespace ModularAudience.Forms
             };
 
             if (dlg.ShowDialog(this) != DialogResult.OK || dlg.ConfirmedSettings == null)
+            {
                 return;
+            }
 
             this._playlistStretchSettings = dlg.ConfirmedSettings;
             this.toolStripMenuItem_timestretchEach.Checked = true;
@@ -712,7 +749,9 @@ namespace ModularAudience.Forms
         {
             var settings = this._playlistStretchSettings;
             if (settings == null)
+            {
                 return null;
+            }
 
             this._isPreprocessingTrack = true;
             WindowMainStaticHelpers.InvokeIfRequired(Instance, this.UpdatePlaylistUI);
@@ -721,7 +760,9 @@ namespace ModularAudience.Forms
                 // Load audio from disk
                 var audio = new AudioObj(path, load: true);
                 if (audio.Data == null || audio.Data.Length == 0)
+                {
                     return null;
+                }
 
                 // Resolve initial BPM: tag first, then scan
                 float initialBpm = audio.Bpm > 0 ? audio.Bpm : audio.ScannedBpm;
@@ -732,14 +773,19 @@ namespace ModularAudience.Forms
                 }
 
                 if (initialBpm <= 0)
+                {
                     return null; // cannot stretch without initial BPM
+                }
 
                 double stretchFactor = settings.Fixed
                     ? (double) settings.StretchFactor
                     : initialBpm / (double) settings.TargetBpm;
 
                 // Guard: half/double tempo if way off
-                if (stretchFactor < 0.5) stretchFactor *= 2.0;
+                if (stretchFactor < 0.5)
+                {
+                    stretchFactor *= 2.0;
+                }
 
                 ct.ThrowIfCancellationRequested();
 
@@ -771,7 +817,9 @@ namespace ModularAudience.Forms
                 }
 
                 if (settings.Trim)
+                {
                     await BeatGridFinder.TrimSilenceAsync(audio).ConfigureAwait(false);
+                }
 
                 ct.ThrowIfCancellationRequested();
 
@@ -829,7 +877,10 @@ namespace ModularAudience.Forms
             {
                 string path = paths[i];
                 string name = Path.GetFileNameWithoutExtension(path);
-                if (name.Length > 32) name = name[..29] + "…";
+                if (name.Length > 32)
+                {
+                    name = name[..29] + "…";
+                }
 
                 var meta = this.GetOrFetchMeta(path);
                 string dur = meta.Duration > TimeSpan.Zero
@@ -841,7 +892,9 @@ namespace ModularAudience.Forms
             }
 
             if (paths.Count > 30)
+            {
                 sb.AppendLine($"… and {paths.Count - 30} more.");
+            }
 
             this.toolTip_playlist.SetToolTip(this.button_playlist, sb.ToString().TrimEnd());
         }
@@ -849,7 +902,11 @@ namespace ModularAudience.Forms
         // ── Label + button text update ─────────────────────────────────────────
         private void UpdatePlaylistUI()
         {
-            if (Instance == null || Instance.IsDisposed) return;
+            if (Instance == null || Instance.IsDisposed)
+            {
+                return;
+            }
+
             try
             {
                 if (this.label_currentlyEnqueued.InvokeRequired)
@@ -925,12 +982,17 @@ namespace ModularAudience.Forms
         private string BuildEnqueuedLabelText()
         {
             if (this._isPreprocessingTrack)
+            {
                 return "⏳ Time-Stretching next track...";
+            }
 
             if (!this._playlist.IsPlaying && !this._playlist.IsPaused && this._playlist.CurrentPath == null)
             {
                 if (this._playlist.FilePaths.Count > 0)
+                {
                     return $"▶ List ready — {this._playlist.FilePaths.Count} track(s) enqueued.";
+                }
+
                 return "No track currently enqueued in playlist.";
             }
 
@@ -944,13 +1006,22 @@ namespace ModularAudience.Forms
                 ? Path.GetFileNameWithoutExtension(this._playlist.CurrentPath) ?? "–"
                 : "–";
             if (!string.IsNullOrWhiteSpace(name) && name.Contains("__"))
+            {
                 name = name.Split(new[] { "__" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
-            if (name.Length > 96) name = name[..63] + "…";
+            }
+
+            if (name.Length > 96)
+            {
+                name = name[..63] + "…";
+            }
 
             // Prefer the engine-reported current BPM (already adjusted for any applied stretch).
             float bpm = this._playlist.CurrentBpm;
             if (bpm <= 0 && this._playlistStretchSettings != null)
+            {
                 bpm = this._playlistStretchSettings.TargetBpm;
+            }
+
             string bpmStr = bpm > 0 ? $"{bpm:F0}" : "?";
 
             int ch   = this._playlist.CurrentChannels;
@@ -965,23 +1036,34 @@ namespace ModularAudience.Forms
         private string? GetCurrentPlaylistTrackTitle()
         {
             if (string.IsNullOrWhiteSpace(this._playlist.OriginalCurrentPath) && string.IsNullOrWhiteSpace(this._playlist.CurrentPath))
+            {
                 return null;
+            }
 
             string? path = this._playlist.OriginalCurrentPath ?? this._playlist.CurrentPath;
             if (string.IsNullOrWhiteSpace(path))
+            {
                 return null;
+            }
 
             string name = Path.GetFileNameWithoutExtension(path) ?? "–";
             // Remove generated suffixes after a double-underscore and common _stretched_ markers
             if (name.Contains("__"))
+            {
                 name = name.Split(new[] { "__" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
+            }
+
             if (name.IndexOf("_stretched_", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
                 name = name.Split(new[] { "_stretched_" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
+            }
 
             // Prefer engine-reported current BPM (reflects applied stretch). If missing, fall back to stretch settings.
             float bpm = this._playlist.CurrentBpm;
             if (bpm <= 0 && this._playlistStretchSettings != null)
+            {
                 bpm = this._playlistStretchSettings.TargetBpm;
+            }
 
             return bpm > 0 ? $"{name} [{bpm:F0} BPM]" : name;
         }
@@ -1027,11 +1109,16 @@ namespace ModularAudience.Forms
         /// </summary>
         public void FinaliseTrackLog()
         {
-            if (this._trackLogFilePath == null || this._trackLogRecordStart == null) return;
+            if (this._trackLogFilePath == null || this._trackLogRecordStart == null)
+            {
+                return;
+            }
 
             TimeSpan now = DateTime.UtcNow - this._trackLogRecordStart.Value;
             foreach (var entry in this._trackLog.Where(e => e.End == null))
+            {
                 entry.End = now;
+            }
 
             this.FlushTrackLog();
 
@@ -1046,8 +1133,15 @@ namespace ModularAudience.Forms
         /// </summary>
         private void OnPlaylistTrackChanged()
         {
-            if (this._trackLogFilePath == null || this._trackLogRecordStart == null) return;
-            if (this._playlist.IsPaused) return;
+            if (this._trackLogFilePath == null || this._trackLogRecordStart == null)
+            {
+                return;
+            }
+
+            if (this._playlist.IsPaused)
+            {
+                return;
+            }
 
             TimeSpan now = DateTime.UtcNow - this._trackLogRecordStart.Value;
 
@@ -1088,7 +1182,11 @@ namespace ModularAudience.Forms
 
         private void FlushTrackLog()
         {
-            if (this._trackLogFilePath == null) return;
+            if (this._trackLogFilePath == null)
+            {
+                return;
+            }
+
             try
             {
                 var lines = this._trackLog

@@ -33,7 +33,10 @@ namespace ModularAudience.Forms.Modules
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float MeasureRms(float[]? samples)
         {
-            if (samples == null || samples.Length == 0) return 0f;
+            if (samples == null || samples.Length == 0)
+            {
+                return 0f;
+            }
 
             double sum = 0.0;
             for (int i = 0; i < samples.Length; i++)
@@ -51,18 +54,32 @@ namespace ModularAudience.Forms.Modules
         /// </summary>
         public static void ApplyRmsGain(float[]? samples, float targetRms)
         {
-            if (samples == null || samples.Length == 0) return;
+            if (samples == null || samples.Length == 0)
+            {
+                return;
+            }
 
-            if (targetRms <= 0f) targetRms = TargetRms;
+            if (targetRms <= 0f)
+            {
+                targetRms = TargetRms;
+            }
 
             float currentRms = MeasureRms(samples);
-            if (currentRms < SilenceThreshold) return;
+            if (currentRms < SilenceThreshold)
+            {
+                return;
+            }
 
             float gain = Math.Clamp(targetRms / currentRms, 0f, MaxGain);
-            if (Math.Abs(gain - 1.0f) < 0.005f) return; // no-op if within 0.5%
+            if (Math.Abs(gain - 1.0f) < 0.005f)
+            {
+                return; // no-op if within 0.5%
+            }
 
             for (int i = 0; i < samples.Length; i++)
+            {
                 samples[i] *= gain;
+            }
         }
 
         /// <summary>

@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static ModularAudience.Audio.SwitchingSampleProvider;
+using System.Diagnostics;
 
 namespace ModularAudience.Audio
 {
@@ -172,6 +173,9 @@ namespace ModularAudience.Audio
 
     public sealed class AudioPlaybackService : IDisposable
     {
+        // Gate to serialize operations that touch the underlying WaveOutEvent
+        private readonly object playerGate = new();
+
         private readonly WaveOutEvent player; // von außen injiziert oder intern erzeugt
         private readonly bool ownsPlayer;
         private AudioFileReader? reader; // float32 Quelle (Datei) optional
@@ -227,8 +231,11 @@ namespace ModularAudience.Audio
             // Snapshot absolute samples at activation for later modulo mapping
             try
             {
-                long bytes = this.player.GetPosition();
-                this.loopActivationSamples = bytes / sizeof(float);
+                lock (this.playerGate)
+                {
+                    long bytes = this.player.GetPosition();
+                    this.loopActivationSamples = bytes / sizeof(float);
+                }
             }
             catch { this.loopActivationSamples = 0; }
 
@@ -245,7 +252,7 @@ namespace ModularAudience.Audio
             else if (this.rawData != null && this.switching != null)
             {
                 long currentBytes = 0;
-                try { currentBytes = this.player.GetPosition(); } catch { }
+                try { lock (this.playerGate) { currentBytes = this.player.GetPosition(); } } catch { }
                 long currentSamples = currentBytes / sizeof(float);
 
                 long ls = Math.Max(0, this.loopStartSamples);
@@ -370,10 +377,30 @@ namespace ModularAudience.Audio
             catch { }
 
             this.player.Volume = 1.0f; // keep device stream at unity, control via VolumeSampleProvider
-            this.waveProvider = new SampleToWaveProvider(this.volumeControl);
-            this.player.Init(this.waveProvider);
 
-            await Task.Run(() => this.player.Play());
+            try
+            {
+                if (this.volumeControl == null)
+                {
+                    // Defensive: ensure volumeControl exists
+                    this.volumeControl = new VolumeSampleProvider(this.switching) { Volume = Math.Clamp(initialVolume, 0f, 1f) };
+                }
+
+                this.waveProvider = new SampleToWaveProvider(this.volumeControl);
+                lock (this.playerGate)
+                {
+                    this.player.Init(this.waveProvider);
+                    // Start playback (Play is non-blocking for WaveOutEvent)
+                    this.player.Play();
+                }
+            }
+            catch (Exception ex)
+            {
+                try { Debug.WriteLine($"Playback initialization failed: {ex.Message}"); } catch { }
+                try { ModularAudience.Audio.LogCollection.Log($"AudioPlaybackService.InitializePlayback failed: {ex.Message}"); } catch { }
+                // Bail out: leave Playing=false to caller and avoid crashing the thread.
+                return;
+            }
             this.SetPositionMapping(Math.Clamp(startSampleIndex, 0, data.LongLength));
         }
 
@@ -558,18 +585,21 @@ namespace ModularAudience.Audio
 
         private void ResetGraph()
         {
-            this.player.Stop();
-            this.reader?.Dispose();
-            this.reader = null;
-            this.switching = null;
-            this.volumeControl = null;
-            this.waveProvider = null;
-            this.pipeline = null;
-            this.rawData = null;
-            this.rawSampleRate = 0;
-            this.rawChannels = 0;
-            this.positionOriginOutputSamples = 0;
-            this.positionOriginSourceSamples = 0;
+            lock (this.playerGate)
+            {
+                try { this.player.Stop(); } catch { }
+                try { this.reader?.Dispose(); } catch { }
+                this.reader = null;
+                this.switching = null;
+                this.volumeControl = null;
+                this.waveProvider = null;
+                this.pipeline = null;
+                this.rawData = null;
+                this.rawSampleRate = 0;
+                this.rawChannels = 0;
+                this.positionOriginOutputSamples = 0;
+                this.positionOriginSourceSamples = 0;
+            }
             // keep loop configuration; caller decides whether to clear
         }
 
@@ -668,16 +698,19 @@ namespace ModularAudience.Audio
 
         public void Dispose()
         {
-            try { this.player.Stop(); } catch { }
-            this.reader?.Dispose();
-            this.reader = null;
-            this.switching = null;
-            this.volumeControl = null;
-            this.waveProvider = null;
-            this.pipeline = null;
-            if (this.ownsPlayer)
+            lock (this.playerGate)
             {
-                this.player.Dispose();
+                try { this.player.Stop(); } catch { }
+                try { this.reader?.Dispose(); } catch { }
+                this.reader = null;
+                this.switching = null;
+                this.volumeControl = null;
+                this.waveProvider = null;
+                this.pipeline = null;
+                if (this.ownsPlayer)
+                {
+                    try { this.player.Dispose(); } catch { }
+                }
             }
         }
     }

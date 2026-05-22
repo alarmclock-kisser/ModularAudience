@@ -10,6 +10,7 @@ namespace ModularAudience.Forms
         {
             ApplicationConfiguration.Initialize();
             Application.Run(new WindowMain());
+
         }
     }
 }

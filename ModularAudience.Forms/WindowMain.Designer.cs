@@ -40,6 +40,7 @@
             this.toolStripMenuItem_shuffle = new ToolStripMenuItem();
             this.toolStripMenuItem_clear = new ToolStripMenuItem();
             this.toolStripMenuItem_timestretchEach = new ToolStripMenuItem();
+            this.toolStripMenuItem_countdown = new ToolStripMenuItem();
             this.toolTip_playlist = new ToolTip(this.components);
             this.button_scanBpm = new Button();
             this.textBox_scanBpmResult = new TextBox();
@@ -72,6 +73,7 @@
             this.button_bringAllToFront = new Button();
             this.button_playlist = new Button();
             this.label_currentlyEnqueued = new Label();
+            this.toolStripMenuItem_autoEnqueueOne = new ToolStripMenuItem();
             this.contextMenuStrip_playlist.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -101,21 +103,9 @@
             // 
             // contextMenuStrip_playlist
             // 
-            this.contextMenuStrip_playlist.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_playPause, this.toolStripMenuItem_prev, this.toolStripMenuItem_skip, this.toolStripMenuItem_crossfade, this.toolStripMenuItem_crossSyncDuration, this.toolStripMenuItem_shuffle, this.toolStripMenuItem_clear, this.toolStripMenuItem_timestretchEach });
-            // Add countdown toggle
-            try
-            {
-                this.toolStripMenuItem_countdown = new ToolStripMenuItem();
-                this.toolStripMenuItem_countdown.CheckOnClick = true;
-                this.toolStripMenuItem_countdown.Checked = true; // default on
-                this.toolStripMenuItem_countdown.Text = "Countdown before play";
-                this.toolStripMenuItem_countdown.Click += this.playlistMenu_Countdown_Click;
-                this.contextMenuStrip_playlist.Items.Add(new ToolStripSeparator());
-                this.contextMenuStrip_playlist.Items.Add(this.toolStripMenuItem_countdown);
-            }
-            catch { }
+            this.contextMenuStrip_playlist.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_playPause, this.toolStripMenuItem_prev, this.toolStripMenuItem_skip, this.toolStripMenuItem_crossfade, this.toolStripMenuItem_crossSyncDuration, this.toolStripMenuItem_shuffle, this.toolStripMenuItem_clear, this.toolStripMenuItem_timestretchEach, this.toolStripMenuItem_countdown });
             this.contextMenuStrip_playlist.Name = "contextMenuStrip_playlist";
-            this.contextMenuStrip_playlist.Size = new Size(201, 202);
+            this.contextMenuStrip_playlist.Size = new Size(201, 208);
             // 
             // toolStripMenuItem_playPause
             // 
@@ -123,14 +113,6 @@
             this.toolStripMenuItem_playPause.Size = new Size(200, 22);
             this.toolStripMenuItem_playPause.Text = "Import Tracks ...";
             this.toolStripMenuItem_playPause.Click += this.playlistMenu_ImportTracks_Click;
-            // 
-            // toolStripMenuItem_autoEnqueueOne
-            // 
-            this.toolStripMenuItem_autoEnqueueOne = new ToolStripMenuItem();
-            this.toolStripMenuItem_autoEnqueueOne.Name = "toolStripMenuItem_autoEnqueueOne";
-            this.toolStripMenuItem_autoEnqueueOne.Size = new Size(200, 22);
-            this.toolStripMenuItem_autoEnqueueOne.Text = "Auto enqueue one";
-            this.toolStripMenuItem_autoEnqueueOne.Click += this.playlistMenu_AutoEnqueueOne_Click;
             // 
             // toolStripMenuItem_prev
             // 
@@ -182,6 +164,16 @@
             this.toolStripMenuItem_timestretchEach.Text = "⏱ Timestretch each...";
             this.toolStripMenuItem_timestretchEach.Click += this.playlistMenu_TimestretchEach_Click;
             this.toolStripMenuItem_timestretchEach.DoubleClick += this.toolStripMenuItem_timestretchEach_DoubleClick;
+            // 
+            // toolStripMenuItem_countdown
+            // 
+            this.toolStripMenuItem_countdown.Checked = true;
+            this.toolStripMenuItem_countdown.CheckOnClick = true;
+            this.toolStripMenuItem_countdown.CheckState = CheckState.Checked;
+            this.toolStripMenuItem_countdown.Name = "toolStripMenuItem_countdown";
+            this.toolStripMenuItem_countdown.Size = new Size(200, 22);
+            this.toolStripMenuItem_countdown.Text = "Countdown before play";
+            this.toolStripMenuItem_countdown.Click += this.playlistMenu_Countdown_Click;
             // 
             // button_scanBpm
             // 
@@ -405,6 +397,7 @@
             this.listBox_log.Size = new Size(300, 212);
             this.listBox_log.TabIndex = 22;
             this.listBox_log.TabStop = false;
+            this.listBox_log.MouseClick += this.listBox_log_Click;
             this.listBox_log.DoubleClick += this.listBox_log_DoubleClick;
             // 
             // button_breakbeatArchitect
@@ -531,6 +524,13 @@
             this.label_currentlyEnqueued.Size = new Size(174, 13);
             this.label_currentlyEnqueued.TabIndex = 33;
             this.label_currentlyEnqueued.Text = "No track currently enqueued in playlist.";
+            // 
+            // toolStripMenuItem_autoEnqueueOne
+            // 
+            this.toolStripMenuItem_autoEnqueueOne.Name = "toolStripMenuItem_autoEnqueueOne";
+            this.toolStripMenuItem_autoEnqueueOne.Size = new Size(200, 22);
+            this.toolStripMenuItem_autoEnqueueOne.Text = "Auto enqueue one";
+            this.toolStripMenuItem_autoEnqueueOne.Click += this.playlistMenu_AutoEnqueueOne_Click;
             // 
             // WindowMain
             // 

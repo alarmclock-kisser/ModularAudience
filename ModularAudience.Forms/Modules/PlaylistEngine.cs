@@ -68,6 +68,17 @@ namespace ModularAudience.Forms.Modules
         private volatile bool _skipRequested;
         private volatile bool _disposed;
 
+        // Lightweight timestamped logger wrapper to produce consistent, ms-precise
+        // debug messages into the existing LogCollection sink.
+        private static void LogDebug(string message)
+        {
+            try
+            {
+                ModularAudience.Audio.LogCollection.Log($"[{DateTime.UtcNow:HH:mm:ss.fff}] {message}");
+            }
+            catch { }
+        }
+
         private static readonly Random Rng = new();
 
         // â”€â”€ Events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -193,6 +204,96 @@ namespace ModularAudience.Forms.Modules
             public string? TempPath { get; init; }
         }
 
+        /// <summary>
+        /// Notification from UI that a path was just inserted as the next track.
+        /// The engine will attempt to pre-prepare it (or reuse an in-flight prepare)
+        /// and, if the timing/window is appropriate (within 8s or crossfade active),
+        /// start the prepared audio so it does not remain in a stopped state.
+        /// </summary>
+        public void NotifyInsertedNext(string originalPath)
+        {
+            if (string.IsNullOrWhiteSpace(originalPath)) return;
+
+            _ = Task.Run(async () =>
+            {
+                PreparedPlaylistTrack? prepared = null;
+                try
+                {
+                    // Reuse existing prepare path where possible
+                    Task<PreparedPlaylistTrack?> prepTask;
+                    lock (this._lock)
+                    {
+                        if (this._preparingTasks.TryGetValue(originalPath, out var existing))
+                        {
+                            prepTask = existing;
+                        }
+                        else
+                        {
+                            prepTask = this.PrepareTrackAsync(originalPath, CancellationToken.None);
+                        }
+                    }
+
+                    try
+                    {
+                        prepared = await prepTask.WaitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+                    }
+                    catch { /* timeout or error: we'll bail silently */ }
+                }
+                catch { }
+
+                if (prepared == null)
+                {
+                    return;
+                }
+
+                try
+                {
+                    bool stillNext = false;
+                    double remainingSeconds = double.MaxValue;
+                    double crossfade = this.GetCrossfadeDuration();
+
+                    lock (this._lock)
+                    {
+                        string? candidate = this.FilePaths.Count > 1 ? this.FilePaths[1] : null;
+                        stillNext = !string.IsNullOrWhiteSpace(candidate) && string.Equals(candidate, originalPath, StringComparison.OrdinalIgnoreCase);
+                        if (this._primaryAudioObj != null)
+                        {
+                            try { remainingSeconds = this._primaryAudioObj.Duration.TotalSeconds - this._primaryAudioObj.CurrentTime.TotalSeconds; } catch { }
+                        }
+                    }
+
+                    if (!stillNext)
+                    {
+                        // Nothing to do — the insertion is no longer the next item.
+                        return;
+                    }
+
+                    // If crossfade is active, or remaining time is small enough, or if there's no
+                    // currently playing primary track, start the prepared track.
+                    bool primaryPlaying = false;
+                    lock (this._lock)
+                    {
+                        try { primaryPlaying = this._primaryAudioObj != null && this._primaryAudioObj.Playing; } catch { primaryPlaying = false; }
+                    }
+
+                    if (crossfade > 0.0 || remainingSeconds <= 8.0 || !primaryPlaying)
+                    {
+                        try
+                        {
+                            await prepared.Audio.PlayAsync(CancellationToken.None, initialVolume: 1.0f).ConfigureAwait(false);
+                            prepared.Audio.Volume = 100f;
+                            prepared.Audio.SetPlaybackVolume(1.0f);
+                            this.TrackPreparedAsActive(prepared, "auto-enqueue start");
+                            try { this.ApplyCurrentTrackState(prepared); } catch { }
+                            TrackChanged?.Invoke();
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+            });
+        }
+
         // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         //  Public API
         // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -200,7 +301,10 @@ namespace ModularAudience.Forms.Modules
         /// <summary>Start or resume playlist playback.</summary>
         public void Play()
         {
-            if (this._disposed) return;
+            if (this._disposed)
+            {
+                return;
+            }
 
             bool resume = false;
             List<AudioObj>? resumeTargets = null;
@@ -211,9 +315,15 @@ namespace ModularAudience.Forms.Modules
                     resume = true;
                     resumeTargets = this._activePreparedTracks.Values.Select(p => p.Audio).ToList();
                     if (this._primaryAudioObj != null && !resumeTargets.Contains(this._primaryAudioObj))
+                    {
                         resumeTargets.Add(this._primaryAudioObj);
+                    }
+
                     if (this._secondaryAudioObj != null && !resumeTargets.Contains(this._secondaryAudioObj))
+                    {
                         resumeTargets.Add(this._secondaryAudioObj);
+                    }
+
                     this.IsPaused = false;
                     this.IsPlaying = true;
                 }
@@ -230,7 +340,10 @@ namespace ModularAudience.Forms.Modules
                 _ = Task.Run(() =>
                 {
                     foreach (var a in targets)
+                    {
                         try { a.PauseAsync().GetAwaiter().GetResult(); } catch { }
+                    }
+
                     lock (this._lock) { this._waveOut?.Play(); }
                 });
                 return;
@@ -246,12 +359,22 @@ namespace ModularAudience.Forms.Modules
             List<AudioObj>? pauseTargets = null;
             lock (this._lock)
             {
-                if (!this.IsPlaying || this.IsPaused) return;
+                if (!this.IsPlaying || this.IsPaused)
+                {
+                    return;
+                }
+
                 pauseTargets = this._activePreparedTracks.Values.Select(p => p.Audio).ToList();
                 if (this._primaryAudioObj != null && !pauseTargets.Contains(this._primaryAudioObj))
+                {
                     pauseTargets.Add(this._primaryAudioObj);
+                }
+
                 if (this._secondaryAudioObj != null && !pauseTargets.Contains(this._secondaryAudioObj))
+                {
                     pauseTargets.Add(this._secondaryAudioObj);
+                }
+
                 this.IsPaused  = true;
                 this.IsPlaying = false;
             }
@@ -266,7 +389,10 @@ namespace ModularAudience.Forms.Modules
             _ = Task.Run(() =>
             {
                 foreach (var a in targets)
+                {
                     try { a.PauseAsync().GetAwaiter().GetResult(); } catch { }
+                }
+
                 lock (this._lock) { this._waveOut?.Pause(); }
             });
         }
@@ -275,9 +401,13 @@ namespace ModularAudience.Forms.Modules
         public void TogglePlayPause()
         {
             if (this.IsPaused || (!this.IsPlaying && this.FilePaths.Count > 0))
+            {
                 this.Play();
+            }
             else
+            {
                 this.Pause();
+            }
         }
 
         /// <summary>
@@ -344,7 +474,9 @@ namespace ModularAudience.Forms.Modules
             }
 
             if (prepared == null && primary == null && secondary == null)
+            {
                 return false;
+            }
 
             // Stop and dispose outside lock
             _ = Task.Run(() =>
@@ -511,7 +643,9 @@ namespace ModularAudience.Forms.Modules
                                             var ao = new ModularAudience.Audio.AudioObj(path, load: false);
                                             var scanned = await ModularAudience.Audio.Processors_V1.BeatScanner.ScanBpmAsync(ao).ConfigureAwait(false);
                                             if (scanned > 0.0)
+                                            {
                                                 bpm = scanned;
+                                            }
                                         }
                                         catch { }
                                     }
@@ -548,7 +682,9 @@ namespace ModularAudience.Forms.Modules
                 while (!ct.IsCancellationRequested && !this._skipRequested && !this._disposed)
                 {
                     if (waveOut.PlaybackState == PlaybackState.Stopped)
+                    {
                         break;
+                    }
 
                     await Task.Delay(100, ct).ConfigureAwait(false);
                 }
@@ -687,19 +823,21 @@ namespace ModularAudience.Forms.Modules
                         while (this.FilePaths.Count > 1 &&
                                string.Equals(this.FilePaths[0], this.FilePaths[1], StringComparison.OrdinalIgnoreCase))
                         {
-                            ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] duplicate removed: {Path.GetFileNameWithoutExtension(this.FilePaths[1])}");
+                            LogDebug($"[PlaylistEngine] duplicate removed: {Path.GetFileNameWithoutExtension(this.FilePaths[1])} FilePathsCount={this.FilePaths.Count}");
                             this.FilePaths.RemoveAt(1);
                         }
                         currentOriginalPath = this.FilePaths.Count > 0 ? this.FilePaths[0] : null;
                     }
 
                     if (string.IsNullOrWhiteSpace(currentOriginalPath))
+                    {
                         break;
+                    }
 
                     PreparedPlaylistTrack? currentPrepared;
                     if (nextPrepareTask != null && string.Equals(nextPrepareTaskPath, currentOriginalPath, StringComparison.OrdinalIgnoreCase))
                     {
-                        ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] reusing pre-prepared: {Path.GetFileNameWithoutExtension(currentOriginalPath)}");
+                        LogDebug($"[PlaylistEngine] reusing pre-prepared: {Path.GetFileNameWithoutExtension(currentOriginalPath)} nextPrepareTaskPath={nextPrepareTaskPath}");
                         currentPrepared = await nextPrepareTask.ConfigureAwait(false);
                         nextPrepareTask = null;
                         nextPrepareTaskPath = null;
@@ -711,11 +849,42 @@ namespace ModularAudience.Forms.Modules
                             var staleTask = nextPrepareTask;
                             _ = Task.Run(async () =>
                             {
-                                try { var ab = await staleTask.ConfigureAwait(false); if (ab != null) { this.UntrackPrepared(ab, "abandoned"); try { ab.Audio.Dispose(); } catch { } this.DeleteTempFile(ab.TempPath); } } catch { }
+                                try
+                                {
+                                    var ab = await staleTask.ConfigureAwait(false);
+                                    if (ab != null)
+                                    {
+                                        bool shouldDispose = false;
+                                        try
+                                        {
+                                            lock (this._lock)
+                                            {
+                                                // Only dispose/untrack if the prepared original path is no longer
+                                                // present in the queue and the audio is not currently playing.
+                                                bool inQueue = this.FilePaths.Any(p => string.Equals(p, ab.OriginalPath, StringComparison.OrdinalIgnoreCase));
+                                                if (!inQueue && (ab.Audio == null || !ab.Audio.Playing))
+                                                {
+                                                    shouldDispose = true;
+                                                }
+                                            }
+                                        }
+                                        catch { }
+
+                                        if (shouldDispose)
+                                        {
+                                            this.UntrackPrepared(ab, "abandoned");
+                                            try { ab.Audio?.Dispose(); } catch { }
+                                            this.DeleteTempFile(ab.TempPath);
+                                        }
+                                        // else: keep preprepared track available for later seam/click use
+                                    }
+                                }
+                                catch { }
                             });
                             nextPrepareTask = null;
                             nextPrepareTaskPath = null;
                         }
+                        LogDebug($"[PlaylistEngine] PrepareTrackAsync start for {Path.GetFileNameWithoutExtension(currentOriginalPath)} FilePathsCount={this.FilePaths.Count}");
                         currentPrepared = await this.PrepareTrackAsync(currentOriginalPath, ct).ConfigureAwait(false);
                     }
 
@@ -724,7 +893,9 @@ namespace ModularAudience.Forms.Modules
                         lock (this._lock)
                         {
                             if (this.FilePaths.Count > 0 && string.Equals(this.FilePaths[0], currentOriginalPath, StringComparison.OrdinalIgnoreCase))
+                            {
                                 this.FilePaths.RemoveAt(0);
+                            }
                         }
                         continue;
                     }
@@ -732,6 +903,7 @@ namespace ModularAudience.Forms.Modules
                     await currentPrepared.Audio.PlayAsync(CancellationToken.None, initialVolume: 1.0f).ConfigureAwait(false);
                     currentPrepared.Audio.Volume = 100f;
                     currentPrepared.Audio.SetPlaybackVolume(1.0f);
+                    LogDebug($"[PlaylistEngine] PlayAsync invoked for {Path.GetFileNameWithoutExtension(currentOriginalPath)} AudioId={currentPrepared.Audio.Id} Playing={currentPrepared.Audio.Playing}");
                     this.TrackPreparedAsActive(currentPrepared, "initial play");
                     this.ApplyCurrentTrackState(currentPrepared);
                     TrackChanged?.Invoke();
@@ -837,7 +1009,10 @@ namespace ModularAudience.Forms.Modules
                                     lock (this._lock)
                                     {
                                         if (this.FilePaths.Count > 0 && string.Equals(this.FilePaths[0], currentOriginalPath, StringComparison.OrdinalIgnoreCase))
+                                        {
                                             this.FilePaths.RemoveAt(0);
+                                        }
+
                                         this._previousPath = currentOriginalPath;
                                     }
 
@@ -884,12 +1059,40 @@ namespace ModularAudience.Forms.Modules
                                     var staleTask = nextPrepareTask;
                                     _ = Task.Run(async () =>
                                     {
-                                        try { var stale = await staleTask.ConfigureAwait(false); if (stale != null) { this.UntrackPrepared(stale, "stale"); try { stale.Audio.Dispose(); } catch { } this.DeleteTempFile(stale.TempPath); } } catch { }
+                                        try
+                                        {
+                                            var stale = await staleTask.ConfigureAwait(false);
+                                            if (stale != null)
+                                            {
+                                                bool shouldDispose = false;
+                                                try
+                                                {
+                                                    lock (this._lock)
+                                                    {
+                                                        bool inQueue = this.FilePaths.Any(p => string.Equals(p, stale.OriginalPath, StringComparison.OrdinalIgnoreCase));
+                                                        if (!inQueue && (stale.Audio == null || !stale.Audio.Playing))
+                                                        {
+                                                            shouldDispose = true;
+                                                        }
+                                                    }
+                                                }
+                                                catch { }
+
+                                                if (shouldDispose)
+                                                {
+                                                    this.UntrackPrepared(stale, "stale");
+                                                    try { stale.Audio.Dispose(); } catch { }
+                                                    this.DeleteTempFile(stale.TempPath);
+                                                }
+                                                // else: keep prepared stale track available
+                                            }
+                                        }
+                                        catch { }
                                     });
                                 }
                                 nextPrepareTask = this.PrepareTrackAsync(nextOriginalPath, ct);
                                 nextPrepareTaskPath = nextOriginalPath;
-                                ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] pre-preparing: {Path.GetFileNameWithoutExtension(nextOriginalPath)} (remaining={remainingSeconds:F1}s)");
+                                LogDebug($"[PlaylistEngine] pre-preparing: {Path.GetFileNameWithoutExtension(nextOriginalPath)} (remaining={remainingSeconds:F1}s) nextPrepareTaskPath={nextPrepareTaskPath}");
                             }
                         }
 
@@ -906,7 +1109,7 @@ namespace ModularAudience.Forms.Modules
                             {
                                 nextPrepareTask = this.PrepareTrackAsync(nextOriginalPath!, ct);
                                 nextPrepareTaskPath = nextOriginalPath;
-                                ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] crossfade: kicked off prepare (remaining={remainingSeconds:F1}s)");
+                                LogDebug($"[PlaylistEngine] crossfade: kicked off prepare (remaining={remainingSeconds:F1}s) nextPrepareTaskPath={nextPrepareTaskPath}");
                             }
                         }
 
@@ -956,7 +1159,7 @@ namespace ModularAudience.Forms.Modules
                             }
 
                             crossfadeTriggered = true;
-                            ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] crossfade trigger (on-beat): remaining={remainingSeconds:F1}s cf={crossfadeDuration:F1}s eff={effectiveCrossfade:F1}s");
+                            LogDebug($"[PlaylistEngine] crossfade trigger (on-beat): remaining={remainingSeconds:F1}s cf={crossfadeDuration:F1}s eff={effectiveCrossfade:F1}s nextPrepareTaskPath={nextPrepareTaskPath}");
 
                             PreparedPlaylistTrack? nextTrack;
                             try { nextTrack = await nextPrepareTask.ConfigureAwait(false); }
@@ -1013,7 +1216,7 @@ namespace ModularAudience.Forms.Modules
                                         this.UntrackPrepared(fadingOut, "fade-out done");
                                         try { fadingOut.Audio.Dispose(); } catch { }
                                         this.DeleteTempFile(fadingOut.TempPath);
-                                        ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] fade-out done: {Path.GetFileNameWithoutExtension(fadingOut.OriginalPath)} | active={this.ActiveAudioObjs.Count}");
+                                        LogDebug($"[PlaylistEngine] fade-out done: {Path.GetFileNameWithoutExtension(fadingOut.OriginalPath)} | active={this.ActiveAudioObjs.Count}");
                                     }
                                 }));
 
@@ -1031,7 +1234,11 @@ namespace ModularAudience.Forms.Modules
                                             // Equal-power fade-in: sin(t * pi/2).
                                             float vol = (float) Math.Sin(t * Math.PI * 0.5);
                                             try { fadingIn.Audio.SetPlaybackVolume(vol); } catch { }
-                                            if (t >= 1.0) break;
+                                            if (t >= 1.0)
+                                            {
+                                                break;
+                                            }
+
                                             await Task.Delay(25).ConfigureAwait(false);
                                         }
                                         try { fadingIn.Audio.SetPlaybackVolume(1.0f); } catch { }
@@ -1042,7 +1249,10 @@ namespace ModularAudience.Forms.Modules
                                 lock (this._lock)
                                 {
                                     if (this.FilePaths.Count > 0 && string.Equals(this.FilePaths[0], currentOriginalPath, StringComparison.OrdinalIgnoreCase))
+                                    {
                                         this.FilePaths.RemoveAt(0);
+                                    }
+
                                     this._previousPath = currentOriginalPath;
                                 }
 
@@ -1050,7 +1260,9 @@ namespace ModularAudience.Forms.Modules
                                 TrackChanged?.Invoke();
 
                                 if (this.CrossfadeStartedAsync != null)
+                                {
                                     _ = Task.Run(() => this.CrossfadeStartedAsync(fadingOut.Audio, nextTrack.Audio), CancellationToken.None);
+                                }
 
                                 ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] crossfade -> {Path.GetFileNameWithoutExtension(nextOriginalPath)} | active={this.ActiveAudioObjs.Count}");
 
@@ -1081,7 +1293,9 @@ namespace ModularAudience.Forms.Modules
                         lock (this._lock)
                         {
                             if (this.FilePaths.Count > 0 && string.Equals(this.FilePaths[0], currentOriginalPath, StringComparison.OrdinalIgnoreCase))
+                            {
                                 this.FilePaths.RemoveAt(0);
+                            }
                         }
                         this._skipRequested = false;
                         this.ClearCurrentTrackState();
@@ -1096,7 +1310,10 @@ namespace ModularAudience.Forms.Modules
                         lock (this._lock)
                         {
                             if (this.FilePaths.Count > 0 && string.Equals(this.FilePaths[0], currentOriginalPath, StringComparison.OrdinalIgnoreCase))
+                            {
                                 this.FilePaths.RemoveAt(0);
+                            }
+
                             this._previousPath = currentOriginalPath;
                         }
                         this.ClearCurrentTrackState();
@@ -1107,16 +1324,48 @@ namespace ModularAudience.Forms.Modules
                 }
 
                 if (fadeOutTasks.Count > 0)
+                {
                     await Task.WhenAll(fadeOutTasks).ConfigureAwait(false);
+                }
             }
             finally
             {
                 if (nextPrepareTask != null)
                 {
-                    try { var ab = await nextPrepareTask.ConfigureAwait(false); if (ab != null) { this.UntrackPrepared(ab, "abandoned"); try { ab.Audio.Dispose(); } catch { } this.DeleteTempFile(ab.TempPath); } } catch { }
+                    try
+                    {
+                        var ab = await nextPrepareTask.ConfigureAwait(false);
+                        if (ab != null)
+                        {
+                            bool shouldDispose = false;
+                            try
+                            {
+                                lock (this._lock)
+                                {
+                                    bool inQueue = this.FilePaths.Any(p => string.Equals(p, ab.OriginalPath, StringComparison.OrdinalIgnoreCase));
+                                    if (!inQueue && (ab.Audio == null || !ab.Audio.Playing))
+                                    {
+                                        shouldDispose = true;
+                                    }
+                                }
+                            }
+                            catch { }
+
+                            if (shouldDispose)
+                            {
+                                this.UntrackPrepared(ab, "abandoned");
+                                try { ab.Audio.Dispose(); } catch { }
+                                this.DeleteTempFile(ab.TempPath);
+                            }
+                            // else: keep preprepared track to allow later use
+                        }
+                    }
+                    catch { }
                 }
                 if (fadeOutTasks.Count > 0)
+                {
                     try { await Task.WhenAll(fadeOutTasks).ConfigureAwait(false); } catch { }
+                }
 
                 this.ClearCurrentTrackState();
                 this.SetSecondaryTrack((PreparedPlaylistTrack?) null);
@@ -1293,7 +1542,10 @@ namespace ModularAudience.Forms.Modules
                 }
                 // If we couldn't compute an effective BPM from factors, fall back to the stored metadata BPM.
                 if (effectiveBpm <= 0)
+                {
                     effectiveBpm = prepared.Audio.Bpm;
+                }
+
                 this.CurrentBpm = effectiveBpm;
                 this.IsPlaying = prepared.Audio.Playing || prepared.Audio.PlayerPlaying || prepared.Audio.Paused;
                 this.IsPaused = prepared.Audio.Paused;
@@ -1332,7 +1584,7 @@ namespace ModularAudience.Forms.Modules
                 // If this prepared track's original path is banned, do not activate it.
                 if (!string.IsNullOrWhiteSpace(prepared.OriginalPath) && this._banlist.Contains(prepared.OriginalPath))
                 {
-                    try { ModularAudience.Audio.LogCollection.Log($"Playlist: prevented activation of banned track: {Path.GetFileNameWithoutExtension(prepared.OriginalPath)}"); } catch { }
+                    try { LogDebug($"Playlist: prevented activation of banned track: {Path.GetFileNameWithoutExtension(prepared.OriginalPath)}"); } catch { }
                     return;
                 }
 
@@ -1344,7 +1596,7 @@ namespace ModularAudience.Forms.Modules
                 string logName = Path.GetFileNameWithoutExtension(prepared.OriginalPath);
                 string logBpm = prepared.Audio.Bpm > 0 ? $" [{prepared.Audio.Bpm:F0} BPM]" : string.Empty;
                 int activeCount = this.ActiveAudioObjs.Count;
-                ModularAudience.Audio.LogCollection.Log($"Playlist track initial play ({reason}): {logName}{logBpm} | active={activeCount}");
+                LogDebug($"Playlist track initial play ({reason}): {logName}{logBpm} | active={activeCount}");
             }
             catch
             {
@@ -1366,7 +1618,7 @@ namespace ModularAudience.Forms.Modules
                         ))
                     {
                         this._banlist.Add(prepared.OriginalPath);
-                        try { ModularAudience.Audio.LogCollection.Log($"Playlist: banlisted track: {Path.GetFileNameWithoutExtension(prepared.OriginalPath)} (reason={reason})"); } catch { }
+                        try { LogDebug($"Playlist: banlisted track: {Path.GetFileNameWithoutExtension(prepared.OriginalPath)} (reason={reason})"); } catch { }
                     }
                 }
                 catch { }
@@ -1376,7 +1628,7 @@ namespace ModularAudience.Forms.Modules
             {
                 string logName = Path.GetFileNameWithoutExtension(prepared.OriginalPath);
                 int activeCount = this.ActiveAudioObjs.Count;
-                ModularAudience.Audio.LogCollection.Log($"Playlist track inactive ({reason}): {logName} | active={activeCount}");
+                LogDebug($"Playlist track inactive ({reason}): {logName} | active={activeCount}");
             }
             catch
             {
@@ -1423,7 +1675,9 @@ namespace ModularAudience.Forms.Modules
                 float bpm = 0f;
 
                 if (file.Tag.BeatsPerMinute > 0)
+                {
                     bpm = (float) file.Tag.BeatsPerMinute;
+                }
 
                 if (bpm <= 0 && file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                 {
@@ -1434,16 +1688,22 @@ namespace ModularAudience.Forms.Modules
                         string s = (frame.Text.FirstOrDefault() ?? "0").Replace(',', '.');
                         if (float.TryParse(s, System.Globalization.NumberStyles.Any,
                             System.Globalization.CultureInfo.InvariantCulture, out float v) && v > 0)
+                        {
                             bpm = v;
+                        }
                     }
                 }
 
                 // Some taggers store BPM * 100 (e.g. 13000 instead of 130)
                 if (bpm > 1000f)
+                {
                     bpm /= 100f;
+                }
 
                 if (bpm >= 30f && bpm <= 1000f)
+                {
                     return bpm;
+                }
             }
             catch { }
             return 0f;

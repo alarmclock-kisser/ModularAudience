@@ -411,6 +411,47 @@ namespace ModularAudience.Forms
             }
         }
 
+        private void listBox_log_Click(object sender, MouseEventArgs e)
+        {
+            // Right-click: show context menu to copy all log entries to clipboard
+            if (e.Button != MouseButtons.Right)
+            {
+                return;
+            }
+
+            if (this.listBox_log.Items.Count == 0)
+            {
+                return;
+            }
+
+            var contextMenu = new ContextMenuStrip();
+            var copyAllItem = new ToolStripMenuItem("Copy All");
+            copyAllItem.Click += (s, args) =>
+            {
+                try
+                {
+                    string allLogs = string.Join(Environment.NewLine, this.listBox_log.Items.Cast<object>().Select(o => o?.ToString() ?? string.Empty));
+                    if (!string.IsNullOrEmpty(allLogs))
+                    {
+                        Clipboard.SetText(allLogs);
+                    }
+                }
+                catch { /* ignore clipboard errors */ }
+            };
+            contextMenu.Items.Add(copyAllItem);
+
+            // Show at mouse location relative to the list box
+            try
+            {
+                contextMenu.Show(this.listBox_log, e.Location);
+            }
+            catch
+            {
+                // Fallback: show at cursor position
+                try { contextMenu.Show(Cursor.Position); } catch { }
+            }
+        }
+
         // button_playlist_Click is implemented in WindowMain.Playlist.partial.cs
     }
 }
