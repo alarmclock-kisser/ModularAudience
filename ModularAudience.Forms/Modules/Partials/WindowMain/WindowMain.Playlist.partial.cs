@@ -482,16 +482,36 @@ namespace ModularAudience.Forms
                         {
                             if (this._playlist != null && this._playlist.FilePaths.Count <= 1)
                             {
+                                var random = new Random();
+
+
                                 // Prefer any prepared track that is NOT the currently playing original.
                                 var preferred = preparedPathsAll
                                     .Where(p => !string.IsNullOrWhiteSpace(p))
-                                    .Where(p => !string.Equals(p, this._playlist.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase))
-                                    .FirstOrDefault();
+                                    .Where(p => !string.Equals(p, this._playlist.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase));
 
-                                candidate = preferred; // may be null if none found
+                                string currentlyPlayingOriginal = this._playlist.OriginalCurrentPath ?? string.Empty;
+                                int count = preferred.Count();
+                                if (count > 0)
+                                {
+                                    candidate = preferred.ElementAt(random.Next(this._playlist.FilePaths.IndexOf(currentlyPlayingOriginal + 4, count)));
+                                }
+                                else
+                                {
+                                    string currentBasePath = Path.GetFileNameWithoutExtension(this._playlist.OriginalCurrentPath ?? string.Empty);
+                                    var filePaths = Directory.GetFiles(Path.GetDirectoryName(this._playlist.OriginalCurrentPath ?? string.Empty) ?? string.Empty)
+                                        .Where(p => !string.IsNullOrWhiteSpace(p) && AllowedImportExtensions.Contains(Path.GetExtension(p)))
+                                        .ToArray();
+
+                                    candidate = random.Next(filePaths.Length) > 0 ? filePaths[random.Next(filePaths.Length)] : null;
+                                }
+
                                 if (!string.IsNullOrWhiteSpace(candidate))
                                 {
                                     LogCollection.Log($"Auto enqueue one: using already pre-prepared track (playlist short) -> {Path.GetFileNameWithoutExtension(candidate)}");
+                                    
+                                    // Remove from (future) consideration if it was selected as candidate, to avoid duplicate selection in the fallback path.
+                                    this._playlist?.FilePaths.Remove(candidate);
                                 }
                             }
                             else
