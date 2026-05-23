@@ -1,4 +1,5 @@
 ﻿using ModularAudience.Audio;
+using ModularAudience.Audio.Processing;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -6,6 +7,7 @@ using System.Data;
 using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
+using static ModularAudience.Audio.Processing.DropManager;
 
 namespace ModularAudience.Forms.Modules
 {
@@ -155,7 +157,7 @@ namespace ModularAudience.Forms.Modules
         private int JumpMs => (int) this.numericUpDown_jump.Value;
         private int JumpSamples => (this.OriginalAudio != null ? (int) (this.OriginalAudio.SampleRate * this.JumpMs / 1000f) : 44100);
 
-		private float CurrentLoopFraction
+        private float CurrentLoopFraction
         {
             get
             {
@@ -218,13 +220,15 @@ namespace ModularAudience.Forms.Modules
         private long lastLoopEndSamples = -1;
         private float lastAppliedLoopFraction = 0f; // value from button (can be negative)
         private bool lastActionWasMultiplierChange = false;
-		private float lastJumpMs = 1;
+        private float lastJumpMs = 1;
 
 
 
-		public LoopControl()
+        public LoopControl()
         {
             this.InitializeComponent();
+
+            this.Fill_ComboBox_Drops();
 
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCenterStartingPoint(this);
@@ -244,7 +248,7 @@ namespace ModularAudience.Forms.Modules
 
             this.RefreshPlaylistTargets();
 
-			this.UpdateLoopButtonsState();
+            this.UpdateLoopButtonsState();
 
             this.FormClosing += (s, e) =>
             {
@@ -319,7 +323,7 @@ namespace ModularAudience.Forms.Modules
                     rateFactor = audio.StretchFactor * audio.SampleRateFactor * audio.ManualSampleRateFactor * audio.SyncNudgeSampleRateFactor;
                 }
                 catch { }
-                effectiveBpm = (float)(audio.Bpm * rateFactor);
+                effectiveBpm = (float) (audio.Bpm * rateFactor);
             }
             string bpm = effectiveBpm > 0 ? $" [{effectiveBpm:F0}]" : string.Empty;
             string state = audio.PlayerPlaying ? "▶" : audio.Paused ? "||" : "■";
@@ -917,7 +921,7 @@ namespace ModularAudience.Forms.Modules
         private async void button_copy_Click(object sender, EventArgs e)
         {
             if (this.OriginalAudio == null || !this.panel_buttons.Controls.OfType<Button>().Any(b => b.BackColor == Color.LightBlue))
-			{
+            {
                 return;
             }
 
@@ -1111,27 +1115,27 @@ namespace ModularAudience.Forms.Modules
 
         private void button_backward_Click(object sender, EventArgs e)
         {
-			// Jump backwards by JumpSamples and Update loop accordingly
-			if (this.OriginalAudio == null)
-            {
-                return;
-            }
-            
-            this.JumpByMilliseconds(-1);
-		}
-
-		private void button_forward_Click(object sender, EventArgs e)
-        {
-			// Jump forwards by JumpSamples and Update loop accordingly
+            // Jump backwards by JumpSamples and Update loop accordingly
             if (this.OriginalAudio == null)
             {
                 return;
             }
-           
-            this.JumpByMilliseconds(1);
-		}
 
-		private void numericUpDown_jump_ValueChanged(object? sender, EventArgs e)
+            this.JumpByMilliseconds(-1);
+        }
+
+        private void button_forward_Click(object sender, EventArgs e)
+        {
+            // Jump forwards by JumpSamples and Update loop accordingly
+            if (this.OriginalAudio == null)
+            {
+                return;
+            }
+
+            this.JumpByMilliseconds(1);
+        }
+
+        private void numericUpDown_jump_ValueChanged(object? sender, EventArgs e)
         {
             if (!ModifierKeys.HasFlag(Keys.Shift) && !ModifierKeys.HasFlag(Keys.Control))
             {
@@ -1149,17 +1153,17 @@ namespace ModularAudience.Forms.Modules
                 }
                 this.numericUpDown_jump.Click += this.numericUpDown_jump_ValueChanged;
             }
-		}
+        }
 
         private void numericUpDown_jump_Click(object? sender, EventArgs e)
         {
-			// If not ctrl is held, ignore
+            // If not ctrl is held, ignore
             if (!ModifierKeys.HasFlag(Keys.Control))
             {
                 return;
-			}
+            }
 
-			int msPerBeat = (int) Math.Round(60000f / this.Bpm);
+            int msPerBeat = (int) Math.Round(60000f / this.Bpm);
             this.numericUpDown_jump.Value = msPerBeat;
             this.lastJumpMs = msPerBeat;
         }
@@ -1167,27 +1171,27 @@ namespace ModularAudience.Forms.Modules
 
 
 
-		private void JumpByMilliseconds(int direction)
-		{
+        private void JumpByMilliseconds(int direction)
+        {
             if (this.OriginalAudio == null || this.TargetAudios.Count == 0)
-			{
-				return;
-			}
+            {
+                return;
+            }
 
-			int channels = Math.Max(1, this.OriginalAudio.Channels);
-			long totalSamples = Math.Max(0L, this.OriginalAudio.Length);
+            int channels = Math.Max(1, this.OriginalAudio.Channels);
+            long totalSamples = Math.Max(0L, this.OriginalAudio.Length);
 
-			// JumpSamples ist in Frames gerechnet (SampleRate * ms / 1000)
-			long deltaFrames = this.JumpSamples * direction;
-			long currentSamples = this.OriginalAudio.Position * channels;
-			long deltaSamples = deltaFrames * channels;
+            // JumpSamples ist in Frames gerechnet (SampleRate * ms / 1000)
+            long deltaFrames = this.JumpSamples * direction;
+            long currentSamples = this.OriginalAudio.Position * channels;
+            long deltaSamples = deltaFrames * channels;
 
-			long targetSamples = currentSamples + deltaSamples;
+            long targetSamples = currentSamples + deltaSamples;
 
-			// Clamp innerhalb des Files
-			targetSamples = Math.Clamp(targetSamples, 0L, Math.Max(0L, totalSamples - 1));
+            // Clamp innerhalb des Files
+            targetSamples = Math.Clamp(targetSamples, 0L, Math.Max(0L, totalSamples - 1));
 
-			// Playhead springen (immer!)
+            // Playhead springen (immer!)
             foreach (AudioObj targetAudio in this.TargetAudios)
             {
                 try
@@ -1200,52 +1204,52 @@ namespace ModularAudience.Forms.Modules
                 }
             }
 
-			// UI sofort aktualisieren (Caret/Waveform neu rendern)
-			try { this.CurrentTrackView?.RequestWaveformRender(); } catch { }
+            // UI sofort aktualisieren (Caret/Waveform neu rendern)
+            try { this.CurrentTrackView?.RequestWaveformRender(); } catch { }
 
-			// Wenn es keinen aktiven Loop gibt, sind wir fertig
-			bool haveLoop = this.lastLoopStartSamples >= 0 &&
-							this.lastLoopEndSamples > this.lastLoopStartSamples &&
-							this.OriginalAudio.LoopFraction != 0;
+            // Wenn es keinen aktiven Loop gibt, sind wir fertig
+            bool haveLoop = this.lastLoopStartSamples >= 0 &&
+                            this.lastLoopEndSamples > this.lastLoopStartSamples &&
+                            this.OriginalAudio.LoopFraction != 0;
 
-			if (!haveLoop)
-			{
-				return;
-			}
+            if (!haveLoop)
+            {
+                return;
+            }
 
-			// Aktiven Loop um dieselbe Distanz verschieben (Start & End)
-			long len = this.lastLoopEndSamples - this.lastLoopStartSamples;
-			if (len <= 0)
-			{
-				return;
-			}
+            // Aktiven Loop um dieselbe Distanz verschieben (Start & End)
+            long len = this.lastLoopEndSamples - this.lastLoopStartSamples;
+            if (len <= 0)
+            {
+                return;
+            }
 
-			long newStart = this.lastLoopStartSamples + deltaSamples;
-			long newEnd = this.lastLoopEndSamples + deltaSamples;
+            long newStart = this.lastLoopStartSamples + deltaSamples;
+            long newEnd = this.lastLoopEndSamples + deltaSamples;
 
-			// Loop innerhalb des Files clampen, Länge bleibt gleich
-			if (newStart < 0)
-			{
-				newStart = 0;
-				newEnd = Math.Min(len, totalSamples);
-			}
-			else if (newEnd > totalSamples)
-			{
-				newEnd = totalSamples;
-				newStart = Math.Max(0, newEnd - len);
-			}
+            // Loop innerhalb des Files clampen, Länge bleibt gleich
+            if (newStart < 0)
+            {
+                newStart = 0;
+                newEnd = Math.Min(len, totalSamples);
+            }
+            else if (newEnd > totalSamples)
+            {
+                newEnd = totalSamples;
+                newStart = Math.Max(0, newEnd - len);
+            }
 
-			long fractionSamples = Math.Max(1L, newEnd - newStart);
+            long fractionSamples = Math.Max(1L, newEnd - newStart);
 
-			// Loop an neuer Position setzen und weiterspielen
+            // Loop an neuer Position setzen und weiterspielen
             foreach (AudioObj targetAudio in this.TargetAudios)
             {
                 targetAudio.UpdateLoopFraction(newStart, newEnd, fractionSamples, true, true);
             }
 
-			// State im LoopControl aktualisieren
-			this.lastLoopStartSamples = newStart;
-			this.lastLoopEndSamples = newEnd;
+            // State im LoopControl aktualisieren
+            this.lastLoopStartSamples = newStart;
+            this.lastLoopEndSamples = newEnd;
 
             foreach (AudioObj targetAudio in this.TargetAudios)
             {
@@ -1259,9 +1263,76 @@ namespace ModularAudience.Forms.Modules
                 }
             }
 
-			// Nach Loop-Verschiebung erneut UI-Refresh anstoßen
-			try { this.CurrentTrackView?.RequestWaveformRender(); } catch { }
-		}
+            // Nach Loop-Verschiebung erneut UI-Refresh anstoßen
+            try { this.CurrentTrackView?.RequestWaveformRender(); } catch { }
+        }
 
-	}
+        private void Fill_ComboBox_Drops()
+        {
+            this.comboBox_drops.Items.Clear();
+            this.comboBox_drops.Items.Add("Select a Drop");
+
+            // Get enum values and names
+            var dropValues = Enum.GetValues(typeof(DropType)).Cast<DropType>();
+            foreach (var dropType in dropValues)
+            {
+                string name = dropType.ToString();
+                this.comboBox_drops.Items.Add(name);
+            }
+        }
+
+        private async void comboBox_drops_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (this.comboBox_drops.SelectedIndex <= 0)
+            {
+                return;
+            }
+
+            string selectedName = this.comboBox_drops.SelectedItem?.ToString() ?? string.Empty;
+            DropType dropType = Enum.TryParse(selectedName, out DropType result) ? result : DropType.AlignedAll;
+
+            Dictionary<Guid, int> timings = new Dictionary<Guid, int>();
+            AudioObj[] audios = this.TargetAudios.ToArray();
+            try
+            {
+                timings = await DropManager.TimeManageDropsAsync(audios, dropType);
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"Drop timing calculation failed: {ex.Message}");
+                timings = new Dictionary<Guid, int>();
+            }
+
+            // log timings for debugging
+            try
+            {
+                foreach (var kv in timings)
+                {
+                    LogCollection.Log($"Drop timing: audio={kv.Key} offsetSamples={kv.Value}");
+                }
+            }
+            catch { }
+
+            // Start PausingPlaybackSyncer for the target audios for an auto-calculated duration
+            try
+            {
+                // compute median bpm for selected tracks
+                double? medianBpm = null;
+                var bpms = audios.Where(a => a != null && a.Bpm > 0).Select(a => (double)a.Bpm).OrderBy(x => x).ToArray();
+                if (bpms.Length > 0)
+                {
+                    medianBpm = bpms[bpms.Length / 2];
+                }
+
+                double? duration = null; // let RunForAsync compute default if null
+                // start syncer async (do not block UI)
+                _ = Task.Run(() => Audio.Processors_V3.PausingPlaybackSyncer.RunForAsync(audios, duration));
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"Failed to start PausingPlaybackSyncer: {ex.Message}");
+            }
+
+        }
+    }
 }

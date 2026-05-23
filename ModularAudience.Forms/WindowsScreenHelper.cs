@@ -173,7 +173,11 @@ namespace ModularAudience.Forms
             try
             {
                 string path = GetPositionFilePath();
-                if (!File.Exists(path)) return false;
+                if (!File.Exists(path))
+                {
+                    return false;
+                }
+
                 string json = File.ReadAllText(path);
                 using var doc = System.Text.Json.JsonDocument.Parse(json);
                 var root = doc.RootElement;

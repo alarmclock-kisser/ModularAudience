@@ -95,11 +95,11 @@ namespace ModularAudience.Forms
                 {
                     try
                     {
-                        _autoEnqueueOne_ForceAllowFallback = true;
+                        this._autoEnqueueOne_ForceAllowFallback = true;
                         // Invoke the click handler directly so behaviour is shared
                         this.playlistMenu_AutoEnqueueOne_Click(sender, EventArgs.Empty);
                     }
-                    finally { _autoEnqueueOne_ForceAllowFallback = false; }
+                    finally { this._autoEnqueueOne_ForceAllowFallback = false; }
                 }
             }
             catch { }
@@ -556,7 +556,7 @@ namespace ModularAudience.Forms
                                                 var dir = Path.GetDirectoryName(this._playlist.OriginalCurrentPath ?? string.Empty) ?? string.Empty;
                                                 var filePaths = Directory.Exists(dir)
                                                     ? Directory.GetFiles(dir).Where(p => !string.IsNullOrWhiteSpace(p) && AllowedImportExtensions.Contains(Path.GetExtension(p))).ToArray()
-                                                    : Array.Empty<string>();
+                                                    : [];
                                                 if (filePaths.Length > 0)
                                                 {
                                                     candidate = filePaths[new Random().Next(filePaths.Length)];

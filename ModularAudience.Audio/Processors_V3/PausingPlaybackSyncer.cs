@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ModularAudience.Audio;
 
 namespace ModularAudience.Audio.Processors_V3
 {
@@ -16,6 +17,9 @@ namespace ModularAudience.Audio.Processors_V3
         private readonly Dictionary<AudioObj, bool> initialPlayingState;
         private readonly Task loopTask;
 
+        // Expose completion task so callers can await the syncer's lifecycle
+        public Task Completion => this.loopTask;
+
         public PausingPlaybackSyncer(IEnumerable<AudioObj> tracks, CancellationToken cancellationToken, double frequency = 0.1, int grain = 10)
         {
             this.tracks = tracks?.ToList() ?? [];
@@ -25,6 +29,57 @@ namespace ModularAudience.Audio.Processors_V3
             this.initialPlayingState = this.tracks.ToDictionary(t => t, t => t?.PlayerPlaying == true);
 
             this.loopTask = Task.Run(this.SyncLoopAsync, cancellationToken);
+        }
+
+        public static async Task RunForAsync(IEnumerable<AudioObj> tracks, double? syncingDuration = null, double frequency = 0.1, int grain = 10)
+        {
+            if (tracks == null) return;
+
+            // Determine duration if not provided or invalid
+            double duration = syncingDuration.HasValue && syncingDuration.Value > 0 ? syncingDuration.Value : -1.0;
+            var bpms = tracks.Where(t => t != null && t.Bpm > 0).Select(t => (double)t.Bpm).ToList();
+            if (duration <= 0)
+            {
+                if (bpms.Count == 0)
+                {
+                    duration = 4.0; // default if no BPM info
+                }
+                else
+                {
+                    // median bpm
+                    bpms.Sort();
+                    double median = bpms[bpms.Count / 2];
+                    // choose 4 beats as reasonable sync window
+                    duration = Math.Max(0.5, 4.0 * (60.0 / median));
+                }
+            }
+
+            LogCollection.Log($"PausingPlaybackSyncer.RunForAsync: starting syncer for {tracks.Count()} tracks, duration={duration:F2}s, frequency={frequency:F3}, grain={grain}");
+
+            using var cts = new CancellationTokenSource();
+            var syncer = new PausingPlaybackSyncer(tracks, cts.Token, frequency, grain);
+            try
+            {
+                // wait for duration
+                await Task.Delay(TimeSpan.FromSeconds(duration)).ConfigureAwait(false);
+            }
+            catch (TaskCanceledException) { }
+            finally
+            {
+                try
+                {
+                    cts.Cancel();
+                }
+                catch { }
+            }
+
+            try
+            {
+                await syncer.Completion.ConfigureAwait(false);
+            }
+            catch { }
+
+            LogCollection.Log("PausingPlaybackSyncer.RunForAsync: syncer finished");
         }
 
         private async Task SyncLoopAsync()

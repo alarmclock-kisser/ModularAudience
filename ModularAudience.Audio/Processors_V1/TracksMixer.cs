@@ -105,7 +105,7 @@ namespace ModularAudience.Audio.Processors_V1
                         srcRate = targetSampleRate;
                     }
 
-                    float[] srcData = track.Data ?? Array.Empty<float>();
+                    float[] srcData = track.Data ?? [];
                     long srcFrames = srcData.Length / Math.Max(1, srcChannels);
 
                     var local = new float[totalSamples];

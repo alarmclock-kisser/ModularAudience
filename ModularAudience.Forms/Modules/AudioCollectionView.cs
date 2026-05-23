@@ -278,7 +278,7 @@ namespace ModularAudience.Forms
 
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
-                var items = e.Data.GetData(DataFormats.FileDrop) as string[] ?? Array.Empty<string>();
+                var items = e.Data.GetData(DataFormats.FileDrop) as string[] ?? [];
                 if (items.Any(p => !string.IsNullOrWhiteSpace(p) &&
                     (Directory.Exists(p) || WindowMain.AllowedImportExtensions.Contains(Path.GetExtension(p)))))
                 {
@@ -380,7 +380,7 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            List<AudioObj> dragged = new();
+            List<AudioObj> dragged = [];
             if (e.Data.GetDataPresent(typeof(AudioObj[])))
             {
                 if (e.Data.GetData(typeof(AudioObj[])) is AudioObj[] arr && arr.Length > 0)

@@ -60,7 +60,7 @@ namespace ModularAudience.Audio.Processors_V1
             int minDurMs = minDurationMs ?? 80;
             int minDurSamples = (int) Math.Ceiling(sampleRate * (minDurMs / 1000.0));
 
-            float[] data = audio.Data ?? Array.Empty<float>();
+            float[] data = audio.Data ?? [];
             int totalFrames = Math.Max(0, data.Length / channels);
             if (totalFrames <= 0)
             {
@@ -406,7 +406,7 @@ namespace ModularAudience.Audio.Processors_V1
         {
             if (env == null || env.Length == 0)
             {
-                return Array.Empty<float>();
+                return [];
             }
 
             int dsFactor = Math.Max(1, sampleRate / downsampleHz);
@@ -918,7 +918,7 @@ namespace ModularAudience.Audio.Processors_V1
         {
             if (audio == null || audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
             {
-                return Array.Empty<bool[]>().FirstOrDefault() ?? Array.Empty<bool>();
+                return Array.Empty<bool[]>().FirstOrDefault() ?? [];
             }
 
             return await Task.Run(() =>

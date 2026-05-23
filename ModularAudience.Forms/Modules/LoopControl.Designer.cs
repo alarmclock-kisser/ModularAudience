@@ -44,6 +44,8 @@
             this.button_playlistAllOn = new Button();
             this.button_playlistAllOff = new Button();
             this.checkedListBox_playlistTracks = new CheckedListBox();
+            this.comboBox_drops = new ComboBox();
+            this.label_info_manageDrops = new Label();
             this.contextMenuStrip_playlistItem.SuspendLayout();
             this.panel_buttons.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_multiplier).BeginInit();
@@ -201,11 +203,31 @@
             this.checkedListBox_playlistTracks.Size = new Size(464, 72);
             this.checkedListBox_playlistTracks.TabIndex = 12;
             // 
+            // comboBox_drops
+            // 
+            this.comboBox_drops.FormattingEnabled = true;
+            this.comboBox_drops.Location = new Point(166, 40);
+            this.comboBox_drops.Name = "comboBox_drops";
+            this.comboBox_drops.Size = new Size(167, 23);
+            this.comboBox_drops.TabIndex = 13;
+            this.comboBox_drops.SelectedIndexChanged += this.comboBox_drops_SelectedIndexChanged;
+            // 
+            // label_info_manageDrops
+            // 
+            this.label_info_manageDrops.AutoSize = true;
+            this.label_info_manageDrops.Location = new Point(73, 45);
+            this.label_info_manageDrops.Name = "label_info_manageDrops";
+            this.label_info_manageDrops.Size = new Size(87, 15);
+            this.label_info_manageDrops.TabIndex = 14;
+            this.label_info_manageDrops.Text = "Manage Drops:";
+            // 
             // LoopControl
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(484, 187);
+            this.Controls.Add(this.label_info_manageDrops);
+            this.Controls.Add(this.comboBox_drops);
             this.Controls.Add(this.button_playlistAllOff);
             this.Controls.Add(this.button_playlistAllOn);
             this.Controls.Add(this.checkedListBox_playlistTracks);
@@ -249,5 +271,7 @@
         private CheckedListBox checkedListBox_playlistTracks;
         private System.Windows.Forms.ContextMenuStrip contextMenuStrip_playlistItem;
         private System.Windows.Forms.ToolStripMenuItem toolStripMenuItem_removeFromEnsemble;
+        private ComboBox comboBox_drops;
+        private Label label_info_manageDrops;
     }
 }

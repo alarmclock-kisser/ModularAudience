@@ -207,7 +207,11 @@ namespace ModularAudience.Forms.Modules
         // Normalize a file path to a canonical key used for dictionaries/banlist.
         private static string NormalizePathForKey(string? path)
         {
-            if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return string.Empty;
+            }
+
             try
             {
                 string full = Path.GetFullPath(path).Trim();
@@ -227,8 +231,11 @@ namespace ModularAudience.Forms.Modules
         /// </summary>
         public void NotifyInsertedNext(string originalPath)
         {
-            LogPlayback($"NotifyInsertedNext(originalPath={originalPath}) called");
-            if (string.IsNullOrWhiteSpace(originalPath)) return;
+            this.LogPlayback($"NotifyInsertedNext(originalPath={originalPath}) called");
+            if (string.IsNullOrWhiteSpace(originalPath))
+            {
+                return;
+            }
 
             _ = Task.Run(async () =>
             {
@@ -372,7 +379,7 @@ namespace ModularAudience.Forms.Modules
         /// <summary>Pause current playback without advancing the queue.</summary>
         public void Pause()
         {
-            LogPlayback($"Pause() called: IsPlaying={this.IsPlaying} IsPaused={this.IsPaused} activePrepared={this._activePreparedTracks.Count}");
+            this.LogPlayback($"Pause() called: IsPlaying={this.IsPlaying} IsPaused={this.IsPaused} activePrepared={this._activePreparedTracks.Count}");
             List<AudioObj>? pauseTargets = null;
             lock (this._lock)
             {
@@ -434,7 +441,7 @@ namespace ModularAudience.Forms.Modules
         /// </summary>
         public bool RemoveActiveById(Guid audioId)
         {
-            LogPlayback($"RemoveActiveById({audioId}) called");
+            this.LogPlayback($"RemoveActiveById({audioId}) called");
             PreparedPlaylistTrack? prepared = null;
             AudioObj? primary = null;
             AudioObj? secondary = null;
@@ -522,7 +529,7 @@ namespace ModularAudience.Forms.Modules
         /// </summary>
         public void RewindOrPrevious()
         {
-            LogPlayback($"RewindOrPrevious() called: CurrentPath={this.CurrentPath} PreviousPath={this._previousPath}");
+            this.LogPlayback($"RewindOrPrevious() called: CurrentPath={this.CurrentPath} PreviousPath={this._previousPath}");
             lock (this._lock)
             {
                 if (this._reader != null && this._reader.CurrentTime.TotalSeconds > 1.0)
@@ -544,7 +551,7 @@ namespace ModularAudience.Forms.Modules
         /// <summary>Skip the current track and start the next one.</summary>
         public void Skip()
         {
-            LogPlayback($"Skip() called: CurrentPath={this.CurrentPath} IsPlaying={this.IsPlaying}");
+            this.LogPlayback($"Skip() called: CurrentPath={this.CurrentPath} IsPlaying={this.IsPlaying}");
             this._skipRequested = true;
             lock (this._lock) { this._waveOut?.Stop(); }
         }
@@ -565,7 +572,7 @@ namespace ModularAudience.Forms.Modules
         /// <summary>Stop playback, clear the queue, dispose all resources.</summary>
         public void Clear()
         {
-            LogPlayback($"Clear() called: FilePaths.Count={this.FilePaths?.Count ?? 0} IsPlaying={this.IsPlaying} IsPaused={this.IsPaused}");
+            this.LogPlayback($"Clear() called: FilePaths.Count={this.FilePaths?.Count ?? 0} IsPlaying={this.IsPlaying} IsPaused={this.IsPaused}");
             // Cancel the run-loop task first so IsPlaying cannot be set back to true after we clear
             this._cts?.Cancel();
             this._skipRequested = true;
@@ -590,7 +597,7 @@ namespace ModularAudience.Forms.Modules
 
         public void Dispose()
         {
-            LogPlayback($"Dispose() called: disposed={this._disposed}");
+            this.LogPlayback($"Dispose() called: disposed={this._disposed}");
             this._disposed = true;
             this.StopAndDisposeCurrent();
         }
@@ -601,13 +608,13 @@ namespace ModularAudience.Forms.Modules
 
         private async Task RunLoop(CancellationToken ct)
         {
-            LogPlayback($"RunLoop() called: cancellationRequested={ct.IsCancellationRequested}");
+            this.LogPlayback($"RunLoop() called: cancellationRequested={ct.IsCancellationRequested}");
             await this.RunCrossfadeLoop(ct).ConfigureAwait(false);
         }
 
         private async Task<bool> PlayTrackAsync(string path, CancellationToken ct)
         {
-            LogPlayback($"PlayTrackAsync(path={path}) called: exists={File.Exists(path ?? string.Empty)}");
+            this.LogPlayback($"PlayTrackAsync(path={path}) called: exists={File.Exists(path ?? string.Empty)}");
             AudioFileReader? reader = null;
             WaveOutEvent?    waveOut = null;
 
@@ -636,7 +643,7 @@ namespace ModularAudience.Forms.Modules
                 // Read BPM tag cheaply
                 this.CurrentBpm = ReadBpmTagLight(path ?? "");
 
-                LogPlayback($"PlayTrackAsync: started playback path={path} duration={reader.TotalTime} bpm={this.CurrentBpm}");
+                this.LogPlayback($"PlayTrackAsync: started playback path={path} duration={reader.TotalTime} bpm={this.CurrentBpm}");
 
                 TrackChanged?.Invoke();
 
@@ -744,7 +751,7 @@ namespace ModularAudience.Forms.Modules
 
         private void StopCurrentAndInsert(string pathToInsert)
         {
-            LogPlayback($"StopCurrentAndInsert(pathToInsert={pathToInsert}) called");
+            this.LogPlayback($"StopCurrentAndInsert(pathToInsert={pathToInsert}) called");
             this._skipRequested = true;
             WaveOutEvent? wo;
             AudioObj? primary;
@@ -834,7 +841,7 @@ namespace ModularAudience.Forms.Modules
 
         private async Task RunCrossfadeLoop(CancellationToken ct)
         {
-            LogPlayback($"RunCrossfadeLoop() called: cancellationRequested={ct.IsCancellationRequested}");
+            this.LogPlayback($"RunCrossfadeLoop() called: cancellationRequested={ct.IsCancellationRequested}");
             var fadeOutTasks = new List<Task>();
             Task<PreparedPlaylistTrack?>? nextPrepareTask = null;
             string? nextPrepareTaskPath = null;
@@ -1411,7 +1418,7 @@ namespace ModularAudience.Forms.Modules
         }
         private async Task<PreparedPlaylistTrack?> PrepareTrackAsync(string originalPath, CancellationToken ct)
         {
-            LogPlayback($"PrepareTrackAsync(originalPath={originalPath}) called: exists={File.Exists(originalPath ?? string.Empty)}");
+            this.LogPlayback($"PrepareTrackAsync(originalPath={originalPath}) called: exists={File.Exists(originalPath ?? string.Empty)}");
             if (string.IsNullOrWhiteSpace(originalPath) || !File.Exists(originalPath))
             {
                 return null;
@@ -1448,7 +1455,7 @@ namespace ModularAudience.Forms.Modules
                 }
                 else
                 {
-                    task = PrepareTrackCoreAsync(originalPath, ct);
+                    task = this.PrepareTrackCoreAsync(originalPath, ct);
                     this._preparingTasks[key] = task;
                 }
             }
@@ -1463,7 +1470,7 @@ namespace ModularAudience.Forms.Modules
 
             try
             {
-                LogPlayback($"PrepareTrackCoreAsync: original={originalPath}");
+                this.LogPlayback($"PrepareTrackCoreAsync: original={originalPath}");
                 if (this.BeforeTrackPlay != null)
                 {
                     try
@@ -1531,7 +1538,7 @@ namespace ModularAudience.Forms.Modules
 
                 // Make preprepared tracks visible immediately so UI fallback can pick them
                 // (avoids race where Prepare completed but TrackPreparedAsActive wasn't yet called).
-                try { LogPlayback($"PrepareTrackCoreAsync: prepared ready original={originalPath} playPath={playPath} temp={tempPath}"); this.TrackPreparedAsActive(prepared, "preprepared"); } catch (Exception ex) { LogPlayback($"PrepareTrackCoreAsync: TrackPreparedAsActive failed: {ex.Message}"); }
+                try { this.LogPlayback($"PrepareTrackCoreAsync: prepared ready original={originalPath} playPath={playPath} temp={tempPath}"); this.TrackPreparedAsActive(prepared, "preprepared"); } catch (Exception ex) { this.LogPlayback($"PrepareTrackCoreAsync: TrackPreparedAsActive failed: {ex.Message}"); }
 
                 return prepared;
             }
@@ -1609,7 +1616,7 @@ namespace ModularAudience.Forms.Modules
 
         private void TrackPreparedAsActive(PreparedPlaylistTrack prepared, string reason)
         {
-            LogPlayback($"TrackPreparedAsActive called: original={prepared.OriginalPath} reason={reason}");
+            this.LogPlayback($"TrackPreparedAsActive called: original={prepared.OriginalPath} reason={reason}");
             bool disposePrepared = false;
             lock (this._lock)
             {
@@ -1736,14 +1743,22 @@ namespace ModularAudience.Forms.Modules
 
         private static float ReadBpmTagLight(string path)
         {
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return 0f;
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                return 0f;
+            }
+
             try
             {
                 using var file = TagLib.File.Create(path);
-                if (file == null) return 0f;
+                if (file == null)
+                {
+                    return 0f;
+                }
+
                 float bpm = 0f;
 
-                try { if (file.Tag != null && file.Tag.BeatsPerMinute > 0) bpm = (float)file.Tag.BeatsPerMinute; } catch { }
+                try { if (file.Tag != null && file.Tag.BeatsPerMinute > 0) { bpm = (float)file.Tag.BeatsPerMinute; } } catch { }
 
                 if (bpm <= 0)
                 {

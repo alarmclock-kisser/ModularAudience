@@ -181,7 +181,7 @@ namespace ModularAudience.Forms
             {
                 if (e.Button == MouseButtons.Left)
                 {
-                    _isMouseDownForPosition = true;
+                    this._isMouseDownForPosition = true;
                 }
             }
             catch { }
@@ -193,7 +193,7 @@ namespace ModularAudience.Forms
             {
                 if (e.Button == MouseButtons.Left)
                 {
-                    _isMouseDownForPosition = false;
+                    this._isMouseDownForPosition = false;
                     WindowsScreenHelper.SaveFormPosition(this);
                 }
             }
@@ -555,6 +555,11 @@ namespace ModularAudience.Forms
                 // Fallback: show at cursor position
                 try { contextMenu.Show(Cursor.Position); } catch { }
             }
+        }
+
+        private void button_dropManager_Click(object sender, EventArgs e)
+        {
+            
         }
 
         // button_playlist_Click is implemented in WindowMain.Playlist.partial.cs

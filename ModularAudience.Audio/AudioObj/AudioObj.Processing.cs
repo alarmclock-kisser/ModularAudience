@@ -109,7 +109,7 @@ namespace ModularAudience.Audio
                 // Validierung
                 if (this.Data == null || this.Data.Length == 0 || this.Channels <= 0)
                 {
-                    return Array.Empty<float>();
+                    return [];
                 }
 
                 // Wenn bereits Mono, einfach zurückgeben

@@ -140,7 +140,11 @@ namespace ModularAudience.Audio
             List<(DateTime ts, string full)> items;
             lock (_pendingLock)
             {
-                if (_pendingPosts.Count == 0) return;
+                if (_pendingPosts.Count == 0)
+                {
+                    return;
+                }
+
                 items = new List<(DateTime ts, string full)>(_pendingPosts);
                 _pendingPosts.Clear();
             }
@@ -162,11 +166,17 @@ namespace ModularAudience.Audio
                         bool shouldPost = true;
                         try
                         {
-                            if (Logs.Contains(it.full)) shouldPost = false;
+                            if (Logs.Contains(it.full))
+                            {
+                                shouldPost = false;
+                            }
                         }
                         catch { }
 
-                        if (!shouldPost) continue;
+                        if (!shouldPost)
+                        {
+                            continue;
+                        }
 
                         if (NewLogPostedWithTimestamp != null)
                         {

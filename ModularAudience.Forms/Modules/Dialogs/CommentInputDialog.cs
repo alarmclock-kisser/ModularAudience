@@ -16,7 +16,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private string _draft = string.Empty;
         private int _cursor = -1; // -1 = draft, 0 = newest history entry
 
-        public string ResultText => _textBox.Text;
+        public string ResultText => this._textBox.Text;
 
         public CommentInputDialog(IEnumerable<string> history, string prompt, string initial = "")
         {
@@ -28,37 +28,37 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.ShowInTaskbar = false;
             this.Text = "Add Log Comment";
 
-            _promptLabel = new Label() { AutoSize = false, Text = prompt, Location = new Point(10, 8), Size = new Size(500, 30) };
-            this.Controls.Add(_promptLabel);
+            this._promptLabel = new Label() { AutoSize = false, Text = prompt, Location = new Point(10, 8), Size = new Size(500, 30) };
+            this.Controls.Add(this._promptLabel);
 
-            _textBox = new TextBox() { Location = new Point(10, 40), Size = new Size(500, 80), Multiline = true, ScrollBars = ScrollBars.None, AcceptsReturn = true }; 
-            _textBox.KeyDown += TextBox_KeyDown;
-            this.Controls.Add(_textBox);
+            this._textBox = new TextBox() { Location = new Point(10, 40), Size = new Size(500, 80), Multiline = true, ScrollBars = ScrollBars.None, AcceptsReturn = true };
+            this._textBox.KeyDown += this.TextBox_KeyDown;
+            this.Controls.Add(this._textBox);
 
-            _okButton = new Button() { Text = "OK", DialogResult = DialogResult.OK, Location = new Point(350, 130), Size = new Size(75, 25) };
-            _cancelButton = new Button() { Text = "Cancel", DialogResult = DialogResult.Cancel, Location = new Point(435, 130), Size = new Size(75, 25) };
-            this.Controls.Add(_okButton);
-            this.Controls.Add(_cancelButton);
+            this._okButton = new Button() { Text = "OK", DialogResult = DialogResult.OK, Location = new Point(350, 130), Size = new Size(75, 25) };
+            this._cancelButton = new Button() { Text = "Cancel", DialogResult = DialogResult.Cancel, Location = new Point(435, 130), Size = new Size(75, 25) };
+            this.Controls.Add(this._okButton);
+            this.Controls.Add(this._cancelButton);
 
-            _historyNewestFirst = history?.ToList() ?? [];
-            _draft = initial ?? string.Empty;
-            _textBox.Text = _draft;
-            _textBox.SelectionStart = _textBox.Text.Length;
-            AdjustHeight();
+            this._historyNewestFirst = history?.ToList() ?? [];
+            this._draft = initial ?? string.Empty;
+            this._textBox.Text = this._draft;
+            this._textBox.SelectionStart = this._textBox.Text.Length;
+            this.AdjustHeight();
         }
 
         private void AdjustHeight()
         {
             // Limit to 4 lines visible height
-            var lines = Math.Max(1, _textBox.Lines.Length);
+            var lines = Math.Max(1, this._textBox.Lines.Length);
             int visibleLines = Math.Min(Math.Max(1, lines), 4);
-            using (Graphics g = _textBox.CreateGraphics())
+            using (Graphics g = this._textBox.CreateGraphics())
             {
-                var fontHeight = TextRenderer.MeasureText("A", _textBox.Font).Height;
+                var fontHeight = TextRenderer.MeasureText("A", this._textBox.Font).Height;
                 int newHeight = fontHeight * visibleLines + 8; // padding
-                _textBox.Height = newHeight;
+                this._textBox.Height = newHeight;
                 // Only show vertical scrollbar when more than 4 lines
-                _textBox.ScrollBars = (lines >= 4) ? ScrollBars.Vertical : ScrollBars.None;
+                this._textBox.ScrollBars = (lines >= 4) ? ScrollBars.Vertical : ScrollBars.None;
             }
         }
 
@@ -74,44 +74,44 @@ namespace ModularAudience.Forms.Modules.Dialogs
             else if (e.KeyCode == Keys.Enter && e.Shift)
             {
                 // Insert newline
-                int sel = _textBox.SelectionStart;
-                _textBox.Text = _textBox.Text.Insert(sel, Environment.NewLine);
-                _textBox.SelectionStart = sel + Environment.NewLine.Length;
+                int sel = this._textBox.SelectionStart;
+                this._textBox.Text = this._textBox.Text.Insert(sel, Environment.NewLine);
+                this._textBox.SelectionStart = sel + Environment.NewLine.Length;
                 e.Handled = true;
-                AdjustHeight();
+                this.AdjustHeight();
             }
             else if (e.KeyCode == Keys.Up)
             {
                 e.Handled = true;
                 // Navigate history (only user comments)
-                if (_cursor < _historyNewestFirst.Count - 1)
+                if (this._cursor < this._historyNewestFirst.Count - 1)
                 {
-                    if (_cursor == -1)
+                    if (this._cursor == -1)
                     {
-                        _draft = _textBox.Text;
+                        this._draft = this._textBox.Text;
                     }
-                    _cursor++;
-                    _textBox.Text = _historyNewestFirst[_cursor];
-                    _textBox.SelectionStart = _textBox.Text.Length;
-                    AdjustHeight();
+                    this._cursor++;
+                    this._textBox.Text = this._historyNewestFirst[this._cursor];
+                    this._textBox.SelectionStart = this._textBox.Text.Length;
+                    this.AdjustHeight();
                 }
             }
             else if (e.KeyCode == Keys.Down)
             {
                 e.Handled = true;
-                if (_cursor > -1)
+                if (this._cursor > -1)
                 {
-                    _cursor--;
-                    if (_cursor == -1)
+                    this._cursor--;
+                    if (this._cursor == -1)
                     {
-                        _textBox.Text = _draft;
+                        this._textBox.Text = this._draft;
                     }
                     else
                     {
-                        _textBox.Text = _historyNewestFirst[_cursor];
+                        this._textBox.Text = this._historyNewestFirst[this._cursor];
                     }
-                    _textBox.SelectionStart = _textBox.Text.Length;
-                    AdjustHeight();
+                    this._textBox.SelectionStart = this._textBox.Text.Length;
+                    this.AdjustHeight();
                 }
             }
         }

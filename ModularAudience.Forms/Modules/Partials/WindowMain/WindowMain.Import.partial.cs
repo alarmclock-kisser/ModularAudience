@@ -67,8 +67,15 @@ namespace ModularAudience.Forms
                         bool duplicate = false;
                         try
                         {
-                            if (insertAt < LogCollection.Logs.Count && LogCollection.Logs[insertAt] == full) duplicate = true;
-                            if (insertAt - 1 >= 0 && LogCollection.Logs[insertAt - 1] == full) duplicate = true;
+                            if (insertAt < LogCollection.Logs.Count && LogCollection.Logs[insertAt] == full)
+                            {
+                                duplicate = true;
+                            }
+
+                            if (insertAt - 1 >= 0 && LogCollection.Logs[insertAt - 1] == full)
+                            {
+                                duplicate = true;
+                            }
                         }
                         catch { }
 
@@ -189,7 +196,7 @@ namespace ModularAudience.Forms
             {
                 if (e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop))
                 {
-                    var items = e.Data.GetData(DataFormats.FileDrop) as string[] ?? Array.Empty<string>();
+                    var items = e.Data.GetData(DataFormats.FileDrop) as string[] ?? [];
                     if (items.Any(p => !string.IsNullOrWhiteSpace(p) &&
                         (Directory.Exists(p) || AllowedImportExtensions.Contains(Path.GetExtension(p)))))
                     {
@@ -214,7 +221,7 @@ namespace ModularAudience.Forms
             string[] dropped;
             try
             {
-                dropped = e.Data.GetData(DataFormats.FileDrop) as string[] ?? Array.Empty<string>();
+                dropped = e.Data.GetData(DataFormats.FileDrop) as string[] ?? [];
             }
             catch (Exception ex)
             {
