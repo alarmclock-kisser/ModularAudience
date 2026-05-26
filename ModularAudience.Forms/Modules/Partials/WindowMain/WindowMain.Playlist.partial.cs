@@ -309,7 +309,6 @@ namespace ModularAudience.Forms
 
                 LogCollection.Log($"Playlist: {ofd.FileNames.Length} file(s) enqueued " +
                                   $"({this._playlist.FilePaths.Count} total).");
-                this._playlist.NotifyQueueChanged("import enqueue");
                 this.UpdatePlaylistUI();
             }
         }
@@ -460,6 +459,13 @@ namespace ModularAudience.Forms
                 }
                 catch { selectedPath = null; }
 
+                PlaylistEngine? playlist = this._playlist;
+
+                if (playlist == null)
+                {
+                    return;
+                }
+
                 // If Ctrl is held, allow fallback to collection selection or file dialog
                 bool ctrl = (ModifierKeys & Keys.Control) == Keys.Control;
                 if (string.IsNullOrWhiteSpace(selectedPath) && ctrl)
@@ -492,8 +498,8 @@ namespace ModularAudience.Forms
                     try
                     {
                         // Prefer an already pre-prepared track that is NOT the currently playing track.
-                        var preparedPathsAll = this._playlist?.ActiveOriginalPaths ?? Array.Empty<string>();
-                        var preparedNonPlaying = this._playlist?.PreparedNonPlayingOriginalPaths ?? Array.Empty<string>();
+                        var preparedPathsAll = playlist.ActiveOriginalPaths;
+                        var preparedNonPlaying = playlist.PreparedNonPlayingOriginalPaths;
 
                         // If the playlist has no next item (count <= 1), prefer any prepared track
                         // (excluding the playing original if possible). This ensures Auto enqueue one
@@ -574,7 +580,7 @@ namespace ModularAudience.Forms
                         if (!string.IsNullOrWhiteSpace(candidate))
                         {
                             selectedPath = candidate;
-                            LogCollection.Log($"Auto enqueue one: using already pre-prepared track -> {Path.GetFileNameWithoutExtension(selectedPath)}");
+                            LogCollection.Log($"Auto enqueue one: using pre-prepared track -> {Path.GetFileNameWithoutExtension(selectedPath)}");
                         }
                     }
                     catch { }
@@ -586,10 +592,9 @@ namespace ModularAudience.Forms
                     return;
                 }
                 string selectedPathValue = selectedPath!;
-                PlaylistEngine? playlist = this._playlist;
-
-                if (playlist == null)
+                if (!playlist.HasPreparedOriginalPath(selectedPathValue))
                 {
+                    LogCollection.Log($"Auto enqueue one: '{Path.GetFileNameWithoutExtension(selectedPathValue)}' is not pre-prepared yet; skipped timing-critical handoff.");
                     return;
                 }
 

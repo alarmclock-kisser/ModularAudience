@@ -82,6 +82,22 @@ namespace ModularAudience.Forms.Modules
             catch { }
         }
 
+        public bool HasPreparedOriginalPath(string originalPath)
+        {
+            string key = NormalizePathForKey(originalPath);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return false;
+            }
+
+            lock (this._lock)
+            {
+                return this._preparedByPath.ContainsKey(key)
+                    || this._activePreparedTracks.Values.Any(p =>
+                        string.Equals(NormalizePathForKey(p.OriginalPath), key, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
         private static readonly Random Rng = new();
 
         // â”€â”€ Events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -215,7 +231,7 @@ namespace ModularAudience.Forms.Modules
             public required string OriginalPath { get; init; }
             public required DateTime RequestedUtc { get; init; }
             public required double MaxDelaySeconds { get; init; }
-            public bool CountdownLogged { get; set; }
+            public int LastCountdownSecond { get; set; } = -1;
         }
 
         // Normalize a file path to a canonical key used for dictionaries/banlist.
@@ -1544,10 +1560,11 @@ namespace ModularAudience.Forms.Modules
             double waitSeconds = ComputeNextBeatWaitSeconds(currentPrepared.Audio, request.MaxDelaySeconds - elapsedSeconds);
             if (waitSeconds > 0.025 && elapsedSeconds + waitSeconds <= request.MaxDelaySeconds)
             {
-                if (!request.CountdownLogged)
+                int countdownSecond = Math.Max(1, (int)Math.Ceiling(waitSeconds));
+                if (request.LastCountdownSecond != countdownSecond)
                 {
-                    request.CountdownLogged = true;
-                    ModularAudience.Audio.LogCollection.Log($"Auto enqueue one: on-beat handoff in {waitSeconds:F1}s -> {Path.GetFileNameWithoutExtension(request.OriginalPath)}");
+                    request.LastCountdownSecond = countdownSecond;
+                    ModularAudience.Audio.LogCollection.Log($"Auto enqueue one: on-beat handoff in {countdownSecond}s -> {Path.GetFileNameWithoutExtension(request.OriginalPath)}");
                 }
 
                 await Task.Delay(TimeSpan.FromSeconds(Math.Min(waitSeconds, 0.25)), ct).ConfigureAwait(false);
