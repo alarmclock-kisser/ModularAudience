@@ -64,6 +64,7 @@ namespace ModularAudience.Forms.Modules
         // In-flight prepare tasks keyed by original path to avoid duplicate prepares
         private readonly Dictionary<string, Task<PreparedPlaylistTrack?>> _preparingTasks = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, PreparedPlaylistTrack> _preparedByPath = new(StringComparer.OrdinalIgnoreCase);
+        private QueuedPreparedStart? _queuedPreparedStart;
         private CancellationTokenSource? _cts;
         private string? _previousPath;          // 1-track back-history
         private readonly object _lock = new();
@@ -209,6 +210,14 @@ namespace ModularAudience.Forms.Modules
             public string? TempPath { get; init; }
         }
 
+        private sealed class QueuedPreparedStart
+        {
+            public required string OriginalPath { get; init; }
+            public required DateTime RequestedUtc { get; init; }
+            public required double MaxDelaySeconds { get; init; }
+            public bool CountdownLogged { get; set; }
+        }
+
         // Normalize a file path to a canonical key used for dictionaries/banlist.
         private static string NormalizePathForKey(string? path)
         {
@@ -229,10 +238,9 @@ namespace ModularAudience.Forms.Modules
         }
 
         /// <summary>
-        /// Notification from UI that a path was just inserted as the next track.
-        /// The engine will attempt to pre-prepare it (or reuse an in-flight prepare)
-        /// and, if the timing/window is appropriate (within 8s or crossfade active),
-        /// start the prepared audio so it does not remain in a stopped state.
+        /// Notification from UI that a prepared path was just inserted as the next track.
+        /// The engine schedules a short beat-aligned handoff and intentionally avoids
+        /// starting heavy time-stretch work on this critical timing path.
         /// </summary>
         public void NotifyInsertedNext(string originalPath)
         {
@@ -242,77 +250,29 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            _ = Task.Run(async () =>
+            string key = NormalizePathForKey(originalPath);
+            lock (this._lock)
             {
-                PreparedPlaylistTrack? prepared = null;
-                try
+                bool hasPrepared = this._preparedByPath.ContainsKey(key)
+                    || this._activePreparedTracks.Values.Any(p =>
+                        string.Equals(NormalizePathForKey(p.OriginalPath), key, StringComparison.OrdinalIgnoreCase));
+                if (hasPrepared)
                 {
-                    // Reuse existing prepare path where possible.
-                    Task<PreparedPlaylistTrack?> prepTask;
-                    string key = NormalizePathForKey(originalPath);
-                    lock (this._lock)
+                    this._queuedPreparedStart = new QueuedPreparedStart
                     {
-                        if (this._preparingTasks.TryGetValue(key, out var existing))
-                        {
-                            prepTask = existing;
-                        }
-                        else
-                        {
-                            prepTask = this.PrepareTrackAsync(originalPath, CancellationToken.None);
-                        }
-                    }
-
-                    try
-                    {
-                        prepared = await prepTask.WaitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
-                    }
-                    catch { /* timeout or error: we'll bail silently */ }
+                        OriginalPath = originalPath,
+                        RequestedUtc = DateTime.UtcNow,
+                        MaxDelaySeconds = 10.0
+                    };
+                    LogDebug($"[PlaylistEngine] auto-enqueue scheduled prepared on-beat start within 10s: {Path.GetFileNameWithoutExtension(originalPath)}");
                 }
-                catch { }
-
-                if (prepared == null)
+                else
                 {
-                    return;
+                    LogDebug($"[PlaylistEngine] auto-enqueue inserted non-prepared track; run-loop will prepare outside timing path: {Path.GetFileNameWithoutExtension(originalPath)}");
                 }
+            }
 
-                try
-                {
-                    bool stillNext = false;
-                    double remainingSeconds = double.MaxValue;
-                    double crossfade = this.GetCrossfadeDuration();
-
-                    lock (this._lock)
-                    {
-                        string? candidate = this.FilePaths.Count > 1 ? this.FilePaths[1] : null;
-                        stillNext = !string.IsNullOrWhiteSpace(candidate) && string.Equals(candidate, originalPath, StringComparison.OrdinalIgnoreCase);
-                        if (this._primaryAudioObj != null)
-                        {
-                            try { remainingSeconds = this._primaryAudioObj.Duration.TotalSeconds - this._primaryAudioObj.CurrentTime.TotalSeconds; } catch { }
-                        }
-                    }
-
-                    if (!stillNext)
-                    {
-                        // Nothing to do — the insertion is no longer the next item.
-                        return;
-                    }
-
-                    // Auto-enqueue must never start a second primary just because crossfade is enabled.
-                    // It should only warm up the next track; the main run-loop owns all starts/fades.
-                    // Only recover by starting the loop if nothing is currently playing.
-                    bool primaryPlaying = false;
-                    lock (this._lock)
-                    {
-                        try { primaryPlaying = this._primaryAudioObj != null && this._primaryAudioObj.Playing; } catch { primaryPlaying = false; }
-                    }
-
-                    if (!primaryPlaying)
-                    {
-                        this.EnsureRunLoopIfQueueHasWork("inserted-next no primary");
-                    }
-                }
-                catch { }
-            });
+            this.EnsureRunLoopIfQueueHasWork("inserted-next");
         }
 
         public void NotifyQueueChanged(string reason)
@@ -1141,6 +1101,18 @@ namespace ModularAudience.Forms.Modules
                             nextOriginalPath = string.Equals(candidate, currentOriginalPath, StringComparison.OrdinalIgnoreCase) ? null : candidate;
                         }
 
+                        PreparedPlaylistTrack? autoStarted = await this.TryStartQueuedPreparedTrackAsync(currentPrepared, currentOriginalPath, nextOriginalPath, ct).ConfigureAwait(false);
+                        if (autoStarted != null && !string.IsNullOrWhiteSpace(nextOriginalPath))
+                        {
+                            currentPrepared = autoStarted;
+                            currentOriginalPath = nextOriginalPath;
+                            crossfadeTriggered = false;
+                            notPlayingStrikes = 0;
+                            silentStallSinceUtc = null;
+                            TrackChanged?.Invoke();
+                            continue;
+                        }
+
                         // ── Pre-prepare next track as early as possible ──────────────────────
                         // Start as soon as the next path is known – regardless of time window –
                         // so that slow time-stretching operations are hidden behind playback.
@@ -1501,7 +1473,15 @@ namespace ModularAudience.Forms.Modules
                 bool currentActuallyPlaying = this._primaryAudioObj?.Playing == true;
                 if (isCurrentPath && currentActuallyPlaying)
                 {
-                    try { LogDebug($"PrepareTrackAsync: skipping currently playing path: {originalPath}"); } catch { }
+                    PreparedPlaylistTrack? currentPrepared = this._activePreparedTracks.Values.FirstOrDefault(p =>
+                        string.Equals(NormalizePathForKey(p.OriginalPath), key, StringComparison.OrdinalIgnoreCase));
+                    if (currentPrepared != null)
+                    {
+                        try { LogDebug($"PrepareTrackAsync: reusing currently playing path: {originalPath}"); } catch { }
+                        return currentPrepared;
+                    }
+
+                    try { LogDebug($"PrepareTrackAsync: skipping currently playing path without prepared entry: {originalPath}"); } catch { }
                     return null;
                 }
 
@@ -1531,6 +1511,137 @@ namespace ModularAudience.Forms.Modules
             }
 
             return await task.ConfigureAwait(false);
+        }
+
+        private async Task<PreparedPlaylistTrack?> TryStartQueuedPreparedTrackAsync(
+            PreparedPlaylistTrack currentPrepared,
+            string currentOriginalPath,
+            string? nextOriginalPath,
+            CancellationToken ct)
+        {
+            QueuedPreparedStart? request;
+            PreparedPlaylistTrack? nextTrack = null;
+            lock (this._lock)
+            {
+                request = this._queuedPreparedStart;
+                if (request == null || string.IsNullOrWhiteSpace(nextOriginalPath) ||
+                    !string.Equals(request.OriginalPath, nextOriginalPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return null;
+                }
+
+                string key = NormalizePathForKey(request.OriginalPath);
+                this._preparedByPath.TryGetValue(key, out nextTrack);
+                nextTrack ??= this._activePreparedTracks.Values.FirstOrDefault(p =>
+                    string.Equals(NormalizePathForKey(p.OriginalPath), key, StringComparison.OrdinalIgnoreCase));
+                if (nextTrack == null)
+                {
+                    return null;
+                }
+            }
+
+            double elapsedSeconds = Math.Max(0.0, (DateTime.UtcNow - request.RequestedUtc).TotalSeconds);
+            double waitSeconds = ComputeNextBeatWaitSeconds(currentPrepared.Audio, request.MaxDelaySeconds - elapsedSeconds);
+            if (waitSeconds > 0.025 && elapsedSeconds + waitSeconds <= request.MaxDelaySeconds)
+            {
+                if (!request.CountdownLogged)
+                {
+                    request.CountdownLogged = true;
+                    ModularAudience.Audio.LogCollection.Log($"Auto enqueue one: on-beat handoff in {waitSeconds:F1}s -> {Path.GetFileNameWithoutExtension(request.OriginalPath)}");
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(Math.Min(waitSeconds, 0.25)), ct).ConfigureAwait(false);
+                return null;
+            }
+
+            if (elapsedSeconds > request.MaxDelaySeconds + 0.5)
+            {
+                lock (this._lock)
+                {
+                    if (ReferenceEquals(this._queuedPreparedStart, request))
+                    {
+                        this._queuedPreparedStart = null;
+                    }
+                }
+                return null;
+            }
+
+            const double handoffFadeSeconds = 1.5;
+            nextTrack.Audio.SetPlaybackVolume(0.0f);
+            await nextTrack.Audio.PlayAsync(CancellationToken.None, initialVolume: 0.0f).ConfigureAwait(false);
+            nextTrack.Audio.Volume = 100f;
+            this.TrackPreparedAsActive(nextTrack, "auto-enqueue on-beat start");
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var started = DateTime.UtcNow;
+                    while (!this._disposed)
+                    {
+                        double t = Math.Clamp((DateTime.UtcNow - started).TotalSeconds / handoffFadeSeconds, 0.0, 1.0);
+                        try { currentPrepared.Audio.SetPlaybackVolume((float)Math.Cos(t * Math.PI * 0.5)); } catch { }
+                        try { nextTrack.Audio.SetPlaybackVolume((float)Math.Sin(t * Math.PI * 0.5)); } catch { }
+                        if (t >= 1.0)
+                        {
+                            break;
+                        }
+
+                        await Task.Delay(25).ConfigureAwait(false);
+                    }
+                }
+                catch { }
+                finally
+                {
+                    try { nextTrack.Audio.SetPlaybackVolume(1.0f); } catch { }
+                    try { await currentPrepared.Audio.StopAsync().ConfigureAwait(false); } catch { }
+                    this.UntrackPrepared(currentPrepared, "auto-enqueue hand-off");
+                    try { currentPrepared.Audio.Dispose(); } catch { }
+                    this.DeleteTempFile(currentPrepared.TempPath);
+                }
+            });
+
+            lock (this._lock)
+            {
+                if (this.FilePaths.Count > 0 && string.Equals(this.FilePaths[0], currentOriginalPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    this.FilePaths.RemoveAt(0);
+                }
+
+                this._previousPath = currentOriginalPath;
+                if (ReferenceEquals(this._queuedPreparedStart, request))
+                {
+                    this._queuedPreparedStart = null;
+                }
+            }
+
+            this.ApplyCurrentTrackState(nextTrack);
+            ModularAudience.Audio.LogCollection.Log($"Auto enqueue one: started on-beat -> {Path.GetFileNameWithoutExtension(nextTrack.OriginalPath)}");
+            return nextTrack;
+        }
+
+        private static double ComputeNextBeatWaitSeconds(AudioObj audio, double maxRemainingSeconds)
+        {
+            if (maxRemainingSeconds <= 0.0)
+            {
+                return 0.0;
+            }
+
+            float bpm = audio.Bpm > 0 ? audio.Bpm : audio.ScannedBpm;
+            if (bpm <= 0f)
+            {
+                return Math.Min(0.25, maxRemainingSeconds);
+            }
+
+            double beatSeconds = 60.0 / bpm;
+            if (beatSeconds <= 0.0)
+            {
+                return 0.0;
+            }
+
+            double phase = audio.CurrentTime.TotalSeconds % beatSeconds;
+            double wait = phase <= 0.02 ? 0.0 : beatSeconds - phase;
+            return wait <= maxRemainingSeconds ? wait : 0.0;
         }
 
         private async Task<PreparedPlaylistTrack?> PrepareTrackCoreAsync(string originalPath, CancellationToken ct)

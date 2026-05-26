@@ -623,58 +623,9 @@ namespace ModularAudience.Forms
                 // Notify engine that we inserted a next track so it can start it promptly if timing permits.
                 try { playlist.NotifyInsertedNext(selectedPathValue); } catch { }
 
-                // Kick off pre-prepare for the newly enqueued track
-                try
-                {
-                    string? pathToPrepare = null;
-                    lock (playlist)
-                    {
-                        pathToPrepare = playlist.FilePaths.Count > insertIndex ? playlist.FilePaths[insertIndex] : null;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(pathToPrepare) && playlist.BeforeTrackPlay != null)
-                    {
-                        Func<string, CancellationToken, Task<string?>> beforeTrackPlay = playlist.BeforeTrackPlay;
-                        _ = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                string? preprocessed = null;
-                                try { preprocessed = await beforeTrackPlay(pathToPrepare, CancellationToken.None).ConfigureAwait(false); } catch { }
-                                if (!string.IsNullOrWhiteSpace(preprocessed) && File.Exists(preprocessed))
-                                {
-                                    LogCollection.Log($"Playlist: pre-prepared {Path.GetFileNameWithoutExtension(pathToPrepare)} (temp)");
-                                }
-                                else
-                                {
-                                    LogCollection.Log($"Playlist: pre-prepare requested but no preprocessed file produced for {Path.GetFileNameWithoutExtension(pathToPrepare)}");
-                                }
-
-                                // Also attempt to pre-prepare the following track in queue to keep pipeline filled
-                                string? nextToPrepare = null;
-                                lock (playlist)
-                                {
-                                    nextToPrepare = playlist.FilePaths.Count > insertIndex + 1 ? playlist.FilePaths[insertIndex + 1] : null;
-                                }
-                                if (!string.IsNullOrWhiteSpace(nextToPrepare))
-                                {
-                                    try
-                                    {
-                                        string? pre2 = null;
-                                        try { pre2 = await beforeTrackPlay(nextToPrepare, CancellationToken.None).ConfigureAwait(false); } catch { }
-                                        if (!string.IsNullOrWhiteSpace(pre2) && File.Exists(pre2))
-                                        {
-                                            LogCollection.Log($"Playlist: additionally pre-prepared {Path.GetFileNameWithoutExtension(nextToPrepare)} (temp)");
-                                        }
-                                    }
-                                    catch { }
-                                }
-                            }
-                            catch (Exception ex) { LogCollection.Log($"Auto-enqueue preprepare failed: {ex.Message}"); }
-                        });
-                    }
-                }
-                catch { }
+                // Do not start stretching/preparing here: this UI path is timing-critical.
+                // The playback engine owns warm-up work after the handoff so Auto enqueue one
+                // can release an already-prepared track quickly and rhythmically.
             }
             catch (Exception ex)
             {
