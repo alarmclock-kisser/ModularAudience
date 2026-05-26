@@ -57,6 +57,7 @@
             this.contextMenuStrip_playlistItem.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_removeFromEnsemble });
             this.contextMenuStrip_playlistItem.Name = "contextMenuStrip_playlistItem";
             this.contextMenuStrip_playlistItem.Size = new Size(201, 26);
+            this.contextMenuStrip_playlistItem.Opening += this.contextMenuStrip_playlistItem_Opening;
             // 
             // toolStripMenuItem_removeFromEnsemble
             // 
@@ -202,6 +203,7 @@
             this.checkedListBox_playlistTracks.Name = "checkedListBox_playlistTracks";
             this.checkedListBox_playlistTracks.Size = new Size(464, 72);
             this.checkedListBox_playlistTracks.TabIndex = 12;
+            this.checkedListBox_playlistTracks.MouseUp += this.checkedListBox_playlistTracks_MouseUp;
             // 
             // comboBox_drops
             // 

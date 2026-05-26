@@ -12,6 +12,9 @@ namespace ModularAudience.Audio.Processing
 {
     public static class DropManager
     {
+        private const double InterleaveSpacingSeconds = 0.25;
+        private const double AnnounceAdvanceSeconds = 0.125;
+
         public enum DropType
         {
             // AlignedAll: All drops are aligned to the same point in time across all audio tracks.
@@ -27,23 +30,51 @@ namespace ModularAudience.Audio.Processing
 
         // Peak detection mode handled via bool parameter in GetDropOffsetAsync: peakLocalMax (true=local maxima, false=strongest)
 
+        private static double SamplesToSeconds(AudioObj audio, int interleavedSampleIndex)
+        {
+            int sampleRate = Math.Max(1, audio.SampleRate);
+            int channels = Math.Max(1, audio.Channels <= 0 ? 1 : audio.Channels);
+            return interleavedSampleIndex / (double)channels / sampleRate;
+        }
+
+        private static int SecondsToSamples(AudioObj audio, double seconds)
+        {
+            int sampleRate = Math.Max(1, audio.SampleRate);
+            int channels = Math.Max(1, audio.Channels <= 0 ? 1 : audio.Channels);
+            return Math.Max(0, (int)Math.Round(Math.Max(0.0, seconds) * sampleRate) * channels);
+        }
+
+        private static int PickClosestToSeconds(AudioObj audio, IReadOnlyDictionary<int, float> candidates, double targetSeconds, int fallback)
+        {
+            if (candidates == null || candidates.Count == 0)
+            {
+                return Math.Max(0, fallback);
+            }
+
+            return candidates.Keys
+                .OrderBy(sample => Math.Abs(SamplesToSeconds(audio, sample) - targetSeconds))
+                .First();
+        }
+
         public async static Task<Dictionary<Guid, int>> TimeManageDropsAsync(IEnumerable<AudioObj> audios, DropType dropType = 0, bool monoProcessing = true, int? maxWorkers = null)
         {
-            if (audios == null || !audios.Any())
+            var list = audios?
+                .Where(audio => audio != null && audio.Data != null && audio.Data.Length > 0 && audio.SampleRate > 0)
+                .DistinctBy(audio => audio.Id)
+                .ToList() ?? [];
+
+            if (list.Count == 0)
             {
                 LogCollection.Log("No audio objects provided for drop management.");
                 return [];
             }
 
-            int[] offsets = new int[audios.Count()];
-            Dictionary<Guid, int> timings = offsets.Select((offset, index) => (audios.ElementAt(index).Id, offset)).ToDictionary(x => x.Id, x => x.offset);
-            
-            timings = dropType switch
+            Dictionary<Guid, int> timings = dropType switch
             {
-                DropType.AlignedAll => await Task.Run(() => AlignAllDropsAsync(audios, monoProcessing, maxWorkers)),
-                DropType.InterleavedAll => await Task.Run(() => InterleaveAllDropsAsync(audios, monoProcessing, maxWorkers)),
-                DropType.LoudestSolo => await Task.Run(() => LoudestSoloDropAsync(audios, monoProcessing, maxWorkers)),
-                DropType.AnnouncingMostEnergetic => await Task.Run(() => AnnounceMostEnergeticDropAsync(audios, monoProcessing, maxWorkers)),
+                DropType.AlignedAll => await AlignAllDropsAsync(list, monoProcessing, maxWorkers).ConfigureAwait(false),
+                DropType.InterleavedAll => await InterleaveAllDropsAsync(list, monoProcessing, maxWorkers).ConfigureAwait(false),
+                DropType.LoudestSolo => await LoudestSoloDropAsync(list, monoProcessing, maxWorkers).ConfigureAwait(false),
+                DropType.AnnouncingMostEnergetic => await AnnounceMostEnergeticDropAsync(list, monoProcessing, maxWorkers).ConfigureAwait(false),
                 _ => throw new ArgumentOutOfRangeException(nameof(dropType), "Invalid drop type specified.")
             };
 
@@ -80,9 +111,9 @@ namespace ModularAudience.Audio.Processing
                 }
             }
 
-            // choose global anchor: the candidate with highest confidence
+            // choose global anchor: the candidate with highest confidence, measured in seconds
             var anchorPair = bestPer.OrderByDescending(kv => kv.Value.Conf).First();
-            int anchor = anchorPair.Value.Offset;
+            double anchorSeconds = SamplesToSeconds(anchorPair.Key, anchorPair.Value.Offset);
 
             // for each audio pick the candidate closest to anchor
             for (int i = 0; i < list.Count; i++)
@@ -92,8 +123,8 @@ namespace ModularAudience.Audio.Processing
                 int chosen = bestPer[a].Offset;
                 if (dict != null && dict.Count > 0)
                 {
-                    // choose candidate with minimal absolute distance to anchor
-                    chosen = dict.Keys.OrderBy(k => Math.Abs(k - anchor)).First();
+                    // choose candidate closest to the anchor time, independent of sample-rate/channel count
+                    chosen = PickClosestToSeconds(a, dict, anchorSeconds, chosen);
                 }
                 result[a.Id] = Math.Max(0, chosen);
             }
@@ -131,27 +162,21 @@ namespace ModularAudience.Audio.Processing
                 }
             }
 
-            // anchor: choose the strongest candidate among all
+            // anchor: choose the strongest candidate among all, measured in seconds
             var anchorItem = bestPer.OrderByDescending(x => x.Conf).First();
-            int anchor = anchorItem.Offset;
-
-            // spacing between interleaved drops (250ms default)
-            int sampleRate = Math.Max(1, list[0].SampleRate);
-            int channels = Math.Max(1, list[0].Channels <= 0 ? 1 : list[0].Channels);
-            int spacing = (int)(sampleRate * 0.25) * channels;
+            double anchorSeconds = SamplesToSeconds(anchorItem.A, anchorItem.Offset);
 
             // order audios by strength descending to stagger stronger first
             var ordered = bestPer.OrderByDescending(x => x.Conf).ToArray();
             for (int i = 0; i < ordered.Length; i++)
             {
                 var entry = ordered[i];
-                int target = anchor + i * spacing;
+                double targetSeconds = anchorSeconds + i * InterleaveSpacingSeconds;
                 var dict = tasks[list.IndexOf(entry.A)].Result;
                 int chosen = entry.Offset;
                 if (dict != null && dict.Count > 0)
                 {
-                    // choose candidate closest to target
-                    chosen = dict.Keys.OrderBy(k => Math.Abs(k - target)).First();
+                    chosen = PickClosestToSeconds(entry.A, dict, targetSeconds, chosen);
                 }
                 result[entry.A.Id] = Math.Max(0, chosen);
             }
@@ -194,7 +219,7 @@ namespace ModularAudience.Audio.Processing
             }
 
             var chosen = bestPer.OrderByDescending(x => x.Conf * (x.Peak + 1e-6f)).First();
-            int anchor = chosen.Offset;
+            double anchorSeconds = SamplesToSeconds(chosen.A, chosen.Offset);
 
             // align all to anchor (others may need nearest candidate)
             for (int i = 0; i < list.Count; i++)
@@ -204,7 +229,7 @@ namespace ModularAudience.Audio.Processing
                 int pick = chosen.Offset;
                 if (dict != null && dict.Count > 0)
                 {
-                    pick = dict.Keys.OrderBy(k => Math.Abs(k - anchor)).First();
+                    pick = PickClosestToSeconds(a, dict, anchorSeconds, pick);
                 }
                 result[a.Id] = Math.Max(0, pick);
             }
@@ -246,18 +271,13 @@ namespace ModularAudience.Audio.Processing
 
             // primary anchor: most energetic (conf * peak)
             var primary = bestPer.OrderByDescending(x => x.Conf * (x.Peak + 1e-6f)).First();
-            int anchor = primary.Offset;
-
-            // announce offset: weaker tracks will be slightly earlier (e.g., 125ms)
-            int sampleRate = Math.Max(1, list[0].SampleRate);
-            int channels = Math.Max(1, list[0].Channels <= 0 ? 1 : list[0].Channels);
-            int announceAdvance = (int)(sampleRate * 0.125) * channels; // 125ms
+            double anchorSeconds = SamplesToSeconds(primary.A, primary.Offset);
 
             foreach (var p in bestPer.OrderByDescending(x => x.Conf * (x.Peak + 1e-6f)))
             {
                 if (p.A.Id == primary.A.Id)
                 {
-                    result[p.A.Id] = Math.Max(0, anchor);
+                    result[p.A.Id] = Math.Max(0, primary.Offset);
                     continue;
                 }
 
@@ -266,17 +286,18 @@ namespace ModularAudience.Audio.Processing
                 // prefer candidate slightly before anchor if available
                 if (dict != null && dict.Count > 0)
                 {
-                    // find candidate <= anchor - (announceAdvance/2) ideally
-                    int target = Math.Max(0, anchor - announceAdvance);
-                    var before = dict.Keys.Where(k => k <= target).OrderByDescending(k => k).ToArray();
+                    double targetSeconds = Math.Max(0.0, anchorSeconds - AnnounceAdvanceSeconds);
+                    var before = dict.Keys
+                        .Where(k => SamplesToSeconds(p.A, k) <= targetSeconds)
+                        .OrderByDescending(k => SamplesToSeconds(p.A, k))
+                        .ToArray();
                     if (before.Length > 0)
                     {
                         chosen = before[0];
                     }
                     else
                     {
-                        // fallback to closest before anchor, or nearest
-                        chosen = dict.Keys.OrderBy(k => Math.Abs(k - anchor)).First();
+                        chosen = PickClosestToSeconds(p.A, dict, anchorSeconds, chosen);
                     }
                 }
 
@@ -304,7 +325,7 @@ namespace ModularAudience.Audio.Processing
             // clamp threshold
             threshold = Math.Clamp(threshold, 0f, 1f);
 
-            int workers = maxWorkers ?? Environment.ProcessorCount;
+                int workers = Math.Clamp(maxWorkers ?? Environment.ProcessorCount, 1, Environment.ProcessorCount);
 
             // run heavy work off the UI thread
             return await Task.Run(async () =>
@@ -491,7 +512,8 @@ namespace ModularAudience.Audio.Processing
                 foreach (var p in timeOrdered)
                 {
                     int centerMono = p.Frame * hop + frameSize / 2;
-                    if (centerMono - lastMonoSample < minSpacingSamples)
+                    int originalMonoSample = startMono + centerMono;
+                    if (originalMonoSample - lastMonoSample < minSpacingSamples)
                     {
                         if (candidates.Count > 0)
                         {
@@ -499,19 +521,26 @@ namespace ModularAudience.Audio.Processing
                             // compare values
                             if (p.Value > prev.Value)
                             {
-                                candidates[^1] = (centerMono * channels, p.Value);
-                                lastMonoSample = centerMono;
+                                candidates[^1] = (originalMonoSample * channels, p.Value);
+                                lastMonoSample = originalMonoSample;
                             }
                         }
                         continue;
                     }
-                    candidates.Add((centerMono * channels, p.Value));
-                    lastMonoSample = centerMono;
+                    candidates.Add((originalMonoSample * channels, p.Value));
+                    lastMonoSample = originalMonoSample;
                 }
 
-                // scale down number of candidates based on threshold (linear mapping)
+                // Keep strongest candidates, then return them in time order. Previous code used
+                // time-order Take(maxKeep), which accidentally discarded later stronger drops.
                 int maxKeep = Math.Max(1, (int)Math.Ceiling((1.0 - threshold) * 32));
-                var final = candidates.DistinctBy(c => c.Sample).OrderBy(c => c.Sample).Take(maxKeep).ToArray();
+                var final = candidates
+                    .GroupBy(c => c.Sample)
+                    .Select(g => g.OrderByDescending(c => c.Value).First())
+                    .OrderByDescending(c => c.Value)
+                    .Take(maxKeep)
+                    .OrderBy(c => c.Sample)
+                    .ToArray();
 
                 // build dictionary offset->confidence (0..1)
                 var dict = new Dictionary<int, float>();

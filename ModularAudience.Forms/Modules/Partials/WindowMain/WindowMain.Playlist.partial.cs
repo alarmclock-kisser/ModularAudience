@@ -86,7 +86,6 @@ namespace ModularAudience.Forms
         }
 
         // If user clicks the menu item with the right mouse button, treat it like Ctrl+Click (allow fallback)
-        private volatile bool _autoEnqueueOne_ForceAllowFallback = false;
         private void playlistMenu_AutoEnqueueOne_MouseDown(object? sender, MouseEventArgs e)
         {
             try
@@ -95,11 +94,10 @@ namespace ModularAudience.Forms
                 {
                     try
                     {
-                        this._autoEnqueueOne_ForceAllowFallback = true;
                         // Invoke the click handler directly so behaviour is shared
                         this.playlistMenu_AutoEnqueueOne_Click(sender, EventArgs.Empty);
                     }
-                    finally { this._autoEnqueueOne_ForceAllowFallback = false; }
+                    catch { }
                 }
             }
             catch { }
@@ -311,6 +309,7 @@ namespace ModularAudience.Forms
 
                 LogCollection.Log($"Playlist: {ofd.FileNames.Length} file(s) enqueued " +
                                   $"({this._playlist.FilePaths.Count} total).");
+                this._playlist.NotifyQueueChanged("import enqueue");
                 this.UpdatePlaylistUI();
             }
         }
@@ -442,6 +441,7 @@ namespace ModularAudience.Forms
             }
 
             LogCollection.Log($"Playlist: {validPaths.Count} file(s) added next.");
+            this._playlist.NotifyQueueChanged("add next");
             this.UpdatePlaylistUI();
         }
 
@@ -585,6 +585,13 @@ namespace ModularAudience.Forms
                     LogCollection.Log("Auto enqueue one: no playlist selection available.");
                     return;
                 }
+                string selectedPathValue = selectedPath!;
+                PlaylistEngine? playlist = this._playlist;
+
+                if (playlist == null)
+                {
+                    return;
+                }
 
                 // Insert as next track (after index 0 if playing)
                 int insertIndex = 0;
@@ -592,46 +599,48 @@ namespace ModularAudience.Forms
                 {
                     // Mutate the playlist under lock to avoid races and to remove any existing
                     // occurrences of the selected path so we don't enqueue duplicates.
-                    lock (this._playlist)
+                    lock (playlist)
                     {
                         // Remove existing occurrences of the same path (case-insensitive)
-                        this._playlist.FilePaths.RemoveAll(p => string.Equals(p, selectedPath, StringComparison.OrdinalIgnoreCase));
+                        playlist.FilePaths.RemoveAll(p => string.Equals(p, selectedPathValue, StringComparison.OrdinalIgnoreCase));
 
-                        insertIndex = this._playlist.IsPlaying ? Math.Min(1, this._playlist.FilePaths.Count) : 0;
+                        insertIndex = playlist.IsPlaying ? Math.Min(1, playlist.FilePaths.Count) : 0;
 
                         // If selectedPath equals the current head, adjust to insert after head to avoid immediate duplicate at index 0.
-                        if (string.Equals(selectedPath, this._playlist.FilePaths.FirstOrDefault() ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(selectedPathValue, playlist.FilePaths.FirstOrDefault() ?? string.Empty, StringComparison.OrdinalIgnoreCase))
                         {
-                            insertIndex = Math.Min(insertIndex + 1, this._playlist.FilePaths.Count);
+                            insertIndex = Math.Min(insertIndex + 1, playlist.FilePaths.Count);
                         }
 
-                        this._playlist.FilePaths.Insert(insertIndex, selectedPath);
+                        playlist.FilePaths.Insert(insertIndex, selectedPathValue);
                     }
                 }
                 catch { insertIndex = 0; }
-                LogCollection.Log($"Playlist: auto-enqueued one -> {Path.GetFileNameWithoutExtension(selectedPath)}");
+                LogCollection.Log($"Playlist: auto-enqueued one -> {Path.GetFileNameWithoutExtension(selectedPathValue)}");
+                playlist.NotifyQueueChanged("auto enqueue one");
                 this.UpdatePlaylistUI();
 
                 // Notify engine that we inserted a next track so it can start it promptly if timing permits.
-                try { this._playlist?.NotifyInsertedNext(selectedPath); } catch { }
+                try { playlist.NotifyInsertedNext(selectedPathValue); } catch { }
 
                 // Kick off pre-prepare for the newly enqueued track
                 try
                 {
                     string? pathToPrepare = null;
-                    lock (this._playlist)
+                    lock (playlist)
                     {
-                        pathToPrepare = this._playlist.FilePaths.Count > insertIndex ? this._playlist.FilePaths[insertIndex] : null;
+                        pathToPrepare = playlist.FilePaths.Count > insertIndex ? playlist.FilePaths[insertIndex] : null;
                     }
 
-                    if (!string.IsNullOrWhiteSpace(pathToPrepare) && this._playlist.BeforeTrackPlay != null)
+                    if (!string.IsNullOrWhiteSpace(pathToPrepare) && playlist.BeforeTrackPlay != null)
                     {
+                        Func<string, CancellationToken, Task<string?>> beforeTrackPlay = playlist.BeforeTrackPlay;
                         _ = Task.Run(async () =>
                         {
                             try
                             {
                                 string? preprocessed = null;
-                                try { preprocessed = await this._playlist.BeforeTrackPlay(pathToPrepare, CancellationToken.None).ConfigureAwait(false); } catch { }
+                                try { preprocessed = await beforeTrackPlay(pathToPrepare, CancellationToken.None).ConfigureAwait(false); } catch { }
                                 if (!string.IsNullOrWhiteSpace(preprocessed) && File.Exists(preprocessed))
                                 {
                                     LogCollection.Log($"Playlist: pre-prepared {Path.GetFileNameWithoutExtension(pathToPrepare)} (temp)");
@@ -643,16 +652,16 @@ namespace ModularAudience.Forms
 
                                 // Also attempt to pre-prepare the following track in queue to keep pipeline filled
                                 string? nextToPrepare = null;
-                                lock (this._playlist)
+                                lock (playlist)
                                 {
-                                    nextToPrepare = this._playlist.FilePaths.Count > insertIndex + 1 ? this._playlist.FilePaths[insertIndex + 1] : null;
+                                    nextToPrepare = playlist.FilePaths.Count > insertIndex + 1 ? playlist.FilePaths[insertIndex + 1] : null;
                                 }
                                 if (!string.IsNullOrWhiteSpace(nextToPrepare))
                                 {
                                     try
                                     {
                                         string? pre2 = null;
-                                        try { pre2 = await this._playlist.BeforeTrackPlay(nextToPrepare, CancellationToken.None).ConfigureAwait(false); } catch { }
+                                        try { pre2 = await beforeTrackPlay(nextToPrepare, CancellationToken.None).ConfigureAwait(false); } catch { }
                                         if (!string.IsNullOrWhiteSpace(pre2) && File.Exists(pre2))
                                         {
                                             LogCollection.Log($"Playlist: additionally pre-prepared {Path.GetFileNameWithoutExtension(nextToPrepare)} (temp)");
@@ -705,6 +714,7 @@ namespace ModularAudience.Forms
             }
 
             LogCollection.Log($"Playlist: {validPaths.Count} file(s) enqueued last.");
+            this._playlist.NotifyQueueChanged("enqueue last");
             this.UpdatePlaylistUI();
         }
 

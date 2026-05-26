@@ -240,10 +240,6 @@ namespace ModularAudience.Forms.Modules
             this.playlistTargetsTimer.Tick += (_, _) => this.RefreshPlaylistTargets();
             this.playlistTargetsTimer.Start();
 
-            // Right-click context menu selection handling
-            this.checkedListBox_playlistTracks.MouseUp += this.checkedListBox_playlistTracks_MouseUp;
-            this.contextMenuStrip_playlistItem.Opening += this.contextMenuStrip_playlistItem_Opening;
-
             this.numericUpDown_jump.Click += this.numericUpDown_jump_Click;
 
             this.RefreshPlaylistTargets();
@@ -253,6 +249,7 @@ namespace ModularAudience.Forms.Modules
             this.FormClosing += (s, e) =>
             {
                 // Hide instead of close
+                e.Cancel = true;
                 WindowMain.LoopControlWindow = null;
                 this.playlistTargetsTimer.Stop();
                 this.Hide();
@@ -382,9 +379,6 @@ namespace ModularAudience.Forms.Modules
                 var listBox = this.checkedListBox_playlistTracks;
 
                 // Build incremental diff against current items to avoid Items.Clear() flicker on every tick.
-                var existing = listBox.Items.OfType<PlaylistTargetItem>().ToList();
-                var existingById = existing.ToDictionary(item => item.Audio.Id, item => item);
-
                 // 1) Remove items whose audio is no longer active, in reverse order to keep indices stable.
                 for (int i = listBox.Items.Count - 1; i >= 0; i--)
                 {

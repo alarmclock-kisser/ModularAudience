@@ -58,10 +58,12 @@ namespace ModularAudience.Forms.Modules
         private string? _primaryOriginalPath;
         private string? _secondaryOriginalPath;
         private readonly Dictionary<Guid, PreparedPlaylistTrack> _activePreparedTracks = [];
+        private Task? _runLoopTask;
         // Paths temporarily banned from random selection until the next Pause click.
         private readonly HashSet<string> _banlist = new(StringComparer.OrdinalIgnoreCase);
         // In-flight prepare tasks keyed by original path to avoid duplicate prepares
         private readonly Dictionary<string, Task<PreparedPlaylistTrack?>> _preparingTasks = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, PreparedPlaylistTrack> _preparedByPath = new(StringComparer.OrdinalIgnoreCase);
         private CancellationTokenSource? _cts;
         private string? _previousPath;          // 1-track back-history
         private readonly object _lock = new();
@@ -149,8 +151,11 @@ namespace ModularAudience.Forms.Modules
                 lock (this._lock)
                 {
                     return this._activePreparedTracks.Values
-                        .Where(p => p != null && p.Audio != null && !p.Audio.Playing)
+                    .Where(p => p != null && p.Audio != null && !p.Audio.Playing)
                         .Select(p => p.OriginalPath)
+                        .Concat(this._preparedByPath.Values
+                            .Where(p => p != null && p.Audio != null && !p.Audio.Playing)
+                            .Select(p => p.OriginalPath))
                         .Where(path => !string.IsNullOrWhiteSpace(path) && !string.Equals(path, this.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToArray();
@@ -242,11 +247,12 @@ namespace ModularAudience.Forms.Modules
                 PreparedPlaylistTrack? prepared = null;
                 try
                 {
-                    // Reuse existing prepare path where possible
+                    // Reuse existing prepare path where possible.
                     Task<PreparedPlaylistTrack?> prepTask;
+                    string key = NormalizePathForKey(originalPath);
                     lock (this._lock)
                     {
-                        if (this._preparingTasks.TryGetValue(originalPath, out var existing))
+                        if (this._preparingTasks.TryGetValue(key, out var existing))
                         {
                             prepTask = existing;
                         }
@@ -291,30 +297,27 @@ namespace ModularAudience.Forms.Modules
                         return;
                     }
 
-                    // If crossfade is active, or remaining time is small enough, or if there's no
-                    // currently playing primary track, start the prepared track.
+                    // Auto-enqueue must never start a second primary just because crossfade is enabled.
+                    // It should only warm up the next track; the main run-loop owns all starts/fades.
+                    // Only recover by starting the loop if nothing is currently playing.
                     bool primaryPlaying = false;
                     lock (this._lock)
                     {
                         try { primaryPlaying = this._primaryAudioObj != null && this._primaryAudioObj.Playing; } catch { primaryPlaying = false; }
                     }
 
-                    if (crossfade > 0.0 || remainingSeconds <= 8.0 || !primaryPlaying)
+                    if (!primaryPlaying)
                     {
-                        try
-                        {
-                            await prepared.Audio.PlayAsync(CancellationToken.None, initialVolume: 1.0f).ConfigureAwait(false);
-                            prepared.Audio.Volume = 100f;
-                            prepared.Audio.SetPlaybackVolume(1.0f);
-                            this.TrackPreparedAsActive(prepared, "auto-enqueue start");
-                            try { this.ApplyCurrentTrackState(prepared); } catch { }
-                            TrackChanged?.Invoke();
-                        }
-                        catch { }
+                        this.EnsureRunLoopIfQueueHasWork("inserted-next no primary");
                     }
                 }
                 catch { }
             });
+        }
+
+        public void NotifyQueueChanged(string reason)
+        {
+            this.EnsureRunLoopIfQueueHasWork(reason);
         }
 
         // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -372,8 +375,52 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            this._cts = new CancellationTokenSource();
-            _ = Task.Run(() => this.RunLoop(this._cts.Token));
+            this.StartRunLoopIfNeeded();
+        }
+
+        private void StartRunLoopIfNeeded()
+        {
+            lock (this._lock)
+            {
+                if (this._disposed || this.FilePaths.Count == 0)
+                {
+                    return;
+                }
+
+                if (this._runLoopTask != null && !this._runLoopTask.IsCompleted)
+                {
+                    return;
+                }
+
+                try { this._cts?.Dispose(); } catch { }
+                this._skipRequested = false;
+                this._cts = new CancellationTokenSource();
+                CancellationToken token = this._cts.Token;
+                this._runLoopTask = Task.Run(() => this.RunLoop(token));
+                this.IsPlaying = true;
+                this.IsPaused = false;
+            }
+        }
+
+        private void EnsureRunLoopIfQueueHasWork(string reason)
+        {
+            bool needsStart = false;
+            lock (this._lock)
+            {
+                bool hasQueue = this.FilePaths.Count > 0;
+                bool hasAudibleAudio = this._activePreparedTracks.Values.Any(p => p.Audio != null && p.Audio.Playing)
+                    || this._primaryAudioObj?.Playing == true
+                    || this._secondaryAudioObj?.Playing == true;
+                bool loopDead = this._runLoopTask == null || this._runLoopTask.IsCompleted;
+                needsStart = hasQueue && !this._disposed && (loopDead || (!hasAudibleAudio && !this.IsPaused));
+            }
+
+            if (needsStart)
+            {
+                LogDebug($"[PlaylistEngine] recovery starting run-loop: {reason}");
+                this.StartRunLoopIfNeeded();
+                TrackChanged?.Invoke();
+            }
         }
 
         /// <summary>Pause current playback without advancing the queue.</summary>
@@ -482,6 +529,7 @@ namespace ModularAudience.Forms.Modules
 
                 if (!string.IsNullOrWhiteSpace(removedOriginalPath))
                 {
+                    this._preparedByPath.Remove(NormalizePathForKey(removedOriginalPath));
                     int queueIndex = this.FilePaths.FindIndex(path =>
                         string.Equals(path, removedOriginalPath, StringComparison.OrdinalIgnoreCase));
                     if (queueIndex >= 0)
@@ -791,6 +839,7 @@ namespace ModularAudience.Forms.Modules
                 this._secondaryAudioObj = null;
                 this._secondaryOriginalPath = null;
                 this._activePreparedTracks.Clear();
+                this._preparedByPath.Clear();
                 this._waveOut = null;
                 this._reader  = null;
             }
@@ -947,6 +996,7 @@ namespace ModularAudience.Forms.Modules
                     bool crossfadeTriggered = false;
                     int notPlayingStrikes = 0;
                     TimeSpan lastObservedPosition = TimeSpan.Zero;
+                    DateTime? silentStallSinceUtc = null;
 
                     while (!ct.IsCancellationRequested && !this._disposed && !this._skipRequested)
                     {
@@ -976,6 +1026,14 @@ namespace ModularAudience.Forms.Modules
                             if (!nearEnd || !positionFrozen)
                             {
                                 notPlayingStrikes = 0;
+                                silentStallSinceUtc ??= DateTime.UtcNow;
+                                if ((DateTime.UtcNow - silentStallSinceUtc.Value).TotalSeconds >= 3.0)
+                                {
+                                    LogDebug($"[PlaylistEngine] silent stall watchdog skipping dead current track: {Path.GetFileNameWithoutExtension(currentOriginalPath)} pos={playedSec:F2}s/{totalSec:F2}s");
+                                    this._skipRequested = true;
+                                    break;
+                                }
+
                                 try { await Task.Delay(150, ct).ConfigureAwait(false); } catch { }
                                 continue;
                             }
@@ -1066,6 +1124,7 @@ namespace ModularAudience.Forms.Modules
                         }
 
                         notPlayingStrikes = 0;
+                        silentStallSinceUtc = null;
                         try { lastObservedPosition = currentPrepared.Audio.CurrentTime; } catch { }
 
                         TimeSpan remaining = currentPrepared.Audio.Duration - currentPrepared.Audio.CurrentTime;
@@ -1407,6 +1466,7 @@ namespace ModularAudience.Forms.Modules
                 lock (this._lock)
                 {
                     this._activePreparedTracks.Clear();
+                    this._preparedByPath.Clear();
                     this.IsPlaying = false;
                     this.IsPaused = false;
                     this.CurrentPath = null;
@@ -1436,16 +1496,26 @@ namespace ModularAudience.Forms.Modules
                 }
 
                 // Early-out: avoid preparing the currently-playing original or any already-prepared original
-                if (!string.IsNullOrWhiteSpace(this.OriginalCurrentPath) && string.Equals(NormalizePathForKey(this.OriginalCurrentPath), key, StringComparison.OrdinalIgnoreCase))
+                bool isCurrentPath = !string.IsNullOrWhiteSpace(this.OriginalCurrentPath)
+                    && string.Equals(NormalizePathForKey(this.OriginalCurrentPath), key, StringComparison.OrdinalIgnoreCase);
+                bool currentActuallyPlaying = this._primaryAudioObj?.Playing == true;
+                if (isCurrentPath && currentActuallyPlaying)
                 {
                     try { LogDebug($"PrepareTrackAsync: skipping currently playing path: {originalPath}"); } catch { }
                     return null;
                 }
 
-                if (this._activePreparedTracks.Values.Any(p => string.Equals(NormalizePathForKey(p.OriginalPath), key, StringComparison.OrdinalIgnoreCase)))
+                PreparedPlaylistTrack? existingPrepared = null;
+                if (this._preparedByPath.TryGetValue(key, out var cachedPrepared))
                 {
-                    try { LogDebug($"PrepareTrackAsync: skipping already-prepared path: {originalPath}"); } catch { }
-                    return null;
+                    existingPrepared = cachedPrepared;
+                }
+                existingPrepared ??= this._activePreparedTracks.Values.FirstOrDefault(p =>
+                    string.Equals(NormalizePathForKey(p.OriginalPath), key, StringComparison.OrdinalIgnoreCase));
+                if (existingPrepared != null)
+                {
+                    try { LogDebug($"PrepareTrackAsync: reusing already-prepared path: {originalPath}"); } catch { }
+                    return existingPrepared;
                 }
 
                 // If a prepare for this path is already in-flight, reuse it.
@@ -1536,9 +1606,18 @@ namespace ModularAudience.Forms.Modules
                     TempPath = tempPath
                 };
 
-                // Make preprepared tracks visible immediately so UI fallback can pick them
-                // (avoids race where Prepare completed but TrackPreparedAsActive wasn't yet called).
-                try { this.LogPlayback($"PrepareTrackCoreAsync: prepared ready original={originalPath} playPath={playPath} temp={tempPath}"); this.TrackPreparedAsActive(prepared, "preprepared"); } catch (Exception ex) { this.LogPlayback($"PrepareTrackCoreAsync: TrackPreparedAsActive failed: {ex.Message}"); }
+                // Cache warmed-up tracks without marking them active/playing. Active tracking is
+                // reserved for tracks actually started by the run-loop, otherwise the UI/loop can
+                // mistake prepared-but-silent audio for real playback and dry out.
+                try
+                {
+                    this.LogPlayback($"PrepareTrackCoreAsync: prepared ready original={originalPath} playPath={playPath} temp={tempPath}");
+                    lock (this._lock)
+                    {
+                        this._preparedByPath[NormalizePathForKey(originalPath)] = prepared;
+                    }
+                }
+                catch { }
 
                 return prepared;
             }
@@ -1640,6 +1719,7 @@ namespace ModularAudience.Forms.Modules
                     return;
                 }
 
+                this._preparedByPath.Remove(key);
                 this._activePreparedTracks[prepared.Audio.Id] = prepared;
             }
 
@@ -1667,6 +1747,13 @@ namespace ModularAudience.Forms.Modules
             lock (this._lock)
             {
                 this._activePreparedTracks.Remove(prepared.Audio.Id);
+                string preparedKey = NormalizePathForKey(prepared.OriginalPath);
+                if (!string.IsNullOrWhiteSpace(preparedKey) &&
+                    this._preparedByPath.TryGetValue(preparedKey, out var cached) &&
+                    cached.Audio.Id == prepared.Audio.Id)
+                {
+                    this._preparedByPath.Remove(preparedKey);
+                }
                 try
                 {
                     if (!string.IsNullOrWhiteSpace(prepared.OriginalPath) &&
