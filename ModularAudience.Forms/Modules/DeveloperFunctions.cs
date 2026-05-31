@@ -9,6 +9,7 @@ using System.Drawing;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -81,6 +82,8 @@ namespace ModularAudience.Forms.Modules
                 catch { }
             };
 
+
+
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCornerPosition(this, true, false);
 
@@ -108,6 +111,116 @@ namespace ModularAudience.Forms.Modules
 
             this.textBox_trackInfo.Text = audio?.GetInfoString() ?? string.Empty;
 
+        }
+
+        // Generic dialog to show arbitrary result entries (Key=>Value).
+        // numericPairs: optional parsed int->float pairs when available; if provided, Convert timestamps button will be enabled.
+        private void ShowResultEntriesDialog(string title, List<KeyValuePair<object, object>> entries, Dictionary<int, float>? numericPairs, AudioObj? audioForMapping, bool monoBase)
+        {
+            try
+            {
+                using var dlg = new Form
+                {
+                    Text = title,
+                    StartPosition = FormStartPosition.CenterParent,
+                    Size = new Size(820, 480),
+                    MinimizeBox = false,
+                    MaximizeBox = false,
+                    FormBorderStyle = FormBorderStyle.SizableToolWindow
+                };
+
+                var listBox = new ListBox { Dock = DockStyle.Fill, Font = SystemFonts.MessageBoxFont };
+                foreach (var kv in entries)
+                {
+                    listBox.Items.Add($"{kv.Key} => {kv.Value}");
+                }
+
+                var btnPanel = new Panel { Dock = DockStyle.Bottom, Height = 44 };
+                var btnCopy = new Button { Text = "Copy", AutoSize = true, Location = new Point(8, 8) };
+                var btnConvert = new Button { Text = "Convert timestamps", AutoSize = true, Location = new Point(96, 8), Enabled = numericPairs != null };
+                var chkMono = new CheckBox { Text = "Base indices are mono", Checked = monoBase, Location = new Point(260, 12), AutoSize = true };
+                var lblInfo = new Label { Text = audioForMapping != null ? $"Map to original: {audioForMapping.SampleRate} Hz, {audioForMapping.Channels} ch" : "No audio metadata (fallback 44100 Hz, 1 ch)", AutoSize = true, Location = new Point(420, 12) };
+
+                btnCopy.Click += (s, e) =>
+                {
+                    try
+                    {
+                        var sb = new StringBuilder();
+                        foreach (var it in listBox.Items)
+                        {
+                            sb.AppendLine(it?.ToString());
+                        }
+                        Clipboard.SetText(sb.ToString());
+                    }
+                    catch { }
+                };
+
+                btnConvert.Click += (s, e) =>
+                {
+                    try
+                    {
+                        if (numericPairs == null || numericPairs.Count == 0) return;
+
+                        int channels = audioForMapping?.Channels ?? 1;
+                        int sampleRate = Math.Max(1, audioForMapping?.SampleRate ?? 44100);
+                        double trackDuration = audioForMapping?.Duration.TotalSeconds ?? double.PositiveInfinity;
+
+                        var mapped = new List<string>();
+                        foreach (var kv in numericPairs.OrderBy(k => k.Key))
+                        {
+                            int keyIndex = kv.Key;
+
+                            // Compute both interpretations
+                            double secondsInterleaved = keyIndex / (double)channels / (double)sampleRate; // if key is interleaved samples
+                            double secondsMono = keyIndex / (double)sampleRate; // if key is mono samples
+
+                            bool useMonoInterpretation;
+                            if (double.IsFinite(trackDuration))
+                            {
+                                // Prefer interpretation that fits inside track duration (with small margin)
+                                double margin = 1.0; // 1 second margin
+                                bool interleavedFits = secondsInterleaved <= trackDuration + margin;
+                                bool monoFits = secondsMono <= trackDuration + margin;
+
+                                if (interleavedFits && !monoFits) useMonoInterpretation = false;
+                                else if (!interleavedFits && monoFits) useMonoInterpretation = true;
+                                else
+                                {
+                                    // both fit or both too large -> prefer interleaved (most methods return interleaved indices)
+                                    useMonoInterpretation = false;
+                                }
+                            }
+                            else
+                            {
+                                // No duration available: fall back to checkbox
+                                useMonoInterpretation = chkMono.Checked;
+                            }
+
+                            int interleavedSamples = useMonoInterpretation && channels > 1 ? Math.Max(0, keyIndex) * channels : keyIndex;
+                            double seconds = interleavedSamples / (double)channels / (double)sampleRate;
+                            var ts = TimeSpan.FromSeconds(seconds);
+                            string formatted = string.Format(CultureInfo.InvariantCulture, "{0:D2}:{1:D2}.{2:D3}", (int)ts.TotalMinutes, ts.Seconds, ts.Milliseconds);
+                            mapped.Add($"{keyIndex} -> {formatted} (mappedSamples:{interleavedSamples}) => conf:{kv.Value:F6}");
+                        }
+
+                        ShowResultValueDialog(title + " - timestamps", string.Join(Environment.NewLine, mapped));
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Error converting timestamps: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                };
+
+                btnPanel.Controls.Add(btnCopy);
+                btnPanel.Controls.Add(btnConvert);
+                btnPanel.Controls.Add(chkMono);
+                btnPanel.Controls.Add(lblInfo);
+
+                dlg.Controls.Add(listBox);
+                dlg.Controls.Add(btnPanel);
+                dlg.ShowDialog(this);
+            }
+            catch { }
         }
 
         private void FillComboBoxMethods(ComboBox comboBox)
@@ -747,10 +860,99 @@ namespace ModularAudience.Forms.Modules
                 }
                 else if (result != null)
                 {
-                    // Nicht-Audio-Ergebnis: ResultAudioObj bleibt null, Ergebnis zur Auswahl anzeigen
+                    // Nicht-Audio-Ergebnis: ResultAudioObj bleibt null, Ergebnis zur strukturierten Anzeige prüfen
                     this.ResultAudioObj = null;
                     try
                     {
+                        // Versuche IDictionary (non-generic)
+                        var entries = new List<KeyValuePair<object, object>>();
+                        if (result is System.Collections.IDictionary nid)
+                        {
+                            foreach (System.Collections.DictionaryEntry de in nid)
+                            {
+                                entries.Add(new KeyValuePair<object, object>(de.Key!, de.Value!));
+                            }
+                        }
+                        else if (result is System.Collections.IEnumerable ienum)
+                        {
+                            // Prüfe auf KeyValuePair<,> Elemente via Reflection
+                            foreach (var el in ienum)
+                            {
+                                if (el == null) continue;
+                                var t = el.GetType();
+                                var kp = t.GetProperty("Key");
+                                var vp = t.GetProperty("Value");
+                                if (kp != null && vp != null)
+                                {
+                                    var k = kp.GetValue(el);
+                                    var v = vp.GetValue(el);
+                                    entries.Add(new KeyValuePair<object, object>(k!, v!));
+                                }
+                                else
+                                {
+                                    // Nicht KeyValuePair-Enumerable -> brich ab
+                                    entries.Clear();
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (entries.Count > 0)
+                        {
+                            // Versuche keys->int und values->float zu parsen
+                            var intFloat = new Dictionary<int, float>();
+                            foreach (var kv in entries)
+                            {
+                                if (kv.Key == null) continue;
+                                int ik = 0; bool keyOk = false;
+                                try { ik = Convert.ToInt32(kv.Key, CultureInfo.InvariantCulture); keyOk = true; } catch { keyOk = false; }
+                                if (!keyOk) continue;
+
+                                float fv = 0f; bool valOk = false;
+                                if (kv.Value is float f) { fv = f; valOk = true; }
+                                else if (kv.Value is double d) { fv = (float)d; valOk = true; }
+                                else if (kv.Value is decimal dec) { fv = (float)dec; valOk = true; }
+                                else if (kv.Value is string s && float.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var pf)) { fv = pf; valOk = true; }
+                                else
+                                {
+                                    try { fv = Convert.ToSingle(kv.Value, CultureInfo.InvariantCulture); valOk = true; } catch { valOk = false; }
+                                }
+
+                                if (valOk) intFloat[ik] = fv;
+                            }
+
+                            if (intFloat.Count > 0)
+                            {
+                                // Erkenne mono-Argument falls vorhanden
+                                bool monoArg = false;
+                                try
+                                {
+                                    for (int pi = 0; pi < parameters.Length; pi++)
+                                    {
+                                        var p = parameters[pi];
+                                        if (string.Equals(p.Name, "mono", StringComparison.OrdinalIgnoreCase) && args.Length > pi && args[pi] is bool bv)
+                                        {
+                                            monoArg = bv;
+                                            break;
+                                        }
+                                    }
+                                }
+                                catch { }
+
+                                var audioForMapping = firstAudioArg ?? this.SelectedAudio;
+                                // Zeige generischen Entries-Dialog und übergebe die erkannten numerischen Paare
+                                this.ShowResultEntriesDialog(method.Name + " result", entries, intFloat, audioForMapping, monoArg);
+                                return;
+                            }
+                            else
+                            {
+                                // Falls nicht numeric pairs, zeige generische Key=>Value Liste im Entries-Dialog
+                                this.ShowResultEntriesDialog(method.Name + " result", entries, null, firstAudioArg ?? this.SelectedAudio, false);
+                                return;
+                            }
+                        }
+
+                        // Fallback: ToString
                         string txt = result.ToString() ?? string.Empty;
                         this.ShowResultValueDialog(method.Name + " result", txt);
                     }
@@ -877,6 +1079,8 @@ namespace ModularAudience.Forms.Modules
             }
             catch { }
         }
+
+
 
         private void button_apply_Click(object sender, EventArgs e)
         {
