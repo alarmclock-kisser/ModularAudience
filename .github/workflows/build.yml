@@ -20,13 +20,12 @@ jobs:
       run: dotnet restore
 
     - name: Build --Release
-      # Hier bauen wir nur das spezifische Forms-Projekt
       run: dotnet build ModularAudience.Forms/ModularAudience.Forms.csproj --configuration Release --no-restore
 
     - name: Publish
       run: dotnet publish ModularAudience.Forms/ModularAudience.Forms.csproj -c Release -r win-x64 --self-contained true -o ./publish
 
-        - name: Create Release
+    - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         files: ./publish/*.exe
@@ -34,4 +33,3 @@ jobs:
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
