@@ -16,6 +16,8 @@ namespace ModularAudience.Forms
 
         public readonly AudioCollection AudioC = new();
 
+        public float MasterLimiter => this.vScrollBar_masterLimiter.Maximum / 100f - this.vScrollBar_masterLimiter.Value / 100f;
+
         internal static LoopControl? LoopControlWindow = null;
         internal static DeveloperFunctions? DeveloperFunctionsWindow = null;
         internal static CudaFunctions? CudaFunctionsWindow = null;
@@ -557,12 +559,35 @@ namespace ModularAudience.Forms
             }
         }
 
-        private void button_dropManager_Click(object sender, EventArgs e)
-        {
-            
-        }
 
-        // button_playlist_Click is implemented in WindowMain.Playlist.partial.cs
+        private ToolTip limiterToolTip = new();
+        private void vScrollBar_masterLimiter_Scroll(object sender, ScrollEventArgs e)
+        {
+            // Dein bestehender Code fürs Audio-Backend
+            AudioPlaybackService.SetMasterLimiter(this.MasterLimiter);
+
+            // Prüfen, ob der User die Maustaste/den Thumb losgelassen hat
+            if (e.Type == ScrollEventType.EndScroll)
+            {
+                // Losgelassen -> Tooltip sofort ausblenden
+                this.limiterToolTip.Hide(this.vScrollBar_masterLimiter);
+            }
+            else
+            {
+                // Während des Scrollens/Haltens -> Tooltip updaten und an der Maus positionieren
+
+                // Tipp: Häng direkt deine Einheit dran (z.B. dB oder %), das liest sich im UI besser
+                string hintText = $"Limiter: {this.MasterLimiter} dB";
+
+                // Position berechnen, damit der Tooltip genau neben dem Thumb an der Maus schwebt
+                // (x + 20 damit er nicht direkt unter dem Mauszeiger klebt und flackert)
+                Point mousePos = this.vScrollBar_masterLimiter.PointToClient(MousePosition);
+                Point tooltipLocation = new Point(mousePos.X + 20, mousePos.Y - 10);
+
+                // Tooltip einblenden bzw. Text/Position in Echtzeit updaten
+                this.limiterToolTip.Show(hintText, this.vScrollBar_masterLimiter, tooltipLocation);
+            }
+        }
     }
 }
 

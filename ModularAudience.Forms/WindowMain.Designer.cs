@@ -75,6 +75,7 @@
             this.button_playlist = new Button();
             this.label_currentlyEnqueued = new Label();
             this.toolStripMenuItem_autoEnqueueOne = new ToolStripMenuItem();
+            this.vScrollBar_masterLimiter = new VScrollBar();
             this.contextMenuStrip_playlist.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -193,7 +194,7 @@
             this.textBox_scanBpmResult.Name = "textBox_scanBpmResult";
             this.textBox_scanBpmResult.PlaceholderText = "0.000 BPM";
             this.textBox_scanBpmResult.ReadOnly = true;
-            this.textBox_scanBpmResult.Size = new Size(100, 23);
+            this.textBox_scanBpmResult.Size = new Size(90, 23);
             this.textBox_scanBpmResult.TabIndex = 4;
             this.textBox_scanBpmResult.TabStop = false;
             // 
@@ -203,7 +204,7 @@
             this.textBox_scanTimingResult.Name = "textBox_scanTimingResult";
             this.textBox_scanTimingResult.PlaceholderText = "1 / 1 Timing";
             this.textBox_scanTimingResult.ReadOnly = true;
-            this.textBox_scanTimingResult.Size = new Size(100, 23);
+            this.textBox_scanTimingResult.Size = new Size(90, 23);
             this.textBox_scanTimingResult.TabIndex = 6;
             this.textBox_scanTimingResult.TabStop = false;
             // 
@@ -224,7 +225,7 @@
             this.textBox_scanKeyResult.Name = "textBox_scanKeyResult";
             this.textBox_scanKeyResult.PlaceholderText = "No key scanned";
             this.textBox_scanKeyResult.ReadOnly = true;
-            this.textBox_scanKeyResult.Size = new Size(100, 23);
+            this.textBox_scanKeyResult.Size = new Size(90, 23);
             this.textBox_scanKeyResult.TabIndex = 8;
             this.textBox_scanKeyResult.TabStop = false;
             // 
@@ -545,11 +546,22 @@
             this.toolStripMenuItem_autoEnqueueOne.Text = "Auto enqueue one";
             this.toolStripMenuItem_autoEnqueueOne.Click += this.playlistMenu_AutoEnqueueOne_Click;
             // 
+            // vScrollBar_masterLimiter
+            // 
+            this.vScrollBar_masterLimiter.LargeChange = 5;
+            this.vScrollBar_masterLimiter.Location = new Point(558, 230);
+            this.vScrollBar_masterLimiter.Maximum = 1000;
+            this.vScrollBar_masterLimiter.Name = "vScrollBar_masterLimiter";
+            this.vScrollBar_masterLimiter.Size = new Size(17, 95);
+            this.vScrollBar_masterLimiter.TabIndex = 35;
+            this.vScrollBar_masterLimiter.Scroll += this.vScrollBar_masterLimiter_Scroll;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(584, 326);
+            this.Controls.Add(this.vScrollBar_masterLimiter);
             this.Controls.Add(this.button_copyLog);
             this.Controls.Add(this.label_currentlyEnqueued);
             this.Controls.Add(this.button_playlist);
@@ -640,5 +652,6 @@
         private ToolTip toolTip_playlist;
         private ToolStripMenuItem toolStripMenuItem_crossfade;
         private ToolStripMenuItem toolStripMenuItem_crossSyncDuration;
+        private VScrollBar vScrollBar_masterLimiter;
     }
 }

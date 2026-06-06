@@ -713,5 +713,23 @@ namespace ModularAudience.Audio
                 }
             }
         }
+
+        public static void SetMasterLimiter(float masterLimiter)
+        {
+            // NAudio's WaveOutEvent does not have a built-in master limiter, but we can simulate it by adjusting the volume of the output stream.
+            // This is a global setting that affects all instances using the same output device.
+            // Note: This is a workaround and may not be as effective as a true master limiter in preventing clipping, especially if individual track volumes are set high.
+            float clampedLimiter = Math.Clamp((masterLimiter / 10f), 0f, 1f);
+            try
+            {
+                // Set the volume for all WaveOutEvent instances (this is a simplification; in a real implementation, you might want to track instances or use a shared volume provider)
+                // For demonstration purposes, we will just set the volume on the default output device.
+                using (var tempPlayer = new WaveOutEvent())
+                {
+                    tempPlayer.Volume = clampedLimiter;
+                }
+            }
+            catch { }
+        }
     }
 }

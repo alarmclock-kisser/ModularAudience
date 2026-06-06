@@ -142,9 +142,9 @@ namespace ModularAudience.Forms.Modules
             .DistinctBy(audio => audio.Id)
             .ToList();
         private IReadOnlyList<AudioObj> TargetAudios => (this.SelectedTrackAudio != null
-                ? new[] { this.SelectedTrackAudio }
+                ? [this.SelectedTrackAudio]
                 : Enumerable.Empty<AudioObj?>())
-            .Concat(this.SelectedPlaylistAudios)
+            .Concat(this.PlaylistAudios)
             .Where(audio => audio != null)
             .Cast<AudioObj>()
             .DistinctBy(audio => audio.Id)
@@ -298,7 +298,7 @@ namespace ModularAudience.Forms.Modules
             string name = rawName;
             if (name.Contains("__"))
             {
-                var parts = name.Split(new[] { "__" }, StringSplitOptions.RemoveEmptyEntries);
+                var parts = name.Split(["__"], StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length > 0)
                 {
                     name = parts[0].Trim();
@@ -307,7 +307,7 @@ namespace ModularAudience.Forms.Modules
             // Also strip common generated marker like _stretched_ inside the filename if present
             if (name.IndexOf("_stretched_", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                name = name.Split(new[] { "_stretched_" }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+                name = name.Split(["_stretched_"], StringSplitOptions.RemoveEmptyEntries)[0].Trim();
             }
             // Show effective playback BPM. If the audio was time-stretched or its sample-rate adjusted,
             // reflect that in the displayed BPM so the UI matches what is actually playing.
@@ -1285,7 +1285,7 @@ namespace ModularAudience.Forms.Modules
             string selectedName = this.comboBox_drops.SelectedItem?.ToString() ?? string.Empty;
             DropType dropType = Enum.TryParse(selectedName, out DropType result) ? result : DropType.AlignedAll;
 
-            Dictionary<Guid, int> timings = new Dictionary<Guid, int>();
+            Dictionary<Guid, int> timings = new();
             AudioObj[] audios = this.TargetAudios.ToArray();
             try
             {

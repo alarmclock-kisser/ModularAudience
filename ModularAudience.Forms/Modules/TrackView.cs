@@ -1,17 +1,18 @@
-﻿using Microsoft.VisualBasic.Devices;
+﻿using MathNet.Numerics.Optimization.TrustRegion;
+using Microsoft.VisualBasic.Devices;
 using ModularAudience.Audio;
-using System.ComponentModel;
-using System.Media;
-using System.Reflection;
-using System.Runtime.Versioning;
-using Timer = System.Windows.Forms.Timer;
 using ModularAudience.Audio.Processing;
 using ModularAudience.Audio.Processors_V1;
-using System.Threading.Tasks;
-using MathNet.Numerics.Optimization.TrustRegion;
 using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio.Processors_V4;
 using ModularAudience.Forms.Helpers;
+using System.ComponentModel;
+using System.Media;
+using System.Reflection;
+using System.Runtime;
+using System.Runtime.Versioning;
+using System.Threading.Tasks;
+using Timer = System.Windows.Forms.Timer;
 
 namespace ModularAudience.Forms.Modules
 {
@@ -19,7 +20,7 @@ namespace ModularAudience.Forms.Modules
     {
         private const int DragThresholdPx = 2;
         private static readonly int[] LoopSteps = [1, 2, 4, 8, 16, 32, 64];
-        private const int MaxSamplesPerPixel = 16384;
+        private const int MaxSamplesPerPixel = 65536;
         private const int MinSamplesPerPixel = 1;
         private static int selectionCopySeed;
 
@@ -151,6 +152,14 @@ namespace ModularAudience.Forms.Modules
                     WindowMain.TrackViews.Remove(this);
                     WindowMain.TrackViewIds.Remove(this.TrackViewId);
                 });
+            };
+
+            this.FormClosed += (_, __) =>
+            {
+                this.DisposeCurrentBitmap();
+                // Erzwingt eine Kompaktierung und einen tiefen GC-Sweep
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(2, GCCollectionMode.Forced, true);
             };
 
             WindowMain.TrackViews.Add(this);
@@ -1079,11 +1088,6 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            if (this.OriginalAudio.Playing)
-            {
-                return;
-            }
-
             if (e.Button == MouseButtons.Left)
             {
                 long frame = this.MapPixelToFrameInView(e.X);
@@ -1104,10 +1108,9 @@ namespace ModularAudience.Forms.Modules
         private void Wave_MouseMove(object? sender, MouseEventArgs e)
         {
             this.mouseX = e.X;
-            if (this.OriginalAudio.Playing)
-            {
-                return;
-            }
+
+            // 1. Erlaube Dragging auch während Playing
+            // (if (this.OriginalAudio.Playing) return;  <-- DAS ENTFERNEN
 
             if (this.pendingSelect && !this.dragSelecting)
             {
@@ -1121,21 +1124,33 @@ namespace ModularAudience.Forms.Modules
             {
                 this.selectEndFrame = this.MapPixelToFrameInView(e.X);
                 this.UpdateSelection();
-                // DIES IST DER FIX: Fordert sofort eine Neuzeichnung an, 
-                // die den SCHNELLEN Paint-Handler (Overlay-Zeichnung) triggert.
+
+                // --- AUTO-SCROLL LOGIK ---
+                // Wenn wir ziehen und der Cursor an den rechten oder linken Rand der PictureBox stößt,
+                // schiebe den Viewport mit.
+                int width = Math.Max(1, this.pictureBox_waveform.Width);
+                if (e.X >= width - 1 || e.X <= 0)
+                {
+                    // Berechne wie weit wir über den Rand hinaus sind
+                    long overflow = (e.X >= width - 1) ? (e.X - (width - 1)) : (0 - e.X);
+
+                    // Wandle das Pixel-Overflow in Frames um
+                    long frameOverflow = (long) (overflow * this.samplesPerPixel);
+
+                    // Update den Offset
+                    long newOffset = this.offsetFrames + (e.X >= width - 1 ? frameOverflow : -frameOverflow);
+                    this.offsetFrames = Math.Clamp(newOffset, 0, this.GetMaxOffsetFrames());
+
+                    this.UpdateOffsetScrollbar();
+                }
+                // ---------------------------
+
                 this.pictureBox_waveform.Invalidate();
             }
         }
 
         private void Wave_MouseUp(object? sender, MouseEventArgs e)
         {
-            if (this.OriginalAudio.Playing)
-            {
-                this.pendingSelect = false;
-                this.dragSelecting = false;
-                return;
-            }
-
             if (e.Button != MouseButtons.Left)
             {
                 return;
@@ -2546,7 +2561,7 @@ namespace ModularAudience.Forms.Modules
             int snappedX = (int) Math.Round((snappedFrame - this.offsetFrames) * invSpp);
             snappedX = Math.Clamp(snappedX, 0, width - 1);
 
-            Point newWaveClient = new Point(snappedX, waveClient.Y);
+            Point newWaveClient = new(snappedX, waveClient.Y);
             Point newScreenPoint = this.pictureBox_waveform.PointToScreen(newWaveClient);
             Cursor.Position = newScreenPoint;
         }
@@ -2845,7 +2860,7 @@ namespace ModularAudience.Forms.Modules
 
             if (!origin.Synced)
             {
-                return new[] { origin };
+                return [origin];
             }
 
             try
@@ -2864,7 +2879,7 @@ namespace ModularAudience.Forms.Modules
             }
             catch
             {
-                return new[] { origin };
+                return [origin];
             }
         }
 

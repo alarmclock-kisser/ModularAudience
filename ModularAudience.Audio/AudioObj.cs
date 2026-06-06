@@ -357,8 +357,8 @@ namespace ModularAudience.Audio
         {
             this.Name = source.Name;
 
-            // copy audio data and relevant metadata
-            this.Data = (float[]) source.Data.Clone();
+            // copy audio data and relevant metadata, important, no cloning of Data, just assign ref
+            this.Data = source.Data;
             this.SampleRate = source.SampleRate;
             this.Channels = source.Channels;
             this.BitDepth = source.BitDepth;

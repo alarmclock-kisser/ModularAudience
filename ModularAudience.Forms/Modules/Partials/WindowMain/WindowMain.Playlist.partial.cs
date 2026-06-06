@@ -972,7 +972,7 @@ namespace ModularAudience.Forms
                 : "–";
             if (!string.IsNullOrWhiteSpace(name) && name.Contains("__"))
             {
-                name = name.Split(new[] { "__" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
+                name = name.Split(["__"], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
             }
 
             if (name.Length > 96)
@@ -1015,12 +1015,12 @@ namespace ModularAudience.Forms
             // Remove generated suffixes after a double-underscore and common _stretched_ markers
             if (name.Contains("__"))
             {
-                name = name.Split(new[] { "__" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
+                name = name.Split(["__"], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
             }
 
             if (name.IndexOf("_stretched_", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                name = name.Split(new[] { "_stretched_" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
+                name = name.Split(["_stretched_"], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
             }
 
             // Prefer engine-reported current BPM (reflects applied stretch). If missing, fall back to stretch settings.

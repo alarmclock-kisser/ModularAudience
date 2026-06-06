@@ -28,619 +28,628 @@
         /// </summary>
         private void InitializeComponent()
         {
-            components = new System.ComponentModel.Container();
-            listBox_audios = new ListBox();
-            checkBox_autoPlay = new CheckBox();
-            button_export = new Button();
-            checkBox_preview = new CheckBox();
-            contextMenuStrip_audios = new ContextMenuStrip(components);
-            menuToolStripItem_rename = new ToolStripMenuItem();
-            menuToolStripItem_clone = new ToolStripMenuItem();
-            menuToolStripItem_editTags = new ToolStripMenuItem();
-            menuToolStripItem_splitEqualParts = new ToolStripMenuItem();
-            menuToolStripItem_splitEqualParts2 = new ToolStripMenuItem();
-            menuToolStripItem_splitEqualParts4 = new ToolStripMenuItem();
-            menuToolStripItem_splitEqualParts8 = new ToolStripMenuItem();
-            menuToolStripItem_splitEqualParts16 = new ToolStripMenuItem();
-            menuToolStripItem_splitEqualParts32 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeat = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatRun = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatBpm = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatBpm80 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatBpm875 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatBpm100 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatBpm120 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatBpm140 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatBars = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatBars1 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatBars2 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatBars4 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatBars8 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatHits = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatHits6 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatHits8 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatHits12 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatHits16 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatHits24 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatDensity = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatDensitySparse = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatDensityBalanced = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatDensityDense = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatDensityMax = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatComplexity = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatComplexityLow = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatComplexityBalanced = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatComplexityBusy = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatComplexityWild = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatResolution = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatResolution16 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatResolution32 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatSwing = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatSwing0 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatSwing6 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatSwing12 = new ToolStripMenuItem();
-            menuToolStripItem_generateBreakbeatSwing18 = new ToolStripMenuItem();
-            menuToolStripItem_atomize = new ToolStripMenuItem();
-            menuToolStripItem_atomizeRun = new ToolStripMenuItem();
-            menuToolStripItem_atomizeSensitivity = new ToolStripMenuItem();
-            menuToolStripItem_atomizeSensitivityConservative = new ToolStripMenuItem();
-            menuToolStripItem_atomizeSensitivityBalanced = new ToolStripMenuItem();
-            menuToolStripItem_atomizeSensitivityAggressive = new ToolStripMenuItem();
-            menuToolStripItem_atomizeMinSlice = new ToolStripMenuItem();
-            menuToolStripItem_atomizeMinSlice40 = new ToolStripMenuItem();
-            menuToolStripItem_atomizeMinSlice80 = new ToolStripMenuItem();
-            menuToolStripItem_atomizeMinSlice140 = new ToolStripMenuItem();
-            menuToolStripItem_atomizeTailPadding = new ToolStripMenuItem();
-            menuToolStripItem_atomizeTail10 = new ToolStripMenuItem();
-            menuToolStripItem_atomizeTail30 = new ToolStripMenuItem();
-            menuToolStripItem_atomizeTail60 = new ToolStripMenuItem();
-            menuToolStripItem_delete = new ToolStripMenuItem();
-            menuToolStripItem_toNewCollection = new ToolStripMenuItem();
-            menuToolStripItem_addIndexToNames = new ToolStripMenuItem();
-            menuToolStripItem_aggregateMixSelected = new ToolStripMenuItem();
-            menuToolStripItem_timeStretchSelected = new ToolStripMenuItem();
-            menuToolStripItem_demucsSeparateSelected = new ToolStripMenuItem();
-            menuToolStripItem_pinWindow = new ToolStripMenuItem();
-            contextMenuStrip_audios.SuspendLayout();
-            SuspendLayout();
-            // 
-            // contextMenuStrip_audios
-            // 
-            contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { menuToolStripItem_rename, menuToolStripItem_clone, menuToolStripItem_editTags, menuToolStripItem_splitEqualParts, menuToolStripItem_generateBreakbeat, menuToolStripItem_atomize, menuToolStripItem_delete, menuToolStripItem_toNewCollection, menuToolStripItem_addIndexToNames, menuToolStripItem_aggregateMixSelected, menuToolStripItem_timeStretchSelected, menuToolStripItem_demucsSeparateSelected, menuToolStripItem_pinWindow });
-            contextMenuStrip_audios.Name = "contextMenuStrip_audios";
-            contextMenuStrip_audios.Size = new Size(213, 246);
-            contextMenuStrip_audios.Opening += contextMenuStrip_audios_Opening;
+            this.components = new System.ComponentModel.Container();
+            this.listBox_audios = new ListBox();
+            this.checkBox_autoPlay = new CheckBox();
+            this.button_export = new Button();
+            this.checkBox_preview = new CheckBox();
+            this.contextMenuStrip_audios = new ContextMenuStrip(this.components);
+            this.menuToolStripItem_rename = new ToolStripMenuItem();
+            this.menuToolStripItem_clone = new ToolStripMenuItem();
+            this.menuToolStripItem_editTags = new ToolStripMenuItem();
+            this.menuToolStripItem_splitEqualParts = new ToolStripMenuItem();
+            this.menuToolStripItem_splitEqualParts2 = new ToolStripMenuItem();
+            this.menuToolStripItem_splitEqualParts4 = new ToolStripMenuItem();
+            this.menuToolStripItem_splitEqualParts8 = new ToolStripMenuItem();
+            this.menuToolStripItem_splitEqualParts16 = new ToolStripMenuItem();
+            this.menuToolStripItem_splitEqualParts32 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeat = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatRun = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatBpm = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatBpm80 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatBpm875 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatBpm100 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatBpm120 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatBpm140 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatBars = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatBars1 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatBars2 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatBars4 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatBars8 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatHits = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatHits6 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatHits8 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatHits12 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatHits16 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatHits24 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatDensity = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatDensitySparse = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatDensityBalanced = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatDensityDense = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatDensityMax = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatComplexity = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatComplexityLow = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatComplexityBalanced = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatComplexityBusy = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatComplexityWild = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatResolution = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatResolution16 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatResolution32 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatSwing = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatSwing0 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatSwing6 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatSwing12 = new ToolStripMenuItem();
+            this.menuToolStripItem_generateBreakbeatSwing18 = new ToolStripMenuItem();
+            this.menuToolStripItem_atomize = new ToolStripMenuItem();
+            this.menuToolStripItem_atomizeRun = new ToolStripMenuItem();
+            this.menuToolStripItem_atomizeSensitivity = new ToolStripMenuItem();
+            this.menuToolStripItem_atomizeSensitivityConservative = new ToolStripMenuItem();
+            this.menuToolStripItem_atomizeSensitivityBalanced = new ToolStripMenuItem();
+            this.menuToolStripItem_atomizeSensitivityAggressive = new ToolStripMenuItem();
+            this.menuToolStripItem_atomizeMinSlice = new ToolStripMenuItem();
+            this.menuToolStripItem_atomizeMinSlice40 = new ToolStripMenuItem();
+            this.menuToolStripItem_atomizeMinSlice80 = new ToolStripMenuItem();
+            this.menuToolStripItem_atomizeMinSlice140 = new ToolStripMenuItem();
+            this.menuToolStripItem_atomizeTailPadding = new ToolStripMenuItem();
+            this.menuToolStripItem_atomizeTail10 = new ToolStripMenuItem();
+            this.menuToolStripItem_atomizeTail30 = new ToolStripMenuItem();
+            this.menuToolStripItem_atomizeTail60 = new ToolStripMenuItem();
+            this.menuToolStripItem_delete = new ToolStripMenuItem();
+            this.menuToolStripItem_toNewCollection = new ToolStripMenuItem();
+            this.menuToolStripItem_addIndexToNames = new ToolStripMenuItem();
+            this.menuToolStripItem_aggregateMixSelected = new ToolStripMenuItem();
+            this.menuToolStripItem_timeStretchSelected = new ToolStripMenuItem();
+            this.menuToolStripItem_demucsSeparateSelected = new ToolStripMenuItem();
+            this.menuToolStripItem_pinWindow = new ToolStripMenuItem();
+            this.toolStripComboBox_orderBy = new ToolStripComboBox();
+            this.contextMenuStrip_audios.SuspendLayout();
+            this.SuspendLayout();
             // 
             // listBox_audios
             // 
-            listBox_audios.FormattingEnabled = true;
-            listBox_audios.Location = new Point(12, 27);
-            listBox_audios.Name = "listBox_audios";
-            listBox_audios.SelectionMode = SelectionMode.MultiExtended;
-            listBox_audios.Size = new Size(220, 289);
-            listBox_audios.TabIndex = 0;
-            listBox_audios.SelectedIndexChanged += listBox_audios_SelectedIndexChanged;
+            this.listBox_audios.FormattingEnabled = true;
+            this.listBox_audios.Location = new Point(12, 27);
+            this.listBox_audios.Name = "listBox_audios";
+            this.listBox_audios.SelectionMode = SelectionMode.MultiExtended;
+            this.listBox_audios.Size = new Size(220, 289);
+            this.listBox_audios.TabIndex = 0;
+            this.listBox_audios.SelectedIndexChanged += this.listBox_audios_SelectedIndexChanged;
             // 
             // checkBox_autoPlay
             // 
-            checkBox_autoPlay.AutoSize = true;
-            checkBox_autoPlay.Location = new Point(155, 2);
-            checkBox_autoPlay.Name = "checkBox_autoPlay";
-            checkBox_autoPlay.Size = new Size(77, 19);
-            checkBox_autoPlay.TabIndex = 1;
-            checkBox_autoPlay.Text = "Auto Play";
-            checkBox_autoPlay.UseVisualStyleBackColor = true;
+            this.checkBox_autoPlay.AutoSize = true;
+            this.checkBox_autoPlay.Location = new Point(155, 2);
+            this.checkBox_autoPlay.Name = "checkBox_autoPlay";
+            this.checkBox_autoPlay.Size = new Size(77, 19);
+            this.checkBox_autoPlay.TabIndex = 1;
+            this.checkBox_autoPlay.Text = "Auto Play";
+            this.checkBox_autoPlay.UseVisualStyleBackColor = true;
             // 
             // button_export
             // 
-            button_export.BackColor = Color.FromArgb(192, 255, 255);
-            button_export.Location = new Point(12, 2);
-            button_export.Name = "button_export";
-            button_export.Size = new Size(60, 23);
-            button_export.TabIndex = 2;
-            button_export.Text = "Export";
-            button_export.UseVisualStyleBackColor = false;
-            button_export.Click += button_export_Click;
+            this.button_export.BackColor = Color.FromArgb(  192,   255,   255);
+            this.button_export.Location = new Point(12, 2);
+            this.button_export.Name = "button_export";
+            this.button_export.Size = new Size(60, 23);
+            this.button_export.TabIndex = 2;
+            this.button_export.Text = "Export";
+            this.button_export.UseVisualStyleBackColor = false;
+            this.button_export.Click += this.button_export_Click;
             // 
             // checkBox_preview
             // 
-            checkBox_preview.AutoSize = true;
-            checkBox_preview.Location = new Point(82, 2);
-            checkBox_preview.Name = "checkBox_preview";
-            checkBox_preview.Size = new Size(67, 19);
-            checkBox_preview.TabIndex = 3;
-            checkBox_preview.Text = "Preview";
-            checkBox_preview.UseVisualStyleBackColor = true;
+            this.checkBox_preview.AutoSize = true;
+            this.checkBox_preview.Location = new Point(82, 2);
+            this.checkBox_preview.Name = "checkBox_preview";
+            this.checkBox_preview.Size = new Size(67, 19);
+            this.checkBox_preview.TabIndex = 3;
+            this.checkBox_preview.Text = "Preview";
+            this.checkBox_preview.UseVisualStyleBackColor = true;
+            // 
+            // contextMenuStrip_audios
+            // 
+            this.contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { this.menuToolStripItem_rename, this.menuToolStripItem_clone, this.menuToolStripItem_editTags, this.menuToolStripItem_splitEqualParts, this.menuToolStripItem_generateBreakbeat, this.menuToolStripItem_atomize, this.menuToolStripItem_delete, this.menuToolStripItem_toNewCollection, this.menuToolStripItem_addIndexToNames, this.menuToolStripItem_aggregateMixSelected, this.menuToolStripItem_timeStretchSelected, this.menuToolStripItem_demucsSeparateSelected, this.menuToolStripItem_pinWindow, this.toolStripComboBox_orderBy });
+            this.contextMenuStrip_audios.Name = "contextMenuStrip_audios";
+            this.contextMenuStrip_audios.Size = new Size(213, 339);
+            this.contextMenuStrip_audios.Opening += this.contextMenuStrip_audios_Opening;
             // 
             // menuToolStripItem_rename
             // 
-            menuToolStripItem_rename.Name = "menuToolStripItem_rename";
-            menuToolStripItem_rename.Size = new Size(212, 22);
-            menuToolStripItem_rename.Text = "Rename";
-            menuToolStripItem_rename.Click += menuToolStripItem_rename_Click;
+            this.menuToolStripItem_rename.Name = "menuToolStripItem_rename";
+            this.menuToolStripItem_rename.Size = new Size(212, 22);
+            this.menuToolStripItem_rename.Text = "Rename";
+            this.menuToolStripItem_rename.Click += this.menuToolStripItem_rename_Click;
             // 
             // menuToolStripItem_clone
             // 
-            menuToolStripItem_clone.Name = "menuToolStripItem_clone";
-            menuToolStripItem_clone.Size = new Size(212, 22);
-            menuToolStripItem_clone.Text = "Clone";
-            menuToolStripItem_clone.Click += menuToolStripItem_clone_Click;
+            this.menuToolStripItem_clone.Name = "menuToolStripItem_clone";
+            this.menuToolStripItem_clone.Size = new Size(212, 22);
+            this.menuToolStripItem_clone.Text = "Clone";
+            this.menuToolStripItem_clone.Click += this.menuToolStripItem_clone_Click;
             // 
             // menuToolStripItem_editTags
             // 
-            menuToolStripItem_editTags.Name = "menuToolStripItem_editTags";
-            menuToolStripItem_editTags.Size = new Size(212, 22);
-            menuToolStripItem_editTags.Text = "Edit Tags";
-            menuToolStripItem_editTags.Click += menuToolStripItem_editTags_Click;
+            this.menuToolStripItem_editTags.Name = "menuToolStripItem_editTags";
+            this.menuToolStripItem_editTags.Size = new Size(212, 22);
+            this.menuToolStripItem_editTags.Text = "Edit Tags";
+            this.menuToolStripItem_editTags.Click += this.menuToolStripItem_editTags_Click;
             // 
             // menuToolStripItem_splitEqualParts
             // 
-            menuToolStripItem_splitEqualParts.DropDownItems.AddRange(new ToolStripItem[] { menuToolStripItem_splitEqualParts2, menuToolStripItem_splitEqualParts4, menuToolStripItem_splitEqualParts8, menuToolStripItem_splitEqualParts16, menuToolStripItem_splitEqualParts32 });
-            menuToolStripItem_splitEqualParts.Name = "menuToolStripItem_splitEqualParts";
-            menuToolStripItem_splitEqualParts.Size = new Size(212, 22);
-            menuToolStripItem_splitEqualParts.Text = "Split Into Equal Parts";
+            this.menuToolStripItem_splitEqualParts.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_splitEqualParts2, this.menuToolStripItem_splitEqualParts4, this.menuToolStripItem_splitEqualParts8, this.menuToolStripItem_splitEqualParts16, this.menuToolStripItem_splitEqualParts32 });
+            this.menuToolStripItem_splitEqualParts.Name = "menuToolStripItem_splitEqualParts";
+            this.menuToolStripItem_splitEqualParts.Size = new Size(212, 22);
+            this.menuToolStripItem_splitEqualParts.Text = "Split Into Equal Parts";
             // 
             // menuToolStripItem_splitEqualParts2
             // 
-            menuToolStripItem_splitEqualParts2.Name = "menuToolStripItem_splitEqualParts2";
-            menuToolStripItem_splitEqualParts2.Size = new Size(80, 22);
-            menuToolStripItem_splitEqualParts2.Text = "2";
-            menuToolStripItem_splitEqualParts2.Click += menuToolStripItem_splitEqualParts2_Click;
+            this.menuToolStripItem_splitEqualParts2.Name = "menuToolStripItem_splitEqualParts2";
+            this.menuToolStripItem_splitEqualParts2.Size = new Size(86, 22);
+            this.menuToolStripItem_splitEqualParts2.Text = "2";
+            this.menuToolStripItem_splitEqualParts2.Click += this.menuToolStripItem_splitEqualParts2_Click;
             // 
             // menuToolStripItem_splitEqualParts4
             // 
-            menuToolStripItem_splitEqualParts4.Name = "menuToolStripItem_splitEqualParts4";
-            menuToolStripItem_splitEqualParts4.Size = new Size(80, 22);
-            menuToolStripItem_splitEqualParts4.Text = "4";
-            menuToolStripItem_splitEqualParts4.Click += menuToolStripItem_splitEqualParts4_Click;
+            this.menuToolStripItem_splitEqualParts4.Name = "menuToolStripItem_splitEqualParts4";
+            this.menuToolStripItem_splitEqualParts4.Size = new Size(86, 22);
+            this.menuToolStripItem_splitEqualParts4.Text = "4";
+            this.menuToolStripItem_splitEqualParts4.Click += this.menuToolStripItem_splitEqualParts4_Click;
             // 
             // menuToolStripItem_splitEqualParts8
             // 
-            menuToolStripItem_splitEqualParts8.Name = "menuToolStripItem_splitEqualParts8";
-            menuToolStripItem_splitEqualParts8.Size = new Size(80, 22);
-            menuToolStripItem_splitEqualParts8.Text = "8";
-            menuToolStripItem_splitEqualParts8.Click += menuToolStripItem_splitEqualParts8_Click;
+            this.menuToolStripItem_splitEqualParts8.Name = "menuToolStripItem_splitEqualParts8";
+            this.menuToolStripItem_splitEqualParts8.Size = new Size(86, 22);
+            this.menuToolStripItem_splitEqualParts8.Text = "8";
+            this.menuToolStripItem_splitEqualParts8.Click += this.menuToolStripItem_splitEqualParts8_Click;
             // 
             // menuToolStripItem_splitEqualParts16
             // 
-            menuToolStripItem_splitEqualParts16.Name = "menuToolStripItem_splitEqualParts16";
-            menuToolStripItem_splitEqualParts16.Size = new Size(80, 22);
-            menuToolStripItem_splitEqualParts16.Text = "16";
-            menuToolStripItem_splitEqualParts16.Click += menuToolStripItem_splitEqualParts16_Click;
+            this.menuToolStripItem_splitEqualParts16.Name = "menuToolStripItem_splitEqualParts16";
+            this.menuToolStripItem_splitEqualParts16.Size = new Size(86, 22);
+            this.menuToolStripItem_splitEqualParts16.Text = "16";
+            this.menuToolStripItem_splitEqualParts16.Click += this.menuToolStripItem_splitEqualParts16_Click;
             // 
             // menuToolStripItem_splitEqualParts32
             // 
-            menuToolStripItem_splitEqualParts32.Name = "menuToolStripItem_splitEqualParts32";
-            menuToolStripItem_splitEqualParts32.Size = new Size(80, 22);
-            menuToolStripItem_splitEqualParts32.Text = "32";
-            menuToolStripItem_splitEqualParts32.Click += menuToolStripItem_splitEqualParts32_Click;
+            this.menuToolStripItem_splitEqualParts32.Name = "menuToolStripItem_splitEqualParts32";
+            this.menuToolStripItem_splitEqualParts32.Size = new Size(86, 22);
+            this.menuToolStripItem_splitEqualParts32.Text = "32";
+            this.menuToolStripItem_splitEqualParts32.Click += this.menuToolStripItem_splitEqualParts32_Click;
             // 
             // menuToolStripItem_generateBreakbeat
             // 
-            menuToolStripItem_generateBreakbeat.DropDownItems.AddRange(new ToolStripItem[] { menuToolStripItem_generateBreakbeatRun, menuToolStripItem_generateBreakbeatBpm, menuToolStripItem_generateBreakbeatBars, menuToolStripItem_generateBreakbeatHits, menuToolStripItem_generateBreakbeatDensity, menuToolStripItem_generateBreakbeatComplexity, menuToolStripItem_generateBreakbeatResolution, menuToolStripItem_generateBreakbeatSwing });
-            menuToolStripItem_generateBreakbeat.Name = "menuToolStripItem_generateBreakbeat";
-            menuToolStripItem_generateBreakbeat.Size = new Size(212, 22);
-            menuToolStripItem_generateBreakbeat.Text = "Generate Breakbeat";
+            this.menuToolStripItem_generateBreakbeat.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatRun, this.menuToolStripItem_generateBreakbeatBpm, this.menuToolStripItem_generateBreakbeatBars, this.menuToolStripItem_generateBreakbeatHits, this.menuToolStripItem_generateBreakbeatDensity, this.menuToolStripItem_generateBreakbeatComplexity, this.menuToolStripItem_generateBreakbeatResolution, this.menuToolStripItem_generateBreakbeatSwing });
+            this.menuToolStripItem_generateBreakbeat.Name = "menuToolStripItem_generateBreakbeat";
+            this.menuToolStripItem_generateBreakbeat.Size = new Size(212, 22);
+            this.menuToolStripItem_generateBreakbeat.Text = "Generate Breakbeat";
             // 
             // menuToolStripItem_generateBreakbeatRun
             // 
-            menuToolStripItem_generateBreakbeatRun.Name = "menuToolStripItem_generateBreakbeatRun";
-            menuToolStripItem_generateBreakbeatRun.Size = new Size(180, 22);
-            menuToolStripItem_generateBreakbeatRun.Text = "Run";
-            menuToolStripItem_generateBreakbeatRun.Click += menuToolStripItem_generateBreakbeatRun_Click;
+            this.menuToolStripItem_generateBreakbeatRun.Name = "menuToolStripItem_generateBreakbeatRun";
+            this.menuToolStripItem_generateBreakbeatRun.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatRun.Text = "Run";
+            this.menuToolStripItem_generateBreakbeatRun.Click += this.menuToolStripItem_generateBreakbeatRun_Click;
             // 
             // menuToolStripItem_generateBreakbeatBpm
             // 
-            menuToolStripItem_generateBreakbeatBpm.DropDownItems.AddRange(new ToolStripItem[] { menuToolStripItem_generateBreakbeatBpm80, menuToolStripItem_generateBreakbeatBpm875, menuToolStripItem_generateBreakbeatBpm100, menuToolStripItem_generateBreakbeatBpm120, menuToolStripItem_generateBreakbeatBpm140 });
-            menuToolStripItem_generateBreakbeatBpm.Name = "menuToolStripItem_generateBreakbeatBpm";
-            menuToolStripItem_generateBreakbeatBpm.Size = new Size(180, 22);
-            menuToolStripItem_generateBreakbeatBpm.Text = "BPM";
+            this.menuToolStripItem_generateBreakbeatBpm.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatBpm80, this.menuToolStripItem_generateBreakbeatBpm875, this.menuToolStripItem_generateBreakbeatBpm100, this.menuToolStripItem_generateBreakbeatBpm120, this.menuToolStripItem_generateBreakbeatBpm140 });
+            this.menuToolStripItem_generateBreakbeatBpm.Name = "menuToolStripItem_generateBreakbeatBpm";
+            this.menuToolStripItem_generateBreakbeatBpm.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatBpm.Text = "BPM";
             // 
             // menuToolStripItem_generateBreakbeatBpm80
             // 
-            menuToolStripItem_generateBreakbeatBpm80.Name = "menuToolStripItem_generateBreakbeatBpm80";
-            menuToolStripItem_generateBreakbeatBpm80.Size = new Size(99, 22);
-            menuToolStripItem_generateBreakbeatBpm80.Text = "80";
-            menuToolStripItem_generateBreakbeatBpm80.Click += menuToolStripItem_generateBreakbeatBpm80_Click;
+            this.menuToolStripItem_generateBreakbeatBpm80.Name = "menuToolStripItem_generateBreakbeatBpm80";
+            this.menuToolStripItem_generateBreakbeatBpm80.Size = new Size(95, 22);
+            this.menuToolStripItem_generateBreakbeatBpm80.Text = "80";
+            this.menuToolStripItem_generateBreakbeatBpm80.Click += this.menuToolStripItem_generateBreakbeatBpm80_Click;
             // 
             // menuToolStripItem_generateBreakbeatBpm875
             // 
-            menuToolStripItem_generateBreakbeatBpm875.Name = "menuToolStripItem_generateBreakbeatBpm875";
-            menuToolStripItem_generateBreakbeatBpm875.Size = new Size(99, 22);
-            menuToolStripItem_generateBreakbeatBpm875.Text = "87.5";
-            menuToolStripItem_generateBreakbeatBpm875.Click += menuToolStripItem_generateBreakbeatBpm875_Click;
+            this.menuToolStripItem_generateBreakbeatBpm875.Name = "menuToolStripItem_generateBreakbeatBpm875";
+            this.menuToolStripItem_generateBreakbeatBpm875.Size = new Size(95, 22);
+            this.menuToolStripItem_generateBreakbeatBpm875.Text = "87.5";
+            this.menuToolStripItem_generateBreakbeatBpm875.Click += this.menuToolStripItem_generateBreakbeatBpm875_Click;
             // 
             // menuToolStripItem_generateBreakbeatBpm100
             // 
-            menuToolStripItem_generateBreakbeatBpm100.Name = "menuToolStripItem_generateBreakbeatBpm100";
-            menuToolStripItem_generateBreakbeatBpm100.Size = new Size(99, 22);
-            menuToolStripItem_generateBreakbeatBpm100.Text = "100";
-            menuToolStripItem_generateBreakbeatBpm100.Click += menuToolStripItem_generateBreakbeatBpm100_Click;
+            this.menuToolStripItem_generateBreakbeatBpm100.Name = "menuToolStripItem_generateBreakbeatBpm100";
+            this.menuToolStripItem_generateBreakbeatBpm100.Size = new Size(95, 22);
+            this.menuToolStripItem_generateBreakbeatBpm100.Text = "100";
+            this.menuToolStripItem_generateBreakbeatBpm100.Click += this.menuToolStripItem_generateBreakbeatBpm100_Click;
             // 
             // menuToolStripItem_generateBreakbeatBpm120
             // 
-            menuToolStripItem_generateBreakbeatBpm120.Name = "menuToolStripItem_generateBreakbeatBpm120";
-            menuToolStripItem_generateBreakbeatBpm120.Size = new Size(99, 22);
-            menuToolStripItem_generateBreakbeatBpm120.Text = "120";
-            menuToolStripItem_generateBreakbeatBpm120.Click += menuToolStripItem_generateBreakbeatBpm120_Click;
+            this.menuToolStripItem_generateBreakbeatBpm120.Name = "menuToolStripItem_generateBreakbeatBpm120";
+            this.menuToolStripItem_generateBreakbeatBpm120.Size = new Size(95, 22);
+            this.menuToolStripItem_generateBreakbeatBpm120.Text = "120";
+            this.menuToolStripItem_generateBreakbeatBpm120.Click += this.menuToolStripItem_generateBreakbeatBpm120_Click;
             // 
             // menuToolStripItem_generateBreakbeatBpm140
             // 
-            menuToolStripItem_generateBreakbeatBpm140.Name = "menuToolStripItem_generateBreakbeatBpm140";
-            menuToolStripItem_generateBreakbeatBpm140.Size = new Size(99, 22);
-            menuToolStripItem_generateBreakbeatBpm140.Text = "140";
-            menuToolStripItem_generateBreakbeatBpm140.Click += menuToolStripItem_generateBreakbeatBpm140_Click;
+            this.menuToolStripItem_generateBreakbeatBpm140.Name = "menuToolStripItem_generateBreakbeatBpm140";
+            this.menuToolStripItem_generateBreakbeatBpm140.Size = new Size(95, 22);
+            this.menuToolStripItem_generateBreakbeatBpm140.Text = "140";
+            this.menuToolStripItem_generateBreakbeatBpm140.Click += this.menuToolStripItem_generateBreakbeatBpm140_Click;
             // 
             // menuToolStripItem_generateBreakbeatBars
             // 
-            menuToolStripItem_generateBreakbeatBars.DropDownItems.AddRange(new ToolStripItem[] { menuToolStripItem_generateBreakbeatBars1, menuToolStripItem_generateBreakbeatBars2, menuToolStripItem_generateBreakbeatBars4, menuToolStripItem_generateBreakbeatBars8 });
-            menuToolStripItem_generateBreakbeatBars.Name = "menuToolStripItem_generateBreakbeatBars";
-            menuToolStripItem_generateBreakbeatBars.Size = new Size(180, 22);
-            menuToolStripItem_generateBreakbeatBars.Text = "Bars";
+            this.menuToolStripItem_generateBreakbeatBars.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatBars1, this.menuToolStripItem_generateBreakbeatBars2, this.menuToolStripItem_generateBreakbeatBars4, this.menuToolStripItem_generateBreakbeatBars8 });
+            this.menuToolStripItem_generateBreakbeatBars.Name = "menuToolStripItem_generateBreakbeatBars";
+            this.menuToolStripItem_generateBreakbeatBars.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatBars.Text = "Bars";
             // 
             // menuToolStripItem_generateBreakbeatBars1
             // 
-            menuToolStripItem_generateBreakbeatBars1.Name = "menuToolStripItem_generateBreakbeatBars1";
-            menuToolStripItem_generateBreakbeatBars1.Size = new Size(80, 22);
-            menuToolStripItem_generateBreakbeatBars1.Text = "1";
-            menuToolStripItem_generateBreakbeatBars1.Click += menuToolStripItem_generateBreakbeatBars1_Click;
+            this.menuToolStripItem_generateBreakbeatBars1.Name = "menuToolStripItem_generateBreakbeatBars1";
+            this.menuToolStripItem_generateBreakbeatBars1.Size = new Size(80, 22);
+            this.menuToolStripItem_generateBreakbeatBars1.Text = "1";
+            this.menuToolStripItem_generateBreakbeatBars1.Click += this.menuToolStripItem_generateBreakbeatBars1_Click;
             // 
             // menuToolStripItem_generateBreakbeatBars2
             // 
-            menuToolStripItem_generateBreakbeatBars2.Name = "menuToolStripItem_generateBreakbeatBars2";
-            menuToolStripItem_generateBreakbeatBars2.Size = new Size(80, 22);
-            menuToolStripItem_generateBreakbeatBars2.Text = "2";
-            menuToolStripItem_generateBreakbeatBars2.Click += menuToolStripItem_generateBreakbeatBars2_Click;
+            this.menuToolStripItem_generateBreakbeatBars2.Name = "menuToolStripItem_generateBreakbeatBars2";
+            this.menuToolStripItem_generateBreakbeatBars2.Size = new Size(80, 22);
+            this.menuToolStripItem_generateBreakbeatBars2.Text = "2";
+            this.menuToolStripItem_generateBreakbeatBars2.Click += this.menuToolStripItem_generateBreakbeatBars2_Click;
             // 
             // menuToolStripItem_generateBreakbeatBars4
             // 
-            menuToolStripItem_generateBreakbeatBars4.Name = "menuToolStripItem_generateBreakbeatBars4";
-            menuToolStripItem_generateBreakbeatBars4.Size = new Size(80, 22);
-            menuToolStripItem_generateBreakbeatBars4.Text = "4";
-            menuToolStripItem_generateBreakbeatBars4.Click += menuToolStripItem_generateBreakbeatBars4_Click;
+            this.menuToolStripItem_generateBreakbeatBars4.Name = "menuToolStripItem_generateBreakbeatBars4";
+            this.menuToolStripItem_generateBreakbeatBars4.Size = new Size(80, 22);
+            this.menuToolStripItem_generateBreakbeatBars4.Text = "4";
+            this.menuToolStripItem_generateBreakbeatBars4.Click += this.menuToolStripItem_generateBreakbeatBars4_Click;
             // 
             // menuToolStripItem_generateBreakbeatBars8
             // 
-            menuToolStripItem_generateBreakbeatBars8.Name = "menuToolStripItem_generateBreakbeatBars8";
-            menuToolStripItem_generateBreakbeatBars8.Size = new Size(80, 22);
-            menuToolStripItem_generateBreakbeatBars8.Text = "8";
-            menuToolStripItem_generateBreakbeatBars8.Click += menuToolStripItem_generateBreakbeatBars8_Click;
+            this.menuToolStripItem_generateBreakbeatBars8.Name = "menuToolStripItem_generateBreakbeatBars8";
+            this.menuToolStripItem_generateBreakbeatBars8.Size = new Size(80, 22);
+            this.menuToolStripItem_generateBreakbeatBars8.Text = "8";
+            this.menuToolStripItem_generateBreakbeatBars8.Click += this.menuToolStripItem_generateBreakbeatBars8_Click;
             // 
             // menuToolStripItem_generateBreakbeatHits
             // 
-            menuToolStripItem_generateBreakbeatHits.DropDownItems.AddRange(new ToolStripItem[] { menuToolStripItem_generateBreakbeatHits6, menuToolStripItem_generateBreakbeatHits8, menuToolStripItem_generateBreakbeatHits12, menuToolStripItem_generateBreakbeatHits16, menuToolStripItem_generateBreakbeatHits24 });
-            menuToolStripItem_generateBreakbeatHits.Name = "menuToolStripItem_generateBreakbeatHits";
-            menuToolStripItem_generateBreakbeatHits.Size = new Size(180, 22);
-            menuToolStripItem_generateBreakbeatHits.Text = "Hits / Bar";
+            this.menuToolStripItem_generateBreakbeatHits.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatHits6, this.menuToolStripItem_generateBreakbeatHits8, this.menuToolStripItem_generateBreakbeatHits12, this.menuToolStripItem_generateBreakbeatHits16, this.menuToolStripItem_generateBreakbeatHits24 });
+            this.menuToolStripItem_generateBreakbeatHits.Name = "menuToolStripItem_generateBreakbeatHits";
+            this.menuToolStripItem_generateBreakbeatHits.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatHits.Text = "Hits / Bar";
             // 
             // menuToolStripItem_generateBreakbeatHits6
             // 
-            menuToolStripItem_generateBreakbeatHits6.Name = "menuToolStripItem_generateBreakbeatHits6";
-            menuToolStripItem_generateBreakbeatHits6.Size = new Size(86, 22);
-            menuToolStripItem_generateBreakbeatHits6.Text = "6";
-            menuToolStripItem_generateBreakbeatHits6.Click += menuToolStripItem_generateBreakbeatHits6_Click;
+            this.menuToolStripItem_generateBreakbeatHits6.Name = "menuToolStripItem_generateBreakbeatHits6";
+            this.menuToolStripItem_generateBreakbeatHits6.Size = new Size(86, 22);
+            this.menuToolStripItem_generateBreakbeatHits6.Text = "6";
+            this.menuToolStripItem_generateBreakbeatHits6.Click += this.menuToolStripItem_generateBreakbeatHits6_Click;
             // 
             // menuToolStripItem_generateBreakbeatHits8
             // 
-            menuToolStripItem_generateBreakbeatHits8.Name = "menuToolStripItem_generateBreakbeatHits8";
-            menuToolStripItem_generateBreakbeatHits8.Size = new Size(86, 22);
-            menuToolStripItem_generateBreakbeatHits8.Text = "8";
-            menuToolStripItem_generateBreakbeatHits8.Click += menuToolStripItem_generateBreakbeatHits8_Click;
+            this.menuToolStripItem_generateBreakbeatHits8.Name = "menuToolStripItem_generateBreakbeatHits8";
+            this.menuToolStripItem_generateBreakbeatHits8.Size = new Size(86, 22);
+            this.menuToolStripItem_generateBreakbeatHits8.Text = "8";
+            this.menuToolStripItem_generateBreakbeatHits8.Click += this.menuToolStripItem_generateBreakbeatHits8_Click;
             // 
             // menuToolStripItem_generateBreakbeatHits12
             // 
-            menuToolStripItem_generateBreakbeatHits12.Name = "menuToolStripItem_generateBreakbeatHits12";
-            menuToolStripItem_generateBreakbeatHits12.Size = new Size(86, 22);
-            menuToolStripItem_generateBreakbeatHits12.Text = "12";
-            menuToolStripItem_generateBreakbeatHits12.Click += menuToolStripItem_generateBreakbeatHits12_Click;
+            this.menuToolStripItem_generateBreakbeatHits12.Name = "menuToolStripItem_generateBreakbeatHits12";
+            this.menuToolStripItem_generateBreakbeatHits12.Size = new Size(86, 22);
+            this.menuToolStripItem_generateBreakbeatHits12.Text = "12";
+            this.menuToolStripItem_generateBreakbeatHits12.Click += this.menuToolStripItem_generateBreakbeatHits12_Click;
             // 
             // menuToolStripItem_generateBreakbeatHits16
             // 
-            menuToolStripItem_generateBreakbeatHits16.Name = "menuToolStripItem_generateBreakbeatHits16";
-            menuToolStripItem_generateBreakbeatHits16.Size = new Size(86, 22);
-            menuToolStripItem_generateBreakbeatHits16.Text = "16";
-            menuToolStripItem_generateBreakbeatHits16.Click += menuToolStripItem_generateBreakbeatHits16_Click;
+            this.menuToolStripItem_generateBreakbeatHits16.Name = "menuToolStripItem_generateBreakbeatHits16";
+            this.menuToolStripItem_generateBreakbeatHits16.Size = new Size(86, 22);
+            this.menuToolStripItem_generateBreakbeatHits16.Text = "16";
+            this.menuToolStripItem_generateBreakbeatHits16.Click += this.menuToolStripItem_generateBreakbeatHits16_Click;
             // 
             // menuToolStripItem_generateBreakbeatHits24
             // 
-            menuToolStripItem_generateBreakbeatHits24.Name = "menuToolStripItem_generateBreakbeatHits24";
-            menuToolStripItem_generateBreakbeatHits24.Size = new Size(86, 22);
-            menuToolStripItem_generateBreakbeatHits24.Text = "24";
-            menuToolStripItem_generateBreakbeatHits24.Click += menuToolStripItem_generateBreakbeatHits24_Click;
+            this.menuToolStripItem_generateBreakbeatHits24.Name = "menuToolStripItem_generateBreakbeatHits24";
+            this.menuToolStripItem_generateBreakbeatHits24.Size = new Size(86, 22);
+            this.menuToolStripItem_generateBreakbeatHits24.Text = "24";
+            this.menuToolStripItem_generateBreakbeatHits24.Click += this.menuToolStripItem_generateBreakbeatHits24_Click;
             // 
             // menuToolStripItem_generateBreakbeatDensity
             // 
-            menuToolStripItem_generateBreakbeatDensity.DropDownItems.AddRange(new ToolStripItem[] { menuToolStripItem_generateBreakbeatDensitySparse, menuToolStripItem_generateBreakbeatDensityBalanced, menuToolStripItem_generateBreakbeatDensityDense, menuToolStripItem_generateBreakbeatDensityMax });
-            menuToolStripItem_generateBreakbeatDensity.Name = "menuToolStripItem_generateBreakbeatDensity";
-            menuToolStripItem_generateBreakbeatDensity.Size = new Size(180, 22);
-            menuToolStripItem_generateBreakbeatDensity.Text = "Density";
+            this.menuToolStripItem_generateBreakbeatDensity.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatDensitySparse, this.menuToolStripItem_generateBreakbeatDensityBalanced, this.menuToolStripItem_generateBreakbeatDensityDense, this.menuToolStripItem_generateBreakbeatDensityMax });
+            this.menuToolStripItem_generateBreakbeatDensity.Name = "menuToolStripItem_generateBreakbeatDensity";
+            this.menuToolStripItem_generateBreakbeatDensity.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatDensity.Text = "Density";
             // 
             // menuToolStripItem_generateBreakbeatDensitySparse
             // 
-            menuToolStripItem_generateBreakbeatDensitySparse.Name = "menuToolStripItem_generateBreakbeatDensitySparse";
-            menuToolStripItem_generateBreakbeatDensitySparse.Size = new Size(121, 22);
-            menuToolStripItem_generateBreakbeatDensitySparse.Text = "Sparse";
-            menuToolStripItem_generateBreakbeatDensitySparse.Click += menuToolStripItem_generateBreakbeatDensitySparse_Click;
+            this.menuToolStripItem_generateBreakbeatDensitySparse.Name = "menuToolStripItem_generateBreakbeatDensitySparse";
+            this.menuToolStripItem_generateBreakbeatDensitySparse.Size = new Size(128, 22);
+            this.menuToolStripItem_generateBreakbeatDensitySparse.Text = "Sparse";
+            this.menuToolStripItem_generateBreakbeatDensitySparse.Click += this.menuToolStripItem_generateBreakbeatDensitySparse_Click;
             // 
             // menuToolStripItem_generateBreakbeatDensityBalanced
             // 
-            menuToolStripItem_generateBreakbeatDensityBalanced.Name = "menuToolStripItem_generateBreakbeatDensityBalanced";
-            menuToolStripItem_generateBreakbeatDensityBalanced.Size = new Size(121, 22);
-            menuToolStripItem_generateBreakbeatDensityBalanced.Text = "Balanced";
-            menuToolStripItem_generateBreakbeatDensityBalanced.Click += menuToolStripItem_generateBreakbeatDensityBalanced_Click;
+            this.menuToolStripItem_generateBreakbeatDensityBalanced.Name = "menuToolStripItem_generateBreakbeatDensityBalanced";
+            this.menuToolStripItem_generateBreakbeatDensityBalanced.Size = new Size(128, 22);
+            this.menuToolStripItem_generateBreakbeatDensityBalanced.Text = "Balanced";
+            this.menuToolStripItem_generateBreakbeatDensityBalanced.Click += this.menuToolStripItem_generateBreakbeatDensityBalanced_Click;
             // 
             // menuToolStripItem_generateBreakbeatDensityDense
             // 
-            menuToolStripItem_generateBreakbeatDensityDense.Name = "menuToolStripItem_generateBreakbeatDensityDense";
-            menuToolStripItem_generateBreakbeatDensityDense.Size = new Size(121, 22);
-            menuToolStripItem_generateBreakbeatDensityDense.Text = "Dense";
-            menuToolStripItem_generateBreakbeatDensityDense.Click += menuToolStripItem_generateBreakbeatDensityDense_Click;
+            this.menuToolStripItem_generateBreakbeatDensityDense.Name = "menuToolStripItem_generateBreakbeatDensityDense";
+            this.menuToolStripItem_generateBreakbeatDensityDense.Size = new Size(128, 22);
+            this.menuToolStripItem_generateBreakbeatDensityDense.Text = "Dense";
+            this.menuToolStripItem_generateBreakbeatDensityDense.Click += this.menuToolStripItem_generateBreakbeatDensityDense_Click;
             // 
             // menuToolStripItem_generateBreakbeatDensityMax
             // 
-            menuToolStripItem_generateBreakbeatDensityMax.Name = "menuToolStripItem_generateBreakbeatDensityMax";
-            menuToolStripItem_generateBreakbeatDensityMax.Size = new Size(121, 22);
-            menuToolStripItem_generateBreakbeatDensityMax.Text = "Maximum";
-            menuToolStripItem_generateBreakbeatDensityMax.Click += menuToolStripItem_generateBreakbeatDensityMax_Click;
+            this.menuToolStripItem_generateBreakbeatDensityMax.Name = "menuToolStripItem_generateBreakbeatDensityMax";
+            this.menuToolStripItem_generateBreakbeatDensityMax.Size = new Size(128, 22);
+            this.menuToolStripItem_generateBreakbeatDensityMax.Text = "Maximum";
+            this.menuToolStripItem_generateBreakbeatDensityMax.Click += this.menuToolStripItem_generateBreakbeatDensityMax_Click;
             // 
             // menuToolStripItem_generateBreakbeatComplexity
             // 
-            menuToolStripItem_generateBreakbeatComplexity.DropDownItems.AddRange(new ToolStripItem[] { menuToolStripItem_generateBreakbeatComplexityLow, menuToolStripItem_generateBreakbeatComplexityBalanced, menuToolStripItem_generateBreakbeatComplexityBusy, menuToolStripItem_generateBreakbeatComplexityWild });
-            menuToolStripItem_generateBreakbeatComplexity.Name = "menuToolStripItem_generateBreakbeatComplexity";
-            menuToolStripItem_generateBreakbeatComplexity.Size = new Size(180, 22);
-            menuToolStripItem_generateBreakbeatComplexity.Text = "Complexity";
+            this.menuToolStripItem_generateBreakbeatComplexity.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatComplexityLow, this.menuToolStripItem_generateBreakbeatComplexityBalanced, this.menuToolStripItem_generateBreakbeatComplexityBusy, this.menuToolStripItem_generateBreakbeatComplexityWild });
+            this.menuToolStripItem_generateBreakbeatComplexity.Name = "menuToolStripItem_generateBreakbeatComplexity";
+            this.menuToolStripItem_generateBreakbeatComplexity.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatComplexity.Text = "Complexity";
             // 
             // menuToolStripItem_generateBreakbeatComplexityLow
             // 
-            menuToolStripItem_generateBreakbeatComplexityLow.Name = "menuToolStripItem_generateBreakbeatComplexityLow";
-            menuToolStripItem_generateBreakbeatComplexityLow.Size = new Size(121, 22);
-            menuToolStripItem_generateBreakbeatComplexityLow.Text = "Low";
-            menuToolStripItem_generateBreakbeatComplexityLow.Click += menuToolStripItem_generateBreakbeatComplexityLow_Click;
+            this.menuToolStripItem_generateBreakbeatComplexityLow.Name = "menuToolStripItem_generateBreakbeatComplexityLow";
+            this.menuToolStripItem_generateBreakbeatComplexityLow.Size = new Size(122, 22);
+            this.menuToolStripItem_generateBreakbeatComplexityLow.Text = "Low";
+            this.menuToolStripItem_generateBreakbeatComplexityLow.Click += this.menuToolStripItem_generateBreakbeatComplexityLow_Click;
             // 
             // menuToolStripItem_generateBreakbeatComplexityBalanced
             // 
-            menuToolStripItem_generateBreakbeatComplexityBalanced.Name = "menuToolStripItem_generateBreakbeatComplexityBalanced";
-            menuToolStripItem_generateBreakbeatComplexityBalanced.Size = new Size(121, 22);
-            menuToolStripItem_generateBreakbeatComplexityBalanced.Text = "Balanced";
-            menuToolStripItem_generateBreakbeatComplexityBalanced.Click += menuToolStripItem_generateBreakbeatComplexityBalanced_Click;
+            this.menuToolStripItem_generateBreakbeatComplexityBalanced.Name = "menuToolStripItem_generateBreakbeatComplexityBalanced";
+            this.menuToolStripItem_generateBreakbeatComplexityBalanced.Size = new Size(122, 22);
+            this.menuToolStripItem_generateBreakbeatComplexityBalanced.Text = "Balanced";
+            this.menuToolStripItem_generateBreakbeatComplexityBalanced.Click += this.menuToolStripItem_generateBreakbeatComplexityBalanced_Click;
             // 
             // menuToolStripItem_generateBreakbeatComplexityBusy
             // 
-            menuToolStripItem_generateBreakbeatComplexityBusy.Name = "menuToolStripItem_generateBreakbeatComplexityBusy";
-            menuToolStripItem_generateBreakbeatComplexityBusy.Size = new Size(121, 22);
-            menuToolStripItem_generateBreakbeatComplexityBusy.Text = "Busy";
-            menuToolStripItem_generateBreakbeatComplexityBusy.Click += menuToolStripItem_generateBreakbeatComplexityBusy_Click;
+            this.menuToolStripItem_generateBreakbeatComplexityBusy.Name = "menuToolStripItem_generateBreakbeatComplexityBusy";
+            this.menuToolStripItem_generateBreakbeatComplexityBusy.Size = new Size(122, 22);
+            this.menuToolStripItem_generateBreakbeatComplexityBusy.Text = "Busy";
+            this.menuToolStripItem_generateBreakbeatComplexityBusy.Click += this.menuToolStripItem_generateBreakbeatComplexityBusy_Click;
             // 
             // menuToolStripItem_generateBreakbeatComplexityWild
             // 
-            menuToolStripItem_generateBreakbeatComplexityWild.Name = "menuToolStripItem_generateBreakbeatComplexityWild";
-            menuToolStripItem_generateBreakbeatComplexityWild.Size = new Size(121, 22);
-            menuToolStripItem_generateBreakbeatComplexityWild.Text = "Wild";
-            menuToolStripItem_generateBreakbeatComplexityWild.Click += menuToolStripItem_generateBreakbeatComplexityWild_Click;
+            this.menuToolStripItem_generateBreakbeatComplexityWild.Name = "menuToolStripItem_generateBreakbeatComplexityWild";
+            this.menuToolStripItem_generateBreakbeatComplexityWild.Size = new Size(122, 22);
+            this.menuToolStripItem_generateBreakbeatComplexityWild.Text = "Wild";
+            this.menuToolStripItem_generateBreakbeatComplexityWild.Click += this.menuToolStripItem_generateBreakbeatComplexityWild_Click;
             // 
             // menuToolStripItem_generateBreakbeatResolution
             // 
-            menuToolStripItem_generateBreakbeatResolution.DropDownItems.AddRange(new ToolStripItem[] { menuToolStripItem_generateBreakbeatResolution16, menuToolStripItem_generateBreakbeatResolution32 });
-            menuToolStripItem_generateBreakbeatResolution.Name = "menuToolStripItem_generateBreakbeatResolution";
-            menuToolStripItem_generateBreakbeatResolution.Size = new Size(180, 22);
-            menuToolStripItem_generateBreakbeatResolution.Text = "Resolution";
+            this.menuToolStripItem_generateBreakbeatResolution.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatResolution16, this.menuToolStripItem_generateBreakbeatResolution32 });
+            this.menuToolStripItem_generateBreakbeatResolution.Name = "menuToolStripItem_generateBreakbeatResolution";
+            this.menuToolStripItem_generateBreakbeatResolution.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatResolution.Text = "Resolution";
             // 
             // menuToolStripItem_generateBreakbeatResolution16
             // 
-            menuToolStripItem_generateBreakbeatResolution16.Name = "menuToolStripItem_generateBreakbeatResolution16";
-            menuToolStripItem_generateBreakbeatResolution16.Size = new Size(80, 22);
-            menuToolStripItem_generateBreakbeatResolution16.Text = "16";
-            menuToolStripItem_generateBreakbeatResolution16.Click += menuToolStripItem_generateBreakbeatResolution16_Click;
+            this.menuToolStripItem_generateBreakbeatResolution16.Name = "menuToolStripItem_generateBreakbeatResolution16";
+            this.menuToolStripItem_generateBreakbeatResolution16.Size = new Size(86, 22);
+            this.menuToolStripItem_generateBreakbeatResolution16.Text = "16";
+            this.menuToolStripItem_generateBreakbeatResolution16.Click += this.menuToolStripItem_generateBreakbeatResolution16_Click;
             // 
             // menuToolStripItem_generateBreakbeatResolution32
             // 
-            menuToolStripItem_generateBreakbeatResolution32.Name = "menuToolStripItem_generateBreakbeatResolution32";
-            menuToolStripItem_generateBreakbeatResolution32.Size = new Size(80, 22);
-            menuToolStripItem_generateBreakbeatResolution32.Text = "32";
-            menuToolStripItem_generateBreakbeatResolution32.Click += menuToolStripItem_generateBreakbeatResolution32_Click;
+            this.menuToolStripItem_generateBreakbeatResolution32.Name = "menuToolStripItem_generateBreakbeatResolution32";
+            this.menuToolStripItem_generateBreakbeatResolution32.Size = new Size(86, 22);
+            this.menuToolStripItem_generateBreakbeatResolution32.Text = "32";
+            this.menuToolStripItem_generateBreakbeatResolution32.Click += this.menuToolStripItem_generateBreakbeatResolution32_Click;
             // 
             // menuToolStripItem_generateBreakbeatSwing
             // 
-            menuToolStripItem_generateBreakbeatSwing.DropDownItems.AddRange(new ToolStripItem[] { menuToolStripItem_generateBreakbeatSwing0, menuToolStripItem_generateBreakbeatSwing6, menuToolStripItem_generateBreakbeatSwing12, menuToolStripItem_generateBreakbeatSwing18 });
-            menuToolStripItem_generateBreakbeatSwing.Name = "menuToolStripItem_generateBreakbeatSwing";
-            menuToolStripItem_generateBreakbeatSwing.Size = new Size(180, 22);
-            menuToolStripItem_generateBreakbeatSwing.Text = "Swing";
+            this.menuToolStripItem_generateBreakbeatSwing.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatSwing0, this.menuToolStripItem_generateBreakbeatSwing6, this.menuToolStripItem_generateBreakbeatSwing12, this.menuToolStripItem_generateBreakbeatSwing18 });
+            this.menuToolStripItem_generateBreakbeatSwing.Name = "menuToolStripItem_generateBreakbeatSwing";
+            this.menuToolStripItem_generateBreakbeatSwing.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatSwing.Text = "Swing";
             // 
             // menuToolStripItem_generateBreakbeatSwing0
             // 
-            menuToolStripItem_generateBreakbeatSwing0.Name = "menuToolStripItem_generateBreakbeatSwing0";
-            menuToolStripItem_generateBreakbeatSwing0.Size = new Size(86, 22);
-            menuToolStripItem_generateBreakbeatSwing0.Text = "0 %";
-            menuToolStripItem_generateBreakbeatSwing0.Click += menuToolStripItem_generateBreakbeatSwing0_Click;
+            this.menuToolStripItem_generateBreakbeatSwing0.Name = "menuToolStripItem_generateBreakbeatSwing0";
+            this.menuToolStripItem_generateBreakbeatSwing0.Size = new Size(99, 22);
+            this.menuToolStripItem_generateBreakbeatSwing0.Text = "0 %";
+            this.menuToolStripItem_generateBreakbeatSwing0.Click += this.menuToolStripItem_generateBreakbeatSwing0_Click;
             // 
             // menuToolStripItem_generateBreakbeatSwing6
             // 
-            menuToolStripItem_generateBreakbeatSwing6.Name = "menuToolStripItem_generateBreakbeatSwing6";
-            menuToolStripItem_generateBreakbeatSwing6.Size = new Size(86, 22);
-            menuToolStripItem_generateBreakbeatSwing6.Text = "6 %";
-            menuToolStripItem_generateBreakbeatSwing6.Click += menuToolStripItem_generateBreakbeatSwing6_Click;
+            this.menuToolStripItem_generateBreakbeatSwing6.Name = "menuToolStripItem_generateBreakbeatSwing6";
+            this.menuToolStripItem_generateBreakbeatSwing6.Size = new Size(99, 22);
+            this.menuToolStripItem_generateBreakbeatSwing6.Text = "6 %";
+            this.menuToolStripItem_generateBreakbeatSwing6.Click += this.menuToolStripItem_generateBreakbeatSwing6_Click;
             // 
             // menuToolStripItem_generateBreakbeatSwing12
             // 
-            menuToolStripItem_generateBreakbeatSwing12.Name = "menuToolStripItem_generateBreakbeatSwing12";
-            menuToolStripItem_generateBreakbeatSwing12.Size = new Size(86, 22);
-            menuToolStripItem_generateBreakbeatSwing12.Text = "12 %";
-            menuToolStripItem_generateBreakbeatSwing12.Click += menuToolStripItem_generateBreakbeatSwing12_Click;
+            this.menuToolStripItem_generateBreakbeatSwing12.Name = "menuToolStripItem_generateBreakbeatSwing12";
+            this.menuToolStripItem_generateBreakbeatSwing12.Size = new Size(99, 22);
+            this.menuToolStripItem_generateBreakbeatSwing12.Text = "12 %";
+            this.menuToolStripItem_generateBreakbeatSwing12.Click += this.menuToolStripItem_generateBreakbeatSwing12_Click;
             // 
             // menuToolStripItem_generateBreakbeatSwing18
             // 
-            menuToolStripItem_generateBreakbeatSwing18.Name = "menuToolStripItem_generateBreakbeatSwing18";
-            menuToolStripItem_generateBreakbeatSwing18.Size = new Size(86, 22);
-            menuToolStripItem_generateBreakbeatSwing18.Text = "18 %";
-            menuToolStripItem_generateBreakbeatSwing18.Click += menuToolStripItem_generateBreakbeatSwing18_Click;
+            this.menuToolStripItem_generateBreakbeatSwing18.Name = "menuToolStripItem_generateBreakbeatSwing18";
+            this.menuToolStripItem_generateBreakbeatSwing18.Size = new Size(99, 22);
+            this.menuToolStripItem_generateBreakbeatSwing18.Text = "18 %";
+            this.menuToolStripItem_generateBreakbeatSwing18.Click += this.menuToolStripItem_generateBreakbeatSwing18_Click;
             // 
             // menuToolStripItem_atomize
             // 
-            menuToolStripItem_atomize.Name = "menuToolStripItem_atomize";
-            menuToolStripItem_atomize.Size = new Size(212, 22);
-            menuToolStripItem_atomize.Text = "Atomize";
-            menuToolStripItem_atomize.DropDownItems.AddRange(new ToolStripItem[] { menuToolStripItem_atomizeRun, menuToolStripItem_atomizeSensitivity, menuToolStripItem_atomizeMinSlice, menuToolStripItem_atomizeTailPadding });
+            this.menuToolStripItem_atomize.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_atomizeRun, this.menuToolStripItem_atomizeSensitivity, this.menuToolStripItem_atomizeMinSlice, this.menuToolStripItem_atomizeTailPadding });
+            this.menuToolStripItem_atomize.Name = "menuToolStripItem_atomize";
+            this.menuToolStripItem_atomize.Size = new Size(212, 22);
+            this.menuToolStripItem_atomize.Text = "Atomize";
             // 
             // menuToolStripItem_atomizeRun
             // 
-            menuToolStripItem_atomizeRun.Name = "menuToolStripItem_atomizeRun";
-            menuToolStripItem_atomizeRun.Size = new Size(180, 22);
-            menuToolStripItem_atomizeRun.Text = "Run";
-            menuToolStripItem_atomizeRun.Click += menuToolStripItem_atomize_Click;
+            this.menuToolStripItem_atomizeRun.Name = "menuToolStripItem_atomizeRun";
+            this.menuToolStripItem_atomizeRun.Size = new Size(127, 22);
+            this.menuToolStripItem_atomizeRun.Text = "Run";
+            this.menuToolStripItem_atomizeRun.Click += this.menuToolStripItem_atomize_Click;
             // 
             // menuToolStripItem_atomizeSensitivity
             // 
-            menuToolStripItem_atomizeSensitivity.DropDownItems.AddRange(new ToolStripItem[] { menuToolStripItem_atomizeSensitivityConservative, menuToolStripItem_atomizeSensitivityBalanced, menuToolStripItem_atomizeSensitivityAggressive });
-            menuToolStripItem_atomizeSensitivity.Name = "menuToolStripItem_atomizeSensitivity";
-            menuToolStripItem_atomizeSensitivity.Size = new Size(180, 22);
-            menuToolStripItem_atomizeSensitivity.Text = "Sensitivity";
+            this.menuToolStripItem_atomizeSensitivity.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_atomizeSensitivityConservative, this.menuToolStripItem_atomizeSensitivityBalanced, this.menuToolStripItem_atomizeSensitivityAggressive });
+            this.menuToolStripItem_atomizeSensitivity.Name = "menuToolStripItem_atomizeSensitivity";
+            this.menuToolStripItem_atomizeSensitivity.Size = new Size(127, 22);
+            this.menuToolStripItem_atomizeSensitivity.Text = "Sensitivity";
             // 
             // menuToolStripItem_atomizeSensitivityConservative
             // 
-            menuToolStripItem_atomizeSensitivityConservative.Name = "menuToolStripItem_atomizeSensitivityConservative";
-            menuToolStripItem_atomizeSensitivityConservative.Size = new Size(143, 22);
-            menuToolStripItem_atomizeSensitivityConservative.Text = "Conservative";
-            menuToolStripItem_atomizeSensitivityConservative.Click += menuToolStripItem_atomizeSensitivityConservative_Click;
+            this.menuToolStripItem_atomizeSensitivityConservative.Name = "menuToolStripItem_atomizeSensitivityConservative";
+            this.menuToolStripItem_atomizeSensitivityConservative.Size = new Size(142, 22);
+            this.menuToolStripItem_atomizeSensitivityConservative.Text = "Conservative";
+            this.menuToolStripItem_atomizeSensitivityConservative.Click += this.menuToolStripItem_atomizeSensitivityConservative_Click;
             // 
             // menuToolStripItem_atomizeSensitivityBalanced
             // 
-            menuToolStripItem_atomizeSensitivityBalanced.Name = "menuToolStripItem_atomizeSensitivityBalanced";
-            menuToolStripItem_atomizeSensitivityBalanced.Size = new Size(143, 22);
-            menuToolStripItem_atomizeSensitivityBalanced.Text = "Balanced";
-            menuToolStripItem_atomizeSensitivityBalanced.Click += menuToolStripItem_atomizeSensitivityBalanced_Click;
+            this.menuToolStripItem_atomizeSensitivityBalanced.Name = "menuToolStripItem_atomizeSensitivityBalanced";
+            this.menuToolStripItem_atomizeSensitivityBalanced.Size = new Size(142, 22);
+            this.menuToolStripItem_atomizeSensitivityBalanced.Text = "Balanced";
+            this.menuToolStripItem_atomizeSensitivityBalanced.Click += this.menuToolStripItem_atomizeSensitivityBalanced_Click;
             // 
             // menuToolStripItem_atomizeSensitivityAggressive
             // 
-            menuToolStripItem_atomizeSensitivityAggressive.Name = "menuToolStripItem_atomizeSensitivityAggressive";
-            menuToolStripItem_atomizeSensitivityAggressive.Size = new Size(143, 22);
-            menuToolStripItem_atomizeSensitivityAggressive.Text = "Aggressive";
-            menuToolStripItem_atomizeSensitivityAggressive.Click += menuToolStripItem_atomizeSensitivityAggressive_Click;
+            this.menuToolStripItem_atomizeSensitivityAggressive.Name = "menuToolStripItem_atomizeSensitivityAggressive";
+            this.menuToolStripItem_atomizeSensitivityAggressive.Size = new Size(142, 22);
+            this.menuToolStripItem_atomizeSensitivityAggressive.Text = "Aggressive";
+            this.menuToolStripItem_atomizeSensitivityAggressive.Click += this.menuToolStripItem_atomizeSensitivityAggressive_Click;
             // 
             // menuToolStripItem_atomizeMinSlice
             // 
-            menuToolStripItem_atomizeMinSlice.DropDownItems.AddRange(new ToolStripItem[] { menuToolStripItem_atomizeMinSlice40, menuToolStripItem_atomizeMinSlice80, menuToolStripItem_atomizeMinSlice140 });
-            menuToolStripItem_atomizeMinSlice.Name = "menuToolStripItem_atomizeMinSlice";
-            menuToolStripItem_atomizeMinSlice.Size = new Size(180, 22);
-            menuToolStripItem_atomizeMinSlice.Text = "Min Slice";
+            this.menuToolStripItem_atomizeMinSlice.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_atomizeMinSlice40, this.menuToolStripItem_atomizeMinSlice80, this.menuToolStripItem_atomizeMinSlice140 });
+            this.menuToolStripItem_atomizeMinSlice.Name = "menuToolStripItem_atomizeMinSlice";
+            this.menuToolStripItem_atomizeMinSlice.Size = new Size(127, 22);
+            this.menuToolStripItem_atomizeMinSlice.Text = "Min Slice";
             // 
             // menuToolStripItem_atomizeMinSlice40
             // 
-            menuToolStripItem_atomizeMinSlice40.Name = "menuToolStripItem_atomizeMinSlice40";
-            menuToolStripItem_atomizeMinSlice40.Size = new Size(115, 22);
-            menuToolStripItem_atomizeMinSlice40.Text = "40 ms";
-            menuToolStripItem_atomizeMinSlice40.Click += menuToolStripItem_atomizeMinSlice40_Click;
+            this.menuToolStripItem_atomizeMinSlice40.Name = "menuToolStripItem_atomizeMinSlice40";
+            this.menuToolStripItem_atomizeMinSlice40.Size = new Size(111, 22);
+            this.menuToolStripItem_atomizeMinSlice40.Text = "40 ms";
+            this.menuToolStripItem_atomizeMinSlice40.Click += this.menuToolStripItem_atomizeMinSlice40_Click;
             // 
             // menuToolStripItem_atomizeMinSlice80
             // 
-            menuToolStripItem_atomizeMinSlice80.Name = "menuToolStripItem_atomizeMinSlice80";
-            menuToolStripItem_atomizeMinSlice80.Size = new Size(115, 22);
-            menuToolStripItem_atomizeMinSlice80.Text = "80 ms";
-            menuToolStripItem_atomizeMinSlice80.Click += menuToolStripItem_atomizeMinSlice80_Click;
+            this.menuToolStripItem_atomizeMinSlice80.Name = "menuToolStripItem_atomizeMinSlice80";
+            this.menuToolStripItem_atomizeMinSlice80.Size = new Size(111, 22);
+            this.menuToolStripItem_atomizeMinSlice80.Text = "80 ms";
+            this.menuToolStripItem_atomizeMinSlice80.Click += this.menuToolStripItem_atomizeMinSlice80_Click;
             // 
             // menuToolStripItem_atomizeMinSlice140
             // 
-            menuToolStripItem_atomizeMinSlice140.Name = "menuToolStripItem_atomizeMinSlice140";
-            menuToolStripItem_atomizeMinSlice140.Size = new Size(115, 22);
-            menuToolStripItem_atomizeMinSlice140.Text = "140 ms";
-            menuToolStripItem_atomizeMinSlice140.Click += menuToolStripItem_atomizeMinSlice140_Click;
+            this.menuToolStripItem_atomizeMinSlice140.Name = "menuToolStripItem_atomizeMinSlice140";
+            this.menuToolStripItem_atomizeMinSlice140.Size = new Size(111, 22);
+            this.menuToolStripItem_atomizeMinSlice140.Text = "140 ms";
+            this.menuToolStripItem_atomizeMinSlice140.Click += this.menuToolStripItem_atomizeMinSlice140_Click;
             // 
             // menuToolStripItem_atomizeTailPadding
             // 
-            menuToolStripItem_atomizeTailPadding.DropDownItems.AddRange(new ToolStripItem[] { menuToolStripItem_atomizeTail10, menuToolStripItem_atomizeTail30, menuToolStripItem_atomizeTail60 });
-            menuToolStripItem_atomizeTailPadding.Name = "menuToolStripItem_atomizeTailPadding";
-            menuToolStripItem_atomizeTailPadding.Size = new Size(180, 22);
-            menuToolStripItem_atomizeTailPadding.Text = "Tail Bias";
+            this.menuToolStripItem_atomizeTailPadding.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_atomizeTail10, this.menuToolStripItem_atomizeTail30, this.menuToolStripItem_atomizeTail60 });
+            this.menuToolStripItem_atomizeTailPadding.Name = "menuToolStripItem_atomizeTailPadding";
+            this.menuToolStripItem_atomizeTailPadding.Size = new Size(127, 22);
+            this.menuToolStripItem_atomizeTailPadding.Text = "Tail Bias";
             // 
             // menuToolStripItem_atomizeTail10
             // 
-            menuToolStripItem_atomizeTail10.Name = "menuToolStripItem_atomizeTail10";
-            menuToolStripItem_atomizeTail10.Size = new Size(115, 22);
-            menuToolStripItem_atomizeTail10.Text = "10 ms";
-            menuToolStripItem_atomizeTail10.Click += menuToolStripItem_atomizeTail10_Click;
+            this.menuToolStripItem_atomizeTail10.Name = "menuToolStripItem_atomizeTail10";
+            this.menuToolStripItem_atomizeTail10.Size = new Size(105, 22);
+            this.menuToolStripItem_atomizeTail10.Text = "10 ms";
+            this.menuToolStripItem_atomizeTail10.Click += this.menuToolStripItem_atomizeTail10_Click;
             // 
             // menuToolStripItem_atomizeTail30
             // 
-            menuToolStripItem_atomizeTail30.Name = "menuToolStripItem_atomizeTail30";
-            menuToolStripItem_atomizeTail30.Size = new Size(115, 22);
-            menuToolStripItem_atomizeTail30.Text = "30 ms";
-            menuToolStripItem_atomizeTail30.Click += menuToolStripItem_atomizeTail30_Click;
+            this.menuToolStripItem_atomizeTail30.Name = "menuToolStripItem_atomizeTail30";
+            this.menuToolStripItem_atomizeTail30.Size = new Size(105, 22);
+            this.menuToolStripItem_atomizeTail30.Text = "30 ms";
+            this.menuToolStripItem_atomizeTail30.Click += this.menuToolStripItem_atomizeTail30_Click;
             // 
             // menuToolStripItem_atomizeTail60
             // 
-            menuToolStripItem_atomizeTail60.Name = "menuToolStripItem_atomizeTail60";
-            menuToolStripItem_atomizeTail60.Size = new Size(115, 22);
-            menuToolStripItem_atomizeTail60.Text = "60 ms";
-            menuToolStripItem_atomizeTail60.Click += menuToolStripItem_atomizeTail60_Click;
+            this.menuToolStripItem_atomizeTail60.Name = "menuToolStripItem_atomizeTail60";
+            this.menuToolStripItem_atomizeTail60.Size = new Size(105, 22);
+            this.menuToolStripItem_atomizeTail60.Text = "60 ms";
+            this.menuToolStripItem_atomizeTail60.Click += this.menuToolStripItem_atomizeTail60_Click;
             // 
             // menuToolStripItem_delete
             // 
-            menuToolStripItem_delete.Name = "menuToolStripItem_delete";
-            menuToolStripItem_delete.Size = new Size(212, 22);
-            menuToolStripItem_delete.Text = "Delete";
-            menuToolStripItem_delete.Click += menuToolStripItem_delete_Click;
+            this.menuToolStripItem_delete.Name = "menuToolStripItem_delete";
+            this.menuToolStripItem_delete.Size = new Size(212, 22);
+            this.menuToolStripItem_delete.Text = "Delete";
+            this.menuToolStripItem_delete.Click += this.menuToolStripItem_delete_Click;
             // 
             // menuToolStripItem_toNewCollection
             // 
-            menuToolStripItem_toNewCollection.Name = "menuToolStripItem_toNewCollection";
-            menuToolStripItem_toNewCollection.Size = new Size(212, 22);
-            menuToolStripItem_toNewCollection.Text = "To new Collection";
-            menuToolStripItem_toNewCollection.Click += menuToolStripItem_toNewCollection_Click;
+            this.menuToolStripItem_toNewCollection.Name = "menuToolStripItem_toNewCollection";
+            this.menuToolStripItem_toNewCollection.Size = new Size(212, 22);
+            this.menuToolStripItem_toNewCollection.Text = "To new Collection";
+            this.menuToolStripItem_toNewCollection.Click += this.menuToolStripItem_toNewCollection_Click;
             // 
             // menuToolStripItem_addIndexToNames
             // 
-            menuToolStripItem_addIndexToNames.CheckOnClick = true;
-            menuToolStripItem_addIndexToNames.Name = "menuToolStripItem_addIndexToNames";
-            menuToolStripItem_addIndexToNames.Size = new Size(212, 22);
-            menuToolStripItem_addIndexToNames.Text = "Add Index to Names";
-            menuToolStripItem_addIndexToNames.CheckedChanged += menuToolStripItem_addIndexToNames_CheckedChanged;
+            this.menuToolStripItem_addIndexToNames.CheckOnClick = true;
+            this.menuToolStripItem_addIndexToNames.Name = "menuToolStripItem_addIndexToNames";
+            this.menuToolStripItem_addIndexToNames.Size = new Size(212, 22);
+            this.menuToolStripItem_addIndexToNames.Text = "Add Index to Names";
+            this.menuToolStripItem_addIndexToNames.CheckedChanged += this.menuToolStripItem_addIndexToNames_CheckedChanged;
             // 
             // menuToolStripItem_aggregateMixSelected
             // 
-            menuToolStripItem_aggregateMixSelected.Name = "menuToolStripItem_aggregateMixSelected";
-            menuToolStripItem_aggregateMixSelected.Size = new Size(212, 22);
-            menuToolStripItem_aggregateMixSelected.Text = "Aggregate Mix Selected";
-            menuToolStripItem_aggregateMixSelected.Click += menuToolStripItem_aggregateMixSelected_Click;
+            this.menuToolStripItem_aggregateMixSelected.Name = "menuToolStripItem_aggregateMixSelected";
+            this.menuToolStripItem_aggregateMixSelected.Size = new Size(212, 22);
+            this.menuToolStripItem_aggregateMixSelected.Text = "Aggregate Mix Selected";
+            this.menuToolStripItem_aggregateMixSelected.Click += this.menuToolStripItem_aggregateMixSelected_Click;
             // 
             // menuToolStripItem_timeStretchSelected
             // 
-            menuToolStripItem_timeStretchSelected.Name = "menuToolStripItem_timeStretchSelected";
-            menuToolStripItem_timeStretchSelected.Size = new Size(212, 22);
-            menuToolStripItem_timeStretchSelected.Text = "Time-Stretch Selected";
-            menuToolStripItem_timeStretchSelected.Click += menuToolStripItem_timeStretchSelected_Click;
+            this.menuToolStripItem_timeStretchSelected.Name = "menuToolStripItem_timeStretchSelected";
+            this.menuToolStripItem_timeStretchSelected.Size = new Size(212, 22);
+            this.menuToolStripItem_timeStretchSelected.Text = "Time-Stretch Selected";
+            this.menuToolStripItem_timeStretchSelected.Click += this.menuToolStripItem_timeStretchSelected_Click;
             // 
             // menuToolStripItem_demucsSeparateSelected
             // 
-            menuToolStripItem_demucsSeparateSelected.Name = "menuToolStripItem_demucsSeparateSelected";
-            menuToolStripItem_demucsSeparateSelected.Size = new Size(212, 22);
-            menuToolStripItem_demucsSeparateSelected.Text = "Demucs Separate Selected";
-            menuToolStripItem_demucsSeparateSelected.Click += menuToolStripItem_demucsSeparateSelected_Click;
+            this.menuToolStripItem_demucsSeparateSelected.Name = "menuToolStripItem_demucsSeparateSelected";
+            this.menuToolStripItem_demucsSeparateSelected.Size = new Size(212, 22);
+            this.menuToolStripItem_demucsSeparateSelected.Text = "Demucs Separate Selected";
+            this.menuToolStripItem_demucsSeparateSelected.Click += this.menuToolStripItem_demucsSeparateSelected_Click;
             // 
             // menuToolStripItem_pinWindow
             // 
-            menuToolStripItem_pinWindow.CheckOnClick = true;
-            menuToolStripItem_pinWindow.Name = "menuToolStripItem_pinWindow";
-            menuToolStripItem_pinWindow.Size = new Size(212, 22);
-            menuToolStripItem_pinWindow.Text = "Pin Window";
-            menuToolStripItem_pinWindow.CheckedChanged += menuToolStripItem_pinWindow_CheckedChanged;
+            this.menuToolStripItem_pinWindow.CheckOnClick = true;
+            this.menuToolStripItem_pinWindow.Name = "menuToolStripItem_pinWindow";
+            this.menuToolStripItem_pinWindow.Size = new Size(212, 22);
+            this.menuToolStripItem_pinWindow.Text = "Pin Window";
+            this.menuToolStripItem_pinWindow.CheckedChanged += this.menuToolStripItem_pinWindow_CheckedChanged;
+            // 
+            // toolStripComboBox_orderBy
+            // 
+            this.toolStripComboBox_orderBy.Items.AddRange(new object[] { "Duration", "Created At", "Name" });
+            this.toolStripComboBox_orderBy.Name = "toolStripComboBox_orderBy";
+            this.toolStripComboBox_orderBy.Size = new Size(121, 23);
+            this.toolStripComboBox_orderBy.Text = "Order by";
+            this.toolStripComboBox_orderBy.SelectedChanged += this.toolStripComboBox_orderBy_SelectedChanged;
             // 
             // AudioCollectionView
             // 
-            AutoScaleDimensions = new SizeF(7F, 15F);
-            AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(244, 321);
-            Controls.Add(checkBox_preview);
-            Controls.Add(button_export);
-            Controls.Add(checkBox_autoPlay);
-            Controls.Add(listBox_audios);
-            MaximizeBox = false;
-            MaximumSize = new Size(480, 8192);
-            MinimizeBox = false;
-            MinimumSize = new Size(200, 100);
-            Name = "AudioCollectionView";
-            Text = "Audio Collection #00";
-            contextMenuStrip_audios.ResumeLayout(false);
-            ResumeLayout(false);
-            PerformLayout();
+            this.AutoScaleDimensions = new SizeF(7F, 15F);
+            this.AutoScaleMode = AutoScaleMode.Font;
+            this.ClientSize = new Size(244, 321);
+            this.Controls.Add(this.checkBox_preview);
+            this.Controls.Add(this.button_export);
+            this.Controls.Add(this.checkBox_autoPlay);
+            this.Controls.Add(this.listBox_audios);
+            this.MaximizeBox = false;
+            this.MaximumSize = new Size(480, 8192);
+            this.MinimizeBox = false;
+            this.MinimumSize = new Size(200, 100);
+            this.Name = "AudioCollectionView";
+            this.Text = "Audio Collection #00";
+            this.contextMenuStrip_audios.ResumeLayout(false);
+            this.ResumeLayout(false);
+            this.PerformLayout();
         }
 
         #endregion
@@ -717,5 +726,6 @@
         private ToolStripMenuItem menuToolStripItem_timeStretchSelected;
         private ToolStripMenuItem menuToolStripItem_demucsSeparateSelected;
         private ToolStripMenuItem menuToolStripItem_pinWindow;
+        private ToolStripComboBox toolStripComboBox_orderBy;
     }
 }

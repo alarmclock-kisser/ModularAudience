@@ -18,7 +18,7 @@ namespace ModularAudience.Onnx
         public bool IsOnline => this._session != null;
         public string? ModelName => this._session?.ModelMetadata?.GraphName;
         // Die Standard-Reihenfolge bei htdemucs_6s
-        private readonly string[] _stems = { "drums", "bass", "other", "vocals", "guitar", "piano" };
+        private readonly string[] _stems = ["drums", "bass", "other", "vocals", "guitar", "piano"];
         public const int SampleRate = 44100;
         public const int ChunkSizeSeconds = 10; // 10 Sekunden pro GPU-Durchgang
 
@@ -155,7 +155,7 @@ namespace ModularAudience.Onnx
                     planarInput[i + framesPerChunk] = interleaved[srcIdx + 1];  // Rechts
                 }
 
-                var inputTensor = new DenseTensor<float>(planarInput, new[] { 1, 2, framesPerChunk });
+                var inputTensor = new DenseTensor<float>(planarInput, [1, 2, framesPerChunk]);
                 var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) };
 
                 // Dummy Inputs für die Hidden-States erzeugen (Verhindert Missing-Input Fehler)
@@ -169,7 +169,7 @@ namespace ModularAudience.Onnx
                     var dims = kv.Value.Dimensions.Select(d => d > 0 ? d : 1).ToArray();
                     if (dims.Length == 0)
                     {
-                        dims = new[] { 1 };
+                        dims = [1];
                     }
 
                     int totalElements = dims.Aggregate(1, (a, b) => a * b);

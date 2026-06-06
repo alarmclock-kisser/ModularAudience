@@ -399,7 +399,7 @@ namespace ModularAudience.Audio
             if (this.AddIndexToNames)
             {
                 int zeros = this.Audios.Count.ToString().Length;
-                string format = new string('0', zeros);
+                string format = new('0', zeros);
                 foreach (var audio in this.Audios)
                 {
                     int index = this.Audios.IndexOf(audio) + 1;
@@ -413,6 +413,25 @@ namespace ModularAudience.Audio
                     audio.Name = audio.OriginalName;
                 }
             }
+        }
+    }
+
+
+
+    public static class BindingListExtensions
+    {
+        public static void SortInPlace<T, TKey>(this BindingList<T> list, Func<T, TKey> keySelector)
+        {
+            var sorted = list.OrderBy(keySelector).ToList();
+
+            list.RaiseListChangedEvents = false;
+            list.Clear();
+            foreach (var item in sorted)
+            {
+                list.Add(item);
+            }
+            list.RaiseListChangedEvents = true;
+            list.ResetBindings();
         }
     }
 }

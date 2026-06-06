@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace ModularAudience.Audio
 {
-    public partial class AudioObj
+    public partial class AudioObj : IDisposable
     {
 		public CustomTags CustomTags { get; } = new();
 
@@ -22,6 +22,7 @@ namespace ModularAudience.Audio
             this.playbackLoopApplied = false;
             this.playbackLoopStartBytes = 0;
             this.playbackLoopEndBytes = 0;
+            GC.SuppressFinalize(this);
         }
 
         public bool LoadAudioFile()

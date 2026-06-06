@@ -206,7 +206,7 @@ namespace ModularAudience.Audio.Processors_V3
             {
                 return true;
             }
-            double[] allowed = { 0.5, 1.5, 2.0, 0.6666667, 1.3333333 };
+            double[] allowed = [0.5, 1.5, 2.0, 0.6666667, 1.3333333];
             return allowed.Any(f => Math.Abs(ratio - f) <= tolerance);
         }
 

@@ -810,9 +810,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             using Brush hitBrush = new SolidBrush(Color.FromArgb(60, 110, 255));
             using Brush emptyBrush = new SolidBrush(Color.FromArgb(232, 232, 232));
             using Brush textBrush = new SolidBrush(Color.FromArgb(70, 70, 70));
-            using Pen gridPen = new Pen(Color.FromArgb(210, 210, 210));
-            using Pen barPen = new Pen(Color.FromArgb(130, 130, 130), 2f);
-            using Pen subdivisionPen = new Pen(Color.FromArgb(185, 185, 185));
+            using Pen gridPen = new(Color.FromArgb(210, 210, 210));
+            using Pen barPen = new(Color.FromArgb(130, 130, 130), 2f);
+            using Pen subdivisionPen = new(Color.FromArgb(185, 185, 185));
 
             for (int row = 0; row < rows; row++)
             {

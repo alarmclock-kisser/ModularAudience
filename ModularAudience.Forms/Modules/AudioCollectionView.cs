@@ -1206,5 +1206,33 @@ namespace ModularAudience.Forms
             }
         }
 
+        private void toolStripComboBox_orderBy_SelectedChanged(object sender, EventArgs e)
+        {
+            string? selected = this.toolStripComboBox_orderBy.SelectedItem as string;
+            if (string.IsNullOrEmpty(selected) || this.AudioCount <= 0)
+            {
+                return;
+            }
+
+            // Order by duration (shortest first)
+            if (selected == "Duration")
+            {
+                this.AudioC.Audios.SortInPlace(a => a.Duration);
+            }
+            // Order by creation date
+            else if (selected == "Created At")
+            {
+                this.AudioC.Audios.SortInPlace(a => a.CreatedAt);
+            }
+            // Order by name (alphabetical)
+            else if (selected == "Name")
+            {
+                this.AudioC.Audios.SortInPlace(a => a.Name);
+            }
+
+            // Jump back to none selected and text "Order by"
+            this.toolStripComboBox_orderBy.SelectedIndex = -1;
+            this.toolStripComboBox_orderBy.Text = "Order by";
+        }
     }
 }

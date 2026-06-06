@@ -471,11 +471,11 @@ namespace ModularAudience.Cuda
 
 			// Remove CUDA/C qualifiers
 			string[] qualifiers =
-			{
+			[
 				"const", "volatile", "restrict", "__restrict", "__restrict__",
 				"__device__", "__host__", "__global__", "extern", "register",
 				"inline", "__inline__", "__forceinline__"
-			};
+			];
 			foreach (var q in qualifiers)
 			{
 				t = System.Text.RegularExpressions.Regex.Replace(t, $@"\b{System.Text.RegularExpressions.Regex.Escape(q)}\b", string.Empty);
@@ -662,10 +662,10 @@ namespace ModularAudience.Cuda
 				string p = args[i];
 				// Remove qualifiers similar to GetArgumentType
 				string[] qualifiers =
-				{
+				[
 					"const", "volatile", "restrict", "__restrict", "__restrict__",
 					"__device__", "__host__", "extern", "register", "inline", "__inline__", "__global__"
-				};
+				];
 				foreach (var q in qualifiers)
 				{
 					p = System.Text.RegularExpressions.Regex.Replace(p, $@"\b{System.Text.RegularExpressions.Regex.Escape(q)}\b", string.Empty);

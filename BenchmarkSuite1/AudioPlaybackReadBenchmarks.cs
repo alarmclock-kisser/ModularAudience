@@ -24,19 +24,19 @@ public class AudioPlaybackReadBenchmarks
 
         var assembly = typeof(ModularAudience.Audio.AudioPlaybackService).Assembly;
         var providerType = assembly.GetType("ModularAudience.Audio.ArraySampleProvider", throwOnError: true)!;
-        this.constructor = providerType.GetConstructor(new[] { typeof(float[]), typeof(int), typeof(int), typeof(long) })!;
-        this.readMethod = providerType.GetMethod("Read", new[] { typeof(float[]), typeof(int), typeof(int) })!;
+        this.constructor = providerType.GetConstructor([typeof(float[]), typeof(int), typeof(int), typeof(long)])!;
+        this.readMethod = providerType.GetMethod("Read", [typeof(float[]), typeof(int), typeof(int)])!;
     }
 
     [IterationSetup]
     public void IterationSetup()
     {
-        this.provider = this.constructor.Invoke(new object[] { this.source, 48000, 2, 0L });
+        this.provider = this.constructor.Invoke([this.source, 48000, 2, 0L]);
     }
 
     [Benchmark]
     public int Read()
     {
-        return (int) this.readMethod.Invoke(this.provider, new object[] { this.destination, 0, this.destination.Length })!;
+        return (int) this.readMethod.Invoke(this.provider, [this.destination, 0, this.destination.Length])!;
     }
 }
