@@ -4,6 +4,10 @@ on:
   push:
     branches: [ "master" ]
 
+# HIER sind die neuen Berechtigungen hinzugefügt
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
