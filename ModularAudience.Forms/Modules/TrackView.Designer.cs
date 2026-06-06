@@ -59,10 +59,11 @@
             this.checkBox_mute = new CheckBox();
             this.checkBox_solo = new CheckBox();
             this.hScrollBar_rate = new HScrollBar();
-            this.label_info_rate = new Label();
             this.contextMenu_rate = new ContextMenuStrip(this.components);
             this.menuItem_rateJumpHere = new ToolStripMenuItem();
             this.menuItem_rateResetCenter = new ToolStripMenuItem();
+            this.label_info_rate = new Label();
+            this.toolStripMenuItem_jumpHere = new ToolStripMenuItem();
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_waveform).BeginInit();
             this.contextMenu_waveform.SuspendLayout();
             this.contextMenu_rate.SuspendLayout();
@@ -119,9 +120,9 @@
             // 
             // contextMenu_waveform
             // 
-            this.contextMenu_waveform.Items.AddRange(new ToolStripItem[] { this.menuItem_copySelection, this.menuItem_splitEqualParts, this.menuItem_removeSelection, this.menuItem_normalizeSelection, this.menuItem_fadeIn, this.menuItem_fadeOut, this.trimSilenceToolStripMenuItem, this.drawBeatGridToolStripMenuItem });
+            this.contextMenu_waveform.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_jumpHere, this.menuItem_copySelection, this.menuItem_splitEqualParts, this.menuItem_removeSelection, this.menuItem_normalizeSelection, this.menuItem_fadeIn, this.menuItem_fadeOut, this.trimSilenceToolStripMenuItem, this.drawBeatGridToolStripMenuItem });
             this.contextMenu_waveform.Name = "contextMenu_waveform";
-            this.contextMenu_waveform.Size = new Size(183, 180);
+            this.contextMenu_waveform.Size = new Size(183, 224);
             this.contextMenu_waveform.Opening += this.contextMenu_waveform_Opening;
             // 
             // menuItem_copySelection
@@ -141,35 +142,35 @@
             // menuItem_splitEqualParts2
             // 
             this.menuItem_splitEqualParts2.Name = "menuItem_splitEqualParts2";
-            this.menuItem_splitEqualParts2.Size = new Size(86, 22);
+            this.menuItem_splitEqualParts2.Size = new Size(180, 22);
             this.menuItem_splitEqualParts2.Text = "2";
             this.menuItem_splitEqualParts2.Click += this.menuItem_splitEqualParts2_Click;
             // 
             // menuItem_splitEqualParts4
             // 
             this.menuItem_splitEqualParts4.Name = "menuItem_splitEqualParts4";
-            this.menuItem_splitEqualParts4.Size = new Size(86, 22);
+            this.menuItem_splitEqualParts4.Size = new Size(180, 22);
             this.menuItem_splitEqualParts4.Text = "4";
             this.menuItem_splitEqualParts4.Click += this.menuItem_splitEqualParts4_Click;
             // 
             // menuItem_splitEqualParts8
             // 
             this.menuItem_splitEqualParts8.Name = "menuItem_splitEqualParts8";
-            this.menuItem_splitEqualParts8.Size = new Size(86, 22);
+            this.menuItem_splitEqualParts8.Size = new Size(180, 22);
             this.menuItem_splitEqualParts8.Text = "8";
             this.menuItem_splitEqualParts8.Click += this.menuItem_splitEqualParts8_Click;
             // 
             // menuItem_splitEqualParts16
             // 
             this.menuItem_splitEqualParts16.Name = "menuItem_splitEqualParts16";
-            this.menuItem_splitEqualParts16.Size = new Size(86, 22);
+            this.menuItem_splitEqualParts16.Size = new Size(180, 22);
             this.menuItem_splitEqualParts16.Text = "16";
             this.menuItem_splitEqualParts16.Click += this.menuItem_splitEqualParts16_Click;
             // 
             // menuItem_splitEqualParts32
             // 
             this.menuItem_splitEqualParts32.Name = "menuItem_splitEqualParts32";
-            this.menuItem_splitEqualParts32.Size = new Size(86, 22);
+            this.menuItem_splitEqualParts32.Size = new Size(180, 22);
             this.menuItem_splitEqualParts32.Text = "32";
             this.menuItem_splitEqualParts32.Click += this.menuItem_splitEqualParts32_Click;
             // 
@@ -343,28 +344,28 @@
             this.hScrollBar_rate.Name = "hScrollBar_rate";
             this.hScrollBar_rate.Size = new Size(113, 17);
             this.hScrollBar_rate.TabIndex = 17;
+            this.hScrollBar_rate.MouseDown += this.hScrollBar_rate_MouseDown;
             this.hScrollBar_rate.Scroll += this.hScrollBar_rate_Scroll;
             this.hScrollBar_rate.ValueChanged += this.hScrollBar_rate_ValueChanged;
-            this.hScrollBar_rate.MouseDown += this.hScrollBar_rate_MouseDown;
             // 
             // contextMenu_rate
             // 
             this.contextMenu_rate.Items.AddRange(new ToolStripItem[] { this.menuItem_rateJumpHere, this.menuItem_rateResetCenter });
             this.contextMenu_rate.Name = "contextMenu_rate";
+            this.contextMenu_rate.Size = new Size(155, 48);
             this.contextMenu_rate.Opening += this.contextMenu_rate_Opening;
-            this.contextMenu_rate.Size = new Size(181, 48);
             // 
             // menuItem_rateJumpHere
             // 
             this.menuItem_rateJumpHere.Name = "menuItem_rateJumpHere";
-            this.menuItem_rateJumpHere.Size = new Size(180, 22);
+            this.menuItem_rateJumpHere.Size = new Size(154, 22);
             this.menuItem_rateJumpHere.Text = "Jump here";
             this.menuItem_rateJumpHere.Click += this.menuItem_rateJumpHere_Click;
             // 
             // menuItem_rateResetCenter
             // 
             this.menuItem_rateResetCenter.Name = "menuItem_rateResetCenter";
-            this.menuItem_rateResetCenter.Size = new Size(180, 22);
+            this.menuItem_rateResetCenter.Size = new Size(154, 22);
             this.menuItem_rateResetCenter.Text = "Reset to Center";
             this.menuItem_rateResetCenter.Click += this.menuItem_rateResetCenter_Click;
             // 
@@ -377,6 +378,13 @@
             this.label_info_rate.Size = new Size(66, 13);
             this.label_info_rate.TabIndex = 18;
             this.label_info_rate.Text = "Rate: 100.0%";
+            // 
+            // toolStripMenuItem_jumpHere
+            // 
+            this.toolStripMenuItem_jumpHere.Name = "toolStripMenuItem_jumpHere";
+            this.toolStripMenuItem_jumpHere.Size = new Size(182, 22);
+            this.toolStripMenuItem_jumpHere.Text = "Jump to [-:--:--.---]";
+            this.toolStripMenuItem_jumpHere.Click += this.toolStripMenuItem_jumpHere_Click;
             // 
             // TrackView
             // 
@@ -447,5 +455,6 @@
         private ContextMenuStrip contextMenu_rate;
         private ToolStripMenuItem menuItem_rateJumpHere;
         private ToolStripMenuItem menuItem_rateResetCenter;
+        private ToolStripMenuItem toolStripMenuItem_jumpHere;
     }
 }

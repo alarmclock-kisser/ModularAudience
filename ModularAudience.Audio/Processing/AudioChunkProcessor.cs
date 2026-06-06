@@ -70,6 +70,67 @@ namespace ModularAudience.Audio.Processing
             return chunks;
         }
 
+        public static IEnumerable<float[]> GetChunksEnumerable(AudioObj audio, int size, float overlap, bool keepData)
+        {
+            if (audio.Data == null || audio.Data.Length == 0)
+            {
+                yield break;
+            }
+
+            if (size <= 0 || overlap < 0 || overlap >= 1)
+            {
+                yield break;
+            }
+
+            audio.ChunkSize = size;
+            audio.OverlapSize = (int) (size * overlap);
+
+            // Align overlap to channel count to keep L-R frame boundaries intact
+            int ch = Math.Max(1, audio.Channels);
+            if (ch > 1 && audio.OverlapSize % ch != 0)
+            {
+                audio.OverlapSize = (audio.OverlapSize / ch) * ch;
+            }
+
+            int step = size - audio.OverlapSize;
+            if (step <= 0)
+            {
+                yield break;
+            }
+
+            int numChunks = Math.Max(1, ((audio.Data.Length - size) / step) + 1);
+            float[] sourceData = audio.Data;
+
+            for (int i = 0; i < numChunks; i++)
+            {
+                int sourceOffset = i * step;
+                int remainingLength = sourceData.Length - sourceOffset;
+
+                if (remainingLength <= 0)
+                {
+                    break;
+                }
+
+                int chunkLength = Math.Min(size, remainingLength);
+                float[] chunk = new float[size];
+
+                Buffer.BlockCopy(
+                    src: sourceData,
+                    srcOffset: sourceOffset * sizeof(float),
+                    dst: chunk,
+                    dstOffset: 0,
+                    count: chunkLength * sizeof(float));
+
+                yield return chunk;
+            }
+
+            if (!keepData)
+            {
+                audio.Data = [];
+            }
+        }
+
+
         public static async Task AggregateStretchedChunksAsync(AudioObj audio, IEnumerable<float[]> chunks, double stretchFactor, int maxWorkers)
         {
             if (chunks == null)
@@ -146,6 +207,7 @@ namespace ModularAudience.Audio.Processing
 
             Debug.WriteLine($"[AggregateStretchedChunks] Output Min: {audio.Data.Min()}, Max: {audio.Data.Max()}, First10: {string.Join(", ", audio.Data.Take(10))}");
         }
+
         private static void Add(ref double location, double value)
         {
             double initialValue;

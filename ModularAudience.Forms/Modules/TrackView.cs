@@ -36,7 +36,7 @@ namespace ModularAudience.Forms.Modules
         internal bool Muted => this.checkBox_mute.Checked;
         internal bool Soloed => this.checkBox_solo.Checked;
 
-		private readonly Timer frameTimer;
+        private readonly Timer frameTimer;
         private bool frameBusy;
 
         private CancellationTokenSource? waveformRenderCts;
@@ -147,11 +147,11 @@ namespace ModularAudience.Forms.Modules
                     WindowMain.LastSelectedTrackView = null;
                 }
                 // Remove from TrackViews collection
-            WindowMainStaticHelpers.InvokeIfRequired(WindowMain.Instance, () =>
-                {
-                    WindowMain.TrackViews.Remove(this);
-                    WindowMain.TrackViewIds.Remove(this.TrackViewId);
-                });
+                WindowMainStaticHelpers.InvokeIfRequired(WindowMain.Instance, () =>
+                    {
+                        WindowMain.TrackViews.Remove(this);
+                        WindowMain.TrackViewIds.Remove(this.TrackViewId);
+                    });
             };
 
             this.FormClosed += (_, __) =>
@@ -789,9 +789,9 @@ namespace ModularAudience.Forms.Modules
         {
             if (this.OriginalAudio.Playing || this.OriginalAudio.Paused)
             {
-				this.SetVolumeSynced(this.vScrollBar_volume.Value, this.checkBox_mute.Checked);
-			}
-		}
+                this.SetVolumeSynced(this.vScrollBar_volume.Value, this.checkBox_mute.Checked);
+            }
+        }
 
         private void checkBox_mute_CheckedChanged(object sender, EventArgs e)
         {
@@ -1723,131 +1723,131 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-			const Keys LessGreaterPipeKey = (Keys) 226;
+            const Keys LessGreaterPipeKey = (Keys) 226;
 
-			// Ctrl + <  -> Fade In
-			if (e.Control && !e.Shift && e.KeyCode == LessGreaterPipeKey)
-			{
-				e.Handled = true;
-				e.SuppressKeyPress = true;
+            // Ctrl + <  -> Fade In
+            if (e.Control && !e.Shift && e.KeyCode == LessGreaterPipeKey)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
 
-				if (this.OriginalAudio.Playing)
+                if (this.OriginalAudio.Playing)
                 {
                     await this.StopPlaybackAsync();
                 }
 
                 await this.OriginalAudio.CreateUndoStepAsync();
-				await AudioFadeProcessor.FadeInAsync(this.OriginalAudio);
+                await AudioFadeProcessor.FadeInAsync(this.OriginalAudio);
 
-				this.RequestWaveformRender();
-				return;
-			}
+                this.RequestWaveformRender();
+                return;
+            }
 
-			// Ctrl + Shift + <  -> Fade Out
-			if (e.Control && e.Shift && e.KeyCode == LessGreaterPipeKey)
-			{
-				e.Handled = true;
-				e.SuppressKeyPress = true;
+            // Ctrl + Shift + <  -> Fade Out
+            if (e.Control && e.Shift && e.KeyCode == LessGreaterPipeKey)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
 
-				if (this.OriginalAudio.Playing)
+                if (this.OriginalAudio.Playing)
                 {
                     await this.StopPlaybackAsync();
                 }
 
                 await this.OriginalAudio.CreateUndoStepAsync();
-				await AudioFadeProcessor.FadeOutAsync(this.OriginalAudio);
+                await AudioFadeProcessor.FadeOutAsync(this.OriginalAudio);
 
-				this.RequestWaveformRender();
-				return;
-			}
+                this.RequestWaveformRender();
+                return;
+            }
 
-		}
+        }
 
-		private async Task PasteFromClipboardAsync()
-		{
-			var clip = WindowMain.ClipboardAudioObj;
-			if (clip == null)
-			{
-				LogCollection.Log("Paste failed: Clipboard is empty.");
-				return;
-			}
-			if (this.OriginalAudio.Playing)
-			{
-				LogCollection.Log("Stop playback before pasting audio.");
-				return;
-			}
+        private async Task PasteFromClipboardAsync()
+        {
+            var clip = WindowMain.ClipboardAudioObj;
+            if (clip == null)
+            {
+                LogCollection.Log("Paste failed: Clipboard is empty.");
+                return;
+            }
+            if (this.OriginalAudio.Playing)
+            {
+                LogCollection.Log("Stop playback before pasting audio.");
+                return;
+            }
 
-			// Wenn der Track leer ist (keine Samples), dann die Track-Format-Metadaten
-			// auf das eingefügte Sample übernehmen (insbesondere SampleRate, Channels, BitDepth),
-			// damit InsertAudioAtFrameAsync später konsistent arbeitet.
-			bool trackWasEmpty = (this.OriginalAudio.Data == null || this.OriginalAudio.Data.LongLength <= 0);
-			if (trackWasEmpty)
-			{
-				try
-				{
-					// Nur Metadaten übernehmen, Daten werden durch InsertAudioAtFrameAsync eingefügt.
-					this.OriginalAudio.SampleRate = clip.SampleRate;
-					this.OriginalAudio.Channels = clip.Channels;
-					this.OriginalAudio.BitDepth = clip.BitDepth;
-					// Länge / Duration bleiben bis nach dem Einfügen aktuell.
-					LogCollection.Log($"Paste: Target track was empty — sample rate set to {clip.SampleRate} Hz, channels set to {clip.Channels}.");
-				}
-				catch (Exception ex)
-				{
-					try { LogCollection.Log($"Paste: Failed to set track format metadata: {ex.Message}"); } catch { }
-				}
-			}
+            // Wenn der Track leer ist (keine Samples), dann die Track-Format-Metadaten
+            // auf das eingefügte Sample übernehmen (insbesondere SampleRate, Channels, BitDepth),
+            // damit InsertAudioAtFrameAsync später konsistent arbeitet.
+            bool trackWasEmpty = (this.OriginalAudio.Data == null || this.OriginalAudio.Data.LongLength <= 0);
+            if (trackWasEmpty)
+            {
+                try
+                {
+                    // Nur Metadaten übernehmen, Daten werden durch InsertAudioAtFrameAsync eingefügt.
+                    this.OriginalAudio.SampleRate = clip.SampleRate;
+                    this.OriginalAudio.Channels = clip.Channels;
+                    this.OriginalAudio.BitDepth = clip.BitDepth;
+                    // Länge / Duration bleiben bis nach dem Einfügen aktuell.
+                    LogCollection.Log($"Paste: Target track was empty — sample rate set to {clip.SampleRate} Hz, channels set to {clip.Channels}.");
+                }
+                catch (Exception ex)
+                {
+                    try { LogCollection.Log($"Paste: Failed to set track format metadata: {ex.Message}"); } catch { }
+                }
+            }
 
-			await this.CreateUndoStep();
-			int insertChannels = Math.Max(1, this.OriginalAudio.Channels);
-			long insertFrame = 0;
-			if (this.HasValidSelection())
-			{
-				insertFrame = this.OriginalAudio.SelectionStart / insertChannels;
-				await this.OriginalAudio.EraseSelectionAsync().ConfigureAwait(true);
-				LogCollection.Log($"Cut: AudioObj.Data selection erased in '{this.OriginalAudio.Name}'");
-				this.ClearSelectionMarkers();
-			}
-			else if (this.OriginalAudio.StartingOffset > 0)
-			{
-				insertFrame = this.OriginalAudio.StartingOffset / insertChannels;
-			}
-			else if (this.lastClickFrame >= 0)
-			{
-				insertFrame = this.lastClickFrame;
-			}
+            await this.CreateUndoStep();
+            int insertChannels = Math.Max(1, this.OriginalAudio.Channels);
+            long insertFrame = 0;
+            if (this.HasValidSelection())
+            {
+                insertFrame = this.OriginalAudio.SelectionStart / insertChannels;
+                await this.OriginalAudio.EraseSelectionAsync().ConfigureAwait(true);
+                LogCollection.Log($"Cut: AudioObj.Data selection erased in '{this.OriginalAudio.Name}'");
+                this.ClearSelectionMarkers();
+            }
+            else if (this.OriginalAudio.StartingOffset > 0)
+            {
+                insertFrame = this.OriginalAudio.StartingOffset / insertChannels;
+            }
+            else if (this.lastClickFrame >= 0)
+            {
+                insertFrame = this.lastClickFrame;
+            }
 
-			await this.OriginalAudio.InsertAudioAtFrameAsync(clip, insertFrame).ConfigureAwait(true);
-			LogCollection.Log($"Paste: AudioObj.Data inserted in '{this.OriginalAudio.Name}'");
+            await this.OriginalAudio.InsertAudioAtFrameAsync(clip, insertFrame).ConfigureAwait(true);
+            LogCollection.Log($"Paste: AudioObj.Data inserted in '{this.OriginalAudio.Name}'");
 
-			// Falls Track zuvor leer war, InsertAudioAtFrame hat nun Daten eingefügt —
-			// Länge/Duration ggf. sofort anpassen (InsertAudioAtFrameAsync macht das bereits,
-			// dennoch sicherstellen, dass SampleRate/Channels konsistent sind).
-			if (trackWasEmpty)
-			{
-				try
-				{
-					// Length und Duration wurden im Insert aktualisiert; stelle sicher, dass Duration korrekt ist.
-					long sampleCount = this.OriginalAudio.Data?.LongLength ?? 0L;
-					this.OriginalAudio.Length = sampleCount;
-					int channels = Math.Max(1, this.OriginalAudio.Channels);
-					int sampleRate = Math.Max(1, this.OriginalAudio.SampleRate);
-					this.OriginalAudio.Duration = TimeSpan.FromSeconds(sampleCount / (double) (sampleRate * channels));
-				}
-				catch { }
-			}
+            // Falls Track zuvor leer war, InsertAudioAtFrame hat nun Daten eingefügt —
+            // Länge/Duration ggf. sofort anpassen (InsertAudioAtFrameAsync macht das bereits,
+            // dennoch sicherstellen, dass SampleRate/Channels konsistent sind).
+            if (trackWasEmpty)
+            {
+                try
+                {
+                    // Length und Duration wurden im Insert aktualisiert; stelle sicher, dass Duration korrekt ist.
+                    long sampleCount = this.OriginalAudio.Data?.LongLength ?? 0L;
+                    this.OriginalAudio.Length = sampleCount;
+                    int channels = Math.Max(1, this.OriginalAudio.Channels);
+                    int sampleRate = Math.Max(1, this.OriginalAudio.SampleRate);
+                    this.OriginalAudio.Duration = TimeSpan.FromSeconds(sampleCount / (double) (sampleRate * channels));
+                }
+                catch { }
+            }
 
-			this.RecalculateLoopFraction();
-			this.ApplyLoopFractionToAudio();
+            this.RecalculateLoopFraction();
+            this.ApplyLoopFractionToAudio();
             this.AlignViewToCurrentPosition();
             this.UpdateOffsetScrollbar();
             this.RequestWaveformRender();
             this.ApplyInitialTrackSizing();
 
-			LogCollection.Log($"AudioObj '{clip.Name}' pasted into track view.");
-		}
+            LogCollection.Log($"AudioObj '{clip.Name}' pasted into track view.");
+        }
 
-		private void checkBox_settings_CheckedChanged(object? sender, EventArgs e)
+        private void checkBox_settings_CheckedChanged(object? sender, EventArgs e)
         {
             if (this.suppressSettingsCheckbox)
             {
@@ -1964,6 +1964,10 @@ namespace ModularAudience.Forms.Modules
 
         private void contextMenu_waveform_Opening(object? sender, CancelEventArgs e)
         {
+            long sampleIndexUnderMouse = this.MapPixelToFrameInView(this.pictureBox_waveform.PointToClient(Cursor.Position).X) * Math.Max(1, this.OriginalAudio.Channels);
+            string timeStamp = TimeSpan.FromSeconds(sampleIndexUnderMouse / (double) Math.Max(1, this.OriginalAudio.SampleRate * this.OriginalAudio.Channels)).ToString(@"hh\:mm\:ss\.fff");
+            this.toolStripMenuItem_jumpHere.Text = "Jump to " + $"[{timeStamp}]";
+
             bool hasSelection = this.HasValidSelection();
             this.menuItem_copySelection.Enabled = hasSelection;
             this.menuItem_splitEqualParts.Enabled = (this.OriginalAudio.Data?.Length ?? 0) > 0;
@@ -3048,7 +3052,7 @@ namespace ModularAudience.Forms.Modules
                 tv.InvokeIfRequired(() => tv.button_playback.Text = "■");
             }
 
-            float mainVolume = initiator.GetEffectivePlaybackVolume();
+            float mainVolume = initiator.GetEffectivePlaybackVolume() * AudioPlaybackService.MasterLimiter;
             Action onStopped = SetButtonsStopped;
 
             foreach (var tv in group)
@@ -3076,6 +3080,31 @@ namespace ModularAudience.Forms.Modules
             {
                 SetButtonsStopped();
             }
+        }
+
+        private void toolStripMenuItem_jumpHere_Click(object sender, EventArgs e)
+        {
+            long sampleIndexUnderMouse = this.MapPixelToFrameInView(this.pictureBox_waveform.PointToClient(Cursor.Position).X) * Math.Max(1, this.OriginalAudio.Channels);
+            if (sampleIndexUnderMouse < 0 || sampleIndexUnderMouse >= this.OriginalAudio.Length)
+            {
+                return;
+            }
+
+            long frame = sampleIndexUnderMouse / Math.Max(1, this.OriginalAudio.Channels);
+
+            this.OriginalAudio.SelectionStart = -1;
+            this.OriginalAudio.SelectionEnd = -1;
+            this.OriginalAudio.SetPosition(frame);
+
+            int channels = Math.Max(1, this.OriginalAudio.Channels);
+            this.OriginalAudio.StartingOffset = frame * channels;
+
+            long desiredOffset = frame - this.GetCaretAnchorFrame();
+            desiredOffset = Math.Max(0, desiredOffset);
+            this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
+            this.UpdateOffsetScrollbar();
+
+            this.lastClickFrame = frame;
         }
     }
 }

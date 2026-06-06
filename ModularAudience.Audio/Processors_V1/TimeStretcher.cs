@@ -35,20 +35,7 @@ namespace ModularAudience.Audio.Processors_V1
                 maxWorkers = Math.Clamp(maxWorkers.Value, 1, Environment.ProcessorCount);
             }
 
-            if (maxWorkers != Environment.ProcessorCount)
-            {
-                return await TimeStretchMostThreadsAsync(
-                    obj,
-                    chunkSize,
-                    overlap,
-                    factor,
-                    keepData,
-                    normalize,
-                    maxWorkers.Value,
-                    progress,
-                    offload: false);
-            }
-
+            // FIX: Offload aktivieren auch bei benutzerdefinierten Thread-Anzahlen
             if (offload)
             {
                 return await TimeStretchOffloadedAsync(
@@ -61,6 +48,20 @@ namespace ModularAudience.Audio.Processors_V1
                     maxWorkers.Value,
                     progress,
                     adjustBpm: true);
+            }
+
+            if (maxWorkers != Environment.ProcessorCount)
+            {
+                return await TimeStretchMostThreadsAsync(
+                    obj,
+                    chunkSize,
+                    overlap,
+                    factor,
+                    keepData,
+                    normalize,
+                    maxWorkers.Value,
+                    progress,
+                    offload: false);
             }
 
             LogCollection.Log("TimeStretchAllThreadsAsync: Starting time stretch with maxWorkers = " + maxWorkers.Value);
@@ -189,22 +190,14 @@ namespace ModularAudience.Audio.Processors_V1
         {
             if (maxWorkers == null)
             {
-                return await TimeStretchAllThreadsAsync(
-                    obj,
-                    chunkSize,
-                    overlap,
-                    factor,
-                    keepData,
-                    normalize,
-                    Environment.ProcessorCount,
-                    progress,
-                    offload);
+                maxWorkers = Environment.ProcessorCount;
             }
             else
             {
                 maxWorkers = Math.Clamp(maxWorkers.Value, 1, Environment.ProcessorCount);
             }
 
+            // FIX 1: Offload ZUERST prüfen, bevor Thread-Anzahl geprüft wird
             if (offload)
             {
                 return await TimeStretchOffloadedAsync(
@@ -216,10 +209,24 @@ namespace ModularAudience.Audio.Processors_V1
                     normalize,
                     maxWorkers.Value,
                     progress,
-                    adjustBpm: false);
+                    adjustBpm: true);
             }
 
-            LogCollection.Log("TimeStretchMostThreadsAsync: Starting time stretch with maxWorkers = " + maxWorkers.Value);
+            if (maxWorkers != Environment.ProcessorCount)
+            {
+                return await TimeStretchMostThreadsAsync(
+                    obj,
+                    chunkSize,
+                    overlap,
+                    factor,
+                    keepData,
+                    normalize,
+                    maxWorkers.Value,
+                    progress,
+                    offload: false);
+            }
+
+            LogCollection.Log("TimeStretchAllThreadsAsync: Starting time stretch with maxWorkers = " + maxWorkers.Value);
 
             var parallelOptions = new ParallelOptions
             {
@@ -623,9 +630,12 @@ namespace ModularAudience.Audio.Processors_V1
             {
                 System.IO.Directory.CreateDirectory(tempDir);
 
-                var chunkEnumerable = await obj.GetChunksAsync(chunkSize, overlap, keepData, maxWorkers);
+                // FIX 2: Streaming statt alles in RAM laden
+                var chunkEnumerable = obj.GetChunksEnumerable(chunkSize, overlap, keepData);
                 int index = 0;
+                int totalChunks = (int) Math.Ceiling((double) backupData.Length / (chunkSize * (1.0 - overlap)));
 
+                // FIX 3: Chunks einzeln verarbeiten
                 foreach (var chunk in chunkEnumerable)
                 {
                     if (chunk == null || chunk.Length == 0)
@@ -633,31 +643,54 @@ namespace ModularAudience.Audio.Processors_V1
                         continue;
                     }
 
-                    var fft = await FourierTransformForwardAsync(chunk, null);
+                    // Verarbeitung
+                    Complex[] fft = null;
+                    Complex[] stretched = null;
+                    float[] ifft = null;
+
+                    await Task.Run(() =>
+                    {
+                        fft = FourierTransformForwardCore(chunk, null);
+                    });
+
                     if (fft == null || fft.Length == 0)
                     {
                         continue;
                     }
 
-                    var stretched = await StretchChunkAsync(fft, chunkSize, overlapSize, sampleRate, factor, null);
+                    await Task.Run(() =>
+                    {
+                        stretched = StretchChunkCore(fft, chunkSize, overlapSize, sampleRate, factor, null);
+                    });
+
+                    // FIX 4: Speicher freigeben
+                    fft = null;
+
                     if (stretched == null || stretched.Length == 0)
                     {
                         continue;
                     }
 
-                    var ifft = await FourierTransformInverseAsync(stretched, null);
+                    await Task.Run(() =>
+                    {
+                        ifft = FourierTransformInverseCore(stretched, null);
+                    });
+
+                    stretched = null;
+
                     if (ifft == null || ifft.Length == 0)
                     {
                         continue;
                     }
 
+                    // Auf Disk schreiben
                     string filePath = System.IO.Path.Combine(tempDir, index.ToString("D6") + ".bin");
                     using (var fs = new System.IO.FileStream(
                                filePath,
                                System.IO.FileMode.Create,
                                System.IO.FileAccess.Write,
                                System.IO.FileShare.None,
-                               4096,
+                               81920, // Größerer Buffer
                                System.IO.FileOptions.SequentialScan))
                     using (var bw = new System.IO.BinaryWriter(fs, Encoding.UTF8, false))
                     {
@@ -668,8 +701,22 @@ namespace ModularAudience.Audio.Processors_V1
                         }
                     }
 
+                    ifft = null;
                     tempFiles.Add(filePath);
                     index++;
+
+                    // Progress
+                    if (progress != null && totalChunks > 0)
+                    {
+                        double frac = (double) index / (totalChunks * 2.0);
+                        progress.Report(Math.Clamp(frac, 0.0, 0.5));
+                    }
+
+                    // FIX 5: GC alle 10 Chunks
+                    if (index % 10 == 0)
+                    {
+                        GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, false);
+                    }
                 }
 
                 if (tempFiles.Count == 0)
@@ -684,19 +731,21 @@ namespace ModularAudience.Audio.Processors_V1
                     obj.Bpm = (float) (obj.Bpm / factor);
                 }
 
-                const int batchSize = 8;
+                // FIX 6: Kleinere Batches
+                const int batchSize = 3;
                 var batchList = new List<float[]>(batchSize);
                 int processedFiles = 0;
                 int totalFiles = tempFiles.Count;
 
-                foreach (var path in tempFiles)
+                foreach (var path in tempFiles.ToList())
                 {
+                    float[] data = null;
                     using (var fs = new System.IO.FileStream(
                                path,
                                System.IO.FileMode.Open,
                                System.IO.FileAccess.Read,
                                System.IO.FileShare.Read,
-                               4096,
+                               81920,
                                System.IO.FileOptions.SequentialScan))
                     using (var br = new System.IO.BinaryReader(fs, Encoding.UTF8, false))
                     {
@@ -706,27 +755,34 @@ namespace ModularAudience.Audio.Processors_V1
                             continue;
                         }
 
-                        var data = new float[len];
+                        data = new float[len];
                         for (int i = 0; i < len; i++)
                         {
                             data[i] = br.ReadSingle();
                         }
-
-                        batchList.Add(data);
                     }
 
+                    batchList.Add(data);
                     processedFiles++;
 
                     if (batchList.Count >= batchSize)
                     {
                         await obj.AggregateStretchedChunksAsync(batchList, obj.StretchFactor, maxWorkers);
                         batchList.Clear();
+                        GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, false);
                     }
+
+                    // FIX 7: Datei sofort löschen
+                    try
+                    {
+                        System.IO.File.Delete(path);
+                    }
+                    catch { }
 
                     if (progress != null && totalFiles > 0)
                     {
-                        double frac = (double) processedFiles / totalFiles;
-                        progress.Report(Math.Clamp(frac, 0.0, 1.0));
+                        double frac = 0.5 + ((double) processedFiles / totalFiles) * 0.5;
+                        progress.Report(Math.Clamp(frac, 0.5, 1.0));
                     }
                 }
 
@@ -752,6 +808,7 @@ namespace ModularAudience.Audio.Processors_V1
             }
             finally
             {
+                // FIX 8: Robustes Cleanup
                 try
                 {
                     foreach (var f in tempFiles)
@@ -763,19 +820,27 @@ namespace ModularAudience.Audio.Processors_V1
                                 System.IO.File.Delete(f);
                             }
                         }
-                        catch
-                        {
-                        }
+                        catch { }
                     }
 
                     if (System.IO.Directory.Exists(tempDir))
                     {
-                        System.IO.Directory.Delete(tempDir, true);
+                        try
+                        {
+                            System.IO.Directory.Delete(tempDir, true);
+                        }
+                        catch
+                        {
+                            await Task.Delay(100);
+                            try
+                            {
+                                System.IO.Directory.Delete(tempDir, true);
+                            }
+                            catch { }
+                        }
                     }
                 }
-                catch
-                {
-                }
+                catch { }
             }
         }
 

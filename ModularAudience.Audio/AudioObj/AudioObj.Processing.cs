@@ -17,6 +17,11 @@ namespace ModularAudience.Audio
             return AudioChunkProcessor.GetChunksAsync(this, size, overlap, keepData, maxWorkers);
         }
 
+        public IEnumerable<float[]> GetChunksEnumerable(int size = 2048, float overlap = 0.5f, bool keepData = false)
+        {
+            return AudioChunkProcessor.GetChunksEnumerable(this, size, overlap, keepData);
+        }
+
         public Task AggregateStretchedChunksAsync(IEnumerable<float[]> chunks, double stretchFactor = 1.0, int maxWorkers = 4)
         {
             return AudioChunkProcessor.AggregateStretchedChunksAsync(this, chunks, stretchFactor, maxWorkers);

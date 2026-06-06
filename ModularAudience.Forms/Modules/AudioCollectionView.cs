@@ -118,6 +118,7 @@ namespace ModularAudience.Forms
                 this.AudioC.Dispose();
 
                 WindowMain.CollectionViews.Remove(this);
+                GC.SuppressFinalize(this);
             };
 
             this.waveformPreviewTimer = new System.Windows.Forms.Timer { Interval = 600 };

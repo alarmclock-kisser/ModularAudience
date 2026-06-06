@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 using static ModularAudience.Audio.SwitchingSampleProvider;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace ModularAudience.Audio
 {
@@ -195,6 +196,7 @@ namespace ModularAudience.Audio
         private long loopStartSamples;
         private long loopEndSamples;
         private long loopActivationSamples; // absolute sample counter snapshot when loop was activated
+        public static float MasterLimiter;
 
         public float PlaybackRate { get; private set; } = 1.0f;
         public int DeviceSampleRate { get; private set; } = 44100;
@@ -730,6 +732,8 @@ namespace ModularAudience.Audio
                 }
             }
             catch { }
+
+            MasterLimiter = clampedLimiter;
         }
     }
 }

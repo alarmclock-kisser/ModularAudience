@@ -322,9 +322,23 @@ namespace ModularAudience.Audio
             long bytePosition = framePosition * (long) bytesPerFrame;
             this.SkippedPositionBytes = Math.Clamp(bytePosition, 0, totalBytes);
 
-            if (this.Paused)
+            if (this.Paused || !this.Playing)
             {
                 this.resumeFromSetPosition = true;
+            }
+            if (this.Playing)
+            {
+                try
+                {
+                    long sampleIndex = framePosition * channels;
+                    this.playback.SeekSamples(sampleIndex);
+                    try { this.positionOriginBytes = this.playback.GetPositionBytes(); }
+                    catch { this.positionOriginBytes = 0; }
+                }
+                catch
+                {
+                    // ignore seek errors to avoid breaking playback
+                }
             }
         }
 
