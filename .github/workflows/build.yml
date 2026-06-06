@@ -26,10 +26,12 @@ jobs:
     - name: Publish
       run: dotnet publish ModularAudience.Forms/ModularAudience.Forms.csproj -c Release -r win-x64 --self-contained true -o ./publish
 
-    - name: Create Release
+        - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         files: ./publish/*.exe
-        asset_name: ModularAudience_v${{ github.run_number }}
+        tag_name: release-${{ github.run_number }}
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
