@@ -626,11 +626,11 @@
             // 
             // toolStripComboBox_orderBy
             // 
-            this.toolStripComboBox_orderBy.Items.AddRange(new object[] { "Duration", "Created At", "Name" });
+            this.toolStripComboBox_orderBy.Items.AddRange(new object[] { "Duration", "Created At", "Name", "BPM" });
             this.toolStripComboBox_orderBy.Name = "toolStripComboBox_orderBy";
             this.toolStripComboBox_orderBy.Size = new Size(121, 23);
             this.toolStripComboBox_orderBy.Text = "Order by";
-            this.toolStripComboBox_orderBy.SelectedChanged += this.toolStripComboBox_orderBy_SelectedChanged;
+            this.toolStripComboBox_orderBy.SelectedIndexChanged += this.toolStripComboBox_orderBy_SelectedIndexChanged;
             // 
             // AudioCollectionView
             // 

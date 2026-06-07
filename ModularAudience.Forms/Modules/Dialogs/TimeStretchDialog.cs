@@ -27,7 +27,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         /// <summary>True if the user confirmed via Stretch V2, false for Stretch V1.</summary>
         public bool ConfirmedUsedV2 { get; private set; }
-        public static bool Channeled { get; internal set; }
+        public static bool Channeled { get; internal set; } = true;
 
         private CancellationTokenSource? ProcessingCancellationSource = null;
         private System.Windows.Forms.Timer? ProcessingTimer = null;
@@ -67,8 +67,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 this.Text = $"Time Stretch - {audios.First().Name}";
             }
+            else
+            {
+                float? minBpm = this.Tracks.Min(t => t.Bpm > 0 ? t.Bpm : t.ScannedBpm > 30 ? t.ScannedBpm : null);
+                float? maxBpm = this.Tracks.Max(t => t.Bpm > 0 ? t.Bpm : t.ScannedBpm > 30 ? t.ScannedBpm : null);
+                this.Text += $"[{minBpm?.ToString("0.#") ?? "?"} - {maxBpm?.ToString("0.#") ?? "?"} BPM]";
+            }
             this.StartPosition = FormStartPosition.Manual;
-            this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false);
+            this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false, WindowMain.CurrentScreenId);
 
             this.numericUpDown_chunkSize.Tag = (int) this.numericUpDown_chunkSize.Value;
             this.numericUpDown_initialBpm.Value = this.GetSafeInitialBpm(this.Tracks.First());

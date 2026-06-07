@@ -102,9 +102,7 @@ namespace ModularAudience.Forms
                 screenId = Array.IndexOf(Screen.AllScreens, Screen.FromControl(form));
             }
 
-            screenId ??= Screen.PrimaryScreen != null
-                ? Array.IndexOf(Screen.AllScreens, Screen.PrimaryScreen)
-                : 0;
+            screenId ??= WindowMain.CurrentScreenId;
 
             Screen screen;
             if (screenId.HasValue)
@@ -245,6 +243,20 @@ namespace ModularAudience.Forms
                 ? screen.WorkingArea.Y
                 : screen.WorkingArea.Y + screen.WorkingArea.Height - (form?.Height ?? 0);
             return new Point(x, y);
+        }
+
+        internal static int GetScreenId(Form? form = null)
+        {
+            if (form != null)
+            {
+                return Array.IndexOf(Screen.AllScreens, Screen.FromControl(form));
+            }
+            else
+            {
+                return Screen.PrimaryScreen != null
+                    ? Array.IndexOf(Screen.AllScreens, Screen.PrimaryScreen)
+                    : 0;
+            }
         }
 
 

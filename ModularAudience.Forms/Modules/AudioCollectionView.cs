@@ -153,6 +153,7 @@ namespace ModularAudience.Forms
                 {
                     string nameText = audio.Name ?? string.Empty;
                     string durationText = AudioCollectionViewHelpers.FormatDurationText(audio);
+                    string bpmText = audio.Bpm > 0 ? $"[{audio.Bpm:F1}]" : audio.ScannedBpm > 0 ? $"[{audio.ScannedBpm:F1}]" : "[ ? ]";
                     // Textfarben basierend auf Auswahlstatus
                     Color textColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected
                         ? SystemColors.HighlightText
@@ -1207,7 +1208,17 @@ namespace ModularAudience.Forms
             }
         }
 
-        private void toolStripComboBox_orderBy_SelectedChanged(object sender, EventArgs e)
+        private void toolStripComboBox_orderBy_SelectedChanged(object? sender, EventArgs e)
+        {
+            this.ApplyOrderBySelection();
+        }
+
+        private void toolStripComboBox_orderBy_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            this.ApplyOrderBySelection();
+        }
+
+        private void ApplyOrderBySelection()
         {
             string? selected = this.toolStripComboBox_orderBy.SelectedItem as string;
             if (string.IsNullOrEmpty(selected) || this.AudioCount <= 0)
@@ -1229,6 +1240,10 @@ namespace ModularAudience.Forms
             else if (selected == "Name")
             {
                 this.AudioC.Audios.SortInPlace(a => a.Name);
+            }
+            else if (selected == "BPM")
+            {
+                this.AudioC.Audios.SortInPlace(a => -(a.Bpm > 0f ? a.Bpm : a.ScannedBpm));
             }
 
             // Jump back to none selected and text "Order by"

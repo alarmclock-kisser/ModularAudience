@@ -249,8 +249,6 @@ namespace ModularAudience.Audio
                     ? audio.Volume / 100f
                     : audio.Volume;
                 float limitedVolume = Math.Clamp(currentVolume01, 0f, MasterLimiter);
-
-                audio.Volume = limitedVolume * 100f;
                 audio.SetPlaybackVolume(limitedVolume);
             }
         }

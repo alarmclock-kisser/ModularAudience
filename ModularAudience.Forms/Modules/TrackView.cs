@@ -1088,6 +1088,13 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            if (this.OriginalAudio.Playing)
+            {
+                this.dragSelecting = false;
+                this.pendingSelect = false;
+                return;
+            }
+
             if (e.Button == MouseButtons.Left)
             {
                 long frame = this.MapPixelToFrameInView(e.X);
@@ -1153,6 +1160,13 @@ namespace ModularAudience.Forms.Modules
         {
             if (e.Button != MouseButtons.Left)
             {
+                return;
+            }
+
+            if (this.OriginalAudio.Playing)
+            {
+                this.pendingSelect = false;
+                this.dragSelecting = false;
                 return;
             }
 

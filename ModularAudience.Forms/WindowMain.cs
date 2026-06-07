@@ -56,6 +56,8 @@ namespace ModularAudience.Forms
             }
         }
 
+        internal static int? CurrentScreenId = 0;
+
 
         // Map AudioObj.Id -> Collection number (01-based) to restore distribution
         internal static readonly Dictionary<Guid, int> AudioCollectionTags = [];
@@ -108,8 +110,9 @@ namespace ModularAudience.Forms
             // Try restore last saved position (multi-screen aware). Fallback to corner position.
             if (!WindowsScreenHelper.TryRestoreFormPosition(this))
             {
-                this.Location = WindowsScreenHelper.GetCornerPosition(this, false, true);
+                this.Location = WindowsScreenHelper.GetCornerPosition(this, false, true, CurrentScreenId);
             }
+            CurrentScreenId = WindowsScreenHelper.GetScreenId(Instance);
 
             // Shift + LeftClick on the form background should bring all open forms of this app to the front
             this.MouseDown += this.WindowMain_MouseDown_BringAllToFront;

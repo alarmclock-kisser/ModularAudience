@@ -275,6 +275,8 @@
             // checkBox_channeled
             // 
             this.checkBox_channeled.AutoSize = true;
+            this.checkBox_channeled.Checked = true;
+            this.checkBox_channeled.CheckState = CheckState.Checked;
             this.checkBox_channeled.Location = new Point(377, 92);
             this.checkBox_channeled.Name = "checkBox_channeled";
             this.checkBox_channeled.Size = new Size(83, 19);
