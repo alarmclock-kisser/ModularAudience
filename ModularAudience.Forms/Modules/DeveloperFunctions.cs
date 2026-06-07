@@ -85,7 +85,7 @@ namespace ModularAudience.Forms.Modules
 
 
             this.StartPosition = FormStartPosition.Manual;
-            this.Location = WindowsScreenHelper.GetCornerPosition(this, true, false);
+            this.Location = WindowsScreenHelper.GetCornerPosition(null, true, false, WindowMain.CurrentScreenId);
 
             this.numericUpDown_maxProcessors.Maximum = Environment.ProcessorCount;
             this.numericUpDown_maxProcessors.Value = Environment.ProcessorCount;
@@ -159,7 +159,10 @@ namespace ModularAudience.Forms.Modules
                 {
                     try
                     {
-                        if (numericPairs == null || numericPairs.Count == 0) return;
+                        if (numericPairs == null || numericPairs.Count == 0)
+                        {
+                            return;
+                        }
 
                         int channels = audioForMapping?.Channels ?? 1;
                         int sampleRate = Math.Max(1, audioForMapping?.SampleRate ?? 44100);
@@ -182,8 +185,14 @@ namespace ModularAudience.Forms.Modules
                                 bool interleavedFits = secondsInterleaved <= trackDuration + margin;
                                 bool monoFits = secondsMono <= trackDuration + margin;
 
-                                if (interleavedFits && !monoFits) useMonoInterpretation = false;
-                                else if (!interleavedFits && monoFits) useMonoInterpretation = true;
+                                if (interleavedFits && !monoFits)
+                                {
+                                    useMonoInterpretation = false;
+                                }
+                                else if (!interleavedFits && monoFits)
+                                {
+                                    useMonoInterpretation = true;
+                                }
                                 else
                                 {
                                     // both fit or both too large -> prefer interleaved (most methods return interleaved indices)
@@ -203,7 +212,7 @@ namespace ModularAudience.Forms.Modules
                             mapped.Add($"{keyIndex} -> {formatted} (mappedSamples:{interleavedSamples}) => conf:{kv.Value:F6}");
                         }
 
-                        ShowResultValueDialog(title + " - timestamps", string.Join(Environment.NewLine, mapped));
+                        this.ShowResultValueDialog(title + " - timestamps", string.Join(Environment.NewLine, mapped));
                     }
                     catch (Exception ex)
                     {
@@ -878,7 +887,11 @@ namespace ModularAudience.Forms.Modules
                             // Prüfe auf KeyValuePair<,> Elemente via Reflection
                             foreach (var el in ienum)
                             {
-                                if (el == null) continue;
+                                if (el == null)
+                                {
+                                    continue;
+                                }
+
                                 var t = el.GetType();
                                 var kp = t.GetProperty("Key");
                                 var vp = t.GetProperty("Value");
@@ -903,10 +916,17 @@ namespace ModularAudience.Forms.Modules
                             var intFloat = new Dictionary<int, float>();
                             foreach (var kv in entries)
                             {
-                                if (kv.Key == null) continue;
+                                if (kv.Key == null)
+                                {
+                                    continue;
+                                }
+
                                 int ik = 0; bool keyOk = false;
                                 try { ik = Convert.ToInt32(kv.Key, CultureInfo.InvariantCulture); keyOk = true; } catch { keyOk = false; }
-                                if (!keyOk) continue;
+                                if (!keyOk)
+                                {
+                                    continue;
+                                }
 
                                 float fv = 0f; bool valOk = false;
                                 if (kv.Value is float f) { fv = f; valOk = true; }
@@ -918,7 +938,10 @@ namespace ModularAudience.Forms.Modules
                                     try { fv = Convert.ToSingle(kv.Value, CultureInfo.InvariantCulture); valOk = true; } catch { valOk = false; }
                                 }
 
-                                if (valOk) intFloat[ik] = fv;
+                                if (valOk)
+                                {
+                                    intFloat[ik] = fv;
+                                }
                             }
 
                             if (intFloat.Count > 0)

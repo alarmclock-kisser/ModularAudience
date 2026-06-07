@@ -37,7 +37,7 @@ namespace ModularAudience.Forms.Modules
 		{
 			this.InitializeComponent();
 			this.StartPosition = FormStartPosition.Manual;
-			this.Location = WindowsScreenHelper.GetCenterStartingPoint(this);
+			this.Location = WindowsScreenHelper.GetCenterStartingPoint(null, WindowMain.CurrentScreenId);
 
 			// Preserve originals when importing from other views
 			this.AudioC.KeepOriginal = true;

@@ -55,7 +55,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.pendingInitialSamples.AddRange(Array.Empty<AudioObj>());
             this.StartPosition = FormStartPosition.Manual;
-            this.Location = WindowsScreenHelper.GetCenterStartingPoint(this);
+            this.Location = WindowsScreenHelper.GetCenterStartingPoint(null, WindowMain.CurrentScreenId);
 
             this.AllowDrop = true;
             this.DragEnter += this.PianoRollEditor_DragEnter;

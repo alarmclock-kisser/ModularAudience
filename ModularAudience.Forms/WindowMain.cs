@@ -56,7 +56,7 @@ namespace ModularAudience.Forms
             }
         }
 
-        internal static int? CurrentScreenId = 0;
+        internal static int? CurrentScreenId => WindowsScreenHelper.GetScreenId(Instance);
 
 
         // Map AudioObj.Id -> Collection number (01-based) to restore distribution
@@ -112,7 +112,6 @@ namespace ModularAudience.Forms
             {
                 this.Location = WindowsScreenHelper.GetCornerPosition(this, false, true, CurrentScreenId);
             }
-            CurrentScreenId = WindowsScreenHelper.GetScreenId(Instance);
 
             // Shift + LeftClick on the form background should bring all open forms of this app to the front
             this.MouseDown += this.WindowMain_MouseDown_BringAllToFront;

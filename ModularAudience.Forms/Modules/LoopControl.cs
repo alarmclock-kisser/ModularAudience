@@ -221,6 +221,8 @@ namespace ModularAudience.Forms.Modules
         private float lastAppliedLoopFraction = 0f; // value from button (can be negative)
         private bool lastActionWasMultiplierChange = false;
         private float lastJumpMs = 1;
+        private float lastJumpValue = 1;
+        private Guid _lastJumpAudioId = Guid.Empty;
 
 
 
@@ -231,7 +233,7 @@ namespace ModularAudience.Forms.Modules
             this.Fill_ComboBox_Drops();
 
             this.StartPosition = FormStartPosition.Manual;
-            this.Location = WindowsScreenHelper.GetCenterStartingPoint(this, WindowMain.CurrentScreenId);
+            this.Location = WindowsScreenHelper.GetCenterStartingPoint(null, WindowMain.CurrentScreenId);
             this.TopMost = true;
 
             this.BuildLoopControlButtons();
@@ -855,10 +857,24 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            this.numericUpDown_jump.ValueChanged -= this.numericUpDown_jump_ValueChanged;
-            this.numericUpDown_jump.Value = (decimal) (60000f / this.Bpm / 4);
-            this.lastJumpMs = (float) this.numericUpDown_jump.Value;
-            this.numericUpDown_jump.ValueChanged += this.numericUpDown_jump_ValueChanged;
+            if (this.OriginalAudio.Id != this._lastJumpAudioId)
+            {
+                // GANZ WICHTIG: Die ID jetzt merken, damit die Bedingung beim nächsten Timer-Tick false ist!
+                this._lastJumpAudioId = this.OriginalAudio.Id;
+
+                this.numericUpDown_jump.ValueChanged -= this.numericUpDown_jump_ValueChanged;
+
+                decimal defaultJumpMs = (decimal) (60000f / this.Bpm / 4);
+                // Optional, aber sicherheitshalber klammern, damit es bei wilden BPM nicht crasht:
+                defaultJumpMs = Math.Clamp(defaultJumpMs, this.numericUpDown_jump.Minimum, this.numericUpDown_jump.Maximum);
+
+                this.numericUpDown_jump.Value = defaultJumpMs;
+
+                this.lastJumpMs = (float) this.numericUpDown_jump.Value;
+                this.lastJumpValue = (float) this.numericUpDown_jump.Value; // <-- Das hier auch nachziehen!
+
+                this.numericUpDown_jump.ValueChanged += this.numericUpDown_jump_ValueChanged;
+            }
 
             // Enable all buttons
             foreach (var btn in this.panel_buttons.Controls.OfType<Button>())
@@ -1064,11 +1080,17 @@ namespace ModularAudience.Forms.Modules
                 {
                     try
                     {
+                        // --- NEU: NumericUpDown überspringen! ---
+                        // Verhindert, dass das Klicken auf die Pfeile sofort den Fokus stiehlt
+                        if (c is NumericUpDown)
+                        {
+                            continue;
+                        }
+
                         this.AttachAutoRefocusToControl(c);
 
                         if (c.HasChildren)
                         {
-                            // Rekursiv auf Unter-Container anwenden
                             this.EnableAutoRefocusForContainer(c);
                         }
                     }
@@ -1134,17 +1156,31 @@ namespace ModularAudience.Forms.Modules
             if (!ModifierKeys.HasFlag(Keys.Shift) && !ModifierKeys.HasFlag(Keys.Control))
             {
                 this.numericUpDown_jump.ValueChanged -= this.numericUpDown_jump_ValueChanged;
-                if ((float) this.numericUpDown_jump.Value > this.lastJumpMs)
+
+                float currentValue = (float)this.numericUpDown_jump.Value;
+
+                if (currentValue > this.lastJumpValue)
                 {
+                    // Moving Up
                     this.lastJumpMs *= 2;
                     this.lastJumpMs = (float) Math.Clamp((decimal) this.lastJumpMs, 1m, this.numericUpDown_jump.Maximum);
                     this.numericUpDown_jump.Value = (decimal) this.lastJumpMs;
                 }
-                else if ((float) this.numericUpDown_jump.Value < this.lastJumpMs)
+                else if (currentValue < this.lastJumpValue)
                 {
+                    // Moving Down
                     this.lastJumpMs = Math.Max(1, this.lastJumpMs / 2);
                     this.numericUpDown_jump.Value = (decimal) this.lastJumpMs;
                 }
+                else
+                {
+                    // Sync lastJumpMs if value was set directly (e.g. via mouse drag)
+                    this.lastJumpMs = currentValue;
+                }
+
+                this.lastJumpValue = (float)this.numericUpDown_jump.Value;
+                this.lastJumpMs = this.lastJumpValue; // Ensure they stay in sync
+
                 this.numericUpDown_jump.ValueChanged += this.numericUpDown_jump_ValueChanged;
             }
         }
@@ -1160,6 +1196,7 @@ namespace ModularAudience.Forms.Modules
             int msPerBeat = (int) Math.Round(60000f / this.Bpm);
             this.numericUpDown_jump.Value = msPerBeat;
             this.lastJumpMs = msPerBeat;
+            this.lastJumpValue = msPerBeat;
         }
 
 

@@ -4,5 +4,6 @@
   <Project Path="ModularAudience.Cuda/ModularAudience.Cuda.csproj" Id="48e6abf6-de92-410b-8a76-3739fbbf0abf" />
   <Project Path="ModularAudience.Forms/ModularAudience.Forms.csproj" />
   <Project Path="ModularAudience.Generators/ModularAudience.Generators.csproj" Id="5b67f48d-7a10-42c5-9e48-ab12e5545a98" />
+  <Project Path="ModularAudience.Llama/ModularAudience.Llama.csproj" Id="595c8593-a4bc-40b5-9f57-1b112f7df301" />
   <Project Path="ModularAudience.Onnx/ModularAudience.Onnx.csproj" Id="4c874a96-7de4-472c-9adc-95419127195e" />
 </Solution>

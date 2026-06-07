@@ -33,7 +33,10 @@ namespace ModularAudience.Audio.Processors_V3
 
         public static async Task RunForAsync(IEnumerable<AudioObj> tracks, double? syncingDuration = null, double frequency = 0.1, int grain = 10)
         {
-            if (tracks == null) return;
+            if (tracks == null)
+            {
+                return;
+            }
 
             // Determine duration if not provided or invalid
             double duration = syncingDuration.HasValue && syncingDuration.Value > 0 ? syncingDuration.Value : -1.0;
