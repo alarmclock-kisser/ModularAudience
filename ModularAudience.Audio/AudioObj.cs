@@ -121,11 +121,15 @@ namespace ModularAudience.Audio
 
         public AudioObj()
         {
-            // Do not initialize undo history here to avoid Clone recursion and unintended baseline snapshots.
+            AudioPlaybackService.Register(this);
+            this.Volume = AudioPlaybackService.MasterLimiter * 100f;
         }
+
 
         public AudioObj(string filePath, bool load = false)
         {
+            AudioPlaybackService.Register(this);
+            this.Volume = AudioPlaybackService.MasterLimiter * 100f;
             this.FilePath = filePath;
             if (load)
             {

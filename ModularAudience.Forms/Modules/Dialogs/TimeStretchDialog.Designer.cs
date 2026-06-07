@@ -49,6 +49,7 @@
             this.checkBox_offload = new CheckBox();
             this.checkBox_fixed = new CheckBox();
             this.checkBox_trim = new CheckBox();
+            this.checkBox_channeled = new CheckBox();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_initialBpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_targetBpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_stretchFactor).BeginInit();
@@ -271,11 +272,23 @@
             this.checkBox_trim.Text = "Trim Silence";
             this.checkBox_trim.UseVisualStyleBackColor = true;
             // 
+            // checkBox_channeled
+            // 
+            this.checkBox_channeled.AutoSize = true;
+            this.checkBox_channeled.Location = new Point(377, 92);
+            this.checkBox_channeled.Name = "checkBox_channeled";
+            this.checkBox_channeled.Size = new Size(83, 19);
+            this.checkBox_channeled.TabIndex = 21;
+            this.checkBox_channeled.Text = "Channeled";
+            this.checkBox_channeled.UseVisualStyleBackColor = true;
+            this.checkBox_channeled.CheckedChanged += this.checkBox_channeled_CheckedChanged;
+            // 
             // TimeStretchDialog
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(464, 201);
+            this.Controls.Add(this.checkBox_channeled);
             this.Controls.Add(this.checkBox_trim);
             this.Controls.Add(this.checkBox_fixed);
             this.Controls.Add(this.checkBox_offload);
@@ -332,5 +345,6 @@
         private CheckBox checkBox_offload;
         private CheckBox checkBox_fixed;
         private CheckBox checkBox_trim;
+        private CheckBox checkBox_channeled;
     }
 }

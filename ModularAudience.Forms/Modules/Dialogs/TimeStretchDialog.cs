@@ -27,7 +27,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         /// <summary>True if the user confirmed via Stretch V2, false for Stretch V1.</summary>
         public bool ConfirmedUsedV2 { get; private set; }
-
+        public static bool Channeled { get; internal set; }
 
         private CancellationTokenSource? ProcessingCancellationSource = null;
         private System.Windows.Forms.Timer? ProcessingTimer = null;
@@ -227,18 +227,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     for (int i = 0; i < this.Tracks.Count(); i++)
                     {
                         this.Text = $"Time Stretch - {this.Tracks.Count()} Tracks (Processing {i + 1}/{this.Tracks.Count()})";
-                        this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked? this.numericUpDown_initialBpm.Value : this.Tracks.ElementAt(i).Bpm > 0 ? (decimal)this.Tracks.ElementAt(i).Bpm : this.Tracks.ElementAt(i).ScannedBpm > 30 ? (decimal)this.Tracks.ElementAt(i).ScannedBpm : (decimal)LastInitialBpm;
+                        this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked ? this.numericUpDown_initialBpm.Value : this.Tracks.ElementAt(i).Bpm > 0 ? (decimal) this.Tracks.ElementAt(i).Bpm : this.Tracks.ElementAt(i).ScannedBpm > 30 ? (decimal) this.Tracks.ElementAt(i).ScannedBpm : (decimal) LastInitialBpm;
                         float originalPeak = await this.Tracks.ElementAt(i).GetPeakAmplitudeAsync((int) this.numericUpDown_threads.Value);
                         await TimeStretcher.TimeStretchAllThreadsAsync(
                                                 this.Tracks.ElementAt(i),
                                                 (int) this.numericUpDown_chunkSize.Value,
                                                 (float) this.numericUpDown_overlap.Value,
-                                                (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2* (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
-												keepData: false,
+                                                (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
+                                                keepData: false,
                                                 normalize: 1.0f,
                                                 maxWorkers: (int) this.numericUpDown_threads.Value,
                                                 progress: progress,
-                                                offload: this.checkBox_offload.Checked);
+                                                offload: this.checkBox_offload.Checked, channeled: this.checkBox_channeled.Checked);
 
                         if (this.checkBox_trim.Checked)
                         {
@@ -271,12 +271,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
                                             this.Tracks.First(),
                                             (int) this.numericUpDown_chunkSize.Value,
                                             (float) this.numericUpDown_overlap.Value,
-										    (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
-											keepData: false,
+                                            (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
+                                            keepData: false,
                                             normalize: 0.0f,
                                             maxWorkers: (int) this.numericUpDown_threads.Value,
                                             progress: progress,
-                                            offload: this.checkBox_offload.Checked);
+                                            offload: this.checkBox_offload.Checked, channeled: this.checkBox_channeled.Checked);
 
                     if (this.checkBox_trim.Checked)
                     {
@@ -356,16 +356,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             this.ConfirmedUsedV2 = useV2;
             this.ConfirmedSettings = new PlaylistStretchSettings(
-                TargetBpm:    (float) this.numericUpDown_targetBpm.Value,
+                TargetBpm: (float) this.numericUpDown_targetBpm.Value,
                 StretchFactor: (float) this.numericUpDown_stretchFactor.Value,
-                ChunkSize:    (int) this.numericUpDown_chunkSize.Value,
-                Overlap:      (float) this.numericUpDown_overlap.Value,
-                Threads:      (int) this.numericUpDown_threads.Value,
-                UseV2:        useV2,
+                ChunkSize: (int) this.numericUpDown_chunkSize.Value,
+                Overlap: (float) this.numericUpDown_overlap.Value,
+                Threads: (int) this.numericUpDown_threads.Value,
+                UseV2: useV2,
                 AutoChunking: this.checkBox_autoChunking.Checked,
-                Offload:      this.checkBox_offload.Checked,
-                Trim:         this.checkBox_trim.Checked,
-                Fixed:        this.checkBox_fixed.Checked
+                Offload: this.checkBox_offload.Checked,
+                Trim: this.checkBox_trim.Checked,
+                Fixed: this.checkBox_fixed.Checked
             );
         }
 
@@ -430,7 +430,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 // Progress mapper: for multi-track, map each track to its portion of the progress bar
                 var rawProgress = new Progress<double>(percent =>
                 {
-                    int scaled = (int)Math.Round(percent * this.progressBar_stretching.Maximum);
+                    int scaled = (int) Math.Round(percent * this.progressBar_stretching.Maximum);
                     this.progressBar_stretching.Value = Math.Clamp(scaled, this.progressBar_stretching.Minimum, this.progressBar_stretching.Maximum);
                 });
 
@@ -438,18 +438,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 int index = 0;
                 void ReportComposite(double local)
                 {
-                    double baseStart = (double)index / Math.Max(1, total);
-                    double baseEnd = (double)(index + 1) / Math.Max(1, total);
+                    double baseStart = (double) index / Math.Max(1, total);
+                    double baseEnd = (double) (index + 1) / Math.Max(1, total);
                     double mapped = baseStart + (baseEnd - baseStart) * Math.Clamp(local, 0.0, 1.0);
-                    ((IProgress<double>)rawProgress).Report(mapped); // <-- Fix: explizites Interface-Casting
+                    ((IProgress<double>) rawProgress).Report(mapped); // <-- Fix: explizites Interface-Casting
                 }
 
                 var perTrackProgress = new Progress<double>(p => ReportComposite(p));
 
                 await this.trackView.OriginalAudio.CreateUndoStepAsync();
 
-                int? chunkSize = this.checkBox_autoChunking.Checked ? null : (int?)this.numericUpDown_chunkSize.Value;
-                float? overlap = this.checkBox_autoChunking.Checked ? null : (float?)this.numericUpDown_overlap.Value;
+                int? chunkSize = this.checkBox_autoChunking.Checked ? null : (int?) this.numericUpDown_chunkSize.Value;
+                float? overlap = this.checkBox_autoChunking.Checked ? null : (float?) this.numericUpDown_overlap.Value;
 
                 try { this.button_stretchV2.Text = "Cancel"; } catch { }
 
@@ -459,13 +459,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     index = 0;
                     foreach (var t in this.Tracks)
                     {
-                        this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked ? this.numericUpDown_initialBpm.Value : t.Bpm > 0 ? (decimal)t.Bpm : t.ScannedBpm > 30 ? (decimal)t.ScannedBpm : (decimal)LastInitialBpm;
+                        this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked ? this.numericUpDown_initialBpm.Value : t.Bpm > 0 ? (decimal) t.Bpm : t.ScannedBpm > 30 ? (decimal) t.ScannedBpm : (decimal) LastInitialBpm;
 
                         // Process each track in-place with V2
                         await TimeStretcher_V2.Timestretch_V2Async(
                             t,
-							(double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
-							chunkSize,
+                            (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
+                            chunkSize,
                             overlap,
                             perTrackProgress,
                             this.ProcessingCancellationSource.Token);
@@ -490,8 +490,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                     await TimeStretcher_V2.Timestretch_V2Async(
                         track,
-						(double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
-						chunkSize,
+                        (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
+                        chunkSize,
                         overlap,
                         perTrackProgress,
                         this.ProcessingCancellationSource.Token);
@@ -553,6 +553,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     : (decimal) LastInitialBpm;
 
             return Math.Clamp(bpm, this.numericUpDown_initialBpm.Minimum, this.numericUpDown_initialBpm.Maximum);
+        }
+
+        private void checkBox_channeled_CheckedChanged(object sender, EventArgs e)
+        {
+            TimeStretchDialog.Channeled = this.checkBox_channeled.Checked;
         }
     }
 }

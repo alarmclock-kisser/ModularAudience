@@ -16,7 +16,7 @@ namespace ModularAudience.Forms
 
         public readonly AudioCollection AudioC = new();
 
-        public float MasterLimiter => this.vScrollBar_masterLimiter.Maximum / 100f - this.vScrollBar_masterLimiter.Value / 100f;
+        public float MasterLimiter => 1f - (float) this.vScrollBar_masterLimiter.Value / Math.Max(1, this.vScrollBar_masterLimiter.Maximum);
 
         internal static LoopControl? LoopControlWindow = null;
         internal static DeveloperFunctions? DeveloperFunctionsWindow = null;
@@ -131,6 +131,7 @@ namespace ModularAudience.Forms
 
             this.InitializeExportControls();
             this.InitPlaylist();
+            AudioPlaybackService.SetMasterLimiter(this.MasterLimiter);
 
             this._keyFilter = new GlobalKeyMessageFilter();
             this._keyFilter.KeyChanged += this.GlobalKeyChanged;

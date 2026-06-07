@@ -14,6 +14,7 @@ namespace ModularAudience.Audio
 
 		public void Dispose()
         {
+            AudioPlaybackService.Unregister(this);
             this.Playing = false;
             this.Paused = false;
             this.Data = [];

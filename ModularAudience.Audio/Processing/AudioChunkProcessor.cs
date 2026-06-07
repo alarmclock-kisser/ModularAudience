@@ -10,18 +10,18 @@ namespace ModularAudience.Audio.Processing
 {
     internal static class AudioChunkProcessor
     {
-        public static async Task<IEnumerable<float[]>> GetChunksAsync(AudioObj audio, int size, float overlap, bool keepData, int maxWorkers)
+        public static Task<IEnumerable<float[]>> GetChunksAsync(AudioObj audio, int size, float overlap, bool keepData, int maxWorkers)
         {
             maxWorkers = Math.Clamp(maxWorkers, 1, Environment.ProcessorCount);
 
             if (audio.Data == null || audio.Data.Length == 0)
             {
-                return [];
+                return Task.FromResult<IEnumerable<float[]>>([]);
             }
 
             if (size <= 0 || overlap < 0 || overlap >= 1)
             {
-                return [];
+                return Task.FromResult<IEnumerable<float[]>>([]);
             }
 
             audio.ChunkSize = size;
@@ -37,37 +37,34 @@ namespace ModularAudience.Audio.Processing
             int step = size - audio.OverlapSize;
             if (step <= 0)
             {
-                return [];
+                return Task.FromResult<IEnumerable<float[]>>([]);
             }
 
             int numChunks = Math.Max(1, ((audio.Data.Length - size) / step) + 1);
             float[][] chunks = new float[numChunks][];
 
-            await Task.Run(() =>
+            Parallel.For(0, numChunks, new ParallelOptions
             {
-                Parallel.For(0, numChunks, new ParallelOptions
-                {
-                    MaxDegreeOfParallelism = maxWorkers
-                }, i =>
-                {
-                    int sourceOffset = i * step;
-                    float[] chunk = new float[size];
-                    Buffer.BlockCopy(
-                        src: audio.Data,
-                        srcOffset: sourceOffset * sizeof(float),
-                        dst: chunk,
-                        dstOffset: 0,
-                        count: size * sizeof(float));
-                    chunks[i] = chunk;
-                });
-            }).ConfigureAwait(false);
+                MaxDegreeOfParallelism = maxWorkers
+            }, i =>
+            {
+                int sourceOffset = i * step;
+                float[] chunk = new float[size];
+                Buffer.BlockCopy(
+                    src: audio.Data,
+                    srcOffset: sourceOffset * sizeof(float),
+                    dst: chunk,
+                    dstOffset: 0,
+                    count: size * sizeof(float));
+                chunks[i] = chunk;
+            });
 
             if (!keepData)
             {
                 audio.Data = [];
             }
 
-            return chunks;
+            return Task.FromResult<IEnumerable<float[]>>(chunks);
         }
 
         public static IEnumerable<float[]> GetChunksEnumerable(AudioObj audio, int size, float overlap, bool keepData)
@@ -131,17 +128,17 @@ namespace ModularAudience.Audio.Processing
         }
 
 
-        public static async Task AggregateStretchedChunksAsync(AudioObj audio, IEnumerable<float[]> chunks, double stretchFactor, int maxWorkers)
+        public static Task AggregateStretchedChunksAsync(AudioObj audio, IEnumerable<float[]> chunks, double stretchFactor, int maxWorkers)
         {
             if (chunks == null)
             {
-                return;
+                return Task.CompletedTask;
             }
 
-            var chunkList = chunks.ToList();
+            var chunkList = chunks as IList<float[]> ?? chunks.ToList();
             if (chunkList.Count == 0)
             {
-                return;
+                return Task.CompletedTask;
             }
 
             maxWorkers = Math.Clamp(maxWorkers, 1, Environment.ProcessorCount);
@@ -161,63 +158,50 @@ namespace ModularAudience.Audio.Processing
 
             int outputLength = Math.Max(chunkSize, (chunkList.Count - 1) * stretchedHopSize + chunkSize);
 
-            double[] window = await Task.Run(() =>
-                Enumerable.Range(0, chunkSize)
-                    .Select(i => 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (chunkSize - 1))))
-                    .ToArray()).ConfigureAwait(false);
+            var window = new double[chunkSize];
+            for (int i = 0; i < chunkSize; i++)
+            {
+                window[i] = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (chunkSize - 1)));
+            }
 
             Debug.WriteLine($"[AggregateStretchedChunks] Chunks: {chunkList.Count}, ChunkSize: {chunkSize}, OutputLength: {outputLength}");
 
             double[] outputAccumulator = new double[outputLength];
             double[] weightSum = new double[outputLength];
 
-            await Task.Run(() =>
+            for (int chunkIndex = 0; chunkIndex < chunkList.Count; chunkIndex++)
             {
-                var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = maxWorkers };
+                var chunk = chunkList[chunkIndex];
+                int offset = chunkIndex * stretchedHopSize;
+                int chunkUpper = Math.Min(chunkSize, chunk.Length);
 
-                Parallel.For(0, chunkList.Count, parallelOptions, chunkIndex =>
+                for (int j = 0; j < chunkUpper; j++)
                 {
-                    var chunk = chunkList[chunkIndex];
-                    int offset = chunkIndex * stretchedHopSize;
-
-                    for (int j = 0; j < Math.Min(chunkSize, chunk.Length); j++)
+                    int idx = offset + j;
+                    if (idx >= outputLength)
                     {
-                        int idx = offset + j;
-                        if (idx >= outputLength)
-                        {
-                            break;
-                        }
-
-                        double windowedSample = chunk[j] * window[j];
-                        Add(ref outputAccumulator[idx], windowedSample);
-                        Add(ref weightSum[idx], window[j]);
+                        break;
                     }
-                });
 
-                float[] finalOutput = new float[outputLength];
-                Parallel.For(0, outputLength, parallelOptions, i =>
-                {
-                    finalOutput[i] = weightSum[i] > 1e-6
-                        ? (float) (outputAccumulator[i] / weightSum[i])
-                        : 0.0f;
-                });
-
-                audio.Data = finalOutput;
-            }).ConfigureAwait(false);
-
-            Debug.WriteLine($"[AggregateStretchedChunks] Output Min: {audio.Data.Min()}, Max: {audio.Data.Max()}, First10: {string.Join(", ", audio.Data.Take(10))}");
-        }
-
-        private static void Add(ref double location, double value)
-        {
-            double initialValue;
-            double computedValue;
-            do
-            {
-                initialValue = location;
-                computedValue = initialValue + value;
+                    double w = window[j];
+                    outputAccumulator[idx] += chunk[j] * w;
+                    weightSum[idx] += w;
+                }
             }
-            while (Interlocked.CompareExchange(ref location, computedValue, initialValue) != initialValue);
+
+            float[] finalOutput = new float[outputLength];
+            var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = maxWorkers };
+            Parallel.For(0, outputLength, parallelOptions, i =>
+            {
+                finalOutput[i] = weightSum[i] > 1e-6
+                    ? (float) (outputAccumulator[i] / weightSum[i])
+                    : 0.0f;
+            });
+
+            audio.Data = finalOutput;
+
+            Debug.WriteLine($"[AggregateStretchedChunks] OutputLength: {audio.Data.LongLength}");
+            return Task.CompletedTask;
         }
     }
 }

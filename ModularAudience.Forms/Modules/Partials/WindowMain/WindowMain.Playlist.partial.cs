@@ -777,7 +777,7 @@ namespace ModularAudience.Forms
                         normalize: 1.0f,
                         maxWorkers: settings.Threads,
                         progress: null,
-                        offload: settings.Offload).ConfigureAwait(false);
+                        offload: settings.Offload, channeled: TimeStretchDialog.Channeled).ConfigureAwait(false);
                     PlaylistNormalizer.ApplyRmsGain(audio.Data, preRms);
                 }
 

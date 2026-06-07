@@ -196,7 +196,66 @@ namespace ModularAudience.Audio
         private long loopStartSamples;
         private long loopEndSamples;
         private long loopActivationSamples; // absolute sample counter snapshot when loop was activated
-        public static float MasterLimiter;
+
+        private static readonly HashSet<AudioObj> _activeTracks = [];
+        private static readonly Lock trackLock = new();
+        public static float MasterLimiter { get; private set; } = 1.0f;
+
+        public static void Register(AudioObj audio)
+        {
+            if (audio == null)
+            {
+                return;
+            }
+
+            lock (trackLock)
+            {
+                _activeTracks.Add(audio);
+            }
+        }
+
+        public static void Unregister(AudioObj audio)
+        {
+            if (audio == null)
+            {
+                return;
+            }
+
+            lock (trackLock)
+            {
+                _activeTracks.Remove(audio);
+            }
+        }
+
+        public static void SetMasterLimiter(float value)
+        {
+            float clampedLimiter = Math.Clamp(value, 0f, 1f);
+            MasterLimiter = clampedLimiter;
+
+            AudioObj[] tracks;
+            lock (trackLock)
+            {
+                tracks = _activeTracks.ToArray();
+            }
+
+            foreach (var audio in tracks)
+            {
+                if (audio == null)
+                {
+                    continue;
+                }
+
+                float currentVolume01 = audio.Volume > 1f
+                    ? audio.Volume / 100f
+                    : audio.Volume;
+                float limitedVolume = Math.Clamp(currentVolume01, 0f, MasterLimiter);
+
+                audio.Volume = limitedVolume * 100f;
+                audio.SetPlaybackVolume(limitedVolume);
+            }
+        }
+
+
 
         public float PlaybackRate { get; private set; } = 1.0f;
         public int DeviceSampleRate { get; private set; } = 44100;
@@ -716,24 +775,5 @@ namespace ModularAudience.Audio
             }
         }
 
-        public static void SetMasterLimiter(float masterLimiter)
-        {
-            // NAudio's WaveOutEvent does not have a built-in master limiter, but we can simulate it by adjusting the volume of the output stream.
-            // This is a global setting that affects all instances using the same output device.
-            // Note: This is a workaround and may not be as effective as a true master limiter in preventing clipping, especially if individual track volumes are set high.
-            float clampedLimiter = Math.Clamp((masterLimiter / 10f), 0f, 1f);
-            try
-            {
-                // Set the volume for all WaveOutEvent instances (this is a simplification; in a real implementation, you might want to track instances or use a shared volume provider)
-                // For demonstration purposes, we will just set the volume on the default output device.
-                using (var tempPlayer = new WaveOutEvent())
-                {
-                    tempPlayer.Volume = clampedLimiter;
-                }
-            }
-            catch { }
-
-            MasterLimiter = clampedLimiter;
-        }
     }
 }

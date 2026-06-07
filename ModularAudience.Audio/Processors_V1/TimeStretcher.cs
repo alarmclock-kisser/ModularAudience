@@ -24,7 +24,7 @@ namespace ModularAudience.Audio.Processors_V1
     float normalize = 1.0f,
     int? maxWorkers = null,
     IProgress<double>? progress = null,
-    bool offload = false)
+    bool offload = false, bool channeled = false)
         {
             if (maxWorkers == null)
             {
@@ -50,6 +50,19 @@ namespace ModularAudience.Audio.Processors_V1
                     adjustBpm: true);
             }
 
+            if (channeled)
+            {
+                return await TimeStretchChanneledAsync(
+                    obj,
+                    chunkSize,
+                    overlap,
+                    factor,
+                    keepData,
+                    normalize,
+                    maxWorkers.Value,
+                    progress);
+            }
+
             if (maxWorkers != Environment.ProcessorCount)
             {
                 return await TimeStretchMostThreadsAsync(
@@ -68,7 +81,9 @@ namespace ModularAudience.Audio.Processors_V1
 
             float[] backupData = obj.Data;
             int sampleRate = obj.SampleRate;
-            int overlapSize = obj.OverlapSize;
+            int overlapSize = chunkSize > 0
+                ? (int) (chunkSize * overlap)
+                : obj.OverlapSize;
 
             double totalMs = 0;
             var sw = Stopwatch.StartNew();
@@ -210,20 +225,6 @@ namespace ModularAudience.Audio.Processors_V1
                     maxWorkers.Value,
                     progress,
                     adjustBpm: true);
-            }
-
-            if (maxWorkers != Environment.ProcessorCount)
-            {
-                return await TimeStretchMostThreadsAsync(
-                    obj,
-                    chunkSize,
-                    overlap,
-                    factor,
-                    keepData,
-                    normalize,
-                    maxWorkers.Value,
-                    progress,
-                    offload: false);
             }
 
             LogCollection.Log("TimeStretchAllThreadsAsync: Starting time stretch with maxWorkers = " + maxWorkers.Value);
@@ -474,6 +475,7 @@ namespace ModularAudience.Audio.Processors_V1
             private readonly IProgress<double> progress;
             private readonly double totalWork;
             private double completed;
+            private double lastReported;
 
             internal ProgressTracker(IProgress<double> progress, double totalWork)
             {
@@ -488,18 +490,33 @@ namespace ModularAudience.Audio.Processors_V1
                     return;
                 }
 
-                double normalized;
+                const double minReportDelta = 0.0025;
+                double? normalizedToReport = null;
                 lock (this.gate)
                 {
                     this.completed += workUnits;
-                    normalized = Math.Clamp(this.completed / this.totalWork, 0.0, 1.0);
+                    double normalized = Math.Clamp(this.completed / this.totalWork, 0.0, 1.0);
+                    if (normalized >= 1.0 || normalized - this.lastReported >= minReportDelta)
+                    {
+                        this.lastReported = normalized;
+                        normalizedToReport = normalized;
+                    }
                 }
 
-                this.progress.Report(normalized);
+                if (normalizedToReport.HasValue)
+                {
+                    this.progress.Report(normalizedToReport.Value);
+                }
             }
 
             internal void Complete()
             {
+                lock (this.gate)
+                {
+                    this.lastReported = 1.0;
+                    this.completed = this.totalWork;
+                }
+
                 this.progress.Report(1.0);
             }
         }
@@ -541,41 +558,76 @@ namespace ModularAudience.Audio.Processors_V1
 
         private static Complex[] FourierTransformForwardCore(float[] samples, ProgressTracker? tracker = null)
         {
-            var complexSamples = samples.Select(s => new Complex(s, 0)).ToArray();
-            Fourier.Forward(complexSamples, FourierOptions.Matlab);
-            tracker?.ReportWork(1);
+            var complexSamples = new Complex[samples.Length];
+            FourierTransformForwardInto(complexSamples, samples, tracker);
             return complexSamples;
+        }
+
+        private static void FourierTransformForwardInto(Complex[] destination, float[] samples, ProgressTracker? tracker = null)
+        {
+            int len = Math.Min(destination.Length, samples.Length);
+            for (int i = 0; i < len; i++)
+            {
+                destination[i] = new Complex(samples[i], 0);
+            }
+
+            Fourier.Forward(destination, FourierOptions.Matlab);
+            tracker?.ReportWork(1);
         }
 
         private static float[] FourierTransformInverseCore(Complex[] samples, ProgressTracker? tracker = null)
         {
             Fourier.Inverse(samples, FourierOptions.Matlab);
             tracker?.ReportWork(1);
-            return samples.Select(c => (float) c.Real).ToArray();
+
+            var output = new float[samples.Length];
+            for (int i = 0; i < samples.Length; i++)
+            {
+                output[i] = (float) samples[i].Real;
+            }
+
+            return output;
         }
 
         private static Complex[] StretchChunkCore(Complex[] samples, int chunkSize, int overlapSize, int sampleRate, double factor, ProgressTracker? tracker = null)
         {
-            int hopIn = chunkSize - overlapSize;
-            int hopOut = (int) (hopIn * factor + 0.5);
+            var output = new Complex[samples.Length];
+            StretchChunkInto(samples, output, chunkSize, overlapSize, sampleRate, factor, tracker);
+            return output;
+        }
 
+        private static void StretchChunkInto(Complex[] samples, Complex[] output, int chunkSize, int overlapSize, int sampleRate, double factor, ProgressTracker? tracker = null)
+        {
+            int hopIn = chunkSize - overlapSize;
             int totalBins = chunkSize;
             int totalChunks = samples.Length / chunkSize;
 
-            var output = new Complex[samples.Length];
+            if (totalChunks <= 0 || totalBins <= 0)
+            {
+                tracker?.ReportWork(1);
+                return;
+            }
+
+            double expectedPhaseStep = 2.0 * Math.PI * hopIn / chunkSize;
+            float factorF = (float) factor;
+            float twoPi = 2.0f * (float) Math.PI;
+            float pi = (float) Math.PI;
 
             for (int chunk = 0; chunk < totalChunks; chunk++)
             {
+                int chunkBase = chunk * chunkSize;
+                int prevChunkBase = chunk > 0 ? (chunk - 1) * chunkSize : chunkBase;
+
+                if (chunk == 0)
+                {
+                    Array.Copy(samples, chunkBase, output, chunkBase, chunkSize);
+                    continue;
+                }
+
                 for (int bin = 0; bin < totalBins; bin++)
                 {
-                    int idx = chunk * chunkSize + bin;
-                    int prevIdx = (chunk > 0) ? (chunk - 1) * chunkSize + bin : idx;
-
-                    if (bin >= totalBins || chunk == 0)
-                    {
-                        output[idx] = samples[idx];
-                        continue;
-                    }
+                    int idx = chunkBase + bin;
+                    int prevIdx = prevChunkBase + bin;
 
                     Complex cur = samples[idx];
                     Complex prev = samples[prevIdx];
@@ -585,20 +637,198 @@ namespace ModularAudience.Audio.Processors_V1
                     float mag = (float) Math.Sqrt(cur.Real * cur.Real + cur.Imaginary * cur.Imaginary);
 
                     float deltaPhase = phaseCur - phasePrev;
-                    float freqPerBin = (float) sampleRate / chunkSize;
-                    float expectedPhaseAdv = 2.0f * (float) Math.PI * freqPerBin * bin * hopIn / sampleRate;
+                    float expectedPhaseAdv = (float) (expectedPhaseStep * bin);
 
                     float delta = deltaPhase - expectedPhaseAdv;
-                    delta = (float) (delta + Math.PI) % (2.0f * (float) Math.PI) - (float) Math.PI;
+                    delta = (delta + pi) % twoPi - pi;
 
-                    float phaseOut = phasePrev + expectedPhaseAdv + (float) (delta * factor);
+                    float phaseOut = phasePrev + expectedPhaseAdv + (delta * factorF);
 
                     output[idx] = new Complex(mag * Math.Cos(phaseOut), mag * Math.Sin(phaseOut));
                 }
             }
 
             tracker?.ReportWork(1);
-            return output;
+        }
+
+        private sealed class FixedComplexPool
+        {
+            private readonly int length;
+            private readonly ConcurrentBag<Complex[]> pool = new();
+
+            internal FixedComplexPool(int length)
+            {
+                this.length = Math.Max(1, length);
+            }
+
+            internal Complex[] Rent()
+            {
+                if (this.pool.TryTake(out var buffer) && buffer.Length == this.length)
+                {
+                    return buffer;
+                }
+
+                return new Complex[this.length];
+            }
+
+            internal void Return(Complex[] buffer)
+            {
+                if (buffer.Length != this.length)
+                {
+                    return;
+                }
+
+                this.pool.Add(buffer);
+            }
+        }
+
+        private readonly record struct ChunkWorkItem(int Index, float[] Samples);
+        private readonly record struct ChunkResultItem(int Index, float[] Samples);
+
+        private static async Task<AudioObj> TimeStretchChanneledAsync(
+            AudioObj obj,
+            int chunkSize,
+            float overlap,
+            double factor,
+            bool keepData,
+            float normalize,
+            int maxWorkers,
+            IProgress<double>? progress)
+        {
+            maxWorkers = Math.Clamp(maxWorkers, 1, Environment.ProcessorCount);
+
+            float[] backupData = obj.Data;
+            int sampleRate = obj.SampleRate;
+            int overlapSize = chunkSize > 0
+                ? (int) (chunkSize * overlap)
+                : obj.OverlapSize;
+
+            var chunkEnumerable = await obj.GetChunksAsync(chunkSize, overlap, keepData, maxWorkers).ConfigureAwait(false);
+            var chunks = chunkEnumerable as IList<float[]> ?? chunkEnumerable.ToList();
+            if (chunks.Count == 0)
+            {
+                obj.Data = backupData;
+                return obj;
+            }
+
+            var tracker = CreateTracker(progress, chunks.Count, normalize > 0);
+            tracker?.ReportWork(chunks.Count);
+
+            obj.StretchFactor = factor;
+            int pooledLength = Math.Max(1, chunks[0].Length);
+            var forwardPool = new FixedComplexPool(pooledLength);
+            var stretchPool = new FixedComplexPool(pooledLength);
+
+            int capacity = Math.Max(maxWorkers, 2);
+            var inChannel = Channel.CreateBounded<ChunkWorkItem>(new BoundedChannelOptions(capacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleWriter = true,
+                SingleReader = false
+            });
+
+            var outChannel = Channel.CreateBounded<ChunkResultItem>(new BoundedChannelOptions(capacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleWriter = false,
+                SingleReader = true
+            });
+
+            var producer = Task.Run(async () =>
+            {
+                try
+                {
+                    for (int i = 0; i < chunks.Count; i++)
+                    {
+                        await inChannel.Writer.WriteAsync(new ChunkWorkItem(i, chunks[i])).ConfigureAwait(false);
+                    }
+
+                    inChannel.Writer.TryComplete();
+                }
+                catch (Exception ex)
+                {
+                    inChannel.Writer.TryComplete(ex);
+                    throw;
+                }
+            });
+
+            var workers = new Task[maxWorkers];
+            for (int worker = 0; worker < maxWorkers; worker++)
+            {
+                workers[worker] = Task.Run(async () =>
+                {
+                    await foreach (var item in inChannel.Reader.ReadAllAsync().ConfigureAwait(false))
+                    {
+                        Complex[] fft = forwardPool.Rent();
+                        Complex[] stretched = stretchPool.Rent();
+                        try
+                        {
+                            FourierTransformForwardInto(fft, item.Samples, tracker);
+                            StretchChunkInto(fft, stretched, chunkSize, overlapSize, sampleRate, factor, tracker);
+                            var ifft = FourierTransformInverseCore(stretched, tracker);
+                            await outChannel.Writer.WriteAsync(new ChunkResultItem(item.Index, ifft)).ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            forwardPool.Return(fft);
+                            stretchPool.Return(stretched);
+                        }
+                    }
+                });
+            }
+
+            var completeOutput = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.WhenAll(workers).ConfigureAwait(false);
+                    outChannel.Writer.TryComplete();
+                }
+                catch (Exception ex)
+                {
+                    outChannel.Writer.TryComplete(ex);
+                    throw;
+                }
+            });
+
+            var orderedChunks = new float[chunks.Count][];
+            int consumed = 0;
+            await foreach (var result in outChannel.Reader.ReadAllAsync().ConfigureAwait(false))
+            {
+                orderedChunks[result.Index] = result.Samples;
+                consumed++;
+            }
+
+            await producer.ConfigureAwait(false);
+            await completeOutput.ConfigureAwait(false);
+
+            if (consumed == 0)
+            {
+                obj.Data = backupData;
+                return obj;
+            }
+
+            await obj.AggregateStretchedChunksAsync(orderedChunks, obj.StretchFactor, maxWorkers).ConfigureAwait(false);
+            tracker?.ReportWork(chunks.Count);
+
+            if (obj.Data == null || obj.Data.LongLength <= 0)
+            {
+                obj.Data = backupData;
+                return obj;
+            }
+
+            obj.Bpm = (float) (obj.Bpm / factor);
+            obj.Length = obj.Data.LongLength;
+            obj.Duration = TimeSpan.FromSeconds(obj.Length / (double) (sampleRate * obj.Channels));
+
+            if (normalize > 0)
+            {
+                await obj.NormalizeAsync(normalize, maxWorkers).ConfigureAwait(false);
+                tracker?.ReportWork(chunks.Count);
+            }
+
+            tracker?.Complete();
+            return obj;
         }
 
 
