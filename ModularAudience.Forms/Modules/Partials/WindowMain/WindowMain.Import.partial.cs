@@ -1,12 +1,16 @@
 using ModularAudience.Audio;
+using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Forms.Helpers;
 using ModularAudience.Forms.Modules;
+using ModularAudience.Forms.Modules.Dialogs;
 using System.ComponentModel;
 
 namespace ModularAudience.Forms
 {
     public partial class WindowMain
     {
+        private PlaylistStretchSettings? _importStretchSettings;
+
         private void Register_ListBox_Log()
         {
             this.listBox_log.Items.Clear();
@@ -183,6 +187,79 @@ namespace ModularAudience.Forms
             }
 
             await this.ImportAndPlaceAsync(filesToImport, fromResources);
+        }
+
+        private async void button_random_Click(object sender, EventArgs e)
+        {
+            // Get focussed track or last collection last track 's filepath base dir
+            var lastTrack = WindowMain.LastSelectedTrackView?.OriginalAudio ?? CollectionViews.LastOrDefault(cv => cv != null && !cv.IsDisposed)?.AudioC.Audios.LastOrDefault();
+            string baseDir = lastTrack != null && !string.IsNullOrWhiteSpace(lastTrack.FilePath) ? Path.GetDirectoryName(lastTrack.FilePath) ?? string.Empty : string.Empty;
+
+            // If baseDir is empty or doesn't exist, fallback to random MyMusic audio file
+            if (string.IsNullOrWhiteSpace(baseDir) || !Directory.Exists(baseDir))
+            {
+                baseDir = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+            }
+
+            Random rand = new();
+
+            string[] allAudioFiles = Directory.Exists(baseDir)
+                ? Directory.EnumerateFiles(baseDir, "*.*", SearchOption.AllDirectories)
+                    .Where(f => AllowedImportExtensions.Contains(Path.GetExtension(f)))
+                    .ToArray()
+                : Array.Empty<string>();
+
+            string? randomFile = allAudioFiles.Length > 0 ? allAudioFiles[rand.Next(allAudioFiles.Length)] : this.TryGetRandomResourceFile();
+
+            // Import
+            if (randomFile != null)
+            {
+                await this.ImportAndPlaceAsync([randomFile], fromResources: false);
+
+                if (this._importStretchSettings != null)
+                {
+                    var track = WindowMain.LastSelectedTrackView?.OriginalAudio ?? CollectionViews.LastOrDefault(cv => cv != null && !cv.IsDisposed)?.AudioC.Audios.LastOrDefault();
+                    if (track != null)
+                    {
+                        track.ReplaceWith(await TimeStretcher.TimeStretchAllThreadsAsync(track, this._importStretchSettings.ChunkSize, this._importStretchSettings.Overlap, this._importStretchSettings.StretchFactor, false, 0.8f, this._importStretchSettings.Threads, null, this._importStretchSettings.Offload, true));
+                    }
+                }
+            }
+            else
+            {
+                LogCollection.Log("Random import: No audio files found.");
+            }
+        }
+
+        private void timeStretchImportedToToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            // Toggle: if already enabled, disable
+            if (this.timeStretchImportedToToolStripMenuItem.Checked)
+            {
+                this.timeStretchImportedToToolStripMenuItem.Checked = false;
+                this._playlistStretchSettings = null;
+                this.timeStretchImportedToToolStripMenuItem.Text = "⏱ Timestretch each...";
+                LogCollection.Log("Playlist auto-timestretch disabled.");
+                return;
+            }
+
+            // Open TimeStretchDialog in configure-only mode with a dummy audio
+            var dummy = new AudioObj { Name = "Playlist Track", Bpm = 130f };
+            using var dlg = new TimeStretchDialog(audios: [dummy])
+            {
+                IsConfigureMode = true
+            };
+
+            if (dlg.ShowDialog(this) != DialogResult.OK || dlg.ConfirmedSettings == null)
+            {
+                return;
+            }
+
+            this._importStretchSettings = dlg.ConfirmedSettings;
+            this.timeStretchImportedToToolStripMenuItem.Checked = true;
+            string method = dlg.ConfirmedUsedV2 ? "V2" : "V1";
+            this.timeStretchImportedToToolStripMenuItem.Text = $"⏱ Timestretch each [{this._importStretchSettings.TargetBpm:F0} BPM, {method}]";
+            LogCollection.Log($"Playlist auto-timestretch enabled: target {this._importStretchSettings.TargetBpm:F0} BPM via Stretch {method}.");
         }
 
         private string? TryGetRandomResourceFile()

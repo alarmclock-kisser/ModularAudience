@@ -591,6 +591,8 @@ namespace ModularAudience.Forms
                 this.limiterToolTip.Show(hintText, this.vScrollBar_masterLimiter, tooltipLocation);
             }
         }
+
+        
     }
 }
 

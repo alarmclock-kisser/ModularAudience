@@ -76,7 +76,11 @@
             this.label_currentlyEnqueued = new Label();
             this.toolStripMenuItem_autoEnqueueOne = new ToolStripMenuItem();
             this.vScrollBar_masterLimiter = new VScrollBar();
+            this.button_random = new Button();
+            this.contextMenuStrip_random = new ContextMenuStrip(this.components);
+            this.timeStretchImportedToToolStripMenuItem = new ToolStripMenuItem();
             this.contextMenuStrip_playlist.SuspendLayout();
+            this.contextMenuStrip_random.SuspendLayout();
             this.SuspendLayout();
             // 
             // button_import
@@ -556,11 +560,39 @@
             this.vScrollBar_masterLimiter.TabIndex = 35;
             this.vScrollBar_masterLimiter.Scroll += this.vScrollBar_masterLimiter_Scroll;
             // 
+            // button_random
+            // 
+            this.button_random.BackColor = Color.FromArgb(  255,   255,   192);
+            this.button_random.ContextMenuStrip = this.contextMenuStrip_random;
+            this.button_random.Font = new Font("Segoe UI", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.button_random.Location = new Point(69, 119);
+            this.button_random.Name = "button_random";
+            this.button_random.Size = new Size(51, 23);
+            this.button_random.TabIndex = 36;
+            this.button_random.TabStop = false;
+            this.button_random.Text = "+ Rnd";
+            this.button_random.UseVisualStyleBackColor = false;
+            this.button_random.Click += this.button_random_Click;
+            // 
+            // contextMenuStrip_random
+            // 
+            this.contextMenuStrip_random.Items.AddRange(new ToolStripItem[] { this.timeStretchImportedToToolStripMenuItem });
+            this.contextMenuStrip_random.Name = "contextMenuStrip_random";
+            this.contextMenuStrip_random.Size = new Size(222, 48);
+            // 
+            // timeStretchImportedToToolStripMenuItem
+            // 
+            this.timeStretchImportedToToolStripMenuItem.Name = "timeStretchImportedToToolStripMenuItem";
+            this.timeStretchImportedToToolStripMenuItem.Size = new Size(221, 22);
+            this.timeStretchImportedToToolStripMenuItem.Text = "Time-Stretch imported to ...";
+            this.timeStretchImportedToToolStripMenuItem.Click += this.timeStretchImportedToToolStripMenuItem_Click;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(584, 326);
+            this.Controls.Add(this.button_random);
             this.Controls.Add(this.vScrollBar_masterLimiter);
             this.Controls.Add(this.button_copyLog);
             this.Controls.Add(this.label_currentlyEnqueued);
@@ -600,6 +632,7 @@
             this.Name = "WindowMain";
             this.Text = "ModularAudience (Main Control)";
             this.contextMenuStrip_playlist.ResumeLayout(false);
+            this.contextMenuStrip_random.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -653,5 +686,8 @@
         private ToolStripMenuItem toolStripMenuItem_crossfade;
         private ToolStripMenuItem toolStripMenuItem_crossSyncDuration;
         private VScrollBar vScrollBar_masterLimiter;
+        private Button button_random;
+        private ContextMenuStrip contextMenuStrip_random;
+        private ToolStripMenuItem timeStretchImportedToToolStripMenuItem;
     }
 }
