@@ -210,10 +210,10 @@ namespace ModularAudience.Forms
 
         internal static Point GetCornerPosition(Form? form = null, bool left = true, bool top = true, int? screenId = null)
         {
-            // Calculate starting position based on screen working area and formif given
+            // Calculate starting position based on screen working area and form if given
             if (form != null)
             {
-                screenId = Array.IndexOf(Screen.AllScreens, Screen.FromControl(form));
+                // screenId = Array.IndexOf(Screen.AllScreens, Screen.FromControl(form));
             }
 
             screenId ??= Screen.PrimaryScreen != null

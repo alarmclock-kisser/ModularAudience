@@ -85,7 +85,7 @@ namespace ModularAudience.Forms.Modules
 
 
             this.StartPosition = FormStartPosition.Manual;
-            this.Location = WindowsScreenHelper.GetCornerPosition(null, true, false, WindowMain.CurrentScreenId);
+            this.Location = WindowsScreenHelper.GetCornerPosition(this, true, false, WindowMain.CurrentScreenId);
 
             this.numericUpDown_maxProcessors.Maximum = Environment.ProcessorCount;
             this.numericUpDown_maxProcessors.Value = Environment.ProcessorCount;

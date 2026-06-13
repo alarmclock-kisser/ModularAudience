@@ -34,7 +34,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.label_status.Text = "Ready to cut samples";
 
             this.StartPosition = FormStartPosition.Manual;
-            this.Location = WindowsScreenHelper.GetCornerPosition(null, false, false, WindowMain.CurrentScreenId);
+            this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false, WindowMain.CurrentScreenId);
         }
 
         private void button_cancel_Click(object sender, EventArgs e)

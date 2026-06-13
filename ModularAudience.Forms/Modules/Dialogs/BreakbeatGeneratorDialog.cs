@@ -92,7 +92,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             };
 
             this.StartPosition = FormStartPosition.Manual;
-            this.Location = WindowsScreenHelper.GetCornerPosition(null, false, false, WindowMain.CurrentScreenId);
+            this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false, WindowMain.CurrentScreenId);
 
             this.FormClosing += async (s, e) =>
             {

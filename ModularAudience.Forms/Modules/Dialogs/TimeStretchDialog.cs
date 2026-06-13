@@ -74,7 +74,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.Text += $"[{minBpm?.ToString("0.#") ?? "?"} - {maxBpm?.ToString("0.#") ?? "?"} BPM]";
             }
             this.StartPosition = FormStartPosition.Manual;
-            this.Location = WindowsScreenHelper.GetCornerPosition(null, false, false, WindowMain.CurrentScreenId);
+            this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false, WindowMain.CurrentScreenId);
 
             this.numericUpDown_chunkSize.Tag = (int) this.numericUpDown_chunkSize.Value;
             this.numericUpDown_initialBpm.Value = this.GetSafeInitialBpm(this.Tracks.First());
