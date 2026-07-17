@@ -3,6 +3,7 @@ using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Forms.Helpers;
 using ModularAudience.Forms.Modules;
 using ModularAudience.Forms.Modules.Dialogs;
+using ModularAudience.Audio.Midi;
 using System.ComponentModel;
 
 namespace ModularAudience.Forms
@@ -62,6 +63,7 @@ namespace ModularAudience.Forms
                                             break;
                                         }
                                     }
+
                                 }
                             }
                             catch { }
@@ -172,7 +174,7 @@ namespace ModularAudience.Forms
                 using OpenFileDialog openFileDialog = new()
                 {
                     InitialDirectory = initialDir,
-                    Filter = "Audio File|*.wav;*.mp3;*.flac",
+                    Filter = "Audio Files|*.wav;*.mp3;*.flac|MIDI Files|*.mid;*.midi|All Supported Files|*.wav;*.mp3;*.flac;*.mid;*.midi",
                     Multiselect = true,
                     Title = "Import Audio Files / Loops",
                     RestoreDirectory = true
@@ -186,7 +188,32 @@ namespace ModularAudience.Forms
                 filesToImport = openFileDialog.FileNames;
             }
 
-            await this.ImportAndPlaceAsync(filesToImport, fromResources);
+            List<string> selectedFiles = filesToImport.ToList();
+            List<string> midiFiles = selectedFiles
+                .Where(file => MidiFileData.IsMidiPath(file))
+                .ToList();
+            List<string> audioFiles = selectedFiles
+                .Where(file => !MidiFileData.IsMidiPath(file))
+                .ToList();
+
+            foreach (string midiFile in midiFiles)
+            {
+                try
+                {
+                    MidiWindow midiWindow = new(midiFile);
+                    midiWindow.Show(this);
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log($"MIDI import failed for '{midiFile}': {ex}");
+                    MessageBox.Show(this, ex.Message, "MIDI import failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+
+            if (audioFiles.Count > 0)
+            {
+                await this.ImportAndPlaceAsync(audioFiles, fromResources);
+            }
         }
 
         private async void button_random_Click(object sender, EventArgs e)
@@ -474,5 +501,12 @@ namespace ModularAudience.Forms
                 this.AudioC.Audios.Remove(audio);
             }
         }
+
+        internal void PlaceRenderedAudio(AudioObj audio)
+        {
+            ArgumentNullException.ThrowIfNull(audio);
+            this.PlaceImportedAudios([($"MIDI:{audio.Name}", audio)], [audio]);
+        }
+
     }
 }
