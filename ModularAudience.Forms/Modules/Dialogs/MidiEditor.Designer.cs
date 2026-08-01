@@ -32,6 +32,9 @@
             this.button_save = new Button();
             this.checkBox_preview = new CheckBox();
             this.button_play = new Button();
+            this.hScrollBar_editor = new HScrollBar();
+            this.label_noteGranularity = new Label();
+            this.domainUpDown_noteGranularity = new DomainUpDown();
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_editor).BeginInit();
             this.SuspendLayout();
             // 
@@ -41,7 +44,7 @@
             this.pictureBox_editor.BackColor = Color.Black;
             this.pictureBox_editor.Location = new Point(12, 12);
             this.pictureBox_editor.Name = "pictureBox_editor";
-            this.pictureBox_editor.Size = new Size(776, 397);
+            this.pictureBox_editor.Size = new Size(776, 380);
             this.pictureBox_editor.TabIndex = 0;
             this.pictureBox_editor.TabStop = false;
             this.pictureBox_editor.Paint += this.pictureBox_editor_Paint;
@@ -49,6 +52,48 @@
             this.pictureBox_editor.MouseMove += this.pictureBox_editor_MouseMove;
             this.pictureBox_editor.MouseUp += this.pictureBox_editor_MouseUp;
             this.pictureBox_editor.MouseWheel += this.pictureBox_editor_MouseWheel;
+            // 
+            // hScrollBar_editor
+            // 
+            this.hScrollBar_editor.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            this.hScrollBar_editor.Location = new Point(12, 392);
+            this.hScrollBar_editor.Maximum = 1000;
+            this.hScrollBar_editor.LargeChange = 100;
+            this.hScrollBar_editor.Name = "hScrollBar_editor";
+            this.hScrollBar_editor.Size = new Size(776, 17);
+            this.hScrollBar_editor.TabIndex = 4;
+            this.hScrollBar_editor.Visible = false;
+            this.hScrollBar_editor.Scroll += this.hScrollBar_editor_Scroll;
+            // 
+            // label_noteGranularity
+            // 
+            this.label_noteGranularity.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            this.label_noteGranularity.AutoSize = true;
+            this.label_noteGranularity.Location = new Point(280, 419);
+            this.label_noteGranularity.Name = "label_noteGranularity";
+            this.label_noteGranularity.Size = new Size(62, 15);
+            this.label_noteGranularity.TabIndex = 5;
+            this.label_noteGranularity.Text = "Grid notes";
+            // 
+            // domainUpDown_noteGranularity
+            // 
+            this.domainUpDown_noteGranularity.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            this.domainUpDown_noteGranularity.Items.Add("1");
+            this.domainUpDown_noteGranularity.Items.Add("2");
+            this.domainUpDown_noteGranularity.Items.Add("3");
+            this.domainUpDown_noteGranularity.Items.Add("4");
+            this.domainUpDown_noteGranularity.Items.Add("5");
+            this.domainUpDown_noteGranularity.Items.Add("6");
+            this.domainUpDown_noteGranularity.Items.Add("8");
+            this.domainUpDown_noteGranularity.Items.Add("12");
+            this.domainUpDown_noteGranularity.Items.Add("16");
+            this.domainUpDown_noteGranularity.Location = new Point(348, 415);
+            this.domainUpDown_noteGranularity.Name = "domainUpDown_noteGranularity";
+            this.domainUpDown_noteGranularity.ReadOnly = true;
+            this.domainUpDown_noteGranularity.SelectedIndex = 3;
+            this.domainUpDown_noteGranularity.Size = new Size(50, 23);
+            this.domainUpDown_noteGranularity.TabIndex = 6;
+            this.domainUpDown_noteGranularity.SelectedItemChanged += this.domainUpDown_noteGranularity_SelectedItemChanged;
             // 
             // button_save
             // 
@@ -94,6 +139,9 @@
             this.Controls.Add(this.button_play);
             this.Controls.Add(this.checkBox_preview);
             this.Controls.Add(this.button_save);
+            this.Controls.Add(this.hScrollBar_editor);
+            this.Controls.Add(this.domainUpDown_noteGranularity);
+            this.Controls.Add(this.label_noteGranularity);
             this.Controls.Add(this.pictureBox_editor);
             this.Name = "MidiEditor";
             this.Text = "MidiEditor";
@@ -110,5 +158,8 @@
         private Button button_save;
         private CheckBox checkBox_preview;
         private Button button_play;
+        private HScrollBar hScrollBar_editor;
+        private Label label_noteGranularity;
+        private DomainUpDown domainUpDown_noteGranularity;
     }
 }

@@ -11,6 +11,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private readonly MidiWindow? sourceMidiWindow;
         private Point? editStart;
         private MouseButtons editButton;
+        private int editNote;
+        private long editPreviousLength;
         private bool panning;
         private Point panStart;
         private long panViewStartTick;
@@ -20,18 +22,22 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private long editorLengthTicks;
         private double pixelsPerTick;
         private CancellationTokenSource? playbackCts;
+        private bool updatingScrollBar;
+
+        private const double EmptyTailRatio = 0.20;
 
         public MidiEditor(MidiEditSelection midiEditSelection, MidiWindow? sourceMidiWindow = null)
         {
             this.MidiEditSelection = midiEditSelection;
             this.sourceMidiWindow = sourceMidiWindow;
             this.InitializeComponent();
-            this.editorLengthTicks = Math.Max(this.GridTicks, this.SelectedTrack.LengthTicks);
-            this.pixelsPerTick = Math.Max(0.001, (this.pictureBox_editor.ClientSize.Width - 44) / (double)this.editorLengthTicks);
+            long defaultViewLength = this.DefaultViewLengthTicks;
+            this.editorLengthTicks = Math.Max(this.GetRequiredEditorLength(), defaultViewLength);
+            this.pixelsPerTick = Math.Max(0.001, (this.pictureBox_editor.ClientSize.Width - 44) / (double)defaultViewLength);
             this.viewStartTick = 0;
-            this.viewEndTick = this.editorLengthTicks;
+            this.viewEndTick = defaultViewLength;
             this.pictureBox_editor.Cursor = Cursors.Cross;
-            this.pictureBox_editor.Invalidate();
+            this.UpdateScrollBar();
         }
 
         private MidiTrackData SelectedTrack => this.MidiEditSelection.MidiFile.Tracks[0];
@@ -40,7 +46,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private int HighestNote => ParseMidiNote(this.MidiEditSelection.HighestNoteName);
 
-        private long GridTicks => Math.Max(1, this.MidiEditSelection.MidiFile.TicksPerQuarterNote / 4);
+        private int NoteGranularity => Math.Max(1, this.domainUpDown_noteGranularity.SelectedIndex + 1);
+
+        private long GridTicks => Math.Max(1, this.MidiEditSelection.MidiFile.TicksPerQuarterNote / this.NoteGranularity);
+
+        private long DefaultViewLengthTicks => this.GridTicks * 8;
 
         private void pictureBox_editor_Paint(object? sender, PaintEventArgs e)
         {
@@ -51,8 +61,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             int height = Math.Max(1, this.pictureBox_editor.ClientSize.Height - 20);
             long lengthTicks = Math.Max(this.GridTicks, this.editorLengthTicks);
             long visibleStartTick = Math.Clamp(this.viewStartTick, 0, Math.Max(0, lengthTicks - this.GridTicks));
-            long visibleEndTick = Math.Clamp(this.viewEndTick, visibleStartTick + this.GridTicks, lengthTicks);
-            double visibleLengthTicks = Math.Max(this.GridTicks, visibleEndTick - visibleStartTick);
+            long visibleLengthTicks = Math.Clamp(this.viewEndTick - this.viewStartTick, this.GridTicks, lengthTicks);
+            long visibleEndTick = Math.Min(lengthTicks, visibleStartTick + visibleLengthTicks);
             e.Graphics.SmoothingMode = SmoothingMode.HighQuality;
             e.Graphics.Clear(Color.FromArgb(24, 24, 28));
 
@@ -96,14 +106,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 e.Graphics.FillRectangle(brush, x, y, Math.Min(noteWidth, 44 + width - x), noteHeight);
             }
 
-            if (this.editStart is Point start)
-            {
-                Point current = this.pictureBox_editor.PointToClient(Cursor.Position);
-                Rectangle rectangle = NormalizeRectangle(start, current);
-                rectangle.Intersect(new Rectangle(44, 0, width, height));
-                using Pen selectionPen = new(Color.White, 1f) { DashStyle = DashStyle.Dash };
-                e.Graphics.DrawRectangle(selectionPen, rectangle);
-            }
         }
 
         private void pictureBox_editor_MouseDown(object? sender, MouseEventArgs e)
@@ -126,7 +128,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.editStart = ClampToEditor(e.Location);
             this.editButton = e.Button;
+            this.editNote = PointToNote(this.editStart.Value.Y);
+            this.editPreviousLength = this.editorLengthTicks;
             this.pictureBox_editor.Capture = true;
+            this.ApplyNoteRange(this.editStart.Value, this.editStart.Value, e.Button == MouseButtons.Left, false);
+            this.pictureBox_editor.Invalidate();
+        }
+
+        private void domainUpDown_noteGranularity_SelectedItemChanged(object? sender, EventArgs e)
+        {
+            long visibleLength = Math.Max(this.GridTicks, this.viewEndTick - this.viewStartTick);
+            this.editorLengthTicks = Math.Max(this.editorLengthTicks, this.GetRequiredEditorLength());
+            this.SetView(this.viewStartTick, this.viewStartTick + visibleLength);
+            this.UpdateScrollBar();
             this.pictureBox_editor.Invalidate();
         }
 
@@ -141,6 +155,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
             if (this.editStart == null)
             {
                 return;
+            }
+
+            Point current = ClampToEditor(e.Location);
+            if (this.editButton == MouseButtons.Right)
+            {
+                this.ApplyNoteRange(current, current, false, false);
+            }
+            else if (PointToNote(current.Y) == this.editNote)
+            {
+                this.ApplyNoteRange(this.editStart.Value, current, this.editButton == MouseButtons.Left, false);
             }
 
             this.pictureBox_editor.Invalidate();
@@ -164,7 +188,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             Point end = ClampToEditor(e.Location);
             this.editStart = null;
             this.pictureBox_editor.Capture = false;
-            this.ApplyNoteRange(start, end, this.editButton == MouseButtons.Left);
+            this.UpdateEditorLengthAfterNoteChange(this.editPreviousLength);
             this.pictureBox_editor.Invalidate();
 
             if (this.checkBox_preview.Checked && this.editButton == MouseButtons.Left)
@@ -180,6 +204,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void pictureBox_editor_MouseWheel(object? sender, MouseEventArgs e)
         {
+            if ((Control.ModifierKeys & Keys.Control) == Keys.None)
+            {
+                this.ScrollView(e.Delta < 0 ? this.GridTicks : -this.GridTicks);
+                return;
+            }
+
             long totalLength = Math.Max(this.GridTicks, this.editorLengthTicks);
             if (totalLength <= this.GridTicks)
             {
@@ -187,7 +217,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             long currentLength = Math.Max(this.GridTicks, this.viewEndTick - this.viewStartTick);
-            double zoomFactor = e.Delta > 0 ? 0.8 : 1.25;
+            double zoomFactor = e.Delta > 0 ? 1.0 / 1.2 : 1.2;
             long newLength = Math.Clamp((long)Math.Round(currentLength * zoomFactor), this.GridTicks, totalLength);
             int width = Math.Max(1, this.pictureBox_editor.ClientSize.Width - 44);
             double mouseRatio = Math.Clamp((e.X - 44) / (double)width, 0, 1);
@@ -195,20 +225,30 @@ namespace ModularAudience.Forms.Modules.Dialogs
             long newStart = tickAtMouse - (long)Math.Round(newLength * mouseRatio);
             this.SetView(newStart, newStart + newLength);
             this.pixelsPerTick = width / (double)Math.Max(this.GridTicks, newLength);
+            this.UpdateScrollBar();
+            this.pictureBox_editor.Invalidate();
+        }
+
+        private void ScrollView(long tickDelta)
+        {
+            long visibleLength = Math.Max(this.GridTicks, this.viewEndTick - this.viewStartTick);
+            this.SetView(this.viewStartTick + tickDelta, this.viewStartTick + tickDelta + visibleLength);
+            this.UpdateScrollBar();
             this.pictureBox_editor.Invalidate();
         }
 
         private void MidiEditor_Resize(object? sender, EventArgs e)
         {
             int width = Math.Max(1, this.pictureBox_editor.ClientSize.Width - 44);
-            long previousLength = this.editorLengthTicks;
             long visibleLength = Math.Max(this.GridTicks, (long)Math.Ceiling(width / this.pixelsPerTick));
             this.editorLengthTicks = Math.Max(this.editorLengthTicks, this.viewStartTick + visibleLength);
-            if (this.viewEndTick >= previousLength)
+            if (this.viewEndTick >= this.editorLengthTicks - visibleLength)
             {
                 this.viewEndTick = this.editorLengthTicks;
+                this.viewStartTick = Math.Max(0, this.viewEndTick - visibleLength);
             }
 
+            this.UpdateScrollBar();
             this.pictureBox_editor.Invalidate();
         }
 
@@ -219,6 +259,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             int width = Math.Max(1, this.pictureBox_editor.ClientSize.Width - 44);
             long tickDelta = (long)Math.Round(-pixelDelta / (double)width * visibleLength);
             this.SetView(this.panViewStartTick + tickDelta, this.panViewEndTick + tickDelta);
+            this.UpdateScrollBar();
             this.pictureBox_editor.Invalidate();
         }
 
@@ -231,7 +272,82 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.viewEndTick = clampedStart + visibleLength;
         }
 
-        private void ApplyNoteRange(Point first, Point second, bool add)
+        private void hScrollBar_editor_Scroll(object? sender, ScrollEventArgs e)
+        {
+            if (this.updatingScrollBar)
+            {
+                return;
+            }
+
+            long totalLength = Math.Max(this.GridTicks, this.editorLengthTicks);
+            long visibleLength = Math.Max(this.GridTicks, this.viewEndTick - this.viewStartTick);
+            long scrollableLength = Math.Max(0, totalLength - visibleLength);
+            if (scrollableLength == 0)
+            {
+                return;
+            }
+
+            int scrollRange = Math.Max(1, this.hScrollBar_editor.Maximum - this.hScrollBar_editor.LargeChange + 1);
+            long newStart = (long)Math.Round(e.NewValue / (double)scrollRange * scrollableLength);
+            this.SetView(newStart, newStart + visibleLength);
+            this.pictureBox_editor.Invalidate();
+        }
+
+        private void UpdateScrollBar()
+        {
+            if (this.hScrollBar_editor == null || this.hScrollBar_editor.IsDisposed)
+            {
+                return;
+            }
+
+            long totalLength = Math.Max(this.GridTicks, this.editorLengthTicks);
+            long visibleLength = Math.Max(this.GridTicks, this.viewEndTick - this.viewStartTick);
+            bool scrollable = totalLength > visibleLength;
+            this.updatingScrollBar = true;
+            try
+            {
+                this.hScrollBar_editor.Enabled = scrollable;
+                this.hScrollBar_editor.Visible = scrollable;
+                if (!scrollable)
+                {
+                    this.hScrollBar_editor.Value = this.hScrollBar_editor.Minimum;
+                    return;
+                }
+
+                int scrollRange = Math.Max(1, this.hScrollBar_editor.Maximum - this.hScrollBar_editor.LargeChange + 1);
+                long scrollableLength = totalLength - visibleLength;
+                int value = (int)Math.Clamp(Math.Round(this.viewStartTick / (double)scrollableLength * scrollRange), 0, scrollRange);
+                this.hScrollBar_editor.Value = value;
+            }
+            finally
+            {
+                this.updatingScrollBar = false;
+            }
+        }
+
+        private long GetRequiredEditorLength()
+        {
+            long lastNoteEnd = this.SelectedTrack.Notes.Count == 0
+                ? this.GridTicks
+                : this.SelectedTrack.Notes.Max(note => note.StartTick + note.DurationTicks);
+            long paddedLength = (long)Math.Ceiling(lastNoteEnd / (1.0 - EmptyTailRatio));
+            return Math.Max(this.GridTicks, paddedLength);
+        }
+
+        private void UpdateEditorLengthAfterNoteChange(long previousLength)
+        {
+            this.editorLengthTicks = Math.Max(this.editorLengthTicks, this.GetRequiredEditorLength());
+            long visibleLength = Math.Max(this.GridTicks, this.viewEndTick - this.viewStartTick);
+            if (this.viewEndTick >= previousLength - visibleLength || this.viewEndTick > this.editorLengthTicks)
+            {
+                this.SetView(Math.Max(0, this.editorLengthTicks - visibleLength), this.editorLengthTicks);
+            }
+
+            this.UpdateScrollBar();
+            this.pictureBox_editor.Invalidate();
+        }
+
+        private void ApplyNoteRange(Point first, Point second, bool add, bool updateView = true)
         {
             int firstNote = PointToNote(first.Y);
             int note = Math.Clamp(firstNote, LowestNote, HighestNote);
@@ -240,32 +356,33 @@ namespace ModularAudience.Forms.Modules.Dialogs
             long previousLength = this.SelectedTrack.LengthTicks;
 
             this.SelectedTrack.Notes.RemoveAll(candidate =>
-                candidate.NoteNumber == note &&
-                candidate.StartTick < endTick &&
-                candidate.StartTick + candidate.DurationTicks > startTick);
+            {
+                if (candidate.NoteNumber != note)
+                {
+                    return false;
+                }
+
+                bool overlaps = candidate.StartTick < endTick && candidate.StartTick + candidate.DurationTicks > startTick;
+                return overlaps;
+            });
 
             if (add)
             {
-                for (long tick = startTick; tick < endTick; tick += this.GridTicks)
+                this.SelectedTrack.Notes.Add(new MidiNoteData
                 {
-                    long duration = Math.Min(this.GridTicks, endTick - tick);
-
-                    this.SelectedTrack.Notes.Add(new MidiNoteData
-                    {
-                        NoteNumber = note,
-                        Channel = 0,
-                        Velocity = 100,
-                        StartTick = tick,
-                        DurationTicks = duration
-                    });
-                }
+                    NoteNumber = note,
+                    Channel = 0,
+                    Velocity = 100,
+                    StartTick = startTick,
+                    DurationTicks = endTick - startTick
+                });
 
                 this.SelectedTrack.ExtendLengthTo(endTick);
-                this.editorLengthTicks = Math.Max(this.editorLengthTicks, endTick);
-                if (this.viewEndTick >= previousLength)
-                {
-                    this.SetView(this.viewStartTick, this.editorLengthTicks);
-                }
+            }
+
+            if (updateView)
+            {
+                this.UpdateEditorLengthAfterNoteChange(previousLength);
             }
         }
 
