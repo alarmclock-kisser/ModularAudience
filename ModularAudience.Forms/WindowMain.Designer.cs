@@ -315,7 +315,6 @@
             // 
             // button_drumRoll
             // 
-            this.button_drumRoll.Enabled = false;
             this.button_drumRoll.Location = new Point(192, 291);
             this.button_drumRoll.Name = "button_drumRoll";
             this.button_drumRoll.Size = new Size(90, 23);
@@ -578,7 +577,7 @@
             // 
             this.contextMenuStrip_random.Items.AddRange(new ToolStripItem[] { this.timeStretchImportedToToolStripMenuItem });
             this.contextMenuStrip_random.Name = "contextMenuStrip_random";
-            this.contextMenuStrip_random.Size = new Size(222, 48);
+            this.contextMenuStrip_random.Size = new Size(222, 26);
             // 
             // timeStretchImportedToToolStripMenuItem
             // 

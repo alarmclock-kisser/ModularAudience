@@ -3,7 +3,7 @@
 ## General Guidelines
 - For this repo, LLM failures should always be logged and shown in a copyable OK dialog; raw LLM responses should be logged.
 - Provide concise status messages; execute plans without lengthy announcements and perform steps in a single run when possible.
-- Implement necessary fixes immediately; do not ask for approval or request follow-up questions for obvious corrections.
+- Implement necessary fixes immediately; do not ask for approval or request follow-up questions for obvious corrections. Validate changes directly after implementation.
 - Do not automatically commit or push changes; only restart the app when the user explicitly requests or performs it. When debugging, continue the existing instance; do not restart automatically.
 - Never include line numbers (z. B. "123: code") in Code-Blöcken oder Snippets. Code muss immer so ausgegeben werden, dass er direkt ohne Bearbeitung kopiert und eingefügt werden kann.
 - Execute instructions strictly and step-by-step without repetition or looping responses, ensuring focused and careful edits.
@@ -25,6 +25,8 @@
   - Support Ctrl+Left-click on hScrollBar_rate to reliably reset the rate to center (value 0).
   - Add an explicit "Center/Reset Rate" entry to the rate scrollbar's right-click context menu.
 - LoopControl for playlist playback must target all concurrently active playlist overlap tracks, not just a single playlist track.
+- For MIDI custom sample rendering, ensure all notes are equally loud as the first note; prevent unintended reduction in volume due to rendering/grain logic.
+- When resizing the MidiEditor, the horizontal tick/pixel scaling must not change: existing notes must retain the same width, and additional window width should only display empty workspace for more notes. Scaling/trim adoption should only occur upon saving in the MidiWindow.
 
 ## UI Interaction Rules
 - Prefer keyboard modifiers and context-menu entries for common quick actions (e.g., centering controls, resetting values).

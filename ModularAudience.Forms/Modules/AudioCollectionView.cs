@@ -8,6 +8,8 @@ using ModularAudience.Forms.Helpers;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using NAudio.Midi;
+using ModularAudience.Audio.Midi;
 
 namespace ModularAudience.Forms
 {
@@ -1249,6 +1251,20 @@ namespace ModularAudience.Forms
             // Jump back to none selected and text "Order by"
             this.toolStripComboBox_orderBy.SelectedIndex = -1;
             this.toolStripComboBox_orderBy.Text = "Order by";
+        }
+
+        private async void convertToMIDIToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var track = this.SelectedAudios.FirstOrDefault();
+            if (track == null)
+            {
+                return;
+            }
+
+            MidiFileData? midiData = await MidiFileData.ConvertAsync(track, maxWorkers: Environment.ProcessorCount, cancellationToken: default);
+
+            var window = new MidiWindow(null, midiData);
+            window.Show();
         }
     }
 }

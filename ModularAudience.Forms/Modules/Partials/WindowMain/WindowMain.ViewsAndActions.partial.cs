@@ -437,15 +437,31 @@ namespace ModularAudience.Forms
 
         private void button_drumRoll_Click(object sender, EventArgs e)
         {
+            if (this.InvokeRequired)
+            {
+                try
+                {
+                    this.BeginInvoke((Action) (() => this.button_drumRoll_Click(sender, e)));
+                }
+                catch (Exception ex)
+                {
+                    try { LogCollection.Log($"DrumRoll UI dispatch error: {ex}"); } catch { }
+                }
+
+                return;
+            }
+
+            DrumRollEditor? editor = null;
             try
             {
-                DrumRollEditor editor = new(SelectedTracks.ToList());
+                editor = new(SelectedTracks.ToList());
                 editor.Show();
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"DrumRoll button error: {ex.Message}"); } catch { }
-                MessageBox.Show(ex.Message, "Drum Roll Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                try { LogCollection.Log($"DrumRoll button error: {ex}"); } catch { }
+                try { editor?.Dispose(); } catch { }
+                MessageBox.Show(ex.ToString(), "Drum Roll Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 

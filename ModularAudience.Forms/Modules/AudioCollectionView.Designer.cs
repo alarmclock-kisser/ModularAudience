@@ -102,6 +102,7 @@
             this.menuToolStripItem_demucsSeparateSelected = new ToolStripMenuItem();
             this.menuToolStripItem_pinWindow = new ToolStripMenuItem();
             this.toolStripComboBox_orderBy = new ToolStripComboBox();
+            this.convertToMIDIToolStripMenuItem = new ToolStripMenuItem();
             this.contextMenuStrip_audios.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -148,9 +149,9 @@
             // 
             // contextMenuStrip_audios
             // 
-            this.contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { this.menuToolStripItem_rename, this.menuToolStripItem_clone, this.menuToolStripItem_editTags, this.menuToolStripItem_splitEqualParts, this.menuToolStripItem_generateBreakbeat, this.menuToolStripItem_atomize, this.menuToolStripItem_delete, this.menuToolStripItem_toNewCollection, this.menuToolStripItem_addIndexToNames, this.menuToolStripItem_aggregateMixSelected, this.menuToolStripItem_timeStretchSelected, this.menuToolStripItem_demucsSeparateSelected, this.menuToolStripItem_pinWindow, this.toolStripComboBox_orderBy });
+            this.contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { this.menuToolStripItem_rename, this.menuToolStripItem_clone, this.menuToolStripItem_editTags, this.menuToolStripItem_splitEqualParts, this.menuToolStripItem_generateBreakbeat, this.menuToolStripItem_atomize, this.menuToolStripItem_delete, this.menuToolStripItem_toNewCollection, this.menuToolStripItem_addIndexToNames, this.menuToolStripItem_aggregateMixSelected, this.menuToolStripItem_timeStretchSelected, this.menuToolStripItem_demucsSeparateSelected, this.menuToolStripItem_pinWindow, this.convertToMIDIToolStripMenuItem, this.toolStripComboBox_orderBy });
             this.contextMenuStrip_audios.Name = "contextMenuStrip_audios";
-            this.contextMenuStrip_audios.Size = new Size(213, 339);
+            this.contextMenuStrip_audios.Size = new Size(213, 361);
             this.contextMenuStrip_audios.Opening += this.contextMenuStrip_audios_Opening;
             // 
             // menuToolStripItem_rename
@@ -632,6 +633,13 @@
             this.toolStripComboBox_orderBy.Text = "Order by";
             this.toolStripComboBox_orderBy.SelectedIndexChanged += this.toolStripComboBox_orderBy_SelectedIndexChanged;
             // 
+            // convertToMIDIToolStripMenuItem
+            // 
+            this.convertToMIDIToolStripMenuItem.Name = "convertToMIDIToolStripMenuItem";
+            this.convertToMIDIToolStripMenuItem.Size = new Size(212, 22);
+            this.convertToMIDIToolStripMenuItem.Text = "Convert to MIDI";
+            this.convertToMIDIToolStripMenuItem.Click += this.convertToMIDIToolStripMenuItem_Click;
+            // 
             // AudioCollectionView
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
@@ -727,5 +735,6 @@
         private ToolStripMenuItem menuToolStripItem_demucsSeparateSelected;
         private ToolStripMenuItem menuToolStripItem_pinWindow;
         private ToolStripComboBox toolStripComboBox_orderBy;
+        private ToolStripMenuItem convertToMIDIToolStripMenuItem;
     }
 }

@@ -1,0 +1,415 @@
+using ModularAudience.Audio;
+using ModularAudience.Audio.Midi;
+using System.Drawing.Drawing2D;
+
+namespace ModularAudience.Forms.Modules.Dialogs
+{
+    public partial class MidiEditor : Form
+    {
+        public readonly MidiEditSelection MidiEditSelection;
+
+        private readonly MidiWindow? sourceMidiWindow;
+        private Point? editStart;
+        private MouseButtons editButton;
+        private bool panning;
+        private Point panStart;
+        private long panViewStartTick;
+        private long panViewEndTick;
+        private long viewStartTick;
+        private long viewEndTick;
+        private long editorLengthTicks;
+        private double pixelsPerTick;
+        private CancellationTokenSource? playbackCts;
+
+        public MidiEditor(MidiEditSelection midiEditSelection, MidiWindow? sourceMidiWindow = null)
+        {
+            this.MidiEditSelection = midiEditSelection;
+            this.sourceMidiWindow = sourceMidiWindow;
+            this.InitializeComponent();
+            this.editorLengthTicks = Math.Max(this.GridTicks, this.SelectedTrack.LengthTicks);
+            this.pixelsPerTick = Math.Max(0.001, (this.pictureBox_editor.ClientSize.Width - 44) / (double)this.editorLengthTicks);
+            this.viewStartTick = 0;
+            this.viewEndTick = this.editorLengthTicks;
+            this.pictureBox_editor.Cursor = Cursors.Cross;
+            this.pictureBox_editor.Invalidate();
+        }
+
+        private MidiTrackData SelectedTrack => this.MidiEditSelection.MidiFile.Tracks[0];
+
+        private int LowestNote => ParseMidiNote(this.MidiEditSelection.LowestNoteName);
+
+        private int HighestNote => ParseMidiNote(this.MidiEditSelection.HighestNoteName);
+
+        private long GridTicks => Math.Max(1, this.MidiEditSelection.MidiFile.TicksPerQuarterNote / 4);
+
+        private void pictureBox_editor_Paint(object? sender, PaintEventArgs e)
+        {
+            int lowest = this.LowestNote;
+            int highest = Math.Max(lowest, this.HighestNote);
+            int noteCount = highest - lowest + 1;
+            int width = Math.Max(1, this.pictureBox_editor.ClientSize.Width - 44);
+            int height = Math.Max(1, this.pictureBox_editor.ClientSize.Height - 20);
+            long lengthTicks = Math.Max(this.GridTicks, this.editorLengthTicks);
+            long visibleStartTick = Math.Clamp(this.viewStartTick, 0, Math.Max(0, lengthTicks - this.GridTicks));
+            long visibleEndTick = Math.Clamp(this.viewEndTick, visibleStartTick + this.GridTicks, lengthTicks);
+            double visibleLengthTicks = Math.Max(this.GridTicks, visibleEndTick - visibleStartTick);
+            e.Graphics.SmoothingMode = SmoothingMode.HighQuality;
+            e.Graphics.Clear(Color.FromArgb(24, 24, 28));
+
+            using Pen gridPen = new(Color.FromArgb(48, 48, 56));
+            using Pen octavePen = new(Color.FromArgb(75, 75, 85));
+            using Font font = new("Segoe UI", 8f);
+            for (int note = lowest; note <= highest; note++)
+            {
+                float y = NoteToY(note, lowest, noteCount, height);
+                e.Graphics.DrawLine(note % 12 == 0 ? octavePen : gridPen, 44, y, 44 + width, y);
+                e.Graphics.DrawString(MidiNoteName(note), font, Brushes.Gainsboro, 2, y - 7);
+            }
+
+            long firstGridTick = visibleStartTick - visibleStartTick % this.GridTicks;
+            for (long tick = firstGridTick; tick <= visibleEndTick; tick += this.GridTicks)
+            {
+                float x = 44 + (float)((tick - visibleStartTick) * this.pixelsPerTick);
+                e.Graphics.DrawLine(gridPen, x, 0, x, height);
+            }
+
+            foreach (MidiNoteData note in this.SelectedTrack.Notes)
+            {
+                if (note.NoteNumber < lowest || note.NoteNumber > highest)
+                {
+                    continue;
+                }
+
+                long noteEndTick = note.StartTick + note.DurationTicks;
+                if (noteEndTick <= visibleStartTick || note.StartTick >= visibleEndTick)
+                {
+                    continue;
+                }
+
+                long clippedStartTick = Math.Max(note.StartTick, visibleStartTick);
+                long clippedEndTick = Math.Min(noteEndTick, visibleEndTick);
+                float x = 44 + (float)((clippedStartTick - visibleStartTick) * this.pixelsPerTick);
+                float noteWidth = Math.Max(2, (float)((clippedEndTick - clippedStartTick) * this.pixelsPerTick));
+                float y = NoteToY(note.NoteNumber, lowest, noteCount, height);
+                float noteHeight = Math.Max(3, height / (float)noteCount - 1);
+                using Brush brush = new SolidBrush(Color.DeepSkyBlue);
+                e.Graphics.FillRectangle(brush, x, y, Math.Min(noteWidth, 44 + width - x), noteHeight);
+            }
+
+            if (this.editStart is Point start)
+            {
+                Point current = this.pictureBox_editor.PointToClient(Cursor.Position);
+                Rectangle rectangle = NormalizeRectangle(start, current);
+                rectangle.Intersect(new Rectangle(44, 0, width, height));
+                using Pen selectionPen = new(Color.White, 1f) { DashStyle = DashStyle.Dash };
+                e.Graphics.DrawRectangle(selectionPen, rectangle);
+            }
+        }
+
+        private void pictureBox_editor_MouseDown(object? sender, MouseEventArgs e)
+        {
+            if (e.Button is not (MouseButtons.Left or MouseButtons.Right))
+            {
+                return;
+            }
+
+            if ((Control.ModifierKeys & Keys.Control) != Keys.None)
+            {
+                this.panning = true;
+                this.panStart = e.Location;
+                this.panViewStartTick = this.viewStartTick;
+                this.panViewEndTick = this.viewEndTick;
+                this.pictureBox_editor.Capture = true;
+                this.pictureBox_editor.Cursor = Cursors.SizeWE;
+                return;
+            }
+
+            this.editStart = ClampToEditor(e.Location);
+            this.editButton = e.Button;
+            this.pictureBox_editor.Capture = true;
+            this.pictureBox_editor.Invalidate();
+        }
+
+        private void pictureBox_editor_MouseMove(object? sender, MouseEventArgs e)
+        {
+            if (this.panning)
+            {
+                this.PanView(e.Location.X - this.panStart.X);
+                return;
+            }
+
+            if (this.editStart == null)
+            {
+                return;
+            }
+
+            this.pictureBox_editor.Invalidate();
+        }
+
+        private async void pictureBox_editor_MouseUp(object? sender, MouseEventArgs e)
+        {
+            if (this.panning)
+            {
+                this.panning = false;
+                this.pictureBox_editor.Capture = false;
+                this.pictureBox_editor.Cursor = Cursors.Cross;
+                return;
+            }
+
+            if (this.editStart is not Point start || e.Button != this.editButton)
+            {
+                return;
+            }
+
+            Point end = ClampToEditor(e.Location);
+            this.editStart = null;
+            this.pictureBox_editor.Capture = false;
+            this.ApplyNoteRange(start, end, this.editButton == MouseButtons.Left);
+            this.pictureBox_editor.Invalidate();
+
+            if (this.checkBox_preview.Checked && this.editButton == MouseButtons.Left)
+            {
+                Point previewPoint = new((start.X + end.X) / 2, start.Y);
+                MidiNoteData? previewNote = this.FindNoteAt(previewPoint);
+                if (previewNote != null)
+                {
+                    await this.PreviewNoteAsync(previewNote);
+                }
+            }
+        }
+
+        private void pictureBox_editor_MouseWheel(object? sender, MouseEventArgs e)
+        {
+            long totalLength = Math.Max(this.GridTicks, this.editorLengthTicks);
+            if (totalLength <= this.GridTicks)
+            {
+                return;
+            }
+
+            long currentLength = Math.Max(this.GridTicks, this.viewEndTick - this.viewStartTick);
+            double zoomFactor = e.Delta > 0 ? 0.8 : 1.25;
+            long newLength = Math.Clamp((long)Math.Round(currentLength * zoomFactor), this.GridTicks, totalLength);
+            int width = Math.Max(1, this.pictureBox_editor.ClientSize.Width - 44);
+            double mouseRatio = Math.Clamp((e.X - 44) / (double)width, 0, 1);
+            long tickAtMouse = this.viewStartTick + (long)Math.Round(currentLength * mouseRatio);
+            long newStart = tickAtMouse - (long)Math.Round(newLength * mouseRatio);
+            this.SetView(newStart, newStart + newLength);
+            this.pixelsPerTick = width / (double)Math.Max(this.GridTicks, newLength);
+            this.pictureBox_editor.Invalidate();
+        }
+
+        private void MidiEditor_Resize(object? sender, EventArgs e)
+        {
+            int width = Math.Max(1, this.pictureBox_editor.ClientSize.Width - 44);
+            long previousLength = this.editorLengthTicks;
+            long visibleLength = Math.Max(this.GridTicks, (long)Math.Ceiling(width / this.pixelsPerTick));
+            this.editorLengthTicks = Math.Max(this.editorLengthTicks, this.viewStartTick + visibleLength);
+            if (this.viewEndTick >= previousLength)
+            {
+                this.viewEndTick = this.editorLengthTicks;
+            }
+
+            this.pictureBox_editor.Invalidate();
+        }
+
+        private void PanView(int pixelDelta)
+        {
+            long totalLength = Math.Max(this.GridTicks, this.editorLengthTicks);
+            long visibleLength = Math.Max(this.GridTicks, this.panViewEndTick - this.panViewStartTick);
+            int width = Math.Max(1, this.pictureBox_editor.ClientSize.Width - 44);
+            long tickDelta = (long)Math.Round(-pixelDelta / (double)width * visibleLength);
+            this.SetView(this.panViewStartTick + tickDelta, this.panViewEndTick + tickDelta);
+            this.pictureBox_editor.Invalidate();
+        }
+
+        private void SetView(long startTick, long endTick)
+        {
+            long totalLength = Math.Max(this.GridTicks, this.editorLengthTicks);
+            long visibleLength = Math.Clamp(endTick - startTick, this.GridTicks, totalLength);
+            long clampedStart = Math.Clamp(startTick, 0, Math.Max(0, totalLength - visibleLength));
+            this.viewStartTick = clampedStart;
+            this.viewEndTick = clampedStart + visibleLength;
+        }
+
+        private void ApplyNoteRange(Point first, Point second, bool add)
+        {
+            int firstNote = PointToNote(first.Y);
+            int note = Math.Clamp(firstNote, LowestNote, HighestNote);
+            long startTick = PointToTick(Math.Min(first.X, second.X));
+            long endTick = Math.Max(startTick + this.GridTicks, PointToTick(Math.Max(first.X, second.X)) + this.GridTicks);
+            long previousLength = this.SelectedTrack.LengthTicks;
+
+            this.SelectedTrack.Notes.RemoveAll(candidate =>
+                candidate.NoteNumber == note &&
+                candidate.StartTick < endTick &&
+                candidate.StartTick + candidate.DurationTicks > startTick);
+
+            if (add)
+            {
+                for (long tick = startTick; tick < endTick; tick += this.GridTicks)
+                {
+                    long duration = Math.Min(this.GridTicks, endTick - tick);
+
+                    this.SelectedTrack.Notes.Add(new MidiNoteData
+                    {
+                        NoteNumber = note,
+                        Channel = 0,
+                        Velocity = 100,
+                        StartTick = tick,
+                        DurationTicks = duration
+                    });
+                }
+
+                this.SelectedTrack.ExtendLengthTo(endTick);
+                this.editorLengthTicks = Math.Max(this.editorLengthTicks, endTick);
+                if (this.viewEndTick >= previousLength)
+                {
+                    this.SetView(this.viewStartTick, this.editorLengthTicks);
+                }
+            }
+        }
+
+        private MidiNoteData? FindNoteAt(Point point)
+        {
+            int note = PointToNote(point.Y);
+            long tick = PointToTick(point.X);
+            return this.SelectedTrack.Notes.FirstOrDefault(candidate => candidate.NoteNumber == note && candidate.StartTick <= tick && candidate.StartTick + candidate.DurationTicks > tick);
+        }
+
+        private Point ClampToEditor(Point point)
+        {
+            return new Point(Math.Clamp(point.X, 44, Math.Max(44, this.pictureBox_editor.ClientSize.Width - 1)), Math.Clamp(point.Y, 0, Math.Max(0, this.pictureBox_editor.ClientSize.Height - 20)));
+        }
+
+        private long PointToTick(int x)
+        {
+            long relativeTick = (long)Math.Floor((x - 44) / this.pixelsPerTick / this.GridTicks) * this.GridTicks;
+            long tick = this.viewStartTick + relativeTick;
+            return Math.Clamp(tick, 0, Math.Max(0, this.editorLengthTicks));
+        }
+
+        private int PointToNote(int y)
+        {
+            int height = Math.Max(1, this.pictureBox_editor.ClientSize.Height - 20);
+            int count = Math.Max(1, HighestNote - LowestNote + 1);
+            return Math.Clamp(HighestNote - (int)Math.Floor(y / (double)height * count), LowestNote, HighestNote);
+        }
+
+        private async Task PreviewNoteAsync(MidiNoteData note)
+        {
+            if (this.sourceMidiWindow == null)
+            {
+                return;
+            }
+
+            MidiFileData previewFile = MidiFileData.CreateEditSelection(this.MidiEditSelection.MidiFile, this.SelectedTrack.Index, note.StartTick, note.StartTick + note.DurationTicks, note.NoteNumber, note.NoteNumber).MidiFile;
+            await this.sourceMidiWindow.PreviewMidiAsync(previewFile, this.SelectedTrack.Index);
+        }
+
+        private async void button_play_Click(object? sender, EventArgs e)
+        {
+            if (this.playbackCts != null)
+            {
+                await this.StopPlaybackAsync();
+                return;
+            }
+
+            if (this.sourceMidiWindow == null || this.SelectedTrack.Notes.Count == 0)
+            {
+                return;
+            }
+
+            CancellationTokenSource runCts = new();
+            this.playbackCts = runCts;
+            this.button_play.Text = "Stop";
+            try
+            {
+                await this.sourceMidiWindow.PreviewMidiAsync(this.MidiEditSelection.MidiFile, this.SelectedTrack.Index);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"MIDI editor playback failed: {ex}");
+                MessageBox.Show(this, ex.Message, "MIDI editor playback failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                if (ReferenceEquals(this.playbackCts, runCts))
+                {
+                    this.playbackCts.Dispose();
+                    this.playbackCts = null;
+                    this.button_play.Text = "Play";
+                }
+                else
+                {
+                    runCts.Dispose();
+                }
+            }
+        }
+
+        private async Task StopPlaybackAsync()
+        {
+            this.playbackCts?.Cancel();
+            if (this.sourceMidiWindow != null)
+            {
+                await this.sourceMidiWindow.StopPreviewAsync();
+            }
+
+            this.button_play.Text = "Play";
+        }
+
+        private async void MidiEditor_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            await this.StopPlaybackAsync();
+        }
+
+        private async void button_save_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                MidiFileData? source = this.MidiEditSelection.SourceMidiFile;
+                if (source != null)
+                {
+                    this.sourceMidiWindow?.ApplyEdit(source.ReplaceSelection(this.MidiEditSelection, this.MidiEditSelection.MidiFile));
+                }
+
+                this.DialogResult = DialogResult.OK;
+                this.Close();
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"MIDI edit save failed: {ex}");
+                MessageBox.Show(this, ex.Message, "MIDI edit failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+
+            await Task.CompletedTask;
+        }
+
+        private static float NoteToY(int note, int lowest, int count, int height) => (count - 1 - (note - lowest)) / (float)Math.Max(1, count) * height;
+
+        private static Rectangle NormalizeRectangle(Point first, Point second) => Rectangle.FromLTRB(Math.Min(first.X, second.X), Math.Min(first.Y, second.Y), Math.Max(first.X, second.X), Math.Max(first.Y, second.Y));
+
+        private static int ParseMidiNote(string name)
+        {
+            string[] names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+            string? matchedName = names
+                .OrderByDescending(value => value.Length)
+                .FirstOrDefault(value => name.StartsWith(value, StringComparison.OrdinalIgnoreCase));
+            if (matchedName == null || !int.TryParse(name[matchedName.Length..], out int octave))
+            {
+                return 0;
+            }
+
+            int noteIndex = Array.IndexOf(names, matchedName);
+            return Math.Clamp((octave + 1) * 12 + noteIndex, 0, 127);
+        }
+
+        private static string MidiNoteName(int note)
+        {
+            string[] names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+            return names[note % 12] + (note / 12 - 1);
+        }
+    }
+}

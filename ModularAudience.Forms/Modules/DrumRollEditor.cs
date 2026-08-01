@@ -42,6 +42,8 @@ namespace ModularAudience.Forms.Modules
 
         public float Bpm => (float) this.numericUpDown_bpm.Value;
         public int Hits => this.domainUpDown_hits.SelectedItem is null ? 16 : int.Parse(this.domainUpDown_hits.SelectedItem.ToString() ?? "16");
+        public int Bars => this.domainUpDown_bars.SelectedItem is null ? 1 : int.Parse(this.domainUpDown_bars.SelectedItem.ToString() ?? "1");
+        private int TotalSteps => Math.Max(1, this.Hits) * Math.Max(1, this.Bars);
         public float Volume => (float) this.numericUpDown_volume.Value / 100.0f;
         private bool InterleavedPlaybackEnabled => this.checkBox_interleaved.Checked;
         private bool LaunchpadModeEnabled => this.checkBox_launchpad.Checked;
@@ -72,6 +74,7 @@ namespace ModularAudience.Forms.Modules
         private bool isPlaying = false;
         private volatile float schedulerBpm;
         private volatile int schedulerHits;
+        private volatile int schedulerBars;
         private bool updatingWindowLayout = false;
         private bool initialPatternLoadCompleted = false;
 
@@ -83,6 +86,7 @@ namespace ModularAudience.Forms.Modules
             this.panel_pattern.Visible = false;
             this.button_hit.Visible = false;
             this.domainUpDown_hits.SelectedIndex = this.domainUpDown_hits.Items.IndexOf("16");
+            this.domainUpDown_bars.SelectedIndex = this.domainUpDown_bars.Items.IndexOf("1");
 
             this.outputFormat = WaveFormat.CreateIeeeFloatWaveFormat(44100, 2);
             this.waveOut = null;
@@ -324,6 +328,30 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
+        private async void domainUpDown_bars_SelectedItemChanged(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (!this.initialPatternLoadCompleted)
+                {
+                    return;
+                }
+
+                List<List<bool>> restoreStates = this.CapturePatternButtonStates();
+                this.schedulerBars = this.Bars;
+                await this.RebuildPatternPanelsAsync(restoreStates);
+                await this.ResizePanelsAndButtonsAsync();
+                if (this.isPlaying)
+                {
+                    this.currentStep = 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                try { LogCollection.Log($"DrumRollEditor BarsChanged error: {ex}"); } catch { }
+            }
+        }
+
         private void DrumRollEditor_DragEnter(object? sender, DragEventArgs e)
         {
             if (e.Data != null)
@@ -414,12 +442,13 @@ namespace ModularAudience.Forms.Modules
 
         private async Task RebuildPatternPanelsAsync(List<List<bool>>? restoreStates = null)
         {
-            await this.rebuildSemaphore.WaitAsync().ConfigureAwait(false);
+            await this.rebuildSemaphore.WaitAsync();
 
             try
             {
                 var audioSnapshot = this.AudioC.Audios.ToList();
                 int hits = Math.Max(1, this.Hits);
+                int totalSteps = hits * Math.Max(1, this.Bars);
                 Dictionary<AudioObj, bool> lockStates = this.patternRows
                     .GroupBy(row => row.Audio)
                     .ToDictionary(group => group.Key, group => group.First().IsLocked);
@@ -429,7 +458,7 @@ namespace ModularAudience.Forms.Modules
                     var rebuiltRows = new List<PatternRowState>(audioSnapshot.Count);
                     for (int i = 0; i < audioSnapshot.Count; i++)
                     {
-                        bool[] steps = new bool[hits];
+                        bool[] steps = new bool[totalSteps];
                         if (restoreStates != null && i < restoreStates.Count)
                         {
                             List<bool> source = restoreStates[i];
@@ -451,7 +480,7 @@ namespace ModularAudience.Forms.Modules
                     }
 
                     return rebuiltRows;
-                }).ConfigureAwait(false);
+                });
 
                 void ApplyRows()
                 {
@@ -595,6 +624,7 @@ namespace ModularAudience.Forms.Modules
         private void RandomizeAllPanels(bool interleaved = false)
         {
             int hits = this.Hits;
+            int totalSteps = this.TotalSteps;
             if (hits <= 0 || this.patternRows.Count == 0)
             {
                 return;
@@ -623,7 +653,7 @@ namespace ModularAudience.Forms.Modules
 
             if (interleaved)
             {
-                for (int step = 0; step < hits; step++)
+                for (int step = 0; step < totalSteps; step++)
                 {
                     bool hasLockedHit = this.patternRows.Any(row => row.IsLocked && step < row.Steps.Length && row.Steps[step]);
                     if (hasLockedHit)
@@ -636,7 +666,7 @@ namespace ModularAudience.Forms.Modules
                     foreach (int rowIndex in unlockedRows)
                     {
                         double rowDensity = this.GetRowDensity(density, variation);
-                        double chance = this.GetStepChance(rowDensity, accent, step, hits);
+                        double chance = this.GetStepChance(rowDensity, accent, step % hits, hits);
                         double roll = this.random.NextDouble();
                         if (roll < chance)
                         {
@@ -651,7 +681,7 @@ namespace ModularAudience.Forms.Modules
 
                     if (selectedRow >= 0)
                     {
-                        this.SetRandomizedStep(this.patternRows[selectedRow], step, hits, streak);
+                        this.SetRandomizedStep(this.patternRows[selectedRow], step, totalSteps, streak);
                     }
                 }
             }
@@ -661,18 +691,18 @@ namespace ModularAudience.Forms.Modules
                 {
                     PatternRowState row = this.patternRows[rowIndex];
                     double rowDensity = this.GetRowDensity(density, variation);
-                    for (int step = 0; step < hits; step++)
+                    for (int step = 0; step < totalSteps; step++)
                     {
-                        double chance = this.GetStepChance(rowDensity, accent, step, hits);
+                        double chance = this.GetStepChance(rowDensity, accent, step % hits, hits);
                         if (this.random.NextDouble() < chance)
                         {
-                            this.SetRandomizedStep(row, step, hits, streak);
+                            this.SetRandomizedStep(row, step, totalSteps, streak);
                         }
                     }
 
                     if (!row.Steps.Any(step => step))
                     {
-                        int fallbackStep = this.GetPreferredFallbackStep(hits);
+                        int fallbackStep = this.GetPreferredFallbackStep(totalSteps);
                         row.Steps[fallbackStep] = true;
                     }
                 }
@@ -752,12 +782,12 @@ namespace ModularAudience.Forms.Modules
             PatternLayoutInfo layout = this.GetPatternLayout();
             int previousStep = this.currentStep;
 
-            if (previousStep >= 0 && previousStep < hits)
+            if (previousStep >= 0 && previousStep < this.TotalSteps)
             {
                 this.InvalidatePlaybackStep(previousStep, layout);
             }
 
-            if (step >= 0 && step < hits)
+            if (step >= 0 && step < this.TotalSteps)
             {
                 this.InvalidatePlaybackStep(step, layout);
             }
@@ -765,7 +795,7 @@ namespace ModularAudience.Forms.Modules
 
         private void InvalidatePlaybackStep(int stepIndex, PatternLayoutInfo layout)
         {
-            if (this.patternRows.Count == 0 || stepIndex < 0 || stepIndex >= Math.Max(1, this.Hits))
+            if (this.patternRows.Count == 0 || stepIndex < 0 || stepIndex >= this.TotalSteps)
             {
                 return;
             }
@@ -799,13 +829,15 @@ namespace ModularAudience.Forms.Modules
                     {
                         // read live-safe copies
                         float bpmNow = this.schedulerBpm > 0 ? this.schedulerBpm : this.Bpm;
-                        int hitsNow = this.schedulerHits > 0 ? this.schedulerHits : this.Hits;
-                        if (hitsNow <= 0)
+                        int hitsPerBarNow = this.schedulerHits > 0 ? this.schedulerHits : this.Hits;
+                        int barsNow = this.schedulerBars > 0 ? this.schedulerBars : this.Bars;
+                        int totalStepsNow = Math.Max(1, hitsPerBarNow * Math.Max(1, barsNow));
+                        if (hitsPerBarNow <= 0)
                         {
-                            hitsNow = 1;
+                            hitsPerBarNow = 1;
                         }
 
-                        List<int> activeTracks = this.GetActiveTrackIndicesForStep(stepIndex % hitsNow);
+                        List<int> activeTracks = this.GetActiveTrackIndicesForStep(stepIndex % totalStepsNow);
                         List<int> scheduledTracks = this.SelectTracksForStep(activeTracks, stepIndex);
                         float stepGain = ComputeStepGain(scheduledTracks.Count);
 
@@ -829,7 +861,7 @@ namespace ModularAudience.Forms.Modules
                         }
 
                         // schedule UI update to run exactly at nextScheduledTime
-                        int scheduledUiStep = stepIndex % hitsNow;
+                        int scheduledUiStep = stepIndex % totalStepsNow;
                         DateTimeOffset uiUpdateTime = nextScheduledTime;
                         _ = Task.Run(async () =>
                         {
@@ -849,7 +881,7 @@ namespace ModularAudience.Forms.Modules
                                 {
                                     this.BeginInvoke((MethodInvoker) (() =>
                                     {
-                                        this.HandleCurrentStepUI(scheduledUiStep, this.Hits);
+                                         this.HandleCurrentStepUI(scheduledUiStep, this.TotalSteps);
                                         this.currentStep = scheduledUiStep;
                                     }));
                                 }
@@ -858,17 +890,17 @@ namespace ModularAudience.Forms.Modules
                         }, cancellationToken);
 
                         // Schritt vorwärts: Intervall aus aktuellen Scheduler-Werten berechnen
-                        int intervalMs = ComputeIntervalMsFromValues(
-                            this.schedulerBpm > 0 ? this.schedulerBpm : this.Bpm,
-                            this.schedulerHits > 0 ? this.schedulerHits : this.Hits);
+                        TimeSpan interval = ComputeIntervalFromValues(
+                            bpmNow,
+                            hitsPerBarNow);
 
-                        nextScheduledTime = nextScheduledTime + TimeSpan.FromMilliseconds(intervalMs);
+                        nextScheduledTime += interval;
                         stepIndex++;
 
                         // Reroll-Logik: wenn RerollInterval > 0, zählen wir abgeschlossene Pattern-Zyklen
                         try
                         {
-                            int hitsForCycle = hitsNow;
+                            int hitsForCycle = totalStepsNow;
                             if (hitsForCycle > 0 && (stepIndex % hitsForCycle) == 0)
                             {
                                 // Wir sind am Ende eines vollen Durchlaufs (hits Schritte)
@@ -1062,6 +1094,7 @@ namespace ModularAudience.Forms.Modules
             // initiale Scheduler-Werte von UI übernehmen (auf UI-Thread)
             this.schedulerBpm = this.Bpm;
             this.schedulerHits = this.Hits;
+            this.schedulerBars = this.Bars;
 
             // Reroll-Countdown neu initialisieren, falls RerollInterval aktiv ist
             try
@@ -1176,6 +1209,8 @@ namespace ModularAudience.Forms.Modules
         {
             // UI-state sicher erfassen (auf UI-Thread)
             int hits = this.Hits;
+            int bars = this.Bars;
+            int totalSteps = Math.Max(1, hits * bars);
             float bpm = this.Bpm;
             int sampleRate = 44100;
             int channels = 2;
@@ -1215,7 +1250,7 @@ namespace ModularAudience.Forms.Modules
 
             // Dauer / Samples berechnen
             float secondsPerStep = 60f / bpm * 4f / hits; // 4/4-Takt
-            int totalSamples = (int) (secondsPerStep * hits * sampleRate);
+            int totalSamples = (int) (secondsPerStep * totalSteps * sampleRate);
             if (totalSamples <= 0)
             {
                 totalSamples = 1;
@@ -1227,7 +1262,7 @@ namespace ModularAudience.Forms.Modules
                 var mix = new float[totalSamples * channels];
 
                 int usableTracks = Math.Min(audioSnapshots.Count, patternStates.Count);
-                for (int step = 0; step < hits; step++)
+                for (int step = 0; step < totalSteps; step++)
                 {
                     List<int> activeTracks = GetActiveTrackIndicesForStep(patternStates, step);
                     if (activeTracks.Count == 0)
@@ -1293,7 +1328,7 @@ namespace ModularAudience.Forms.Modules
                 Data = mixBuffer,
                 SampleRate = sampleRate,
                 Channels = channels,
-                Duration = TimeSpan.FromSeconds(secondsPerStep * hits),
+                Duration = TimeSpan.FromSeconds(secondsPerStep * totalSteps),
                 Length = mixBuffer.Length,
                 BitDepth = 32,
                 Bpm = bpm
@@ -1406,10 +1441,14 @@ namespace ModularAudience.Forms.Modules
             this.panel_pattern.Margin = Padding.Empty;
 
             PatternLayoutInfo layout = this.GetPatternLayout();
-            bool needsScroll = layout.ContentHeight > this.panel_pattern.ClientSize.Height;
+            bool needsVerticalScroll = layout.ContentHeight > this.panel_pattern.ClientSize.Height;
+            bool needsHorizontalScroll = layout.ContentWidth > this.panel_pattern.ClientSize.Width;
+            bool needsScroll = needsVerticalScroll || needsHorizontalScroll;
             this.panel_pattern.AutoScroll = needsScroll;
             this.panel_pattern.AutoScrollMinSize = needsScroll
-                ? new Size(0, Math.Max(0, layout.ContentHeight))
+                ? new Size(
+                    needsHorizontalScroll ? Math.Max(0, layout.ContentWidth) : 0,
+                    needsVerticalScroll ? Math.Max(0, layout.ContentHeight) : 0)
                 : Size.Empty;
 
             if (!needsScroll)
@@ -1417,17 +1456,11 @@ namespace ModularAudience.Forms.Modules
                 this.panel_pattern.AutoScrollPosition = Point.Empty;
             }
 
-            try
-            {
-                this.panel_pattern.HorizontalScroll.Enabled = false;
-                this.panel_pattern.HorizontalScroll.Visible = false;
-            }
-            catch { }
         }
 
         private PatternLayoutInfo GetPatternLayout()
         {
-            int hits = Math.Max(1, this.Hits);
+            int totalSteps = this.TotalSteps;
             int rowCount = this.patternRows.Count;
             int viewportWidth = Math.Max(64, this.panel_pattern.ClientSize.Width);
             int viewportHeight = Math.Max(80, this.panel_pattern.ClientSize.Height);
@@ -1447,19 +1480,19 @@ namespace ModularAudience.Forms.Modules
                 availableWidth = Math.Max(64, availableWidth - SystemInformation.VerticalScrollBarWidth);
             }
 
-            int spacingWidth = Math.Max(0, (hits - 1) * PatternStepSpacing);
+            int spacingWidth = Math.Max(0, (totalSteps - 1) * PatternStepSpacing);
             int nameWidth = Math.Min(PatternNameMaxWidth, Math.Max(PatternNameMinWidth, availableWidth / 3));
-            int stepWidth = Math.Max(PatternStepMinWidth, (availableWidth - nameWidth - PatternPadding - spacingWidth) / Math.Max(1, hits));
+            int stepWidth = Math.Max(PatternStepMinWidth, (availableWidth - nameWidth - PatternPadding - spacingWidth) / Math.Max(1, totalSteps));
 
             if (stepWidth == PatternStepMinWidth)
             {
-                int targetNameWidth = Math.Max(96, availableWidth - (hits * stepWidth) - spacingWidth - PatternPadding);
+                int targetNameWidth = Math.Max(96, availableWidth - (totalSteps * stepWidth) - spacingWidth - PatternPadding);
                 nameWidth = Math.Min(nameWidth, targetNameWidth);
-                stepWidth = Math.Max(PatternStepMinWidth, (availableWidth - nameWidth - PatternPadding - spacingWidth) / Math.Max(1, hits));
+                stepWidth = Math.Max(PatternStepMinWidth, (availableWidth - nameWidth - PatternPadding - spacingWidth) / Math.Max(1, totalSteps));
             }
 
-            int contentWidth = nameWidth + PatternPadding + (hits * stepWidth) + spacingWidth;
-            bool showStepNumbers = hits <= 20 && stepWidth >= 22 && rowHeight >= 24;
+            int contentWidth = nameWidth + PatternPadding + (totalSteps * stepWidth) + spacingWidth;
+            bool showStepNumbers = totalSteps <= 20 && stepWidth >= 22 && rowHeight >= 24;
 
             return new PatternLayoutInfo(contentWidth, contentHeight, rowHeight, nameWidth, stepWidth, showStepNumbers);
         }
@@ -1510,7 +1543,7 @@ namespace ModularAudience.Forms.Modules
 
         private int GetStepIndexFromPoint(Point contentPoint, int rowIndex, PatternLayoutInfo layout)
         {
-            for (int step = 0; step < Math.Max(1, this.Hits); step++)
+            for (int step = 0; step < this.TotalSteps; step++)
             {
                 if (this.GetStepBounds(rowIndex, step, layout).Contains(contentPoint))
                 {
@@ -1634,22 +1667,23 @@ namespace ModularAudience.Forms.Modules
             }
 
             int hits = Math.Max(1, this.Hits);
+            int totalSteps = this.TotalSteps;
             double density = this.GetRowDensity((double) this.numericUpDown_randomDensity.Value / 100d, (double) this.numericUpDown_randomVariation.Value / 100d);
             double accent = (double) this.numericUpDown_randomAccent.Value / 100d;
             double streak = (double) this.numericUpDown_randomStreak.Value / 100d;
 
             Array.Clear(row.Steps, 0, row.Steps.Length);
-            for (int step = 0; step < hits; step++)
+            for (int step = 0; step < totalSteps; step++)
             {
-                if (this.random.NextDouble() < this.GetStepChance(density, accent, step, hits))
+                if (this.random.NextDouble() < this.GetStepChance(density, accent, step % hits, hits))
                 {
-                    this.SetRandomizedStep(row, step, hits, streak);
+                    this.SetRandomizedStep(row, step, totalSteps, streak);
                 }
             }
 
             if (!row.Steps.Any(step => step))
             {
-                row.Steps[this.GetPreferredFallbackStep(hits)] = true;
+                row.Steps[this.GetPreferredFallbackStep(totalSteps)] = true;
             }
 
             this.panel_pattern.Invalidate();
@@ -1821,7 +1855,7 @@ namespace ModularAudience.Forms.Modules
                             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
                     }
 
-                    int visibleStepCount = Math.Min(Math.Max(1, this.Hits), row.Steps.Length);
+                    int visibleStepCount = Math.Min(this.TotalSteps, row.Steps.Length);
                     for (int step = 0; step < visibleStepCount; step++)
                     {
                         bool isCurrentStep = this.isPlaying && step == this.currentStep;
@@ -2064,14 +2098,15 @@ namespace ModularAudience.Forms.Modules
 
 
 
-        private static int ComputeIntervalMsFromValues(float bpm, int hits)
+        private static TimeSpan ComputeIntervalFromValues(float bpm, int hits)
         {
             if (bpm <= 0f || hits <= 0)
             {
-                return 100;
+                return TimeSpan.FromMilliseconds(100);
             }
 
-            return (int) (60000.0f / bpm * 4.0f / hits);
+            double intervalMs = 60000.0 / bpm * 4.0 / hits;
+            return TimeSpan.FromTicks((long) Math.Round(intervalMs * TimeSpan.TicksPerMillisecond));
         }
 
         private void Bpm_ValueChanged(object? sender, EventArgs e)

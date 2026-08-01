@@ -28,330 +28,374 @@
         /// </summary>
         private void InitializeComponent()
         {
-            panel_pattern = new BufferedPatternPanel();
-            button_hit = new Button();
-            label_info_dragndrop = new Label();
-            button_playback = new Button();
-            numericUpDown_bpm = new NumericUpDown();
-            domainUpDown_hits = new DomainUpDown();
-            label_info_bpm = new Label();
-            label_info_hits = new Label();
-            numericUpDown_volume = new NumericUpDown();
-            label_info_volume = new Label();
-            button_export = new Button();
-            numericUpDown_rerollInterval = new NumericUpDown();
-            label_info_randomDensity = new Label();
-            numericUpDown_randomDensity = new NumericUpDown();
-            label_info_randomAccent = new Label();
-            numericUpDown_randomAccent = new NumericUpDown();
-            label_info_randomStreak = new Label();
-            numericUpDown_randomStreak = new NumericUpDown();
-            label_info_randomVariation = new Label();
-            numericUpDown_randomVariation = new NumericUpDown();
-            button_randomize = new Button();
-            label_info_reroll = new Label();
-            checkBox_interleaved = new CheckBox();
-            checkBox_launchpad = new CheckBox();
-            panel_pattern.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_bpm).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_volume).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_rerollInterval).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_randomDensity).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_randomAccent).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_randomStreak).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_randomVariation).BeginInit();
-            SuspendLayout();
+            this.panel_pattern = new BufferedPatternPanel();
+            this.button_hit = new Button();
+            this.label_info_dragndrop = new Label();
+            this.button_playback = new Button();
+            this.numericUpDown_bpm = new NumericUpDown();
+            this.domainUpDown_hits = new DomainUpDown();
+            this.label_info_bpm = new Label();
+            this.label_info_hits = new Label();
+            this.numericUpDown_volume = new NumericUpDown();
+            this.label_info_volume = new Label();
+            this.button_export = new Button();
+            this.numericUpDown_rerollInterval = new NumericUpDown();
+            this.label_info_randomDensity = new Label();
+            this.numericUpDown_randomDensity = new NumericUpDown();
+            this.label_info_randomAccent = new Label();
+            this.numericUpDown_randomAccent = new NumericUpDown();
+            this.label_info_randomStreak = new Label();
+            this.numericUpDown_randomStreak = new NumericUpDown();
+            this.label_info_randomVariation = new Label();
+            this.numericUpDown_randomVariation = new NumericUpDown();
+            this.button_randomize = new Button();
+            this.label_info_reroll = new Label();
+            this.checkBox_interleaved = new CheckBox();
+            this.checkBox_launchpad = new CheckBox();
+            this.label_info_bars = new Label();
+            this.domainUpDown_bars = new DomainUpDown();
+            this.panel_pattern.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_bpm).BeginInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_volume).BeginInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_rerollInterval).BeginInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_randomDensity).BeginInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_randomAccent).BeginInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_randomStreak).BeginInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_randomVariation).BeginInit();
+            this.SuspendLayout();
             // 
             // panel_pattern
             // 
-            panel_pattern.AllowDrop = true;
-            panel_pattern.BackColor = SystemColors.ControlLight;
-            panel_pattern.Controls.Add(button_hit);
-            panel_pattern.Location = new Point(12, 66);
-            panel_pattern.Name = "panel_pattern";
-            panel_pattern.Size = new Size(680, 50);
-            panel_pattern.TabIndex = 0;
-            panel_pattern.DragDrop += DrumRollEditor_DragDrop;
-            panel_pattern.DragEnter += DrumRollEditor_DragEnter;
-            panel_pattern.Paint += panel_pattern_Paint;
-            panel_pattern.MouseClick += panel_pattern_MouseClick;
+            this.panel_pattern.AllowDrop = true;
+            this.panel_pattern.BackColor = SystemColors.ControlLight;
+            this.panel_pattern.Controls.Add(this.button_hit);
+            this.panel_pattern.Location = new Point(12, 66);
+            this.panel_pattern.Name = "panel_pattern";
+            this.panel_pattern.Size = new Size(680, 50);
+            this.panel_pattern.TabIndex = 0;
+            this.panel_pattern.DragDrop += this.DrumRollEditor_DragDrop;
+            this.panel_pattern.DragEnter += this.DrumRollEditor_DragEnter;
+            this.panel_pattern.Paint += this.panel_pattern_Paint;
+            this.panel_pattern.MouseClick += this.panel_pattern_MouseClick;
             // 
             // button_hit
             // 
-            button_hit.Location = new Point(3, 3);
-            button_hit.Name = "button_hit";
-            button_hit.Size = new Size(35, 44);
-            button_hit.TabIndex = 1;
-            button_hit.Text = "0";
-            button_hit.UseVisualStyleBackColor = true;
+            this.button_hit.Location = new Point(3, 3);
+            this.button_hit.Name = "button_hit";
+            this.button_hit.Size = new Size(35, 44);
+            this.button_hit.TabIndex = 1;
+            this.button_hit.Text = "0";
+            this.button_hit.UseVisualStyleBackColor = true;
             // 
             // label_info_dragndrop
             // 
-            label_info_dragndrop.AllowDrop = true;
-            label_info_dragndrop.AutoSize = true;
-            label_info_dragndrop.Location = new Point(270, 53);
-            label_info_dragndrop.Name = "label_info_dragndrop";
-            label_info_dragndrop.Size = new Size(138, 15);
-            label_info_dragndrop.TabIndex = 10;
-            label_info_dragndrop.Text = "Drop Sample here to add";
-            label_info_dragndrop.DragDrop += DrumRollEditor_DragDrop;
-            label_info_dragndrop.DragEnter += DrumRollEditor_DragEnter;
+            this.label_info_dragndrop.AllowDrop = true;
+            this.label_info_dragndrop.AutoSize = true;
+            this.label_info_dragndrop.Location = new Point(270, 53);
+            this.label_info_dragndrop.Name = "label_info_dragndrop";
+            this.label_info_dragndrop.Size = new Size(138, 15);
+            this.label_info_dragndrop.TabIndex = 10;
+            this.label_info_dragndrop.Text = "Drop Sample here to add";
+            this.label_info_dragndrop.DragDrop += this.DrumRollEditor_DragDrop;
+            this.label_info_dragndrop.DragEnter += this.DrumRollEditor_DragEnter;
             // 
             // button_playback
             // 
-            button_playback.Location = new Point(11, 28);
-            button_playback.Margin = new Padding(2);
-            button_playback.Name = "button_playback";
-            button_playback.Size = new Size(23, 23);
-            button_playback.TabIndex = 5;
-            button_playback.TabStop = false;
-            button_playback.Tag = "■";
-            button_playback.Text = "▶";
-            button_playback.UseVisualStyleBackColor = true;
-            button_playback.Click += button_playback_Click;
+            this.button_playback.Location = new Point(11, 28);
+            this.button_playback.Margin = new Padding(2);
+            this.button_playback.Name = "button_playback";
+            this.button_playback.Size = new Size(23, 23);
+            this.button_playback.TabIndex = 5;
+            this.button_playback.TabStop = false;
+            this.button_playback.Tag = "■";
+            this.button_playback.Text = "▶";
+            this.button_playback.UseVisualStyleBackColor = true;
+            this.button_playback.Click += this.button_playback_Click;
             // 
             // numericUpDown_bpm
             // 
-            numericUpDown_bpm.DecimalPlaces = 3;
-            numericUpDown_bpm.Increment = new decimal(new int[] { 5, 0, 0, 65536 });
-            numericUpDown_bpm.Location = new Point(39, 27);
-            numericUpDown_bpm.Maximum = new decimal(new int[] { 360, 0, 0, 0 });
-            numericUpDown_bpm.Minimum = new decimal(new int[] { 15, 0, 0, 0 });
-            numericUpDown_bpm.Name = "numericUpDown_bpm";
-            numericUpDown_bpm.ReadOnly = true;
-            numericUpDown_bpm.Size = new Size(90, 23);
-            numericUpDown_bpm.TabIndex = 6;
-            numericUpDown_bpm.TabStop = false;
-            numericUpDown_bpm.Value = new decimal(new int[] { 90, 0, 0, 0 });
+            this.numericUpDown_bpm.DecimalPlaces = 3;
+            this.numericUpDown_bpm.Increment = new decimal(new int[] { 5, 0, 0, 65536 });
+            this.numericUpDown_bpm.Location = new Point(39, 27);
+            this.numericUpDown_bpm.Maximum = new decimal(new int[] { 360, 0, 0, 0 });
+            this.numericUpDown_bpm.Minimum = new decimal(new int[] { 15, 0, 0, 0 });
+            this.numericUpDown_bpm.Name = "numericUpDown_bpm";
+            this.numericUpDown_bpm.ReadOnly = true;
+            this.numericUpDown_bpm.Size = new Size(90, 23);
+            this.numericUpDown_bpm.TabIndex = 6;
+            this.numericUpDown_bpm.TabStop = false;
+            this.numericUpDown_bpm.Value = new decimal(new int[] { 90, 0, 0, 0 });
             // 
             // domainUpDown_hits
             // 
-            domainUpDown_hits.Items.Add("32");
-            domainUpDown_hits.Items.Add("28");
-            domainUpDown_hits.Items.Add("24");
-            domainUpDown_hits.Items.Add("20");
-            domainUpDown_hits.Items.Add("16");
-            domainUpDown_hits.Items.Add("12");
-            domainUpDown_hits.Items.Add("8");
-            domainUpDown_hits.Items.Add("4");
-            domainUpDown_hits.Location = new Point(140, 27);
-            domainUpDown_hits.Name = "domainUpDown_hits";
-            domainUpDown_hits.ReadOnly = true;
-            domainUpDown_hits.Size = new Size(55, 23);
-            domainUpDown_hits.TabIndex = 7;
-            domainUpDown_hits.TabStop = false;
-            domainUpDown_hits.Text = "Hits";
-            domainUpDown_hits.SelectedItemChanged += domainUpDown_hits_SelectedItemChanged;
+            this.domainUpDown_hits.Items.Add("32");
+            this.domainUpDown_hits.Items.Add("28");
+            this.domainUpDown_hits.Items.Add("24");
+            this.domainUpDown_hits.Items.Add("20");
+            this.domainUpDown_hits.Items.Add("16");
+            this.domainUpDown_hits.Items.Add("12");
+            this.domainUpDown_hits.Items.Add("8");
+            this.domainUpDown_hits.Items.Add("4");
+            this.domainUpDown_hits.Location = new Point(140, 27);
+            this.domainUpDown_hits.Name = "domainUpDown_hits";
+            this.domainUpDown_hits.ReadOnly = true;
+            this.domainUpDown_hits.Size = new Size(55, 23);
+            this.domainUpDown_hits.TabIndex = 7;
+            this.domainUpDown_hits.TabStop = false;
+            this.domainUpDown_hits.Text = "Hits";
+            this.domainUpDown_hits.SelectedItemChanged += this.domainUpDown_hits_SelectedItemChanged;
             // 
             // label_info_bpm
             // 
-            label_info_bpm.AutoSize = true;
-            label_info_bpm.Location = new Point(39, 9);
-            label_info_bpm.Name = "label_info_bpm";
-            label_info_bpm.Size = new Size(32, 15);
-            label_info_bpm.TabIndex = 8;
-            label_info_bpm.Text = "BPM";
+            this.label_info_bpm.AutoSize = true;
+            this.label_info_bpm.Location = new Point(39, 9);
+            this.label_info_bpm.Name = "label_info_bpm";
+            this.label_info_bpm.Size = new Size(32, 15);
+            this.label_info_bpm.TabIndex = 8;
+            this.label_info_bpm.Text = "BPM";
             // 
             // label_info_hits
             // 
-            label_info_hits.AutoSize = true;
-            label_info_hits.Location = new Point(140, 9);
-            label_info_hits.Name = "label_info_hits";
-            label_info_hits.Size = new Size(28, 15);
-            label_info_hits.TabIndex = 9;
-            label_info_hits.Text = "Hits";
+            this.label_info_hits.AutoSize = true;
+            this.label_info_hits.Location = new Point(140, 9);
+            this.label_info_hits.Name = "label_info_hits";
+            this.label_info_hits.Size = new Size(28, 15);
+            this.label_info_hits.TabIndex = 9;
+            this.label_info_hits.Text = "Hits";
             // 
             // numericUpDown_volume
             // 
-            numericUpDown_volume.Location = new Point(201, 27);
-            numericUpDown_volume.Name = "numericUpDown_volume";
-            numericUpDown_volume.ReadOnly = true;
-            numericUpDown_volume.Size = new Size(55, 23);
-            numericUpDown_volume.TabIndex = 11;
-            numericUpDown_volume.TabStop = false;
-            numericUpDown_volume.Value = new decimal(new int[] { 80, 0, 0, 0 });
+            this.numericUpDown_volume.Location = new Point(649, 37);
+            this.numericUpDown_volume.Name = "numericUpDown_volume";
+            this.numericUpDown_volume.ReadOnly = true;
+            this.numericUpDown_volume.Size = new Size(43, 23);
+            this.numericUpDown_volume.TabIndex = 11;
+            this.numericUpDown_volume.TabStop = false;
+            this.numericUpDown_volume.Value = new decimal(new int[] { 80, 0, 0, 0 });
             // 
             // label_info_volume
             // 
-            label_info_volume.AutoSize = true;
-            label_info_volume.Location = new Point(201, 9);
-            label_info_volume.Name = "label_info_volume";
-            label_info_volume.Size = new Size(47, 15);
-            label_info_volume.TabIndex = 12;
-            label_info_volume.Text = "Volume";
+            this.label_info_volume.AutoSize = true;
+            this.label_info_volume.Location = new Point(617, 39);
+            this.label_info_volume.Name = "label_info_volume";
+            this.label_info_volume.Size = new Size(26, 15);
+            this.label_info_volume.TabIndex = 12;
+            this.label_info_volume.Text = "Vol.";
             // 
             // button_export
             // 
-            button_export.BackColor = Color.FromArgb(192, 255, 255);
-            button_export.Location = new Point(617, 12);
-            button_export.Name = "button_export";
-            button_export.Size = new Size(75, 23);
-            button_export.TabIndex = 13;
-            button_export.TabStop = false;
-            button_export.Text = "Export";
-            button_export.UseVisualStyleBackColor = false;
-            button_export.Click += button_export_Click;
+            this.button_export.BackColor = Color.FromArgb(  192,   255,   255);
+            this.button_export.Location = new Point(617, 12);
+            this.button_export.Name = "button_export";
+            this.button_export.Size = new Size(75, 23);
+            this.button_export.TabIndex = 13;
+            this.button_export.TabStop = false;
+            this.button_export.Text = "Export";
+            this.button_export.UseVisualStyleBackColor = false;
+            this.button_export.Click += this.button_export_Click;
             // 
             // numericUpDown_rerollInterval
             // 
-            numericUpDown_rerollInterval.Location = new Point(571, 27);
-            numericUpDown_rerollInterval.Maximum = new decimal(new int[] { 32, 0, 0, 0 });
-            numericUpDown_rerollInterval.Name = "numericUpDown_rerollInterval";
-            numericUpDown_rerollInterval.Size = new Size(40, 23);
-            numericUpDown_rerollInterval.TabIndex = 14;
+            this.numericUpDown_rerollInterval.Location = new Point(571, 27);
+            this.numericUpDown_rerollInterval.Maximum = new decimal(new int[] { 32, 0, 0, 0 });
+            this.numericUpDown_rerollInterval.Name = "numericUpDown_rerollInterval";
+            this.numericUpDown_rerollInterval.Size = new Size(40, 23);
+            this.numericUpDown_rerollInterval.TabIndex = 14;
             // 
             // label_info_randomDensity
             // 
-            label_info_randomDensity.AutoSize = true;
-            label_info_randomDensity.Location = new Point(262, 9);
-            label_info_randomDensity.Name = "label_info_randomDensity";
-            label_info_randomDensity.Size = new Size(39, 15);
-            label_info_randomDensity.TabIndex = 15;
-            label_info_randomDensity.Text = "Dense";
+            this.label_info_randomDensity.AutoSize = true;
+            this.label_info_randomDensity.Location = new Point(262, 9);
+            this.label_info_randomDensity.Name = "label_info_randomDensity";
+            this.label_info_randomDensity.Size = new Size(39, 15);
+            this.label_info_randomDensity.TabIndex = 15;
+            this.label_info_randomDensity.Text = "Dense";
             // 
             // numericUpDown_randomDensity
             // 
-            numericUpDown_randomDensity.Location = new Point(262, 27);
-            numericUpDown_randomDensity.Name = "numericUpDown_randomDensity";
-            numericUpDown_randomDensity.Size = new Size(50, 23);
-            numericUpDown_randomDensity.TabIndex = 16;
-            numericUpDown_randomDensity.Value = new decimal(new int[] { 45, 0, 0, 0 });
+            this.numericUpDown_randomDensity.Location = new Point(262, 27);
+            this.numericUpDown_randomDensity.Name = "numericUpDown_randomDensity";
+            this.numericUpDown_randomDensity.Size = new Size(50, 23);
+            this.numericUpDown_randomDensity.TabIndex = 16;
+            this.numericUpDown_randomDensity.Value = new decimal(new int[] { 45, 0, 0, 0 });
             // 
             // label_info_randomAccent
             // 
-            label_info_randomAccent.AutoSize = true;
-            label_info_randomAccent.Location = new Point(318, 9);
-            label_info_randomAccent.Name = "label_info_randomAccent";
-            label_info_randomAccent.Size = new Size(44, 15);
-            label_info_randomAccent.TabIndex = 17;
-            label_info_randomAccent.Text = "Accent";
+            this.label_info_randomAccent.AutoSize = true;
+            this.label_info_randomAccent.Location = new Point(318, 9);
+            this.label_info_randomAccent.Name = "label_info_randomAccent";
+            this.label_info_randomAccent.Size = new Size(44, 15);
+            this.label_info_randomAccent.TabIndex = 17;
+            this.label_info_randomAccent.Text = "Accent";
             // 
             // numericUpDown_randomAccent
             // 
-            numericUpDown_randomAccent.Location = new Point(318, 27);
-            numericUpDown_randomAccent.Name = "numericUpDown_randomAccent";
-            numericUpDown_randomAccent.Size = new Size(50, 23);
-            numericUpDown_randomAccent.TabIndex = 18;
-            numericUpDown_randomAccent.Value = new decimal(new int[] { 30, 0, 0, 0 });
+            this.numericUpDown_randomAccent.Location = new Point(318, 27);
+            this.numericUpDown_randomAccent.Name = "numericUpDown_randomAccent";
+            this.numericUpDown_randomAccent.Size = new Size(50, 23);
+            this.numericUpDown_randomAccent.TabIndex = 18;
+            this.numericUpDown_randomAccent.Value = new decimal(new int[] { 30, 0, 0, 0 });
             // 
             // label_info_randomStreak
             // 
-            label_info_randomStreak.AutoSize = true;
-            label_info_randomStreak.Location = new Point(374, 9);
-            label_info_randomStreak.Name = "label_info_randomStreak";
-            label_info_randomStreak.Size = new Size(34, 15);
-            label_info_randomStreak.TabIndex = 19;
-            label_info_randomStreak.Text = "Burst";
+            this.label_info_randomStreak.AutoSize = true;
+            this.label_info_randomStreak.Location = new Point(374, 9);
+            this.label_info_randomStreak.Name = "label_info_randomStreak";
+            this.label_info_randomStreak.Size = new Size(34, 15);
+            this.label_info_randomStreak.TabIndex = 19;
+            this.label_info_randomStreak.Text = "Burst";
             // 
             // numericUpDown_randomStreak
             // 
-            numericUpDown_randomStreak.Location = new Point(374, 27);
-            numericUpDown_randomStreak.Name = "numericUpDown_randomStreak";
-            numericUpDown_randomStreak.Size = new Size(50, 23);
-            numericUpDown_randomStreak.TabIndex = 20;
-            numericUpDown_randomStreak.Value = new decimal(new int[] { 15, 0, 0, 0 });
+            this.numericUpDown_randomStreak.Location = new Point(374, 27);
+            this.numericUpDown_randomStreak.Name = "numericUpDown_randomStreak";
+            this.numericUpDown_randomStreak.Size = new Size(50, 23);
+            this.numericUpDown_randomStreak.TabIndex = 20;
+            this.numericUpDown_randomStreak.Value = new decimal(new int[] { 15, 0, 0, 0 });
             // 
             // label_info_randomVariation
             // 
-            label_info_randomVariation.AutoSize = true;
-            label_info_randomVariation.Location = new Point(430, 9);
-            label_info_randomVariation.Name = "label_info_randomVariation";
-            label_info_randomVariation.Size = new Size(23, 15);
-            label_info_randomVariation.TabIndex = 21;
-            label_info_randomVariation.Text = "Var";
+            this.label_info_randomVariation.AutoSize = true;
+            this.label_info_randomVariation.Location = new Point(430, 9);
+            this.label_info_randomVariation.Name = "label_info_randomVariation";
+            this.label_info_randomVariation.Size = new Size(23, 15);
+            this.label_info_randomVariation.TabIndex = 21;
+            this.label_info_randomVariation.Text = "Var";
             // 
             // numericUpDown_randomVariation
             // 
-            numericUpDown_randomVariation.Location = new Point(430, 27);
-            numericUpDown_randomVariation.Name = "numericUpDown_randomVariation";
-            numericUpDown_randomVariation.Size = new Size(50, 23);
-            numericUpDown_randomVariation.TabIndex = 22;
-            numericUpDown_randomVariation.Value = new decimal(new int[] { 25, 0, 0, 0 });
+            this.numericUpDown_randomVariation.Location = new Point(430, 27);
+            this.numericUpDown_randomVariation.Name = "numericUpDown_randomVariation";
+            this.numericUpDown_randomVariation.Size = new Size(50, 23);
+            this.numericUpDown_randomVariation.TabIndex = 22;
+            this.numericUpDown_randomVariation.Value = new decimal(new int[] { 25, 0, 0, 0 });
             // 
             // button_randomize
             // 
-            button_randomize.Location = new Point(490, 27);
-            button_randomize.Name = "button_randomize";
-            button_randomize.Size = new Size(75, 23);
-            button_randomize.TabIndex = 23;
-            button_randomize.Text = "Random";
-            button_randomize.UseVisualStyleBackColor = true;
-            button_randomize.Click += button_randomize_Click;
+            this.button_randomize.Location = new Point(490, 27);
+            this.button_randomize.Name = "button_randomize";
+            this.button_randomize.Size = new Size(75, 23);
+            this.button_randomize.TabIndex = 23;
+            this.button_randomize.Text = "Random";
+            this.button_randomize.UseVisualStyleBackColor = true;
+            this.button_randomize.Click += this.button_randomize_Click;
             // 
             // label_info_reroll
             // 
-            label_info_reroll.AutoSize = true;
-            label_info_reroll.Location = new Point(571, 9);
-            label_info_reroll.Name = "label_info_reroll";
-            label_info_reroll.Size = new Size(37, 15);
-            label_info_reroll.TabIndex = 24;
-            label_info_reroll.Text = "Reroll";
+            this.label_info_reroll.AutoSize = true;
+            this.label_info_reroll.Location = new Point(571, 9);
+            this.label_info_reroll.Name = "label_info_reroll";
+            this.label_info_reroll.Size = new Size(37, 15);
+            this.label_info_reroll.TabIndex = 24;
+            this.label_info_reroll.Text = "Reroll";
             // 
             // checkBox_interleaved
             // 
-            checkBox_interleaved.AutoSize = true;
-            checkBox_interleaved.Location = new Point(481, 2);
-            checkBox_interleaved.Name = "checkBox_interleaved";
-            checkBox_interleaved.Size = new Size(84, 19);
-            checkBox_interleaved.TabIndex = 25;
-            checkBox_interleaved.Text = "Interleaved";
-            checkBox_interleaved.UseVisualStyleBackColor = true;
-            checkBox_interleaved.CheckedChanged += checkBox_interleaved_CheckedChanged;
+            this.checkBox_interleaved.AutoSize = true;
+            this.checkBox_interleaved.Location = new Point(481, 2);
+            this.checkBox_interleaved.Name = "checkBox_interleaved";
+            this.checkBox_interleaved.Size = new Size(84, 19);
+            this.checkBox_interleaved.TabIndex = 25;
+            this.checkBox_interleaved.Text = "Interleaved";
+            this.checkBox_interleaved.UseVisualStyleBackColor = true;
+            this.checkBox_interleaved.CheckedChanged += this.checkBox_interleaved_CheckedChanged;
             // 
             // checkBox_launchpad
             // 
-            checkBox_launchpad.AutoSize = true;
-            checkBox_launchpad.Location = new Point(371, 2);
-            checkBox_launchpad.Name = "checkBox_launchpad";
-            checkBox_launchpad.Size = new Size(104, 19);
-            checkBox_launchpad.TabIndex = 26;
-            checkBox_launchpad.Text = "Launchpad";
-            checkBox_launchpad.UseVisualStyleBackColor = true;
+            this.checkBox_launchpad.AutoSize = true;
+            this.checkBox_launchpad.Location = new Point(371, 2);
+            this.checkBox_launchpad.Name = "checkBox_launchpad";
+            this.checkBox_launchpad.Size = new Size(85, 19);
+            this.checkBox_launchpad.TabIndex = 26;
+            this.checkBox_launchpad.Text = "Launchpad";
+            this.checkBox_launchpad.UseVisualStyleBackColor = true;
+            // 
+            // label_info_bars
+            // 
+            this.label_info_bars.AutoSize = true;
+            this.label_info_bars.Location = new Point(201, 9);
+            this.label_info_bars.Name = "label_info_bars";
+            this.label_info_bars.Size = new Size(29, 15);
+            this.label_info_bars.TabIndex = 28;
+            this.label_info_bars.Text = "Bars";
+            // 
+            // domainUpDown_bars
+            // 
+            this.domainUpDown_bars.Items.Add("20");
+            this.domainUpDown_bars.Items.Add("19");
+            this.domainUpDown_bars.Items.Add("18");
+            this.domainUpDown_bars.Items.Add("17");
+            this.domainUpDown_bars.Items.Add("16");
+            this.domainUpDown_bars.Items.Add("15");
+            this.domainUpDown_bars.Items.Add("14");
+            this.domainUpDown_bars.Items.Add("13");
+            this.domainUpDown_bars.Items.Add("12");
+            this.domainUpDown_bars.Items.Add("11");
+            this.domainUpDown_bars.Items.Add("10");
+            this.domainUpDown_bars.Items.Add("9");
+            this.domainUpDown_bars.Items.Add("8");
+            this.domainUpDown_bars.Items.Add("7");
+            this.domainUpDown_bars.Items.Add("6");
+            this.domainUpDown_bars.Items.Add("5");
+            this.domainUpDown_bars.Items.Add("4");
+            this.domainUpDown_bars.Items.Add("3");
+            this.domainUpDown_bars.Items.Add("2");
+            this.domainUpDown_bars.Items.Add("1");
+            this.domainUpDown_bars.Location = new Point(201, 27);
+            this.domainUpDown_bars.Name = "domainUpDown_bars";
+            this.domainUpDown_bars.ReadOnly = true;
+            this.domainUpDown_bars.Size = new Size(55, 23);
+            this.domainUpDown_bars.TabIndex = 27;
+            this.domainUpDown_bars.TabStop = false;
+            this.domainUpDown_bars.Text = "Bars";
+            this.domainUpDown_bars.SelectedItemChanged += this.domainUpDown_bars_SelectedItemChanged;
             // 
             // DrumRollEditor
             // 
-            AutoScaleDimensions = new SizeF(7F, 15F);
-            AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(704, 441);
-            Controls.Add(checkBox_launchpad);
-            Controls.Add(checkBox_interleaved);
-            Controls.Add(label_info_dragndrop);
-            Controls.Add(label_info_reroll);
-            Controls.Add(button_randomize);
-            Controls.Add(numericUpDown_randomVariation);
-            Controls.Add(label_info_randomVariation);
-            Controls.Add(numericUpDown_randomStreak);
-            Controls.Add(label_info_randomStreak);
-            Controls.Add(numericUpDown_randomAccent);
-            Controls.Add(label_info_randomAccent);
-            Controls.Add(numericUpDown_randomDensity);
-            Controls.Add(label_info_randomDensity);
-            Controls.Add(numericUpDown_rerollInterval);
-            Controls.Add(button_export);
-            Controls.Add(label_info_volume);
-            Controls.Add(numericUpDown_volume);
-            Controls.Add(label_info_hits);
-            Controls.Add(label_info_bpm);
-            Controls.Add(domainUpDown_hits);
-            Controls.Add(numericUpDown_bpm);
-            Controls.Add(button_playback);
-            Controls.Add(panel_pattern);
-            KeyPreview = true;
-            MaximizeBox = false;
-            MaximumSize = new Size(1280, 480);
-            MinimumSize = new Size(720, 480);
-            Name = "DrumRollEditor";
-            Text = "Drum Roll Editor";
-            panel_pattern.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_bpm).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_volume).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_rerollInterval).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_randomDensity).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_randomAccent).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_randomStreak).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown_randomVariation).EndInit();
-            ResumeLayout(false);
-            PerformLayout();
+            this.AutoScaleDimensions = new SizeF(7F, 15F);
+            this.AutoScaleMode = AutoScaleMode.Font;
+            this.ClientSize = new Size(704, 441);
+            this.Controls.Add(this.label_info_bars);
+            this.Controls.Add(this.domainUpDown_bars);
+            this.Controls.Add(this.checkBox_launchpad);
+            this.Controls.Add(this.checkBox_interleaved);
+            this.Controls.Add(this.label_info_dragndrop);
+            this.Controls.Add(this.label_info_reroll);
+            this.Controls.Add(this.button_randomize);
+            this.Controls.Add(this.numericUpDown_randomVariation);
+            this.Controls.Add(this.label_info_randomVariation);
+            this.Controls.Add(this.numericUpDown_randomStreak);
+            this.Controls.Add(this.label_info_randomStreak);
+            this.Controls.Add(this.numericUpDown_randomAccent);
+            this.Controls.Add(this.label_info_randomAccent);
+            this.Controls.Add(this.numericUpDown_randomDensity);
+            this.Controls.Add(this.label_info_randomDensity);
+            this.Controls.Add(this.numericUpDown_rerollInterval);
+            this.Controls.Add(this.button_export);
+            this.Controls.Add(this.label_info_volume);
+            this.Controls.Add(this.numericUpDown_volume);
+            this.Controls.Add(this.label_info_hits);
+            this.Controls.Add(this.label_info_bpm);
+            this.Controls.Add(this.domainUpDown_hits);
+            this.Controls.Add(this.numericUpDown_bpm);
+            this.Controls.Add(this.button_playback);
+            this.Controls.Add(this.panel_pattern);
+            this.KeyPreview = true;
+            this.MaximizeBox = false;
+            this.MaximumSize = new Size(1280, 480);
+            this.MinimumSize = new Size(720, 480);
+            this.Name = "DrumRollEditor";
+            this.Text = "Drum Roll Editor";
+            this.panel_pattern.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_bpm).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_volume).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_rerollInterval).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_randomDensity).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_randomAccent).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_randomStreak).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_randomVariation).EndInit();
+            this.ResumeLayout(false);
+            this.PerformLayout();
         }
 
         #endregion
@@ -380,5 +424,7 @@
         private Label label_info_reroll;
         private CheckBox checkBox_interleaved;
         private CheckBox checkBox_launchpad;
+        private Label label_info_bars;
+        private DomainUpDown domainUpDown_bars;
     }
 }
