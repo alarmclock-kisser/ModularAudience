@@ -13,10 +13,11 @@ public enum MidiInstrument
 
 public static class MidiAudioRenderer
 {
-    public static AudioObj Render(MidiFileData midi, int trackIndex, MidiInstrument instrument, double bpm, AudioObj? customSample = null, int sampleRate = 44100, CancellationToken cancellationToken = default)
+    public static AudioObj Render(MidiFileData midi, int trackIndex, MidiInstrument instrument, double bpm, AudioObj? customSample = null, int sampleRate = 44100, CancellationToken cancellationToken = default, double pitchFrequency = 440.0)
     {
         ArgumentNullException.ThrowIfNull(midi);
         bpm = Math.Clamp(bpm, 20.0, 400.0);
+        pitchFrequency = Math.Clamp(pitchFrequency, 1.0, 1000.0);
         MidiTrackData track = midi.Tracks.FirstOrDefault(candidate => candidate.Index == trackIndex) ?? throw new ArgumentOutOfRangeException(nameof(trackIndex));
         int channels = 2;
         double secondsPerTick = 60.0 / bpm / Math.Max(1, midi.TicksPerQuarterNote);
@@ -39,7 +40,7 @@ public static class MidiAudioRenderer
                 _ => 0.22f
             };
             float amplitude = Math.Clamp(note.Velocity / 127f, 0.05f, 1f) * instrumentGain;
-            double frequency = 440.0 * Math.Pow(2.0, (note.NoteNumber - 69) / 12.0);
+            double frequency = pitchFrequency * Math.Pow(2.0, (note.NoteNumber - 69) / 12.0);
             MixNote(output, frameCount, channels, sampleRate, startFrame, noteFrames, frequency, amplitude, instrument, customSample, random, cancellationToken);
         }
 

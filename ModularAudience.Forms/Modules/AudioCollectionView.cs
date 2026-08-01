@@ -1261,10 +1261,54 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            MidiFileData? midiData = await MidiFileData.ConvertAsync(track, maxWorkers: Environment.ProcessorCount, cancellationToken: default);
+            using MidiConversionPresetDialog presetDialog = new();
+            if (presetDialog.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
 
-            var window = new MidiWindow(null, midiData);
-            window.Show();
+            using CancellationTokenSource conversionCts = new();
+            ProgressDialog? progressDialog = null;
+            Progress<double> progress = new(value => progressDialog?.Report(value));
+            progressDialog = new(
+                title: "Converting audio to MIDI...",
+                progress: progress,
+                windowCloseDelay: 2.0d,
+                ct: conversionCts.Token,
+                cancellationSource: conversionCts);
+            Cursor previousCursor = Cursor.Current ?? Cursors.Default;
+            try
+            {
+                this.UseWaitCursor = true;
+                progressDialog.UseWaitCursor = true;
+                progressDialog.Show(this);
+                progressDialog.BringToFront();
+                MidiFileData? midiData = await MidiFileData.ConvertAsync(
+                    track,
+                    maxWorkers: Environment.ProcessorCount,
+                    cancellationToken: conversionCts.Token,
+                    progress: progress,
+                    preset: presetDialog.SelectedPreset);
+
+                progressDialog.Complete();
+                var window = new MidiWindow(null, midiData);
+                window.Show();
+            }
+            catch (OperationCanceledException) when (conversionCts.IsCancellationRequested)
+            {
+                progressDialog.Close();
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"MIDI conversion failed: {ex}");
+                progressDialog.Close();
+                MessageBox.Show(this, ex.Message, "MIDI conversion failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                this.UseWaitCursor = false;
+                Cursor.Current = previousCursor;
+            }
         }
     }
 }

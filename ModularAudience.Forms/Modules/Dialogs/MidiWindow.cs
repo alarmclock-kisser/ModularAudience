@@ -22,16 +22,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.Text = $"MIDI Renderer - {Path.GetFileNameWithoutExtension(this.midiFile.FilePath)}";
             this.numericUpDown_track.Maximum = Math.Max(1, this.tracks.Count);
             this.numericUpDown_track.Value = 1;
-            this.numericUpDown_bpm.Value = (decimal)Math.Clamp(this.midiFile.DefaultBpm, 20.0, 400.0);
+            this.numericUpDown_bpm.Value = (decimal) Math.Clamp(this.midiFile.DefaultBpm, 20.0, 400.0);
             this.comboBox_instrument.Items.AddRange([
             "Sine", "Saw", "Square", "Triangle", "Noise", "Pluck / Karplus-Strong", "Custom Sample"]);
             this.comboBox_instrument.SelectedIndex = 0;
             this.label_status.Text = $"Tracks: {this.tracks.Count}, Notes: {this.tracks.Sum(track => track.Notes.Count)}";
         }
 
-        private MidiTrackData SelectedTrack => this.tracks[Math.Clamp((int)this.numericUpDown_track.Value - 1, 0, this.tracks.Count - 1)];
+        private MidiTrackData SelectedTrack => this.tracks[Math.Clamp((int) this.numericUpDown_track.Value - 1, 0, this.tracks.Count - 1)];
 
-        public MidiInstrument SelectedInstrument => (MidiInstrument)Math.Clamp(this.comboBox_instrument.SelectedIndex, 0, 6);
+        public MidiInstrument SelectedInstrument => (MidiInstrument) Math.Clamp(this.comboBox_instrument.SelectedIndex, 0, 6);
+
+        public double PreviewBpm => (double) this.numericUpDown_bpm.Value;
 
         private void pictureBox_midi_Paint(object? sender, PaintEventArgs e)
         {
@@ -46,7 +48,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             using Font font = new("Segoe UI", 8f);
             for (int note = 0; note <= 127; note += 12)
             {
-                int y = top + height - (int)(note / 127.0 * height);
+                int y = top + height - (int) (note / 127.0 * height);
                 e.Graphics.DrawLine(gridPen, left, y, left + width, y);
                 e.Graphics.DrawString(MidiNoteName(note), font, Brushes.Gainsboro, 2, y - 7);
             }
@@ -54,9 +56,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             long lengthTicks = Math.Max(1, track.LengthTicks);
             foreach (MidiNoteData note in track.Notes)
             {
-                float x = left + (float)(note.StartTick / (double)lengthTicks * width);
-                float noteWidth = Math.Max(2f, (float)(note.DurationTicks / (double)lengthTicks * width));
-                float y = top + height - (float)((note.NoteNumber + 1) / 128.0 * height);
+                float x = left + (float) (note.StartTick / (double) lengthTicks * width);
+                float noteWidth = Math.Max(2f, (float) (note.DurationTicks / (double) lengthTicks * width));
+                float y = top + height - (float) ((note.NoteNumber + 1) / 128.0 * height);
                 float noteHeight = Math.Max(3f, height / 128f + 1f);
                 using Brush brush = new SolidBrush(ChannelColor(note.Channel));
                 e.Graphics.FillRectangle(brush, x, y, Math.Min(noteWidth, left + width - x), noteHeight);
@@ -65,7 +67,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             if (this.previewAudio?.PlayerPlaying == true && this.previewAudio.Duration > TimeSpan.Zero)
             {
                 double progress = Math.Clamp(this.previewAudio.CurrentTime.TotalSeconds / this.previewAudio.Duration.TotalSeconds, 0.0, 1.0);
-                float caretX = left + (float)(progress * width);
+                float caretX = left + (float) (progress * width);
                 using Pen caretPen = new(Color.Red, 2f);
                 e.Graphics.DrawLine(caretPen, caretX, top, caretX, top + height);
             }
@@ -90,6 +92,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     e.Graphics.FillEllipse(anchorBrush, selectionCurrent.X - 3, selectionCurrent.Y - 3, 6, 6);
                 }
             }
+        }
+
+        public async Task<AudioObj> RenderMidiAsync(MidiFileData midi, int trackIndex, CancellationToken cancellationToken = default, double pitchFrequency = 440.0)
+        {
+            MidiInstrument instrument = this.SelectedInstrument;
+            double bpm = (double) this.numericUpDown_bpm.Value;
+            AudioObj? selectedCustomSample = this.customSample;
+            return await Task.Run(
+                () => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, selectedCustomSample, cancellationToken: cancellationToken, pitchFrequency: pitchFrequency),
+                cancellationToken);
         }
 
         private static Rectangle NormalizeRectangle(Point first, Point second)
@@ -156,8 +168,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             MidiEditSelection selection = this.CreateSelection(rectangle);
-            using MidiEditor editor = new(selection, this);
-            editor.ShowDialog(this);
+            MidiEditor editor = new(selection, this);
+            editor.Show(this);
         }
 
         private Point ClampToMidiCanvas(Point point)
@@ -178,10 +190,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             int top = 12;
             int width = Math.Max(1, this.pictureBox_midi.ClientSize.Width - left - 12);
             int height = Math.Max(1, this.pictureBox_midi.ClientSize.Height - top - 16);
-            long startTick = (long)Math.Floor((rectangle.Left - left) / (double)width * Math.Max(1, track.LengthTicks));
-            long endTick = (long)Math.Ceiling((rectangle.Right - left) / (double)width * Math.Max(1, track.LengthTicks));
-            int lowestNote = Math.Clamp((int)Math.Floor((top + height - rectangle.Bottom) / (double)height * 128), 0, 127);
-            int highestNote = Math.Clamp((int)Math.Ceiling((top + height - rectangle.Top) / (double)height * 128) - 1, 0, 127);
+            long startTick = (long) Math.Floor((rectangle.Left - left) / (double) width * Math.Max(1, track.LengthTicks));
+            long endTick = (long) Math.Ceiling((rectangle.Right - left) / (double) width * Math.Max(1, track.LengthTicks));
+            int lowestNote = Math.Clamp((int) Math.Floor((top + height - rectangle.Bottom) / (double) height * 128), 0, 127);
+            int highestNote = Math.Clamp((int) Math.Ceiling((top + height - rectangle.Top) / (double) height * 128) - 1, 0, 127);
             return MidiFileData.CreateEditSelection(this.midiFile, track.Index, startTick, endTick, lowestNote, Math.Max(lowestNote, highestNote));
         }
 
@@ -219,12 +231,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 menu.Items.Add(new ToolStripMenuItem(selected.Name, null, (_, _) =>
                 {
                     this.customSample = selected;
-                this.label_status.Text = $"Custom sample: {selected.Name}";
+                    this.label_status.Text = $"Custom sample: {selected.Name}";
                 }));
             }
             if (menu.Items.Count == 0)
             {
-            menu.Items.Add(new ToolStripMenuItem("No audio objects are currently open") { Enabled = false });
+                menu.Items.Add(new ToolStripMenuItem("No audio objects are currently open") { Enabled = false });
             }
             menu.Show(this.button_customInstrument, 0, this.button_customInstrument.Height);
         }
@@ -245,8 +257,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 runCts = new CancellationTokenSource();
                 this.previewCts = runCts;
                 MidiInstrument instrument = this.SelectedInstrument;
-                double bpm = (double)this.numericUpDown_bpm.Value;
-                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(this.midiFile, this.SelectedTrack.Index, instrument, bpm, this.customSample, cancellationToken: runCts.Token), runCts.Token);
+                double bpm = (double) this.numericUpDown_bpm.Value;
+                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(this.midiFile, this.SelectedTrack.Index, instrument, bpm, this.customSample, cancellationToken: runCts.Token, pitchFrequency: this.midiFile.PitchFrequency), runCts.Token);
                 this.previewAudio = audio;
                 this.button_preview.Text = "Stop Preview";
                 this.button_preview.Enabled = true;
@@ -281,20 +293,20 @@ namespace ModularAudience.Forms.Modules.Dialogs
             try
             {
                 this.button_save.Enabled = false;
-            this.label_status.Text = "Rendering MIDI...";
+                this.label_status.Text = "Rendering MIDI...";
                 MidiFileData midi = this.midiFile;
                 int trackIndex = this.SelectedTrack.Index;
                 MidiInstrument instrument = this.SelectedInstrument;
-                double bpm = (double)this.numericUpDown_bpm.Value;
+                double bpm = (double) this.numericUpDown_bpm.Value;
                 AudioObj? customSample = this.customSample;
-                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample));
+                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, pitchFrequency: midi.PitchFrequency));
                 WindowMain.Instance?.PlaceRenderedAudio(audio);
-            this.label_status.Text = "Audio object saved";
+                this.label_status.Text = "Audio object saved";
             }
             catch (Exception ex)
             {
                 LogCollection.Log($"MIDI render failed: {ex}");
-            MessageBox.Show(this, ex.Message, "MIDI rendering failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, ex.Message, "MIDI rendering failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
@@ -313,14 +325,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             await this.StopPreviewAsync();
             MidiInstrument instrument = this.SelectedInstrument;
-            double bpm = (double)this.numericUpDown_bpm.Value;
+            double bpm = (double) this.numericUpDown_bpm.Value;
             AudioObj? customSample = this.customSample;
             CancellationTokenSource? runCts = null;
             try
             {
                 runCts = new CancellationTokenSource();
                 this.previewCts = runCts;
-                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, cancellationToken: runCts.Token), runCts.Token);
+                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, cancellationToken: runCts.Token, pitchFrequency: midi.PitchFrequency), runCts.Token);
                 this.previewAudio = audio;
                 this.timer_previewCaret.Start();
                 TaskCompletionSource playbackStopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -350,9 +362,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.previewCts = null;
             this.previewAudio?.Dispose();
             this.previewAudio = null;
-        this.button_preview.Text = "Preview";
+            this.button_preview.Text = "Preview";
             this.button_preview.Enabled = true;
-        this.label_status.Text = "Ready";
+            this.label_status.Text = "Ready";
         }
 
         private void timer_previewCaret_Tick(object? sender, EventArgs e) => this.pictureBox_midi.Invalidate();
@@ -360,7 +372,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private void MidiWindow_Resize(object? sender, EventArgs e) => this.pictureBox_midi.Invalidate();
 
         private async void MidiWindow_FormClosing(object? sender, FormClosingEventArgs e) => await this.StopPreviewAsync();
-    
+
         public void ApplyEdit(MidiFileData midiFileData)
         {
             this.midiFile = midiFileData;
@@ -373,6 +385,38 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.pictureBox_midi.Invalidate();
 
         }
-    
+
+        private async void button_export_Click(object sender, EventArgs e)
+        {
+            // SFD at MyMusic for MIDI file (*mid) export
+            using SaveFileDialog sfd = new()
+            {
+                Title = "Export MIDI File",
+                Filter = "MIDI Files (*.mid)|*.mid",
+                DefaultExt = "mid",
+                AddExtension = true,
+                FileName = Path.GetFileNameWithoutExtension(this.midiFile.FilePath) + "_exported.mid"
+            };
+
+            if (sfd.ShowDialog(this) == DialogResult.OK)
+            {
+                try
+                {
+                    this.button_export.Enabled = false;
+                    this.label_status.Text = "Exporting MIDI...";
+                    string? exportedPath = await this.midiFile.ExportAsync(sfd.FileName);
+                    this.label_status.Text = $"MIDI exported to {exportedPath}";
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log($"MIDI export failed: {ex}");
+                    MessageBox.Show(this, ex.Message, "MIDI export failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                finally
+                {
+                    this.button_export.Enabled = true;
+                }
+            }
+        }
     }
 }

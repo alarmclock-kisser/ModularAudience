@@ -6,7 +6,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 {
     public partial class MidiEditor : Form
     {
-        public readonly MidiEditSelection MidiEditSelection;
+        public MidiEditSelection MidiEditSelection { get; private set; }
 
         private readonly MidiWindow? sourceMidiWindow;
         private Point? editStart;
@@ -22,6 +22,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private long editorLengthTicks;
         private double pixelsPerTick;
         private CancellationTokenSource? playbackCts;
+        private AudioObj? previewAudio;
+        private bool previewCaretVisible;
         private bool updatingScrollBar;
 
         private const double EmptyTailRatio = 0.20;
@@ -31,11 +33,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.MidiEditSelection = midiEditSelection;
             this.sourceMidiWindow = sourceMidiWindow;
             this.InitializeComponent();
+            this.numericUpDown_pitchFrequency.Value = (decimal) Math.Clamp(midiEditSelection.MidiFile.PitchFrequency, 1.0, 1000.0);
             long defaultViewLength = this.DefaultViewLengthTicks;
-            this.editorLengthTicks = Math.Max(this.GetRequiredEditorLength(), defaultViewLength);
-            this.pixelsPerTick = Math.Max(0.001, (this.pictureBox_editor.ClientSize.Width - 44) / (double)defaultViewLength);
+            long initialViewLength = Math.Max(this.GetRequiredEditorLength(), defaultViewLength);
+            this.editorLengthTicks = initialViewLength;
+            this.pixelsPerTick = Math.Max(0.001, (this.pictureBox_editor.ClientSize.Width - 44) / (double) initialViewLength);
             this.viewStartTick = 0;
-            this.viewEndTick = defaultViewLength;
+            this.viewEndTick = initialViewLength;
             this.pictureBox_editor.Cursor = Cursors.Cross;
             this.UpdateScrollBar();
         }
@@ -49,6 +53,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private int NoteGranularity => Math.Max(1, this.domainUpDown_noteGranularity.SelectedIndex + 1);
 
         private long GridTicks => Math.Max(1, this.MidiEditSelection.MidiFile.TicksPerQuarterNote / this.NoteGranularity);
+
+        private double PitchFrequency => (double) this.numericUpDown_pitchFrequency.Value;
 
         private long DefaultViewLengthTicks => this.GridTicks * 8;
 
@@ -79,7 +85,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             long firstGridTick = visibleStartTick - visibleStartTick % this.GridTicks;
             for (long tick = firstGridTick; tick <= visibleEndTick; tick += this.GridTicks)
             {
-                float x = 44 + (float)((tick - visibleStartTick) * this.pixelsPerTick);
+                float x = 44 + (float) ((tick - visibleStartTick) * this.pixelsPerTick);
                 e.Graphics.DrawLine(gridPen, x, 0, x, height);
             }
 
@@ -98,12 +104,22 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                 long clippedStartTick = Math.Max(note.StartTick, visibleStartTick);
                 long clippedEndTick = Math.Min(noteEndTick, visibleEndTick);
-                float x = 44 + (float)((clippedStartTick - visibleStartTick) * this.pixelsPerTick);
-                float noteWidth = Math.Max(2, (float)((clippedEndTick - clippedStartTick) * this.pixelsPerTick));
+                float x = 44 + (float) ((clippedStartTick - visibleStartTick) * this.pixelsPerTick);
+                float noteWidth = Math.Max(2, (float) ((clippedEndTick - clippedStartTick) * this.pixelsPerTick));
                 float y = NoteToY(note.NoteNumber, lowest, noteCount, height);
-                float noteHeight = Math.Max(3, height / (float)noteCount - 1);
+                float noteHeight = Math.Max(3, height / (float) noteCount - 1);
                 using Brush brush = new SolidBrush(Color.DeepSkyBlue);
                 e.Graphics.FillRectangle(brush, x, y, Math.Min(noteWidth, 44 + width - x), noteHeight);
+            }
+
+            if (this.previewCaretVisible && this.previewAudio?.PlayerPlaying == true && this.previewAudio.Duration > TimeSpan.Zero)
+            {
+                double secondsPerTick = 60.0 / Math.Max(1.0, this.sourceMidiWindow?.PreviewBpm ?? 120.0) / Math.Max(1, this.MidiEditSelection.MidiFile.TicksPerQuarterNote);
+                long previewTick = (long) Math.Round(this.previewAudio.CurrentTime.TotalSeconds / secondsPerTick);
+                previewTick = Math.Clamp(previewTick, 0, Math.Max(this.GridTicks, this.SelectedTrack.LengthTicks));
+                float caretX = 44 + (float) ((previewTick - visibleStartTick) * this.pixelsPerTick);
+                using Pen caretPen = new(Color.Red, 2f);
+                e.Graphics.DrawLine(caretPen, caretX, 0, caretX, height);
             }
 
         }
@@ -211,20 +227,31 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             long totalLength = Math.Max(this.GridTicks, this.editorLengthTicks);
-            if (totalLength <= this.GridTicks)
+            bool zoomingOut = e.Delta < 0;
+            if (!zoomingOut && totalLength <= this.GridTicks)
             {
                 return;
             }
 
             long currentLength = Math.Max(this.GridTicks, this.viewEndTick - this.viewStartTick);
-            double zoomFactor = e.Delta > 0 ? 1.0 / 1.2 : 1.2;
-            long newLength = Math.Clamp((long)Math.Round(currentLength * zoomFactor), this.GridTicks, totalLength);
+            double zoomFactor = zoomingOut ? 1.2 : 1.0 / 1.2;
+            long newLength = Math.Max(this.GridTicks, (long) Math.Round(currentLength * zoomFactor));
+            if (!zoomingOut)
+            {
+                newLength = Math.Min(newLength, totalLength);
+            }
+
             int width = Math.Max(1, this.pictureBox_editor.ClientSize.Width - 44);
-            double mouseRatio = Math.Clamp((e.X - 44) / (double)width, 0, 1);
-            long tickAtMouse = this.viewStartTick + (long)Math.Round(currentLength * mouseRatio);
-            long newStart = tickAtMouse - (long)Math.Round(newLength * mouseRatio);
+            double mouseRatio = Math.Clamp((e.X - 44) / (double) width, 0, 1);
+            long tickAtMouse = this.viewStartTick + (long) Math.Round(currentLength * mouseRatio);
+            long newStart = Math.Max(0, tickAtMouse - (long) Math.Round(newLength * mouseRatio));
+            if (zoomingOut)
+            {
+                this.editorLengthTicks = Math.Max(this.editorLengthTicks, newStart + newLength);
+            }
+
             this.SetView(newStart, newStart + newLength);
-            this.pixelsPerTick = width / (double)Math.Max(this.GridTicks, newLength);
+            this.pixelsPerTick = width / (double) Math.Max(this.GridTicks, newLength);
             this.UpdateScrollBar();
             this.pictureBox_editor.Invalidate();
         }
@@ -240,13 +267,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private void MidiEditor_Resize(object? sender, EventArgs e)
         {
             int width = Math.Max(1, this.pictureBox_editor.ClientSize.Width - 44);
-            long visibleLength = Math.Max(this.GridTicks, (long)Math.Ceiling(width / this.pixelsPerTick));
-            this.editorLengthTicks = Math.Max(this.editorLengthTicks, this.viewStartTick + visibleLength);
-            if (this.viewEndTick >= this.editorLengthTicks - visibleLength)
-            {
-                this.viewEndTick = this.editorLengthTicks;
-                this.viewStartTick = Math.Max(0, this.viewEndTick - visibleLength);
-            }
+            long visibleLength = Math.Max(this.GridTicks, (long) Math.Ceiling(width / this.pixelsPerTick));
+            this.viewEndTick = this.viewStartTick + visibleLength;
+            this.editorLengthTicks = Math.Max(this.editorLengthTicks, this.viewEndTick);
 
             this.UpdateScrollBar();
             this.pictureBox_editor.Invalidate();
@@ -257,7 +280,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             long totalLength = Math.Max(this.GridTicks, this.editorLengthTicks);
             long visibleLength = Math.Max(this.GridTicks, this.panViewEndTick - this.panViewStartTick);
             int width = Math.Max(1, this.pictureBox_editor.ClientSize.Width - 44);
-            long tickDelta = (long)Math.Round(-pixelDelta / (double)width * visibleLength);
+            long tickDelta = (long) Math.Round(-pixelDelta / (double) width * visibleLength);
             this.SetView(this.panViewStartTick + tickDelta, this.panViewEndTick + tickDelta);
             this.UpdateScrollBar();
             this.pictureBox_editor.Invalidate();
@@ -288,7 +311,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             int scrollRange = Math.Max(1, this.hScrollBar_editor.Maximum - this.hScrollBar_editor.LargeChange + 1);
-            long newStart = (long)Math.Round(e.NewValue / (double)scrollRange * scrollableLength);
+            long newStart = (long) Math.Round(e.NewValue / (double) scrollRange * scrollableLength);
             this.SetView(newStart, newStart + visibleLength);
             this.pictureBox_editor.Invalidate();
         }
@@ -316,7 +339,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                 int scrollRange = Math.Max(1, this.hScrollBar_editor.Maximum - this.hScrollBar_editor.LargeChange + 1);
                 long scrollableLength = totalLength - visibleLength;
-                int value = (int)Math.Clamp(Math.Round(this.viewStartTick / (double)scrollableLength * scrollRange), 0, scrollRange);
+                int value = (int) Math.Clamp(Math.Round(this.viewStartTick / (double) scrollableLength * scrollRange), 0, scrollRange);
                 this.hScrollBar_editor.Value = value;
             }
             finally
@@ -330,18 +353,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
             long lastNoteEnd = this.SelectedTrack.Notes.Count == 0
                 ? this.GridTicks
                 : this.SelectedTrack.Notes.Max(note => note.StartTick + note.DurationTicks);
-            long paddedLength = (long)Math.Ceiling(lastNoteEnd / (1.0 - EmptyTailRatio));
+            long paddedLength = (long) Math.Ceiling(lastNoteEnd / (1.0 - EmptyTailRatio));
             return Math.Max(this.GridTicks, paddedLength);
         }
 
         private void UpdateEditorLengthAfterNoteChange(long previousLength)
         {
             this.editorLengthTicks = Math.Max(this.editorLengthTicks, this.GetRequiredEditorLength());
-            long visibleLength = Math.Max(this.GridTicks, this.viewEndTick - this.viewStartTick);
-            if (this.viewEndTick >= previousLength - visibleLength || this.viewEndTick > this.editorLengthTicks)
-            {
-                this.SetView(Math.Max(0, this.editorLengthTicks - visibleLength), this.editorLengthTicks);
-            }
 
             this.UpdateScrollBar();
             this.pictureBox_editor.Invalidate();
@@ -400,7 +418,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private long PointToTick(int x)
         {
-            long relativeTick = (long)Math.Floor((x - 44) / this.pixelsPerTick / this.GridTicks) * this.GridTicks;
+            long relativeTick = (long) Math.Floor((x - 44) / this.pixelsPerTick / this.GridTicks) * this.GridTicks;
             long tick = this.viewStartTick + relativeTick;
             return Math.Clamp(tick, 0, Math.Max(0, this.editorLengthTicks));
         }
@@ -409,18 +427,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             int height = Math.Max(1, this.pictureBox_editor.ClientSize.Height - 20);
             int count = Math.Max(1, HighestNote - LowestNote + 1);
-            return Math.Clamp(HighestNote - (int)Math.Floor(y / (double)height * count), LowestNote, HighestNote);
+            return Math.Clamp(HighestNote - (int) Math.Floor(y / (double) height * count), LowestNote, HighestNote);
         }
 
         private async Task PreviewNoteAsync(MidiNoteData note)
         {
-            if (this.sourceMidiWindow == null)
-            {
-                return;
-            }
-
-            MidiFileData previewFile = MidiFileData.CreateEditSelection(this.MidiEditSelection.MidiFile, this.SelectedTrack.Index, note.StartTick, note.StartTick + note.DurationTicks, note.NoteNumber, note.NoteNumber).MidiFile;
-            await this.sourceMidiWindow.PreviewMidiAsync(previewFile, this.SelectedTrack.Index);
+            MidiFileData previewFile = MidiFileData.CreateSingleNotePreview(
+                this.MidiEditSelection.MidiFile,
+                this.SelectedTrack.Index,
+                note);
+            await this.PreviewMidiAsync(previewFile, previewFile.Tracks[0].Index, false);
         }
 
         private async void button_play_Click(object? sender, EventArgs e)
@@ -441,7 +457,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.button_play.Text = "Stop";
             try
             {
-                await this.sourceMidiWindow.PreviewMidiAsync(this.MidiEditSelection.MidiFile, this.SelectedTrack.Index);
+                await this.PreviewMidiAsync(this.MidiEditSelection.MidiFile, this.SelectedTrack.Index, true);
             }
             catch (OperationCanceledException)
             {
@@ -468,14 +484,72 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async Task StopPlaybackAsync()
         {
-            this.playbackCts?.Cancel();
-            if (this.sourceMidiWindow != null)
-            {
-                await this.sourceMidiWindow.StopPreviewAsync();
-            }
+            await this.StopPreviewAsync();
 
             this.button_play.Text = "Play";
         }
+
+        private async Task PreviewMidiAsync(MidiFileData midi, int trackIndex, bool showCaret)
+        {
+            await this.StopPreviewAsync();
+            if (this.sourceMidiWindow == null)
+            {
+                return;
+            }
+
+            CancellationTokenSource runCts = new();
+            this.playbackCts = runCts;
+            try
+            {
+                this.previewCaretVisible = showCaret;
+                this.previewAudio = await this.sourceMidiWindow.RenderMidiAsync(midi, trackIndex, runCts.Token, this.PitchFrequency);
+                if (showCaret)
+                {
+                    this.timer_previewCaret.Start();
+                }
+                TaskCompletionSource playbackStopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                await this.previewAudio.PlayAsync(runCts.Token, () => playbackStopped.TrySetResult());
+                await playbackStopped.Task.WaitAsync(runCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                if (ReferenceEquals(this.playbackCts, runCts))
+                {
+                    this.ResetPreviewState();
+                }
+                else
+                {
+                    runCts.Dispose();
+                }
+            }
+        }
+
+        private async Task StopPreviewAsync()
+        {
+            this.playbackCts?.Cancel();
+            if (this.previewAudio != null)
+            {
+                await this.previewAudio.StopAsync();
+            }
+
+            this.ResetPreviewState();
+        }
+
+        private void ResetPreviewState()
+        {
+            this.timer_previewCaret.Stop();
+            this.playbackCts?.Dispose();
+            this.playbackCts = null;
+            this.previewAudio?.Dispose();
+            this.previewAudio = null;
+            this.previewCaretVisible = false;
+            this.pictureBox_editor.Invalidate();
+        }
+
+        private void timer_previewCaret_Tick(object? sender, EventArgs e) => this.pictureBox_editor.Invalidate();
 
         private async void MidiEditor_FormClosing(object? sender, FormClosingEventArgs e)
         {
@@ -489,7 +563,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 MidiFileData? source = this.MidiEditSelection.SourceMidiFile;
                 if (source != null)
                 {
-                    this.sourceMidiWindow?.ApplyEdit(source.ReplaceSelection(this.MidiEditSelection, this.MidiEditSelection.MidiFile));
+                    MidiFileData editedFile = this.MidiEditSelection.MidiFile.WithPitchFrequency(this.PitchFrequency);
+                    this.MidiEditSelection.MidiFile = editedFile;
+                    this.sourceMidiWindow?.ApplyEdit(source.ReplaceSelection(this.MidiEditSelection, editedFile));
                 }
 
                 this.DialogResult = DialogResult.OK;
@@ -504,7 +580,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             await Task.CompletedTask;
         }
 
-        private static float NoteToY(int note, int lowest, int count, int height) => (count - 1 - (note - lowest)) / (float)Math.Max(1, count) * height;
+        private static float NoteToY(int note, int lowest, int count, int height) => (count - 1 - (note - lowest)) / (float) Math.Max(1, count) * height;
 
         private static Rectangle NormalizeRectangle(Point first, Point second) => Rectangle.FromLTRB(Math.Min(first.X, second.X), Math.Min(first.Y, second.Y), Math.Max(first.X, second.X), Math.Max(first.Y, second.Y));
 
@@ -527,6 +603,36 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             string[] names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
             return names[note % 12] + (note / 12 - 1);
+        }
+
+        private async void button_import_Click(object sender, EventArgs e)
+        {
+            // OFD at MyMusic, Filter for MIDI files (*.mid, *.midi), single file selection
+            using OpenFileDialog ofd = new()
+            {
+                InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
+                Filter = "MIDI files (*.mid;*.midi)|*.mid;*.midi",
+                Multiselect = false,
+                RestoreDirectory = true
+            };
+
+            if (ofd.ShowDialog(this) == DialogResult.OK)
+            {
+                try
+                {
+                    MidiFileData importedFile = MidiFileData.Load(ofd.FileName);
+                    this.MidiEditSelection.MidiFile = importedFile;
+                    this.editorLengthTicks = Math.Max(this.editorLengthTicks, this.GetRequiredEditorLength());
+                    this.SetView(0, Math.Max(this.GridTicks, this.viewEndTick - this.viewStartTick));
+                    this.UpdateScrollBar();
+                    this.pictureBox_editor.Invalidate();
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log($"MIDI import failed: {ex}");
+                    MessageBox.Show(this, ex.Message, "MIDI import failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
         }
     }
 }

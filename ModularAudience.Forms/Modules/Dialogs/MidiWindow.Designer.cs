@@ -37,6 +37,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.button_save = new Button();
             this.label_status = new Label();
             this.timer_previewCaret = new System.Windows.Forms.Timer(this.components);
+            this.button_export = new Button();
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_midi).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_track).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_bpm).BeginInit();
@@ -52,12 +53,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.pictureBox_midi.Size = new Size(824, 500);
             this.pictureBox_midi.TabIndex = 0;
             this.pictureBox_midi.TabStop = false;
+            this.pictureBox_midi.Paint += this.pictureBox_midi_Paint;
             this.pictureBox_midi.MouseDown += this.pictureBox_midi_MouseDown;
             this.pictureBox_midi.MouseEnter += this.pictureBox_midi_MouseEnter;
             this.pictureBox_midi.MouseLeave += this.pictureBox_midi_MouseLeave;
             this.pictureBox_midi.MouseMove += this.pictureBox_midi_MouseMove;
             this.pictureBox_midi.MouseUp += this.pictureBox_midi_MouseUp;
-            this.pictureBox_midi.Paint += this.pictureBox_midi_Paint;
             // 
             // label_track
             // 
@@ -161,9 +162,20 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.timer_previewCaret.Interval = 30;
             this.timer_previewCaret.Tick += this.timer_previewCaret_Tick;
             // 
+            // button_export
+            // 
+            this.button_export.Anchor =  AnchorStyles.Bottom | AnchorStyles.Right;
+            this.button_export.Location = new Point(682, 533);
+            this.button_export.Name = "button_export";
+            this.button_export.Size = new Size(130, 30);
+            this.button_export.TabIndex = 11;
+            this.button_export.Text = "Export";
+            this.button_export.Click += this.button_export_Click;
+            // 
             // MidiWindow
             // 
             this.ClientSize = new Size(824, 624);
+            this.Controls.Add(this.button_export);
             this.Controls.Add(this.pictureBox_midi);
             this.Controls.Add(this.label_track);
             this.Controls.Add(this.numericUpDown_track);
@@ -187,5 +199,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.ResumeLayout(false);
             this.PerformLayout();
         }
+
+        private Button button_export;
     }
 }
