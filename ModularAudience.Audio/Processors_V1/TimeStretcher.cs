@@ -874,9 +874,9 @@ namespace ModularAudience.Audio.Processors_V1
                     }
 
                     // Verarbeitung
-                    Complex[] fft = null;
-                    Complex[] stretched = null;
-                    float[] ifft = null;
+                    Complex[] fft = [];
+                    Complex[] stretched = [];
+                    float[] ifft = [];
 
                     await Task.Run(() =>
                     {
@@ -894,7 +894,7 @@ namespace ModularAudience.Audio.Processors_V1
                     });
 
                     // FIX 4: Speicher freigeben
-                    fft = null;
+                    fft = [];
 
                     if (stretched == null || stretched.Length == 0)
                     {
@@ -906,7 +906,7 @@ namespace ModularAudience.Audio.Processors_V1
                         ifft = FourierTransformInverseCore(stretched, null);
                     });
 
-                    stretched = null;
+                    stretched = [];
 
                     if (ifft == null || ifft.Length == 0)
                     {
@@ -931,7 +931,7 @@ namespace ModularAudience.Audio.Processors_V1
                         }
                     }
 
-                    ifft = null;
+                    ifft = [];
                     tempFiles.Add(filePath);
                     index++;
 
@@ -969,7 +969,7 @@ namespace ModularAudience.Audio.Processors_V1
 
                 foreach (var path in tempFiles.ToList())
                 {
-                    float[] data = null;
+                    float[] data = [];
                     using (var fs = new System.IO.FileStream(
                                path,
                                System.IO.FileMode.Open,

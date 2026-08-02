@@ -58,6 +58,8 @@ public partial class ProgressDialog : Form
     public void Complete()
     {
         this.operationCompleted = true;
+        this.timer_elapsed.Stop();
+        this.stopwatch.Stop();
         this.Report(1.0);
         this.Close();
     }

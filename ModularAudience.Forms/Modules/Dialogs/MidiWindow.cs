@@ -94,13 +94,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
         }
 
-        public async Task<AudioObj> RenderMidiAsync(MidiFileData midi, int trackIndex, CancellationToken cancellationToken = default, double pitchFrequency = 440.0)
+        public async Task<AudioObj> RenderMidiAsync(MidiFileData midi, int trackIndex, CancellationToken cancellationToken = default, double pitchFrequency = 440.0, IProgress<double>? progress = null)
         {
             MidiInstrument instrument = this.SelectedInstrument;
             double bpm = (double) this.numericUpDown_bpm.Value;
             AudioObj? selectedCustomSample = this.customSample;
             return await Task.Run(
-                () => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, selectedCustomSample, cancellationToken: cancellationToken, pitchFrequency: pitchFrequency),
+                () => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, selectedCustomSample, cancellationToken: cancellationToken, pitchFrequency: pitchFrequency, previewQuality: true, progress: progress),
                 cancellationToken);
         }
 
@@ -258,7 +258,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.previewCts = runCts;
                 MidiInstrument instrument = this.SelectedInstrument;
                 double bpm = (double) this.numericUpDown_bpm.Value;
-                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(this.midiFile, this.SelectedTrack.Index, instrument, bpm, this.customSample, cancellationToken: runCts.Token, pitchFrequency: this.midiFile.PitchFrequency), runCts.Token);
+                ProgressDialog? progressDialog = null;
+                Progress<double> progress = new(value => progressDialog?.Report(value));
+                progressDialog = new ProgressDialog("Rendering MIDI preview...", progress, ct: runCts.Token, cancellationSource: runCts, windowCloseDelay: 0.0d);
+                progressDialog.Show(this);
+                progressDialog.BringToFront();
+                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(this.midiFile, this.SelectedTrack.Index, instrument, bpm, this.customSample, cancellationToken: runCts.Token, pitchFrequency: this.midiFile.PitchFrequency, previewQuality: true, progress: progress), runCts.Token);
+                progressDialog.Complete();
                 this.previewAudio = audio;
                 this.button_preview.Text = "Stop Preview";
                 this.button_preview.Enabled = true;
@@ -332,7 +338,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 runCts = new CancellationTokenSource();
                 this.previewCts = runCts;
-                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, cancellationToken: runCts.Token, pitchFrequency: midi.PitchFrequency), runCts.Token);
+                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, cancellationToken: runCts.Token, pitchFrequency: midi.PitchFrequency, previewQuality: true), runCts.Token);
                 this.previewAudio = audio;
                 this.timer_previewCaret.Start();
                 TaskCompletionSource playbackStopped = new(TaskCreationOptions.RunContinuationsAsynchronously);

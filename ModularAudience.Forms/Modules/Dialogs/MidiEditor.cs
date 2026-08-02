@@ -285,7 +285,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             if ((Control.ModifierKeys & Keys.Control) == Keys.None)
             {
-                this.ScrollView(e.Delta < 0 ? this.GridTicks : -this.GridTicks);
+                long scrollTicks = this.GridTicks * Math.Max(1, Math.Abs(e.Delta) / 120) * 4;
+                this.ScrollView(e.Delta < 0 ? scrollTicks : -scrollTicks);
                 return;
             }
 
@@ -562,10 +563,22 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             CancellationTokenSource runCts = new();
             this.playbackCts = runCts;
+            ProgressDialog? progressDialog = null;
             try
             {
                 this.previewCaretVisible = showCaret;
-                this.previewAudio = await this.sourceMidiWindow.RenderMidiAsync(midi, trackIndex, runCts.Token, this.PitchFrequency);
+                IProgress<double>? progress = null;
+                if (showCaret)
+                {
+                    Progress<double> previewProgress = new(value => progressDialog?.Report(value));
+                    progress = previewProgress;
+                    progressDialog = new ProgressDialog("Rendering MIDI editor preview...", progress, windowCloseDelay: 0.0d, ct: runCts.Token, cancellationSource: runCts);
+                    progressDialog.Show(this);
+                    progressDialog.BringToFront();
+                }
+
+                this.previewAudio = await this.sourceMidiWindow.RenderMidiAsync(midi, trackIndex, runCts.Token, this.PitchFrequency, progress);
+                progressDialog?.Complete();
                 if (showCaret)
                 {
                     this.timer_previewCaret.Start();
@@ -579,6 +592,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             finally
             {
+                if (progressDialog != null && !progressDialog.IsDisposed)
+                {
+                    progressDialog.Close();
+                }
+
                 if (ReferenceEquals(this.playbackCts, runCts))
                 {
                     this.ResetPreviewState();
