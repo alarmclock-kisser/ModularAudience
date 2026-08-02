@@ -129,6 +129,33 @@ public sealed class MidiFileData
         };
     }
 
+
+    public static MidiFileData CreateEmpty(int ticksPerQuarterNote = 960, double defaultBpm = 120.0, double pitchFrequency = 440.0)
+    {
+        return new MidiFileData(string.Empty, ticksPerQuarterNote, defaultBpm, [], pitchFrequency);
+    }
+
+    public static MidiFileData CreateGenerated(IEnumerable<MidiTrackData> tracks, int ticksPerQuarterNote = 960, double defaultBpm = 120.0, string? filePath = null, double pitchFrequency = 440.0)
+    {
+        ArgumentNullException.ThrowIfNull(tracks);
+        if (ticksPerQuarterNote <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(ticksPerQuarterNote));
+        }
+
+        List<MidiTrackData> generatedTracks = tracks.ToList();
+        foreach (MidiTrackData track in generatedTracks)
+        {
+            ArgumentNullException.ThrowIfNull(track);
+            long noteEnd = track.Notes.Count == 0
+                ? 0
+                : track.Notes.Max(note => note.StartTick + Math.Max(1, note.DurationTicks));
+            track.ExtendLengthTo(noteEnd);
+        }
+
+        return new MidiFileData(filePath ?? string.Empty, ticksPerQuarterNote, Math.Clamp(defaultBpm, 20.0, 400.0), generatedTracks, pitchFrequency);
+    }
+
     public static MidiFileData CreateSingleNotePreview(MidiFileData source, int trackIndex, MidiNoteData note)
     {
         ArgumentNullException.ThrowIfNull(source);

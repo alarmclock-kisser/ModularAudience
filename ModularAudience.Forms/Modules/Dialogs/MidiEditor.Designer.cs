@@ -28,6 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
+            this.components = new System.ComponentModel.Container();
             this.pictureBox_editor = new PictureBox();
             this.button_save = new Button();
             this.checkBox_preview = new CheckBox();
@@ -38,7 +39,9 @@
             this.label_pitchFrequency = new Label();
             this.numericUpDown_pitchFrequency = new NumericUpDown();
             this.button_import = new Button();
-            this.timer_previewCaret = new System.Windows.Forms.Timer();
+            this.timer_previewCaret = new System.Windows.Forms.Timer(this.components);
+            this.button_generate = new Button();
+            this.toolTip_editor = new ToolTip(this.components);
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_editor).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_pitchFrequency).BeginInit();
             this.SuspendLayout();
@@ -57,6 +60,7 @@
             this.pictureBox_editor.MouseMove += this.pictureBox_editor_MouseMove;
             this.pictureBox_editor.MouseUp += this.pictureBox_editor_MouseUp;
             this.pictureBox_editor.MouseWheel += this.pictureBox_editor_MouseWheel;
+            this.toolTip_editor.SetToolTip(this.pictureBox_editor, "Left mouse button adds notes. Right mouse button deletes notes. Mouse wheel scrolls. Hold Ctrl while using the mouse wheel to zoom. Shift + right mouse button drag selects and deletes all notes in the rectangle on release.");
             // 
             // button_save
             // 
@@ -75,7 +79,7 @@
             this.checkBox_preview.AutoSize = true;
             this.checkBox_preview.Checked = true;
             this.checkBox_preview.CheckState = CheckState.Checked;
-            this.checkBox_preview.Location = new Point(138, 419);
+            this.checkBox_preview.Location = new Point(93, 418);
             this.checkBox_preview.Name = "checkBox_preview";
             this.checkBox_preview.Size = new Size(122, 19);
             this.checkBox_preview.TabIndex = 2;
@@ -109,7 +113,7 @@
             // 
             this.label_noteGranularity.Anchor =  AnchorStyles.Bottom | AnchorStyles.Left;
             this.label_noteGranularity.AutoSize = true;
-            this.label_noteGranularity.Location = new Point(280, 419);
+            this.label_noteGranularity.Location = new Point(221, 419);
             this.label_noteGranularity.Name = "label_noteGranularity";
             this.label_noteGranularity.Size = new Size(61, 15);
             this.label_noteGranularity.TabIndex = 5;
@@ -127,7 +131,7 @@
             this.domainUpDown_noteGranularity.Items.Add("8");
             this.domainUpDown_noteGranularity.Items.Add("12");
             this.domainUpDown_noteGranularity.Items.Add("16");
-            this.domainUpDown_noteGranularity.Location = new Point(348, 415);
+            this.domainUpDown_noteGranularity.Location = new Point(289, 415);
             this.domainUpDown_noteGranularity.Name = "domainUpDown_noteGranularity";
             this.domainUpDown_noteGranularity.ReadOnly = true;
             this.domainUpDown_noteGranularity.SelectedIndex = 3;
@@ -140,9 +144,9 @@
             // 
             this.label_pitchFrequency.Anchor =  AnchorStyles.Bottom | AnchorStyles.Left;
             this.label_pitchFrequency.AutoSize = true;
-            this.label_pitchFrequency.Location = new Point(414, 419);
+            this.label_pitchFrequency.Location = new Point(355, 419);
             this.label_pitchFrequency.Name = "label_pitchFrequency";
-            this.label_pitchFrequency.Size = new Size(78, 15);
+            this.label_pitchFrequency.Size = new Size(77, 15);
             this.label_pitchFrequency.TabIndex = 7;
             this.label_pitchFrequency.Text = "A4 frequency";
             // 
@@ -151,7 +155,7 @@
             this.numericUpDown_pitchFrequency.Anchor =  AnchorStyles.Bottom | AnchorStyles.Left;
             this.numericUpDown_pitchFrequency.DecimalPlaces = 1;
             this.numericUpDown_pitchFrequency.Increment = new decimal(new int[] { 1, 0, 0, 65536 });
-            this.numericUpDown_pitchFrequency.Location = new Point(498, 415);
+            this.numericUpDown_pitchFrequency.Location = new Point(439, 415);
             this.numericUpDown_pitchFrequency.Maximum = new decimal(new int[] { 1000, 0, 0, 0 });
             this.numericUpDown_pitchFrequency.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             this.numericUpDown_pitchFrequency.Name = "numericUpDown_pitchFrequency";
@@ -161,6 +165,7 @@
             // 
             // button_import
             // 
+            this.button_import.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             this.button_import.Location = new Point(632, 415);
             this.button_import.Name = "button_import";
             this.button_import.Size = new Size(75, 23);
@@ -169,11 +174,28 @@
             this.button_import.UseVisualStyleBackColor = true;
             this.button_import.Click += this.button_import_Click;
             // 
+            // timer_previewCaret
+            // 
+            this.timer_previewCaret.Interval = 30;
+            this.timer_previewCaret.Tick += this.timer_previewCaret_Tick;
+            // 
+            // button_generate
+            // 
+            this.button_generate.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            this.button_generate.Location = new Point(551, 415);
+            this.button_generate.Name = "button_generate";
+            this.button_generate.Size = new Size(75, 23);
+            this.button_generate.TabIndex = 9;
+            this.button_generate.Text = "Generate";
+            this.button_generate.UseVisualStyleBackColor = true;
+            this.button_generate.Click += this.button_generate_Click;
+            // 
             // MidiEditor
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(800, 450);
+            this.Controls.Add(this.button_generate);
             this.Controls.Add(this.button_import);
             this.Controls.Add(this.button_play);
             this.Controls.Add(this.checkBox_preview);
@@ -189,15 +211,10 @@
             this.Text = "MidiEditor";
             this.FormClosing += this.MidiEditor_FormClosing;
             this.Resize += this.MidiEditor_Resize;
-            // 
-            // timer_previewCaret
-            // 
-            this.timer_previewCaret.Interval = 30;
-            this.timer_previewCaret.Tick += this.timer_previewCaret_Tick;
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_editor).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_pitchFrequency).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_pitchFrequency).EndInit();
         }
 
         #endregion
@@ -213,5 +230,7 @@
         private NumericUpDown numericUpDown_pitchFrequency;
         private Button button_import;
         private System.Windows.Forms.Timer timer_previewCaret;
+        private Button button_generate;
+        private ToolTip toolTip_editor;
     }
 }

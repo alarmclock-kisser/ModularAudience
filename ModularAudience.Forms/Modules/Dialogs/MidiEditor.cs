@@ -10,6 +10,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private readonly MidiWindow? sourceMidiWindow;
         private Point? editStart;
+        private Point? rectangleSelectionStart;
+        private Point? rectangleSelectionEnd;
         private MouseButtons editButton;
         private int editNote;
         private long editPreviousLength;
@@ -112,6 +114,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 e.Graphics.FillRectangle(brush, x, y, Math.Min(noteWidth, 44 + width - x), noteHeight);
             }
 
+            if (this.rectangleSelectionStart is Point rectangleStart && this.rectangleSelectionEnd is Point rectangleEnd)
+            {
+                Rectangle selectionRectangle = Rectangle.FromLTRB(
+                    Math.Min(rectangleStart.X, rectangleEnd.X),
+                    Math.Min(rectangleStart.Y, rectangleEnd.Y),
+                    Math.Max(rectangleStart.X, rectangleEnd.X),
+                    Math.Max(rectangleStart.Y, rectangleEnd.Y));
+                using Pen selectionPen = new(Color.White, 1f) { DashStyle = DashStyle.Dash };
+                e.Graphics.DrawRectangle(selectionPen, selectionRectangle);
+            }
+
             if (this.previewCaretVisible && this.previewAudio?.PlayerPlaying == true && this.previewAudio.Duration > TimeSpan.Zero)
             {
                 double secondsPerTick = 60.0 / Math.Max(1.0, this.sourceMidiWindow?.PreviewBpm ?? 120.0) / Math.Max(1, this.MidiEditSelection.MidiFile.TicksPerQuarterNote);
@@ -128,6 +141,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             if (e.Button is not (MouseButtons.Left or MouseButtons.Right))
             {
+                return;
+            }
+
+            if (e.Button == MouseButtons.Right && (Control.ModifierKeys & Keys.Shift) != Keys.None)
+            {
+                this.rectangleSelectionStart = ClampToEditor(e.Location);
+                this.rectangleSelectionEnd = this.rectangleSelectionStart;
+                this.editButton = MouseButtons.Right;
+                this.editPreviousLength = this.editorLengthTicks;
+                this.pictureBox_editor.Capture = true;
+                this.pictureBox_editor.Invalidate();
                 return;
             }
 
@@ -170,6 +194,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             if (this.editStart == null)
             {
+                if (this.rectangleSelectionStart is Point && this.editButton == MouseButtons.Right)
+                {
+                    this.rectangleSelectionEnd = ClampToEditor(e.Location);
+                    this.pictureBox_editor.Invalidate();
+                }
                 return;
             }
 
@@ -196,6 +225,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
+            if (this.rectangleSelectionStart is Point rectangleStart && e.Button == MouseButtons.Right)
+            {
+                Point rectangleEnd = ClampToEditor(e.Location);
+                this.DeleteNotesInRectangle(rectangleStart, rectangleEnd);
+                this.rectangleSelectionStart = null;
+                this.rectangleSelectionEnd = null;
+                this.pictureBox_editor.Capture = false;
+                this.UpdateEditorLengthAfterNoteChange(this.editPreviousLength);
+                this.pictureBox_editor.Invalidate();
+                return;
+            }
+
             if (this.editStart is not Point start || e.Button != this.editButton)
             {
                 return;
@@ -216,6 +257,28 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     await this.PreviewNoteAsync(previewNote);
                 }
             }
+        }
+
+        private void DeleteNotesInRectangle(Point first, Point second)
+        {
+            int left = Math.Min(first.X, second.X);
+            int right = Math.Max(first.X, second.X);
+            int top = Math.Min(first.Y, second.Y);
+            int bottom = Math.Max(first.Y, second.Y);
+            long startTick = PointToTick(left);
+            long endTick = PointToTick(right) + this.GridTicks;
+            int height = Math.Max(1, this.pictureBox_editor.ClientSize.Height - 20);
+            int count = Math.Max(1, HighestNote - LowestNote + 1);
+
+            this.SelectedTrack.Notes.RemoveAll(note =>
+            {
+                float noteTop = NoteToY(note.NoteNumber, LowestNote, count, height);
+                float noteBottom = noteTop + Math.Max(3, height / (float) count - 1);
+                long noteEndTick = note.StartTick + note.DurationTicks;
+                bool overlapsTime = note.StartTick <= endTick && noteEndTick >= startTick;
+                bool overlapsNote = noteTop <= bottom && noteBottom >= top;
+                return overlapsTime && overlapsNote;
+            });
         }
 
         private void pictureBox_editor_MouseWheel(object? sender, MouseEventArgs e)
@@ -633,6 +696,22 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     MessageBox.Show(this, ex.Message, "MIDI import failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
+        }
+
+        private void button_generate_Click(object sender, EventArgs e)
+        {
+            using MidiGeneratorDialog dialog = new(this.MidiEditSelection.MidiFile);
+            if (dialog.ShowDialog(this) != DialogResult.OK || dialog.GeneratedMidiFileData == null)
+            {
+                return;
+            }
+
+            this.MidiEditSelection.MidiFile = dialog.GeneratedMidiFileData;
+            this.editorLengthTicks = Math.Max(this.editorLengthTicks, this.GetRequiredEditorLength());
+            long visibleLength = Math.Max(this.GridTicks, this.viewEndTick - this.viewStartTick);
+            this.SetView(this.viewStartTick, this.viewStartTick + visibleLength);
+            this.UpdateScrollBar();
+            this.pictureBox_editor.Invalidate();
         }
     }
 }
