@@ -41,6 +41,7 @@
             this.button_import = new Button();
             this.timer_previewCaret = new System.Windows.Forms.Timer(this.components);
             this.button_generate = new Button();
+            this.button_remix = new Button();
             this.toolTip_editor = new ToolTip(this.components);
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_editor).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_pitchFrequency).BeginInit();
@@ -60,14 +61,14 @@
             this.pictureBox_editor.MouseMove += this.pictureBox_editor_MouseMove;
             this.pictureBox_editor.MouseUp += this.pictureBox_editor_MouseUp;
             this.pictureBox_editor.MouseWheel += this.pictureBox_editor_MouseWheel;
-            this.toolTip_editor.SetToolTip(this.pictureBox_editor, "Left mouse button adds notes. Right mouse button deletes notes. Mouse wheel scrolls. Hold Ctrl while using the mouse wheel to zoom. Shift + right mouse button drag selects and deletes all notes in the rectangle on release.");
+            this.toolTip_editor.SetToolTip(this.pictureBox_editor, "Left mouse button: Add notes\r\nRight mouse button: Delete notes\r\nMouse wheel: Scroll vertically\r\nCtrl + mouse wheel: Zoom horizontally\r\nShift + right-drag: Select and delete notes in a rectangle");
             // 
             // button_save
             // 
             this.button_save.Anchor =  AnchorStyles.Bottom | AnchorStyles.Right;
-            this.button_save.Location = new Point(713, 415);
+            this.button_save.Location = new Point(733, 415);
             this.button_save.Name = "button_save";
-            this.button_save.Size = new Size(75, 23);
+            this.button_save.Size = new Size(55, 23);
             this.button_save.TabIndex = 1;
             this.button_save.Text = "Save";
             this.button_save.UseVisualStyleBackColor = true;
@@ -113,7 +114,7 @@
             // 
             this.label_noteGranularity.Anchor =  AnchorStyles.Bottom | AnchorStyles.Left;
             this.label_noteGranularity.AutoSize = true;
-            this.label_noteGranularity.Location = new Point(221, 419);
+            this.label_noteGranularity.Location = new Point(190, 419);
             this.label_noteGranularity.Name = "label_noteGranularity";
             this.label_noteGranularity.Size = new Size(61, 15);
             this.label_noteGranularity.TabIndex = 5;
@@ -131,7 +132,7 @@
             this.domainUpDown_noteGranularity.Items.Add("8");
             this.domainUpDown_noteGranularity.Items.Add("12");
             this.domainUpDown_noteGranularity.Items.Add("16");
-            this.domainUpDown_noteGranularity.Location = new Point(289, 415);
+            this.domainUpDown_noteGranularity.Location = new Point(260, 415);
             this.domainUpDown_noteGranularity.Name = "domainUpDown_noteGranularity";
             this.domainUpDown_noteGranularity.ReadOnly = true;
             this.domainUpDown_noteGranularity.SelectedIndex = 3;
@@ -144,7 +145,7 @@
             // 
             this.label_pitchFrequency.Anchor =  AnchorStyles.Bottom | AnchorStyles.Left;
             this.label_pitchFrequency.AutoSize = true;
-            this.label_pitchFrequency.Location = new Point(355, 419);
+            this.label_pitchFrequency.Location = new Point(325, 419);
             this.label_pitchFrequency.Name = "label_pitchFrequency";
             this.label_pitchFrequency.Size = new Size(77, 15);
             this.label_pitchFrequency.TabIndex = 7;
@@ -155,7 +156,7 @@
             this.numericUpDown_pitchFrequency.Anchor =  AnchorStyles.Bottom | AnchorStyles.Left;
             this.numericUpDown_pitchFrequency.DecimalPlaces = 1;
             this.numericUpDown_pitchFrequency.Increment = new decimal(new int[] { 1, 0, 0, 65536 });
-            this.numericUpDown_pitchFrequency.Location = new Point(439, 415);
+            this.numericUpDown_pitchFrequency.Location = new Point(405, 415);
             this.numericUpDown_pitchFrequency.Maximum = new decimal(new int[] { 1000, 0, 0, 0 });
             this.numericUpDown_pitchFrequency.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             this.numericUpDown_pitchFrequency.Name = "numericUpDown_pitchFrequency";
@@ -182,7 +183,7 @@
             // button_generate
             // 
             this.button_generate.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            this.button_generate.Location = new Point(551, 415);
+            this.button_generate.Location = new Point(548, 415);
             this.button_generate.Name = "button_generate";
             this.button_generate.Size = new Size(75, 23);
             this.button_generate.TabIndex = 9;
@@ -190,12 +191,24 @@
             this.button_generate.UseVisualStyleBackColor = true;
             this.button_generate.Click += this.button_generate_Click;
             // 
+            // button_remix
+            // 
+            this.button_remix.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            this.button_remix.Location = new Point(490, 415);
+            this.button_remix.Name = "button_remix";
+            this.button_remix.Size = new Size(55, 23);
+            this.button_remix.TabIndex = 10;
+            this.button_remix.Text = "Remix";
+            this.button_remix.UseVisualStyleBackColor = true;
+            this.button_remix.Click += this.button_remix_Click;
+            // 
             // MidiEditor
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(800, 450);
             this.Controls.Add(this.button_generate);
+            this.Controls.Add(this.button_remix);
             this.Controls.Add(this.button_import);
             this.Controls.Add(this.button_play);
             this.Controls.Add(this.checkBox_preview);
@@ -231,6 +244,7 @@
         private Button button_import;
         private System.Windows.Forms.Timer timer_previewCaret;
         private Button button_generate;
+        private Button button_remix;
         private ToolTip toolTip_editor;
     }
 }

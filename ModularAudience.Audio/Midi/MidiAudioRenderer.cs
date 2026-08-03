@@ -13,16 +13,29 @@ public enum MidiInstrument
     CustomSample
 }
 
+public enum MidiRenderQuality
+{
+    Best,
+    Balanced,
+    Fast,
+    Draft
+}
+
 public static class MidiAudioRenderer
 {
-    public static AudioObj Render(MidiFileData midi, int trackIndex, MidiInstrument instrument, double bpm, AudioObj? customSample = null, int sampleRate = 44100, CancellationToken cancellationToken = default, double pitchFrequency = 440.0, bool previewQuality = false, IProgress<double>? progress = null)
+    public static AudioObj Render(MidiFileData midi, int trackIndex, MidiInstrument instrument, double bpm, AudioObj? customSample = null, int sampleRate = 44100, CancellationToken cancellationToken = default, double pitchFrequency = 440.0, bool previewQuality = false, IProgress<double>? progress = null, MidiRenderQuality renderQuality = MidiRenderQuality.Balanced)
     {
         ArgumentNullException.ThrowIfNull(midi);
         bpm = Math.Clamp(bpm, 20.0, 400.0);
         pitchFrequency = Math.Clamp(pitchFrequency, 1.0, 1000.0);
-        if (previewQuality)
+        bool draftQuality = previewQuality || renderQuality == MidiRenderQuality.Draft;
+        if (draftQuality)
         {
             sampleRate = Math.Min(sampleRate, 22050);
+        }
+        else if (renderQuality == MidiRenderQuality.Fast)
+        {
+            sampleRate = Math.Min(sampleRate, 32000);
         }
         MidiTrackData track = midi.Tracks.FirstOrDefault(candidate => candidate.Index == trackIndex) ?? throw new ArgumentOutOfRangeException(nameof(trackIndex));
         int channels = 2;
@@ -32,7 +45,7 @@ public static class MidiAudioRenderer
         float[] output = new float[frameCount * channels];
         Random random = new(17);
         List<MidiNoteData> orderedNotes = track.Notes.OrderBy(note => note.StartTick).ToList();
-        Dictionary<(int NoteNumber, int FrameCount), AudioObj>? previewSamples = previewQuality && instrument == MidiInstrument.CustomSample
+        Dictionary<(int NoteNumber, int FrameCount), AudioObj>? preparedSamples = instrument == MidiInstrument.CustomSample
             ? []
             : null;
         int noteIndex = 0;
@@ -57,10 +70,10 @@ public static class MidiAudioRenderer
                 AudioObj? preparedCustomSample = null;
                 if (instrument == MidiInstrument.CustomSample && customSample?.Data is { Length: > 0 } && customSample.SampleRate > 0)
                 {
-                    if (previewSamples == null || !previewSamples.TryGetValue((note.NoteNumber, noteFrames), out preparedCustomSample))
+                    if (preparedSamples == null || !preparedSamples.TryGetValue((note.NoteNumber, noteFrames), out preparedCustomSample))
                     {
-                        preparedCustomSample = PrepareCustomSample(customSample, noteFrames, frequency, pitchFrequency, cancellationToken, previewQuality);
-                        previewSamples?.Add((note.NoteNumber, noteFrames), preparedCustomSample);
+                        preparedCustomSample = PrepareCustomSample(customSample, noteFrames, frequency, pitchFrequency, cancellationToken, draftQuality, renderQuality);
+                        preparedSamples?.Add((note.NoteNumber, noteFrames), preparedCustomSample);
                     }
                 }
 
@@ -70,7 +83,7 @@ public static class MidiAudioRenderer
                 }
                 finally
                 {
-                    if (previewSamples == null && preparedCustomSample != null && !ReferenceEquals(preparedCustomSample, customSample))
+                    if (preparedSamples == null && preparedCustomSample != null && !ReferenceEquals(preparedCustomSample, customSample))
                     {
                         preparedCustomSample.Dispose();
                     }
@@ -81,9 +94,9 @@ public static class MidiAudioRenderer
         }
         finally
         {
-            if (previewSamples != null)
+            if (preparedSamples != null)
             {
-                foreach (AudioObj preparedSample in previewSamples.Values)
+                foreach (AudioObj preparedSample in preparedSamples.Values)
                 {
                     preparedSample.Dispose();
                 }
@@ -94,6 +107,10 @@ public static class MidiAudioRenderer
         {
             NormalizePeak(output, 0.95f);
             LogSineRender(track, output, sampleRate);
+        }
+        else if (draftQuality && instrument == MidiInstrument.CustomSample)
+        {
+            NormalizePeak(output, 0.8f);
         }
 
         AudioObj rendered = new()
@@ -113,11 +130,11 @@ public static class MidiAudioRenderer
         return rendered;
     }
 
-    private static AudioObj PrepareCustomSample(AudioObj sample, int targetFrames, double targetFrequency, double referenceFrequency, CancellationToken cancellationToken, bool previewQuality)
+    private static AudioObj PrepareCustomSample(AudioObj sample, int targetFrames, double targetFrequency, double referenceFrequency, CancellationToken cancellationToken, bool draftQuality, MidiRenderQuality renderQuality)
     {
         double sampleRootFrequency = referenceFrequency * Math.Pow(2.0, (60 - 69) / 12.0);
         double semitones = 12.0 * Math.Log2(Math.Max(1.0, targetFrequency) / Math.Max(1.0, sampleRootFrequency));
-        if (previewQuality)
+        if (draftQuality)
         {
             return PreparePreviewCustomSample(sample, targetFrames, semitones, cancellationToken);
         }
@@ -137,8 +154,18 @@ public static class MidiAudioRenderer
                 double stretchFactor = targetFrames / (double) sourceFrames;
                 TimeStretcher.TimeStretchAllThreadsAsync(
                     pitchedSample,
-                    chunkSize: previewQuality ? 2048 : 16384,
-                    overlap: previewQuality ? 0.25f : 0.5f,
+                    chunkSize: renderQuality switch
+                    {
+                        MidiRenderQuality.Fast => 8192,
+                        MidiRenderQuality.Balanced => 12288,
+                        _ => 16384
+                    },
+                    overlap: renderQuality switch
+                    {
+                        MidiRenderQuality.Fast => 0.35f,
+                        MidiRenderQuality.Balanced => 0.45f,
+                        _ => 0.5f
+                    },
                     factor: stretchFactor,
                     normalize: 0.0f,
                     maxWorkers: Environment.ProcessorCount,

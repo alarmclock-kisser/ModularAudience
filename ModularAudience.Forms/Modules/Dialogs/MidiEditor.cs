@@ -1,5 +1,6 @@
 using ModularAudience.Audio;
 using ModularAudience.Audio.Midi;
+using ModularAudience.Generators;
 using System.Drawing.Drawing2D;
 
 namespace ModularAudience.Forms.Modules.Dialogs
@@ -516,9 +517,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            CancellationTokenSource runCts = new();
-            this.playbackCts = runCts;
-            this.button_play.Text = "Stop";
             try
             {
                 await this.PreviewMidiAsync(this.MidiEditSelection.MidiFile, this.SelectedTrack.Index, true);
@@ -533,15 +531,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             finally
             {
-                if (ReferenceEquals(this.playbackCts, runCts))
+                if (this.playbackCts == null)
                 {
-                    this.playbackCts.Dispose();
-                    this.playbackCts = null;
                     this.button_play.Text = "Play";
-                }
-                else
-                {
-                    runCts.Dispose();
                 }
             }
         }
@@ -563,6 +555,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             CancellationTokenSource runCts = new();
             this.playbackCts = runCts;
+            this.button_play.Text = "Stop";
             ProgressDialog? progressDialog = null;
             try
             {
@@ -622,6 +615,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private void ResetPreviewState()
         {
             this.timer_previewCaret.Stop();
+            this.button_play.Text = "Play";
             this.playbackCts?.Dispose();
             this.playbackCts = null;
             this.previewAudio?.Dispose();
@@ -730,6 +724,32 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.SetView(this.viewStartTick, this.viewStartTick + visibleLength);
             this.UpdateScrollBar();
             this.pictureBox_editor.Invalidate();
+        }
+
+        private async void button_remix_Click(object? sender, EventArgs e)
+        {
+            using MidiRemixDialog dialog = new(this.MidiEditSelection.MidiFile);
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
+
+            try
+            {
+                MidiFileData remixedFile = await MidiRemixer.RemixAsync(this.MidiEditSelection.MidiFile, dialog.Settings, dialog.TrackIndex);
+                MidiEditSelection selection = new(remixedFile);
+                MidiEditor editor = new(selection, this.sourceMidiWindow)
+                {
+                    StartPosition = FormStartPosition.Manual,
+                    Location = new Point(this.Location.X + 24, this.Location.Y + 24)
+                };
+                editor.Show(this);
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"MIDI remix failed: {ex}");
+                MessageBox.Show(this, ex.Message, "MIDI remix failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 }

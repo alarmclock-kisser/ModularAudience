@@ -15,6 +15,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Button button_save;
         private Label label_status;
         private System.Windows.Forms.Timer timer_previewCaret;
+        private ToolTip toolTip_midi;
+        private Label label_renderQuality;
+        private ComboBox comboBox_renderQuality;
 
         protected override void Dispose(bool disposing)
         {
@@ -37,6 +40,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.button_save = new Button();
             this.label_status = new Label();
             this.timer_previewCaret = new System.Windows.Forms.Timer(this.components);
+            this.toolTip_midi = new ToolTip(this.components);
+            this.label_renderQuality = new Label();
+            this.comboBox_renderQuality = new ComboBox();
             this.button_export = new Button();
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_midi).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_track).BeginInit();
@@ -53,6 +59,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.pictureBox_midi.Size = new Size(824, 500);
             this.pictureBox_midi.TabIndex = 0;
             this.pictureBox_midi.TabStop = false;
+            this.toolTip_midi.SetToolTip(this.pictureBox_midi, "Click and drag with the mouse to select a range of MIDI notes.\r\nRelease the mouse button to open the selected range in the MIDI Editor.");
             this.pictureBox_midi.Paint += this.pictureBox_midi_Paint;
             this.pictureBox_midi.MouseDown += this.pictureBox_midi_MouseDown;
             this.pictureBox_midi.MouseEnter += this.pictureBox_midi_MouseEnter;
@@ -91,7 +98,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // numericUpDown_bpm
             // 
             this.numericUpDown_bpm.DecimalPlaces = 2;
-            this.numericUpDown_bpm.Increment = new decimal(new int[] { 1, 0, 0, 131072 });
+            this.numericUpDown_bpm.Increment = new decimal(new int[] { 5, 0, 0, 65536 });
             this.numericUpDown_bpm.Location = new Point(168, 512);
             this.numericUpDown_bpm.Maximum = new decimal(new int[] { 400, 0, 0, 0 });
             this.numericUpDown_bpm.Minimum = new decimal(new int[] { 20, 0, 0, 0 });
@@ -127,6 +134,23 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.button_customInstrument.TabIndex = 7;
             this.button_customInstrument.Text = "Custom...";
             this.button_customInstrument.Click += this.button_customInstrument_Click;
+            // 
+            // label_renderQuality
+            // 
+            this.label_renderQuality.AutoSize = true;
+            this.label_renderQuality.Location = new Point(270, 550);
+            this.label_renderQuality.Name = "label_renderQuality";
+            this.label_renderQuality.Size = new Size(86, 15);
+            this.label_renderQuality.TabIndex = 12;
+            this.label_renderQuality.Text = "Render quality:";
+            // 
+            // comboBox_renderQuality
+            // 
+            this.comboBox_renderQuality.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.comboBox_renderQuality.Location = new Point(362, 547);
+            this.comboBox_renderQuality.Name = "comboBox_renderQuality";
+            this.comboBox_renderQuality.Size = new Size(127, 23);
+            this.comboBox_renderQuality.TabIndex = 13;
             // 
             // button_preview
             // 
@@ -176,6 +200,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             this.ClientSize = new Size(824, 624);
             this.Controls.Add(this.button_export);
+            this.Controls.Add(this.comboBox_renderQuality);
+            this.Controls.Add(this.label_renderQuality);
             this.Controls.Add(this.pictureBox_midi);
             this.Controls.Add(this.label_track);
             this.Controls.Add(this.numericUpDown_track);

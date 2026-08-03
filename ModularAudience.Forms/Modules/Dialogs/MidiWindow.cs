@@ -26,6 +26,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.comboBox_instrument.Items.AddRange([
             "Sine", "Saw", "Square", "Triangle", "Noise", "Pluck / Karplus-Strong", "Custom Sample"]);
             this.comboBox_instrument.SelectedIndex = 0;
+            this.comboBox_renderQuality.Items.AddRange(["Best", "Balanced", "Fast", "Draft"]);
+            this.comboBox_renderQuality.SelectedIndex = (int) MidiRenderQuality.Balanced;
             this.label_status.Text = $"Tracks: {this.tracks.Count}, Notes: {this.tracks.Sum(track => track.Notes.Count)}";
         }
 
@@ -34,6 +36,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public MidiInstrument SelectedInstrument => (MidiInstrument) Math.Clamp(this.comboBox_instrument.SelectedIndex, 0, 6);
 
         public double PreviewBpm => (double) this.numericUpDown_bpm.Value;
+
+        private MidiRenderQuality SelectedRenderQuality => (MidiRenderQuality) Math.Clamp(this.comboBox_renderQuality.SelectedIndex, 0, 3);
 
         private void pictureBox_midi_Paint(object? sender, PaintEventArgs e)
         {
@@ -296,6 +300,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async void button_save_Click(object? sender, EventArgs e)
         {
+            ProgressDialog? progressDialog = null;
+            CancellationTokenSource? renderCts = null;
             try
             {
                 this.button_save.Enabled = false;
@@ -305,8 +311,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 MidiInstrument instrument = this.SelectedInstrument;
                 double bpm = (double) this.numericUpDown_bpm.Value;
                 AudioObj? customSample = this.customSample;
-                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, pitchFrequency: midi.PitchFrequency));
+                renderCts = new CancellationTokenSource();
+                Progress<double> progress = new(value => progressDialog?.Report(value));
+                progressDialog = new ProgressDialog("Rendering MIDI...", progress, ct: renderCts.Token, cancellationSource: renderCts);
+                progressDialog.Show(this);
+                progressDialog.BringToFront();
+                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, cancellationToken: renderCts.Token, pitchFrequency: midi.PitchFrequency, progress: progress, renderQuality: this.SelectedRenderQuality), renderCts.Token);
                 WindowMain.Instance?.PlaceRenderedAudio(audio);
+                progressDialog.Complete();
                 this.label_status.Text = "Audio object saved";
             }
             catch (Exception ex)
@@ -316,6 +328,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             finally
             {
+                if (progressDialog != null && !progressDialog.IsDisposed)
+                {
+                    progressDialog.Close();
+                }
+
+                renderCts?.Dispose();
                 this.button_save.Enabled = true;
             }
         }
