@@ -636,11 +636,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
             try
             {
                 MidiFileData? source = this.MidiEditSelection.SourceMidiFile;
-                if (source != null)
+                MidiFileData editedFile = this.MidiEditSelection.MidiFile.WithPitchFrequency(this.PitchFrequency);
+                this.MidiEditSelection.MidiFile = editedFile;
+                if (source != null && this.sourceMidiWindow != null)
                 {
-                    MidiFileData editedFile = this.MidiEditSelection.MidiFile.WithPitchFrequency(this.PitchFrequency);
-                    this.MidiEditSelection.MidiFile = editedFile;
-                    this.sourceMidiWindow?.ApplyEdit(source.ReplaceSelection(this.MidiEditSelection, editedFile));
+                    this.sourceMidiWindow.ApplyEdit(source.ReplaceSelection(this.MidiEditSelection, editedFile));
+                }
+                else if (this.sourceMidiWindow == null)
+                {
+                    MidiWindow midiWindow = new(editedFile.FilePath, editedFile);
+                    midiWindow.StartPosition = FormStartPosition.Manual;
+                    midiWindow.Location = new Point(this.Location.X + 24, this.Location.Y + 24);
+                    midiWindow.Show(this);
                 }
 
                 this.DialogResult = DialogResult.OK;
@@ -651,8 +658,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 LogCollection.Log($"MIDI edit save failed: {ex}");
                 MessageBox.Show(this, ex.Message, "MIDI edit failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-
-            await Task.CompletedTask;
+            finally
+            {
+                await Task.CompletedTask;
+            }
         }
 
         private static float NoteToY(int note, int lowest, int count, int height) => (count - 1 - (note - lowest)) / (float) Math.Max(1, count) * height;
