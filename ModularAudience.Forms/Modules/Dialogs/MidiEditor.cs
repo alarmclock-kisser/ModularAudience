@@ -642,7 +642,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     this.sourceMidiWindow.ApplyEdit(source.ReplaceSelection(this.MidiEditSelection, editedFile));
                 }
-                else if (this.sourceMidiWindow == null)
+                else if (source == null)
                 {
                     MidiWindow midiWindow = new(editedFile.FilePath, editedFile);
                     midiWindow.StartPosition = FormStartPosition.Manual;
