@@ -55,6 +55,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.trackView = trackView;
                 this.Tracks = [trackView.OriginalAudio];
             }
+            else if (filePaths?.Any() == true)
+            {
+                // File-path mode: no AudioObj instances yet; the dialog runs in
+                // configure-only or per-file mode and does not need Tracks populated.
+                this.Tracks = [];
+            }
             else
             {
                 // Close if no valid input
