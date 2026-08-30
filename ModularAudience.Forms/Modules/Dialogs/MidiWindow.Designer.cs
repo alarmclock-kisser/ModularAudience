@@ -18,6 +18,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private ToolTip toolTip_midi;
         private Label label_renderQuality;
         private ComboBox comboBox_renderQuality;
+        private Button button_fromImage;
 
         protected override void Dispose(bool disposing)
         {
@@ -43,6 +44,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.toolTip_midi = new ToolTip(this.components);
             this.label_renderQuality = new Label();
             this.comboBox_renderQuality = new ComboBox();
+            this.button_fromImage = new Button();
             this.button_export = new Button();
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_midi).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_track).BeginInit();
@@ -56,7 +58,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.pictureBox_midi.Dock = DockStyle.Top;
             this.pictureBox_midi.Location = new Point(0, 0);
             this.pictureBox_midi.Name = "pictureBox_midi";
-            this.pictureBox_midi.Size = new Size(824, 500);
+            this.pictureBox_midi.Size = new Size(824, 504);
             this.pictureBox_midi.TabIndex = 0;
             this.pictureBox_midi.TabStop = false;
             this.toolTip_midi.SetToolTip(this.pictureBox_midi, "Click and drag with the mouse to select a range of MIDI notes.\r\nRelease the mouse button to open the selected range in the MIDI Editor.");
@@ -135,23 +137,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.button_customInstrument.Text = "Custom...";
             this.button_customInstrument.Click += this.button_customInstrument_Click;
             // 
-            // label_renderQuality
-            // 
-            this.label_renderQuality.AutoSize = true;
-            this.label_renderQuality.Location = new Point(270, 550);
-            this.label_renderQuality.Name = "label_renderQuality";
-            this.label_renderQuality.Size = new Size(86, 15);
-            this.label_renderQuality.TabIndex = 12;
-            this.label_renderQuality.Text = "Render quality:";
-            // 
-            // comboBox_renderQuality
-            // 
-            this.comboBox_renderQuality.DropDownStyle = ComboBoxStyle.DropDownList;
-            this.comboBox_renderQuality.Location = new Point(362, 547);
-            this.comboBox_renderQuality.Name = "comboBox_renderQuality";
-            this.comboBox_renderQuality.Size = new Size(127, 23);
-            this.comboBox_renderQuality.TabIndex = 13;
-            // 
             // button_preview
             // 
             this.button_preview.Anchor =  AnchorStyles.Bottom | AnchorStyles.Left;
@@ -186,10 +171,37 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.timer_previewCaret.Interval = 30;
             this.timer_previewCaret.Tick += this.timer_previewCaret_Tick;
             // 
+            // label_renderQuality
+            // 
+            this.label_renderQuality.AutoSize = true;
+            this.label_renderQuality.Location = new Point(270, 550);
+            this.label_renderQuality.Name = "label_renderQuality";
+            this.label_renderQuality.Size = new Size(86, 15);
+            this.label_renderQuality.TabIndex = 12;
+            this.label_renderQuality.Text = "Render quality:";
+            // 
+            // comboBox_renderQuality
+            // 
+            this.comboBox_renderQuality.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.comboBox_renderQuality.Location = new Point(362, 547);
+            this.comboBox_renderQuality.Name = "comboBox_renderQuality";
+            this.comboBox_renderQuality.Size = new Size(127, 23);
+            this.comboBox_renderQuality.TabIndex = 13;
+            // 
+            // button_fromImage
+            // 
+            this.button_fromImage.Anchor =  AnchorStyles.Bottom | AnchorStyles.Right;
+            this.button_fromImage.Location = new Point(682, 510);
+            this.button_fromImage.Name = "button_fromImage";
+            this.button_fromImage.Size = new Size(130, 30);
+            this.button_fromImage.TabIndex = 12;
+            this.button_fromImage.Text = "From Image";
+            this.button_fromImage.Click += this.button_fromImage_Click;
+            // 
             // button_export
             // 
             this.button_export.Anchor =  AnchorStyles.Bottom | AnchorStyles.Right;
-            this.button_export.Location = new Point(682, 533);
+            this.button_export.Location = new Point(682, 546);
             this.button_export.Name = "button_export";
             this.button_export.Size = new Size(130, 30);
             this.button_export.TabIndex = 11;
@@ -200,6 +212,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             this.ClientSize = new Size(824, 624);
             this.Controls.Add(this.button_export);
+            this.Controls.Add(this.button_fromImage);
             this.Controls.Add(this.comboBox_renderQuality);
             this.Controls.Add(this.label_renderQuality);
             this.Controls.Add(this.pictureBox_midi);

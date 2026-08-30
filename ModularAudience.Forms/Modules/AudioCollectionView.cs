@@ -1310,5 +1310,13 @@ namespace ModularAudience.Forms
                 Cursor.Current = previousCursor;
             }
         }
+
+        private void neuralFeedbackEngineToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var selectedAudios = this.GetContextAudios();
+
+            NeuralBeatEngineDialog dlg = new(selectedAudios);
+            dlg.Show(this);
+        }
     }
 }

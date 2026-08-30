@@ -101,8 +101,9 @@
             this.menuToolStripItem_timeStretchSelected = new ToolStripMenuItem();
             this.menuToolStripItem_demucsSeparateSelected = new ToolStripMenuItem();
             this.menuToolStripItem_pinWindow = new ToolStripMenuItem();
-            this.toolStripComboBox_orderBy = new ToolStripComboBox();
             this.convertToMIDIToolStripMenuItem = new ToolStripMenuItem();
+            this.toolStripComboBox_orderBy = new ToolStripComboBox();
+            this.neuralFeedbackEngineToolStripMenuItem = new ToolStripMenuItem();
             this.contextMenuStrip_audios.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -219,7 +220,7 @@
             // 
             // menuToolStripItem_generateBreakbeat
             // 
-            this.menuToolStripItem_generateBreakbeat.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatRun, this.menuToolStripItem_generateBreakbeatBpm, this.menuToolStripItem_generateBreakbeatBars, this.menuToolStripItem_generateBreakbeatHits, this.menuToolStripItem_generateBreakbeatDensity, this.menuToolStripItem_generateBreakbeatComplexity, this.menuToolStripItem_generateBreakbeatResolution, this.menuToolStripItem_generateBreakbeatSwing });
+            this.menuToolStripItem_generateBreakbeat.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatRun, this.menuToolStripItem_generateBreakbeatBpm, this.menuToolStripItem_generateBreakbeatBars, this.menuToolStripItem_generateBreakbeatHits, this.menuToolStripItem_generateBreakbeatDensity, this.menuToolStripItem_generateBreakbeatComplexity, this.menuToolStripItem_generateBreakbeatResolution, this.menuToolStripItem_generateBreakbeatSwing, this.neuralFeedbackEngineToolStripMenuItem });
             this.menuToolStripItem_generateBreakbeat.Name = "menuToolStripItem_generateBreakbeat";
             this.menuToolStripItem_generateBreakbeat.Size = new Size(212, 22);
             this.menuToolStripItem_generateBreakbeat.Text = "Generate Breakbeat";
@@ -227,7 +228,7 @@
             // menuToolStripItem_generateBreakbeatRun
             // 
             this.menuToolStripItem_generateBreakbeatRun.Name = "menuToolStripItem_generateBreakbeatRun";
-            this.menuToolStripItem_generateBreakbeatRun.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatRun.Size = new Size(213, 22);
             this.menuToolStripItem_generateBreakbeatRun.Text = "Run";
             this.menuToolStripItem_generateBreakbeatRun.Click += this.menuToolStripItem_generateBreakbeatRun_Click;
             // 
@@ -235,7 +236,7 @@
             // 
             this.menuToolStripItem_generateBreakbeatBpm.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatBpm80, this.menuToolStripItem_generateBreakbeatBpm875, this.menuToolStripItem_generateBreakbeatBpm100, this.menuToolStripItem_generateBreakbeatBpm120, this.menuToolStripItem_generateBreakbeatBpm140 });
             this.menuToolStripItem_generateBreakbeatBpm.Name = "menuToolStripItem_generateBreakbeatBpm";
-            this.menuToolStripItem_generateBreakbeatBpm.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatBpm.Size = new Size(213, 22);
             this.menuToolStripItem_generateBreakbeatBpm.Text = "BPM";
             // 
             // menuToolStripItem_generateBreakbeatBpm80
@@ -277,7 +278,7 @@
             // 
             this.menuToolStripItem_generateBreakbeatBars.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatBars1, this.menuToolStripItem_generateBreakbeatBars2, this.menuToolStripItem_generateBreakbeatBars4, this.menuToolStripItem_generateBreakbeatBars8 });
             this.menuToolStripItem_generateBreakbeatBars.Name = "menuToolStripItem_generateBreakbeatBars";
-            this.menuToolStripItem_generateBreakbeatBars.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatBars.Size = new Size(213, 22);
             this.menuToolStripItem_generateBreakbeatBars.Text = "Bars";
             // 
             // menuToolStripItem_generateBreakbeatBars1
@@ -312,7 +313,7 @@
             // 
             this.menuToolStripItem_generateBreakbeatHits.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatHits6, this.menuToolStripItem_generateBreakbeatHits8, this.menuToolStripItem_generateBreakbeatHits12, this.menuToolStripItem_generateBreakbeatHits16, this.menuToolStripItem_generateBreakbeatHits24 });
             this.menuToolStripItem_generateBreakbeatHits.Name = "menuToolStripItem_generateBreakbeatHits";
-            this.menuToolStripItem_generateBreakbeatHits.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatHits.Size = new Size(213, 22);
             this.menuToolStripItem_generateBreakbeatHits.Text = "Hits / Bar";
             // 
             // menuToolStripItem_generateBreakbeatHits6
@@ -354,7 +355,7 @@
             // 
             this.menuToolStripItem_generateBreakbeatDensity.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatDensitySparse, this.menuToolStripItem_generateBreakbeatDensityBalanced, this.menuToolStripItem_generateBreakbeatDensityDense, this.menuToolStripItem_generateBreakbeatDensityMax });
             this.menuToolStripItem_generateBreakbeatDensity.Name = "menuToolStripItem_generateBreakbeatDensity";
-            this.menuToolStripItem_generateBreakbeatDensity.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatDensity.Size = new Size(213, 22);
             this.menuToolStripItem_generateBreakbeatDensity.Text = "Density";
             // 
             // menuToolStripItem_generateBreakbeatDensitySparse
@@ -389,7 +390,7 @@
             // 
             this.menuToolStripItem_generateBreakbeatComplexity.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatComplexityLow, this.menuToolStripItem_generateBreakbeatComplexityBalanced, this.menuToolStripItem_generateBreakbeatComplexityBusy, this.menuToolStripItem_generateBreakbeatComplexityWild });
             this.menuToolStripItem_generateBreakbeatComplexity.Name = "menuToolStripItem_generateBreakbeatComplexity";
-            this.menuToolStripItem_generateBreakbeatComplexity.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatComplexity.Size = new Size(213, 22);
             this.menuToolStripItem_generateBreakbeatComplexity.Text = "Complexity";
             // 
             // menuToolStripItem_generateBreakbeatComplexityLow
@@ -424,7 +425,7 @@
             // 
             this.menuToolStripItem_generateBreakbeatResolution.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatResolution16, this.menuToolStripItem_generateBreakbeatResolution32 });
             this.menuToolStripItem_generateBreakbeatResolution.Name = "menuToolStripItem_generateBreakbeatResolution";
-            this.menuToolStripItem_generateBreakbeatResolution.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatResolution.Size = new Size(213, 22);
             this.menuToolStripItem_generateBreakbeatResolution.Text = "Resolution";
             // 
             // menuToolStripItem_generateBreakbeatResolution16
@@ -445,7 +446,7 @@
             // 
             this.menuToolStripItem_generateBreakbeatSwing.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatSwing0, this.menuToolStripItem_generateBreakbeatSwing6, this.menuToolStripItem_generateBreakbeatSwing12, this.menuToolStripItem_generateBreakbeatSwing18 });
             this.menuToolStripItem_generateBreakbeatSwing.Name = "menuToolStripItem_generateBreakbeatSwing";
-            this.menuToolStripItem_generateBreakbeatSwing.Size = new Size(134, 22);
+            this.menuToolStripItem_generateBreakbeatSwing.Size = new Size(213, 22);
             this.menuToolStripItem_generateBreakbeatSwing.Text = "Swing";
             // 
             // menuToolStripItem_generateBreakbeatSwing0
@@ -625,6 +626,13 @@
             this.menuToolStripItem_pinWindow.Text = "Pin Window";
             this.menuToolStripItem_pinWindow.CheckedChanged += this.menuToolStripItem_pinWindow_CheckedChanged;
             // 
+            // convertToMIDIToolStripMenuItem
+            // 
+            this.convertToMIDIToolStripMenuItem.Name = "convertToMIDIToolStripMenuItem";
+            this.convertToMIDIToolStripMenuItem.Size = new Size(212, 22);
+            this.convertToMIDIToolStripMenuItem.Text = "Convert to MIDI";
+            this.convertToMIDIToolStripMenuItem.Click += this.convertToMIDIToolStripMenuItem_Click;
+            // 
             // toolStripComboBox_orderBy
             // 
             this.toolStripComboBox_orderBy.Items.AddRange(new object[] { "Duration", "Created At", "Name", "BPM" });
@@ -633,12 +641,12 @@
             this.toolStripComboBox_orderBy.Text = "Order by";
             this.toolStripComboBox_orderBy.SelectedIndexChanged += this.toolStripComboBox_orderBy_SelectedIndexChanged;
             // 
-            // convertToMIDIToolStripMenuItem
+            // neuralFeedbackEngineToolStripMenuItem
             // 
-            this.convertToMIDIToolStripMenuItem.Name = "convertToMIDIToolStripMenuItem";
-            this.convertToMIDIToolStripMenuItem.Size = new Size(212, 22);
-            this.convertToMIDIToolStripMenuItem.Text = "Convert to MIDI";
-            this.convertToMIDIToolStripMenuItem.Click += this.convertToMIDIToolStripMenuItem_Click;
+            this.neuralFeedbackEngineToolStripMenuItem.Name = "neuralFeedbackEngineToolStripMenuItem";
+            this.neuralFeedbackEngineToolStripMenuItem.Size = new Size(213, 22);
+            this.neuralFeedbackEngineToolStripMenuItem.Text = "Neural Feedback Engine ...";
+            this.neuralFeedbackEngineToolStripMenuItem.Click += this.neuralFeedbackEngineToolStripMenuItem_Click;
             // 
             // AudioCollectionView
             // 
@@ -736,5 +744,6 @@
         private ToolStripMenuItem menuToolStripItem_pinWindow;
         private ToolStripComboBox toolStripComboBox_orderBy;
         private ToolStripMenuItem convertToMIDIToolStripMenuItem;
+        private ToolStripMenuItem neuralFeedbackEngineToolStripMenuItem;
     }
 }

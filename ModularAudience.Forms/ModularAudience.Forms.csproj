@@ -41,6 +41,7 @@
     <ProjectReference Include="..\ModularAudience.Audio\ModularAudience.Audio.csproj" />
     <ProjectReference Include="..\ModularAudience.Cuda\ModularAudience.Cuda.csproj" />
     <ProjectReference Include="..\ModularAudience.Generators\ModularAudience.Generators.csproj" />
+    <ProjectReference Include="..\ModularAudience.Llama\ModularAudience.Llama.csproj" />
     <ProjectReference Include="..\ModularAudience.Onnx\ModularAudience.Onnx.csproj" />
   </ItemGroup>
 

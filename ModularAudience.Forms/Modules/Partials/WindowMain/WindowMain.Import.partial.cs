@@ -5,6 +5,7 @@ using ModularAudience.Forms.Modules;
 using ModularAudience.Forms.Modules.Dialogs;
 using ModularAudience.Audio.Midi;
 using System.ComponentModel;
+using ModularAudience.Audio.Omr;
 
 namespace ModularAudience.Forms
 {
@@ -174,7 +175,7 @@ namespace ModularAudience.Forms
                 using OpenFileDialog openFileDialog = new()
                 {
                     InitialDirectory = initialDir,
-                    Filter = "Audio Files|*.wav;*.mp3;*.flac|MIDI Files|*.mid;*.midi|All Supported Files|*.wav;*.mp3;*.flac;*.mid;*.midi",
+                    Filter = "Audio Files|*.wav;*.mp3;*.flac|MIDI Files|*.mid;*.midi|PDF Files|*.pdf|All Supported Files|*.wav;*.mp3;*.flac;*.mid;*.midi;*.pdf",
                     Multiselect = true,
                     Title = "Import Audio Files / Loops",
                     RestoreDirectory = true
@@ -193,7 +194,10 @@ namespace ModularAudience.Forms
                 .Where(file => MidiFileData.IsMidiPath(file))
                 .ToList();
             List<string> audioFiles = selectedFiles
-                .Where(file => !MidiFileData.IsMidiPath(file))
+                .Where(file => !MidiFileData.IsMidiPath(file) && !Path.GetExtension(file).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            List<string> pdfFiles = selectedFiles
+                .Where(file => Path.GetExtension(file).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             foreach (string midiFile in midiFiles)
@@ -207,6 +211,44 @@ namespace ModularAudience.Forms
                 {
                     LogCollection.Log($"MIDI import failed for '{midiFile}': {ex}");
                     MessageBox.Show(this, ex.Message, "MIDI import failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+
+            foreach (string pdfFile in pdfFiles)
+            {
+                try
+                {
+                    ImageObj? imageObj = await ImageObj.LoadAsync(pdfFile);
+                    if (imageObj == null)
+                    {
+                        LogCollection.Log($"PDF import failed for '{pdfFile}': Unable to load PDF as image.");
+                        continue;
+                    }
+
+                    ImageViewDialog viewDlg = new(imageObj);
+                    viewDlg.Show();
+
+                    OmrObj? omr = await ImageToOmrObjParser.ParseAsync(imageObj);
+                    if (omr == null)
+                    {
+                        LogCollection.Log($"PDF import failed for '{pdfFile}': Unable to parse OMR from image.");
+                        continue;
+                    }
+
+                    var midiData = OmrToMidiObjConverter.Convert(omr);
+                    if (midiData == null)
+                    {
+                        LogCollection.Log($"PDF import failed for '{pdfFile}': Unable to generate MIDI from OMR.");
+                        continue;
+                    }
+
+                    MidiWindow midiWindow = new(null, midiData);
+                    midiWindow.Show(this);
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log($"PDF import failed for '{pdfFile}': {ex}");
+                    MessageBox.Show(this, ex.Message, "PDF import failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
 

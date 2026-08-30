@@ -1,5 +1,6 @@
 using ModularAudience.Audio;
 using ModularAudience.Audio.Midi;
+using ModularAudience.Audio.Omr;
 using System.Drawing.Drawing2D;
 
 namespace ModularAudience.Forms.Modules.Dialogs
@@ -134,7 +135,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            this.midiSelectionStart = ClampToMidiCanvas(e.Location);
+            this.midiSelectionStart = this.ClampToMidiCanvas(e.Location);
             this.midiSelectionCurrent = this.midiSelectionStart;
             this.pictureBox_midi.Capture = true;
             this.pictureBox_midi.Invalidate();
@@ -147,7 +148,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            this.midiSelectionCurrent = ClampToMidiCanvas(e.Location);
+            this.midiSelectionCurrent = this.ClampToMidiCanvas(e.Location);
             this.pictureBox_midi.Invalidate();
         }
 
@@ -158,7 +159,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            Point end = ClampToMidiCanvas(e.Location);
+            Point end = this.ClampToMidiCanvas(e.Location);
             this.midiSelectionCurrent = end;
             this.pictureBox_midi.Capture = false;
             this.midiSelectionStart = null;
@@ -442,5 +443,68 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
             }
         }
+
+        private async void button_fromImage_Click(object sender, EventArgs e)
+        {
+            // OFD at MyMusic for image file import (png, jpg, bmp, pdf)
+            using OpenFileDialog ofd = new()
+            {
+                Title = "Import MIDI from Image",
+                Filter = "Image Files (*.png;*.jpg;*.jpeg;*.bmp;*.pdf)|*.png;*.jpg;*.jpeg;*.bmp;*.pdf",
+                DefaultExt = "png",
+                AddExtension = true,
+                FileName = Path.GetFileNameWithoutExtension(this.midiFile.FilePath) + "_imported.png"
+            };
+            if (ofd.ShowDialog(this) == DialogResult.OK)
+            {
+                try
+                {
+                    this.button_fromImage.Enabled = false;
+                    this.label_status.Text = "Importing MIDI from image...";
+                    
+                    using ImageObj? img = await ImageObj.LoadAsync(ofd.FileName);
+                    if (img == null)
+                    {
+                        throw new Exception("Failed to load image.");
+                    }
+
+                    var omr = await ImageToOmrObjParser.ParseAsync(img);
+                    if (omr == null)
+                    {
+                        throw new Exception("Failed to parse image to OMR.");
+                    }
+
+                    var midi = OmrToMidiObjConverter.Convert(omr);
+                    if (midi == null)
+                    {
+                        throw new Exception("Failed to convert OMR to MIDI.");
+                    }
+
+                    if (!(midi.Tracks.FirstOrDefault()?.Notes.Count > 0))
+                    {
+                        using var viewDlg = new ImageViewDialog(img);
+                        if (viewDlg.ShowDialog(this) != DialogResult.OK || viewDlg.GeneratedMidiFile == null)
+                        {
+                            this.label_status.Text = "MIDI image import cancelled.";
+                            return;
+                        }
+
+                        midi = viewDlg.GeneratedMidiFile;
+                    }
+
+                    this.ApplyEdit(midi);
+                    this.label_status.Text = $"MIDI imported from {ofd.FileName}";
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log($"MIDI import failed: {ex}");
+                    MessageBox.Show(this, ex.Message, "MIDI import failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                finally
+                {
+                    this.button_fromImage.Enabled = true;
+                }
+            }
+        }   
     }
 }

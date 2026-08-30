@@ -147,7 +147,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             if (e.Button == MouseButtons.Right && (Control.ModifierKeys & Keys.Shift) != Keys.None)
             {
-                this.rectangleSelectionStart = ClampToEditor(e.Location);
+                this.rectangleSelectionStart = this.ClampToEditor(e.Location);
                 this.rectangleSelectionEnd = this.rectangleSelectionStart;
                 this.editButton = MouseButtons.Right;
                 this.editPreviousLength = this.editorLengthTicks;
@@ -167,9 +167,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            this.editStart = ClampToEditor(e.Location);
+            this.editStart = this.ClampToEditor(e.Location);
             this.editButton = e.Button;
-            this.editNote = PointToNote(this.editStart.Value.Y);
+            this.editNote = this.PointToNote(this.editStart.Value.Y);
             this.editPreviousLength = this.editorLengthTicks;
             this.pictureBox_editor.Capture = true;
             this.ApplyNoteRange(this.editStart.Value, this.editStart.Value, e.Button == MouseButtons.Left, false);
@@ -197,18 +197,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 if (this.rectangleSelectionStart is Point && this.editButton == MouseButtons.Right)
                 {
-                    this.rectangleSelectionEnd = ClampToEditor(e.Location);
+                    this.rectangleSelectionEnd = this.ClampToEditor(e.Location);
                     this.pictureBox_editor.Invalidate();
                 }
                 return;
             }
 
-            Point current = ClampToEditor(e.Location);
+            Point current = this.ClampToEditor(e.Location);
             if (this.editButton == MouseButtons.Right)
             {
                 this.ApplyNoteRange(current, current, false, false);
             }
-            else if (PointToNote(current.Y) == this.editNote)
+            else if (this.PointToNote(current.Y) == this.editNote)
             {
                 this.ApplyNoteRange(this.editStart.Value, current, this.editButton == MouseButtons.Left, false);
             }
@@ -228,7 +228,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             if (this.rectangleSelectionStart is Point rectangleStart && e.Button == MouseButtons.Right)
             {
-                Point rectangleEnd = ClampToEditor(e.Location);
+                Point rectangleEnd = this.ClampToEditor(e.Location);
                 this.DeleteNotesInRectangle(rectangleStart, rectangleEnd);
                 this.rectangleSelectionStart = null;
                 this.rectangleSelectionEnd = null;
@@ -243,7 +243,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            Point end = ClampToEditor(e.Location);
+            Point end = this.ClampToEditor(e.Location);
             this.editStart = null;
             this.pictureBox_editor.Capture = false;
             this.UpdateEditorLengthAfterNoteChange(this.editPreviousLength);
@@ -266,14 +266,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
             int right = Math.Max(first.X, second.X);
             int top = Math.Min(first.Y, second.Y);
             int bottom = Math.Max(first.Y, second.Y);
-            long startTick = PointToTick(left);
-            long endTick = PointToTick(right) + this.GridTicks;
+            long startTick = this.PointToTick(left);
+            long endTick = this.PointToTick(right) + this.GridTicks;
             int height = Math.Max(1, this.pictureBox_editor.ClientSize.Height - 20);
-            int count = Math.Max(1, HighestNote - LowestNote + 1);
+            int count = Math.Max(1, this.HighestNote - this.LowestNote + 1);
 
             this.SelectedTrack.Notes.RemoveAll(note =>
             {
-                float noteTop = NoteToY(note.NoteNumber, LowestNote, count, height);
+                float noteTop = NoteToY(note.NoteNumber, this.LowestNote, count, height);
                 float noteBottom = noteTop + Math.Max(3, height / (float) count - 1);
                 long noteEndTick = note.StartTick + note.DurationTicks;
                 bool overlapsTime = note.StartTick <= endTick && noteEndTick >= startTick;
@@ -432,10 +432,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void ApplyNoteRange(Point first, Point second, bool add, bool updateView = true)
         {
-            int firstNote = PointToNote(first.Y);
-            int note = Math.Clamp(firstNote, LowestNote, HighestNote);
-            long startTick = PointToTick(Math.Min(first.X, second.X));
-            long endTick = Math.Max(startTick + this.GridTicks, PointToTick(Math.Max(first.X, second.X)) + this.GridTicks);
+            int firstNote = this.PointToNote(first.Y);
+            int note = Math.Clamp(firstNote, this.LowestNote, this.HighestNote);
+            long startTick = this.PointToTick(Math.Min(first.X, second.X));
+            long endTick = Math.Max(startTick + this.GridTicks, this.PointToTick(Math.Max(first.X, second.X)) + this.GridTicks);
             long previousLength = this.SelectedTrack.LengthTicks;
 
             this.SelectedTrack.Notes.RemoveAll(candidate =>
@@ -471,8 +471,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private MidiNoteData? FindNoteAt(Point point)
         {
-            int note = PointToNote(point.Y);
-            long tick = PointToTick(point.X);
+            int note = this.PointToNote(point.Y);
+            long tick = this.PointToTick(point.X);
             return this.SelectedTrack.Notes.FirstOrDefault(candidate => candidate.NoteNumber == note && candidate.StartTick <= tick && candidate.StartTick + candidate.DurationTicks > tick);
         }
 
@@ -491,8 +491,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private int PointToNote(int y)
         {
             int height = Math.Max(1, this.pictureBox_editor.ClientSize.Height - 20);
-            int count = Math.Max(1, HighestNote - LowestNote + 1);
-            return Math.Clamp(HighestNote - (int) Math.Floor(y / (double) height * count), LowestNote, HighestNote);
+            int count = Math.Max(1, this.HighestNote - this.LowestNote + 1);
+            return Math.Clamp(this.HighestNote - (int) Math.Floor(y / (double) height * count), this.LowestNote, this.HighestNote);
         }
 
         private async Task PreviewNoteAsync(MidiNoteData note)
