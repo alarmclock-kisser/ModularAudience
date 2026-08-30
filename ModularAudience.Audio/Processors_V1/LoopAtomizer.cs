@@ -827,10 +827,12 @@ namespace ModularAudience.Audio.Processors_V1
                 SampleRate = sampleRate,
                 Length = outData.LongLength
             };
-            try {
+            try
+            {
                 obj.Name = (string.IsNullOrWhiteSpace(baseName) ? "slice" : baseName);
                 obj.Rename(obj.Name);
-            } catch { }
+            }
+            catch { }
             return obj;
         }
 

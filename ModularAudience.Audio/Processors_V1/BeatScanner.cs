@@ -581,7 +581,7 @@ namespace ModularAudience.Audio.Processors_V1
                                     {
                                         sum += floats[f * channels + c];
                                     }
-                                    sampleBuffer.Add((float)(sum / channels));
+                                    sampleBuffer.Add((float) (sum / channels));
                                 }
                             }
                         }
@@ -601,7 +601,7 @@ namespace ModularAudience.Audio.Processors_V1
                                     {
                                         sum += shorts[f * channels + c] / 32768.0;
                                     }
-                                    sampleBuffer.Add((float)(sum / channels));
+                                    sampleBuffer.Add((float) (sum / channels));
                                 }
                             }
                         }
@@ -638,7 +638,7 @@ namespace ModularAudience.Audio.Processors_V1
                         }
 
                         // Cap snapshot to reasonable length (MaxLiveBpmDurationSeconds seconds)
-                        int maxSamples = sr * Math.Max(1, Math.Min(MaxLiveBpmDurationSeconds, (int)MaxLiveBpmDurationSeconds));
+                        int maxSamples = sr * Math.Max(1, Math.Min(MaxLiveBpmDurationSeconds, (int) MaxLiveBpmDurationSeconds));
                         int take = Math.Min(sampleBuffer.Count, maxSamples);
                         snapshot = sampleBuffer.Skip(Math.Max(0, sampleBuffer.Count - take)).Take(take).ToArray();
                     }

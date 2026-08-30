@@ -157,7 +157,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         if (obj == null)
                         {
                             // markiere als fertig
-                            ((IProgress<double>)childProgress).Report(1.0);
+                            ((IProgress<double>) childProgress).Report(1.0);
                             return;
                         }
 
@@ -175,7 +175,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     finally
                     {
                         // Stelle sicher, dass dieses Element als 100% gemeldet wird
-                        try { ((IProgress<double>)childProgress).Report(1.0); } catch { }
+                        try { ((IProgress<double>) childProgress).Report(1.0); } catch { }
                     }
                 });
             }).ToArray();

@@ -34,14 +34,14 @@ namespace ModularAudience.Audio.Processing
         {
             int sampleRate = Math.Max(1, audio.SampleRate);
             int channels = Math.Max(1, audio.Channels <= 0 ? 1 : audio.Channels);
-            return interleavedSampleIndex / (double)channels / sampleRate;
+            return interleavedSampleIndex / (double) channels / sampleRate;
         }
 
         private static int SecondsToSamples(AudioObj audio, double seconds)
         {
             int sampleRate = Math.Max(1, audio.SampleRate);
             int channels = Math.Max(1, audio.Channels <= 0 ? 1 : audio.Channels);
-            return Math.Max(0, (int)Math.Round(Math.Max(0.0, seconds) * sampleRate) * channels);
+            return Math.Max(0, (int) Math.Round(Math.Max(0.0, seconds) * sampleRate) * channels);
         }
 
         private static int PickClosestToSeconds(AudioObj audio, IReadOnlyDictionary<int, float> candidates, double targetSeconds, int fallback)
@@ -325,7 +325,7 @@ namespace ModularAudience.Audio.Processing
             // clamp threshold
             threshold = Math.Clamp(threshold, 0f, 1f);
 
-                int workers = Math.Clamp(maxWorkers ?? Environment.ProcessorCount, 1, Environment.ProcessorCount);
+            int workers = Math.Clamp(maxWorkers ?? Environment.ProcessorCount, 1, Environment.ProcessorCount);
 
             // run heavy work off the UI thread
             return await Task.Run(async () =>
@@ -339,8 +339,8 @@ namespace ModularAudience.Audio.Processing
                 int sampleRate = Math.Max(1, audio.SampleRate);
                 int channels = Math.Max(1, audio.Channels <= 0 ? 1 : audio.Channels);
 
-                int startMono = (int)Math.Clamp(trimStart / Math.Max(1, channels), 0, fullMono.Length);
-                int endMono = (int)Math.Clamp(trimEnd / Math.Max(1, channels), 0, fullMono.Length);
+                int startMono = (int) Math.Clamp(trimStart / Math.Max(1, channels), 0, fullMono.Length);
+                int endMono = (int) Math.Clamp(trimEnd / Math.Max(1, channels), 0, fullMono.Length);
                 if (endMono <= startMono) { startMono = 0; endMono = fullMono.Length; }
 
                 // build monoSamples slice
@@ -390,22 +390,22 @@ namespace ModularAudience.Audio.Processing
                     // if single band and we want lowband bias, use up to 200Hz
                     if (bandCount == 1)
                     {
-                        int maxBin = Math.Min(nyquistBin, (int)(200.0 * frameSize / sampleRate));
+                        int maxBin = Math.Min(nyquistBin, (int) (200.0 * frameSize / sampleRate));
                         double sum = 0.0;
                         for (int b = 0; b <= maxBin; b++)
                         {
                             double m = buffer[b].Magnitude;
                             sum += m * m;
                         }
-                        bandEnergies[0][fi] = (float)sum;
+                        bandEnergies[0][fi] = (float) sum;
                     }
                     else
                     {
                         // split full spectrum into equal-width bands (linear)
                         for (int bi = 0; bi < bandCount; bi++)
                         {
-                            int startBin = (int)((bi / (double)bandCount) * nyquistBin);
-                            int endBin = (int)(((bi + 1) / (double)bandCount) * nyquistBin);
+                            int startBin = (int) ((bi / (double) bandCount) * nyquistBin);
+                            int endBin = (int) (((bi + 1) / (double) bandCount) * nyquistBin);
                             startBin = Math.Clamp(startBin, 0, nyquistBin);
                             endBin = Math.Clamp(endBin, startBin, nyquistBin);
                             double sum = 0.0;
@@ -414,7 +414,7 @@ namespace ModularAudience.Audio.Processing
                                 double m = buffer[b].Magnitude;
                                 sum += m * m;
                             }
-                            bandEnergies[bi][fi] = (float)sum;
+                            bandEnergies[bi][fi] = (float) sum;
                         }
                     }
                 });
@@ -460,7 +460,7 @@ namespace ModularAudience.Audio.Processing
                         if (d <= beatTol)
                         {
                             double factor = 1.0 + 0.6 * (1.0 - d / beatTol); // up to +60% boost
-                            combinedFlux[i] = (float)(combinedFlux[i] * factor);
+                            combinedFlux[i] = (float) (combinedFlux[i] * factor);
                         }
                     }
                     // re-normalize slightly
@@ -505,7 +505,7 @@ namespace ModularAudience.Audio.Processing
                 }
 
                 // Convert peaks to sample indices and enforce minimum spacing
-                int minSpacingSamples = (int)(sampleRate * 0.25);
+                int minSpacingSamples = (int) (sampleRate * 0.25);
                 var timeOrdered = peaks.OrderBy(p => p.Frame).ToList();
                 var candidates = new List<(int Sample, float Value)>();
                 int lastMonoSample = -minSpacingSamples * 2;
@@ -533,7 +533,7 @@ namespace ModularAudience.Audio.Processing
 
                 // Keep strongest candidates, then return them in time order. Previous code used
                 // time-order Take(maxKeep), which accidentally discarded later stronger drops.
-                int maxKeep = Math.Max(1, (int)Math.Ceiling((1.0 - threshold) * 32));
+                int maxKeep = Math.Max(1, (int) Math.Ceiling((1.0 - threshold) * 32));
                 var final = candidates
                     .GroupBy(c => c.Sample)
                     .Select(g => g.OrderByDescending(c => c.Value).First())
@@ -559,7 +559,7 @@ namespace ModularAudience.Audio.Processing
             var w = new float[n];
             for (int i = 0; i < n; i++)
             {
-                w[i] = 0.5f * (1f - (float)Math.Cos(2.0 * Math.PI * i / (n - 1)));
+                w[i] = 0.5f * (1f - (float) Math.Cos(2.0 * Math.PI * i / (n - 1)));
             }
             return w;
         }
@@ -583,7 +583,7 @@ namespace ModularAudience.Audio.Processing
                     sum += data[j];
                 }
 
-                outArr[i] = (float)(sum / (e - s + 1));
+                outArr[i] = (float) (sum / (e - s + 1));
             }
             return outArr;
         }

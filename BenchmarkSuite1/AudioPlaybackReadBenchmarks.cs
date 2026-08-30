@@ -4,6 +4,7 @@ using System;
 using System.Reflection;
 
 namespace BenchmarkSuite1;
+
 [CPUUsageDiagnoser]
 public class AudioPlaybackReadBenchmarks
 {
@@ -19,7 +20,7 @@ public class AudioPlaybackReadBenchmarks
         this.destination = new float[2048];
         for (int i = 0; i < this.source.Length; i++)
         {
-            this.source[i] = (float)System.Math.Sin(i * 0.01);
+            this.source[i] = (float) System.Math.Sin(i * 0.01);
         }
 
         var assembly = typeof(ModularAudience.Audio.AudioPlaybackService).Assembly;
@@ -27,6 +28,11 @@ public class AudioPlaybackReadBenchmarks
         this.constructor = providerType.GetConstructor([typeof(float[]), typeof(int), typeof(int), typeof(long)])!;
         this.readMethod = providerType.GetMethod("Read", [typeof(float[]), typeof(int), typeof(int)])!;
     }
+
+
+    /*
+     
+     */
 
     [IterationSetup]
     public void IterationSetup()

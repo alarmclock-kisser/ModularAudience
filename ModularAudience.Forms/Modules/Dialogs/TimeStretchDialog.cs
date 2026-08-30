@@ -41,7 +41,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private static float LastTargetBpm = 120f;
         private static float LastInitialBpm = 120f;
 
-        public TimeStretchDialog(TrackView? trackView = null, IEnumerable<AudioObj>? audios = null)
+        public TimeStretchDialog(TrackView? trackView = null, IEnumerable<AudioObj>? audios = null, IEnumerable<string>? filePaths = null)
         {
             this.InitializeComponent();
             this.previousInitialBpmValue = this.numericUpDown_initialBpm.Value;
@@ -66,6 +66,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
             if (audios?.Count() == 1)
             {
                 this.Text = $"Time Stretch - {audios.First().Name}";
+            }
+            else if (filePaths?.Any() == true)
+            {
+                Dictionary<string, float> fileBpms = AudioObj.ReadFilesBpmTags(filePaths);
+
+                this.Text = $"Time Stretch (each) <{fileBpms.Count}> Audio Files";
+
+                float? minBpm = fileBpms.Values.Min();
+                float? maxBpm = fileBpms.Values.Max();
+                this.Text += $" [{minBpm?.ToString("0.#") ?? "?"} - {maxBpm?.ToString("0.#") ?? "?"} BPM]";
             }
             else
             {
@@ -370,6 +380,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 UseV2: useV2,
                 AutoChunking: this.checkBox_autoChunking.Checked,
                 Offload: this.checkBox_offload.Checked,
+                Channeled: this.checkBox_channeled.Checked,
                 Trim: this.checkBox_trim.Checked,
                 Fixed: this.checkBox_fixed.Checked
             );

@@ -355,8 +355,8 @@ namespace ModularAudience.Forms
             this.UpdatePlaylistButtonText();
         }
 
-        private void playlistMenu_Prev_Click(object sender, EventArgs e)  => this._playlist.RewindOrPrevious();
-        private void playlistMenu_Skip_Click(object sender, EventArgs e)  => this._playlist.Skip();
+        private void playlistMenu_Prev_Click(object sender, EventArgs e) => this._playlist.RewindOrPrevious();
+        private void playlistMenu_Skip_Click(object sender, EventArgs e) => this._playlist.Skip();
 
         private void playlistMenu_Shuffle_Click(object sender, EventArgs e)
         {
@@ -687,8 +687,7 @@ namespace ModularAudience.Forms
             }
 
             // Open TimeStretchDialog in configure-only mode with a dummy audio
-            var dummy = new AudioObj { Name = "Playlist Track", Bpm = 130f };
-            using var dlg = new TimeStretchDialog(audios: [dummy])
+            using var dlg = new TimeStretchDialog(filePaths: this._playlist.FilePaths)
             {
                 IsConfigureMode = true
             };
@@ -756,8 +755,8 @@ namespace ModularAudience.Forms
 
                 if (settings.UseV2)
                 {
-                    int? chunkSize  = settings.AutoChunking ? null : (int?) settings.ChunkSize;
-                    float? overlap  = settings.AutoChunking ? null : (float?) settings.Overlap;
+                    int? chunkSize = settings.AutoChunking ? null : (int?) settings.ChunkSize;
+                    float? overlap = settings.AutoChunking ? null : (float?) settings.Overlap;
 
                     float preRms = PlaylistNormalizer.MeasureRms(audio.Data);
                     await TimeStretcher_V2.Timestretch_V2Async(
@@ -777,7 +776,7 @@ namespace ModularAudience.Forms
                         normalize: 1.0f,
                         maxWorkers: settings.Threads,
                         progress: null,
-                        offload: settings.Offload, channeled: TimeStretchDialog.Channeled).ConfigureAwait(false);
+                        offload: settings.Offload, channeled: settings.Channeled).ConfigureAwait(false);
                     PlaylistNormalizer.ApplyRmsGain(audio.Data, preRms);
                 }
 
@@ -989,8 +988,8 @@ namespace ModularAudience.Forms
 
             string bpmStr = bpm > 0 ? $"{bpm:F0}" : "?";
 
-            int ch   = this._playlist.CurrentChannels;
-            int sr   = this._playlist.CurrentSampleRate;
+            int ch = this._playlist.CurrentChannels;
+            int sr = this._playlist.CurrentSampleRate;
             int bits = this._playlist.CurrentBitDepth;
             string chStr = ch switch { 1 => "mono", 2 => "stereo", _ => $"{ch}-ch" };
             string srStr = (sr / 1000.0).ToString("F1");
@@ -1088,7 +1087,7 @@ namespace ModularAudience.Forms
             this.FlushTrackLog();
 
             // Reset so future recordings start fresh
-            this._trackLogFilePath   = null;
+            this._trackLogFilePath = null;
             this._trackLogRecordStart = null;
             this._trackLogActivePaths.Clear();
         }
@@ -1159,7 +1158,7 @@ namespace ModularAudience.Forms
                     .Select(e =>
                 {
                     string start = FormatLogTs(e.Start);
-                    string end   = e.End.HasValue ? FormatLogTs(e.End.Value) : "ongoing";
+                    string end = e.End.HasValue ? FormatLogTs(e.End.Value) : "ongoing";
                     return $"{start} - {end}\t{e.TrackId}";
                 });
                 File.WriteAllLines(this._trackLogFilePath, lines);

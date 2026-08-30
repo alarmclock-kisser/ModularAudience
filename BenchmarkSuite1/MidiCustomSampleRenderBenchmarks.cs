@@ -6,6 +6,7 @@ using System.Linq;
 using Microsoft.VSDiagnostics;
 
 namespace BenchmarkSuite1;
+
 [CPUUsageDiagnoser]
 public class MidiCustomSampleRenderBenchmarks
 {
@@ -20,7 +21,7 @@ public class MidiCustomSampleRenderBenchmarks
             SampleRate = 44100,
             Channels = 2,
             BitDepth = 32,
-            Data = Enumerable.Range(0, 44100 * 2).Select(index => (float)Math.Sin(index * 0.01)).ToArray(),
+            Data = Enumerable.Range(0, 44100 * 2).Select(index => (float) Math.Sin(index * 0.01)).ToArray(),
             Length = 44100L * 2,
             Duration = TimeSpan.FromSeconds(1),
             Volume = 100f

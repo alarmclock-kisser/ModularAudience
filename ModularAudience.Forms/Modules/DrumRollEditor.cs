@@ -881,7 +881,7 @@ namespace ModularAudience.Forms.Modules
                                 {
                                     this.BeginInvoke((MethodInvoker) (() =>
                                     {
-                                         this.HandleCurrentStepUI(scheduledUiStep, this.TotalSteps);
+                                        this.HandleCurrentStepUI(scheduledUiStep, this.TotalSteps);
                                         this.currentStep = scheduledUiStep;
                                     }));
                                 }

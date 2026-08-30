@@ -6,6 +6,7 @@ using System;
 using System.Threading.Tasks;
 
 namespace BenchmarkSuite1;
+
 [CPUUsageDiagnoser]
 public class MidiConversionBenchmarks
 {
@@ -25,8 +26,8 @@ public class MidiConversionBenchmarks
         };
         for (int index = 0; index < this.audio.Data.Length; index++)
         {
-            double time = index / (double)sampleRate;
-            this.audio.Data[index] = (float)(0.6 * Math.Sin(2 * Math.PI * 220 * time) + 0.2 * Math.Sin(2 * Math.PI * 440 * time));
+            double time = index / (double) sampleRate;
+            this.audio.Data[index] = (float) (0.6 * Math.Sin(2 * Math.PI * 220 * time) + 0.2 * Math.Sin(2 * Math.PI * 440 * time));
         }
     }
 

@@ -40,11 +40,11 @@ namespace ModularAudience.Forms.Helpers
             TimeSpan duration = ResolveDuration(audio);
             if (duration.TotalMilliseconds > 0 && duration.TotalMilliseconds < 8000)
             {
-                int ms = Math.Max(1, (int)Math.Round(duration.TotalMilliseconds));
+                int ms = Math.Max(1, (int) Math.Round(duration.TotalMilliseconds));
                 return ms.ToString("0", CultureInfo.InvariantCulture) + " ms";
             }
 
-            int minutes = Math.Max(0, (int)duration.TotalMinutes);
+            int minutes = Math.Max(0, (int) duration.TotalMinutes);
             int seconds = Math.Clamp(duration.Seconds, 0, 59);
             return string.Format(CultureInfo.InvariantCulture, "{0:00}:{1:00}", minutes, seconds);
         }
@@ -59,7 +59,7 @@ namespace ModularAudience.Forms.Helpers
             if (audio.Data != null && audio.Data.Length > 0 && audio.SampleRate > 0)
             {
                 int channels = Math.Max(1, audio.Channels);
-                double totalFrames = audio.Data.LongLength / (double)channels;
+                double totalFrames = audio.Data.LongLength / (double) channels;
                 double seconds = totalFrames / audio.SampleRate;
                 if (seconds > 0)
                 {

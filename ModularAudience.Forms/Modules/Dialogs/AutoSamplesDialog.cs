@@ -230,7 +230,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private async void button_split_Click(object sender, EventArgs e)
         {
             var samples = await AutoSampleCutter.CutFractionSamplesAsync(this.OriginalAudio, (float) this.numericUpDown_fractions.Value);
-            
+
             foreach (var sample in samples)
             {
                 this.ResultSamples.Add(sample);

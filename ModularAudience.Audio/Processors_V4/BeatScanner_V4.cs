@@ -51,13 +51,13 @@ namespace ModularAudience.Audio.Processors_V4
                     return 0.0f;
                 }
 
-                float averageInterval = (float)(sumIntervals / intervalCount);
+                float averageInterval = (float) (sumIntervals / intervalCount);
 
                 // 3. Frequency Calculation
                 // The logic used (AverageInterval / SampleRate) = Period (seconds)
                 // Frequency (Hz) = 1 / Period
                 // BPM = Frequency * 60
-                
+
                 float frequency = sampleRate / averageInterval;
                 float bpm = frequency * 60.0f;
 
@@ -76,8 +76,8 @@ namespace ModularAudience.Audio.Processors_V4
 
             for (int i = 1; i < samples.Length - 1; i++)
             {
-                if (Math.Abs(samples[i]) > threshold && 
-                    Math.Abs(samples[i]) > Math.Abs(samples[i - 1]) && 
+                if (Math.Abs(samples[i]) > threshold &&
+                    Math.Abs(samples[i]) > Math.Abs(samples[i - 1]) &&
                     Math.Abs(samples[i]) > Math.Abs(samples[i + 1]))
                 {
                     peaks.Add(i);

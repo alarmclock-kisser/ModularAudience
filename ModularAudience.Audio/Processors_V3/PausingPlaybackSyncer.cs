@@ -40,7 +40,7 @@ namespace ModularAudience.Audio.Processors_V3
 
             // Determine duration if not provided or invalid
             double duration = syncingDuration.HasValue && syncingDuration.Value > 0 ? syncingDuration.Value : -1.0;
-            var bpms = tracks.Where(t => t != null && t.Bpm > 0).Select(t => (double)t.Bpm).ToList();
+            var bpms = tracks.Where(t => t != null && t.Bpm > 0).Select(t => (double) t.Bpm).ToList();
             if (duration <= 0)
             {
                 if (bpms.Count == 0)
@@ -215,7 +215,7 @@ namespace ModularAudience.Audio.Processors_V3
 
         private static double GetPhase(AudioObj track, double beatDuration)
         {
-            double t = Math.Max(0, track.CurrentTime.TotalSeconds - Math.Max(0, track.StartingOffset / (double)Math.Max(1, track.Channels) / track.SampleRate));
+            double t = Math.Max(0, track.CurrentTime.TotalSeconds - Math.Max(0, track.StartingOffset / (double) Math.Max(1, track.Channels) / track.SampleRate));
             double phase = t % beatDuration;
             return phase;
         }

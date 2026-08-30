@@ -122,7 +122,7 @@ namespace ModularAudience.Audio
                     if (Application.OpenForms.Count > 0)
                     {
                         var any = Application.OpenForms[0];
-                        try { any?.BeginInvoke((Action)(() => { try { _flushTimer.Stop(); } catch { } try { _flushTimer.Start(); } catch { } })); } catch { _flushTimer.Stop(); try { _flushTimer.Start(); } catch { } }
+                        try { any?.BeginInvoke((Action) (() => { try { _flushTimer.Stop(); } catch { } try { _flushTimer.Start(); } catch { } })); } catch { _flushTimer.Stop(); try { _flushTimer.Start(); } catch { } }
                     }
                     else
                     {

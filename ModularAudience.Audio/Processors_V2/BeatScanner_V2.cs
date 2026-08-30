@@ -39,7 +39,7 @@ namespace ModularAudience.Audio.Processors_V2
                 }
 
                 // Auto-range if not provided
-                var (minEff, maxEff) = ResolveTempoBounds(minBpm, maxBpm, obj.ScannedBpm > 0 ?  obj.ScannedBpm : null);
+                var (minEff, maxEff) = ResolveTempoBounds(minBpm, maxBpm, obj.ScannedBpm > 0 ? obj.ScannedBpm : null);
 
                 double bpm = await EstimateBpmAsync(monoData, obj.SampleRate, minEff, maxEff).ConfigureAwait(false);
 

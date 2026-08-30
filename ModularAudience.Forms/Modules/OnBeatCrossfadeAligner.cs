@@ -39,10 +39,10 @@ namespace ModularAudience.Forms.Modules
         /// A value of 0 means "start now".  A positive value means "wait this many more seconds".
         /// </returns>
         public static double ComputeWaitSeconds(
-            float   bpm,
+            float bpm,
             TimeSpan currentPosition,
-            double  remainingSeconds,
-            double  nominalCrossfadeSeconds)
+            double remainingSeconds,
+            double nominalCrossfadeSeconds)
         {
             // How many seconds until the nominal crossfade trigger point?
             double nominalWait = remainingSeconds - nominalCrossfadeSeconds;
@@ -63,7 +63,7 @@ namespace ModularAudience.Forms.Modules
 
             // Beat phase of the nominal trigger moment (measured from track start)
             double nominalPosition = currentPosition.TotalSeconds + nominalWait;
-            double phase           = nominalPosition % secondsPerBeat;
+            double phase = nominalPosition % secondsPerBeat;
 
             // Distance to the beat BEFORE and AFTER the nominal trigger point
             double distToPrev = phase;                       // seconds before nominal
@@ -89,7 +89,7 @@ namespace ModularAudience.Forms.Modules
         /// the earliest possible trigger so the engine always has time to compute.
         /// </summary>
         public static bool IsInAlignmentWindow(
-            float  bpm,
+            float bpm,
             double remainingSeconds,
             double nominalCrossfadeSeconds)
         {

@@ -1,5 +1,6 @@
 using NAudio.Wave;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -10,9 +11,9 @@ namespace ModularAudience.Audio
 {
     public partial class AudioObj : IDisposable
     {
-		public CustomTags CustomTags { get; } = new();
+        public CustomTags CustomTags { get; } = new();
 
-		public void Dispose()
+        public void Dispose()
         {
             AudioPlaybackService.Unregister(this);
             this.Playing = false;
@@ -94,6 +95,7 @@ namespace ModularAudience.Audio
             return true;
         }
 
+
         public float ReadBpmTag(string tag = "TBPM", bool set = true)
         {
             float bpm = 0.0f;
@@ -158,7 +160,7 @@ namespace ModularAudience.Audio
             return bpm;
         }
 
-        public float ReadBpmTagLegacy()
+        public float ReadBpmTagLegacy(string tag = "BPM")
         {
             float bpm = 0.0f;
 
@@ -174,7 +176,7 @@ namespace ModularAudience.Audio
                     else if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                     {
                         var id3v2Tag = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
-                        var bpmFrame = TagLib.Id3v2.UserTextInformationFrame.Get(id3v2Tag, "BPM", false);
+                        var bpmFrame = TagLib.Id3v2.UserTextInformationFrame.Get(id3v2Tag, tag, false);
                         if (bpmFrame != null && float.TryParse(bpmFrame.Text.FirstOrDefault(), out float parsedBpm))
                         {
                             bpm = parsedBpm;
@@ -190,6 +192,7 @@ namespace ModularAudience.Audio
             this.Bpm = bpm > 0 ? bpm / 100.0f : 0.0f;
             return this.Bpm;
         }
+
 
         private static IEnumerable<float> ReadAllSamplesStreaming(AudioFileReader reader)
         {
@@ -209,5 +212,188 @@ namespace ModularAudience.Audio
                 }
             }
         }
+
+
+        public static float? ReadFileBpmTag(string filePath, string tag = "TBPM")
+        {
+            if (!File.Exists(filePath) || Path.GetExtension(filePath) is not (".mp3" or ".wav" or ".flac" or ".m4a"))
+            {
+                return null;
+            }
+
+            float bpm = 0.0f;
+            float roughBpm = 0.0f;
+
+            try
+            {
+                using var file = TagLib.File.Create(filePath);
+                if (file.Tag.BeatsPerMinute > 0)
+                {
+                    roughBpm = (float) file.Tag.BeatsPerMinute;
+                }
+
+                if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
+                {
+                    var id3v2Tag = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
+                    var tagTextFrame = TagLib.Id3v2.TextInformationFrame.Get(id3v2Tag, tag, false);
+
+                    if (tagTextFrame != null && tagTextFrame.Text.Any())
+                    {
+                        string bpmString = tagTextFrame.Text.FirstOrDefault() ?? "0,0";
+                        bpmString = bpmString.Replace(',', '.');
+                        if (float.TryParse(bpmString, NumberStyles.Any, CultureInfo.InvariantCulture, out float parsedBpm))
+                        {
+                            bpm = parsedBpm;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Fehler beim Lesen des Tags {tag.ToUpperInvariant()}: {ex.Message} ({ex.InnerException?.Message ?? " - "})");
+            }
+
+            if (bpm > 0.0f && (bpm < 30.0f || bpm > 360.0f))
+            {
+                bpm = 0.0f;
+            }
+
+            if (bpm <= 0.0f && roughBpm > 0.0f)
+            {
+                if (roughBpm < 30.0f || roughBpm > 360.0f)
+                {
+                    roughBpm = 0.0f;
+                }
+
+                bpm = roughBpm;
+            }
+
+            if (bpm <= 10)
+            {
+                bpm = ReadFileBpmTagLegacy(filePath);
+            }
+
+            return bpm;
+        }
+
+        public static float ReadFileBpmTagLegacy(string filePath, string tag = "BPM")
+        {
+            float bpm = 0.0f;
+            try
+            {
+                if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
+                {
+                    using var file = TagLib.File.Create(filePath);
+                    if (file.Tag.BeatsPerMinute > 0)
+                    {
+                        bpm = (float) file.Tag.BeatsPerMinute;
+                    }
+                    else if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
+                    {
+                        var id3v2Tag = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
+                        var bpmFrame = TagLib.Id3v2.UserTextInformationFrame.Get(id3v2Tag, "BPM", false);
+                        if (bpmFrame != null && float.TryParse(bpmFrame.Text.FirstOrDefault(), out float parsedBpm))
+                        {
+                            bpm = parsedBpm;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Fehler beim Lesen der BPM: {ex.Message}");
+            }
+            return bpm > 0 ? bpm / 100.0f : 0.0f;
+        }
+
+
+        public static Dictionary<string, float> ReadFilesBpmTags(IEnumerable<string> filePaths, string tag = "TBPM", int? maxWorkers = null)
+        {
+            // Evaluate max parallel workers (half of the available processors if null, safely clamped to 1..ProcessorCount)
+            maxWorkers ??= Math.Max(1, Environment.ProcessorCount / 2);
+            maxWorkers = Math.Clamp(maxWorkers.Value, 1, Environment.ProcessorCount);
+
+            // Verify & filter file paths; return [] if none are valid
+            var validFiles = (filePaths?.Where(fp => !string.IsNullOrWhiteSpace(fp)
+                && File.Exists(fp)
+                && Path.GetExtension(fp) is (".mp3" or ".flac" or ".wav" or ".m4a")) ?? []).ToList();
+
+            if (validFiles.Count == 0)
+            {
+                Debug.WriteLine("No valid audio files found for BPM tag reading.");
+                return [];
+            }
+
+            // Thread-safe result dictionary
+            var results = new ConcurrentDictionary<string, float>();
+
+            Parallel.ForEach(validFiles, new ParallelOptions
+            {
+                MaxDegreeOfParallelism = maxWorkers.Value
+            }, filePath =>
+            {
+                try
+                {
+                    float? bpm = ReadFileBpmTag(filePath, tag);
+                    results[filePath] = bpm ?? 0.0f;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error reading BPM tags for '{filePath}': {ex.Message}");
+                    results[filePath] = 0.0f;
+                }
+            });
+
+            return results.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        }
+
+        public static async Task<Dictionary<string, float>> ReadFilesBpmTagsAsync(IEnumerable<string> filePaths, string tag = "TBPM", int? maxWorkers = null)
+        {
+            // Evaluate max parallel workers (half of the available processors if null, safely clamped to 1..ProcessorCount)
+            maxWorkers ??= Math.Max(1, Environment.ProcessorCount / 2);
+            maxWorkers = Math.Clamp(maxWorkers.Value, 1, Environment.ProcessorCount);
+
+            // Verify & filter file paths; return [] if none are valid
+            var validFiles = (filePaths?.Where(fp => !string.IsNullOrWhiteSpace(fp)
+                && File.Exists(fp)
+                && Path.GetExtension(fp) is (".mp3" or ".flac" or ".wav" or ".m4a")) ?? []).ToList();
+
+            if (validFiles.Count == 0)
+            {
+                Debug.WriteLine("No valid audio files found for BPM tag reading.");
+                return [];
+            }
+
+            // Thread-safe result dictionary
+            var results = new ConcurrentDictionary<string, float>();
+
+            // SemaphoreSlim limits concurrent I/O operations to maxWorkers
+            using var semaphore = new SemaphoreSlim(maxWorkers.Value);
+
+            var tasks = validFiles.Select(async filePath =>
+            {
+                await semaphore.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    // Run the blocking TagLib read on a thread-pool thread so we don't block the caller's context
+                    float? bpm = await Task.Run(() => ReadFileBpmTag(filePath, tag)).ConfigureAwait(false);
+                    results[filePath] = bpm ?? 0.0f;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error reading BPM tags for '{filePath}': {ex.Message}");
+                    results[filePath] = 0.0f;
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+
+            return results.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        }
+
     }
 }

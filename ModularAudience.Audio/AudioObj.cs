@@ -591,7 +591,7 @@ namespace ModularAudience.Audio
                 this.Data = newData;
                 this.Channels = channels;
                 this.Length = newData.Length;
-                this.Duration = TimeSpan.FromSeconds((double)this.Length / (this.SampleRate * this.Channels));
+                this.Duration = TimeSpan.FromSeconds((double) this.Length / (this.SampleRate * this.Channels));
             }).ConfigureAwait(false);
         }
     }

@@ -174,8 +174,8 @@ namespace ModularAudience.Forms.Modules
                             int keyIndex = kv.Key;
 
                             // Compute both interpretations
-                            double secondsInterleaved = keyIndex / (double)channels / (double)sampleRate; // if key is interleaved samples
-                            double secondsMono = keyIndex / (double)sampleRate; // if key is mono samples
+                            double secondsInterleaved = keyIndex / (double) channels / (double) sampleRate; // if key is interleaved samples
+                            double secondsMono = keyIndex / (double) sampleRate; // if key is mono samples
 
                             bool useMonoInterpretation;
                             if (double.IsFinite(trackDuration))
@@ -206,9 +206,9 @@ namespace ModularAudience.Forms.Modules
                             }
 
                             int interleavedSamples = useMonoInterpretation && channels > 1 ? Math.Max(0, keyIndex) * channels : keyIndex;
-                            double seconds = interleavedSamples / (double)channels / (double)sampleRate;
+                            double seconds = interleavedSamples / (double) channels / (double) sampleRate;
                             var ts = TimeSpan.FromSeconds(seconds);
-                            string formatted = string.Format(CultureInfo.InvariantCulture, "{0:D2}:{1:D2}.{2:D3}", (int)ts.TotalMinutes, ts.Seconds, ts.Milliseconds);
+                            string formatted = string.Format(CultureInfo.InvariantCulture, "{0:D2}:{1:D2}.{2:D3}", (int) ts.TotalMinutes, ts.Seconds, ts.Milliseconds);
                             mapped.Add($"{keyIndex} -> {formatted} (mappedSamples:{interleavedSamples}) => conf:{kv.Value:F6}");
                         }
 
@@ -930,8 +930,8 @@ namespace ModularAudience.Forms.Modules
 
                                 float fv = 0f; bool valOk = false;
                                 if (kv.Value is float f) { fv = f; valOk = true; }
-                                else if (kv.Value is double d) { fv = (float)d; valOk = true; }
-                                else if (kv.Value is decimal dec) { fv = (float)dec; valOk = true; }
+                                else if (kv.Value is double d) { fv = (float) d; valOk = true; }
+                                else if (kv.Value is decimal dec) { fv = (float) dec; valOk = true; }
                                 else if (kv.Value is string s && float.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var pf)) { fv = pf; valOk = true; }
                                 else
                                 {

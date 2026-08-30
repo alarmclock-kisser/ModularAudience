@@ -41,7 +41,7 @@ public static class MidiAudioRenderer
         int channels = 2;
         double secondsPerTick = 60.0 / bpm / Math.Max(1, midi.TicksPerQuarterNote);
         double durationSeconds = Math.Max(0.1, (track.LengthTicks + midi.TicksPerQuarterNote / 2.0) * secondsPerTick);
-        int frameCount = checked((int)Math.Min(int.MaxValue / channels, Math.Ceiling(durationSeconds * sampleRate)));
+        int frameCount = checked((int) Math.Min(int.MaxValue / channels, Math.Ceiling(durationSeconds * sampleRate)));
         float[] output = new float[frameCount * channels];
         Random random = new(17);
         List<MidiNoteData> orderedNotes = track.Notes.OrderBy(note => note.StartTick).ToList();
@@ -57,8 +57,8 @@ public static class MidiAudioRenderer
                 cancellationToken.ThrowIfCancellationRequested();
                 double startSeconds = note.StartTick * secondsPerTick;
                 double noteSeconds = Math.Max(0.01, note.DurationTicks * secondsPerTick);
-                int startFrame = (int)Math.Round(startSeconds * sampleRate);
-                int noteFrames = Math.Max(1, (int)Math.Round(noteSeconds * sampleRate));
+                int startFrame = (int) Math.Round(startSeconds * sampleRate);
+                int noteFrames = Math.Max(1, (int) Math.Round(noteSeconds * sampleRate));
                 float instrumentGain = instrument switch
                 {
                     MidiInstrument.Sine => 1.25f,
@@ -122,8 +122,8 @@ public static class MidiAudioRenderer
             Channels = channels,
             BitDepth = 32,
             Length = output.Length,
-            Duration = TimeSpan.FromSeconds(frameCount / (double)sampleRate),
-            Bpm = (float)bpm,
+            Duration = TimeSpan.FromSeconds(frameCount / (double) sampleRate),
+            Bpm = (float) bpm,
             Volume = 100f
         };
         rendered.Rename(rendered.Name);
@@ -337,7 +337,7 @@ public static class MidiAudioRenderer
                 MidiInstrument.Pluck => RenderPluckSample(pluckBuffer!, ref pluckIndex),
                 _ => 0.0
             };
-            float sample = (float)(value * envelope * amplitude);
+            float sample = (float) (value * envelope * amplitude);
             int outputIndex = (Math.Max(0, startFrame) + frame) * channels;
             for (int channel = 0; channel < channels; channel++)
             {
@@ -406,11 +406,11 @@ public static class MidiAudioRenderer
 
     private static float[] CreatePluckBuffer(double frequency, Random random)
     {
-        int length = Math.Clamp((int)Math.Round(44100.0 / Math.Clamp(frequency, 40.0, 4000.0)), 2, 2205);
+        int length = Math.Clamp((int) Math.Round(44100.0 / Math.Clamp(frequency, 40.0, 4000.0)), 2, 2205);
         float[] buffer = new float[length];
         for (int index = 0; index < buffer.Length; index++)
         {
-            buffer[index] = (float)(random.NextDouble() * 2.0 - 1.0);
+            buffer[index] = (float) (random.NextDouble() * 2.0 - 1.0);
         }
         return buffer;
     }

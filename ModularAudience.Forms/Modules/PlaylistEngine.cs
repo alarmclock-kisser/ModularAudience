@@ -15,16 +15,17 @@ namespace ModularAudience.Forms.Modules
     /// All fields except InitialBpm are track-independent and set once by the user.
     /// </summary>
     public sealed record PlaylistStretchSettings(
-        float  TargetBpm,
-        float  StretchFactor,
-        int    ChunkSize,
-        float  Overlap,
-        int    Threads,
-        bool   UseV2,
-        bool   AutoChunking,
-        bool   Offload,
-        bool   Trim,
-        bool   Fixed
+        float TargetBpm,
+        float StretchFactor,
+        int ChunkSize,
+        float Overlap,
+        int Threads,
+        bool UseV2,
+        bool AutoChunking,
+        bool Offload,
+        bool Channeled,
+        bool Trim,
+        bool Fixed
     );
 
     /// <summary>
@@ -37,7 +38,7 @@ namespace ModularAudience.Forms.Modules
         // â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         public List<string> FilePaths { get; } = [];        // remaining queue (shared ref to WindowMain.PlaylistFilePaths)
         public bool IsPlaying { get; private set; }
-        public bool IsPaused  { get; private set; }
+        public bool IsPaused { get; private set; }
 
         /// <summary>File path of the track currently streaming (null when idle).</summary>
         public string? CurrentPath { get; private set; }
@@ -45,13 +46,13 @@ namespace ModularAudience.Forms.Modules
         public string? OriginalCurrentPath { get; private set; }
         public TimeSpan CurrentPosition => this.GetCurrentPosition();
         public TimeSpan CurrentDuration { get; private set; }
-        public int     CurrentChannels   { get; private set; }
-        public int     CurrentSampleRate { get; private set; }
-        public int     CurrentBitDepth   { get; private set; }
-        public float   CurrentBpm        { get; private set; }
+        public int CurrentChannels { get; private set; }
+        public int CurrentSampleRate { get; private set; }
+        public int CurrentBitDepth { get; private set; }
+        public float CurrentBpm { get; private set; }
 
         // â”€â”€ Private â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        private WaveOutEvent?    _waveOut;
+        private WaveOutEvent? _waveOut;
         private AudioFileReader? _reader;
         private AudioObj? _primaryAudioObj;
         private AudioObj? _secondaryAudioObj;
@@ -422,7 +423,7 @@ namespace ModularAudience.Forms.Modules
                     pauseTargets.Add(this._secondaryAudioObj);
                 }
 
-                this.IsPaused  = true;
+                this.IsPaused = true;
                 this.IsPlaying = false;
             }
 
@@ -605,16 +606,16 @@ namespace ModularAudience.Forms.Modules
             {
                 this.FilePaths?.Clear();
                 this._banlist.Clear();
-                this.CurrentPath      = null;
+                this.CurrentPath = null;
                 this.OriginalCurrentPath = null;
-                this._previousPath    = null;
-                this.CurrentDuration  = TimeSpan.Zero;
-                this.CurrentChannels  = 0;
+                this._previousPath = null;
+                this.CurrentDuration = TimeSpan.Zero;
+                this.CurrentChannels = 0;
                 this.CurrentSampleRate = 0;
-                this.CurrentBitDepth  = 0;
-                this.CurrentBpm       = 0;
+                this.CurrentBitDepth = 0;
+                this.CurrentBpm = 0;
                 this.IsPlaying = false;
-                this.IsPaused  = false;
+                this.IsPaused = false;
             }
             TrackChanged?.Invoke();
         }
@@ -640,11 +641,11 @@ namespace ModularAudience.Forms.Modules
         {
             this.LogPlayback($"PlayTrackAsync(path={path}) called: exists={File.Exists(path ?? string.Empty)}");
             AudioFileReader? reader = null;
-            WaveOutEvent?    waveOut = null;
+            WaveOutEvent? waveOut = null;
 
             try
             {
-                reader  = new AudioFileReader(path);
+                reader = new AudioFileReader(path);
                 waveOut = new WaveOutEvent { DesiredLatency = 80 };
 
                 // Raise thread priority inside WaveOut callback
@@ -652,16 +653,16 @@ namespace ModularAudience.Forms.Modules
 
                 lock (this._lock)
                 {
-                    this._reader  = reader;
+                    this._reader = reader;
                     this._waveOut = waveOut;
 
-                    this.CurrentPath       = path;
-                    this.CurrentDuration   = reader.TotalTime;
-                    this.CurrentChannels   = reader.WaveFormat.Channels;
+                    this.CurrentPath = path;
+                    this.CurrentDuration = reader.TotalTime;
+                    this.CurrentChannels = reader.WaveFormat.Channels;
                     this.CurrentSampleRate = reader.WaveFormat.SampleRate;
-                    this.CurrentBitDepth   = reader.WaveFormat.BitsPerSample;
+                    this.CurrentBitDepth = reader.WaveFormat.BitsPerSample;
                     this.IsPlaying = true;
-                    this.IsPaused  = false;
+                    this.IsPaused = false;
                 }
 
                 // Read BPM tag cheaply
@@ -675,7 +676,7 @@ namespace ModularAudience.Forms.Modules
                 try
                 {
                     string logName = System.IO.Path.GetFileNameWithoutExtension(this.OriginalCurrentPath ?? path) ?? "";
-                    string logBpm  = this.CurrentBpm > 0 ? $" [{this.CurrentBpm:F0} BPM]" : string.Empty;
+                    string logBpm = this.CurrentBpm > 0 ? $" [{this.CurrentBpm:F0} BPM]" : string.Empty;
                     bool wantCountdown = false;
                     try { wantCountdown = WindowMain.PlaylistCountdownEnabled; } catch { }
 
@@ -762,14 +763,14 @@ namespace ModularAudience.Forms.Modules
                 lock (this._lock)
                 {
                     this._waveOut = null;
-                    this._reader  = null;
+                    this._reader = null;
                     this.IsPlaying = false;
-                    this.IsPaused  = false;
+                    this.IsPaused = false;
                 }
 
-                try { waveOut?.Stop(); }  catch { }
+                try { waveOut?.Stop(); } catch { }
                 try { waveOut?.Dispose(); } catch { }
-                try { reader?.Dispose(); }  catch { }
+                try { reader?.Dispose(); } catch { }
             }
         }
 
@@ -802,31 +803,31 @@ namespace ModularAudience.Forms.Modules
 
             AudioObj? primary;
             AudioObj? secondary;
-            WaveOutEvent?    wo;
+            WaveOutEvent? wo;
             AudioFileReader? rd;
             lock (this._lock)
             {
-                primary   = this._primaryAudioObj;
+                primary = this._primaryAudioObj;
                 secondary = this._secondaryAudioObj;
                 wo = this._waveOut;
                 rd = this._reader;
-                this._primaryAudioObj   = null;
+                this._primaryAudioObj = null;
                 this._primaryOriginalPath = null;
                 this._secondaryAudioObj = null;
                 this._secondaryOriginalPath = null;
                 this._activePreparedTracks.Clear();
                 this._preparedByPath.Clear();
                 this._waveOut = null;
-                this._reader  = null;
+                this._reader = null;
             }
 
             _ = Task.Run(() =>
             {
-                try { primary?.StopAsync().GetAwaiter().GetResult(); }   catch { }
+                try { primary?.StopAsync().GetAwaiter().GetResult(); } catch { }
                 try { secondary?.StopAsync().GetAwaiter().GetResult(); } catch { }
-                try { primary?.Dispose(); }   catch { }
+                try { primary?.Dispose(); } catch { }
                 try { secondary?.Dispose(); } catch { }
-                try { wo?.Stop();    } catch { }
+                try { wo?.Stop(); } catch { }
                 try { wo?.Dispose(); } catch { }
                 try { rd?.Dispose(); } catch { }
             });
@@ -1560,7 +1561,7 @@ namespace ModularAudience.Forms.Modules
             double waitSeconds = ComputeNextBeatWaitSeconds(currentPrepared.Audio, request.MaxDelaySeconds - elapsedSeconds);
             if (waitSeconds > 0.025 && elapsedSeconds + waitSeconds <= request.MaxDelaySeconds)
             {
-                int countdownSecond = Math.Max(1, (int)Math.Ceiling(waitSeconds));
+                int countdownSecond = Math.Max(1, (int) Math.Ceiling(waitSeconds));
                 if (request.LastCountdownSecond != countdownSecond)
                 {
                     request.LastCountdownSecond = countdownSecond;
@@ -1597,8 +1598,8 @@ namespace ModularAudience.Forms.Modules
                     while (!this._disposed)
                     {
                         double t = Math.Clamp((DateTime.UtcNow - started).TotalSeconds / handoffFadeSeconds, 0.0, 1.0);
-                        try { currentPrepared.Audio.SetPlaybackVolume((float)Math.Cos(t * Math.PI * 0.5)); } catch { }
-                        try { nextTrack.Audio.SetPlaybackVolume((float)Math.Sin(t * Math.PI * 0.5)); } catch { }
+                        try { currentPrepared.Audio.SetPlaybackVolume((float) Math.Cos(t * Math.PI * 0.5)); } catch { }
+                        try { nextTrack.Audio.SetPlaybackVolume((float) Math.Sin(t * Math.PI * 0.5)); } catch { }
                         if (t >= 1.0)
                         {
                             break;
@@ -1782,7 +1783,7 @@ namespace ModularAudience.Forms.Modules
                         rateFactor = prepared.Audio.StretchFactor * prepared.Audio.SampleRateFactor * prepared.Audio.ManualSampleRateFactor * prepared.Audio.SyncNudgeSampleRateFactor;
                     }
                     catch { }
-                    effectiveBpm = (float)(prepared.Audio.Bpm * rateFactor);
+                    effectiveBpm = (float) (prepared.Audio.Bpm * rateFactor);
                 }
                 // If we couldn't compute an effective BPM from factors, fall back to the stored metadata BPM.
                 if (effectiveBpm <= 0)
@@ -1973,7 +1974,7 @@ namespace ModularAudience.Forms.Modules
 
                 float bpm = 0f;
 
-                try { if (file.Tag != null && file.Tag.BeatsPerMinute > 0) { bpm = (float)file.Tag.BeatsPerMinute; } } catch { }
+                try { if (file.Tag != null && file.Tag.BeatsPerMinute > 0) { bpm = (float) file.Tag.BeatsPerMinute; } } catch { }
 
                 if (bpm <= 0)
                 {
@@ -1981,7 +1982,7 @@ namespace ModularAudience.Forms.Modules
                     {
                         if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                         {
-                            var id3 = (TagLib.Id3v2.Tag?)file.GetTag(TagLib.TagTypes.Id3v2);
+                            var id3 = (TagLib.Id3v2.Tag?) file.GetTag(TagLib.TagTypes.Id3v2);
                             var frame = id3 != null ? TagLib.Id3v2.TextInformationFrame.Get(id3, "TBPM", false) : null;
                             if (frame != null)
                             {

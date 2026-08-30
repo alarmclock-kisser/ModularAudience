@@ -298,7 +298,7 @@ namespace ModularAudience.Audio.Processors_V1
             {
                 throw new ArgumentNullException(nameof(sample));
             }
-            
+
             // 1) Resample (changes duration)
             var resampled = await PitchShiftOneAsync(sample, semitoneDelta, new Progress<double>(p =>
             {
@@ -327,7 +327,7 @@ namespace ModularAudience.Audio.Processors_V1
                     progress?.Report(Math.Clamp(0.5 + p * 0.5, 0.0, 1.0));
                 }));
             }
-            
+
             // build result clone and set data
             var result = resampled.Clone();
             result.Data = stretchedData;

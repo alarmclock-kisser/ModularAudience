@@ -1157,7 +1157,7 @@ namespace ModularAudience.Forms.Modules
             {
                 this.numericUpDown_jump.ValueChanged -= this.numericUpDown_jump_ValueChanged;
 
-                float currentValue = (float)this.numericUpDown_jump.Value;
+                float currentValue = (float) this.numericUpDown_jump.Value;
 
                 if (currentValue > this.lastJumpValue)
                 {
@@ -1178,7 +1178,7 @@ namespace ModularAudience.Forms.Modules
                     this.lastJumpMs = currentValue;
                 }
 
-                this.lastJumpValue = (float)this.numericUpDown_jump.Value;
+                this.lastJumpValue = (float) this.numericUpDown_jump.Value;
                 this.lastJumpMs = this.lastJumpValue; // Ensure they stay in sync
 
                 this.numericUpDown_jump.ValueChanged += this.numericUpDown_jump_ValueChanged;
@@ -1349,7 +1349,7 @@ namespace ModularAudience.Forms.Modules
             {
                 // compute median bpm for selected tracks
                 double? medianBpm = null;
-                var bpms = audios.Where(a => a != null && a.Bpm > 0).Select(a => (double)a.Bpm).OrderBy(x => x).ToArray();
+                var bpms = audios.Where(a => a != null && a.Bpm > 0).Select(a => (double) a.Bpm).OrderBy(x => x).ToArray();
                 if (bpms.Length > 0)
                 {
                     medianBpm = bpms[bpms.Length / 2];

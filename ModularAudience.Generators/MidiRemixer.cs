@@ -71,7 +71,7 @@ namespace ModularAudience.Generators
                 int length = Math.Min(maxLength, notes.Count - index);
                 if (length < minLength)
                 {
-                result.Add(CreatePattern(notes[index..], index));
+                    result.Add(CreatePattern(notes[index..], index));
                     break;
                 }
 
@@ -191,7 +191,11 @@ namespace ModularAudience.Generators
 
         private static MidiNoteData CloneNote(MidiNoteData source, int noteNumber, long startTick, long duration, int velocity) => new()
         {
-            NoteNumber = Math.Clamp(noteNumber, 0, 127), Channel = source.Channel, Velocity = Math.Clamp(velocity, 1, 127), StartTick = Math.Max(0, startTick), DurationTicks = Math.Max(1, duration)
+            NoteNumber = Math.Clamp(noteNumber, 0, 127),
+            Channel = source.Channel,
+            Velocity = Math.Clamp(velocity, 1, 127),
+            StartTick = Math.Max(0, startTick),
+            DurationTicks = Math.Max(1, duration)
         };
 
         private static List<MidiNoteData> RebasePattern(List<MidiNoteData> notes)

@@ -21,7 +21,7 @@ namespace ModularAudience.Forms
 
             double scannedBpm = await BeatScanner.ScanBpmAsync(audio);
             this.textBox_scanBpmResult.Text = scannedBpm.ToString("F3") + " BPM";
-            audio.ScannedBpm = (float)scannedBpm;
+            audio.ScannedBpm = (float) scannedBpm;
         }
 
         private async void button_scanTiming_Click(object sender, EventArgs e)
@@ -254,12 +254,12 @@ namespace ModularAudience.Forms
 
                 if (m.Msg == WM_KEYDOWN || m.Msg == WM_SYSKEYDOWN)
                 {
-                    Keys key = (Keys)((int)m.WParam & 0xFFFF);
+                    Keys key = (Keys) ((int) m.WParam & 0xFFFF);
                     this.KeyChanged?.Invoke(key, true);
                 }
                 else if (m.Msg == WM_KEYUP || m.Msg == WM_SYSKEYUP)
                 {
-                    Keys key = (Keys)((int)m.WParam & 0xFFFF);
+                    Keys key = (Keys) ((int) m.WParam & 0xFFFF);
                     this.KeyChanged?.Invoke(key, false);
                 }
 
@@ -361,21 +361,21 @@ namespace ModularAudience.Forms
                             using (var dlg = new Modules.Dialogs.CommentInputDialog(history, prompt, draft))
                             {
                                 var dr = dlg.ShowDialog(Instance ?? this);
-                            if (dr == DialogResult.OK)
-                            {
-                                string input = dlg.ResultText?.Trim() ?? string.Empty;
-                                if (!string.IsNullOrWhiteSpace(input))
+                                if (dr == DialogResult.OK)
                                 {
-                                    LogCollection.PostComment(timestamp, input);
-                                    try { WindowMain.CommentHistory.Insert(0, input); } catch { }
-                                    try { WindowMain.CommentDraft = string.Empty; } catch { }
+                                    string input = dlg.ResultText?.Trim() ?? string.Empty;
+                                    if (!string.IsNullOrWhiteSpace(input))
+                                    {
+                                        LogCollection.PostComment(timestamp, input);
+                                        try { WindowMain.CommentHistory.Insert(0, input); } catch { }
+                                        try { WindowMain.CommentDraft = string.Empty; } catch { }
+                                    }
                                 }
-                            }
-                            else
-                            {
-                                // Save draft back
-                                try { WindowMain.CommentDraft = dlg.ResultText ?? string.Empty; } catch { }
-                            }
+                                else
+                                {
+                                    // Save draft back
+                                    try { WindowMain.CommentDraft = dlg.ResultText ?? string.Empty; } catch { }
+                                }
                             }
                         }
                         finally
