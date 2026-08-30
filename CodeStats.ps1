@@ -116,16 +116,16 @@ foreach ($proj in $csprojFiles) {
 
     Write-Host " [$projectCount] $projName"
     Write-Host "     Path:             $projDir\"
-    Write-Host "     .cs    files:        $($csFiles.Count.ToString().PadLeft(7))"
-    Write-Host "     .razor files:        $($razorFiles.Count.ToString().PadLeft(7))"
-    Write-Host "     .json  files:        $($jsonFiles.Count.ToString().PadLeft(7))"
-    Write-Host "     .xml   files:        $($xmlFiles.Count.ToString().PadLeft(7))"
-    Write-Host "     Code lines:          $($code.ToString().PadLeft(7))"
-    Write-Host "     Comment lines:       $($comment.ToString().PadLeft(7))"
-    Write-Host "     Whitespace lines:    $($ws.ToString().PadLeft(7))"
+    Write-Host "     .cs    files:         $($csFiles.Count.ToString().PadLeft(7))"
+    Write-Host "     .razor files:         $($razorFiles.Count.ToString().PadLeft(7))"
+    Write-Host "     .json  files:         $($jsonFiles.Count.ToString().PadLeft(7))"
+    Write-Host "     .xml   files:         $($xmlFiles.Count.ToString().PadLeft(7))"
+    Write-Host "     Code lines:           $($code.ToString().PadLeft(7))"
+    Write-Host "     Comment lines:        $($comment.ToString().PadLeft(7))"
+    Write-Host "     Whitespace lines:     $($ws.ToString().PadLeft(7))"
     Write-Host "     Combined lines:   Σ= $($combined.ToString().PadLeft(7))"
-    Write-Host "     JSON elements:       $($json.ToString().PadLeft(7))"
-    Write-Host "     XML elements:        $($xml.ToString().PadLeft(7))"
+    Write-Host "     JSON elements:        $($json.ToString().PadLeft(7))"
+    Write-Host "     XML elements:         $($xml.ToString().PadLeft(7))"
     Write-Host ""
 
     $totalCode += $code
@@ -138,15 +138,17 @@ foreach ($proj in $csprojFiles) {
     $totalXmlFiles += $xmlFiles.Count
 }
 
+$totalCombined = $totalCode + $totalComment + $totalWhitespace;
+
 Write-Host "========================< TOTAL >============================"
-Write-Host " $($totalCode.ToString().PadLeft(7))     lines of code (LoC),"
-Write-Host " $($totalComment.ToString().PadLeft(7))     comment lines and"
-Write-Host " $($totalWhitespace.ToString().PadLeft(7))     whitespace lines => "
+Write-Host " $($totalCode.ToString().PadLeft(7))      lines of code (LoC),"
+Write-Host " $($totalComment.ToString().PadLeft(7))      comment lines and"
+Write-Host " $($totalWhitespace.ToString().PadLeft(7))      whitespace lines => "
 Write-Host " $($totalCombined.ToString().PadLeft(7))  Σ= total combined lines, "
-Write-Host " $($totalJsonElements.ToString().PadLeft(7))     JSON elements and"
-Write-Host " $($totalXmlElements.ToString().PadLeft(7))     XML elements in"
-Write-Host " $($totalCsFiles.ToString().PadLeft(7))     .cs source code files, "
-Write-Host " $($totalJsonFiles.ToString().PadLeft(7))     .json files and "
-Write-Host " $($totalXmlFiles.ToString().PadLeft(7))     .xml files within "
-Write-Host " $($projectCount.ToString().PadLeft(7))     C#-Projects for $Root"
+Write-Host " $($totalJsonElements.ToString().PadLeft(7))      JSON elements and"
+Write-Host " $($totalXmlElements.ToString().PadLeft(7))      XML elements in"
+Write-Host " $($totalCsFiles.ToString().PadLeft(7))      .cs source code files, "
+Write-Host " $($totalJsonFiles.ToString().PadLeft(7))      .json files and "
+Write-Host " $($totalXmlFiles.ToString().PadLeft(7))      .xml files within "
+Write-Host " $($projectCount.ToString().PadLeft(7))      C#-Projects for $Root"
 Write-Host "============================================================="

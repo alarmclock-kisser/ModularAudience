@@ -87,7 +87,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false, WindowMain.CurrentScreenId);
 
             this.numericUpDown_chunkSize.Tag = (int) this.numericUpDown_chunkSize.Value;
-            this.numericUpDown_initialBpm.Value = this.GetSafeInitialBpm(this.Tracks.First());
+            this.numericUpDown_initialBpm.Value = this.Tracks.Any() ? this.GetSafeInitialBpm(this.Tracks.First()) : (decimal) LastInitialBpm;
             this.numericUpDown_threads.Minimum = 1;
             this.numericUpDown_threads.Maximum = Math.Max(Environment.ProcessorCount, 1);
             this.numericUpDown_threads.Value = Math.Max(Environment.ProcessorCount / 2, 1);
