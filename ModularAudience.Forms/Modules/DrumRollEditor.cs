@@ -1074,8 +1074,8 @@ namespace ModularAudience.Forms.Modules
             // Attempt to raise GC and process priority to reduce GC-induced stutters
             try
             {
-                this.previousGcLatencyMode = System.Runtime.GCSettings.LatencyMode;
-                System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
+                this.previousGcLatencyMode = GCSettings.LatencyMode;
+                GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
             }
             catch { this.previousGcLatencyMode = null; }
 
@@ -1151,7 +1151,7 @@ namespace ModularAudience.Forms.Modules
             {
                 if (this.previousGcLatencyMode.HasValue)
                 {
-                    System.Runtime.GCSettings.LatencyMode = this.previousGcLatencyMode.Value;
+                    GCSettings.LatencyMode = this.previousGcLatencyMode.Value;
                 }
             }
             catch { }

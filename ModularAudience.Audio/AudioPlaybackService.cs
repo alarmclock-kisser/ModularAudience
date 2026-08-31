@@ -456,7 +456,7 @@ namespace ModularAudience.Audio
             catch (Exception ex)
             {
                 try { Debug.WriteLine($"Playback initialization failed: {ex.Message}"); } catch { }
-                try { ModularAudience.Audio.LogCollection.Log($"AudioPlaybackService.InitializePlayback failed: {ex.Message}"); } catch { }
+                try { LogCollection.Log($"AudioPlaybackService.InitializePlayback failed: {ex.Message}"); } catch { }
                 // Bail out: leave Playing=false to caller and avoid crashing the thread.
                 return;
             }

@@ -455,7 +455,7 @@ namespace ModularAudience.Forms.Modules
                     {
                         try
                         {
-                            defaultValue = Convert.ToDecimal(p.DefaultValue, System.Globalization.CultureInfo.InvariantCulture);
+                            defaultValue = Convert.ToDecimal(p.DefaultValue, CultureInfo.InvariantCulture);
                         }
                         catch { defaultValue = 0m; }
                     }
@@ -533,13 +533,13 @@ namespace ModularAudience.Forms.Modules
                     {
                         Location = new Point(ctrlX, y),
                         Size = new Size(ctrlInnerWidth, rowH),
-                        Text = p.HasDefaultValue && p.DefaultValue != null ? Convert.ToString(p.DefaultValue, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty : string.Empty,
+                        Text = p.HasDefaultValue && p.DefaultValue != null ? Convert.ToString(p.DefaultValue, CultureInfo.InvariantCulture) ?? string.Empty : string.Empty,
                         Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right
                     };
 
                     if (p.HasDefaultValue && p.DefaultValue != null && p.DefaultValue != DBNull.Value)
                     {
-                        txt.Text = Convert.ToString(p.DefaultValue, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+                        txt.Text = Convert.ToString(p.DefaultValue, CultureInfo.InvariantCulture) ?? string.Empty;
                     }
 
                     inputCtrl = txt;
@@ -688,7 +688,7 @@ namespace ModularAudience.Forms.Modules
                 // CancellationToken param -> verwende erzeugten Token
                 if ((Nullable.GetUnderlyingType(p.ParameterType) ?? p.ParameterType) == typeof(System.Threading.CancellationToken))
                 {
-                    args[i] = this._cancellationToken ?? System.Threading.CancellationToken.None;
+                    args[i] = this._cancellationToken ?? CancellationToken.None;
                     continue;
                 }
 
@@ -1226,7 +1226,7 @@ namespace ModularAudience.Forms.Modules
                 }
 
                 // attempt to convert
-                return Convert.ChangeType(cb.Checked, Nullable.GetUnderlyingType(targetType) ?? targetType, System.Globalization.CultureInfo.InvariantCulture);
+                return Convert.ChangeType(cb.Checked, Nullable.GetUnderlyingType(targetType) ?? targetType, CultureInfo.InvariantCulture);
             }
 
             // ComboBox (enums)
@@ -1253,19 +1253,19 @@ namespace ModularAudience.Forms.Modules
 
                 if (convType == typeof(int))
                 {
-                    return Convert.ChangeType((int) val, convType, System.Globalization.CultureInfo.InvariantCulture);
+                    return Convert.ChangeType((int) val, convType, CultureInfo.InvariantCulture);
                 }
                 if (convType == typeof(long))
                 {
-                    return Convert.ChangeType((long) val, convType, System.Globalization.CultureInfo.InvariantCulture);
+                    return Convert.ChangeType((long) val, convType, CultureInfo.InvariantCulture);
                 }
                 if (convType == typeof(float))
                 {
-                    return Convert.ChangeType((float) val, convType, System.Globalization.CultureInfo.InvariantCulture);
+                    return Convert.ChangeType((float) val, convType, CultureInfo.InvariantCulture);
                 }
                 if (convType == typeof(double))
                 {
-                    return Convert.ChangeType((double) val, convType, System.Globalization.CultureInfo.InvariantCulture);
+                    return Convert.ChangeType((double) val, convType, CultureInfo.InvariantCulture);
                 }
                 if (convType == typeof(decimal))
                 {
@@ -1273,7 +1273,7 @@ namespace ModularAudience.Forms.Modules
                 }
 
                 // fallback
-                return Convert.ChangeType(val, convType, System.Globalization.CultureInfo.InvariantCulture);
+                return Convert.ChangeType(val, convType, CultureInfo.InvariantCulture);
             }
 
             // TextBox
@@ -1312,7 +1312,7 @@ namespace ModularAudience.Forms.Modules
                 }
 
                 // last resort
-                return Convert.ChangeType(text, convType2, System.Globalization.CultureInfo.InvariantCulture);
+                return Convert.ChangeType(text, convType2, CultureInfo.InvariantCulture);
             }
 
             // Fallback: return null or attempt Convert

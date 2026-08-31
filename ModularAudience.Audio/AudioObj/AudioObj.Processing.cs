@@ -75,8 +75,8 @@ namespace ModularAudience.Audio
                 {
                     // Prüfe auf näherungsweise Kehrwert eines Integers (z. B. 0.5 -> 1/2)
                     double recip = 1.0 / lf;
-                    int recipInt = (int) System.Math.Round(recip);
-                    if (System.Math.Abs(recip - recipInt) < 1e-3 && recipInt > 1)
+                    int recipInt = (int) Math.Round(recip);
+                    if (Math.Abs(recip - recipInt) < 1e-3 && recipInt > 1)
                     {
                         fraction = "1/" + recipInt.ToString(CultureInfo.InvariantCulture);
                     }
@@ -87,8 +87,8 @@ namespace ModularAudience.Audio
                 }
                 else if (lf >= 1f)
                 {
-                    int whole = (int) System.Math.Round(lf);
-                    fraction = System.Math.Abs(lf - whole) < 1e-3
+                    int whole = (int) Math.Round(lf);
+                    fraction = Math.Abs(lf - whole) < 1e-3
                         ? whole.ToString(CultureInfo.InvariantCulture)
                         : lf.ToString("F1", CultureInfo.InvariantCulture);
                 }
@@ -99,7 +99,7 @@ namespace ModularAudience.Audio
                     fraction = len > 0 ? "1" : "0";
                 }
 
-                double loopStartTime = (double) startSample.Value / System.Math.Max(1, this.SampleRate) / System.Math.Max(1, this.Channels);
+                double loopStartTime = (double) startSample.Value / Math.Max(1, this.SampleRate) / Math.Max(1, this.Channels);
 
                 clone.Rename($"{this.OriginalName} (Looped {fraction} at {loopStartTime:F1}s)");
             }

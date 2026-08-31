@@ -302,7 +302,7 @@ namespace ModularAudience.Forms
             }
 
             // Default: Move within collections unless Ctrl is held -> Copy
-            bool ctrl = (Control.ModifierKeys & Keys.Control) != 0;
+            bool ctrl = (ModifierKeys & Keys.Control) != 0;
             if (e.AllowedEffect.HasFlag(DragDropEffects.Move) && !ctrl)
             {
                 e.Effect = DragDropEffects.Move;

@@ -330,9 +330,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             // generisches Id3v2-TextFrame als Fallback
-            if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
+            if (file.TagTypes.HasFlag(TagTypes.Id3v2))
             {
-                var id3 = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
+                var id3 = (TagLib.Id3v2.Tag) file.GetTag(TagTypes.Id3v2);
 
                 if (upper.Length == 4)
                 {

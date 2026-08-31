@@ -96,7 +96,7 @@ namespace ModularAudience.Audio.Processors_V1
                 int idx = i;
                 var track = trackList[idx];
 
-                tasks[idx] = System.Threading.Tasks.Task.Run(() =>
+                tasks[idx] = Task.Run(() =>
                 {
                     int srcChannels = track.Channels > 0 ? track.Channels : 1;
                     int srcRate = track.AdjustedSampleRate > 0 ? track.AdjustedSampleRate : track.SampleRate;
@@ -189,11 +189,11 @@ namespace ModularAudience.Audio.Processors_V1
                 });
             }
 
-            await System.Threading.Tasks.Task.WhenAll(tasks).ConfigureAwait(false);
+            await Task.WhenAll(tasks).ConfigureAwait(false);
 
             var mix = new float[totalSamples];
 
-            System.Threading.Tasks.Parallel.For(
+            Parallel.For(
                 0,
                 totalSamples,
                 i =>

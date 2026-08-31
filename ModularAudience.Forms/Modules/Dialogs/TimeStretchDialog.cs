@@ -76,6 +76,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             else if (filePaths?.Any() == true)
             {
                 Dictionary<string, float> fileBpms = AudioObj.ReadFilesBpmTags(filePaths);
+                if (fileBpms.Where(fb => fb.Value <= 10).Select(fb => fb.Key).ToArray() is string[] invalidFileBpms)
+                {
+                    fileBpms = BeatScanner.ScanFilesBpm(invalidFileBpms, 65536, 8, 50, 210, null, true);
+                }
 
                 this.Text = $"Time Stretch (each) <{fileBpms.Count}> Audio Files";
 
@@ -130,7 +134,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             decimal currentValue = this.numericUpDown_initialBpm.Value;
 
             // If ctrl down, double / halve the initial BPM
-            if (System.Windows.Forms.Control.ModifierKeys.HasFlag(Keys.Control) && currentValue != this.previousInitialBpmValue)
+            if (ModifierKeys.HasFlag(Keys.Control) && currentValue != this.previousInitialBpmValue)
             {
                 decimal adjustedValue = currentValue;
 
@@ -174,7 +178,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             decimal currentValue = this.numericUpDown_targetBpm.Value;
 
             // If ctrl down, double / halve the target BPM
-            if (System.Windows.Forms.Control.ModifierKeys.HasFlag(Keys.Control) && currentValue != this.previousTargetBpmValue)
+            if (ModifierKeys.HasFlag(Keys.Control) && currentValue != this.previousTargetBpmValue)
             {
                 decimal adjustedValue = currentValue;
 
@@ -580,7 +584,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void checkBox_channeled_CheckedChanged(object sender, EventArgs e)
         {
-            TimeStretchDialog.Channeled = this.checkBox_channeled.Checked;
+            Channeled = this.checkBox_channeled.Checked;
         }
     }
 }

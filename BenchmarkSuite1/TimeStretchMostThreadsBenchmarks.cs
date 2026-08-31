@@ -25,7 +25,7 @@ public class TimeStretchMostThreadsBenchmarks
         var data = new float[length];
         for (int i = 0; i < data.Length; i++)
         {
-            data[i] = (float) System.Math.Sin(i * 0.0007);
+            data[i] = (float) Math.Sin(i * 0.0007);
         }
 
         this.template = new AudioObj

@@ -50,7 +50,7 @@ public partial class ImageViewDialog : Form
 
     private void ShowFrame(int frameIndex)
     {
-        Bitmap nextFrame = ImageViewDialog.CreateBitmap(this.imageObj[frameIndex]);
+        Bitmap nextFrame = CreateBitmap(this.imageObj[frameIndex]);
         Bitmap? previousFrame = this.displayedFrame;
         this.displayedFrame = nextFrame;
         this.pictureBox_image.Image = this.displayedFrame;

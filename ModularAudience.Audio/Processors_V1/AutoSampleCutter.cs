@@ -70,7 +70,7 @@ namespace ModularAudience.Audio.Processors_V1
                 int baseFrames = totalFrames / parts;
                 int remainder = totalFrames % parts;
 
-                System.Threading.Tasks.Parallel.For(0, parts, i =>
+                Parallel.For(0, parts, i =>
                 {
                     int framesThis = baseFrames + (i < remainder ? 1 : 0);
                     if (framesThis <= 0)

@@ -132,7 +132,7 @@ namespace ModularAudience.Forms
             };
 
             this._playlist.BeforeTrackPlay = this.PreprocessPlaylistTrackAsync;
-            this._playlist.CrossfadeDurationProvider = () => WindowMain.CrossfadeDurationSeconds;
+            this._playlist.CrossfadeDurationProvider = () => CrossfadeDurationSeconds;
             this._playlist.ResolvePlaybackBpm = this.ResolvePlaylistPlaybackBpm;
             this._playlist.CrossfadeStartedAsync = this.HandlePlaylistCrossfadeStartedAsync;
 
@@ -205,7 +205,7 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            int syncDurationMs = Math.Max(0, WindowMain.CrossSyncDurationMs);
+            int syncDurationMs = Math.Max(0, CrossSyncDurationMs);
             if (syncDurationMs <= 0)
             {
                 return;

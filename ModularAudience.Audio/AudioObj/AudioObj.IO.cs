@@ -307,11 +307,10 @@ namespace ModularAudience.Audio
         }
 
 
-        public static Dictionary<string, float> ReadFilesBpmTags(IEnumerable<string> filePaths, string tag = "TBPM", int? maxWorkers = null)
+        public static Dictionary<string, float> ReadFilesBpmTags(IEnumerable<string> filePaths, string tag = "TBPM", int? maxWorkers = null, bool filterValidBpms = false)
         {
             // Evaluate max parallel workers (half of the available processors if null, safely clamped to 1..ProcessorCount)
-            maxWorkers ??= Math.Max(1, Environment.ProcessorCount / 2);
-            maxWorkers = Math.Clamp(maxWorkers.Value, 1, Environment.ProcessorCount);
+            maxWorkers = Math.Clamp(maxWorkers ?? Math.Max(1, Environment.ProcessorCount / 2), 1, Environment.ProcessorCount);
 
             // Verify & filter file paths; return [] if none are valid
             var validFiles = (filePaths?.Where(fp => !string.IsNullOrWhiteSpace(fp)
@@ -335,7 +334,10 @@ namespace ModularAudience.Audio
                 try
                 {
                     float? bpm = ReadFileBpmTag(filePath, tag);
-                    results[filePath] = bpm ?? 0.0f;
+                    if (!filterValidBpms || (bpm.HasValue && bpm.Value > 0))
+                    {
+                        results[filePath] = bpm ?? 0.0f;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -347,11 +349,10 @@ namespace ModularAudience.Audio
             return results.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         }
 
-        public static async Task<Dictionary<string, float>> ReadFilesBpmTagsAsync(IEnumerable<string> filePaths, string tag = "TBPM", int? maxWorkers = null)
+        public static async Task<Dictionary<string, float>> ReadFilesBpmTagsAsync(IEnumerable<string> filePaths, string tag = "TBPM", int? maxWorkers = null, bool filterValidBpms = false)
         {
             // Evaluate max parallel workers (half of the available processors if null, safely clamped to 1..ProcessorCount)
-            maxWorkers ??= Math.Max(1, Environment.ProcessorCount / 2);
-            maxWorkers = Math.Clamp(maxWorkers.Value, 1, Environment.ProcessorCount);
+            maxWorkers = Math.Clamp(maxWorkers ?? Math.Max(1, Environment.ProcessorCount / 2), 1, Environment.ProcessorCount);
 
             // Verify & filter file paths; return [] if none are valid
             var validFiles = (filePaths?.Where(fp => !string.IsNullOrWhiteSpace(fp)
@@ -377,7 +378,10 @@ namespace ModularAudience.Audio
                 {
                     // Run the blocking TagLib read on a thread-pool thread so we don't block the caller's context
                     float? bpm = await Task.Run(() => ReadFileBpmTag(filePath, tag)).ConfigureAwait(false);
-                    results[filePath] = bpm ?? 0.0f;
+                    if (!filterValidBpms || (bpm.HasValue && bpm.Value > 0))
+                    {
+                        results[filePath] = bpm ?? 0.0f;
+                    }
                 }
                 catch (Exception ex)
                 {

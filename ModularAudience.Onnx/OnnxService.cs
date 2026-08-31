@@ -97,7 +97,7 @@ namespace ModularAudience.Onnx
             }
 
             this.ModelPaths = this.ModelDirectories
-                .SelectMany(dir => System.IO.Directory.GetFiles(dir, "*.onnx", SearchOption.AllDirectories))
+                .SelectMany(dir => Directory.GetFiles(dir, "*.onnx", SearchOption.AllDirectories))
                 .ToList();
 
             return this.ModelPaths.ToArray();

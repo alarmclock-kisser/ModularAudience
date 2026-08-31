@@ -467,7 +467,7 @@ namespace ModularAudience.Audio
             foreach (char ch in name)
             {
                 // drop control chars and replace invalid chars with a single underscore
-                if (char.IsControl(ch) || System.Array.IndexOf(invalidChars, ch) >= 0)
+                if (char.IsControl(ch) || Array.IndexOf(invalidChars, ch) >= 0)
                 {
                     if (!lastWasUnderscore)
                     {
@@ -514,7 +514,7 @@ namespace ModularAudience.Audio
                 baseName = result.Substring(0, dotIndex);
             }
 
-            var reserved = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+            var reserved = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 "CON","PRN","AUX","NUL"
             };

@@ -20,7 +20,7 @@ public class AudioPlaybackReadBenchmarks
         this.destination = new float[2048];
         for (int i = 0; i < this.source.Length; i++)
         {
-            this.source[i] = (float) System.Math.Sin(i * 0.01);
+            this.source[i] = (float) Math.Sin(i * 0.01);
         }
 
         var assembly = typeof(ModularAudience.Audio.AudioPlaybackService).Assembly;

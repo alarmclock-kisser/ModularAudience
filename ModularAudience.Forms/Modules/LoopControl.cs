@@ -109,7 +109,7 @@ namespace ModularAudience.Forms.Modules
                     if (!removed)
                     {
                         // Fallback: stop and dispose audio directly if possible
-                        _ = System.Threading.Tasks.Task.Run(() =>
+                        _ = Task.Run(() =>
                         {
                             try { audio.StopAsync().GetAwaiter().GetResult(); } catch { }
                             try { audio.Dispose(); } catch { }
@@ -1326,7 +1326,7 @@ namespace ModularAudience.Forms.Modules
             AudioObj[] audios = this.TargetAudios.ToArray();
             try
             {
-                timings = await DropManager.TimeManageDropsAsync(audios, dropType);
+                timings = await TimeManageDropsAsync(audios, dropType);
             }
             catch (Exception ex)
             {

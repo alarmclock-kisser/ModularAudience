@@ -508,7 +508,7 @@ namespace ModularAudience.Forms
             if (int.TryParse(input, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int result))
             {
                 CrossSyncDurationMs = Math.Clamp(result, 0, 60_000);
-                Audio.LogCollection.Log($"Cross sync duration set to {CrossSyncDurationMs} ms.");
+                LogCollection.Log($"Cross sync duration set to {CrossSyncDurationMs} ms.");
             }
         }
 

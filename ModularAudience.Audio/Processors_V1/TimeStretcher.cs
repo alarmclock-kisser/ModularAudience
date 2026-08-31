@@ -852,13 +852,13 @@ namespace ModularAudience.Audio.Processors_V1
                 return obj;
             }
 
-            string baseTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MA_TimeStretch");
-            string tempDir = System.IO.Path.Combine(baseTemp, "TS_" + Guid.NewGuid().ToString("N"));
+            string baseTemp = Path.Combine(Path.GetTempPath(), "MA_TimeStretch");
+            string tempDir = Path.Combine(baseTemp, "TS_" + Guid.NewGuid().ToString("N"));
             var tempFiles = new List<string>();
 
             try
             {
-                System.IO.Directory.CreateDirectory(tempDir);
+                Directory.CreateDirectory(tempDir);
 
                 // FIX 2: Streaming statt alles in RAM laden
                 var chunkEnumerable = obj.GetChunksEnumerable(chunkSize, overlap, keepData);
@@ -914,14 +914,14 @@ namespace ModularAudience.Audio.Processors_V1
                     }
 
                     // Auf Disk schreiben
-                    string filePath = System.IO.Path.Combine(tempDir, index.ToString("D6") + ".bin");
+                    string filePath = Path.Combine(tempDir, index.ToString("D6") + ".bin");
                     using (var fs = new System.IO.FileStream(
                                filePath,
-                               System.IO.FileMode.Create,
-                               System.IO.FileAccess.Write,
-                               System.IO.FileShare.None,
+                               FileMode.Create,
+                               FileAccess.Write,
+                               FileShare.None,
                                81920, // Größerer Buffer
-                               System.IO.FileOptions.SequentialScan))
+                               FileOptions.SequentialScan))
                     using (var bw = new System.IO.BinaryWriter(fs, Encoding.UTF8, false))
                     {
                         bw.Write(ifft.Length);
@@ -972,11 +972,11 @@ namespace ModularAudience.Audio.Processors_V1
                     float[] data = [];
                     using (var fs = new System.IO.FileStream(
                                path,
-                               System.IO.FileMode.Open,
-                               System.IO.FileAccess.Read,
-                               System.IO.FileShare.Read,
+                               FileMode.Open,
+                               FileAccess.Read,
+                               FileShare.Read,
                                81920,
-                               System.IO.FileOptions.SequentialScan))
+                               FileOptions.SequentialScan))
                     using (var br = new System.IO.BinaryReader(fs, Encoding.UTF8, false))
                     {
                         int len = br.ReadInt32();
@@ -1005,7 +1005,7 @@ namespace ModularAudience.Audio.Processors_V1
                     // FIX 7: Datei sofort löschen
                     try
                     {
-                        System.IO.File.Delete(path);
+                        File.Delete(path);
                     }
                     catch { }
 
@@ -1045,26 +1045,26 @@ namespace ModularAudience.Audio.Processors_V1
                     {
                         try
                         {
-                            if (System.IO.File.Exists(f))
+                            if (File.Exists(f))
                             {
-                                System.IO.File.Delete(f);
+                                File.Delete(f);
                             }
                         }
                         catch { }
                     }
 
-                    if (System.IO.Directory.Exists(tempDir))
+                    if (Directory.Exists(tempDir))
                     {
                         try
                         {
-                            System.IO.Directory.Delete(tempDir, true);
+                            Directory.Delete(tempDir, true);
                         }
                         catch
                         {
                             await Task.Delay(100);
                             try
                             {
-                                System.IO.Directory.Delete(tempDir, true);
+                                Directory.Delete(tempDir, true);
                             }
                             catch { }
                         }

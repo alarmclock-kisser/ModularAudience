@@ -444,7 +444,7 @@ namespace ModularAudience.Cuda
 
             if (string.IsNullOrEmpty(kernelFile))
             {
-                CudaService.Log($"Kernel '{kernelName}' not found in source files.", "Error", 1);
+                Log($"Kernel '{kernelName}' not found in source files.", "Error", 1);
                 return null;
             }
 

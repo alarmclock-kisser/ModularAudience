@@ -78,7 +78,7 @@ namespace ModularAudience.Forms.Modules
         {
             try
             {
-                ModularAudience.Audio.LogCollection.Log($"[{DateTime.UtcNow:HH:mm:ss.fff}] {message}");
+                LogCollection.Log($"[{DateTime.UtcNow:HH:mm:ss.fff}] {message}");
             }
             catch { }
         }
@@ -675,7 +675,7 @@ namespace ModularAudience.Forms.Modules
                 // If countdown is enabled, announce 3..2..1 with approx. timing before logging Now playing.
                 try
                 {
-                    string logName = System.IO.Path.GetFileNameWithoutExtension(this.OriginalCurrentPath ?? path) ?? "";
+                    string logName = Path.GetFileNameWithoutExtension(this.OriginalCurrentPath ?? path) ?? "";
                     string logBpm = this.CurrentBpm > 0 ? $" [{this.CurrentBpm:F0} BPM]" : string.Empty;
                     bool wantCountdown = false;
                     try { wantCountdown = WindowMain.PlaylistCountdownEnabled; } catch { }
@@ -699,7 +699,7 @@ namespace ModularAudience.Forms.Modules
                                         try
                                         {
                                             var ao = new ModularAudience.Audio.AudioObj(path ?? "", load: false);
-                                            var scanned = await ModularAudience.Audio.Processors_V1.BeatScanner.ScanBpmAsync(ao).ConfigureAwait(false);
+                                            var scanned = await Audio.Processors_V1.BeatScanner.ScanBpmAsync(ao).ConfigureAwait(false);
                                             if (scanned > 0.0)
                                             {
                                                 bpm = scanned;
@@ -719,18 +719,18 @@ namespace ModularAudience.Forms.Modules
                                     intervalMs = (int) Math.Max(150, Math.Round(beatMs));
                                 }
 
-                                try { ModularAudience.Audio.LogCollection.Log($"Countdown: 3 (interval={intervalMs}ms)"); } catch { }
+                                try { LogCollection.Log($"Countdown: 3 (interval={intervalMs}ms)"); } catch { }
                                 try { await Task.Delay(intervalMs); } catch { }
-                                try { ModularAudience.Audio.LogCollection.Log("Countdown: 2"); } catch { }
+                                try { LogCollection.Log("Countdown: 2"); } catch { }
                                 try { await Task.Delay(intervalMs); } catch { }
-                                try { ModularAudience.Audio.LogCollection.Log("Countdown: 1"); } catch { }
+                                try { LogCollection.Log("Countdown: 1"); } catch { }
                             }
                             catch { }
                         });
                     }
 
                     // Intentionally logged before Play(): runs on each new track entry via PlayTrackAsync.
-                    ModularAudience.Audio.LogCollection.Log($"Now playing: {logName}{logBpm}");
+                    LogCollection.Log($"Now playing: {logName}{logBpm}");
                 }
                 catch { }
 
@@ -968,7 +968,7 @@ namespace ModularAudience.Forms.Modules
                     this.TrackPreparedAsActive(currentPrepared, "initial play");
                     this.ApplyCurrentTrackState(currentPrepared);
                     TrackChanged?.Invoke();
-                    ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] Now playing: {Path.GetFileNameWithoutExtension(currentOriginalPath)} | active={this.ActiveAudioObjs.Count}");
+                    LogCollection.Log($"[PlaylistEngine] Now playing: {Path.GetFileNameWithoutExtension(currentOriginalPath)} | active={this.ActiveAudioObjs.Count}");
 
                     bool crossfadeTriggered = false;
                     int notPlayingStrikes = 0;
@@ -1022,7 +1022,7 @@ namespace ModularAudience.Forms.Modules
                                 continue;
                             }
 
-                            ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] track ended (confirmed): {Path.GetFileNameWithoutExtension(currentOriginalPath)} pos={playedSec:F2}s/{totalSec:F2}s");
+                            LogCollection.Log($"[PlaylistEngine] track ended (confirmed): {Path.GetFileNameWithoutExtension(currentOriginalPath)} pos={playedSec:F2}s/{totalSec:F2}s");
                             // Nahtloser Direktübergang: nur dann direkt starten, wenn KEIN Crossfade
                             // konfiguriert ist. Wenn Crossfade aktiv ist, gehört der Übergang in den
                             // normalen Crossfade-Pfad (der bereits früher auslöst), sonst verhindern
@@ -1030,7 +1030,7 @@ namespace ModularAudience.Forms.Modules
                             double configuredCrossfade = this.GetCrossfadeDuration();
                             if (configuredCrossfade > 0.0)
                             {
-                                ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] track ended but crossfade configured ({configuredCrossfade}s) - deferring to crossfade logic");
+                                LogCollection.Log($"[PlaylistEngine] track ended but crossfade configured ({configuredCrossfade}s) - deferring to crossfade logic");
                                 break;
                             }
 
@@ -1052,7 +1052,7 @@ namespace ModularAudience.Forms.Modules
                                 // Wenn Prepare noch läuft (z.B. Stretching), max 8s abwarten bevor wir aufgeben.
                                 if (!nextPrepareTask.IsCompleted)
                                 {
-                                    ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] seam-wait: prepare still running for {Path.GetFileNameWithoutExtension(nextPath)}");
+                                    LogCollection.Log($"[PlaylistEngine] seam-wait: prepare still running for {Path.GetFileNameWithoutExtension(nextPath)}");
                                     using var waitCts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(8));
                                     try { await nextPrepareTask.WaitAsync(waitCts.Token).ConfigureAwait(false); } catch { }
                                 }
@@ -1092,7 +1092,7 @@ namespace ModularAudience.Forms.Modules
 
                                     this.ApplyCurrentTrackState(seamNext);
                                     TrackChanged?.Invoke();
-                                    ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] seam-start -> {Path.GetFileNameWithoutExtension(nextPath)} | active={this.ActiveAudioObjs.Count}");
+                                    LogCollection.Log($"[PlaylistEngine] seam-start -> {Path.GetFileNameWithoutExtension(nextPath)} | active={this.ActiveAudioObjs.Count}");
                                     continue;
                                 }
                             }
@@ -1219,7 +1219,7 @@ namespace ModularAudience.Forms.Modules
                                     continue;
                                 }
                                 // else: proceed to trigger crossfade despite imperfect beat alignment
-                                ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] crossfade force-trigger (near-end): remaining={remainingSeconds:F2}s beatWait={beatWait:F2}s");
+                                LogCollection.Log($"[PlaylistEngine] crossfade force-trigger (near-end): remaining={remainingSeconds:F2}s beatWait={beatWait:F2}s");
                             }
 
                             // Ensure prepare task exists (may have been skipped if BPM unknown)
@@ -1238,7 +1238,7 @@ namespace ModularAudience.Forms.Modules
                                     await Task.Delay(25, ct).ConfigureAwait(false);
                                     continue;
                                 }
-                                ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] forcing crossfade even though prepare still running (remaining={remainingSeconds:F2}s)");
+                                LogCollection.Log($"[PlaylistEngine] forcing crossfade even though prepare still running (remaining={remainingSeconds:F2}s)");
                             }
 
                             crossfadeTriggered = true;
@@ -1347,7 +1347,7 @@ namespace ModularAudience.Forms.Modules
                                     _ = Task.Run(() => this.CrossfadeStartedAsync(fadingOut.Audio, nextTrack.Audio), CancellationToken.None);
                                 }
 
-                                ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] crossfade -> {Path.GetFileNameWithoutExtension(nextOriginalPath)} | active={this.ActiveAudioObjs.Count}");
+                                LogCollection.Log($"[PlaylistEngine] crossfade -> {Path.GetFileNameWithoutExtension(nextOriginalPath)} | active={this.ActiveAudioObjs.Count}");
 
                                 // Pivot inner loop to the new primary track without re-entering the outer loop.
                                 // This prevents the outer loop from calling PrepareTrackAsync again on the
@@ -1360,7 +1360,7 @@ namespace ModularAudience.Forms.Modules
                             else
                             {
                                 crossfadeTriggered = false;
-                                ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine] crossfade prepare FAILED: {nextOriginalPath}");
+                                LogCollection.Log($"[PlaylistEngine] crossfade prepare FAILED: {nextOriginalPath}");
                             }
                         }
 
@@ -1565,7 +1565,7 @@ namespace ModularAudience.Forms.Modules
                 if (request.LastCountdownSecond != countdownSecond)
                 {
                     request.LastCountdownSecond = countdownSecond;
-                    ModularAudience.Audio.LogCollection.Log($"Auto enqueue one: on-beat handoff in {countdownSecond}s -> {Path.GetFileNameWithoutExtension(request.OriginalPath)}");
+                    LogCollection.Log($"Auto enqueue one: on-beat handoff in {countdownSecond}s -> {Path.GetFileNameWithoutExtension(request.OriginalPath)}");
                 }
 
                 await Task.Delay(TimeSpan.FromSeconds(Math.Min(waitSeconds, 0.25)), ct).ConfigureAwait(false);
@@ -1634,7 +1634,7 @@ namespace ModularAudience.Forms.Modules
             }
 
             this.ApplyCurrentTrackState(nextTrack);
-            ModularAudience.Audio.LogCollection.Log($"Auto enqueue one: started on-beat -> {Path.GetFileNameWithoutExtension(nextTrack.OriginalPath)}");
+            LogCollection.Log($"Auto enqueue one: started on-beat -> {Path.GetFileNameWithoutExtension(nextTrack.OriginalPath)}");
             return nextTrack;
         }
 
@@ -1927,7 +1927,7 @@ namespace ModularAudience.Forms.Modules
         // Safe playback logging helper: must never throw
         private void LogPlayback(string message)
         {
-            try { ModularAudience.Audio.LogCollection.Log($"[PlaylistEngine::Playback] {message}"); } catch { }
+            try { LogCollection.Log($"[PlaylistEngine::Playback] {message}"); } catch { }
         }
 
         // â”€â”€ Tag helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

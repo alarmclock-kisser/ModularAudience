@@ -273,7 +273,7 @@ namespace ModularAudience.Forms
             {
                 if (!isDown)
                 {
-                    bool capsOn = Control.IsKeyLocked(Keys.CapsLock);
+                    bool capsOn = IsKeyLocked(Keys.CapsLock);
                     if (capsOn)
                     {
                         this.StartSyncer();
@@ -347,13 +347,13 @@ namespace ModularAudience.Forms
                         // Provide history from LogCollection.Logs (newest first)
                         // Provide only user comment history (newest first)
                         List<string> history;
-                        try { history = WindowMain.CommentHistory.ToList(); } catch { history = []; }
+                        try { history = CommentHistory.ToList(); } catch { history = []; }
 
                         // Provide newest-first ordering
                         history = history.ToList();
 
                         // supply draft
-                        string draft = WindowMain.CommentDraft ?? string.Empty;
+                        string draft = CommentDraft ?? string.Empty;
 
                         Instance?.IsCommentDialogOpen = true;
                         try
@@ -367,14 +367,14 @@ namespace ModularAudience.Forms
                                     if (!string.IsNullOrWhiteSpace(input))
                                     {
                                         LogCollection.PostComment(timestamp, input);
-                                        try { WindowMain.CommentHistory.Insert(0, input); } catch { }
-                                        try { WindowMain.CommentDraft = string.Empty; } catch { }
+                                        try { CommentHistory.Insert(0, input); } catch { }
+                                        try { CommentDraft = string.Empty; } catch { }
                                     }
                                 }
                                 else
                                 {
                                     // Save draft back
-                                    try { WindowMain.CommentDraft = dlg.ResultText ?? string.Empty; } catch { }
+                                    try { CommentDraft = dlg.ResultText ?? string.Empty; } catch { }
                                 }
                             }
                         }

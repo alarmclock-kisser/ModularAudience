@@ -145,7 +145,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            if (e.Button == MouseButtons.Right && (Control.ModifierKeys & Keys.Shift) != Keys.None)
+            if (e.Button == MouseButtons.Right && (ModifierKeys & Keys.Shift) != Keys.None)
             {
                 this.rectangleSelectionStart = this.ClampToEditor(e.Location);
                 this.rectangleSelectionEnd = this.rectangleSelectionStart;
@@ -156,7 +156,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            if ((Control.ModifierKeys & Keys.Control) != Keys.None)
+            if ((ModifierKeys & Keys.Control) != Keys.None)
             {
                 this.panning = true;
                 this.panStart = e.Location;
@@ -284,7 +284,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void pictureBox_editor_MouseWheel(object? sender, MouseEventArgs e)
         {
-            if ((Control.ModifierKeys & Keys.Control) == Keys.None)
+            if ((ModifierKeys & Keys.Control) == Keys.None)
             {
                 long scrollTicks = this.GridTicks * Math.Max(1, Math.Abs(e.Delta) / 120) * 4;
                 this.ScrollView(e.Delta < 0 ? scrollTicks : -scrollTicks);

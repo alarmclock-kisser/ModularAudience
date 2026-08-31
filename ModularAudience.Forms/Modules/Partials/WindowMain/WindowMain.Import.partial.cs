@@ -261,7 +261,7 @@ namespace ModularAudience.Forms
         private async void button_random_Click(object sender, EventArgs e)
         {
             // Get focussed track or last collection last track 's filepath base dir
-            var lastTrack = WindowMain.LastSelectedTrackView?.OriginalAudio ?? CollectionViews.LastOrDefault(cv => cv != null && !cv.IsDisposed)?.AudioC.Audios.LastOrDefault();
+            var lastTrack = LastSelectedTrackView?.OriginalAudio ?? CollectionViews.LastOrDefault(cv => cv != null && !cv.IsDisposed)?.AudioC.Audios.LastOrDefault();
             string baseDir = lastTrack != null && !string.IsNullOrWhiteSpace(lastTrack.FilePath) ? Path.GetDirectoryName(lastTrack.FilePath) ?? string.Empty : string.Empty;
 
             // If baseDir is empty or doesn't exist, fallback to random MyMusic audio file
@@ -287,7 +287,7 @@ namespace ModularAudience.Forms
 
                 if (this._importStretchSettings != null)
                 {
-                    var track = WindowMain.LastSelectedTrackView?.OriginalAudio ?? CollectionViews.LastOrDefault(cv => cv != null && !cv.IsDisposed)?.AudioC.Audios.LastOrDefault();
+                    var track = LastSelectedTrackView?.OriginalAudio ?? CollectionViews.LastOrDefault(cv => cv != null && !cv.IsDisposed)?.AudioC.Audios.LastOrDefault();
                     if (track != null)
                     {
                         track.ReplaceWith(await TimeStretcher.TimeStretchAllThreadsAsync(track, this._importStretchSettings.ChunkSize, this._importStretchSettings.Overlap, this._importStretchSettings.StretchFactor, false, 0.8f, this._importStretchSettings.Threads, null, this._importStretchSettings.Offload, true));

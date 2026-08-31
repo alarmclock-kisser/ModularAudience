@@ -697,6 +697,67 @@ namespace ModularAudience.Audio.Processors_V1
         }
 
 
+        /// <summary>
+        /// Scan the BPM of an audio file.
+        /// </summary>
+        /// <param name="filePath">The path to the audio file to scan for BPM.</param>
+        /// <param name="windowSize">The size of the window to use for analysis.</param>
+        /// <param name="lookingRange">The amount of windowSizes to look forwards and backward for BPM peaks, starting from the middle. Null means the maximum amount of windowSizes that fit within the audio data samples.</param>
+        /// <param name="minBpm">The minimum BPM to consider.</param>
+        /// <param name="maxBpm">The maximum BPM to consider.</param>
+        /// <returns>The estimated BPM of the audio file, or -1 if it could not be determined.</returns>
+        public static float ScanFileBpm(string filePath, int windowSize = 65536, int? lookingRange = null, int minBpm = 40, int maxBpm = 200)
+        {
+            if (!File.Exists(filePath))
+            {
+                return -1f;
+            }
+
+            // Task.Run to avoid blocking the calling thread, but wait for the result
+            double bpm = 0;
+            Task.Run(async () =>
+            {
+                using var audioObj = new AudioObj(filePath);
+                // Clamp lookingRange to the maximum number of windowSizes that fit within the audio data samples, divided by 2 (for looking forwards and backwards)
+                lookingRange = Math.Clamp(lookingRange ?? (audioObj.Data.Length / windowSize), 0, (audioObj.Data.Length / windowSize) / 2);
+                bpm = await ScanBpmAsync(audioObj, windowSize, lookingRange.Value, minBpm, maxBpm);
+            }).Wait();
+            return (float)bpm;
+        }
+
+        public static Dictionary<string, float> ScanFilesBpm(IEnumerable<string> filePaths, int windowSize = 65536, int? lookingRange = null, int minBpm = 40, int maxBpm = 200, int? maxWorkers = null, bool filterInvalidBpms = false)
+        {
+            maxWorkers = Math.Clamp(maxWorkers ?? Math.Max(1, Environment.ProcessorCount / 2), 1, Environment.ProcessorCount);
+            
+            using SemaphoreSlim semaphore = new(maxWorkers.Value);
+            ConcurrentDictionary<string, float> results = [];
+
+            var tasks = filePaths.Select(async filePath =>
+            {
+                await semaphore.WaitAsync();
+                try
+                {
+                    float bpm = ScanFileBpm(filePath, windowSize, lookingRange, minBpm, maxBpm);
+                    results[filePath] = bpm;
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            }).ToArray();
+
+            Task.WaitAll(tasks);
+
+            if (filterInvalidBpms)
+            {
+                return results.Where(kv => kv.Value > 0).ToDictionary(kv => kv.Key, kv => kv.Value);
+            }
+            else
+            {
+                return results.ToDictionary(kv => kv.Key, kv => kv.Value);
+            }
+        }
+
 
         private static double[] BuildMeterTemplate(int K)
         {
