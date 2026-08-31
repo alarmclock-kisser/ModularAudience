@@ -713,16 +713,17 @@ namespace ModularAudience.Audio.Processors_V1
                 return -1f;
             }
 
-            // Task.Run to avoid blocking the calling thread, but wait for the result
-            double bpm = 0;
-            Task.Run(async () =>
-            {
-                using var audioObj = new AudioObj(filePath);
-                // Clamp lookingRange to the maximum number of windowSizes that fit within the audio data samples, divided by 2 (for looking forwards and backwards)
-                lookingRange = Math.Clamp(lookingRange ?? (audioObj.Data.Length / windowSize), 0, (audioObj.Data.Length / windowSize) / 2);
-                bpm = await ScanBpmAsync(audioObj, windowSize, lookingRange.Value, minBpm, maxBpm);
-            }).Wait();
-            return (float)bpm;
+            // Create AudioObj on the current thread (synchronous file I/O is fine here)
+            using var audioObj = new AudioObj(filePath);
+
+            // Clamp lookingRange to the maximum number of windowSizes that fit within the audio data samples, divided by 2 (for looking forwards and backwards)
+            int effectiveLookingRange = Math.Clamp(lookingRange ?? (audioObj.Data.Length / windowSize), 0, (audioObj.Data.Length / windowSize) / 2);
+
+            // Run async method synchronously using .GetAwaiter().GetResult() - this is the recommended pattern for:
+            // 1. Avoiding Task.Run + .Wait() which can cause thread pool exhaustion
+            // 2. Safe because we're on a background thread (called from Parallel.ForEach or Task.Run)
+            // 3. GetAwaiter().GetResult() doesn't capture the synchronization context, so no deadlock risk
+            return (float) ScanBpmAsync(audioObj, windowSize, effectiveLookingRange, minBpm, maxBpm).GetAwaiter().GetResult();
         }
 
         public static Dictionary<string, float> ScanFilesBpm(IEnumerable<string> filePaths, int windowSize = 65536, int? lookingRange = null, int minBpm = 40, int maxBpm = 200, int? maxWorkers = null, bool filterInvalidBpms = false)

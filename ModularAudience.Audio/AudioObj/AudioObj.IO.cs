@@ -308,7 +308,7 @@ namespace ModularAudience.Audio
         }
 
 
-        public static Dictionary<string, float> ReadFilesBpmTags(IEnumerable<string> filePaths, string tag = "TBPM", int? maxWorkers = null, bool retryWithScanBpm = true, float filterMinBpm = 10f)
+        public static Dictionary<string, float> ReadFilesBpmTags(IEnumerable<string> filePaths, string tag = "TBPM", int? maxWorkers = null, bool retryWithScanBpm = true, float filterMinBpm = 10f, bool addFileTag = true)
         {
             // Evaluate max parallel workers (half of the available processors if null, safely clamped to 1..ProcessorCount)
             maxWorkers = Math.Clamp(maxWorkers ?? Math.Max(1, Environment.ProcessorCount / 2), 1, Environment.ProcessorCount);
@@ -344,6 +344,10 @@ namespace ModularAudience.Audio
                         bpm = BeatScanner.ScanFileBpm(filePath, 65536, 32);
                         if (bpm > filterMinBpm)
                         {
+                            if (addFileTag)
+                            {
+                                WriteBpmTagToFile(filePath, bpm);
+                            }
                             results[filePath] = bpm ?? 0.0f;
                         }
                     }
@@ -351,7 +355,10 @@ namespace ModularAudience.Audio
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"Error reading BPM tags for '{filePath}': {ex.Message}");
-                    results[filePath] = 0.0f;
+                    if (filterMinBpm <= 0)
+                    {
+                        results[filePath] = 0.0f;
+                    }
                 }
             });
 
@@ -359,5 +366,72 @@ namespace ModularAudience.Audio
         }
 
 
+        /// <summary>
+        /// Writes a BPM value as tag to an audio file or removes it.
+        /// </summary>
+        /// <param name="filePath">The audio file path to write the BPM tag to</param>
+        /// <param name="bpmValue">The BPM value for the tag, if null, remove any BPM tag.</param>
+        /// <param name="tag">The tag name to search and replace for or write as</param>
+        /// <returns>Bool whether the action succeeded or failed</returns>
+        public static bool WriteBpmTagToFile(string filePath, float? bpmValue, string tag = "TBPM")
+        {
+            if (!File.Exists(filePath) || Path.GetExtension(filePath) is not (".mp3" or ".wav" or ".flac" or ".m4a"))
+            {
+                return false;
+            }
+
+            try
+            {
+                using var file = TagLib.File.Create(filePath);
+
+                if (bpmValue.HasValue && bpmValue.Value > 0)
+                {
+                    // Write standard BPM field (ID3v2 TBPM / Vorbis BPM= / APE BPM)
+                    file.Tag.BeatsPerMinute = (ushort)bpmValue.Value;
+
+                    // Also write the custom text frame (e.g. "TBPM") for consistency with ReadFileBpmTag
+                    if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
+                    {
+                        var id3v2Tag = (TagLib.Id3v2.Tag)file.GetTag(TagLib.TagTypes.Id3v2);
+                        var frame = TagLib.Id3v2.TextInformationFrame.Get(id3v2Tag, tag, false);
+                        if (frame == null)
+                        {
+                            frame = new TagLib.Id3v2.TextInformationFrame(tag)
+                            {
+                                Text = [bpmValue.Value.ToString("0.##", CultureInfo.InvariantCulture)]
+                            };
+                            id3v2Tag.AddFrame(frame);
+                        }
+                        else
+                        {
+                            frame.Text = [bpmValue.Value.ToString("0.##", CultureInfo.InvariantCulture)];
+                        }
+                    }
+                }
+                else
+                {
+                    // Remove BPM tag: clear standard field and custom text frame
+                    file.Tag.BeatsPerMinute = 0;
+
+                    if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
+                    {
+                        var id3v2Tag = (TagLib.Id3v2.Tag)file.GetTag(TagLib.TagTypes.Id3v2);
+                        var frame = TagLib.Id3v2.TextInformationFrame.Get(id3v2Tag, tag, false);
+                        if (frame != null)
+                        {
+                            id3v2Tag.RemoveFrame(frame);
+                        }
+                    }
+                }
+
+                file.Save();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error writing BPM tag to '{filePath}': {ex.Message}");
+                return false;
+            }
+        }
     }
 }

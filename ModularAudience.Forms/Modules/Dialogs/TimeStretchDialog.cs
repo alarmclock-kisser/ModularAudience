@@ -56,7 +56,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     float? minBpm = this.Tracks.Min(t => t.Bpm > 0 ? t.Bpm : t.ScannedBpm > 30 ? t.ScannedBpm : null);
                     float? maxBpm = this.Tracks.Max(t => t.Bpm > 0 ? t.Bpm : t.ScannedBpm > 30 ? t.ScannedBpm : null);
-                    this.Text = $"Time Stretch - {this.Tracks.Count} Tracks [{minBpm?.ToString("0.#") ?? "?"} - {maxBpm?.ToString("0.#") ?? "?"} BPM]";
+                    this.Text = $"Time Stretch <{this.Tracks.Count}> Tracks [{minBpm?.ToString("0.#") ?? "?"} - {maxBpm?.ToString("0.#") ?? "?"} BPM]";
                 }
             }
             else if (trackView != null)
@@ -100,7 +100,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     AudioObj.ReadFilesBpmTags(this._pendingFilePaths, filterMinBpm: 10f));
 
                 // Zurück auf dem UI-Thread: Text updaten
-                this.Text = $"Time Stretch (each) <{fileBpms.Count}> Audios [{fileBpms.Values.Max():0.#} - {fileBpms.Values.Min():0.#} BPM]";
+                this.Text = $"Time Stretch <{fileBpms.Count}> Audios [{fileBpms.Values.Min():0.#} - {fileBpms.Values.Max():0.#} BPM]";
             }
         }
 
