@@ -2,7 +2,7 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 
 partial class ImageViewDialog
 {
-    private System.ComponentModel.IContainer? components = null;
+    private System.ComponentModel.IContainer components;
     private PictureBox pictureBox_image;
     private Panel panel_frame;
     private Label label_frame;

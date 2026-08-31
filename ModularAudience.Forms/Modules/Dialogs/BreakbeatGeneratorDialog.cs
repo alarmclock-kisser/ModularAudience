@@ -746,7 +746,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.CollectionView ??= new AudioCollectionView([]);
             this.CollectionView.AudioC.Audios.Add(audioObj);
             this.CollectionView.Show();
-            this.CollectionView.Rename("Break-Beat" + (this.CollectionView.AudioC.Audios.Count() == 1 ? "" : "(s)") + " Generated " + this.Bpm.ToString("F1", CultureInfo.InvariantCulture) + " BPM");
+            this.CollectionView.Rename("Break-Beat" + (this.CollectionView.AudioC.Audios.Count == 1 ? "" : "(s)") + " Generated " + this.Bpm.ToString("F1", CultureInfo.InvariantCulture) + " BPM");
         }
 
         private IReadOnlyList<string> GetBeatMapRowLabels()

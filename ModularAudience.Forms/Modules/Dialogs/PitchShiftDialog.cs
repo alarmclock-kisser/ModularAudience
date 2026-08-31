@@ -78,7 +78,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             foreach (var samples in pitchedSamples)
             {
-                int take = Math.Clamp((int) this.numericUpDown_take.Value, 1, samples.Count());
+                int take = Math.Clamp((int) this.numericUpDown_take.Value, 1, samples.Count);
 
                 // Snapshot als IList für effizienten Indexzugriff (falls bereits IList vorhanden, wiederverwenden)
                 IList<AudioObj> list = samples is IList<AudioObj> l ? l : [.. samples];

@@ -1,3 +1,4 @@
+using ModularAudience.Audio.Processors_V1;
 using NAudio.Wave;
 using System;
 using System.Collections.Concurrent;
@@ -307,7 +308,7 @@ namespace ModularAudience.Audio
         }
 
 
-        public static Dictionary<string, float> ReadFilesBpmTags(IEnumerable<string> filePaths, string tag = "TBPM", int? maxWorkers = null, bool filterValidBpms = false)
+        public static Dictionary<string, float> ReadFilesBpmTags(IEnumerable<string> filePaths, string tag = "TBPM", int? maxWorkers = null, bool retryWithScanBpm = true, float filterMinBpm = 10f)
         {
             // Evaluate max parallel workers (half of the available processors if null, safely clamped to 1..ProcessorCount)
             maxWorkers = Math.Clamp(maxWorkers ?? Math.Max(1, Environment.ProcessorCount / 2), 1, Environment.ProcessorCount);
@@ -334,9 +335,17 @@ namespace ModularAudience.Audio
                 try
                 {
                     float? bpm = ReadFileBpmTag(filePath, tag);
-                    if (!filterValidBpms || (bpm.HasValue && bpm.Value > 0))
+                    if (bpm > filterMinBpm)
                     {
                         results[filePath] = bpm ?? 0.0f;
+                    }
+                    else if (retryWithScanBpm)
+                    {
+                        bpm = BeatScanner.ScanFileBpm(filePath, 65536, 32);
+                        if (bpm > filterMinBpm)
+                        {
+                            results[filePath] = bpm ?? 0.0f;
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -349,55 +358,6 @@ namespace ModularAudience.Audio
             return results.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         }
 
-        public static async Task<Dictionary<string, float>> ReadFilesBpmTagsAsync(IEnumerable<string> filePaths, string tag = "TBPM", int? maxWorkers = null, bool filterValidBpms = false)
-        {
-            // Evaluate max parallel workers (half of the available processors if null, safely clamped to 1..ProcessorCount)
-            maxWorkers = Math.Clamp(maxWorkers ?? Math.Max(1, Environment.ProcessorCount / 2), 1, Environment.ProcessorCount);
-
-            // Verify & filter file paths; return [] if none are valid
-            var validFiles = (filePaths?.Where(fp => !string.IsNullOrWhiteSpace(fp)
-                && File.Exists(fp)
-                && Path.GetExtension(fp) is (".mp3" or ".flac" or ".wav" or ".m4a")) ?? []).ToList();
-
-            if (validFiles.Count == 0)
-            {
-                Debug.WriteLine("No valid audio files found for BPM tag reading.");
-                return [];
-            }
-
-            // Thread-safe result dictionary
-            var results = new ConcurrentDictionary<string, float>();
-
-            // SemaphoreSlim limits concurrent I/O operations to maxWorkers
-            using var semaphore = new SemaphoreSlim(maxWorkers.Value);
-
-            var tasks = validFiles.Select(async filePath =>
-            {
-                await semaphore.WaitAsync().ConfigureAwait(false);
-                try
-                {
-                    // Run the blocking TagLib read on a thread-pool thread so we don't block the caller's context
-                    float? bpm = await Task.Run(() => ReadFileBpmTag(filePath, tag)).ConfigureAwait(false);
-                    if (!filterValidBpms || (bpm.HasValue && bpm.Value > 0))
-                    {
-                        results[filePath] = bpm ?? 0.0f;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Error reading BPM tags for '{filePath}': {ex.Message}");
-                    results[filePath] = 0.0f;
-                }
-                finally
-                {
-                    semaphore.Release();
-                }
-            });
-
-            await Task.WhenAll(tasks).ConfigureAwait(false);
-
-            return results.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        }
 
     }
 }

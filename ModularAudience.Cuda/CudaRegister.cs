@@ -270,7 +270,7 @@ namespace ModularAudience.Cuda
         {
             if (maxCount <= 0)
             {
-                maxCount = this.MaxThreads - this.streams.Count();
+                maxCount = this.MaxThreads - this.streams.Count;
             }
             if (maxCount <= 0 || this.CTX == null)
             {
@@ -325,7 +325,7 @@ namespace ModularAudience.Cuda
         {
             if (maxCount <= 0)
             {
-                maxCount = this.MaxThreads - this.streams.Count();
+                maxCount = this.MaxThreads - this.streams.Count;
             }
             if (maxCount <= 0 || this.CTX == null)
             {

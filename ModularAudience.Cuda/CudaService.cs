@@ -318,7 +318,7 @@ namespace ModularAudience.Cuda
         // Method:Build CudaMem entry
         public string BuildCudaMemEntry(CudaMem mem)
         {
-            return $"<{mem.IndexPointer.ToString()}> ({mem.TotalSize / (1024.0 * 1024.0):F2} MB, {mem.Pointers.LongLength} chunks)";
+            return $"<{mem.IndexPointer}> ({mem.TotalSize / (1024.0 * 1024.0):F2} MB, {mem.Pointers.LongLength} chunks)";
         }
 
 
@@ -502,7 +502,7 @@ namespace ModularAudience.Cuda
 
                 // Move -> Host
                 var chunks = this.Register.PullChunks<float>(obj.Pointer, keep);
-                if (chunks == null || chunks.LongCount() <= 0)
+                if (chunks == null || chunks.Count <= 0)
                 {
                     sw.Stop();
                     return obj;
@@ -560,7 +560,7 @@ namespace ModularAudience.Cuda
 
                 // Move -> Host
                 var chunks = await this.Register.PullChunksAsync<float>(obj.Pointer, keep);
-                if (chunks == null || chunks.LongCount() <= 0)
+                if (chunks == null || chunks.Count <= 0)
                 {
                     sw.Stop();
                     return obj;

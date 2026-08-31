@@ -11,21 +11,20 @@ namespace ModularAudience.Forms.Modules.Dialogs
 {
     public partial class TimeStretchDialog : Form
     {
-        internal IEnumerable<AudioObj> Tracks;
-        private readonly TrackView? trackView;
+        internal List<AudioObj> Tracks = [];
+        private readonly TrackView? TrackView;
         private bool isProcessing;
+        private string[] _pendingFilePaths = [];
 
         /// <summary>
         /// When true the dialog only collects parameters; clicking Stretch / Stretch V2
         /// saves <see cref="ConfirmedSettings"/> and closes without processing any audio.
         /// </summary>
         [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-        public bool IsConfigureMode { get; set; }
+        public bool IsConfigureMode { get; init; }
 
-        /// <summary>Stretch settings confirmed by the user (populated when <see cref="IsConfigureMode"/> is true).</summary>
         public PlaylistStretchSettings? ConfirmedSettings { get; private set; }
 
-        /// <summary>True if the user confirmed via Stretch V2, false for Stretch V1.</summary>
         public bool ConfirmedUsedV2 { get; private set; }
         public static bool Channeled { get; internal set; } = true;
 
@@ -46,20 +45,29 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.InitializeComponent();
             this.previousInitialBpmValue = this.numericUpDown_initialBpm.Value;
             this.previousTargetBpmValue = this.numericUpDown_targetBpm.Value;
-            if (audios?.Count() > 0)
+            if (audios?.Any() == true)
             {
-                this.Tracks = audios;
+                this.Tracks = audios.ToList();
+                if (audios.Count() == 1)
+                {
+                    this.Text = $"Time Stretch - {this.Tracks.First().Name}";
+                }
+                else
+                {
+                    float? minBpm = this.Tracks.Min(t => t.Bpm > 0 ? t.Bpm : t.ScannedBpm > 30 ? t.ScannedBpm : null);
+                    float? maxBpm = this.Tracks.Max(t => t.Bpm > 0 ? t.Bpm : t.ScannedBpm > 30 ? t.ScannedBpm : null);
+                    this.Text = $"Time Stretch - {this.Tracks.Count} Tracks [{minBpm?.ToString("0.#") ?? "?"} - {maxBpm?.ToString("0.#") ?? "?"} BPM]";
+                }
             }
             else if (trackView != null)
             {
-                this.trackView = trackView;
+                this.TrackView = trackView;
                 this.Tracks = [trackView.OriginalAudio];
+                this.Text = $"Time Stretch - {this.Tracks.First().Name}";
             }
             else if (filePaths?.Any() == true)
             {
-                // File-path mode: no AudioObj instances yet; the dialog runs in
-                // configure-only or per-file mode and does not need Tracks populated.
-                this.Tracks = [];
+                this._pendingFilePaths = filePaths.ToArray();
             }
             else
             {
@@ -68,43 +76,32 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.Close();
             }
 
-            this.Text = $"Time Stretch - {trackView?.Name ?? this.Tracks.Count() + " Tracks"}";
-            if (audios?.Count() == 1)
-            {
-                this.Text = $"Time Stretch - {audios.First().Name}";
-            }
-            else if (filePaths?.Any() == true)
-            {
-                Dictionary<string, float> fileBpms = AudioObj.ReadFilesBpmTags(filePaths);
-                if (fileBpms.Where(fb => fb.Value <= 10).Select(fb => fb.Key).ToArray() is string[] invalidFileBpms)
-                {
-                    fileBpms = BeatScanner.ScanFilesBpm(invalidFileBpms, 65536, 8, 50, 210, null, true);
-                }
-
-                this.Text = $"Time Stretch (each) <{fileBpms.Count}> Audio Files";
-
-                float? minBpm = fileBpms.Values.Min();
-                float? maxBpm = fileBpms.Values.Max();
-                this.Text += $" [{minBpm?.ToString("0.#") ?? "?"} - {maxBpm?.ToString("0.#") ?? "?"} BPM]";
-            }
-            else
-            {
-                float? minBpm = this.Tracks.Min(t => t.Bpm > 0 ? t.Bpm : t.ScannedBpm > 30 ? t.ScannedBpm : null);
-                float? maxBpm = this.Tracks.Max(t => t.Bpm > 0 ? t.Bpm : t.ScannedBpm > 30 ? t.ScannedBpm : null);
-                this.Text += $"[{minBpm?.ToString("0.#") ?? "?"} - {maxBpm?.ToString("0.#") ?? "?"} BPM]";
-            }
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false, WindowMain.CurrentScreenId);
 
             this.numericUpDown_chunkSize.Tag = (int) this.numericUpDown_chunkSize.Value;
-            this.numericUpDown_initialBpm.Value = this.Tracks.Any() ? this.GetSafeInitialBpm(this.Tracks.First()) : (decimal) LastInitialBpm;
+            this.numericUpDown_initialBpm.Value = this.Tracks.Count != 0 ? this.GetSafeInitialBpm(this.Tracks.First()) : (decimal) LastInitialBpm;
             this.numericUpDown_threads.Minimum = 1;
             this.numericUpDown_threads.Maximum = Math.Max(Environment.ProcessorCount, 1);
             this.numericUpDown_threads.Value = Math.Max(Environment.ProcessorCount / 2, 1);
             this.numericUpDown_targetBpm.Value = (decimal) LastTargetBpm;
 
-
+            this.Load += this.TimeStretchDialog_Load;
             this.FormClosing += this.TimeStretchDialog_FormClosing;
+        }
+
+
+        private async void TimeStretchDialog_Load(object? sender, EventArgs e)
+        {
+            if (this._pendingFilePaths?.Any() == true)
+            {
+                // UI bleibt responsiv, der User kann den Dialog sogar schon verschieben!
+                Dictionary<string, float> fileBpms = await Task.Run(() =>
+                    AudioObj.ReadFilesBpmTags(this._pendingFilePaths, filterMinBpm: 10f));
+
+                // Zurück auf dem UI-Thread: Text updaten
+                this.Text = $"Time Stretch (each) <{fileBpms.Count}> Audios [{fileBpms.Values.Max():0.#} - {fileBpms.Values.Min():0.#} BPM]";
+            }
         }
 
         private void numericUpDown_chunkSize_ValueChanged(object sender, EventArgs e)
@@ -245,14 +242,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     this.progressBar_stretching.Value = Math.Clamp(scaled, this.progressBar_stretching.Minimum, this.progressBar_stretching.Maximum);
                 });
 
-                if (this.Tracks.Count() > 1 || this.trackView == null)
+                if (this.Tracks.Count > 1 || this.TrackView == null)
                 {
                     // Set window title to indicate multi-track processing
-                    this.Text = $"Time Stretch - {this.Tracks.Count()} Tracks (Processing...)";
+                    this.Text = $"Time Stretch - {this.Tracks.Count} Tracks (Processing...)";
 
-                    for (int i = 0; i < this.Tracks.Count(); i++)
+                    for (int i = 0; i < this.Tracks.Count; i++)
                     {
-                        this.Text = $"Time Stretch - {this.Tracks.Count()} Tracks (Processing {i + 1}/{this.Tracks.Count()})";
+                        this.Text = $"Time Stretch - {this.Tracks.Count} Tracks (Processing {i + 1}/{this.Tracks.Count})";
                         this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked ? this.numericUpDown_initialBpm.Value : this.Tracks.ElementAt(i).Bpm > 0 ? (decimal) this.Tracks.ElementAt(i).Bpm : this.Tracks.ElementAt(i).ScannedBpm > 30 ? (decimal) this.Tracks.ElementAt(i).ScannedBpm : (decimal) LastInitialBpm;
                         float originalPeak = await this.Tracks.ElementAt(i).GetPeakAmplitudeAsync((int) this.numericUpDown_threads.Value);
                         await TimeStretcher.TimeStretchAllThreadsAsync(
@@ -285,12 +282,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
                 else
                 {
-                    if (this.trackView == null)
+                    if (this.TrackView == null)
                     {
                         throw new InvalidOperationException("Kein TrackView zum Anwenden des Time-Stretch gefunden.");
                     }
 
-                    bool resumePlaybackAfterReplace = this.trackView.OriginalAudio.PlayerPlaying;
+                    bool resumePlaybackAfterReplace = this.TrackView.OriginalAudio.PlayerPlaying;
                     float originalPeak = await this.Tracks.First().GetPeakAmplitudeAsync((int) this.numericUpDown_threads.Value);
 
                     var result = await TimeStretcher.TimeStretchAllThreadsAsync(
@@ -315,9 +312,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         await result.NormalizeAsync(originalPeak, (int) this.numericUpDown_threads.Value);
                     }
 
-                    await this.trackView.OriginalAudio.CreateUndoStepAsync();
+                    await this.TrackView.OriginalAudio.CreateUndoStepAsync();
                     double stretchFactor = (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value;
-                    await this.trackView.ApplyStretchedAudioAsync(result, stretchFactor, resumePlaybackAfterReplace);
+                    await this.TrackView.ApplyStretchedAudioAsync(result, stretchFactor, resumePlaybackAfterReplace);
                     this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
                     closeAfterSuccess = true;
                     this.SetProcessingState(false);
@@ -432,7 +429,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             try
             {
-                if (this.trackView == null)
+                if (this.TrackView == null)
                 {
                     throw new InvalidOperationException("Kein TrackView zum Anwenden des Time-Stretch gefunden.");
                 }
@@ -461,7 +458,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     this.progressBar_stretching.Value = Math.Clamp(scaled, this.progressBar_stretching.Minimum, this.progressBar_stretching.Maximum);
                 });
 
-                int total = this.Tracks.Count();
+                int total = this.Tracks.Count;
                 int index = 0;
                 void ReportComposite(double local)
                 {
@@ -473,7 +470,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                 var perTrackProgress = new Progress<double>(p => ReportComposite(p));
 
-                await this.trackView.OriginalAudio.CreateUndoStepAsync();
+                await this.TrackView.OriginalAudio.CreateUndoStepAsync();
 
                 int? chunkSize = this.checkBox_autoChunking.Checked ? null : (int?) this.numericUpDown_chunkSize.Value;
                 float? overlap = this.checkBox_autoChunking.Checked ? null : (float?) this.numericUpDown_overlap.Value;
@@ -512,7 +509,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     // Single track: process, then apply to TrackView
                     var track = this.Tracks.First();
-                    bool resumePlaybackAfterReplace = this.trackView.OriginalAudio.PlayerPlaying;
+                    bool resumePlaybackAfterReplace = this.TrackView.OriginalAudio.PlayerPlaying;
                     float originalPeak = await track.GetPeakAmplitudeAsync((int) this.numericUpDown_threads.Value);
 
                     await TimeStretcher_V2.Timestretch_V2Async(
@@ -529,7 +526,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     }
 
                     double stretchFactor = (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value;
-                    await this.trackView.ApplyStretchedAudioAsync(track, stretchFactor, resumePlaybackAfterReplace);
+                    await this.TrackView.ApplyStretchedAudioAsync(track, stretchFactor, resumePlaybackAfterReplace);
                     this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
                     closeAfterSuccess = true;
                     this.SetProcessingState(false);
