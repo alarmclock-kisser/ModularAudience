@@ -34,7 +34,7 @@ namespace ModularAudience.Audio.Omr
                 throw new FileNotFoundException($"File not found: {filePath}", filePath);
             }
 
-            string[] supportedExtensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp", ".pdf" };
+            string[] supportedExtensions = [".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp", ".pdf"];
             string ext = Path.GetExtension(filePath);
             if (!supportedExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
             {
@@ -78,7 +78,7 @@ namespace ModularAudience.Audio.Omr
                 {
                     // Load image file
                     var image = await Image.LoadAsync<Rgba32>(filePath, ct);
-                    return new ImageObj(new[] { image });
+                    return new ImageObj([image]);
                 }
             }
             catch (Exception ex)

@@ -96,8 +96,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             if (this._pendingFilePaths?.Any() == true)
             {
                 // UI bleibt responsiv, der User kann den Dialog sogar schon verschieben!
-                Dictionary<string, float> fileBpms = await Task.Run(() =>
-                    AudioObj.ReadFilesBpmTags(this._pendingFilePaths, filterMinBpm: 10f));
+                Dictionary<string, float> fileBpms = await Task.Run(() => AudioObj.ReadFilesBpmTags(this._pendingFilePaths.With(AudioFileProperties.Duration, value => (TimeSpan)value > TimeSpan.FromSeconds(0.5)).ToArray()));
 
                 // Zurück auf dem UI-Thread: Text updaten
                 this.Text = $"Time Stretch <{fileBpms.Count}> Audios [{fileBpms.Values.Min():0.#} - {fileBpms.Values.Max():0.#} BPM]";

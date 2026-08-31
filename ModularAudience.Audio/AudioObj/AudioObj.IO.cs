@@ -387,12 +387,12 @@ namespace ModularAudience.Audio
                 if (bpmValue.HasValue && bpmValue.Value > 0)
                 {
                     // Write standard BPM field (ID3v2 TBPM / Vorbis BPM= / APE BPM)
-                    file.Tag.BeatsPerMinute = (ushort)bpmValue.Value;
+                    file.Tag.BeatsPerMinute = (ushort) bpmValue.Value;
 
                     // Also write the custom text frame (e.g. "TBPM") for consistency with ReadFileBpmTag
                     if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                     {
-                        var id3v2Tag = (TagLib.Id3v2.Tag)file.GetTag(TagLib.TagTypes.Id3v2);
+                        var id3v2Tag = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
                         var frame = TagLib.Id3v2.TextInformationFrame.Get(id3v2Tag, tag, false);
                         if (frame == null)
                         {
@@ -415,7 +415,7 @@ namespace ModularAudience.Audio
 
                     if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                     {
-                        var id3v2Tag = (TagLib.Id3v2.Tag)file.GetTag(TagLib.TagTypes.Id3v2);
+                        var id3v2Tag = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
                         var frame = TagLib.Id3v2.TextInformationFrame.Get(id3v2Tag, tag, false);
                         if (frame != null)
                         {
@@ -433,5 +433,143 @@ namespace ModularAudience.Audio
                 return false;
             }
         }
+
+
+        public static TimeSpan? ReadFileDuration(string filePath)
+        {
+            if (!File.Exists(filePath) || Path.GetExtension(filePath) is not (".mp3" or ".flac" or ".wav" or ".m4a"))
+            {
+                return null;
+            }
+            try
+            {
+                using var reader = new AudioFileReader(filePath);
+                return reader.TotalTime;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error reading duration for '{filePath}': {ex.Message}");
+                return null;
+            }
+        }
+
+
+
     }
+
+
+
+    public static class AudioFilePathExtensions
+    {
+        public static IEnumerable<string> With(this IEnumerable<string> filePaths, AudioFileProperties property, Func<object, bool> predicate)
+        {
+            foreach (var filePath in filePaths)
+            {
+                // 1. Schneller Fail-Check vor dem teuren I/O
+                if (!File.Exists(filePath) || Path.GetExtension(filePath) is not (".mp3" or ".flac" or ".wav" or ".m4a"))
+                {
+                    continue;
+                }
+
+                object? value = null;
+                try
+                {
+                    switch (property)
+                    {
+                        case AudioFileProperties.Bpm:
+                            value = AudioObj.ReadFileBpmTag(filePath);
+                            break;
+
+                        case AudioFileProperties.Format:
+                            // NAudio Reader NUR öffnen, wenn Format, Duration oder Channels gefragt sind!
+                            using (var reader = new AudioFileReader(filePath))
+                            {
+                                value = reader.WaveFormat.Encoding.ToString();
+                            }
+                            break;
+
+                        case AudioFileProperties.Duration:
+                            using (var reader = new AudioFileReader(filePath))
+                            {
+                                value = reader.TotalTime;
+                            }
+                            break;
+
+                        case AudioFileProperties.Channels:
+                            using (var reader = new AudioFileReader(filePath))
+                            {
+                                value = reader.WaveFormat.Channels;
+                            }
+                            break;
+
+                        default:
+                            throw new ArgumentException($"Unsupported property: {property}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error filtering '{filePath}' by {property}: {ex.Message}");
+                }
+
+                if (value != null && predicate(value))
+                {
+                    yield return filePath;
+                }
+            }
+        }
+
+
+        public static IEnumerable<string> With(this IEnumerable<string> filePaths, Func<AudioFileProperties, bool> audioFileProperiesPredicate)
+        {
+            foreach (var filePath in filePaths)
+            {
+                if (!File.Exists(filePath) || Path.GetExtension(filePath) is not (".mp3" or ".flac" or ".wav" or ".m4a"))
+                {
+                    continue;
+                }
+
+                bool isMatch = false;
+                try
+                {
+                    foreach (var property in Enum.GetValues(typeof(AudioFileProperties)).Cast<AudioFileProperties>())
+                    {
+                        if (audioFileProperiesPredicate(property))
+                        {
+                            isMatch = true;
+                            break;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error filtering '{filePath}' by predicate: {ex.Message}");
+                }
+
+                if (isMatch)
+                {
+                    yield return filePath;
+                }
+            }
+        }
+
+    }
+
+
+    public enum AudioFileProperties
+    {
+        Format,
+        Duration,
+        Bpm,
+        Channels,
+        BitDepth,
+        FileSize,
+        Date,
+        Title,
+        Rating,
+        Artist,
+        Album,
+        Year
+
+    }
+
 }
