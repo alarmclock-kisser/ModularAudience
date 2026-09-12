@@ -719,7 +719,6 @@ namespace ModularAudience.Forms.Modules
         // Beispiel: neuen Parameter hinzufügen und reentrancy-flag verwenden
         private bool suppressVolumeSync;
         private bool suppressRateSync;
-        private int lastAppliedRateScrollbarValue = int.MinValue;
 
         private async Task FadeInCurrentPlaybackAsync(float targetVolume, int steps = 3, int durationMs = 12)
         {
@@ -806,6 +805,11 @@ namespace ModularAudience.Forms.Modules
 
         private void hScrollBar_rate_Scroll(object? sender, ScrollEventArgs e)
         {
+            if (e.Type == ScrollEventType.EndScroll)
+            {
+                this.ResetTransientPlaybackRate();
+                return;
+            }
             this.SetPlaybackRateSynced(e.NewValue);
         }
 
@@ -836,8 +840,6 @@ namespace ModularAudience.Forms.Modules
                 this.SetPlaybackRateSynced(0);
                 return;
             }
-
-            this.SetPlaybackRateSynced(this.GetRateScrollbarValueFromMouseX(e.X));
         }
 
         private void menuItem_rateResetCenter_Click(object? sender, EventArgs e)
@@ -902,32 +904,13 @@ namespace ModularAudience.Forms.Modules
                 this.hScrollBar_rate.Value = clampedValue;
             }
 
-            float factor = MapRateScrollbarToFactor(clampedValue);
-            this.label_info_rate.Text = $"Rate: {factor * 100f:F1}%";
-
-            bool changed = this.lastAppliedRateScrollbarValue != clampedValue;
-            this.lastAppliedRateScrollbarValue = clampedValue;
-            this.OriginalAudio.ManualSampleRateFactor = factor;
-
-            if (fireAndForget)
-            {
-                if (changed)
-                {
-                    _ = this.ApplyPlaybackRateAsync();
-                }
-
-                return changed;
-            }
-
-            this.OriginalAudio.SampleRateFactor = Math.Clamp(this.OriginalAudio.ManualSampleRateFactor * this.OriginalAudio.SyncNudgeSampleRateFactor, 0.5, 2.0);
-            return changed;
+            float factor = this.rateGesture.Update(clampedValue, this.OriginalAudio.PlayerPlaying, Environment.TickCount64);
+            return this.ApplyTransientRateFactor(factor, fireAndForget);
         }
 
         private static float MapRateScrollbarToFactor(int scrollbarValue)
         {
-            double normalized = Math.Clamp(scrollbarValue / 500.0, -1.0, 1.0);
-            double factor = Math.Pow(2.0, normalized);
-            return (float) factor;
+            return PlaybackRateGesture.MapFactor(scrollbarValue);
         }
 
         private int GetRateScrollbarValueFromMouseX(int mouseX)
@@ -1250,6 +1233,10 @@ namespace ModularAudience.Forms.Modules
         internal async Task TogglePlayAsync()
         {
             var group = GetPlaybackGroup(this);
+            foreach (var tv in group)
+            {
+                tv.ResetTransientPlaybackRate();
+            }
             if (group.Count == 0)
             {
                 return;
@@ -1335,6 +1322,10 @@ namespace ModularAudience.Forms.Modules
         private async Task TogglePauseAsync()
         {
             var group = GetPlaybackGroup(this);
+            foreach (var tv in group)
+            {
+                tv.ResetTransientPlaybackRate();
+            }
 
             // Fall 1: Diese Spur spielt -> nur spielende pausieren
             if (this.OriginalAudio.Playing)
@@ -1630,6 +1621,7 @@ namespace ModularAudience.Forms.Modules
 
         private async Task StopPlaybackAsync()
         {
+            this.InvokeIfRequired(this.ResetTransientPlaybackRate);
             var cts = Interlocked.Exchange(ref this.playbackCts, null);
             if (cts != null)
             {

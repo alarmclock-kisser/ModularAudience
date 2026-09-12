@@ -58,6 +58,8 @@ namespace ModularAudience.Forms
                     LoopControlWindow?.UpdateLoopButtonsState();
                     DeveloperFunctionsWindow?.UpdateControlStates();
                 }
+
+                LoopControlWindow?.SynchronizeTrackSelection();
             }
         }
 

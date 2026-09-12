@@ -203,6 +203,7 @@
             this.checkedListBox_playlistTracks.Name = "checkedListBox_playlistTracks";
             this.checkedListBox_playlistTracks.Size = new Size(464, 72);
             this.checkedListBox_playlistTracks.TabIndex = 12;
+            this.checkedListBox_playlistTracks.SelectedIndexChanged += this.checkedListBox_playlistTracks_SelectedIndexChanged;
             this.checkedListBox_playlistTracks.MouseUp += this.checkedListBox_playlistTracks_MouseUp;
             // 
             // comboBox_drops

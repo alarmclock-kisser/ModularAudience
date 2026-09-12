@@ -332,6 +332,7 @@ namespace ModularAudience.Forms.Modules
 
         private void RefreshPlaylistTargets()
         {
+            Guid? selectedAudioId = (this.checkedListBox_playlistTracks.SelectedItem as PlaylistTargetItem)?.Audio.Id;
             List<AudioObj> activePlaylistAudios = this.PlaylistAudios
                 .Where(audio => audio != null)
                 .DistinctBy(audio => audio.Id)
@@ -436,6 +437,11 @@ namespace ModularAudience.Forms.Modules
                         listBox.SetItemChecked(currentIndex, shouldBeChecked);
                     }
                 }
+
+                int selectedIndex = this.FindPlaylistTrackIndex(selectedAudioId);
+                listBox.SelectedIndex = selectedIndex >= 0
+                    ? selectedIndex
+                    : this.FindPlaylistTrackIndex(this.CurrentTrackView?.OriginalAudio.Id);
             }
             finally
             {
@@ -1040,7 +1046,18 @@ namespace ModularAudience.Forms.Modules
                     // BeginInvoke stellt sicher, dass das auslösende Event komplettExecuted
                     this.BeginInvoke((Action) (() =>
                     {
-                        try { this.CurrentTrackView?.Focus(); } catch { }
+                        try
+                        {
+                            if (ctrl == this.checkedListBox_playlistTracks)
+                            {
+                                this.FocusSelectedPlaylistTrackView();
+                            }
+                            else
+                            {
+                                this.CurrentTrackView?.Focus();
+                            }
+                        }
+                        catch { }
                     }));
                 }
                 catch { }
