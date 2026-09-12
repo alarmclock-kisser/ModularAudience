@@ -481,7 +481,7 @@ namespace ModularAudience.Forms
 
         private void button_loopControl_Click(object sender, EventArgs e)
         {
-            WindowMainStaticHelpers.InvokeIfRequired(Instance, () =>
+            try
             {
                 if (LoopControlWindow == null || LoopControlWindow.IsDisposed)
                 {
@@ -489,7 +489,15 @@ namespace ModularAudience.Forms
                 }
 
                 LoopControlWindow.Show();
-            });
+                LoopControlWindow.WindowState = FormWindowState.Normal;
+                LoopControlWindow.BringToFront();
+                LoopControlWindow.Activate();
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log(ex);
+                MessageBox.Show(this, ex.ToString(), "Loop Control Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void button_newTrack_Click(object sender, EventArgs e)

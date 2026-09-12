@@ -9,6 +9,7 @@
 - Execute instructions strictly and step-by-step without repetition or looping responses, ensuring focused and careful edits.
 - All UI labels, strings, button texts, status messages, and logs should be written in English; avoid German UI text in the application.
 - Utilize previously loaded context after interruptions to avoid unnecessary reloading and provide short, concrete progress updates instead of lengthy analysis phases without visible results.
+- For regression tests, prefer a few concrete bug reproductions instead of exhaustive test suites. Report actual product defects with exact test names, evidence, and fix suggestions instead of modifying production code or weakening tests without request.
 
 ## Project-Specific Rules
 - The BreakbeatGenerator beatmap should render as a drum-by-step matrix in the picture box.
@@ -28,6 +29,7 @@
 - LoopControl for playlist playback must target all concurrently active playlist overlap tracks, not just a single playlist track.
 - For MIDI custom sample rendering, ensure all notes are equally loud as the first note; prevent unintended reduction in volume due to rendering/grain logic.
 - When resizing the MidiEditor, the horizontal tick/pixel scaling must not change: existing notes must retain the same width, and additional window width should only display empty workspace for more notes. Scaling/trim adoption should only occur upon saving in the MidiWindow.
+- For Audio-to-MIDI in this repository, ensure a practical implementation is achievable even without an AI model; missing models should not halt progress during pure diagnostics.
 
 ## UI Interaction Rules
 - Prefer keyboard modifiers and context-menu entries for common quick actions (e.g., centering controls, resetting values).

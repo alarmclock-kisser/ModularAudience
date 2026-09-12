@@ -91,9 +91,6 @@ namespace ModularAudience.Forms
         // Copy + Paste AudioObj
         internal static AudioObj? ClipboardAudioObj = null;
 
-        // Playlist FilePaths
-        internal static List<string> PlaylistFilePaths = [];
-
         // User comment history (newest first) and draft
         public static List<string> CommentHistory { get; } = [];
         public static string CommentDraft { get; set; } = string.Empty;

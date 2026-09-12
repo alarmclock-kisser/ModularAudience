@@ -41,24 +41,24 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.label_description.AutoSize = true;
             this.label_description.Location = new Point(12, 39);
             this.label_description.Name = "label_description";
-            this.label_description.Size = new Size(318, 30);
+            this.label_description.Size = new Size(378, 75);
             this.label_description.TabIndex = 1;
-            this.label_description.Text = "Synth: clear monophonic tones\r\nGuitar: suppresses pluck-related pitch artifacts";
+            this.label_description.Text = "Polyphonic: up to six notes, C2-C7, no AI model.\r\nTwo estimated tracks: melody and accompaniment.\r\nInstrument separation is approximate.\r\nSynth / Guitar: single-note transcription.\r\nThe preset does not select the playback sound.";
             //
             // comboBox_preset
             //
             this.comboBox_preset.DropDownStyle = ComboBoxStyle.DropDownList;
             this.comboBox_preset.FormattingEnabled = true;
-            this.comboBox_preset.Items.AddRange(new object[] { "Synth", "Guitar" });
-            this.comboBox_preset.Location = new Point(12, 82);
+            this.comboBox_preset.Items.AddRange(new object[] { "Synth (monophonic)", "Guitar (monophonic)", "Polyphonic (melody + accompaniment)" });
+            this.comboBox_preset.Location = new Point(12, 128);
             this.comboBox_preset.Name = "comboBox_preset";
-            this.comboBox_preset.Size = new Size(318, 23);
+            this.comboBox_preset.Size = new Size(378, 23);
             this.comboBox_preset.TabIndex = 2;
             //
             // button_ok
             //
             this.button_ok.DialogResult = DialogResult.OK;
-            this.button_ok.Location = new Point(174, 121);
+            this.button_ok.Location = new Point(234, 168);
             this.button_ok.Name = "button_ok";
             this.button_ok.Size = new Size(75, 23);
             this.button_ok.TabIndex = 3;
@@ -68,7 +68,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_cancel
             //
             this.button_cancel.DialogResult = DialogResult.Cancel;
-            this.button_cancel.Location = new Point(255, 121);
+            this.button_cancel.Location = new Point(315, 168);
             this.button_cancel.Name = "button_cancel";
             this.button_cancel.Size = new Size(75, 23);
             this.button_cancel.TabIndex = 4;
@@ -79,7 +79,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             this.AcceptButton = this.button_ok;
             this.CancelButton = this.button_cancel;
-            this.ClientSize = new Size(342, 156);
+            this.ClientSize = new Size(402, 203);
             this.Controls.Add(this.button_cancel);
             this.Controls.Add(this.button_ok);
             this.Controls.Add(this.comboBox_preset);

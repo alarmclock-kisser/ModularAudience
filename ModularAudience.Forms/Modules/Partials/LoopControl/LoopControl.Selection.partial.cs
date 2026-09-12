@@ -4,7 +4,12 @@ namespace ModularAudience.Forms.Modules
     {
         private void checkedListBox_playlistTracks_SelectedIndexChanged(object? sender, EventArgs e)
         {
+            if (this.suppressPlaylistChecklistEvents)
+            {
+                return;
+            }
             this.SelectPlaylistTrackView();
+            this.UpdateLoopButtonsState();
         }
 
         private TrackView? SelectPlaylistTrackView()
@@ -25,19 +30,26 @@ namespace ModularAudience.Forms.Modules
             return trackView;
         }
 
-        private void FocusSelectedPlaylistTrackView()
+        private void RestorePlaylistSelection(Guid? audioId, int previousIndex)
         {
-            TrackView? trackView = this.SelectPlaylistTrackView();
-            if (trackView == null)
+            var listBox = this.checkedListBox_playlistTracks;
+            int index = this.FindPlaylistTrackIndex(audioId);
+            if (index < 0 && previousIndex >= 0 && listBox.Items.Count > 0)
             {
-                return;
+                index = Math.Min(previousIndex, listBox.Items.Count - 1);
             }
-
-            if (trackView.WindowState == FormWindowState.Minimized)
+            if (index < 0)
             {
-                trackView.WindowState = FormWindowState.Normal;
+                index = this.FindPlaylistTrackIndex(SelectedTrackView?.OriginalAudio.Id);
             }
-            trackView.Activate();
+            if (index < 0 && listBox.Items.Count > 0 && (SelectedTrackView == null || listBox.ContainsFocus))
+            {
+                index = 0;
+            }
+            if (listBox.SelectedIndex != index)
+            {
+                listBox.SelectedIndex = index;
+            }
         }
 
         internal void SynchronizeTrackSelection()
@@ -51,18 +63,25 @@ namespace ModularAudience.Forms.Modules
                 this.BeginInvoke((Action) this.SynchronizeTrackSelection);
                 return;
             }
+            if (this.suppressPlaylistChecklistEvents || this.checkedListBox_playlistTracks.IsInteracting ||
+                this.checkedListBox_playlistTracks.ContainsFocus || this.checkedListBox_playlistTracks.SelectedIndex >= 0 ||
+                this.contextMenuStrip_playlistItem.Visible)
+            {
+                return;
+            }
 
             bool wasSuppressed = this.suppressPlaylistChecklistEvents;
             this.suppressPlaylistChecklistEvents = true;
             try
             {
                 this.checkedListBox_playlistTracks.SelectedIndex =
-                    this.FindPlaylistTrackIndex(this.CurrentTrackView?.OriginalAudio.Id);
+                    this.FindPlaylistTrackIndex(SelectedTrackView?.OriginalAudio.Id);
             }
             finally
             {
                 this.suppressPlaylistChecklistEvents = wasSuppressed;
             }
+            this.UpdateLoopButtonsState();
         }
 
         private int FindPlaylistTrackIndex(Guid? audioId)

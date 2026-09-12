@@ -18,6 +18,7 @@ namespace ModularAudience.Forms
         // ── Engine + timer ─────────────────────────────────────────────────────
         private PlaylistEngine _playlist = new();
         private System.Windows.Forms.Timer? _playlistTimer;
+        private bool _playlistAutoEnqueueRightClickHandled;
 
         // Metadata cache: path → (duration, bpm, channels, sampleRate, bitDepth)
         private readonly Dictionary<string, (TimeSpan Duration, float Bpm, int Channels, int SampleRate, int BitDepth)>
@@ -40,68 +41,19 @@ namespace ModularAudience.Forms
         // Designer hookup for context menu opening
         private void contextMenuStrip_playlist_Opening(object? sender, CancelEventArgs e)
         {
-            try
-            {
-                if (this.contextMenuStrip_playlist == null)
-                {
-                    return;
-                }
-
-                foreach (ToolStripItem it in this.contextMenuStrip_playlist.Items)
-                {
-                    if (it is ToolStripMenuItem mi && string.Equals(mi.Text, "Auto enqueue one", StringComparison.OrdinalIgnoreCase))
-                    {
-                        bool enable = false;
-                        try
-                        {
-                            if (LoopControlWindow != null && !LoopControlWindow.IsDisposed)
-                            {
-                                enable = LoopControlWindow.HasSelectedPlaylistItem();
-                            }
-
-                            // Also enable when the engine already holds a prepared track that is NOT the
-                            // currently playing original path. This avoids enabling the menu solely because
-                            // the currently playing track reports as "prepared".
-                            try
-                            {
-                                enable = enable || (this._playlist != null &&
-                                    this._playlist.ActiveOriginalPaths.Any(p =>
-                                        !string.IsNullOrWhiteSpace(p) &&
-                                        !string.Equals(p, this._playlist.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase)));
-                            }
-                            catch { }
-                        }
-                        catch { enable = false; }
-                        mi.Enabled = enable;
-                        try
-                        {
-                            // Ensure right-click on the menu item maps to the fallback behaviour.
-                            mi.MouseDown -= this.playlistMenu_AutoEnqueueOne_MouseDown;
-                            mi.MouseDown += this.playlistMenu_AutoEnqueueOne_MouseDown;
-                        }
-                        catch { }
-                    }
-                }
-            }
-            catch { }
+            this._playlistAutoEnqueueRightClickHandled = false;
+            this.toolStripMenuItem_autoEnqueueOne.Enabled = true;
         }
 
         // If user clicks the menu item with the right mouse button, treat it like Ctrl+Click (allow fallback)
         private void playlistMenu_AutoEnqueueOne_MouseDown(object? sender, MouseEventArgs e)
         {
-            try
+            this._playlistAutoEnqueueRightClickHandled = e.Button == MouseButtons.Right;
+            if (this._playlistAutoEnqueueRightClickHandled)
             {
-                if (e.Button == MouseButtons.Right)
-                {
-                    try
-                    {
-                        // Invoke the click handler directly so behaviour is shared
-                        this.playlistMenu_AutoEnqueueOne_Click(sender, EventArgs.Empty);
-                    }
-                    catch { }
-                }
+                this.contextMenuStrip_playlist.Close();
+                this.AutoEnqueueOne(allowFallback: true);
             }
-            catch { }
         }
 
         private string? _trackLogFilePath;               // set when a recording begins
@@ -112,10 +64,8 @@ namespace ModularAudience.Forms
         // ── Initializer (called from constructor) ──────────────────────────────
         private void InitPlaylist()
         {
-            // Keep engine's list in sync with the static field
-            // (engine owns the list reference we swap PlaylistFilePaths with)
-            PlaylistFilePaths = this._playlist.FilePaths;
             this._playlist.CountdownEnabledProvider = () => PlaylistCountdownEnabled;
+            this._playlist.AutoEnqueuePathProvider = SelectRandomPlaylistPath;
 
             this._playlist.TrackChanged += () =>
             {
@@ -142,34 +92,37 @@ namespace ModularAudience.Forms
             this._playlistTimer.Tick += (_, _) => this.UpdatePlaylistUI();
             this._playlistTimer.Start();
 
-            // Ensure playlist context menu contains Add next / Enqueue last entries and Auto enqueue one
-            try
-            {
-                var addNextMenuItem = new ToolStripMenuItem("Add next", null, this.playlistMenu_AddNext_Click);
-                var enqueueLastMenuItem = new ToolStripMenuItem("Enqueue last", null, this.playlistMenu_EnqueueLast_Click);
-                // Insert near top so it's easy to find (after Play/Pause)
-                if (this.contextMenuStrip_playlist != null)
-                {
-                    this.contextMenuStrip_playlist.Items.Add(new ToolStripSeparator());
-                    this.contextMenuStrip_playlist.Items.Add(addNextMenuItem);
-                    this.contextMenuStrip_playlist.Items.Add(enqueueLastMenuItem);
-
-                    try
-                    {
-                        var autoOne = new ToolStripMenuItem("Auto enqueue one", null, this.playlistMenu_AutoEnqueueOne_Click)
-                        {
-                            CheckOnClick = false
-                        };
-                        this.contextMenuStrip_playlist.Items.Add(new ToolStripSeparator());
-                        this.contextMenuStrip_playlist.Items.Add(autoOne);
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-
             // Default countdown enabled state
             try { PlaylistCountdownEnabled = true; } catch { }
+        }
+
+        private static string? SelectRandomPlaylistPath(string? originalPath)
+        {
+            if (string.IsNullOrWhiteSpace(originalPath))
+            {
+                return null;
+            }
+
+            try
+            {
+                string fullOriginalPath = Path.GetFullPath(originalPath);
+                string? directory = Path.GetDirectoryName(fullOriginalPath);
+                if (!Directory.Exists(directory))
+                {
+                    return null;
+                }
+
+                string[] candidates = Directory.EnumerateFiles(directory)
+                    .Where(path => Path.GetExtension(path).ToLowerInvariant() is ".wav" or ".mp3" or ".flac")
+                    .Where(path => !string.Equals(path, fullOriginalPath, StringComparison.OrdinalIgnoreCase) && File.Exists(path))
+                    .ToArray();
+                return candidates.Length > 0 ? candidates[Random.Shared.Next(candidates.Length)] : null;
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"Playlist random selection failed: {ex.Message}");
+                return null;
+            }
         }
 
         // Toggle controlled by context menu
@@ -300,17 +253,11 @@ namespace ModularAudience.Forms
             else
             {
                 // Enqueue to playlist (files stay on disk)
-                foreach (string path in ofd.FileNames)
-                {
-                    if (!string.IsNullOrWhiteSpace(path) &&
-                        AllowedImportExtensions.Contains(Path.GetExtension(path)))
-                    {
-                        this._playlist.FilePaths.Add(path);
-                    }
-                }
+                int added = this._playlist.EnqueueLast(ofd.FileNames.Where(path =>
+                    !string.IsNullOrWhiteSpace(path) && AllowedImportExtensions.Contains(Path.GetExtension(path))));
 
-                LogCollection.Log($"Playlist: {ofd.FileNames.Length} file(s) enqueued " +
-                                  $"({this._playlist.FilePaths.Count} total).");
+                LogCollection.Log($"Playlist: {added} file(s) enqueued " +
+                                  $"({this._playlist.GetQueueSnapshot().FilePaths.Count} total).");
                 this.UpdatePlaylistUI();
             }
         }
@@ -415,224 +362,98 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            // PlaylistEngine keeps the currently playing track at index 0 until it finishes.
-            // "Add next" therefore means insert after index 0 while playing, otherwise at the front.
-            int insertIndex = 0;
-            try
-            {
-                if (!this._playlist.IsPlaying || this._playlist.FilePaths.Count == 0)
-                {
-                    insertIndex = 0;
-                }
-                else
-                {
-                    insertIndex = Math.Min(1, this._playlist.FilePaths.Count);
-                }
-            }
-            catch
-            {
-                insertIndex = Math.Min(this._playlist.IsPlaying ? 1 : 0, this._playlist.FilePaths.Count);
-            }
-
-            insertIndex = Math.Clamp(insertIndex, 0, this._playlist.FilePaths.Count);
-
-            foreach (string path in validPaths.Reverse<string>())
-            {
-                this._playlist.FilePaths.Insert(insertIndex, path);
-            }
-
-            LogCollection.Log($"Playlist: {validPaths.Count} file(s) added next.");
-            this._playlist.NotifyQueueChanged("add next");
+            int added = this._playlist.EnqueueNext(validPaths);
+            LogCollection.Log($"Playlist: {added} file(s) added next.");
             this.UpdatePlaylistUI();
         }
 
         private void playlistMenu_AutoEnqueueOne_Click(object? sender, EventArgs e)
         {
+            if (!this._playlistAutoEnqueueRightClickHandled)
+            {
+                this.AutoEnqueueOne(allowFallback: (ModifierKeys & Keys.Control) == Keys.Control);
+            }
+        }
+
+        private void AutoEnqueueOne(bool allowFallback)
+        {
             try
             {
-                // Prefer a selected playlist item from LoopControl if available.
-                string? selectedPath = null;
-                try
+                string? selectedPath = LoopControlWindow != null && !LoopControlWindow.IsDisposed
+                    ? LoopControlWindow.GetSelectedPlaylistPath() : null;
+                bool promoted = !string.IsNullOrWhiteSpace(selectedPath) &&
+                    this._playlist.AutoEnqueuePreparedNext(selectedPath);
+
+                if (!promoted && allowFallback)
                 {
-                    if (LoopControlWindow != null && !LoopControlWindow.IsDisposed)
+                    string[] selectedPaths = this.SelectPlaylistFallbackPaths();
+                    if (selectedPaths.Length == 0)
                     {
-                        selectedPath = LoopControlWindow.GetSelectedPlaylistPath();
+                        return;
                     }
-                }
-                catch { selectedPath = null; }
-
-                PlaylistEngine playlist = this._playlist;
-
-                // If Ctrl is held
-                bool ctrl = (ModifierKeys & Keys.Control) == Keys.Control;
-                if (string.IsNullOrWhiteSpace(selectedPath) && ctrl)
-                {
-                    try { selectedPath = CollectionViews.Where(cv => !cv.IsDisposed).SelectMany(cv => cv.SelectedAudios).FirstOrDefault()?.FilePath; } catch { }
-                    if (string.IsNullOrWhiteSpace(selectedPath))
-                    {
-                        using OpenFileDialog ofd = new()
-                        {
-                            Multiselect = false,
-                            Filter = "Audio Files|*.wav;*.mp3;*.flac|All Files|*.*",
-                            InitialDirectory = this.lastImportFolder
-                        };
-                        if (ofd.ShowDialog() != DialogResult.OK || ofd.FileNames.Length == 0)
-                        {
-                            return;
-                        }
-
-                        selectedPath = ofd.FileNames[0];
-                        if (!AllowedImportExtensions.Contains(Path.GetExtension(selectedPath)))
-                        {
-                            return;
-                        }
-                    }
-                }
-
-                if (string.IsNullOrWhiteSpace(selectedPath))
-                {
-                    // If there is an already pre-prepared track in the engine, use that instead of failing.
-                    try
-                    {
-                        // Prefer an already pre-prepared track that is NOT the currently playing track.
-                        var preparedPathsAll = playlist.ActiveOriginalPaths;
-                        var preparedNonPlaying = playlist.PreparedNonPlayingOriginalPaths;
-
-                        // If the playlist has no next item (count <= 1), prefer any prepared track
-                        // (excluding the playing original if possible). This ensures Auto enqueue one
-                        // can pick a prepared track even when there's no explicit "next" in the queue.
-                        string? candidate = null;
-                        try
-                        {
-                            if (this._playlist != null && this._playlist.FilePaths.Count > 0)
-                            {
-                                // Attempt to pick a random candidate from the playlist starting at index currentIndex + 4
-                                try
-                                {
-                                    int currentIndex = 0;
-                                    string currentOriginal = this._playlist.OriginalCurrentPath ?? string.Empty;
-                                    try { currentIndex = Math.Max(0, this._playlist.FilePaths.FindIndex(p => string.Equals(p, currentOriginal, StringComparison.OrdinalIgnoreCase))); } catch { currentIndex = 0; }
-                                    int startIndex = currentIndex + 4;
-                                    int count = this._playlist.FilePaths.Count;
-
-                                    if (startIndex < count)
-                                    {
-                                        var rng = new Random();
-                                        // Build a pool excluding the currently playing original to avoid reselecting it
-                                        var pool = this._playlist.FilePaths.Skip(startIndex)
-                                            .Where(p => !string.Equals(p, currentOriginal, StringComparison.OrdinalIgnoreCase))
-                                            .ToList();
-                                        if (pool.Count > 0)
-                                        {
-                                            candidate = pool[rng.Next(pool.Count)];
-                                            if (!string.IsNullOrWhiteSpace(candidate))
-                                            {
-                                                LogCollection.Log($"Auto enqueue one: selected from playlist [{startIndex}..{count - 1}] -> {Path.GetFileNameWithoutExtension(candidate)}");
-                                                // Remove any existing occurrences after the head to avoid duplicate entries when we insert below
-                                                try
-                                                {
-                                                    for (int i = this._playlist.FilePaths.Count - 1; i >= 1; i--)
-                                                    {
-                                                        if (string.Equals(this._playlist.FilePaths[i], candidate, StringComparison.OrdinalIgnoreCase))
-                                                        {
-                                                            this._playlist.FilePaths.RemoveAt(i);
-                                                        }
-                                                    }
-                                                }
-                                                catch { }
-                                            }
-                                        }
-                                    }
-                                    else
-                                    {
-                                        // Fallback: prefer a prepared non-playing original, then any prepared, then directory sample
-                                        candidate = preparedNonPlaying.FirstOrDefault(p => !string.Equals(p, this._playlist.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase));
-                                        if (string.IsNullOrWhiteSpace(candidate))
-                                        {
-                                            candidate = preparedPathsAll.FirstOrDefault(p => !string.Equals(p, this._playlist.OriginalCurrentPath ?? string.Empty, StringComparison.OrdinalIgnoreCase));
-                                        }
-
-                                        if (string.IsNullOrWhiteSpace(candidate))
-                                        {
-                                            try
-                                            {
-                                                var dir = Path.GetDirectoryName(this._playlist.OriginalCurrentPath ?? string.Empty) ?? string.Empty;
-                                                var filePaths = Directory.Exists(dir)
-                                                    ? Directory.GetFiles(dir).Where(p => !string.IsNullOrWhiteSpace(p) && AllowedImportExtensions.Contains(Path.GetExtension(p))).ToArray()
-                                                    : [];
-                                                if (filePaths.Length > 0)
-                                                {
-                                                    candidate = filePaths[new Random().Next(filePaths.Length)];
-                                                }
-                                            }
-                                            catch { }
-                                        }
-                                    }
-                                }
-                                catch { }
-                            }
-                        }
-                        catch { }
-
-                        if (!string.IsNullOrWhiteSpace(candidate))
-                        {
-                            selectedPath = candidate;
-                            LogCollection.Log($"Auto enqueue one: using pre-prepared track -> {Path.GetFileNameWithoutExtension(selectedPath)}");
-                        }
-                    }
-                    catch { }
-                }
-
-                if (string.IsNullOrWhiteSpace(selectedPath))
-                {
-                    LogCollection.Log("Auto enqueue one: no playlist selection available.");
+                    int added = this._playlist.EnqueueNext(selectedPaths);
+                    this._playlist.NotifyInsertedNext(selectedPaths[0]);
+                    LogCollection.Log($"Playlist: {added} selected file(s) added next.");
+                    this.UpdatePlaylistUI();
                     return;
                 }
-                string selectedPathValue = selectedPath!;
-                if (!playlist.HasPreparedOriginalPath(selectedPathValue))
+                else if (!promoted)
                 {
-                    LogCollection.Log($"Auto enqueue one: '{Path.GetFileNameWithoutExtension(selectedPathValue)}' is not pre-prepared yet; skipped timing-critical handoff.");
-                    return;
+                    promoted = this.AutoEnqueueRandomPreparedNext();
                 }
 
-                // Insert as next track (after index 0 if playing)
-                int insertIndex = 0;
-                try
-                {
-                    // Mutate the playlist under lock to avoid races and to remove any existing
-                    // occurrences of the selected path so we don't enqueue duplicates.
-                    lock (playlist)
-                    {
-                        // Remove existing occurrences of the same path (case-insensitive)
-                        playlist.FilePaths.RemoveAll(p => string.Equals(p, selectedPathValue, StringComparison.OrdinalIgnoreCase));
-
-                        insertIndex = playlist.IsPlaying ? Math.Min(1, playlist.FilePaths.Count) : 0;
-
-                        // If selectedPath equals the current head, adjust to insert after head to avoid immediate duplicate at index 0.
-                        if (string.Equals(selectedPathValue, playlist.FilePaths.FirstOrDefault() ?? string.Empty, StringComparison.OrdinalIgnoreCase))
-                        {
-                            insertIndex = Math.Min(insertIndex + 1, playlist.FilePaths.Count);
-                        }
-
-                        playlist.FilePaths.Insert(insertIndex, selectedPathValue);
-                    }
-                }
-                catch { insertIndex = 0; }
-                LogCollection.Log($"Playlist: auto-enqueued one -> {Path.GetFileNameWithoutExtension(selectedPathValue)}");
-                playlist.NotifyQueueChanged("auto enqueue one");
+                LogCollection.Log(promoted
+                    ? "Playlist: auto-enqueued one prepared track."
+                    : "Auto enqueue one: no eligible prepared non-active track; queue unchanged.");
                 this.UpdatePlaylistUI();
-
-                // Notify engine that we inserted a next track so it can start it promptly if timing permits.
-                try { playlist.NotifyInsertedNext(selectedPathValue); } catch { }
-
-                // Do not start stretching/preparing here: this UI path is timing-critical.
-                // The playback engine owns warm-up work after the handoff so Auto enqueue one
-                // can release an already-prepared track quickly and rhythmically.
             }
             catch (Exception ex)
             {
-                LogCollection.Log(ex);
+                LogCollection.Log($"Auto enqueue one failed: {ex.Message}");
             }
+        }
+
+        private string[] SelectPlaylistFallbackPaths()
+        {
+            string[] selectedPaths = CollectionViews.Where(cv => !cv.IsDisposed)
+                .SelectMany(cv => cv.SelectedAudios).Select(audio => audio.FilePath)
+                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path) &&
+                    AllowedImportExtensions.Contains(Path.GetExtension(path)))
+                .ToArray();
+            if (selectedPaths.Length > 0)
+            {
+                return selectedPaths;
+            }
+
+            using OpenFileDialog ofd = new()
+            {
+                Multiselect = true,
+                Filter = "Audio Files|*.wav;*.mp3;*.flac|All Files|*.*",
+                InitialDirectory = this.lastImportFolder,
+                Title = "Select Audio Files to Add Next"
+            };
+            if (ofd.ShowDialog(this) != DialogResult.OK || ofd.FileNames.Length == 0)
+            {
+                return [];
+            }
+
+            this.lastImportFolder = Path.GetDirectoryName(ofd.FileNames[0]) ?? this.lastImportFolder;
+            return ofd.FileNames.Where(path => !string.IsNullOrWhiteSpace(path) &&
+                AllowedImportExtensions.Contains(Path.GetExtension(path))).ToArray();
+        }
+
+        private bool AutoEnqueueRandomPreparedNext()
+        {
+            string[] candidates = this._playlist.GetQueueSnapshot().FilePaths.Skip(4).ToArray();
+            Random.Shared.Shuffle(candidates);
+            foreach (string candidate in candidates)
+            {
+                if (this._playlist.AutoEnqueuePreparedNext(candidate))
+                {
+                    return true;
+                }
+            }
+            return this._playlist.AutoEnqueuePreparedNext();
         }
 
         private void playlistMenu_EnqueueLast_Click(object? sender, EventArgs e)
@@ -661,13 +482,8 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            foreach (string path in validPaths)
-            {
-                this._playlist.FilePaths.Add(path);
-            }
-
-            LogCollection.Log($"Playlist: {validPaths.Count} file(s) enqueued last.");
-            this._playlist.NotifyQueueChanged("enqueue last");
+            int added = this._playlist.EnqueueLast(validPaths);
+            LogCollection.Log($"Playlist: {added} file(s) enqueued last.");
             this.UpdatePlaylistUI();
         }
 
@@ -684,7 +500,7 @@ namespace ModularAudience.Forms
             }
 
             // Open TimeStretchDialog in configure-only mode with a dummy audio
-            using var dlg = new TimeStretchDialog(filePaths: this._playlist.FilePaths)
+            using var dlg = new TimeStretchDialog(filePaths: this._playlist.GetQueueSnapshot().FilePaths)
             {
                 IsConfigureMode = true
             };
@@ -816,14 +632,15 @@ namespace ModularAudience.Forms
         // ── Tooltip (MouseHover) ───────────────────────────────────────────────
         private void button_playlist_MouseHover(object sender, EventArgs e)
         {
-            string? currentTrackTitle = this.GetCurrentPlaylistTrackTitle();
+            PlaylistQueueSnapshot snapshot = this._playlist.GetQueueSnapshot();
+            string? currentTrackTitle = this.GetCurrentPlaylistTrackTitle(snapshot);
             if (!string.IsNullOrWhiteSpace(currentTrackTitle))
             {
-                this.toolTip_playlist.SetToolTip(this.button_playlist, currentTrackTitle);
+                this.toolTip_playlist.SetToolTip(this.button_playlist, this.BuildPlaylistHoverSummary(snapshot));
                 return;
             }
 
-            var paths = this._playlist.FilePaths.ToList();
+            var paths = snapshot.FilePaths;
             if (paths.Count == 0)
             {
                 this.toolTip_playlist.SetToolTip(this.button_playlist, "Playlist is empty.");
@@ -831,7 +648,7 @@ namespace ModularAudience.Forms
             }
 
             var sb = new StringBuilder();
-            sb.AppendLine($"Playlist — {paths.Count} track(s):");
+            sb.AppendLine(this.BuildPlaylistHoverSummary(snapshot));
             sb.AppendLine(new string('─', 36));
 
             for (int i = 0; i < Math.Min(paths.Count, 30); i++)
@@ -876,25 +693,29 @@ namespace ModularAudience.Forms
                     return;
                 }
 
-                this.UpdatePlaylistButtonText();
-                string label = this.BuildEnqueuedLabelText();
+                PlaylistQueueSnapshot snapshot = this._playlist.GetQueueSnapshot();
+                this.button_playlist.Text = snapshot.IsPaused ? "|| List" : "▶ List";
+                string label = this.BuildEnqueuedLabelText(snapshot);
                 this.label_currentlyEnqueued.Text = label;
-                this.Text = this.GetWindowTitleText();
+                this.Text = this.GetWindowTitleText(snapshot);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"Playlist UI update failed: {ex.Message}");
+            }
         }
 
-        private string GetWindowTitleText()
+        private string GetWindowTitleText(PlaylistQueueSnapshot snapshot)
         {
-            string? current = this.GetCurrentPlaylistTrackTitle();
+            string? current = this.GetCurrentPlaylistTrackTitle(snapshot);
             string baseTitle = this.Tag as string ?? this.Text;
 
-            if (this._playlist.IsPlaying && !this._playlist.IsPaused && !string.IsNullOrWhiteSpace(current))
+            if (snapshot.IsPlaying && !snapshot.IsPaused && !string.IsNullOrWhiteSpace(current))
             {
                 return $"▶ {current}";
             }
 
-            if (this._playlist.IsPaused && !string.IsNullOrWhiteSpace(current))
+            if (snapshot.IsPaused && !string.IsNullOrWhiteSpace(current))
             {
                 return $"|| {current}";
             }
@@ -910,19 +731,8 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            if (this._playlist.IsPlaying && !this._playlist.IsPaused)
-            {
-                this.button_playlist.Text = "▶ List";
-                return;
-            }
-
-            if (this._playlist.IsPaused)
-            {
-                this.button_playlist.Text = "|| List";
-                return;
-            }
-
-            this.button_playlist.Text = "▶ List";
+            PlaylistQueueSnapshot snapshot = this._playlist.GetQueueSnapshot();
+            this.button_playlist.Text = snapshot.IsPaused ? "|| List" : "▶ List";
         }
 
         private void UpdatePlaylistHoverTitle()
@@ -933,51 +743,49 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            string? current = this.GetCurrentPlaylistTrackTitle();
-            if (!string.IsNullOrWhiteSpace(current))
-            {
-                this.toolTip_playlist.SetToolTip(this.button_playlist, current);
-            }
+            PlaylistQueueSnapshot snapshot = this._playlist.GetQueueSnapshot();
+            this.toolTip_playlist.SetToolTip(this.button_playlist, this.BuildPlaylistHoverSummary(snapshot));
         }
 
-        private string BuildEnqueuedLabelText()
+        private string BuildPlaylistHoverSummary(PlaylistQueueSnapshot snapshot)
+        {
+            string current = this.GetCurrentPlaylistTrackTitle(snapshot) ?? "None";
+            string next = string.IsNullOrWhiteSpace(snapshot.NextPath)
+                ? "None" : Path.GetFileNameWithoutExtension(snapshot.NextPath);
+            return $"Current: {current}\nNext up: {next}\nQueue total: {snapshot.FilePaths.Count} track(s)";
+        }
+
+        private string BuildEnqueuedLabelText(PlaylistQueueSnapshot snapshot)
         {
             if (this._isPreprocessingTrack)
             {
                 return "⏳ Time-Stretching next track...";
             }
 
-            if (!this._playlist.IsPlaying && !this._playlist.IsPaused && this._playlist.CurrentPath == null)
+            if (!snapshot.IsPlaying && !snapshot.IsPaused && snapshot.CurrentPath == null)
             {
-                if (this._playlist.FilePaths.Count > 0)
+                if (snapshot.FilePaths.Count > 0)
                 {
-                    return $"▶ List ready — {this._playlist.FilePaths.Count} track(s) enqueued.";
+                    return $"▶ List ready — {snapshot.FilePaths.Count} track(s) enqueued.";
                 }
 
                 return "No track currently enqueued in playlist.";
             }
 
-            string stateIcon = this._playlist.IsPlaying ? "▶" : "||";
-            TimeSpan pos = this._playlist.CurrentPosition;
-            TimeSpan dur = this._playlist.CurrentDuration;
+            string stateIcon = snapshot.IsPaused ? "||" : "▶";
+            TimeSpan pos = snapshot.CurrentPosition;
+            TimeSpan dur = snapshot.CurrentDuration;
             string posStr = $"{(int) pos.TotalMinutes:D2}:{pos.Seconds:D2}";
             string durStr = $"{(int) dur.TotalMinutes:D2}:{dur.Seconds:D2}";
 
-            string name = this._playlist.CurrentPath != null
-                ? Path.GetFileNameWithoutExtension(this._playlist.CurrentPath) ?? "–"
-                : "–";
-            if (!string.IsNullOrWhiteSpace(name) && name.Contains("__"))
-            {
-                name = name.Split(["__"], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
-            }
-
+            string name = GetCurrentPlaylistTrackName(snapshot) ?? "–";
             if (name.Length > 96)
             {
                 name = name[..63] + "…";
             }
 
             // Prefer the engine-reported current BPM (already adjusted for any applied stretch).
-            float bpm = this._playlist.CurrentBpm;
+            float bpm = snapshot.CurrentBpm;
             if (bpm <= 0 && this._playlistStretchSettings != null)
             {
                 bpm = this._playlistStretchSettings.TargetBpm;
@@ -985,23 +793,23 @@ namespace ModularAudience.Forms
 
             string bpmStr = bpm > 0 ? $"{bpm:F0}" : "?";
 
-            int ch = this._playlist.CurrentChannels;
-            int sr = this._playlist.CurrentSampleRate;
-            int bits = this._playlist.CurrentBitDepth;
+            int ch = snapshot.CurrentChannels;
+            int sr = snapshot.CurrentSampleRate;
+            int bits = snapshot.CurrentBitDepth;
             string chStr = ch switch { 1 => "mono", 2 => "stereo", _ => $"{ch}-ch" };
             string srStr = (sr / 1000.0).ToString("F1");
 
             return $"{stateIcon} {posStr} / {durStr} | {name} [{bpmStr}] | {chStr} {srStr} kHz {bits} bits";
         }
 
-        private string? GetCurrentPlaylistTrackTitle()
+        private static string? GetCurrentPlaylistTrackName(PlaylistQueueSnapshot snapshot)
         {
-            if (string.IsNullOrWhiteSpace(this._playlist.OriginalCurrentPath) && string.IsNullOrWhiteSpace(this._playlist.CurrentPath))
+            if (!string.IsNullOrWhiteSpace(snapshot.OriginalCurrentPath))
             {
-                return null;
+                return Path.GetFileNameWithoutExtension(snapshot.OriginalCurrentPath);
             }
 
-            string? path = this._playlist.OriginalCurrentPath ?? this._playlist.CurrentPath;
+            string? path = snapshot.CurrentPath;
             if (string.IsNullOrWhiteSpace(path))
             {
                 return null;
@@ -1019,8 +827,19 @@ namespace ModularAudience.Forms
                 name = name.Split(["_stretched_"], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? name;
             }
 
+            return name;
+        }
+
+        private string? GetCurrentPlaylistTrackTitle(PlaylistQueueSnapshot snapshot)
+        {
+            string? name = GetCurrentPlaylistTrackName(snapshot);
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return null;
+            }
+
             // Prefer engine-reported current BPM (reflects applied stretch). If missing, fall back to stretch settings.
-            float bpm = this._playlist.CurrentBpm;
+            float bpm = snapshot.CurrentBpm;
             if (bpm <= 0 && this._playlistStretchSettings != null)
             {
                 bpm = this._playlistStretchSettings.TargetBpm;

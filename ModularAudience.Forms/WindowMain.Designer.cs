@@ -41,6 +41,10 @@
             this.toolStripMenuItem_clear = new ToolStripMenuItem();
             this.toolStripMenuItem_timestretchEach = new ToolStripMenuItem();
             this.toolStripMenuItem_countdown = new ToolStripMenuItem();
+            this.toolStripSeparator_playlistQueue = new ToolStripSeparator();
+            this.toolStripMenuItem_addNext = new ToolStripMenuItem();
+            this.toolStripMenuItem_enqueueLast = new ToolStripMenuItem();
+            this.toolStripSeparator_playlistAutoEnqueue = new ToolStripSeparator();
             this.toolTip_playlist = new ToolTip(this.components);
             this.button_scanBpm = new Button();
             this.textBox_scanBpmResult = new TextBox();
@@ -110,9 +114,10 @@
             // 
             // contextMenuStrip_playlist
             // 
-            this.contextMenuStrip_playlist.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_playPause, this.toolStripMenuItem_prev, this.toolStripMenuItem_skip, this.toolStripMenuItem_crossfade, this.toolStripMenuItem_crossSyncDuration, this.toolStripMenuItem_shuffle, this.toolStripMenuItem_clear, this.toolStripMenuItem_timestretchEach, this.toolStripMenuItem_countdown });
+            this.contextMenuStrip_playlist.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_playPause, this.toolStripMenuItem_prev, this.toolStripMenuItem_skip, this.toolStripMenuItem_crossfade, this.toolStripMenuItem_crossSyncDuration, this.toolStripMenuItem_shuffle, this.toolStripMenuItem_clear, this.toolStripMenuItem_timestretchEach, this.toolStripMenuItem_countdown, this.toolStripSeparator_playlistQueue, this.toolStripMenuItem_addNext, this.toolStripMenuItem_enqueueLast, this.toolStripSeparator_playlistAutoEnqueue, this.toolStripMenuItem_autoEnqueueOne });
             this.contextMenuStrip_playlist.Name = "contextMenuStrip_playlist";
-            this.contextMenuStrip_playlist.Size = new Size(201, 202);
+            this.contextMenuStrip_playlist.Size = new Size(201, 280);
+            this.contextMenuStrip_playlist.Opening += this.contextMenuStrip_playlist_Opening;
             // 
             // toolStripMenuItem_playPause
             // 
@@ -181,6 +186,30 @@
             this.toolStripMenuItem_countdown.Size = new Size(200, 22);
             this.toolStripMenuItem_countdown.Text = "Countdown before play";
             this.toolStripMenuItem_countdown.Click += this.playlistMenu_Countdown_Click;
+            //
+            // toolStripSeparator_playlistQueue
+            //
+            this.toolStripSeparator_playlistQueue.Name = "toolStripSeparator_playlistQueue";
+            this.toolStripSeparator_playlistQueue.Size = new Size(197, 6);
+            //
+            // toolStripMenuItem_addNext
+            //
+            this.toolStripMenuItem_addNext.Name = "toolStripMenuItem_addNext";
+            this.toolStripMenuItem_addNext.Size = new Size(200, 22);
+            this.toolStripMenuItem_addNext.Text = "Add next";
+            this.toolStripMenuItem_addNext.Click += this.playlistMenu_AddNext_Click;
+            //
+            // toolStripMenuItem_enqueueLast
+            //
+            this.toolStripMenuItem_enqueueLast.Name = "toolStripMenuItem_enqueueLast";
+            this.toolStripMenuItem_enqueueLast.Size = new Size(200, 22);
+            this.toolStripMenuItem_enqueueLast.Text = "Enqueue last";
+            this.toolStripMenuItem_enqueueLast.Click += this.playlistMenu_EnqueueLast_Click;
+            //
+            // toolStripSeparator_playlistAutoEnqueue
+            //
+            this.toolStripSeparator_playlistAutoEnqueue.Name = "toolStripSeparator_playlistAutoEnqueue";
+            this.toolStripSeparator_playlistAutoEnqueue.Size = new Size(197, 6);
             // 
             // button_scanBpm
             // 
@@ -548,7 +577,9 @@
             this.toolStripMenuItem_autoEnqueueOne.Name = "toolStripMenuItem_autoEnqueueOne";
             this.toolStripMenuItem_autoEnqueueOne.Size = new Size(200, 22);
             this.toolStripMenuItem_autoEnqueueOne.Text = "Auto enqueue one";
+            this.toolStripMenuItem_autoEnqueueOne.ToolTipText = "Promote a prepared, non-active track. Ctrl+click or right-click to choose a fallback.";
             this.toolStripMenuItem_autoEnqueueOne.Click += this.playlistMenu_AutoEnqueueOne_Click;
+            this.toolStripMenuItem_autoEnqueueOne.MouseDown += this.playlistMenu_AutoEnqueueOne_MouseDown;
             // 
             // vScrollBar_masterLimiter
             // 
@@ -688,6 +719,10 @@
         private Label label_currentlyEnqueued;
         private ContextMenuStrip contextMenuStrip_playlist;
         private ToolStripMenuItem toolStripMenuItem_autoEnqueueOne;
+        private ToolStripSeparator toolStripSeparator_playlistQueue;
+        private ToolStripMenuItem toolStripMenuItem_addNext;
+        private ToolStripMenuItem toolStripMenuItem_enqueueLast;
+        private ToolStripSeparator toolStripSeparator_playlistAutoEnqueue;
         private ToolStripMenuItem toolStripMenuItem_countdown;
         private ToolStripMenuItem toolStripMenuItem_playPause;
         private ToolStripMenuItem toolStripMenuItem_prev;

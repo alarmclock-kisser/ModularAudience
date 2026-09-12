@@ -13,6 +13,14 @@
         /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
+            if (disposing)
+            {
+                this.playlistTargetsTimer.Dispose();
+                if (ReferenceEquals(WindowMain.LoopControlWindow, this))
+                {
+                    WindowMain.LoopControlWindow = null;
+                }
+            }
             if (disposing && (components != null))
             {
                 components.Dispose();
@@ -31,6 +39,8 @@
             this.components = new System.ComponentModel.Container();
             this.contextMenuStrip_playlistItem = new ContextMenuStrip(this.components);
             this.toolStripMenuItem_removeFromEnsemble = new ToolStripMenuItem();
+            this.toolStripMenuItem_resetPlaylistRate = new ToolStripMenuItem();
+            this.toolTip_playlistTracks = new ToolTip(this.components);
             this.panel_buttons = new Panel();
             this.button_loop = new Button();
             this.button_copy = new Button();
@@ -43,7 +53,7 @@
             this.label_targetMode = new Label();
             this.button_playlistAllOn = new Button();
             this.button_playlistAllOff = new Button();
-            this.checkedListBox_playlistTracks = new CheckedListBox();
+            this.checkedListBox_playlistTracks = new ModularAudience.Forms.Controls.PlaylistTrackListBox();
             this.comboBox_drops = new ComboBox();
             this.label_info_manageDrops = new Label();
             this.contextMenuStrip_playlistItem.SuspendLayout();
@@ -54,9 +64,9 @@
             // 
             // contextMenuStrip_playlistItem
             // 
-            this.contextMenuStrip_playlistItem.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_removeFromEnsemble });
+            this.contextMenuStrip_playlistItem.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_resetPlaylistRate, this.toolStripMenuItem_removeFromEnsemble });
             this.contextMenuStrip_playlistItem.Name = "contextMenuStrip_playlistItem";
-            this.contextMenuStrip_playlistItem.Size = new Size(201, 26);
+            this.contextMenuStrip_playlistItem.Size = new Size(201, 48);
             this.contextMenuStrip_playlistItem.Opening += this.contextMenuStrip_playlistItem_Opening;
             // 
             // toolStripMenuItem_removeFromEnsemble
@@ -65,7 +75,14 @@
             this.toolStripMenuItem_removeFromEnsemble.Size = new Size(200, 22);
             this.toolStripMenuItem_removeFromEnsemble.Text = "Remove from ensemble";
             this.toolStripMenuItem_removeFromEnsemble.Click += this.toolStripMenuItem_removeFromEnsemble_Click;
-            // 
+            //
+            // toolStripMenuItem_resetPlaylistRate
+            //
+            this.toolStripMenuItem_resetPlaylistRate.Name = "toolStripMenuItem_resetPlaylistRate";
+            this.toolStripMenuItem_resetPlaylistRate.Size = new Size(200, 22);
+            this.toolStripMenuItem_resetPlaylistRate.Text = "Center/Reset Rate";
+            this.toolStripMenuItem_resetPlaylistRate.Click += this.toolStripMenuItem_resetPlaylistRate_Click;
+            //
             // panel_buttons
             // 
             this.panel_buttons.BackColor = SystemColors.ButtonFace;
@@ -166,9 +183,10 @@
             this.label_targetMode.AutoEllipsis = true;
             this.label_targetMode.Location = new Point(12, 4);
             this.label_targetMode.Name = "label_targetMode";
-            this.label_targetMode.Size = new Size(464, 18);
+            this.label_targetMode.Size = new Size(408, 18);
             this.label_targetMode.TabIndex = 9;
             this.label_targetMode.Text = "Target: none";
+            this.toolTip_playlistTracks.SetToolTip(this.label_targetMode, "Loop buttons target the focused row, regardless of checks. Ctrl+loop targets all checked active rows. If all targets already use that fraction, they all turn off; otherwise the fraction is applied to every target.");
             // 
             // button_playlistAllOn
             // 
@@ -180,6 +198,7 @@
             this.button_playlistAllOn.TabStop = false;
             this.button_playlistAllOn.Text = "+";
             this.button_playlistAllOn.UseVisualStyleBackColor = true;
+            this.toolTip_playlistTracks.SetToolTip(this.button_playlistAllOn, "Check all rows for Ctrl+loop actions. Checking does not change loops or playback.");
             this.button_playlistAllOn.Click += this.button_playlistAllOn_Click;
             // 
             // button_playlistAllOff
@@ -192,6 +211,7 @@
             this.button_playlistAllOff.TabStop = false;
             this.button_playlistAllOff.Text = "−";
             this.button_playlistAllOff.UseVisualStyleBackColor = true;
+            this.toolTip_playlistTracks.SetToolTip(this.button_playlistAllOff, "Uncheck all rows. An empty Ctrl+loop group does nothing; loops and playback are unchanged.");
             this.button_playlistAllOff.Click += this.button_playlistAllOff_Click;
             // 
             // checkedListBox_playlistTracks
@@ -203,8 +223,11 @@
             this.checkedListBox_playlistTracks.Name = "checkedListBox_playlistTracks";
             this.checkedListBox_playlistTracks.Size = new Size(464, 72);
             this.checkedListBox_playlistTracks.TabIndex = 12;
+            this.toolTip_playlistTracks.SetToolTip(this.checkedListBox_playlistTracks, "Click text to focus a row without checking it. Use checkboxes or Space to choose the Ctrl+loop group; checks never change playback. Loop: focused row only. Ctrl+loop: all checked active rows (none means no action). Drag text horizontally to set only that row's rate; the rate persists after release and while stopped. Ctrl+click text or right-click > Center/Reset Rate resets only that row.");
+            this.checkedListBox_playlistTracks.ItemCheck += this.checkedListBox_playlistTracks_ItemCheck;
+            this.checkedListBox_playlistTracks.RatePositionChanged += this.checkedListBox_playlistTracks_RatePositionChanged;
             this.checkedListBox_playlistTracks.SelectedIndexChanged += this.checkedListBox_playlistTracks_SelectedIndexChanged;
-            this.checkedListBox_playlistTracks.MouseUp += this.checkedListBox_playlistTracks_MouseUp;
+            this.checkedListBox_playlistTracks.MouseDown += this.checkedListBox_playlistTracks_MouseDown;
             // 
             // comboBox_drops
             // 
@@ -271,9 +294,11 @@
         private Label label_targetMode;
         private Button button_playlistAllOn;
         private Button button_playlistAllOff;
-        private CheckedListBox checkedListBox_playlistTracks;
+        private ModularAudience.Forms.Controls.PlaylistTrackListBox checkedListBox_playlistTracks;
         private System.Windows.Forms.ContextMenuStrip contextMenuStrip_playlistItem;
         private System.Windows.Forms.ToolStripMenuItem toolStripMenuItem_removeFromEnsemble;
+        private System.Windows.Forms.ToolStripMenuItem toolStripMenuItem_resetPlaylistRate;
+        private ToolTip toolTip_playlistTracks;
         private ComboBox comboBox_drops;
         private Label label_info_manageDrops;
     }
