@@ -17,20 +17,5 @@ namespace ModularAudience.Forms.Modules
             }
             return changed;
         }
-
-        private sealed class LiveRateScrollBar : HScrollBar
-        {
-            protected override void WndProc(ref Message message)
-            {
-                const int LeftButtonDown = 0x0201;
-                if (message.Msg == LeftButtonDown && (ModifierKeys & Keys.Control) != 0)
-                {
-                    this.Value = 0;
-                    this.OnScroll(new ScrollEventArgs(ScrollEventType.ThumbPosition, 0));
-                    return;
-                }
-                base.WndProc(ref message);
-            }
-        }
     }
 }

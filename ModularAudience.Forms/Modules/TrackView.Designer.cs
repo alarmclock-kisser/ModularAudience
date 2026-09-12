@@ -59,7 +59,7 @@
             this.checkBox_sync = new CheckBox();
             this.checkBox_mute = new CheckBox();
             this.checkBox_solo = new CheckBox();
-            this.hScrollBar_rate = new LiveRateScrollBar();
+            this.hScrollBar_rate = new ModularAudience.Forms.Controls.LiveRateScrollBar();
             this.contextMenu_rate = new ContextMenuStrip(this.components);
             this.menuItem_rateJumpHere = new ToolStripMenuItem();
             this.menuItem_rateResetCenter = new ToolStripMenuItem();
