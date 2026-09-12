@@ -15,20 +15,9 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             settings ??= LoopAtomizerSettings.Default;
-            double lastProgress = 0.0;
             IProgress<double>? monotonicProgress = progress == null
                 ? null
-                : new Progress<double>(value =>
-                {
-                    double clamped = Math.Clamp(value, 0.0, 1.0);
-                    if (clamped < lastProgress)
-                    {
-                        clamped = lastProgress;
-                    }
-
-                    lastProgress = clamped;
-                    progress.Report(clamped);
-                });
+                : new MonotonicProgress(progress);
 
             monotonicProgress?.Report(0.0);
             AtomizeAnalysis analysis = await Task.Run(() => AnalyzeAtomicSegments(source, settings, monotonicProgress)).ConfigureAwait(false);
@@ -344,7 +333,9 @@ namespace ModularAudience.Audio.Processors_V4
                 onsets.Add(firstActive);
             }
 
-            return ConsolidateOnsets(onsets, envelope, minPeakDistanceSamples, sampleRate);
+            List<int> consolidated = ConsolidateOnsets(onsets, envelope, minPeakDistanceSamples, sampleRate);
+            return AtomicTransientDetector.AddTransientOnsets(consolidated, mono, envelope,
+                sampleRate, silenceThreshold, settings);
         }
 
         private static bool HasDistinctAttack(float[] envelope, int onset, int sampleRate, float silenceThreshold)
@@ -549,7 +540,7 @@ namespace ModularAudience.Audio.Processors_V4
                 }
             }
 
-            return SnapToZeroCrossing(mono, boundary, Math.Max(12, sampleRate / 250));
+            return SnapToZeroCrossing(mono, boundary, Math.Max(1, sampleRate / 1000), allowForward: false);
         }
 
         private static List<AtomicSegment> BuildAtomicSegments(float[] mono, float[] envelope, List<int> onsets, int sampleRate, float silenceThreshold, LoopAtomizerSettings settings)
@@ -625,7 +616,7 @@ namespace ModularAudience.Audio.Processors_V4
             return trimmed;
         }
 
-        private static int SnapToZeroCrossing(float[] mono, int index, int radius)
+        private static int SnapToZeroCrossing(float[] mono, int index, int radius, bool allowForward = true)
         {
             if (mono.Length == 0)
             {
@@ -652,6 +643,11 @@ namespace ModularAudience.Audio.Processors_V4
                         bestAmplitude = amplitude;
                         bestIndex = left;
                     }
+                }
+
+                if (!allowForward)
+                {
+                    continue;
                 }
 
                 int right = index + distance;
@@ -892,6 +888,21 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             return (null, 0.0);
+        }
+
+        private sealed class MonotonicProgress(IProgress<double> target) : IProgress<double>
+        {
+            private readonly object sync = new();
+            private double lastProgress;
+
+            public void Report(double value)
+            {
+                lock (this.sync)
+                {
+                    this.lastProgress = Math.Max(this.lastProgress, Math.Clamp(value, 0.0, 1.0));
+                    target.Report(this.lastProgress);
+                }
+            }
         }
 
         private sealed record AtomizeAnalysis(IReadOnlyList<AtomicSegment> Segments, bool IsLikelyDrumLoop);
