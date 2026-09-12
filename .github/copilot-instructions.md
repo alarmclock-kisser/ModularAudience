@@ -8,6 +8,7 @@
 - Never include line numbers (z. B. "123: code") in Code-Blöcken oder Snippets. Code muss immer so ausgegeben werden, dass er direkt ohne Bearbeitung kopiert und eingefügt werden kann.
 - Execute instructions strictly and step-by-step without repetition or looping responses, ensuring focused and careful edits.
 - All UI labels, strings, button texts, status messages, and logs should be written in English; avoid German UI text in the application.
+- Utilize previously loaded context after interruptions to avoid unnecessary reloading and provide short, concrete progress updates instead of lengthy analysis phases without visible results.
 
 ## Project-Specific Rules
 - The BreakbeatGenerator beatmap should render as a drum-by-step matrix in the picture box.

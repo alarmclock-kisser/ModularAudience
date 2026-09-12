@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
 using System.Threading.Tasks;
-using MathNet.Numerics.IntegralTransforms;
 
 namespace ModularAudience.Audio.Processors_V4
 {
@@ -17,18 +15,34 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             settings ??= LoopAtomizerSettings.Default;
-            progress?.Report(0.0);
-            AtomizeAnalysis analysis = await Task.Run(() => AnalyzeAtomicSegments(source, settings, progress)).ConfigureAwait(false);
-            List<AudioObj> atomics = await CreateAtomicSamplesAsync(source, analysis, progress).ConfigureAwait(false);
+            double lastProgress = 0.0;
+            IProgress<double>? monotonicProgress = progress == null
+                ? null
+                : new Progress<double>(value =>
+                {
+                    double clamped = Math.Clamp(value, 0.0, 1.0);
+                    if (clamped < lastProgress)
+                    {
+                        clamped = lastProgress;
+                    }
+
+                    lastProgress = clamped;
+                    progress.Report(clamped);
+                });
+
+            monotonicProgress?.Report(0.0);
+            AtomizeAnalysis analysis = await Task.Run(() => AnalyzeAtomicSegments(source, settings, monotonicProgress)).ConfigureAwait(false);
+            List<AudioObj> atomics = await CreateAtomicSamplesAsync(source, analysis, monotonicProgress).ConfigureAwait(false);
 
             // Deduplicate similar atomics if enabled
             List<AudioObj> dedupedAtomics = atomics;
             if (settings.EnableDeduplication && atomics.Count > 1)
             {
-                dedupedAtomics = await DeduplicateAtomicsAsync(atomics, source.SampleRate, settings.ClusterSimilarityThreshold, progress).ConfigureAwait(false);
+                dedupedAtomics = await Task.Run(() => AtomicSampleDeduplicator.Deduplicate(
+                    atomics, settings.ClusterSimilarityThreshold, monotonicProgress)).ConfigureAwait(false);
             }
 
-            progress?.Report(1.0);
+            monotonicProgress?.Report(1.0);
             return new LoopAtomizerResult(dedupedAtomics, analysis.IsLikelyDrumLoop);
         }
 
@@ -58,7 +72,7 @@ namespace ModularAudience.Audio.Processors_V4
                     working.SelectionStart = startSample;
                     working.SelectionEnd = endSample;
                     AudioObj? atomic = await working.CloneFromSelectionAsync().ConfigureAwait(false);
-                    progress?.Report(0.5 + 0.5 * ((double) i / analysis.Segments.Count));
+                    progress?.Report(0.45 + 0.25 * ((double) (i + 1) / analysis.Segments.Count));
                     if (atomic == null)
                     {
                         continue;
@@ -82,201 +96,6 @@ namespace ModularAudience.Audio.Processors_V4
             return atomics;
         }
 
-        private static async Task<List<AudioObj>> DeduplicateAtomicsAsync(List<AudioObj> atomics, int sampleRate, float defaultClusterThreshold, IProgress<double>? progress)
-        {
-            if (atomics.Count <= 1)
-            {
-                return atomics;
-            }
-
-            // Compute spectral fingerprints for all atomics
-            int fingerprintBins = 64;
-            var fingerprints = new List<double[]>();
-
-            for (int i = 0; i < atomics.Count; i++)
-            {
-                var fp = ComputeSpectralFingerprint(atomics[i].Data, atomics[i].Channels, sampleRate, fingerprintBins);
-                fingerprints.Add(fp);
-                progress?.Report(0.5 + 0.2 * ((double) i / atomics.Count));
-            }
-
-            // Determine adaptive cluster threshold
-            float clusterThreshold = DetermineAdaptiveClusterThreshold(fingerprints, defaultClusterThreshold);
-
-            // Cluster similar atomics
-            var clusters = GreedyClusterBySimilarity(fingerprints, clusterThreshold);
-
-            // Select representative from each cluster (highest RMS)
-            var representatives = new List<AudioObj>();
-            for (int ci = 0; ci < clusters.Count; ci++)
-            {
-                var cluster = clusters[ci];
-                if (cluster.Count == 0) continue;
-
-                int bestIdx = cluster[0];
-                double bestRms = -1;
-
-                foreach (int idx in cluster)
-                {
-                    double rms = ComputePeakRms(atomics[idx].Data, atomics[idx].Channels);
-                    if (rms > bestRms)
-                    {
-                        bestRms = rms;
-                        bestIdx = idx;
-                    }
-                }
-
-                representatives.Add(atomics[bestIdx]);
-            }
-
-            return representatives;
-        }
-
-        private static double[] ComputeSpectralFingerprint(float[] interleaved, int channels, int sampleRate, int bins = 64)
-        {
-            var mono = ConvertToMono(interleaved, channels);
-            int N = 1;
-            while (N < mono.Length && N < 8192)
-            {
-                N <<= 1;
-            }
-
-            if (N < 256)
-            {
-                N = 256;
-            }
-
-            var window = new double[N];
-            for (int i = 0; i < N; i++)
-            {
-                window[i] = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (N - 1)));
-            }
-
-            var buf = new Complex[N];
-            int offset = Math.Max(0, mono.Length / 2 - N / 2);
-            for (int i = 0; i < N; i++)
-            {
-                buf[i] = new Complex((i + offset) < mono.Length ? mono[i + offset] * window[i] : 0.0, 0.0);
-            }
-
-            Fourier.Forward(buf, FourierOptions.Matlab);
-            int half = N / 2;
-            var mags = new double[half];
-            double max = 1e-12;
-            for (int k = 0; k < half; k++)
-            {
-                mags[k] = buf[k].Magnitude;
-                if (mags[k] > max)
-                {
-                    max = mags[k];
-                }
-            }
-
-            var fp = new double[bins];
-            for (int b = 0; b < bins; b++)
-            {
-                int a = (int) Math.Round(b * (half / (double) bins));
-                int bb = (int) Math.Round((b + 1) * (half / (double) bins));
-                a = Math.Clamp(a, 0, half - 1);
-                bb = Math.Clamp(bb, a + 1, half);
-                double sum = 0;
-                for (int k = a; k < bb; k++)
-                {
-                    sum += mags[k];
-                }
-
-                fp[b] = sum / Math.Max(1, bb - a) / max;
-            }
-            return fp;
-        }
-
-        private static float DetermineAdaptiveClusterThreshold(List<double[]> fps, float defaultThreshold)
-        {
-            if (fps == null || fps.Count < 2)
-            {
-                return defaultThreshold;
-            }
-
-            var sims = new List<double>();
-            for (int i = 0; i < fps.Count; i++)
-            {
-                for (int j = i + 1; j < fps.Count; j++)
-                {
-                    sims.Add(CosineSimilarity(fps[i], fps[j]));
-                }
-            }
-
-            if (sims.Count == 0)
-            {
-                return defaultThreshold;
-            }
-
-            double mean = sims.Average();
-            double std = Math.Sqrt(sims.Average(v => (v - mean) * (v - mean)));
-            double thr = mean + 0.35 * std;
-            return (float) Math.Clamp(thr, 0.65, Math.Max(defaultThreshold, 0.95));
-        }
-
-        private static List<List<int>> GreedyClusterBySimilarity(List<double[]> fps, float threshold)
-        {
-            int n = fps.Count;
-            var assigned = new bool[n];
-            var clusters = new List<List<int>>();
-
-            for (int i = 0; i < n; i++)
-            {
-                if (assigned[i])
-                {
-                    continue;
-                }
-
-                var cluster = new List<int> { i };
-                assigned[i] = true;
-                for (int j = i + 1; j < n; j++)
-                {
-                    if (assigned[j])
-                    {
-                        continue;
-                    }
-
-                    double sim = CosineSimilarity(fps[i], fps[j]);
-                    if (sim >= threshold) { cluster.Add(j); assigned[j] = true; }
-                }
-                clusters.Add(cluster);
-            }
-            return clusters;
-        }
-
-        private static double CosineSimilarity(double[] a, double[] b)
-        {
-            int n = Math.Min(a.Length, b.Length);
-            double da = 0, db = 0, dot = 0;
-            for (int i = 0; i < n; i++) { dot += a[i] * b[i]; da += a[i] * a[i]; db += b[i] * b[i]; }
-            if (da <= 0 || db <= 0)
-            {
-                return 0.0;
-            }
-
-            return dot / (Math.Sqrt(da) * Math.Sqrt(db));
-        }
-
-        private static double ComputePeakRms(float[] interleaved, int channels)
-        {
-            if (interleaved == null || interleaved.Length == 0)
-            {
-                return 0.0;
-            }
-
-            var mono = ConvertToMono(interleaved, channels);
-            double s = 0;
-            foreach (var v in mono)
-            {
-                s += v * v;
-            }
-
-            return Math.Sqrt(s / Math.Max(1, mono.Length));
-        }
-
         private static AtomizeAnalysis AnalyzeAtomicSegments(AudioObj source, LoopAtomizerSettings settings, IProgress<double>? progress)
         {
             if (source.Data == null || source.Data.Length == 0 || source.SampleRate <= 0 || source.Channels <= 0)
@@ -297,7 +116,8 @@ namespace ModularAudience.Audio.Processors_V4
             progress?.Report(0.25);
             float floor = EstimatePercentile(envelope, 0.18);
             float loud = EstimatePercentile(envelope, 0.92);
-            float silenceThreshold = Math.Max(0.00035f, floor + ((loud - floor) * 0.07f));
+            float silenceThreshold = Math.Max(0.00002f,
+                Math.Min((floor * 2f) + ((loud - floor) * 0.015f), envelope.Max() * 0.02f));
 
             List<int> onsets = DetectOnsets(mono, envelope, fastEnvelope, source.SampleRate, silenceThreshold, settings);
             List<AtomicSegment> segments = BuildAtomicSegments(mono, envelope, onsets, source.SampleRate, silenceThreshold, settings);
@@ -307,7 +127,8 @@ namespace ModularAudience.Audio.Processors_V4
                 int last = FindLastActiveFrame(envelope, silenceThreshold * 1.10f);
                 if (first >= 0 && last > first)
                 {
-                    segments = [new AtomicSegment(first, last + 1, null, 0.0)];
+                    segments = TrimSegmentBoundaries([new AtomicSegment(0, mono.Length, null, 0.0)],
+                        mono, envelope, source.SampleRate, silenceThreshold, settings);
                 }
             }
 
@@ -337,13 +158,17 @@ namespace ModularAudience.Audio.Processors_V4
             for (int frame = 0; frame < frames; frame++)
             {
                 int offset = frame * channels;
-                float sum = 0f;
+                float strongest = 0f;
                 for (int channel = 0; channel < channels; channel++)
                 {
-                    sum += data[offset + channel];
+                    float value = data[offset + channel];
+                    if (float.IsFinite(value) && Math.Abs(value) > Math.Abs(strongest))
+                    {
+                        strongest = value;
+                    }
                 }
 
-                mono[frame] = sum / channels;
+                mono[frame] = strongest;
             }
 
             return mono;
@@ -353,9 +178,9 @@ namespace ModularAudience.Audio.Processors_V4
         {
             int window = settings.Sensitivity switch
             {
-                AtomizeSensitivity.Conservative => Math.Clamp(sampleRate / 520, 20, 320),
-                AtomizeSensitivity.Aggressive => Math.Clamp(sampleRate / 980, 8, 160),
-                _ => Math.Clamp(sampleRate / 760, 12, 240)
+                AtomizeSensitivity.Conservative => Math.Max(1, sampleRate / 160),
+                AtomizeSensitivity.Aggressive => Math.Max(1, sampleRate / 330),
+                _ => Math.Max(1, sampleRate / 250)
             };
 
             return BuildMovingAverageEnvelope(mono, window);
@@ -434,11 +259,11 @@ namespace ModularAudience.Audio.Processors_V4
                 AtomizeSensitivity.Aggressive => 5,
                 _ => 8
             };
-            int minPeakDistanceSamples = Math.Max((settings.MinSliceMs * sampleRate) / 1000, settings.Sensitivity switch
+            int minPeakDistanceSamples = Math.Max((settings.MinSliceMs * sampleRate) / 2000, settings.Sensitivity switch
             {
-                AtomizeSensitivity.Conservative => sampleRate / 9,
-                AtomizeSensitivity.Aggressive => sampleRate / 24,
-                _ => sampleRate / 14
+                AtomizeSensitivity.Conservative => sampleRate / 30,
+                AtomizeSensitivity.Aggressive => sampleRate / 80,
+                _ => sampleRate / 50
             });
             double stdMultiplier = settings.Sensitivity switch
             {
@@ -489,19 +314,13 @@ namespace ModularAudience.Audio.Processors_V4
 
                 int approximateOnset = Math.Min(mono.Length - 1, frame * hopSize);
                 int refinedOnset = RefineOnset(mono, envelope, fastEnvelope, approximateOnset, sampleRate, settings);
-                if (envelope[refinedOnset] < silenceThreshold * 0.92f)
+                if (!HasDistinctAttack(envelope, refinedOnset, sampleRate, silenceThreshold))
                 {
                     continue;
                 }
 
-                if (refinedOnset - lastAcceptedOnset < minPeakDistanceSamples)
+                if (onsets.Count > 0 && refinedOnset - lastAcceptedOnset < minPeakDistanceSamples)
                 {
-                    if (onsets.Count > 0 && envelope[refinedOnset] > envelope[onsets[^1]])
-                    {
-                        onsets[^1] = refinedOnset;
-                        lastAcceptedOnset = refinedOnset;
-                    }
-
                     continue;
                 }
 
@@ -511,24 +330,47 @@ namespace ModularAudience.Audio.Processors_V4
 
             foreach (int backupPeak in DetectEnvelopePeaks(envelope, sampleRate, silenceThreshold, settings))
             {
-                if (onsets.Count == 0 || onsets.All(existing => Math.Abs(existing - backupPeak) >= minPeakDistanceSamples))
+                int refined = RefineOnset(mono, envelope, fastEnvelope, backupPeak, sampleRate, settings);
+                if (HasDistinctAttack(envelope, refined, sampleRate, silenceThreshold) &&
+                    onsets.All(existing => Math.Abs(existing - refined) >= minPeakDistanceSamples))
                 {
-                    onsets.Add(backupPeak);
+                    onsets.Add(refined);
                 }
             }
 
-            int firstActive = FindFirstActiveFrame(envelope, silenceThreshold * 1.20f);
-            if (firstActive >= 0 && onsets.Count > 0 && onsets[0] - firstActive > minPeakDistanceSamples)
+            int firstActive = FindFirstActiveFrame(envelope, silenceThreshold);
+            if (firstActive >= 0)
             {
-                onsets.Insert(0, firstActive);
+                onsets.Add(firstActive);
             }
 
-            return ConsolidateOnsets(onsets, envelope, minPeakDistanceSamples);
+            return ConsolidateOnsets(onsets, envelope, minPeakDistanceSamples, sampleRate);
+        }
+
+        private static bool HasDistinctAttack(float[] envelope, int onset, int sampleRate, float silenceThreshold)
+        {
+            int beforeStart = Math.Max(0, onset - Math.Max(1, sampleRate / 50));
+            int afterEnd = Math.Min(envelope.Length, onset + Math.Max(1, sampleRate / 65));
+            double before = 0.0;
+            double after = 0.0;
+            for (int i = beforeStart; i < onset; i++)
+            {
+                before += envelope[i];
+            }
+
+            for (int i = onset; i < afterEnd; i++)
+            {
+                after += envelope[i];
+            }
+
+            before /= Math.Max(1, onset - beforeStart);
+            after /= Math.Max(1, afterEnd - onset);
+            return after > Math.Max(silenceThreshold, (before * 1.25) + (silenceThreshold * 0.25));
         }
 
         private static List<int> DetectEnvelopePeaks(float[] envelope, int sampleRate, float silenceThreshold, LoopAtomizerSettings settings)
         {
-            int minDistance = Math.Max((settings.MinSliceMs * sampleRate) / 1000, sampleRate / 30);
+            int minDistance = Math.Max((settings.MinSliceMs * sampleRate) / 2000, sampleRate / 50);
             int radius = Math.Clamp(sampleRate / 180, 12, 180);
             float prominenceScale = settings.Sensitivity switch
             {
@@ -585,7 +427,7 @@ namespace ModularAudience.Audio.Processors_V4
             return peaks;
         }
 
-        private static List<int> ConsolidateOnsets(IEnumerable<int> onsets, float[] envelope, int minPeakDistanceSamples)
+        private static List<int> ConsolidateOnsets(IEnumerable<int> onsets, float[] envelope, int minPeakDistanceSamples, int sampleRate)
         {
             List<int> ordered = onsets.Distinct().OrderBy(x => x).ToList();
             if (ordered.Count <= 1)
@@ -593,25 +435,41 @@ namespace ModularAudience.Audio.Processors_V4
                 return ordered;
             }
 
+            float[] activity = BuildMovingAverageEnvelope(envelope, Math.Max(1, sampleRate / 100));
             List<int> consolidated = [ordered[0]];
+            int scanned = ordered[0];
+            float peak = 0f;
             for (int i = 1; i < ordered.Count; i++)
             {
                 int current = ordered[i];
                 int previous = consolidated[^1];
-                if (current - previous < minPeakDistanceSamples)
+                while (scanned < current)
                 {
-                    if (envelope[current] > envelope[previous])
-                    {
-                        consolidated[^1] = current;
-                    }
+                    peak = Math.Max(peak, activity[scanned++]);
+                }
 
+                if (current - previous < minPeakDistanceSamples || !HasNewAttack(activity, previous, current, peak, sampleRate))
+                {
                     continue;
                 }
 
                 consolidated.Add(current);
+                peak = activity[current];
             }
 
             return consolidated;
+        }
+
+        private static bool HasNewAttack(float[] activity, int previous, int current, float peak, int sampleRate)
+        {
+            int radius = Math.Max(1, sampleRate / 80);
+            float before = activity[Math.Max(previous, current - radius)];
+            float atOnset = activity[current];
+            float after = activity[Math.Min(activity.Length - 1, current + radius)];
+            float earlierRise = Math.Max(0f, atOnset - before);
+            bool followsDecay = atOnset < peak * 0.90f;
+            bool abruptRise = after > atOnset * 1.25f && after - atOnset > earlierRise * 2f;
+            return followsDecay || abruptRise;
         }
 
         private static void NormalizeInPlace(float[] values)
@@ -702,35 +560,12 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             onsets = onsets.OrderBy(x => x).ToList();
-            int minFrames = Math.Max((settings.MinSliceMs * sampleRate) / 1000, sampleRate / 50);
-            int tailBiasFrames = Math.Max(0, (settings.TailPaddingMs * sampleRate) / 1000);
-            int[] boundaries = new int[onsets.Count + 1];
-            boundaries[0] = FindLeadingBoundary(mono, envelope, onsets[0], sampleRate, silenceThreshold, settings);
-
-            for (int i = 1; i < onsets.Count; i++)
-            {
-                boundaries[i] = FindBoundaryBetween(mono, envelope, onsets[i - 1], onsets[i], sampleRate, silenceThreshold, tailBiasFrames, settings);
-            }
-
-            boundaries[^1] = FindTrailingBoundary(mono, envelope, onsets[^1], sampleRate, silenceThreshold, settings);
-
             List<AtomicSegment> segments = [];
             for (int i = 0; i < onsets.Count; i++)
             {
-                int start = Math.Clamp(boundaries[i], 0, mono.Length - 1);
-                int end = Math.Clamp(boundaries[i + 1], start + 1, mono.Length);
-                if ((end - start) < minFrames)
-                {
-                    if (segments.Count > 0)
-                    {
-                        AtomicSegment previous = segments[^1];
-                        segments[^1] = previous with { EndFrame = end };
-                    }
-
-                    continue;
-                }
-
-                if (!ContainsMeaningfulEnergy(envelope, start, end, silenceThreshold))
+                int start = i == 0 ? 0 : onsets[i];
+                int end = i + 1 < onsets.Count ? onsets[i + 1] : mono.Length;
+                if (end <= start || !ContainsMeaningfulEnergy(envelope, start, end, silenceThreshold))
                 {
                     continue;
                 }
@@ -738,9 +573,7 @@ namespace ModularAudience.Audio.Processors_V4
                 segments.Add(new AtomicSegment(start, end, null, 0.0));
             }
 
-            List<AtomicSegment> merged = MergeTinySegments(segments, mono, envelope, sampleRate, silenceThreshold, mono.Length, settings);
-            List<AtomicSegment> split = SplitCompoundSegments(merged, mono, envelope, sampleRate, silenceThreshold, settings);
-            return TrimSegmentBoundaries(split, mono, envelope, sampleRate, silenceThreshold, settings);
+            return TrimSegmentBoundaries(segments, mono, envelope, sampleRate, silenceThreshold, settings);
         }
 
         private static List<AtomicSegment> TrimSegmentBoundaries(
@@ -751,8 +584,7 @@ namespace ModularAudience.Audio.Processors_V4
             float silenceThreshold,
             LoopAtomizerSettings settings)
         {
-            int minimumLength = Math.Max((settings.MinSliceMs * sampleRate) / 1000, sampleRate / 50);
-            int attackPadding = Math.Max(8, sampleRate / 500);
+            int attackPadding = Math.Max(1, sampleRate / 4000);
             int tailPadding = Math.Max(0, (settings.TailPaddingMs * sampleRate) / 1000);
             List<AtomicSegment> trimmed = [];
 
@@ -761,366 +593,36 @@ namespace ModularAudience.Audio.Processors_V4
                 float peak = 0f;
                 for (int i = segment.StartFrame; i < segment.EndFrame; i++)
                 {
-                    peak = Math.Max(peak, envelope[i]);
+                    peak = Math.Max(peak, Math.Abs(mono[i]));
                 }
 
-                float threshold = Math.Max(silenceThreshold * 1.15f, peak * 0.035f);
+                float threshold = Math.Max(0.00001f, Math.Min(silenceThreshold * 0.5f, peak * 0.005f));
                 int firstActive = segment.StartFrame;
-                while (firstActive < segment.EndFrame && envelope[firstActive] < threshold)
+                while (firstActive < segment.EndFrame && Math.Abs(mono[firstActive]) < threshold)
                 {
                     firstActive++;
                 }
 
                 int lastActive = segment.EndFrame - 1;
-                while (lastActive >= firstActive && envelope[lastActive] < threshold)
+                while (lastActive >= firstActive && Math.Abs(mono[lastActive]) < threshold)
                 {
                     lastActive--;
                 }
 
                 if (lastActive < firstActive)
                 {
-                    trimmed.Add(segment);
                     continue;
                 }
 
-                // Snap start to zero crossing for cleaner attack
-                int start = Math.Max(segment.StartFrame, firstActive - attackPadding);
-                start = SnapToZeroCrossing(mono, start, Math.Max(12, sampleRate / 250));
-
-                // Snap end to zero crossing for cleaner release
+                int earliestStart = Math.Max(segment.StartFrame, firstActive - attackPadding);
+                int start = Math.Clamp(SnapToZeroCrossing(mono, firstActive, attackPadding), earliestStart, firstActive);
                 int end = Math.Min(segment.EndFrame, lastActive + 1 + tailPadding);
-                end = SnapToZeroCrossing(mono, end, Math.Max(12, sampleRate / 250));
-
-                if (end - start < minimumLength)
-                {
-                    trimmed.Add(segment);
-                    continue;
-                }
+                end = Math.Clamp(SnapToZeroCrossing(mono, end, attackPadding), lastActive + 1, segment.EndFrame);
 
                 trimmed.Add(new AtomicSegment(start, end, segment.Label, segment.Confidence));
             }
 
             return trimmed;
-        }
-
-        private static List<AtomicSegment> SplitCompoundSegments(
-            List<AtomicSegment> segments,
-            float[] mono,
-            float[] envelope,
-            int sampleRate,
-            float silenceThreshold,
-            LoopAtomizerSettings settings)
-        {
-            // Compound hits can be closer than the normal slice length, especially at high BPM.
-            int minimumDistance = Math.Max(sampleRate / 40, (settings.MinSliceMs * sampleRate) / 2000);
-            List<AtomicSegment> result = [];
-
-            foreach (AtomicSegment segment in segments)
-            {
-                int length = segment.EndFrame - segment.StartFrame;
-                if (length < minimumDistance * 2)
-                {
-                    result.Add(segment);
-                    continue;
-                }
-
-                float segmentPeak = 0f;
-                for (int i = segment.StartFrame; i < segment.EndFrame; i++)
-                {
-                    segmentPeak = Math.Max(segmentPeak, envelope[i]);
-                }
-
-                // A later hit may be quieter than the first one; use the noise floor and
-                // a modest relative threshold instead of requiring equally loud attacks.
-                float peakThreshold = Math.Max(silenceThreshold * 1.20f, segmentPeak * 0.12f);
-                int peakRadius = Math.Clamp(sampleRate / 500, 12, 120);
-                List<int> peaks = [];
-
-                int edgeWindow = Math.Min(length / 3, Math.Max(peakRadius * 2, minimumDistance));
-                int startPeak = FindStrongestPeak(envelope, segment.StartFrame, segment.StartFrame + edgeWindow, peakThreshold);
-                if (startPeak >= 0)
-                {
-                    peaks.Add(startPeak);
-                }
-
-                for (int i = segment.StartFrame + peakRadius; i < segment.EndFrame - peakRadius; i++)
-                {
-                    float current = envelope[i];
-                    if (current < peakThreshold || peaks.Any(peak => i - peak < minimumDistance))
-                    {
-                        continue;
-                    }
-
-                    bool isPeak = true;
-                    float leftMinimum = current;
-                    float rightMinimum = current;
-                    for (int j = 1; j <= peakRadius; j++)
-                    {
-                        leftMinimum = Math.Min(leftMinimum, envelope[i - j]);
-                        rightMinimum = Math.Min(rightMinimum, envelope[i + j]);
-                        if (envelope[i - j] > current || envelope[i + j] > current)
-                        {
-                            isPeak = false;
-                            break;
-                        }
-                    }
-
-                    float prominenceThreshold = Math.Max(segmentPeak * 0.04f, silenceThreshold * 0.50f);
-                    if (isPeak && current - Math.Max(leftMinimum, rightMinimum) >= prominenceThreshold)
-                    {
-                        peaks.Add(i);
-                    }
-                }
-
-                int endPeak = FindStrongestPeak(envelope, segment.EndFrame - edgeWindow, segment.EndFrame, peakThreshold);
-                if (endPeak >= 0 && peaks.All(peak => endPeak - peak >= minimumDistance))
-                {
-                    peaks.Add(endPeak);
-                }
-
-                peaks = peaks.Distinct().OrderBy(peak => peak).ToList();
-                if (peaks.Count < 2)
-                {
-                    result.Add(segment);
-                    continue;
-                }
-
-                int start = segment.StartFrame;
-                for (int i = 0; i < peaks.Count - 1; i++)
-                {
-                    int boundary = FindLowestEnvelopePointWithZeroCrossing(mono, envelope, peaks[i], peaks[i + 1], sampleRate);
-                    float lowerPeak = Math.Min(envelope[peaks[i]], envelope[peaks[i + 1]]);
-                    bool hasDistinctValley = envelope[boundary] <= lowerPeak * 0.88f;
-                    if (hasDistinctValley && boundary - start >= minimumDistance)
-                    {
-                        result.Add(new AtomicSegment(start, boundary, null, 0.0));
-                        start = boundary;
-                    }
-                }
-
-                if (segment.EndFrame - start >= minimumDistance)
-                {
-                    result.Add(new AtomicSegment(start, segment.EndFrame, null, 0.0));
-                }
-                else if (result.Count > 0)
-                {
-                    AtomicSegment previous = result[^1];
-                    result[^1] = previous with { EndFrame = segment.EndFrame };
-                }
-            }
-
-            return result;
-        }
-
-        private static int FindStrongestPeak(float[] envelope, int start, int end, float threshold)
-        {
-            start = Math.Clamp(start, 0, envelope.Length - 1);
-            end = Math.Clamp(end, start + 1, envelope.Length);
-            int strongest = -1;
-            float strongestValue = threshold;
-
-            for (int i = start; i < end; i++)
-            {
-                if (envelope[i] > strongestValue)
-                {
-                    strongest = i;
-                    strongestValue = envelope[i];
-                }
-            }
-
-            return strongest;
-        }
-
-        private static int FindLowestEnvelopePoint(float[] envelope, int leftPeak, int rightPeak)
-        {
-            int start = Math.Min(leftPeak, rightPeak);
-            int end = Math.Max(leftPeak, rightPeak);
-            int lowest = start;
-            for (int i = start + 1; i < end; i++)
-            {
-                if (envelope[i] < envelope[lowest])
-                {
-                    lowest = i;
-                }
-            }
-
-            return lowest;
-        }
-
-        private static int FindLowestEnvelopePointWithZeroCrossing(float[] mono, float[] envelope, int leftPeak, int rightPeak, int sampleRate)
-        {
-            int start = Math.Min(leftPeak, rightPeak);
-            int end = Math.Max(leftPeak, rightPeak);
-            int lowest = start;
-            float lowestEnergy = envelope[lowest];
-
-            for (int i = start + 1; i < end; i++)
-            {
-                if (envelope[i] < lowestEnergy)
-                {
-                    lowest = i;
-                    lowestEnergy = envelope[i];
-                }
-            }
-
-            // Snap to nearest zero crossing for cleaner cut
-            return SnapToZeroCrossing(mono, lowest, Math.Max(12, sampleRate / 250));
-        }
-
-        private static int FindLeadingBoundary(
-            float[] mono,
-            float[] envelope,
-            int firstOnset,
-            int sampleRate,
-            float silenceThreshold,
-            LoopAtomizerSettings settings)
-        {
-            int lookBehind = settings.Sensitivity switch
-            {
-                AtomizeSensitivity.Conservative => Math.Min(firstOnset, sampleRate / 3),
-                AtomizeSensitivity.Aggressive => Math.Min(firstOnset, sampleRate / 10),
-                _ => Math.Min(firstOnset, sampleRate / 6)
-            };
-            int searchStart = Math.Max(0, firstOnset - lookBehind);
-            int preGuard = Math.Max(6, sampleRate / 500);
-            int searchEnd = Math.Max(searchStart, firstOnset - preGuard);
-            int bestIndex = searchStart;
-            float bestScore = float.MaxValue;
-
-            for (int i = searchStart; i <= searchEnd; i++)
-            {
-                float score = envelope[i] + (Math.Abs(mono[i]) * 0.20f) - (((float) (i - searchStart) / Math.Max(1, searchEnd - searchStart + 1)) * 0.02f);
-                if (envelope[i] <= silenceThreshold)
-                {
-                    score *= 0.60f;
-                }
-
-                if (score < bestScore)
-                {
-                    bestScore = score;
-                    bestIndex = i;
-                }
-            }
-
-            // Snap to zero crossing
-            int snapped = SnapToZeroCrossing(mono, bestIndex, Math.Max(12, sampleRate / 250));
-
-            // Fine-tune for cleaner attack: find the earliest zero crossing with low energy
-            int fineTuneRadius = Math.Min(sampleRate / 200, 30);
-            for (int i = Math.Max(0, snapped - fineTuneRadius); i <= snapped; i++)
-            {
-                if (Math.Abs(mono[i]) < Math.Abs(mono[Math.Max(0, i - 1)]) && Math.Abs(mono[i]) < Math.Abs(mono[i + 1]))
-                {
-                    return i;
-                }
-            }
-
-            return snapped;
-        }
-
-        private static int FindBoundaryBetween(float[] mono, float[] envelope, int leftOnset, int rightOnset, int sampleRate, float silenceThreshold, int tailBiasFrames, LoopAtomizerSettings settings)
-        {
-            int gap = Math.Max(1, rightOnset - leftOnset);
-            int guardAfterLeft = Math.Min(Math.Max(sampleRate / 160, 12), gap / 3);
-            int guardBeforeRight = Math.Min(Math.Max(sampleRate / 220, 10), gap / 3);
-            int searchStart = Math.Clamp(leftOnset + guardAfterLeft, 0, rightOnset - 1);
-            int searchEnd = Math.Clamp(rightOnset - guardBeforeRight, searchStart + 1, envelope.Length - 1);
-            if (searchEnd <= searchStart)
-            {
-                return SnapToZeroCrossing(mono, (leftOnset + rightOnset) / 2, Math.Max(12, sampleRate / 250));
-            }
-
-            int bestIndex = searchStart;
-            float bestScore = float.MaxValue;
-            for (int i = searchStart; i <= searchEnd; i++)
-            {
-                float normalizedPosition = (float) (i - searchStart) / Math.Max(1, searchEnd - searchStart);
-                float slope = i > 0 ? Math.Abs(envelope[i] - envelope[i - 1]) : envelope[i];
-                float score = envelope[i] + (slope * 0.22f) - (normalizedPosition * (tailBiasFrames / (float) Math.Max(1, gap)) * 0.12f);
-                if (envelope[i] <= silenceThreshold)
-                {
-                    score *= 0.55f;
-                }
-
-                if (score < bestScore)
-                {
-                    bestScore = score;
-                    bestIndex = i;
-                }
-            }
-
-            // Snap to zero crossing first
-            int snapped = SnapToZeroCrossing(mono, bestIndex, Math.Max(12, sampleRate / 250));
-
-            // Fine-tune: look for the closest zero crossing that has minimal energy (silence)
-            int fineTuneRadius = Math.Min(sampleRate / 100, 50);
-            int bestBoundary = snapped;
-            float bestEnergy = float.MaxValue;
-
-            for (int i = Math.Max(0, snapped - fineTuneRadius); i <= Math.Min(envelope.Length - 1, snapped + fineTuneRadius); i++)
-            {
-                // Prefer positions closer to zero crossing
-                if (Math.Abs(mono[i]) < Math.Abs(mono[bestBoundary]))
-                {
-                    bestBoundary = i;
-                    bestEnergy = envelope[i];
-                }
-            }
-
-            int shifted = Math.Min(searchEnd, bestBoundary + Math.Min(tailBiasFrames, Math.Max(0, searchEnd - bestBoundary)));
-            return SnapToZeroCrossing(mono, shifted, Math.Max(12, sampleRate / 250));
-        }
-
-        private static int FindTrailingBoundary(float[] mono, float[] envelope, int lastOnset, int sampleRate, float silenceThreshold, LoopAtomizerSettings settings)
-        {
-            int maxTail = settings.Sensitivity switch
-            {
-                AtomizeSensitivity.Conservative => sampleRate * 2,
-                AtomizeSensitivity.Aggressive => sampleRate,
-                _ => sampleRate + (sampleRate / 2)
-            };
-            int minTail = Math.Max((settings.MinSliceMs * sampleRate) / 1000, sampleRate / 30);
-            int searchStart = Math.Clamp(lastOnset + Math.Max(4, sampleRate / 500), 0, envelope.Length - 1);
-            int searchEnd = Math.Clamp(lastOnset + maxTail, searchStart + 1, envelope.Length - 1);
-            int releaseThresholdIndex = -1;
-            float peak = 0f;
-            for (int i = lastOnset; i <= searchEnd; i++)
-            {
-                peak = Math.Max(peak, envelope[i]);
-                if (i - lastOnset < minTail)
-                {
-                    continue;
-                }
-
-                float decayThreshold = Math.Max(silenceThreshold * 1.15f, peak * 0.16f);
-                if (envelope[i] <= decayThreshold)
-                {
-                    releaseThresholdIndex = i;
-                    break;
-                }
-            }
-
-            int candidate = releaseThresholdIndex >= 0 ? releaseThresholdIndex : searchEnd;
-
-            // Snap to zero crossing
-            int snapped = SnapToZeroCrossing(mono, candidate, Math.Max(12, sampleRate / 250));
-
-            // Fine-tune for cleaner release: look for zero crossing with minimal energy
-            int fineTuneRadius = Math.Min(sampleRate / 200, 30);
-            int bestBoundary = snapped;
-            float bestEnergy = float.MaxValue;
-
-            for (int i = Math.Max(snapped - fineTuneRadius, 0); i <= Math.Min(snapped + fineTuneRadius, mono.Length - 1); i++)
-            {
-                // Prefer positions closer to zero crossing with low energy
-                if (Math.Abs(mono[i]) < Math.Abs(mono[bestBoundary]) && envelope[i] < bestEnergy)
-                {
-                    bestBoundary = i;
-                    bestEnergy = envelope[i];
-                }
-            }
-
-            return bestBoundary;
         }
 
         private static int SnapToZeroCrossing(float[] mono, int index, int radius)
@@ -1170,46 +672,6 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             return bestIndex;
-        }
-
-        private static List<AtomicSegment> MergeTinySegments(List<AtomicSegment> segments, float[] mono, float[] envelope, int sampleRate, float silenceThreshold, int totalFrames, LoopAtomizerSettings settings)
-        {
-            int minFrames = Math.Max((settings.MinSliceMs * sampleRate) / 1000, sampleRate / 60);
-            List<AtomicSegment> merged = [];
-
-            foreach (AtomicSegment segment in segments)
-            {
-                int start = Math.Clamp(segment.StartFrame, 0, totalFrames);
-                int end = Math.Clamp(segment.EndFrame, start + 1, totalFrames);
-
-                // Snap boundaries to zero crossing for cleaner segments
-                start = SnapToZeroCrossing(mono, start, Math.Max(12, sampleRate / 250));
-                end = SnapToZeroCrossing(mono, end, Math.Max(12, sampleRate / 250));
-
-                AtomicSegment normalized = new(start, end, null, 0.0);
-
-                if (!ContainsMeaningfulEnergy(envelope, normalized.StartFrame, normalized.EndFrame, silenceThreshold))
-                {
-                    continue;
-                }
-
-                if (merged.Count == 0)
-                {
-                    merged.Add(normalized);
-                    continue;
-                }
-
-                if ((normalized.EndFrame - normalized.StartFrame) < minFrames)
-                {
-                    AtomicSegment previous = merged[^1];
-                    merged[^1] = previous with { EndFrame = normalized.EndFrame };
-                    continue;
-                }
-
-                merged.Add(normalized);
-            }
-
-            return merged;
         }
 
         private static bool ContainsMeaningfulEnergy(float[] envelope, int startFrame, int endFrame, float silenceThreshold)
@@ -1463,7 +925,7 @@ namespace ModularAudience.Audio.Processors_V4
         public int TailPaddingMs { get; init; } = 30;
         public bool AllowSingleAtomFallback { get; init; } = true;
         public bool EnableDeduplication { get; init; } = true;
-        public float ClusterSimilarityThreshold { get; init; } = 0.85f;
+        public float ClusterSimilarityThreshold { get; init; } = 0.94f;
     }
 
     public sealed record LoopAtomizerResult(IReadOnlyList<AudioObj> Atomics, bool IsLikelyDrumLoop);
