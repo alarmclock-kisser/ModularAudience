@@ -1,3 +1,10 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+using System.Threading.Tasks;
+using MathNet.Numerics.IntegralTransforms;
+
 namespace ModularAudience.Audio.Processors_V4
 {
     public static class LoopAtomizer_V4
@@ -13,8 +20,16 @@ namespace ModularAudience.Audio.Processors_V4
             progress?.Report(0.0);
             AtomizeAnalysis analysis = await Task.Run(() => AnalyzeAtomicSegments(source, settings, progress)).ConfigureAwait(false);
             List<AudioObj> atomics = await CreateAtomicSamplesAsync(source, analysis, progress).ConfigureAwait(false);
+
+            // Deduplicate similar atomics if enabled
+            List<AudioObj> dedupedAtomics = atomics;
+            if (settings.EnableDeduplication && atomics.Count > 1)
+            {
+                dedupedAtomics = await DeduplicateAtomicsAsync(atomics, source.SampleRate, settings.ClusterSimilarityThreshold, progress).ConfigureAwait(false);
+            }
+
             progress?.Report(1.0);
-            return new LoopAtomizerResult(atomics, analysis.IsLikelyDrumLoop);
+            return new LoopAtomizerResult(dedupedAtomics, analysis.IsLikelyDrumLoop);
         }
 
         private static async Task<List<AudioObj>> CreateAtomicSamplesAsync(AudioObj source, AtomizeAnalysis analysis, IProgress<double>? progress)
@@ -65,6 +80,201 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             return atomics;
+        }
+
+        private static async Task<List<AudioObj>> DeduplicateAtomicsAsync(List<AudioObj> atomics, int sampleRate, float defaultClusterThreshold, IProgress<double>? progress)
+        {
+            if (atomics.Count <= 1)
+            {
+                return atomics;
+            }
+
+            // Compute spectral fingerprints for all atomics
+            int fingerprintBins = 64;
+            var fingerprints = new List<double[]>();
+
+            for (int i = 0; i < atomics.Count; i++)
+            {
+                var fp = ComputeSpectralFingerprint(atomics[i].Data, atomics[i].Channels, sampleRate, fingerprintBins);
+                fingerprints.Add(fp);
+                progress?.Report(0.5 + 0.2 * ((double) i / atomics.Count));
+            }
+
+            // Determine adaptive cluster threshold
+            float clusterThreshold = DetermineAdaptiveClusterThreshold(fingerprints, defaultClusterThreshold);
+
+            // Cluster similar atomics
+            var clusters = GreedyClusterBySimilarity(fingerprints, clusterThreshold);
+
+            // Select representative from each cluster (highest RMS)
+            var representatives = new List<AudioObj>();
+            for (int ci = 0; ci < clusters.Count; ci++)
+            {
+                var cluster = clusters[ci];
+                if (cluster.Count == 0) continue;
+
+                int bestIdx = cluster[0];
+                double bestRms = -1;
+
+                foreach (int idx in cluster)
+                {
+                    double rms = ComputePeakRms(atomics[idx].Data, atomics[idx].Channels);
+                    if (rms > bestRms)
+                    {
+                        bestRms = rms;
+                        bestIdx = idx;
+                    }
+                }
+
+                representatives.Add(atomics[bestIdx]);
+            }
+
+            return representatives;
+        }
+
+        private static double[] ComputeSpectralFingerprint(float[] interleaved, int channels, int sampleRate, int bins = 64)
+        {
+            var mono = ConvertToMono(interleaved, channels);
+            int N = 1;
+            while (N < mono.Length && N < 8192)
+            {
+                N <<= 1;
+            }
+
+            if (N < 256)
+            {
+                N = 256;
+            }
+
+            var window = new double[N];
+            for (int i = 0; i < N; i++)
+            {
+                window[i] = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (N - 1)));
+            }
+
+            var buf = new Complex[N];
+            int offset = Math.Max(0, mono.Length / 2 - N / 2);
+            for (int i = 0; i < N; i++)
+            {
+                buf[i] = new Complex((i + offset) < mono.Length ? mono[i + offset] * window[i] : 0.0, 0.0);
+            }
+
+            Fourier.Forward(buf, FourierOptions.Matlab);
+            int half = N / 2;
+            var mags = new double[half];
+            double max = 1e-12;
+            for (int k = 0; k < half; k++)
+            {
+                mags[k] = buf[k].Magnitude;
+                if (mags[k] > max)
+                {
+                    max = mags[k];
+                }
+            }
+
+            var fp = new double[bins];
+            for (int b = 0; b < bins; b++)
+            {
+                int a = (int) Math.Round(b * (half / (double) bins));
+                int bb = (int) Math.Round((b + 1) * (half / (double) bins));
+                a = Math.Clamp(a, 0, half - 1);
+                bb = Math.Clamp(bb, a + 1, half);
+                double sum = 0;
+                for (int k = a; k < bb; k++)
+                {
+                    sum += mags[k];
+                }
+
+                fp[b] = sum / Math.Max(1, bb - a) / max;
+            }
+            return fp;
+        }
+
+        private static float DetermineAdaptiveClusterThreshold(List<double[]> fps, float defaultThreshold)
+        {
+            if (fps == null || fps.Count < 2)
+            {
+                return defaultThreshold;
+            }
+
+            var sims = new List<double>();
+            for (int i = 0; i < fps.Count; i++)
+            {
+                for (int j = i + 1; j < fps.Count; j++)
+                {
+                    sims.Add(CosineSimilarity(fps[i], fps[j]));
+                }
+            }
+
+            if (sims.Count == 0)
+            {
+                return defaultThreshold;
+            }
+
+            double mean = sims.Average();
+            double std = Math.Sqrt(sims.Average(v => (v - mean) * (v - mean)));
+            double thr = mean + 0.35 * std;
+            return (float) Math.Clamp(thr, 0.65, Math.Max(defaultThreshold, 0.95));
+        }
+
+        private static List<List<int>> GreedyClusterBySimilarity(List<double[]> fps, float threshold)
+        {
+            int n = fps.Count;
+            var assigned = new bool[n];
+            var clusters = new List<List<int>>();
+
+            for (int i = 0; i < n; i++)
+            {
+                if (assigned[i])
+                {
+                    continue;
+                }
+
+                var cluster = new List<int> { i };
+                assigned[i] = true;
+                for (int j = i + 1; j < n; j++)
+                {
+                    if (assigned[j])
+                    {
+                        continue;
+                    }
+
+                    double sim = CosineSimilarity(fps[i], fps[j]);
+                    if (sim >= threshold) { cluster.Add(j); assigned[j] = true; }
+                }
+                clusters.Add(cluster);
+            }
+            return clusters;
+        }
+
+        private static double CosineSimilarity(double[] a, double[] b)
+        {
+            int n = Math.Min(a.Length, b.Length);
+            double da = 0, db = 0, dot = 0;
+            for (int i = 0; i < n; i++) { dot += a[i] * b[i]; da += a[i] * a[i]; db += b[i] * b[i]; }
+            if (da <= 0 || db <= 0)
+            {
+                return 0.0;
+            }
+
+            return dot / (Math.Sqrt(da) * Math.Sqrt(db));
+        }
+
+        private static double ComputePeakRms(float[] interleaved, int channels)
+        {
+            if (interleaved == null || interleaved.Length == 0)
+            {
+                return 0.0;
+            }
+
+            var mono = ConvertToMono(interleaved, channels);
+            double s = 0;
+            foreach (var v in mono)
+            {
+                s += v * v;
+            }
+
+            return Math.Sqrt(s / Math.Max(1, mono.Length));
         }
 
         private static AtomizeAnalysis AnalyzeAtomicSegments(AudioObj source, LoopAtomizerSettings settings, IProgress<double>? progress)
@@ -528,13 +738,14 @@ namespace ModularAudience.Audio.Processors_V4
                 segments.Add(new AtomicSegment(start, end, null, 0.0));
             }
 
-            List<AtomicSegment> merged = MergeTinySegments(segments, envelope, sampleRate, silenceThreshold, mono.Length, settings);
-            List<AtomicSegment> split = SplitCompoundSegments(merged, envelope, sampleRate, silenceThreshold, settings);
-            return TrimSegmentBoundaries(split, envelope, sampleRate, silenceThreshold, settings);
+            List<AtomicSegment> merged = MergeTinySegments(segments, mono, envelope, sampleRate, silenceThreshold, mono.Length, settings);
+            List<AtomicSegment> split = SplitCompoundSegments(merged, mono, envelope, sampleRate, silenceThreshold, settings);
+            return TrimSegmentBoundaries(split, mono, envelope, sampleRate, silenceThreshold, settings);
         }
 
         private static List<AtomicSegment> TrimSegmentBoundaries(
             List<AtomicSegment> segments,
+            float[] mono,
             float[] envelope,
             int sampleRate,
             float silenceThreshold,
@@ -572,8 +783,14 @@ namespace ModularAudience.Audio.Processors_V4
                     continue;
                 }
 
+                // Snap start to zero crossing for cleaner attack
                 int start = Math.Max(segment.StartFrame, firstActive - attackPadding);
+                start = SnapToZeroCrossing(mono, start, Math.Max(12, sampleRate / 250));
+
+                // Snap end to zero crossing for cleaner release
                 int end = Math.Min(segment.EndFrame, lastActive + 1 + tailPadding);
+                end = SnapToZeroCrossing(mono, end, Math.Max(12, sampleRate / 250));
+
                 if (end - start < minimumLength)
                 {
                     trimmed.Add(segment);
@@ -588,6 +805,7 @@ namespace ModularAudience.Audio.Processors_V4
 
         private static List<AtomicSegment> SplitCompoundSegments(
             List<AtomicSegment> segments,
+            float[] mono,
             float[] envelope,
             int sampleRate,
             float silenceThreshold,
@@ -670,7 +888,7 @@ namespace ModularAudience.Audio.Processors_V4
                 int start = segment.StartFrame;
                 for (int i = 0; i < peaks.Count - 1; i++)
                 {
-                    int boundary = FindLowestEnvelopePoint(envelope, peaks[i], peaks[i + 1]);
+                    int boundary = FindLowestEnvelopePointWithZeroCrossing(mono, envelope, peaks[i], peaks[i + 1], sampleRate);
                     float lowerPeak = Math.Min(envelope[peaks[i]], envelope[peaks[i + 1]]);
                     bool hasDistinctValley = envelope[boundary] <= lowerPeak * 0.88f;
                     if (hasDistinctValley && boundary - start >= minimumDistance)
@@ -729,6 +947,26 @@ namespace ModularAudience.Audio.Processors_V4
             return lowest;
         }
 
+        private static int FindLowestEnvelopePointWithZeroCrossing(float[] mono, float[] envelope, int leftPeak, int rightPeak, int sampleRate)
+        {
+            int start = Math.Min(leftPeak, rightPeak);
+            int end = Math.Max(leftPeak, rightPeak);
+            int lowest = start;
+            float lowestEnergy = envelope[lowest];
+
+            for (int i = start + 1; i < end; i++)
+            {
+                if (envelope[i] < lowestEnergy)
+                {
+                    lowest = i;
+                    lowestEnergy = envelope[i];
+                }
+            }
+
+            // Snap to nearest zero crossing for cleaner cut
+            return SnapToZeroCrossing(mono, lowest, Math.Max(12, sampleRate / 250));
+        }
+
         private static int FindLeadingBoundary(
             float[] mono,
             float[] envelope,
@@ -764,7 +1002,20 @@ namespace ModularAudience.Audio.Processors_V4
                 }
             }
 
-            return SnapToZeroCrossing(mono, bestIndex, Math.Max(12, sampleRate / 250));
+            // Snap to zero crossing
+            int snapped = SnapToZeroCrossing(mono, bestIndex, Math.Max(12, sampleRate / 250));
+
+            // Fine-tune for cleaner attack: find the earliest zero crossing with low energy
+            int fineTuneRadius = Math.Min(sampleRate / 200, 30);
+            for (int i = Math.Max(0, snapped - fineTuneRadius); i <= snapped; i++)
+            {
+                if (Math.Abs(mono[i]) < Math.Abs(mono[Math.Max(0, i - 1)]) && Math.Abs(mono[i]) < Math.Abs(mono[i + 1]))
+                {
+                    return i;
+                }
+            }
+
+            return snapped;
         }
 
         private static int FindBoundaryBetween(float[] mono, float[] envelope, int leftOnset, int rightOnset, int sampleRate, float silenceThreshold, int tailBiasFrames, LoopAtomizerSettings settings)
@@ -798,7 +1049,25 @@ namespace ModularAudience.Audio.Processors_V4
                 }
             }
 
-            int shifted = Math.Min(searchEnd, bestIndex + Math.Min(tailBiasFrames, Math.Max(0, searchEnd - bestIndex)));
+            // Snap to zero crossing first
+            int snapped = SnapToZeroCrossing(mono, bestIndex, Math.Max(12, sampleRate / 250));
+
+            // Fine-tune: look for the closest zero crossing that has minimal energy (silence)
+            int fineTuneRadius = Math.Min(sampleRate / 100, 50);
+            int bestBoundary = snapped;
+            float bestEnergy = float.MaxValue;
+
+            for (int i = Math.Max(0, snapped - fineTuneRadius); i <= Math.Min(envelope.Length - 1, snapped + fineTuneRadius); i++)
+            {
+                // Prefer positions closer to zero crossing
+                if (Math.Abs(mono[i]) < Math.Abs(mono[bestBoundary]))
+                {
+                    bestBoundary = i;
+                    bestEnergy = envelope[i];
+                }
+            }
+
+            int shifted = Math.Min(searchEnd, bestBoundary + Math.Min(tailBiasFrames, Math.Max(0, searchEnd - bestBoundary)));
             return SnapToZeroCrossing(mono, shifted, Math.Max(12, sampleRate / 250));
         }
 
@@ -832,7 +1101,26 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             int candidate = releaseThresholdIndex >= 0 ? releaseThresholdIndex : searchEnd;
-            return SnapToZeroCrossing(mono, candidate, Math.Max(12, sampleRate / 250));
+
+            // Snap to zero crossing
+            int snapped = SnapToZeroCrossing(mono, candidate, Math.Max(12, sampleRate / 250));
+
+            // Fine-tune for cleaner release: look for zero crossing with minimal energy
+            int fineTuneRadius = Math.Min(sampleRate / 200, 30);
+            int bestBoundary = snapped;
+            float bestEnergy = float.MaxValue;
+
+            for (int i = Math.Max(snapped - fineTuneRadius, 0); i <= Math.Min(snapped + fineTuneRadius, mono.Length - 1); i++)
+            {
+                // Prefer positions closer to zero crossing with low energy
+                if (Math.Abs(mono[i]) < Math.Abs(mono[bestBoundary]) && envelope[i] < bestEnergy)
+                {
+                    bestBoundary = i;
+                    bestEnergy = envelope[i];
+                }
+            }
+
+            return bestBoundary;
         }
 
         private static int SnapToZeroCrossing(float[] mono, int index, int radius)
@@ -884,7 +1172,7 @@ namespace ModularAudience.Audio.Processors_V4
             return bestIndex;
         }
 
-        private static List<AtomicSegment> MergeTinySegments(List<AtomicSegment> segments, float[] envelope, int sampleRate, float silenceThreshold, int totalFrames, LoopAtomizerSettings settings)
+        private static List<AtomicSegment> MergeTinySegments(List<AtomicSegment> segments, float[] mono, float[] envelope, int sampleRate, float silenceThreshold, int totalFrames, LoopAtomizerSettings settings)
         {
             int minFrames = Math.Max((settings.MinSliceMs * sampleRate) / 1000, sampleRate / 60);
             List<AtomicSegment> merged = [];
@@ -893,6 +1181,11 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 int start = Math.Clamp(segment.StartFrame, 0, totalFrames);
                 int end = Math.Clamp(segment.EndFrame, start + 1, totalFrames);
+
+                // Snap boundaries to zero crossing for cleaner segments
+                start = SnapToZeroCrossing(mono, start, Math.Max(12, sampleRate / 250));
+                end = SnapToZeroCrossing(mono, end, Math.Max(12, sampleRate / 250));
+
                 AtomicSegment normalized = new(start, end, null, 0.0);
 
                 if (!ContainsMeaningfulEnergy(envelope, normalized.StartFrame, normalized.EndFrame, silenceThreshold))
@@ -1168,7 +1461,9 @@ namespace ModularAudience.Audio.Processors_V4
         public AtomizeSensitivity Sensitivity { get; init; } = AtomizeSensitivity.Balanced;
         public int MinSliceMs { get; init; } = 80;
         public int TailPaddingMs { get; init; } = 30;
-        public bool AllowSingleAtomFallback { get; init; }
+        public bool AllowSingleAtomFallback { get; init; } = true;
+        public bool EnableDeduplication { get; init; } = true;
+        public float ClusterSimilarityThreshold { get; init; } = 0.85f;
     }
 
     public sealed record LoopAtomizerResult(IReadOnlyList<AudioObj> Atomics, bool IsLikelyDrumLoop);
