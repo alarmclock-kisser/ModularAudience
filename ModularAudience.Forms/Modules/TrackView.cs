@@ -807,7 +807,6 @@ namespace ModularAudience.Forms.Modules
         {
             if (e.Type == ScrollEventType.EndScroll)
             {
-                this.ResetTransientPlaybackRate();
                 return;
             }
             this.SetPlaybackRateSynced(e.NewValue);
@@ -904,13 +903,13 @@ namespace ModularAudience.Forms.Modules
                 this.hScrollBar_rate.Value = clampedValue;
             }
 
-            float factor = this.rateGesture.Update(clampedValue, this.OriginalAudio.PlayerPlaying, Environment.TickCount64);
-            return this.ApplyTransientRateFactor(factor, fireAndForget);
+            float factor = MapRateScrollbarToFactor(clampedValue);
+            return this.ApplyPlaybackRateFactor(factor, fireAndForget);
         }
 
         private static float MapRateScrollbarToFactor(int scrollbarValue)
         {
-            return PlaybackRateGesture.MapFactor(scrollbarValue);
+            return PlaybackRateMapping.MapFactor(scrollbarValue);
         }
 
         private int GetRateScrollbarValueFromMouseX(int mouseX)
@@ -1233,10 +1232,6 @@ namespace ModularAudience.Forms.Modules
         internal async Task TogglePlayAsync()
         {
             var group = GetPlaybackGroup(this);
-            foreach (var tv in group)
-            {
-                tv.ResetTransientPlaybackRate();
-            }
             if (group.Count == 0)
             {
                 return;
@@ -1322,10 +1317,6 @@ namespace ModularAudience.Forms.Modules
         private async Task TogglePauseAsync()
         {
             var group = GetPlaybackGroup(this);
-            foreach (var tv in group)
-            {
-                tv.ResetTransientPlaybackRate();
-            }
 
             // Fall 1: Diese Spur spielt -> nur spielende pausieren
             if (this.OriginalAudio.Playing)
@@ -1621,7 +1612,6 @@ namespace ModularAudience.Forms.Modules
 
         private async Task StopPlaybackAsync()
         {
-            this.InvokeIfRequired(this.ResetTransientPlaybackRate);
             var cts = Interlocked.Exchange(ref this.playbackCts, null);
             if (cts != null)
             {

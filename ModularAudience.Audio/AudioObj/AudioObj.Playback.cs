@@ -351,7 +351,7 @@ namespace ModularAudience.Audio
         public async Task AdjustSampleRate(float factor)
         {
             this.SampleRateFactor = factor;
-            if (this.PlayerPlaying)
+            if (this.PlayerPlaying || this.Paused)
             {
                 await this.playback.AdjustSampleRate((float) this.SampleRateFactor).ConfigureAwait(false);
             }

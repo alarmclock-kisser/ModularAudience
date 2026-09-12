@@ -60,7 +60,6 @@
             this.checkBox_mute = new CheckBox();
             this.checkBox_solo = new CheckBox();
             this.hScrollBar_rate = new LiveRateScrollBar();
-            this.rateMotionTimer = new System.Windows.Forms.Timer(this.components);
             this.contextMenu_rate = new ContextMenuStrip(this.components);
             this.menuItem_rateJumpHere = new ToolStripMenuItem();
             this.menuItem_rateResetCenter = new ToolStripMenuItem();
@@ -356,11 +355,6 @@
             this.hScrollBar_rate.MouseDown += this.hScrollBar_rate_MouseDown;
             this.hScrollBar_rate.Scroll += this.hScrollBar_rate_Scroll;
             this.hScrollBar_rate.ValueChanged += this.hScrollBar_rate_ValueChanged;
-            //
-            // rateMotionTimer
-            //
-            this.rateMotionTimer.Interval = 16;
-            this.rateMotionTimer.Tick += this.rateMotionTimer_Tick;
             // 
             // contextMenu_rate
             // 
@@ -466,7 +460,6 @@
         private CheckBox checkBox_mute;
         private CheckBox checkBox_solo;
         private HScrollBar hScrollBar_rate;
-        private System.Windows.Forms.Timer rateMotionTimer;
         private Label label_info_rate;
         private ContextMenuStrip contextMenu_rate;
         private ToolStripMenuItem menuItem_rateJumpHere;
