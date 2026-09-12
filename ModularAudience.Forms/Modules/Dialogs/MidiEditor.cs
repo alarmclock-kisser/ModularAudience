@@ -727,7 +727,23 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            this.MidiEditSelection.MidiFile = dialog.GeneratedMidiFileData;
+            this.ApplyGeneratedMidiFile(dialog.GeneratedMidiFileData);
+        }
+
+        private void button_llmGenerate_Click(object? sender, EventArgs e)
+        {
+            using MidiLlmGenerateDialog dialog = new();
+            if (dialog.ShowDialog(this) != DialogResult.OK || dialog.GeneratedMidiFileData == null)
+            {
+                return;
+            }
+
+            this.ApplyGeneratedMidiFile(dialog.GeneratedMidiFileData);
+        }
+
+        private void ApplyGeneratedMidiFile(MidiFileData generatedMidiFile)
+        {
+            this.MidiEditSelection.MidiFile = generatedMidiFile;
             this.editorLengthTicks = Math.Max(this.editorLengthTicks, this.GetRequiredEditorLength());
             long visibleLength = Math.Max(this.GridTicks, this.viewEndTick - this.viewStartTick);
             this.SetView(this.viewStartTick, this.viewStartTick + visibleLength);

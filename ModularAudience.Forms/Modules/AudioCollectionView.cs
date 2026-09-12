@@ -1181,15 +1181,38 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            if (this.listBox_audios.Items[this.waveformPreviewIndex] is AudioObj audio)
+            if (this.listBox_audios.Items[this.waveformPreviewIndex] is AudioObj audio && this.ShowPreview)
             {
-                // Vorschau nur anzeigen, wenn Audio < 60s
                 if (audio.Duration.TotalSeconds > 60.0)
                 {
                     return;
                 }
-                if (audio.WaveformPreview != null && this.ShowPreview)
+
+                int selectedCount = this.listBox_audios.SelectedIndices.Count;
+                bool hoveredIsSelected = this.listBox_audios.GetSelected(this.waveformPreviewIndex);
+
+                // Multiple selection AND hovering a selected item → show concatenated preview
+                if (selectedCount > 1 && hoveredIsSelected)
                 {
+                    List<Bitmap> previews = new();
+                    foreach (int selIdx in this.listBox_audios.SelectedIndices.Cast<int>().OrderBy(i => i))
+                    {
+                        if (this.listBox_audios.Items[selIdx] is AudioObj selAudio &&
+                            selAudio.Duration.TotalSeconds <= 60.0)
+                        {
+                            Bitmap? bmp = selAudio.WaveformPreview;
+                            if (bmp != null)
+                            {
+                                previews.Add(bmp);
+                            }
+                        }
+                    }
+
+                    if (previews.Count == 0)
+                    {
+                        return;
+                    }
+
                     if (this.waveformPreviewForm == null || this.waveformPreviewForm.IsDisposed)
                     {
                         this.waveformPreviewForm = new WaveformPreview();
@@ -1197,7 +1220,31 @@ namespace ModularAudience.Forms
 
                     Point screenPos = this.listBox_audios.PointToScreen(this.lastMousePos);
                     screenPos.Offset(20, 10); // etwas rechts/unten von der Maus
-                    this.waveformPreviewForm.ShowWaveform(audio.WaveformPreview, screenPos);
+
+                    if (previews.Count == 1)
+                    {
+                        this.waveformPreviewForm.ShowWaveform(previews[0], screenPos);
+                    }
+                    else
+                    {
+                        this.waveformPreviewForm.ShowConcatenatedWaveforms(previews, screenPos);
+                    }
+                }
+                // No selection or single selection → show the hovered item's own preview
+                else
+                {
+                    Bitmap? bmp = audio.WaveformPreview;
+                    if (bmp != null)
+                    {
+                        if (this.waveformPreviewForm == null || this.waveformPreviewForm.IsDisposed)
+                        {
+                            this.waveformPreviewForm = new WaveformPreview();
+                        }
+
+                        Point screenPos = this.listBox_audios.PointToScreen(this.lastMousePos);
+                        screenPos.Offset(20, 10); // etwas rechts/unten von der Maus
+                        this.waveformPreviewForm.ShowWaveform(bmp, screenPos);
+                    }
                 }
             }
         }
@@ -1317,6 +1364,11 @@ namespace ModularAudience.Forms
 
             NeuralBeatEngineDialog dlg = new(selectedAudios);
             dlg.Show(this);
+        }
+
+        private void concatSelectedWaveformsToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            // Render preview of all selected waveforms vertically as one bitmap that can be copied, saved, or screenshotted
         }
     }
 }

@@ -35,6 +35,7 @@
 
   <ItemGroup>
     <PackageReference Include="alarmclockkisser.DragNDrop.Forms" Version="1.0.0" />
+    <PackageReference Include="NAudio.WinMM" Version="3.1.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,6 +43,7 @@
     <ProjectReference Include="..\ModularAudience.Cuda\ModularAudience.Cuda.csproj" />
     <ProjectReference Include="..\ModularAudience.Generators\ModularAudience.Generators.csproj" />
     <ProjectReference Include="..\ModularAudience.Llama\ModularAudience.Llama.csproj" />
+    <ProjectReference Include="..\ModularAudience.MidiController\ModularAudience.MidiController.csproj" />
     <ProjectReference Include="..\ModularAudience.Onnx\ModularAudience.Onnx.csproj" />
   </ItemGroup>
 

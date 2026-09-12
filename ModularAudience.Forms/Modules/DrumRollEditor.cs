@@ -1,4 +1,5 @@
-﻿using ModularAudience.Audio;
+using ModularAudience.Audio;
+using ModularAudience.Audio.Processing;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using System.ComponentModel;
@@ -60,7 +61,7 @@ namespace ModularAudience.Forms.Modules
         private ToolStripMenuItem? lockRowToolStripMenuItem;
         private int contextMenuRowIndex = -1;
 
-        private WaveOutEvent? waveOut;
+        private WaveOut? waveOut;
         private MixingSampleProvider? mixer;
         private readonly WaveFormat outputFormat;
 
@@ -1044,9 +1045,9 @@ namespace ModularAudience.Forms.Modules
                 }
                 if (this.waveOut == null)
                 {
-                    this.waveOut = new WaveOutEvent()
+                    this.waveOut = new WaveOut()
                     {
-                        DesiredLatency = OutputDesiredLatencyMs,
+                        BufferMilliseconds = OutputDesiredLatencyMs,
                         NumberOfBuffers = 4
                     };
                     this.waveOut.Init(new SoftLimiterSampleProvider(this.mixer));

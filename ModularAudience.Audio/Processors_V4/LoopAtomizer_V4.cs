@@ -2,7 +2,7 @@ namespace ModularAudience.Audio.Processors_V4
 {
     public static class LoopAtomizer_V4
     {
-        public static async Task<LoopAtomizerResult> AtomizeAsync(AudioObj source, LoopAtomizerSettings? settings = null)
+        public static async Task<LoopAtomizerResult> AtomizeAsync(AudioObj source, LoopAtomizerSettings? settings = null, IProgress<double>? progress = null)
         {
             if (source == null)
             {
@@ -10,12 +10,14 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             settings ??= LoopAtomizerSettings.Default;
-            AtomizeAnalysis analysis = await Task.Run(() => AnalyzeAtomicSegments(source, settings)).ConfigureAwait(false);
-            List<AudioObj> atomics = await CreateAtomicSamplesAsync(source, analysis).ConfigureAwait(false);
+            progress?.Report(0.0);
+            AtomizeAnalysis analysis = await Task.Run(() => AnalyzeAtomicSegments(source, settings, progress)).ConfigureAwait(false);
+            List<AudioObj> atomics = await CreateAtomicSamplesAsync(source, analysis, progress).ConfigureAwait(false);
+            progress?.Report(1.0);
             return new LoopAtomizerResult(atomics, analysis.IsLikelyDrumLoop);
         }
 
-        private static async Task<List<AudioObj>> CreateAtomicSamplesAsync(AudioObj source, AtomizeAnalysis analysis)
+        private static async Task<List<AudioObj>> CreateAtomicSamplesAsync(AudioObj source, AtomizeAnalysis analysis, IProgress<double>? progress)
         {
             if (analysis.Segments.Count == 0)
             {
@@ -41,6 +43,7 @@ namespace ModularAudience.Audio.Processors_V4
                     working.SelectionStart = startSample;
                     working.SelectionEnd = endSample;
                     AudioObj? atomic = await working.CloneFromSelectionAsync().ConfigureAwait(false);
+                    progress?.Report(0.5 + 0.5 * ((double) i / analysis.Segments.Count));
                     if (atomic == null)
                     {
                         continue;
@@ -64,7 +67,7 @@ namespace ModularAudience.Audio.Processors_V4
             return atomics;
         }
 
-        private static AtomizeAnalysis AnalyzeAtomicSegments(AudioObj source, LoopAtomizerSettings settings)
+        private static AtomizeAnalysis AnalyzeAtomicSegments(AudioObj source, LoopAtomizerSettings settings, IProgress<double>? progress)
         {
             if (source.Data == null || source.Data.Length == 0 || source.SampleRate <= 0 || source.Channels <= 0)
             {
@@ -77,8 +80,11 @@ namespace ModularAudience.Audio.Processors_V4
                 return new AtomizeAnalysis([], false);
             }
 
+            progress?.Report(0.05);
             float[] envelope = BuildEnvelope(mono, source.SampleRate, settings);
+            progress?.Report(0.15);
             float[] fastEnvelope = BuildFastEnvelope(mono, source.SampleRate, settings);
+            progress?.Report(0.25);
             float floor = EstimatePercentile(envelope, 0.18);
             float loud = EstimatePercentile(envelope, 0.92);
             float silenceThreshold = Math.Max(0.00035f, floor + ((loud - floor) * 0.07f));
@@ -522,10 +528,214 @@ namespace ModularAudience.Audio.Processors_V4
                 segments.Add(new AtomicSegment(start, end, null, 0.0));
             }
 
-            return MergeTinySegments(segments, envelope, sampleRate, silenceThreshold, mono.Length, settings);
+            List<AtomicSegment> merged = MergeTinySegments(segments, envelope, sampleRate, silenceThreshold, mono.Length, settings);
+            List<AtomicSegment> split = SplitCompoundSegments(merged, envelope, sampleRate, silenceThreshold, settings);
+            return TrimSegmentBoundaries(split, envelope, sampleRate, silenceThreshold, settings);
         }
 
-        private static int FindLeadingBoundary(float[] mono, float[] envelope, int firstOnset, int sampleRate, float silenceThreshold, LoopAtomizerSettings settings)
+        private static List<AtomicSegment> TrimSegmentBoundaries(
+            List<AtomicSegment> segments,
+            float[] envelope,
+            int sampleRate,
+            float silenceThreshold,
+            LoopAtomizerSettings settings)
+        {
+            int minimumLength = Math.Max((settings.MinSliceMs * sampleRate) / 1000, sampleRate / 50);
+            int attackPadding = Math.Max(8, sampleRate / 500);
+            int tailPadding = Math.Max(0, (settings.TailPaddingMs * sampleRate) / 1000);
+            List<AtomicSegment> trimmed = [];
+
+            foreach (AtomicSegment segment in segments)
+            {
+                float peak = 0f;
+                for (int i = segment.StartFrame; i < segment.EndFrame; i++)
+                {
+                    peak = Math.Max(peak, envelope[i]);
+                }
+
+                float threshold = Math.Max(silenceThreshold * 1.15f, peak * 0.035f);
+                int firstActive = segment.StartFrame;
+                while (firstActive < segment.EndFrame && envelope[firstActive] < threshold)
+                {
+                    firstActive++;
+                }
+
+                int lastActive = segment.EndFrame - 1;
+                while (lastActive >= firstActive && envelope[lastActive] < threshold)
+                {
+                    lastActive--;
+                }
+
+                if (lastActive < firstActive)
+                {
+                    trimmed.Add(segment);
+                    continue;
+                }
+
+                int start = Math.Max(segment.StartFrame, firstActive - attackPadding);
+                int end = Math.Min(segment.EndFrame, lastActive + 1 + tailPadding);
+                if (end - start < minimumLength)
+                {
+                    trimmed.Add(segment);
+                    continue;
+                }
+
+                trimmed.Add(new AtomicSegment(start, end, segment.Label, segment.Confidence));
+            }
+
+            return trimmed;
+        }
+
+        private static List<AtomicSegment> SplitCompoundSegments(
+            List<AtomicSegment> segments,
+            float[] envelope,
+            int sampleRate,
+            float silenceThreshold,
+            LoopAtomizerSettings settings)
+        {
+            // Compound hits can be closer than the normal slice length, especially at high BPM.
+            int minimumDistance = Math.Max(sampleRate / 40, (settings.MinSliceMs * sampleRate) / 2000);
+            List<AtomicSegment> result = [];
+
+            foreach (AtomicSegment segment in segments)
+            {
+                int length = segment.EndFrame - segment.StartFrame;
+                if (length < minimumDistance * 2)
+                {
+                    result.Add(segment);
+                    continue;
+                }
+
+                float segmentPeak = 0f;
+                for (int i = segment.StartFrame; i < segment.EndFrame; i++)
+                {
+                    segmentPeak = Math.Max(segmentPeak, envelope[i]);
+                }
+
+                // A later hit may be quieter than the first one; use the noise floor and
+                // a modest relative threshold instead of requiring equally loud attacks.
+                float peakThreshold = Math.Max(silenceThreshold * 1.20f, segmentPeak * 0.12f);
+                int peakRadius = Math.Clamp(sampleRate / 500, 12, 120);
+                List<int> peaks = [];
+
+                int edgeWindow = Math.Min(length / 3, Math.Max(peakRadius * 2, minimumDistance));
+                int startPeak = FindStrongestPeak(envelope, segment.StartFrame, segment.StartFrame + edgeWindow, peakThreshold);
+                if (startPeak >= 0)
+                {
+                    peaks.Add(startPeak);
+                }
+
+                for (int i = segment.StartFrame + peakRadius; i < segment.EndFrame - peakRadius; i++)
+                {
+                    float current = envelope[i];
+                    if (current < peakThreshold || peaks.Any(peak => i - peak < minimumDistance))
+                    {
+                        continue;
+                    }
+
+                    bool isPeak = true;
+                    float leftMinimum = current;
+                    float rightMinimum = current;
+                    for (int j = 1; j <= peakRadius; j++)
+                    {
+                        leftMinimum = Math.Min(leftMinimum, envelope[i - j]);
+                        rightMinimum = Math.Min(rightMinimum, envelope[i + j]);
+                        if (envelope[i - j] > current || envelope[i + j] > current)
+                        {
+                            isPeak = false;
+                            break;
+                        }
+                    }
+
+                    float prominenceThreshold = Math.Max(segmentPeak * 0.04f, silenceThreshold * 0.50f);
+                    if (isPeak && current - Math.Max(leftMinimum, rightMinimum) >= prominenceThreshold)
+                    {
+                        peaks.Add(i);
+                    }
+                }
+
+                int endPeak = FindStrongestPeak(envelope, segment.EndFrame - edgeWindow, segment.EndFrame, peakThreshold);
+                if (endPeak >= 0 && peaks.All(peak => endPeak - peak >= minimumDistance))
+                {
+                    peaks.Add(endPeak);
+                }
+
+                peaks = peaks.Distinct().OrderBy(peak => peak).ToList();
+                if (peaks.Count < 2)
+                {
+                    result.Add(segment);
+                    continue;
+                }
+
+                int start = segment.StartFrame;
+                for (int i = 0; i < peaks.Count - 1; i++)
+                {
+                    int boundary = FindLowestEnvelopePoint(envelope, peaks[i], peaks[i + 1]);
+                    float lowerPeak = Math.Min(envelope[peaks[i]], envelope[peaks[i + 1]]);
+                    bool hasDistinctValley = envelope[boundary] <= lowerPeak * 0.88f;
+                    if (hasDistinctValley && boundary - start >= minimumDistance)
+                    {
+                        result.Add(new AtomicSegment(start, boundary, null, 0.0));
+                        start = boundary;
+                    }
+                }
+
+                if (segment.EndFrame - start >= minimumDistance)
+                {
+                    result.Add(new AtomicSegment(start, segment.EndFrame, null, 0.0));
+                }
+                else if (result.Count > 0)
+                {
+                    AtomicSegment previous = result[^1];
+                    result[^1] = previous with { EndFrame = segment.EndFrame };
+                }
+            }
+
+            return result;
+        }
+
+        private static int FindStrongestPeak(float[] envelope, int start, int end, float threshold)
+        {
+            start = Math.Clamp(start, 0, envelope.Length - 1);
+            end = Math.Clamp(end, start + 1, envelope.Length);
+            int strongest = -1;
+            float strongestValue = threshold;
+
+            for (int i = start; i < end; i++)
+            {
+                if (envelope[i] > strongestValue)
+                {
+                    strongest = i;
+                    strongestValue = envelope[i];
+                }
+            }
+
+            return strongest;
+        }
+
+        private static int FindLowestEnvelopePoint(float[] envelope, int leftPeak, int rightPeak)
+        {
+            int start = Math.Min(leftPeak, rightPeak);
+            int end = Math.Max(leftPeak, rightPeak);
+            int lowest = start;
+            for (int i = start + 1; i < end; i++)
+            {
+                if (envelope[i] < envelope[lowest])
+                {
+                    lowest = i;
+                }
+            }
+
+            return lowest;
+        }
+
+        private static int FindLeadingBoundary(
+            float[] mono,
+            float[] envelope,
+            int firstOnset,
+            int sampleRate,
+            float silenceThreshold,
+            LoopAtomizerSettings settings)
         {
             int lookBehind = settings.Sensitivity switch
             {

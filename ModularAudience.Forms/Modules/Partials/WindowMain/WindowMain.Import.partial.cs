@@ -6,6 +6,7 @@ using ModularAudience.Forms.Modules.Dialogs;
 using ModularAudience.Audio.Midi;
 using System.ComponentModel;
 using ModularAudience.Audio.Omr;
+using ModularAudience.Audio.Processing;
 
 namespace ModularAudience.Forms
 {
@@ -174,8 +175,8 @@ namespace ModularAudience.Forms
 
                 using OpenFileDialog openFileDialog = new()
                 {
-                    InitialDirectory = initialDir,
-                    Filter = "Audio Files|*.wav;*.mp3;*.flac|MIDI Files|*.mid;*.midi|PDF Files|*.pdf|All Supported Files|*.wav;*.mp3;*.flac;*.mid;*.midi;*.pdf",
+                    InitialDirectory = this.lastImportFolder,
+                    Filter = "Audio Files|*.wav;*.mp3;*.flac;*.mid|MIDI Files|*.mid;*.midi|PDF Files|*.pdf|All Supported Files|*.wav;*.mp3;*.flac;*.mid;*.midi;*.pdf",
                     Multiselect = true,
                     Title = "Import Audio Files / Loops",
                     RestoreDirectory = true
@@ -256,6 +257,16 @@ namespace ModularAudience.Forms
             {
                 await this.ImportAndPlaceAsync(audioFiles, fromResources);
             }
+
+            // Remember the folder where files were imported from (for next time)
+            try
+            {
+                if (filesToImport.Count() > 0)
+                {
+                    this.lastImportFolder = Path.GetDirectoryName(filesToImport.First()) ?? this.lastImportFolder;
+                }
+            }
+            catch { }
         }
 
         private async void button_random_Click(object sender, EventArgs e)

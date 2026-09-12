@@ -1,6 +1,6 @@
 using System;
 
-namespace ModularAudience.Forms.Modules
+namespace ModularAudience.Audio.Processing
 {
     /// <summary>
     /// Calculates a beat-aligned crossfade start time so that the incoming track

@@ -55,7 +55,7 @@ namespace ModularAudience.Audio
                     try
                     {
                         float[] tmp = new float[numSamples];
-                        int read = reader.Read(tmp, 0, (int) numSamples);
+                        int read = reader.ToSampleProvider().Read(tmp.AsSpan());
                         if (read != numSamples)
                         {
                             float[] resized = new float[read];
@@ -205,7 +205,8 @@ namespace ModularAudience.Audio
             int blockSize = samplesPerChannelPerBlock * channels; // total interleaved samples
             float[] buffer = new float[blockSize];
             int read;
-            while ((read = reader.Read(buffer, 0, blockSize)) > 0)
+            var sampleProvider = reader.ToSampleProvider();
+            while ((read = sampleProvider.Read(buffer.AsSpan())) > 0)
             {
                 for (int i = 0; i < read; i++)
                 {

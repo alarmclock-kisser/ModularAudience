@@ -1,13 +1,13 @@
 using System;
 using System.Runtime.CompilerServices;
 
-namespace ModularAudience.Forms.Modules
+namespace ModularAudience.Audio.Processing
 {
     /// <summary>
     /// Lightweight loudness normalisation helpers for playlist playback.
     /// All operations work in-place on interleaved IEEE-float sample arrays.
     /// </summary>
-    internal static class PlaylistNormalizer
+    public static class PlaylistNormalizer
     {
         /// <summary>Target RMS amplitude (≈ −14 LUFS, a sensible streaming reference level).</summary>
         private const float TargetRms = 0.20f;

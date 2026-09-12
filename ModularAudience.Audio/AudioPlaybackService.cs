@@ -59,7 +59,26 @@ namespace ModularAudience.Audio
             ISampleProvider? p;
             lock (this.gate) { p = this.current; }
             if (p == null) { Array.Clear(buffer, offset, count); return count; }
-            return p.Read(buffer, offset, count);
+            return p.Read(buffer.AsSpan(offset, count));
+        }
+
+        public int Read(Span<float> buffer)
+        {
+            try
+            {
+                NativeMethods.SetThreadPriority(NativeMethods.GetCurrentThread(), NativeMethods.THREAD_PRIORITY_TIME_CRITICAL);
+            }
+            catch { }
+
+            ISampleProvider? p;
+            lock (this.gate) { p = this.current; }
+            if (p == null)
+            {
+                buffer.Clear();
+                return buffer.Length;
+            }
+
+            return p.Read(buffer);
         }
     }
 
@@ -78,7 +97,12 @@ namespace ModularAudience.Audio
 
         public int Read(float[] buffer, int offset, int count)
         {
-            return this.source.Read(buffer, offset, count);
+            return this.source.Read(buffer.AsSpan(offset, count));
+        }
+
+        public int Read(Span<float> buffer)
+        {
+            return this.source.Read(buffer);
         }
     }
 
@@ -108,13 +132,19 @@ namespace ModularAudience.Audio
 
         public virtual int Read(float[] buffer, int offset, int count)
         {
-            int samplesAvailable = (int) Math.Min(count, this.data.LongLength - this.position);
+            return this.Read(buffer.AsSpan(offset, count));
+        }
+
+        public virtual int Read(Span<float> buffer)
+        {
+            int samplesAvailable = (int)Math.Min(buffer.Length, this.data.LongLength - this.position);
             if (samplesAvailable <= 0)
             {
-                Array.Clear(buffer, offset, count);
+                buffer.Clear();
                 return 0;
             }
-            Array.Copy(this.data, (int) this.position, buffer, offset, samplesAvailable);
+
+            this.data.AsSpan((int)this.position, samplesAvailable).CopyTo(buffer);
             this.position += samplesAvailable;
             return samplesAvailable;
         }
@@ -125,6 +155,7 @@ namespace ModularAudience.Audio
     {
         private readonly long loopStart; // inclusive
         private readonly long loopEnd;   // exclusive
+        private readonly long seamFadeSamples;
 
         public LoopingArraySampleProvider(float[] data, int sampleRate, int channels, long loopStartSampleIndex, long loopEndSampleIndex, long startSampleIndex)
             : base(data, sampleRate, channels, 0)
@@ -134,6 +165,7 @@ namespace ModularAudience.Audio
             this.loopEnd = Math.Clamp(loopEndSampleIndex, this.loopStart + 1, len);
             long start = Math.Clamp(startSampleIndex, this.loopStart, this.loopEnd - 1);
             this.position = start;
+            this.seamFadeSamples = Math.Min(Math.Max(1, (this.loopEnd - this.loopStart) / 2), 16);
         }
 
         public override int Read(float[] buffer, int offset, int count)
@@ -143,14 +175,24 @@ namespace ModularAudience.Audio
                 return 0;
             }
 
+            return this.Read(buffer.AsSpan(offset, count));
+        }
+
+        public override int Read(Span<float> buffer)
+        {
+            if (buffer.Length == 0)
+            {
+                return 0;
+            }
+
             int written = 0;
             long len = this.data.LongLength;
             if (this.loopStart < 0 || this.loopEnd <= this.loopStart || this.loopStart >= len)
             {
-                return base.Read(buffer, offset, count);
+                return base.Read(buffer);
             }
 
-            while (written < count)
+            while (written < buffer.Length)
             {
                 // Wenn Position außerhalb des Loop-Bereichs: auf Loop-Start springen
                 if (this.position < this.loopStart || this.position >= this.loopEnd)
@@ -163,8 +205,23 @@ namespace ModularAudience.Audio
                     this.position = this.loopStart;
                     continue;
                 }
-                int toCopy = (int) Math.Min(count - written, remainingInLoop);
-                Array.Copy(this.data, (int) this.position, buffer, offset + written, toCopy);
+                int toCopy = (int)Math.Min(buffer.Length - written, remainingInLoop);
+                long fadeStart = this.loopEnd - this.seamFadeSamples;
+                for (int i = 0; i < toCopy; i++)
+                {
+                    long sourcePosition = this.position + i;
+                    float sample = this.data[(int)sourcePosition];
+                    if (sourcePosition >= fadeStart)
+                    {
+                        long fadeOffset = sourcePosition - fadeStart;
+                        long headPosition = this.loopStart + fadeOffset;
+                        float headSample = this.data[(int)headPosition];
+                        float fade = (float)(fadeOffset + 1) / this.seamFadeSamples;
+                        sample = sample * (1f - fade) + headSample * fade;
+                    }
+
+                    buffer[written + i] = sample;
+                }
                 this.position += toCopy;
                 written += toCopy;
             }
@@ -174,15 +231,15 @@ namespace ModularAudience.Audio
 
     public sealed class AudioPlaybackService : IDisposable
     {
-        // Gate to serialize operations that touch the underlying WaveOutEvent
+        // Gate to serialize operations that touch the underlying WaveOut
         private readonly object playerGate = new();
 
-        private readonly WaveOutEvent player; // von außen injiziert oder intern erzeugt
+        private readonly WaveOut player; // von außen injiziert oder intern erzeugt
         private readonly bool ownsPlayer;
         private AudioFileReader? reader; // float32 Quelle (Datei) optional
         private SwitchingSampleProvider? switching; // konstanter Output (Geräteformat)
         private VolumeSampleProvider? volumeControl; // per-instance volume control
-        private SampleToWaveProvider? waveProvider; // für WaveOutEvent.Init
+        private SampleToWaveProvider? waveProvider; // für WaveOut.Init
         private ISampleProvider? pipeline; // aktuelle (resampled) Pipeline
         private readonly Lock graphGate = new();
         private float[]? rawData; // store original data for seeking while paused
@@ -263,12 +320,12 @@ namespace ModularAudience.Audio
 
         public AudioPlaybackService()
         {
-            this.player = new WaveOutEvent();
+            this.player = new WaveOut();
             this.ownsPlayer = true;
             this.player.PlaybackStopped += (s, e) => this.PlaybackStopped?.Invoke(this, e);
         }
 
-        public AudioPlaybackService(WaveOutEvent player)
+        public AudioPlaybackService(WaveOut player)
         {
             this.player = player ?? throw new ArgumentNullException(nameof(player));
             this.ownsPlayer = false;
@@ -392,8 +449,8 @@ namespace ModularAudience.Audio
             // Increase internal buffering to reduce underruns on busy systems
             try
             {
-                this.player.DesiredLatency = Math.Max(desiredLatency, 120);
-                this.player.NumberOfBuffers = Math.Max(this.player.NumberOfBuffers, 4);
+                this.player.BufferMilliseconds = Math.Clamp(desiredLatency, 20, 40);
+                this.player.NumberOfBuffers = 2;
             }
             catch { }
 
@@ -430,8 +487,8 @@ namespace ModularAudience.Audio
 
             try
             {
-                this.player.DesiredLatency = Math.Max(desiredLatency, 120);
-                this.player.NumberOfBuffers = Math.Max(this.player.NumberOfBuffers, 4);
+                this.player.BufferMilliseconds = Math.Clamp(desiredLatency, 20, 40);
+                this.player.NumberOfBuffers = 2;
             }
             catch { }
 
@@ -449,7 +506,7 @@ namespace ModularAudience.Audio
                 lock (this.playerGate)
                 {
                     this.player.Init(this.waveProvider);
-                    // Start playback (Play is non-blocking for WaveOutEvent)
+                    // Start playback (Play is non-blocking for WaveOut)
                     this.player.Play();
                 }
             }

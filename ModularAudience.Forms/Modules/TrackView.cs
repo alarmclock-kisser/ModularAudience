@@ -1984,7 +1984,9 @@ namespace ModularAudience.Forms.Modules
 
             bool hasSelection = this.HasValidSelection();
             this.menuItem_copySelection.Enabled = hasSelection;
-            this.menuItem_splitEqualParts.Enabled = (this.OriginalAudio.Data?.Length ?? 0) > 0;
+            bool hasData = (this.OriginalAudio.Data?.Length ?? 0) > 0;
+            this.menuItem_splitEqualParts.Enabled = hasData;
+            this.menuItem_atomize.Enabled = hasData;
             this.menuItem_removeSelection.Enabled = hasSelection && !this.OriginalAudio.Playing;
         }
 

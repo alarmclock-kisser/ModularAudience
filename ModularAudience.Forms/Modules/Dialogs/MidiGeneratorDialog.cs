@@ -210,6 +210,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
             base.OnFormClosing(e);
         }
 
+        private void button_llm_Click(object sender, EventArgs e)
+        {
+            var dlg = new MidiLlmGenerateDialog();
+            if (dlg.ShowDialog(this) == DialogResult.OK)
+            {
+                this.GeneratedMidiFileData = dlg.GeneratedMidiFileData;
+                this.DialogResult = DialogResult.OK;
+                this.Close();
+            }
+        }
+
         private sealed record PresetOption(MidiGenerationPreset Preset, string MethodName)
         {
             public override string ToString() => this.Preset.ToString();

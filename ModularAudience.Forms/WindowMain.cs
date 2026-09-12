@@ -7,6 +7,8 @@ using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio.Processors_V3;
 using ModularAudience.Forms.Helpers;
 using ModularAudience.Forms.Modules.Dialogs;
+using ModularAudience.MidiController;
+using ModularAudience.MidiController.Models;
 
 namespace ModularAudience.Forms
 {
@@ -40,6 +42,9 @@ namespace ModularAudience.Forms
         private bool _pausingActive;
         private bool _shiftPressed;
         private GlobalKeyMessageFilter? _keyFilter;
+        private MidiControllerService? _midiService;
+        private MidiCommandMapper? _midiMapper;
+        private PlaybackCommandHandler? _midiHandler;
         internal static TrackView? LastSelectedTrackView
         {
             get => _lastSelectedTrackView;
@@ -61,14 +66,14 @@ namespace ModularAudience.Forms
 
         // Map AudioObj.Id -> Collection number (01-based) to restore distribution
         internal static readonly Dictionary<Guid, int> AudioCollectionTags = [];
-        internal static readonly HashSet<string> AllowedImportExtensions = new(StringComparer.OrdinalIgnoreCase) { ".wav", ".mp3", ".flac" };
+        internal static readonly HashSet<string> AllowedImportExtensions = new(StringComparer.OrdinalIgnoreCase) { ".wav", ".mp3", ".flac", ".mid" };
         private static readonly Random ResourceRandom = new();
         private static readonly Size CollectionCascadeOffset = new(26, 28);
         private const int CollectionBaseMargin = 2;
         private static readonly Padding TrackViewScreenMargin = new(20, 20, 20, 20);
         private static readonly Size TrackViewSpacing = new(15, 12);
         private bool suppressExportFormatEvent;
-        private string lastImportFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
+        private string lastImportFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
         internal bool StructuredImports => this.checkBox_structure.Checked;
 
         internal static bool SuppressCollectionViewPositioning = false;
@@ -592,10 +597,27 @@ namespace ModularAudience.Forms
             }
         }
 
+        private void button_controller_Click(object sender, EventArgs e)
+        {
+            this._midiService ??= new MidiControllerService();
+            this._midiMapper ??= new MidiCommandMapper();
 
+            var selected = SelectedTracks.FirstOrDefault();
+            if (selected is not null)
+            {
+                this._midiHandler?.Stop();
+                this._midiHandler = new PlaybackCommandHandler(this._midiService, this._midiMapper, selected);
+                this._midiHandler.Start();
+            }
+
+            var dialog = new MidiControllerDialog(this._midiService, this._midiMapper) { Owner = this };
+            using (dialog)
+            {
+                dialog.ShowDialog(this);
+            }
+        }
     }
 }
-
 
 
 

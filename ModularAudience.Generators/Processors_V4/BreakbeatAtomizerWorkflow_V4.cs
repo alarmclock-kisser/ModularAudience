@@ -1,4 +1,5 @@
 using ModularAudience.Audio;
+using ModularAudience.Audio.Processing;
 using ModularAudience.Audio.Processors_V4;
 
 namespace ModularAudience.Generators
@@ -67,13 +68,14 @@ namespace ModularAudience.Generators
         public static async Task<AtomizeWorkflowResult> AtomizeAsync(
             AudioObj source,
             LoopAtomizerSettings settings,
+            IProgress<double>? progress = null,
             CancellationToken cancellationToken = default)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            LoopAtomizerResult result = await LoopAtomizer_V4.AtomizeAsync(source, settings);
+            AudioAtomizeResult result = await AudioAtomizerWorkflow
+                .AtomizeAsync(source, settings, progress, cancellationToken)
+                .ConfigureAwait(false);
             List<AudioObj> atomics = result.Atomics.ToList();
 
-            string? summary = null;
             if (result.IsLikelyDrumLoop)
             {
                 foreach (AudioObj atomic in atomics)
@@ -83,9 +85,11 @@ namespace ModularAudience.Generators
                         atomic.Tag = element;
                     }
                 }
-
-                summary = string.Join(", ", atomics.Where(a => a.Tag is DrumsetElement).Select(a => $"{a.Name}={a.Tag}"));
             }
+
+            string? summary = result.IsLikelyDrumLoop
+                ? string.Join(", ", atomics.Where(a => a.Tag is DrumsetElement).Select(a => $"{a.Name}={a.Tag}"))
+                : null;
 
             return new AtomizeWorkflowResult(atomics, result.IsLikelyDrumLoop, summary);
         }

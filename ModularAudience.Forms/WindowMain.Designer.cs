@@ -79,6 +79,7 @@
             this.button_random = new Button();
             this.contextMenuStrip_random = new ContextMenuStrip(this.components);
             this.timeStretchImportedToToolStripMenuItem = new ToolStripMenuItem();
+            this.button_controller = new Button();
             this.contextMenuStrip_playlist.SuspendLayout();
             this.contextMenuStrip_random.SuspendLayout();
             this.SuspendLayout();
@@ -586,11 +587,24 @@
             this.timeStretchImportedToToolStripMenuItem.Text = "Time-Stretch imported to ...";
             this.timeStretchImportedToToolStripMenuItem.Click += this.timeStretchImportedToToolStripMenuItem_Click;
             // 
+            // button_controller
+            // 
+            this.button_controller.Font = new Font("Bahnschrift SemiLight Condensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
+            this.button_controller.Location = new Point(12, 152);
+            this.button_controller.Name = "button_controller";
+            this.button_controller.Size = new Size(51, 23);
+            this.button_controller.TabIndex = 37;
+            this.button_controller.TabStop = false;
+            this.button_controller.Text = "MIDI-Ctrl";
+            this.button_controller.UseVisualStyleBackColor = true;
+            this.button_controller.Click += this.button_controller_Click;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(584, 326);
+            this.Controls.Add(this.button_controller);
             this.Controls.Add(this.button_random);
             this.Controls.Add(this.vScrollBar_masterLimiter);
             this.Controls.Add(this.button_copyLog);
@@ -688,5 +702,6 @@
         private Button button_random;
         private ContextMenuStrip contextMenuStrip_random;
         private ToolStripMenuItem timeStretchImportedToToolStripMenuItem;
+        private Button button_controller;
     }
 }

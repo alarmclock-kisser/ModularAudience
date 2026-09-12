@@ -63,5 +63,18 @@ namespace ModularAudience.Audio
             this.position += samplesToRead;
             return samplesToRead;
         }
+
+        public int Read(Span<float> buffer)
+        {
+            if (this.position >= this.data.Length)
+            {
+                return 0;
+            }
+
+            int samplesToRead = (int)Math.Min((long)buffer.Length, this.data.Length - this.position);
+            this.data.AsSpan((int)this.position, samplesToRead).CopyTo(buffer);
+            this.position += samplesToRead;
+            return samplesToRead;
+        }
     }
 }

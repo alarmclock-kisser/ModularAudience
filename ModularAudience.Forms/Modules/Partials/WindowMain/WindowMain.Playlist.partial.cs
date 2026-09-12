@@ -1,4 +1,5 @@
 using ModularAudience.Audio;
+using ModularAudience.Audio.Processing;
 using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio.Processors_V3;
@@ -114,6 +115,7 @@ namespace ModularAudience.Forms
             // Keep engine's list in sync with the static field
             // (engine owns the list reference we swap PlaylistFilePaths with)
             PlaylistFilePaths = this._playlist.FilePaths;
+            this._playlist.CountdownEnabledProvider = () => PlaylistCountdownEnabled;
 
             this._playlist.TrackChanged += () =>
             {
@@ -459,14 +461,9 @@ namespace ModularAudience.Forms
                 }
                 catch { selectedPath = null; }
 
-                PlaylistEngine? playlist = this._playlist;
+                PlaylistEngine playlist = this._playlist;
 
-                if (playlist == null)
-                {
-                    return;
-                }
-
-                // If Ctrl is held, allow fallback to collection selection or file dialog
+                // If Ctrl is held
                 bool ctrl = (ModifierKeys & Keys.Control) == Keys.Control;
                 if (string.IsNullOrWhiteSpace(selectedPath) && ctrl)
                 {

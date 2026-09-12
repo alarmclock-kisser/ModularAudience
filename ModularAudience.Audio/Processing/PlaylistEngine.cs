@@ -1,4 +1,3 @@
-﻿using ModularAudience.Audio;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using System;
@@ -8,7 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ModularAudience.Forms.Modules
+namespace ModularAudience.Audio.Processing
 {
     /// <summary>
     /// Parameters for automatic time-stretching of each playlist track before playback.
@@ -33,9 +32,12 @@ namespace ModularAudience.Forms.Modules
     /// and are never fully loaded into RAM. Each finished or skipped track is removed from the
     /// shared <see cref="FilePaths"/> list and disposed cleanly.
     /// </summary>
-    internal sealed class PlaylistEngine : IDisposable
+    public sealed class PlaylistEngine : IDisposable
     {
-        // â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        /// <summary>Optional UI-independent provider for the playback countdown setting.</summary>
+        public Func<bool>? CountdownEnabledProvider { get; set; }
+
+        //
         public List<string> FilePaths { get; } = [];        // remaining queue (shared ref to WindowMain.PlaylistFilePaths)
         public bool IsPlaying { get; private set; }
         public bool IsPaused { get; private set; }
@@ -52,7 +54,7 @@ namespace ModularAudience.Forms.Modules
         public float CurrentBpm { get; private set; }
 
         // â”€â”€ Private â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        private WaveOutEvent? _waveOut;
+        private WaveOut? _waveOut;
         private AudioFileReader? _reader;
         private AudioObj? _primaryAudioObj;
         private AudioObj? _secondaryAudioObj;
@@ -469,7 +471,7 @@ namespace ModularAudience.Forms.Modules
             PreparedPlaylistTrack? prepared = null;
             AudioObj? primary = null;
             AudioObj? secondary = null;
-            WaveOutEvent? wo = null;
+            WaveOut? wo = null;
             AudioFileReader? rd = null;
             string? removedOriginalPath = null;
             bool removedCurrentPrimary = false;
@@ -641,12 +643,12 @@ namespace ModularAudience.Forms.Modules
         {
             this.LogPlayback($"PlayTrackAsync(path={path}) called: exists={File.Exists(path ?? string.Empty)}");
             AudioFileReader? reader = null;
-            WaveOutEvent? waveOut = null;
+            WaveOut? waveOut = null;
 
             try
             {
                 reader = new AudioFileReader(path);
-                waveOut = new WaveOutEvent { DesiredLatency = 80 };
+                waveOut = new WaveOut { BufferMilliseconds = 80 };
 
                 // Raise thread priority inside WaveOut callback
                 waveOut.Init(reader);
@@ -677,8 +679,7 @@ namespace ModularAudience.Forms.Modules
                 {
                     string logName = Path.GetFileNameWithoutExtension(this.OriginalCurrentPath ?? path) ?? "";
                     string logBpm = this.CurrentBpm > 0 ? $" [{this.CurrentBpm:F0} BPM]" : string.Empty;
-                    bool wantCountdown = false;
-                    try { wantCountdown = WindowMain.PlaylistCountdownEnabled; } catch { }
+                    bool wantCountdown = this.CountdownEnabledProvider?.Invoke() ?? false;
 
                     if (wantCountdown)
                     {
@@ -778,7 +779,7 @@ namespace ModularAudience.Forms.Modules
         {
             this.LogPlayback($"StopCurrentAndInsert(pathToInsert={pathToInsert}) called");
             this._skipRequested = true;
-            WaveOutEvent? wo;
+            WaveOut? wo;
             AudioObj? primary;
             AudioObj? secondary;
             lock (this._lock)
@@ -803,7 +804,7 @@ namespace ModularAudience.Forms.Modules
 
             AudioObj? primary;
             AudioObj? secondary;
-            WaveOutEvent? wo;
+            WaveOut? wo;
             AudioFileReader? rd;
             lock (this._lock)
             {

@@ -1,5 +1,6 @@
 ﻿using System; // <-- Hinzugefügt für Progress<T>
 using System.Windows.Forms; // <-- Hinzugefügt für Form, Timer etc;
+using ModularAudience.Audio.Processing;
 using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio;
 using ModularAudience.Audio.Processors_V2;

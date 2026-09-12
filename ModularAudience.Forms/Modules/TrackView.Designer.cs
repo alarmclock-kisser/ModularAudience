@@ -45,6 +45,7 @@
             this.menuItem_normalizeSelection = new ToolStripMenuItem();
             this.menuItem_fadeIn = new ToolStripMenuItem();
             this.menuItem_fadeOut = new ToolStripMenuItem();
+            this.menuItem_atomize = new ToolStripMenuItem();
             this.trimSilenceToolStripMenuItem = new ToolStripMenuItem();
             this.drawBeatGridToolStripMenuItem = new ToolStripMenuItem();
             this.beatGridV1ToolStripMenuItem = new ToolStripMenuItem();
@@ -120,7 +121,7 @@
             // 
             // contextMenu_waveform
             // 
-            this.contextMenu_waveform.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_jumpHere, this.menuItem_copySelection, this.menuItem_splitEqualParts, this.menuItem_removeSelection, this.menuItem_normalizeSelection, this.menuItem_fadeIn, this.menuItem_fadeOut, this.trimSilenceToolStripMenuItem, this.drawBeatGridToolStripMenuItem });
+            this.contextMenu_waveform.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_jumpHere, this.menuItem_copySelection, this.menuItem_splitEqualParts, this.menuItem_atomize, this.menuItem_removeSelection, this.menuItem_normalizeSelection, this.menuItem_fadeIn, this.menuItem_fadeOut, this.trimSilenceToolStripMenuItem, this.drawBeatGridToolStripMenuItem });
             this.contextMenu_waveform.Name = "contextMenu_waveform";
             this.contextMenu_waveform.Size = new Size(183, 224);
             this.contextMenu_waveform.Opening += this.contextMenu_waveform_Opening;
@@ -138,6 +139,13 @@
             this.menuItem_splitEqualParts.Name = "menuItem_splitEqualParts";
             this.menuItem_splitEqualParts.Size = new Size(182, 22);
             this.menuItem_splitEqualParts.Text = "Split Into Equal Parts";
+            // 
+            // menuItem_atomize
+            // 
+            this.menuItem_atomize.Name = "menuItem_atomize";
+            this.menuItem_atomize.Size = new Size(182, 22);
+            this.menuItem_atomize.Text = "Atomize";
+            this.menuItem_atomize.Click += this.menuItem_atomize_Click;
             // 
             // menuItem_splitEqualParts2
             // 
@@ -440,8 +448,9 @@
         private ToolStripMenuItem menuItem_splitEqualParts32;
         private ToolStripMenuItem menuItem_removeSelection;
         private ToolStripMenuItem menuItem_normalizeSelection;
-        private ToolStripMenuItem menuItem_fadeIn;
-        private ToolStripMenuItem menuItem_fadeOut;
+		private ToolStripMenuItem menuItem_fadeIn;
+		private ToolStripMenuItem menuItem_fadeOut;
+		private ToolStripMenuItem menuItem_atomize;
 		private Button button_apply;
         private CheckBox checkBox_sync;
 		private ToolStripMenuItem trimSilenceToolStripMenuItem;

@@ -56,12 +56,12 @@
             this.pictureBox_editor.Size = new Size(776, 380);
             this.pictureBox_editor.TabIndex = 0;
             this.pictureBox_editor.TabStop = false;
+            this.toolTip_editor.SetToolTip(this.pictureBox_editor, "Left mouse button: Add notes\r\nRight mouse button: Delete notes\r\nMouse wheel: Scroll vertically\r\nCtrl + mouse wheel: Zoom horizontally\r\nShift + right-drag: Select and delete notes in a rectangle");
             this.pictureBox_editor.Paint += this.pictureBox_editor_Paint;
             this.pictureBox_editor.MouseDown += this.pictureBox_editor_MouseDown;
             this.pictureBox_editor.MouseMove += this.pictureBox_editor_MouseMove;
             this.pictureBox_editor.MouseUp += this.pictureBox_editor_MouseUp;
             this.pictureBox_editor.MouseWheel += this.pictureBox_editor_MouseWheel;
-            this.toolTip_editor.SetToolTip(this.pictureBox_editor, "Left mouse button: Add notes\r\nRight mouse button: Delete notes\r\nMouse wheel: Scroll vertically\r\nCtrl + mouse wheel: Zoom horizontally\r\nShift + right-drag: Select and delete notes in a rectangle");
             // 
             // button_save
             // 
@@ -166,7 +166,7 @@
             // 
             // button_import
             // 
-            this.button_import.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            this.button_import.Anchor =  AnchorStyles.Bottom | AnchorStyles.Right;
             this.button_import.Location = new Point(632, 415);
             this.button_import.Name = "button_import";
             this.button_import.Size = new Size(75, 23);
@@ -182,7 +182,7 @@
             // 
             // button_generate
             // 
-            this.button_generate.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            this.button_generate.Anchor =  AnchorStyles.Bottom | AnchorStyles.Right;
             this.button_generate.Location = new Point(548, 415);
             this.button_generate.Name = "button_generate";
             this.button_generate.Size = new Size(75, 23);
@@ -193,7 +193,7 @@
             // 
             // button_remix
             // 
-            this.button_remix.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            this.button_remix.Anchor =  AnchorStyles.Bottom | AnchorStyles.Right;
             this.button_remix.Location = new Point(490, 415);
             this.button_remix.Name = "button_remix";
             this.button_remix.Size = new Size(55, 23);
