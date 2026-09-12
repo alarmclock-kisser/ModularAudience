@@ -1979,6 +1979,7 @@ namespace ModularAudience.Forms.Modules
         private void contextMenu_waveform_Opening(object? sender, CancelEventArgs e)
         {
             long sampleIndexUnderMouse = this.MapPixelToFrameInView(this.pictureBox_waveform.PointToClient(Cursor.Position).X) * Math.Max(1, this.OriginalAudio.Channels);
+            this.toolStripMenuItem_jumpHere.Tag = sampleIndexUnderMouse;
             string timeStamp = TimeSpan.FromSeconds(sampleIndexUnderMouse / (double) Math.Max(1, this.OriginalAudio.SampleRate * this.OriginalAudio.Channels)).ToString(@"hh\:mm\:ss\.fff");
             this.toolStripMenuItem_jumpHere.Text = "Jump to " + $"[{timeStamp}]";
 
@@ -3100,8 +3101,8 @@ namespace ModularAudience.Forms.Modules
 
         private void toolStripMenuItem_jumpHere_Click(object sender, EventArgs e)
         {
-            long sampleIndexUnderMouse = this.MapPixelToFrameInView(this.pictureBox_waveform.PointToClient(Cursor.Position).X) * Math.Max(1, this.OriginalAudio.Channels);
-            if (sampleIndexUnderMouse < 0 || sampleIndexUnderMouse >= this.OriginalAudio.Length)
+            if (this.toolStripMenuItem_jumpHere.Tag is not long sampleIndexUnderMouse ||
+                sampleIndexUnderMouse < 0 || sampleIndexUnderMouse >= this.OriginalAudio.Length)
             {
                 return;
             }
