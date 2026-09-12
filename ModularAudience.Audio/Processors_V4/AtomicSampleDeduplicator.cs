@@ -6,10 +6,11 @@ namespace ModularAudience.Audio.Processors_V4
     internal static class AtomicSampleDeduplicator
     {
         private const int SpectralBins = 72;
-        private const int MaximumVariants = 3;
 
-        public static List<AudioObj> Deduplicate(List<AudioObj> atomics, float similarityThreshold, IProgress<double>? progress)
+        public static List<AudioObj> Deduplicate(List<AudioObj> atomics, float similarityThreshold,
+            IProgress<double>? progress, int maxVariantsPerCluster = 3)
         {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxVariantsPerCluster);
             Fingerprint[] fingerprints = new Fingerprint[atomics.Count];
             for (int i = 0; i < atomics.Count; i++)
             {
@@ -22,7 +23,7 @@ namespace ModularAudience.Audio.Processors_V4
             HashSet<int> selected = [];
             for (int i = 0; i < clusters.Count; i++)
             {
-                selected.UnionWith(SelectVariants(clusters[i], fingerprints));
+                selected.UnionWith(SelectVariants(clusters[i], fingerprints, maxVariantsPerCluster));
                 progress?.Report(0.85 + (0.14 * (i + 1) / clusters.Count));
             }
 
@@ -181,7 +182,7 @@ namespace ModularAudience.Audio.Processors_V4
                 Similarity(left.Envelope, right.Envelope) >= 0.80;
         }
 
-        private static List<int> SelectVariants(List<int> cluster, Fingerprint[] fingerprints)
+        private static List<int> SelectVariants(List<int> cluster, Fingerprint[] fingerprints, int maxVariantsPerCluster)
         {
             List<int> unique = [];
             foreach (int candidate in cluster.OrderByDescending(index => fingerprints[index].Quality).ThenBy(index => index))
@@ -194,7 +195,7 @@ namespace ModularAudience.Audio.Processors_V4
 
             List<int> selected = [unique[0]];
             unique.RemoveAt(0);
-            while (selected.Count < MaximumVariants && unique.Count > 0)
+            while (selected.Count < maxVariantsPerCluster && unique.Count > 0)
             {
                 int next = unique.OrderByDescending(candidate => selected.Min(index =>
                     Difference(fingerprints[candidate], fingerprints[index]))).ThenBy(index => index).First();

@@ -15,27 +15,34 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             settings ??= LoopAtomizerSettings.Default;
+            if (!float.IsFinite(settings.MinimumRmsLevel) || settings.MinimumRmsLevel < 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(settings.MinimumRmsLevel),
+                    "The minimum RMS level must be finite and non-negative.");
+            }
+
             IProgress<double>? monotonicProgress = progress == null
                 ? null
                 : new MonotonicProgress(progress);
 
             monotonicProgress?.Report(0.0);
             AtomizeAnalysis analysis = await Task.Run(() => AnalyzeAtomicSegments(source, settings, monotonicProgress)).ConfigureAwait(false);
-            List<AudioObj> atomics = await CreateAtomicSamplesAsync(source, analysis, monotonicProgress).ConfigureAwait(false);
+            List<AudioObj> atomics = await CreateAtomicSamplesAsync(source, analysis, settings.MinimumRmsLevel, monotonicProgress).ConfigureAwait(false);
 
             // Deduplicate similar atomics if enabled
             List<AudioObj> dedupedAtomics = atomics;
             if (settings.EnableDeduplication && atomics.Count > 1)
             {
                 dedupedAtomics = await Task.Run(() => AtomicSampleDeduplicator.Deduplicate(
-                    atomics, settings.ClusterSimilarityThreshold, monotonicProgress)).ConfigureAwait(false);
+                    atomics, settings.ClusterSimilarityThreshold, monotonicProgress, settings.MaxVariantsPerCluster)).ConfigureAwait(false);
             }
 
             monotonicProgress?.Report(1.0);
             return new LoopAtomizerResult(dedupedAtomics, analysis.IsLikelyDrumLoop);
         }
 
-        private static async Task<List<AudioObj>> CreateAtomicSamplesAsync(AudioObj source, AtomizeAnalysis analysis, IProgress<double>? progress)
+        private static async Task<List<AudioObj>> CreateAtomicSamplesAsync(AudioObj source, AtomizeAnalysis analysis,
+            float minimumRmsLevel, IProgress<double>? progress)
         {
             if (analysis.Segments.Count == 0)
             {
@@ -67,6 +74,12 @@ namespace ModularAudience.Audio.Processors_V4
                         continue;
                     }
 
+                    if (!MeetsMinimumRms(atomic.Data, minimumRmsLevel))
+                    {
+                        atomic.Dispose();
+                        continue;
+                    }
+
                     string baseName = string.IsNullOrWhiteSpace(source.Name) ? "Audio" : source.Name.Trim();
                     string suffix = string.IsNullOrWhiteSpace(segment.Label) ? string.Empty : $"_{segment.Label}";
                     atomic.Rename($"{baseName}_Atomic{i + 1:D3}{suffix}");
@@ -83,6 +96,22 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             return atomics;
+        }
+
+        private static bool MeetsMinimumRms(float[] samples, float minimumRmsLevel)
+        {
+            if (minimumRmsLevel == 0f)
+            {
+                return true;
+            }
+
+            double energy = 0.0;
+            foreach (float sample in samples)
+            {
+                energy += (double) sample * sample;
+            }
+
+            return samples.Length > 0 && Math.Sqrt(energy / samples.Length) >= minimumRmsLevel;
         }
 
         private static AtomizeAnalysis AnalyzeAtomicSegments(AudioObj source, LoopAtomizerSettings settings, IProgress<double>? progress)
@@ -936,6 +965,8 @@ namespace ModularAudience.Audio.Processors_V4
         public int TailPaddingMs { get; init; } = 30;
         public bool AllowSingleAtomFallback { get; init; } = true;
         public bool EnableDeduplication { get; init; } = true;
+        public int MaxVariantsPerCluster { get; init; } = 3;
+        public float MinimumRmsLevel { get; init; }
         public float ClusterSimilarityThreshold { get; init; } = 0.94f;
     }
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using ModularAudience.Audio;
 using ModularAudience.Audio.Processing;
 using ModularAudience.Audio.Processors_V4;
@@ -9,6 +10,49 @@ namespace ModularAudience.Forms.Modules
     {
         private void menuItem_atomize_Click(object? sender, EventArgs e) => _ = this.AtomizeSelectionOrTrackAsync();
 
+        private bool TryGetAtomizeVariantLimit(out int maxVariants)
+        {
+            maxVariants = LoopAtomizerSettings.Default.MaxVariantsPerCluster;
+            string input = Microsoft.VisualBasic.Interaction.InputBox(
+                $"Maximum variants to keep per similar sound (empty = {maxVariants}):",
+                "Atomize", maxVariants.ToString());
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return true;
+            }
+
+            if (int.TryParse(input, out maxVariants) && maxVariants > 0)
+            {
+                return true;
+            }
+
+            MessageBox.Show(this, "Please enter a whole number greater than zero.",
+                "Atomize", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        private bool TryGetAtomizeMinimumRms(out float minimumRms)
+        {
+            minimumRms = 0.1f;
+            string input = Microsoft.VisualBasic.Interaction.InputBox(
+                "Minimum average level (RMS, linear; empty = 0.1, 0 = disabled):",
+                "Atomize", minimumRms.ToString(CultureInfo.InvariantCulture));
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return true;
+            }
+
+            if (float.TryParse(input.Trim().Replace(',', '.'), NumberStyles.Float,
+                CultureInfo.InvariantCulture, out minimumRms) && float.IsFinite(minimumRms) && minimumRms >= 0f)
+            {
+                return true;
+            }
+
+            MessageBox.Show(this, "Please enter a finite number greater than or equal to zero (use '.' or ',').",
+                "Atomize", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
         private async Task AtomizeSelectionOrTrackAsync()
         {
             if (this.OriginalAudio.Data == null || this.OriginalAudio.Data.Length == 0)
@@ -16,6 +60,21 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            if (!this.TryGetAtomizeVariantLimit(out int maxVariants))
+            {
+                return;
+            }
+
+            if (!this.TryGetAtomizeMinimumRms(out float minimumRms))
+            {
+                return;
+            }
+
+            LoopAtomizerSettings settings = LoopAtomizerSettings.Default with
+            {
+                MaxVariantsPerCluster = maxVariants,
+                MinimumRmsLevel = minimumRms
+            };
             bool previousWaitCursor = this.UseWaitCursor;
             this.UseWaitCursor = true;
             this.menuItem_atomize.Enabled = false;
@@ -44,7 +103,7 @@ namespace ModularAudience.Forms.Modules
                     progressDialog.BringToFront();
 
                     AudioAtomizeResult result = await AudioAtomizerWorkflow
-                        .AtomizeAsync(source, LoopAtomizerSettings.Default, progress, cts.Token);
+                        .AtomizeAsync(source, settings, progress, cts.Token);
                     List<AudioObj> atomics = result.Atomics.ToList();
                     if (atomics.Count == 0)
                     {
