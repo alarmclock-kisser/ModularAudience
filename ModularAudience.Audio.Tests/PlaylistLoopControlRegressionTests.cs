@@ -191,6 +191,48 @@ namespace ModularAudience.Audio.Tests
             });
         }
 
+        [STATestMethod]
+        public void RateGestureAccumulatesMouseMovesOnlyOnce()
+        {
+            using AudioTestScope scope = new();
+            AudioObj audio = scope.Create(new float[64000]);
+            WithPlaylist([audio], (_, list) =>
+            {
+                Point start = TextPoint(list, 0);
+                int targetX = list.ClientRectangle.Right - 5;
+                Mouse(list, MouseDown, start);
+                for (int x = start.X + 20; x < targetX; x += 20)
+                {
+                    Mouse(list, MouseMove, new Point(x, start.Y));
+                }
+                Mouse(list, MouseMove, new Point(targetX, start.Y));
+
+                Assert.IsTrue(audio.ManualSampleRateFactor > 1.0f);
+                Assert.IsTrue(audio.ManualSampleRateFactor < 1.8f,
+                    "Repeated mouse messages must not multiply the full drag distance repeatedly.");
+                Mouse(list, MouseUp, new Point(targetX, start.Y));
+            });
+        }
+
+        [STATestMethod]
+        public void RateGestureReturnsToOriginalRateWhenMouseReturnsToGrabPoint()
+        {
+            using AudioTestScope scope = new();
+            AudioObj audio = scope.Create(new float[64000]);
+            WithPlaylist([audio], (_, list) =>
+            {
+                Point start = TextPoint(list, 0);
+                Mouse(list, MouseDown, start);
+                Mouse(list, MouseMove, new Point(start.X - 80, start.Y));
+                Mouse(list, MouseMove, new Point(start.X - 40, start.Y));
+                Mouse(list, MouseMove, start);
+                Mouse(list, MouseUp, start);
+
+                Assert.AreEqual(1.0, audio.ManualSampleRateFactor, 0.000001,
+                    "Returning to the grab point must cancel the complete relative drag.");
+            });
+        }
+
         private static void WithPlaylist(AudioObj[] audios, Action<LoopControl, CheckedListBox> verify)
         {
             Assert.AreEqual(ApartmentState.STA, Thread.CurrentThread.GetApartmentState());
@@ -298,9 +340,9 @@ namespace ModularAudience.Audio.Tests
 
         private static void AssertRate(AudioObj audio, CheckedListBox list)
         {
-            Assert.AreEqual(2.0, audio.ManualSampleRateFactor, 0.000001);
-            Assert.AreEqual(2.0, audio.SampleRateFactor, 0.000001);
-            StringAssert.Contains(list.Items[0]!.ToString()!, "[360.0 BPM] {+100.0%}");
+            Assert.AreEqual(1.2959409952, audio.ManualSampleRateFactor, 0.000001);
+            Assert.AreEqual(1.2959409952, audio.SampleRateFactor, 0.000001);
+            StringAssert.Contains(list.Items[0]!.ToString()!, "[233.3 BPM] {+29.6%}");
         }
 
         private static void PumpMessages(TimeSpan duration)

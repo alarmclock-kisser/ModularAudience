@@ -146,6 +146,7 @@
             this.checkBox_preview.Size = new Size(67, 19);
             this.checkBox_preview.TabIndex = 3;
             this.checkBox_preview.Text = "Preview";
+            this.checkBox_preview.Checked = true;
             this.checkBox_preview.UseVisualStyleBackColor = true;
             // 
             // contextMenuStrip_audios

@@ -38,9 +38,8 @@ namespace ModularAudience.Forms.Modules
                     _audioRateDragOffset[audioId] = 500.0 * Math.Log2(Math.Clamp(item.Audio.ManualSampleRateFactor, 0.01f, 10f));
                 }
 
-                double newOffset = reset
-                    ? 0.0
-                    : Math.Clamp(_audioRateDragOffset[audioId] + position, minimumLogPosition, maximumLogPosition);
+                double candidateOffset = reset ? 0.0 : _audioRateDragOffset[audioId] + position;
+                double newOffset = Math.Clamp(candidateOffset, minimumLogPosition, maximumLogPosition);
                 _audioRateDragOffset[audioId] = newOffset;
 
                 float currentFactor = (float)Math.Clamp(Math.Pow(2.0, newOffset / 500.0), 0.01, 10.0);

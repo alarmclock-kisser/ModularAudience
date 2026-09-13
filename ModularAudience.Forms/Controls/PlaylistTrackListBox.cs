@@ -14,10 +14,12 @@ namespace ModularAudience.Forms.Controls
         private Rectangle interactionTextBounds;
         private bool rateDragAllowed;
         private bool draggingRate;
-        private int? lastPosition;
-        private int? startRatePosition; // Rate position when dragging starts (for relative dragging)
+        private int lastMouseX;
+        private int dragPixels;
+        private int lastMappedPosition;
 
         public event EventHandler<PlaylistTrackRateChangedEventArgs>? RatePositionChanged;
+        public event EventHandler? RateInteractionEnded;
 
         public bool IsInteracting { get; private set; }
 
@@ -87,10 +89,9 @@ namespace ModularAudience.Forms.Controls
             this.mouseDownX = point.X;
             this.rateDragAllowed = this.interactionTextBounds.Contains(point);
             this.draggingRate = false;
-            this.lastPosition = null;
-            this.startRatePosition = this.rateDragAllowed
-                ? MapRatePosition(point.X, this.interactionTextBounds.Left, this.interactionTextBounds.Right - 1)
-                : null;
+            this.lastMouseX = point.X;
+            this.dragPixels = 0;
+            this.lastMappedPosition = 0;
             this.IsInteracting = true;
             this.Capture = true;
             if (!this.Capture)
@@ -146,41 +147,46 @@ namespace ModularAudience.Forms.Controls
                 {
                     this.draggingRate = true;
 
-                    int currentMapPos = MapRatePosition(e.X,
-                        this.interactionTextBounds.Left, this.interactionTextBounds.Right - 1);
-                    int relativePosition = currentMapPos - (this.startRatePosition ?? currentMapPos);
-                    this.RaiseRatePositionChanged(Math.Clamp(relativePosition, -500, 500));
+                    int totalWidth = Math.Max(1, this.interactionTextBounds.Width - 1);
+                    this.dragPixels += e.X - this.lastMouseX;
+                    this.lastMouseX = e.X;
+                    int mappedPosition = MapRatePosition(this.dragPixels, totalWidth);
+                    int relativePosition = mappedPosition - this.lastMappedPosition;
+                    this.lastMappedPosition = mappedPosition;
+                    if (relativePosition != 0)
+                    {
+                        this.RaiseRatePositionChanged(relativePosition);
+                    }
                 }
             }
             base.OnMouseMove(e);
         }
 
-        // The row width maps to 50%..200% (0.5x..2.0x). The midpoint is 100% (1.0x).
-        // Dragging accumulates relative deltas, so the full 1%..1000% range is reachable.
-        internal static int MapRatePosition(int mouseX, int textLeft, int textRight)
+        // Dragging is relative. Five row widths to the right reach 1000%; two row
+        // widths to the left reach approximately 1%.
+        internal static int MapRatePosition(int dragPixels, int rowWidth)
         {
-            if (textRight <= textLeft)
+            if (rowWidth <= 0 || dragPixels == 0)
             {
                 return 0;
             }
 
-            double totalWidth = textRight - textLeft;
-            double midpoint = textLeft + totalWidth / 2;
-            double positionFromMid = mouseX - midpoint;
-
-            // One row width spans -500..+500. Positions outside the row remain usable
-            // so a relative grab-drag can continue across repeated gestures.
-            return (int)Math.Round(1000.0 * positionFromMid / totalWidth);
+            double unitsPerRowWidth = dragPixels >= 0
+                ? 500.0 * Math.Log2(10.0) / 5.0
+                : 500.0 * Math.Log2(100.0) / 2.0;
+            double mapped = unitsPerRowWidth * dragPixels / rowWidth;
+            return (int)Math.Round(Math.Clamp(mapped,
+                500.0 * Math.Log2(0.01),
+                500.0 * Math.Log2(10.0)));
         }
 
         private void RaiseRatePositionChanged(int position)
         {
             if (!this.IsInteracting || this.interactionRowIndex < 0 || this.interactionRowIndex >= this.Items.Count
-                || this.lastPosition == position)
+                || position == 0)
             {
                 return;
             }
-            this.lastPosition = position;
             this.RatePositionChanged?.Invoke(this, new PlaylistTrackRateChangedEventArgs(this.interactionRowIndex, position));
         }
 
@@ -225,7 +231,9 @@ namespace ModularAudience.Forms.Controls
             this.interactionRowIndex = -1;
             this.rateDragAllowed = false;
             this.draggingRate = false;
-            this.lastPosition = null;
+            this.dragPixels = 0;
+            this.lastMappedPosition = 0;
+            this.RateInteractionEnded?.Invoke(this, EventArgs.Empty);
             this.Capture = false;
         }
 

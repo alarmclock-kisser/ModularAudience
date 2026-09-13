@@ -834,7 +834,7 @@ namespace ModularAudience.Audio
         public async Task<Bitmap> DrawWaveformCacheAsync(int width, int height, int samplesPerPixel = 128, bool drawEachChannel = false, Color waveColor = default, Color backColor = default)
         {
             // === VORHER: DrawWaveformAsync. NEU: DrawWaveformCacheAsync ===
-            // Diese Methode enthält die langsame Logik zum Lesen der Audiodaten und Zeichnen der Welle
+            // Diese Methode enthï¿½lt die langsame Logik zum Lesen der Audiodaten und Zeichnen der Welle
             // und nutzt das _cacheLock.
 
             // *WICHTIG*: Hier NICHT die Selection oder den Caret zeichnen.
@@ -852,18 +852,18 @@ namespace ModularAudience.Audio
                 this._cacheLock.Release();
             }
 
-            // Statt das fertige Bitmap zurückzugeben, geben wir den Teil des Caches zurück, der aktuell benötigt wird
+            // Statt das fertige Bitmap zurï¿½ckzugeben, geben wir den Teil des Caches zurï¿½ck, der aktuell benï¿½tigt wird
             // (die Logik hier ist komplex wegen des Cache-Strips, aber die Idee ist: nur Welle zeichnen)
 
-            // Da Sie bereits eine Bitmap zurückgeben, verwenden wir diese weiterhin, aber ohne Selection/Caret-Code.
+            // Da Sie bereits eine Bitmap zurï¿½ckgeben, verwenden wir diese weiterhin, aber ohne Selection/Caret-Code.
             return this._waveCacheStrip ?? new Bitmap(1, 1);
         }
         public Bitmap? GetCachedBitmap()
         {
-            // Wenn möglich, Zugriff auf das Cache-Bitmap nur über einen kleinen Lock
+            // Wenn mï¿½glich, Zugriff auf das Cache-Bitmap nur ï¿½ber einen kleinen Lock
             if (this._waveCacheStrip != null)
             {
-                // *ACHTUNG*: Da Bitmaps nicht Thread-Safe sind, MÜSSTE dies eigentlich
+                // *ACHTUNG*: Da Bitmaps nicht Thread-Safe sind, Mï¿½SSTE dies eigentlich
                 // ein Klon oder ein synchornisierter Zugriff sein, 
                 // ABER da wir die Selection auf dem UI Thread zeichnen,
                 // nehmen wir den geringeren Aufwand des Zugriffs.
@@ -875,15 +875,10 @@ namespace ModularAudience.Audio
 
         private Bitmap DrawWaveformPreview(int width = 160, int height = 160, int border = 3)
         {
-            // Zeige nur eine Vorschau, wenn das Audio kürzer als 20 Sekunden ist
-            if (this.Duration.TotalSeconds > 20.0)
-            {
-                return new Bitmap(width, height); // leer lassen
-            }
             Bitmap bitmap = new(width, height);
             using (Graphics g = Graphics.FromImage(bitmap))
             {
-                g.Clear(Color.White); // Hintergrund weiß
+                g.Clear(Color.White); // Hintergrund weiï¿½
                 if (this.Data.Length == 0)
                 {
                     return bitmap;

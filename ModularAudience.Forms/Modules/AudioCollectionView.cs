@@ -97,6 +97,7 @@ namespace ModularAudience.Forms
             this.listBox_audios.DoubleClick += this.listBox_audios_DoubleClick;
             this.listBox_audios.SelectedIndexChanged += this.listBox_audios_SelectedIndexChanged;
             this.checkBox_autoPlay.CheckedChanged += this.checkBox_autoPlay_CheckedChanged;
+            this.checkBox_preview.CheckedChanged += this.checkBox_preview_CheckedChanged;
             this.DoubleClick += this.Form_DoubleClick;
             alarmclockkisser.DragNDrop.Forms.ListBoxExtensions.Register_ListBox_DragNDrop(this.listBox_audios, true);
             this.listBox_audios.DrawItem += this.listBox_audios_DrawItem;
@@ -126,6 +127,7 @@ namespace ModularAudience.Forms
             this.waveformPreviewTimer = new System.Windows.Forms.Timer { Interval = 600 };
             this.waveformPreviewTimer.Tick += this.WaveformPreviewTimer_Tick;
             this.listBox_audios.MouseMove += this.ListBox_audios_MouseMove_WaveformPreview;
+            this.listBox_audios.MouseHover += this.ListBox_audios_MouseHover_WaveformPreview;
             this.listBox_audios.MouseLeave += this.ListBox_audios_MouseLeave_WaveformPreview;
 
             // Set minimum and maximum sizes
@@ -1166,11 +1168,39 @@ namespace ModularAudience.Forms
             }
         }
 
+        private void ListBox_audios_MouseHover_WaveformPreview(object? sender, EventArgs e)
+        {
+            Point point = this.listBox_audios.PointToClient(Cursor.Position);
+            int idx = this.listBox_audios.IndexFromPoint(point);
+            if (idx < 0 || idx >= this.listBox_audios.Items.Count || !this.ShowPreview)
+            {
+                return;
+            }
+
+            this.waveformPreviewIndex = idx;
+            this.lastMousePos = point;
+            this.waveformPreviewTimer.Stop();
+            this.waveformPreviewTimer.Start();
+        }
+
         private void ListBox_audios_MouseLeave_WaveformPreview(object? sender, EventArgs e)
         {
             this.waveformPreviewTimer.Stop();
             this.HideWaveformPreview();
             this.waveformPreviewIndex = -1;
+        }
+
+        private void checkBox_preview_CheckedChanged(object? sender, EventArgs e)
+        {
+            this.waveformPreviewTimer.Stop();
+            this.HideWaveformPreview();
+            if (!this.ShowPreview || this.waveformPreviewIndex < 0 ||
+                this.waveformPreviewIndex >= this.listBox_audios.Items.Count)
+            {
+                return;
+            }
+
+            this.waveformPreviewTimer.Start();
         }
 
         private void WaveformPreviewTimer_Tick(object? sender, EventArgs e)
@@ -1183,11 +1213,6 @@ namespace ModularAudience.Forms
 
             if (this.listBox_audios.Items[this.waveformPreviewIndex] is AudioObj audio && this.ShowPreview)
             {
-                if (audio.Duration.TotalSeconds > 60.0)
-                {
-                    return;
-                }
-
                 int selectedCount = this.listBox_audios.SelectedIndices.Count;
                 bool hoveredIsSelected = this.listBox_audios.GetSelected(this.waveformPreviewIndex);
 
