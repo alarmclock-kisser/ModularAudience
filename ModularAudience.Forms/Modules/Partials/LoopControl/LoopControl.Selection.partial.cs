@@ -64,8 +64,7 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
             if (this.suppressPlaylistChecklistEvents || this.checkedListBox_playlistTracks.IsInteracting ||
-                this.checkedListBox_playlistTracks.ContainsFocus || this.checkedListBox_playlistTracks.SelectedIndex >= 0 ||
-                this.contextMenuStrip_playlistItem.Visible)
+                this.checkedListBox_playlistTracks.ContainsFocus || this.contextMenuStrip_playlistItem.Visible)
             {
                 return;
             }
@@ -74,8 +73,11 @@ namespace ModularAudience.Forms.Modules
             this.suppressPlaylistChecklistEvents = true;
             try
             {
-                this.checkedListBox_playlistTracks.SelectedIndex =
-                    this.FindPlaylistTrackIndex(SelectedTrackView?.OriginalAudio.Id);
+                int index = this.FindPlaylistTrackIndex(SelectedTrackView?.OriginalAudio.Id);
+                if (index >= 0)
+                {
+                    this.checkedListBox_playlistTracks.SelectedIndex = index;
+                }
             }
             finally
             {

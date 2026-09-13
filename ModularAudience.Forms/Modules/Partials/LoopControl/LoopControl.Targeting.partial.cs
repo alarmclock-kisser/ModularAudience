@@ -16,10 +16,25 @@ namespace ModularAudience.Forms.Modules
             (this.checkedListBox_playlistTracks.SelectedItem as PlaylistTargetItem)?.Audio;
         private static TrackView? SelectedTrackView => WindowMain.LastSelectedTrackView is { IsDisposed: false, Disposing: false } view
             ? view : null;
-        private TrackView? CurrentTrackView => this.FocusedPlaylistAudio is AudioObj audio
-            ? FindTrackView(audio)
-            : this.checkedListBox_playlistTracks.ContainsFocus ? null : SelectedTrackView;
-        private AudioObj? OriginalAudio => this.FocusedPlaylistAudio ?? this.CurrentTrackView?.OriginalAudio;
+        private TrackView? CurrentTrackView
+        {
+            get
+            {
+                if (FocusedPlaylistAudio != null)
+                    return FindTrackView(FocusedPlaylistAudio);
+
+                var tv = SelectedTrackView;
+                if (tv != null && !this.checkedListBox_playlistTracks.SelectedItems.Contains(tv) && !this.checkedListBox_playlistTracks.ContainsFocus)
+                    return tv;
+
+                if (this.checkedListBox_playlistTracks.SelectedItem is PlaylistTargetItem sel)
+                    return FindTrackView(sel.Audio);
+
+                return null;
+            }
+        }
+
+        private AudioObj? OriginalAudio => this.CurrentTrackView?.OriginalAudio ?? this.FocusedPlaylistAudio;
         private IReadOnlyList<AudioObj> PlaylistAudios => WindowMain.Instance?.GetActivePlaylistAudios() ?? [];
 
         private static TrackView? FindTrackView(AudioObj audio) => WindowMain.TrackViews.FirstOrDefault(view =>

@@ -11,6 +11,8 @@ using System.Threading.Tasks;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
+#pragma warning disable CS0618 // WasapiLoopbackCapture is deprecated - use WasapiRecorderBuilder.WithProcessLoopback() instead
+
 namespace ModularAudience.Audio.Processors_V1
 {
     public static class BeatScanner

@@ -15,6 +15,7 @@ namespace ModularAudience.Forms.Controls
         private bool rateDragAllowed;
         private bool draggingRate;
         private int? lastPosition;
+        private int? startRatePosition; // Rate position when dragging starts (for relative dragging)
 
         public event EventHandler<PlaylistTrackRateChangedEventArgs>? RatePositionChanged;
 
@@ -87,6 +88,7 @@ namespace ModularAudience.Forms.Controls
             this.rateDragAllowed = this.interactionTextBounds.Contains(point);
             this.draggingRate = false;
             this.lastPosition = null;
+            this.startRatePosition = null; // Reset start position for new drag
             this.IsInteracting = true;
             this.Capture = true;
             if (!this.Capture)
@@ -141,31 +143,60 @@ namespace ModularAudience.Forms.Controls
                 if (this.draggingRate || Math.Abs((long) e.X - this.mouseDownX) >= threshold)
                 {
                     this.draggingRate = true;
-                    this.RaiseRatePositionChanged(MapRatePosition(e.X,
-                        this.interactionTextBounds.Left, this.interactionTextBounds.Right - 1));
+
+                    // Calculate current map position
+                    int currentMapPos = MapRatePosition(e.X,
+                        this.interactionTextBounds.Left, this.interactionTextBounds.Right - 1);
+
+                    // If this is the start of the drag, record the start position
+                    if (!this.startRatePosition.HasValue)
+                    {
+                        this.startRatePosition = currentMapPos;
+                    }
+
+                    // Calculate new position relative to start position
+                    int delta = currentMapPos - this.startRatePosition.Value;
+                    int newPosition = this.startRatePosition.Value + delta;
+
+                    // Clamp to valid range (-1000 to +1000)
+                    if (newPosition < -1000) newPosition = -1000;
+                    if (newPosition > 1000) newPosition = 1000;
+
+                    this.RaiseRatePositionChanged(newPosition);
+                }
+            }
+            else if (this.IsInteracting && this.rateDragAllowed && !this.draggingRate)
+            {
+                // Check if mouse has become steady (not moving)
+                // If position hasn't changed significantly, stop rate updates
+                int currentMapPos = MapRatePosition(e.X,
+                    this.interactionTextBounds.Left, this.interactionTextBounds.Right - 1);
+                if (this.startRatePosition.HasValue && Math.Abs(currentMapPos - this.startRatePosition.Value) < 5)
+                {
+                    // Mouse is steady, stop updating rate
+                    this.EndInteraction();
                 }
             }
             base.OnMouseMove(e);
         }
 
-        // Endpoints are inclusive; the integer midpoint represents PlaybackRateMapping.MapFactor(0).
+        // The row width maps to 50%..200% (0.5x..2.0x). The midpoint is 100% (1.0x).
+        // Dragging accumulates relative deltas, so the full 1%..1000% range is reachable.
         internal static int MapRatePosition(int mouseX, int textLeft, int textRight)
         {
             if (textRight <= textLeft)
             {
                 return 0;
             }
-            if (mouseX <= textLeft)
-            {
-                return -500;
-            }
-            if (mouseX >= textRight)
-            {
-                return 500;
-            }
-            double midpoint = textLeft + ((long) textRight - textLeft) / 2;
-            double halfWidth = mouseX < midpoint ? midpoint - textLeft : textRight - midpoint;
-            return (int) Math.Round(500.0 * (mouseX - midpoint) / halfWidth, MidpointRounding.AwayFromZero);
+
+            double totalWidth = textRight - textLeft;
+            double midpoint = textLeft + totalWidth / 2;
+            double positionFromMid = mouseX - midpoint;
+            double halfWidth = totalWidth / 2;
+            double relativePos = Math.Clamp(positionFromMid / halfWidth, -1.0, 1.0);
+
+            // 0.5x..2.0x maps to -500..+500 in log2 position units.
+            return (int)Math.Round(500.0 * Math.Log2(1.0 + relativePos));
         }
 
         private void RaiseRatePositionChanged(int position)

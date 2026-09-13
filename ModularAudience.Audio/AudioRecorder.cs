@@ -2,6 +2,8 @@
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
+#pragma warning disable CS0618 // WasapiLoopbackCapture is deprecated - use WasapiRecorderBuilder.WithProcessLoopback() instead
+
 public static class AudioRecorder
 {
     public static string RecordsPath { get; set; } = string.Empty;

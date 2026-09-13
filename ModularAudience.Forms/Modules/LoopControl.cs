@@ -51,6 +51,7 @@ namespace ModularAudience.Forms.Modules
             public override string ToString() => this.DisplayText;
         }
 
+        // Relative rate drag state: tracks cumulative log-rate position per audio
         private void checkedListBox_playlistTracks_MouseDown(object? sender, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Right)
@@ -488,6 +489,12 @@ namespace ModularAudience.Forms.Modules
             // Focus TrackView but also keep this Form front most
             this.CurrentTrackView?.Focus();
             this.BringToFront();
+
+            if (this.CurrentTrackView != null)
+            {
+                int index = this.FindPlaylistTrackIndex(this.CurrentTrackView.OriginalAudio.Id);
+                if (index >= 0) this.checkedListBox_playlistTracks.SelectedIndex = index;
+            }
         }
 
         private void UntoggleAllOtherButtons(Button? sender)

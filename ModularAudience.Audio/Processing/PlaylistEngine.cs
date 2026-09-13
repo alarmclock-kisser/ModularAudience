@@ -1474,10 +1474,12 @@ namespace ModularAudience.Audio.Processing
                 return null;
             }
 
-            _ = this.FadePreparedAsync(currentPrepared, handoffFadeSeconds, false, ct);
+            // The incoming track fades in and plays alongside the current track.
+            // The current track is NOT faded out: auto-enqueue must not force the
+            // currently playing track(s) to stop; they continue undisturbed.
             _ = this.FadePreparedAsync(nextTrack, handoffFadeSeconds, true, ct);
 
-            LogCollection.Log($"Auto enqueue one: started on-beat -> {Path.GetFileNameWithoutExtension(nextTrack.OriginalPath)}");
+            LogCollection.Log($"Auto enqueue one: started on-beat alongside current -> {Path.GetFileNameWithoutExtension(nextTrack.OriginalPath)}");
             return nextTrack;
         }
 
