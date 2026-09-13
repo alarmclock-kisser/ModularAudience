@@ -36,7 +36,7 @@ namespace ModularAudience.Audio.Processing
         public void SetTargetRate(float rate)
         {
             if (!float.IsFinite(rate)) { throw new ArgumentOutOfRangeException(nameof(rate)); }
-            Volatile.Write(ref this.targetRate, Math.Clamp(rate, 0.5f, 2f));
+            Volatile.Write(ref this.targetRate, Math.Clamp(rate, 0.01f, 10f));
         }
 
         public int Read(float[] buffer, int offset, int count) => this.Read(buffer.AsSpan(offset, count));

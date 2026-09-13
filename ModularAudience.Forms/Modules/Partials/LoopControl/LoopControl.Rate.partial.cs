@@ -7,8 +7,8 @@ namespace ModularAudience.Forms.Modules
 {
     public partial class LoopControl
     {
-        // Cumulative rate drag offset per audio (guid -> offset in "log position units")
-        private readonly Dictionary<Guid, float> _audioRateDragOffset = new();
+        // Absolute rate position per audio in logarithmic scrollbar units.
+        private readonly Dictionary<Guid, double> _audioRateDragOffset = new();
 
         private async void checkedListBox_playlistTracks_RatePositionChanged(object? sender, PlaylistTrackRateChangedEventArgs e)
         {
@@ -17,10 +17,10 @@ namespace ModularAudience.Forms.Modules
 
         private async void toolStripMenuItem_resetPlaylistRate_Click(object? sender, EventArgs e)
         {
-            await this.ApplyPlaylistRateAsync(this.checkedListBox_playlistTracks.SelectedIndex, 0);
+            await this.ApplyPlaylistRateAsync(this.checkedListBox_playlistTracks.SelectedIndex, 0, reset: true);
         }
 
-        private async Task ApplyPlaylistRateAsync(int rowIndex, int position)
+        private async Task ApplyPlaylistRateAsync(int rowIndex, int position, bool reset = false)
         {
             if (this.suppressPlaylistChecklistEvents || rowIndex < 0 || rowIndex >= this.checkedListBox_playlistTracks.Items.Count
                 || this.checkedListBox_playlistTracks.Items[rowIndex] is not PlaylistTargetItem item)
@@ -29,34 +29,26 @@ namespace ModularAudience.Forms.Modules
             }
             try
             {
-                TrackView? view = FindTrackView(item.Audio);
                 Guid audioId = item.Audio.Id;
 
-                // Initialize drag offset on first interaction for this audio
+                double minimumLogPosition = 500.0 * Math.Log2(0.01);
+                double maximumLogPosition = 500.0 * Math.Log2(10.0);
                 if (!_audioRateDragOffset.ContainsKey(audioId))
                 {
-                    _audioRateDragOffset[audioId] = (float)PlaybackRateMapping.MapFactor(position);
+                    _audioRateDragOffset[audioId] = 500.0 * Math.Log2(Math.Clamp(item.Audio.ManualSampleRateFactor, 0.01f, 10f));
                 }
 
-                // Cumulative: add delta from previous offset to maintain relative dragging
-                float prevOffset = _audioRateDragOffset[audioId];
-                float delta = (float)PlaybackRateMapping.MapFactor(position) - prevOffset;
-                float newOffset = prevOffset + delta;
+                double newOffset = reset
+                    ? 0.0
+                    : Math.Clamp(_audioRateDragOffset[audioId] + position, minimumLogPosition, maximumLogPosition);
                 _audioRateDragOffset[audioId] = newOffset;
 
-                float currentFactor = Math.Clamp(newOffset, 0.001f, 10f); // 1%..1000% range
+                float currentFactor = (float)Math.Clamp(Math.Pow(2.0, newOffset / 500.0), 0.01, 10.0);
 
-                if (view != null)
-                {
-                    view.SetPlaybackRateSynced((int)Math.Round(500.0 * Math.Log2(currentFactor)), broadcast: false);
-                }
-                else
-                {
-                    item.Audio.ManualSampleRateFactor = currentFactor;
-                    var updateTask = item.Audio.ApplyCombinedSampleRateAsync();
-                    this.RefreshPlaylistRowText(rowIndex, item);
-                    await updateTask;
-                }
+                item.Audio.ManualSampleRateFactor = currentFactor;
+                this.RefreshPlaylistRowText(rowIndex, item);
+                await item.Audio.ApplyCombinedSampleRateAsync();
+                this.RefreshPlaylistRowText(rowIndex, item);
             }
             catch (Exception ex)
             {

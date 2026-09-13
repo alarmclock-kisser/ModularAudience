@@ -88,7 +88,9 @@ namespace ModularAudience.Forms.Controls
             this.rateDragAllowed = this.interactionTextBounds.Contains(point);
             this.draggingRate = false;
             this.lastPosition = null;
-            this.startRatePosition = null; // Reset start position for new drag
+            this.startRatePosition = this.rateDragAllowed
+                ? MapRatePosition(point.X, this.interactionTextBounds.Left, this.interactionTextBounds.Right - 1)
+                : null;
             this.IsInteracting = true;
             this.Capture = true;
             if (!this.Capture)
@@ -144,37 +146,10 @@ namespace ModularAudience.Forms.Controls
                 {
                     this.draggingRate = true;
 
-                    // Calculate current map position
                     int currentMapPos = MapRatePosition(e.X,
                         this.interactionTextBounds.Left, this.interactionTextBounds.Right - 1);
-
-                    // If this is the start of the drag, record the start position
-                    if (!this.startRatePosition.HasValue)
-                    {
-                        this.startRatePosition = currentMapPos;
-                    }
-
-                    // Calculate new position relative to start position
-                    int delta = currentMapPos - this.startRatePosition.Value;
-                    int newPosition = this.startRatePosition.Value + delta;
-
-                    // Clamp to valid range (-1000 to +1000)
-                    if (newPosition < -1000) newPosition = -1000;
-                    if (newPosition > 1000) newPosition = 1000;
-
-                    this.RaiseRatePositionChanged(newPosition);
-                }
-            }
-            else if (this.IsInteracting && this.rateDragAllowed && !this.draggingRate)
-            {
-                // Check if mouse has become steady (not moving)
-                // If position hasn't changed significantly, stop rate updates
-                int currentMapPos = MapRatePosition(e.X,
-                    this.interactionTextBounds.Left, this.interactionTextBounds.Right - 1);
-                if (this.startRatePosition.HasValue && Math.Abs(currentMapPos - this.startRatePosition.Value) < 5)
-                {
-                    // Mouse is steady, stop updating rate
-                    this.EndInteraction();
+                    int relativePosition = currentMapPos - (this.startRatePosition ?? currentMapPos);
+                    this.RaiseRatePositionChanged(Math.Clamp(relativePosition, -500, 500));
                 }
             }
             base.OnMouseMove(e);
@@ -192,11 +167,10 @@ namespace ModularAudience.Forms.Controls
             double totalWidth = textRight - textLeft;
             double midpoint = textLeft + totalWidth / 2;
             double positionFromMid = mouseX - midpoint;
-            double halfWidth = totalWidth / 2;
-            double relativePos = Math.Clamp(positionFromMid / halfWidth, -1.0, 1.0);
 
-            // 0.5x..2.0x maps to -500..+500 in log2 position units.
-            return (int)Math.Round(500.0 * Math.Log2(1.0 + relativePos));
+            // One row width spans -500..+500. Positions outside the row remain usable
+            // so a relative grab-drag can continue across repeated gestures.
+            return (int)Math.Round(1000.0 * positionFromMid / totalWidth);
         }
 
         private void RaiseRatePositionChanged(int position)

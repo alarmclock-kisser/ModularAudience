@@ -359,7 +359,7 @@ namespace ModularAudience.Audio
 
         public async Task ApplyCombinedSampleRateAsync()
         {
-            float combinedFactor = (float) Math.Clamp(this.ManualSampleRateFactor * this.SyncNudgeSampleRateFactor, 0.5, 2.0);
+            float combinedFactor = (float) Math.Clamp(this.ManualSampleRateFactor * this.SyncNudgeSampleRateFactor, 0.01, 10.0);
             await this.AdjustSampleRate(combinedFactor).ConfigureAwait(false);
         }
 

@@ -515,7 +515,7 @@ namespace ModularAudience.Audio
                 if (this.pipeline is VarispeedSampleProvider provider)
                 {
                     provider.SetTargetRate(factor);
-                    this.PlaybackRate = Math.Clamp(factor, 0.5f, 2f);
+                    this.PlaybackRate = Math.Clamp(factor, 0.01f, 10f);
                 }
             }
             return Task.CompletedTask;

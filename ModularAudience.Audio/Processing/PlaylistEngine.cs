@@ -1468,11 +1468,16 @@ namespace ModularAudience.Audio.Processing
             }
 
             const double handoffFadeSeconds = 1.5;
+            // A previous transition may still have left the current track below unity.
+            // Auto-enqueue is an overlap handoff, so restore it before starting the newcomer.
+            currentPrepared.Audio.SetPlaybackVolume(1.0f);
             if (!await this.TryStartPreparedAsync(nextTrack, currentPrepared, 0.0f, ct, request).ConfigureAwait(false))
             {
                 this.DiscardPreparedIfUnused(nextTrack);
                 return null;
             }
+
+            currentPrepared.Audio.SetPlaybackVolume(1.0f);
 
             // The incoming track fades in and plays alongside the current track.
             // The current track is NOT faded out: auto-enqueue must not force the
