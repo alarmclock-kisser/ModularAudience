@@ -233,6 +233,31 @@ namespace ModularAudience.Audio.Tests
             });
         }
 
+        [STATestMethod]
+        public void ControlRateGestureTargetsEveryCheckedOverlapTrackNotFocusedRow()
+        {
+            using AudioTestScope scope = new();
+            AudioObj[] audios = CreateTracks(scope);
+            WithPlaylist(audios, (_, list) =>
+            {
+                SetChecks(list, 0, 2);
+                Point start = TextPoint(list, 1);
+                Point target = new(list.ClientRectangle.Right - 5, start.Y);
+
+                WithControlKey(true, () =>
+                {
+                    Mouse(list, MouseDown, start);
+                    Mouse(list, MouseMove, target);
+                    Mouse(list, MouseUp, target);
+                });
+
+                Assert.IsTrue(audios[0].ManualSampleRateFactor > 1.0f);
+                Assert.AreEqual(1.0, audios[1].ManualSampleRateFactor, 0.000001,
+                    "Ctrl rate dragging must not include the focused unchecked row.");
+                Assert.IsTrue(audios[2].ManualSampleRateFactor > 1.0f);
+            });
+        }
+
         private static void WithPlaylist(AudioObj[] audios, Action<LoopControl, CheckedListBox> verify)
         {
             Assert.AreEqual(ApartmentState.STA, Thread.CurrentThread.GetApartmentState());

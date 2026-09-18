@@ -14,6 +14,7 @@ namespace ModularAudience.Forms.Controls
         private Rectangle interactionTextBounds;
         private bool rateDragAllowed;
         private bool draggingRate;
+        private bool controlRateGesture;
         private int lastMouseX;
         private int dragPixels;
         private int lastMappedPosition;
@@ -89,6 +90,7 @@ namespace ModularAudience.Forms.Controls
             this.mouseDownX = point.X;
             this.rateDragAllowed = this.interactionTextBounds.Contains(point);
             this.draggingRate = false;
+            this.controlRateGesture = (ModifierKeys & Keys.Control) != 0;
             this.lastMouseX = point.X;
             this.dragPixels = 0;
             this.lastMappedPosition = 0;
@@ -114,11 +116,6 @@ namespace ModularAudience.Forms.Controls
             if (!this.rateDragAllowed)
             {
                 this.ToggleItem(this.interactionRowIndex);
-            }
-            else if ((ModifierKeys & Keys.Control) != 0)
-            {
-                this.rateDragAllowed = false;
-                this.RaiseRatePositionChanged(0);
             }
         }
 
@@ -227,12 +224,19 @@ namespace ModularAudience.Forms.Controls
             {
                 return;
             }
+            int endedRowIndex = this.interactionRowIndex;
+            bool resetRate = this.rateDragAllowed && !this.draggingRate && this.controlRateGesture;
             this.IsInteracting = false;
             this.interactionRowIndex = -1;
             this.rateDragAllowed = false;
             this.draggingRate = false;
+            this.controlRateGesture = false;
             this.dragPixels = 0;
             this.lastMappedPosition = 0;
+            if (resetRate)
+            {
+                this.RatePositionChanged?.Invoke(this, new PlaylistTrackRateChangedEventArgs(endedRowIndex, 0));
+            }
             this.RateInteractionEnded?.Invoke(this, EventArgs.Empty);
             this.Capture = false;
         }

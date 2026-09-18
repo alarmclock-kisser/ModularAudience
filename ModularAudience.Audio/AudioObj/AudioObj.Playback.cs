@@ -309,6 +309,11 @@ namespace ModularAudience.Audio
 
         public void SetPlaybackVolume(float volume)
         {
+            if (!this.Playing && !this.Paused)
+            {
+                return;
+            }
+
             this.playback.SetVolume(Math.Clamp(volume, 0.0f, 1.0f));
         }
 

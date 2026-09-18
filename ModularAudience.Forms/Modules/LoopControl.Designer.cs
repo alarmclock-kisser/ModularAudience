@@ -223,7 +223,7 @@
             this.checkedListBox_playlistTracks.Name = "checkedListBox_playlistTracks";
             this.checkedListBox_playlistTracks.Size = new Size(464, 72);
             this.checkedListBox_playlistTracks.TabIndex = 12;
-            this.toolTip_playlistTracks.SetToolTip(this.checkedListBox_playlistTracks, "Click text to focus a row without checking it. Use checkboxes or Space to choose the Ctrl+loop group; checks never change playback. Loop: focused row only. Ctrl+loop: all checked active rows (none means no action). Drag text horizontally to set only that row's rate; the rate persists after release and while stopped. Ctrl+click text or right-click > Center/Reset Rate resets only that row.");
+            this.toolTip_playlistTracks.SetToolTip(this.checkedListBox_playlistTracks, "Click text to focus a row without checking it. Use checkboxes or Space to choose the Ctrl group; checks never change playback. Loop and Ctrl-drag: focused row or all checked active rows (none means no action). Drag text horizontally to set the rate; the rate persists after release and while stopped. Ctrl+click text or right-click > Center/Reset Rate resets only that row.");
             this.checkedListBox_playlistTracks.ItemCheck += this.checkedListBox_playlistTracks_ItemCheck;
             this.checkedListBox_playlistTracks.RatePositionChanged += this.checkedListBox_playlistTracks_RatePositionChanged;
             this.checkedListBox_playlistTracks.SelectedIndexChanged += this.checkedListBox_playlistTracks_SelectedIndexChanged;

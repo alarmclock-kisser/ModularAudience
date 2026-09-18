@@ -12,7 +12,7 @@ namespace ModularAudience.Forms.Modules
 
         private async void checkedListBox_playlistTracks_RatePositionChanged(object? sender, PlaylistTrackRateChangedEventArgs e)
         {
-            await this.ApplyPlaylistRateAsync(e.RowIndex, e.Position);
+            await this.ApplyPlaylistRateAsync(e.RowIndex, e.Position, reset: e.Position == 0);
         }
 
         private async void toolStripMenuItem_resetPlaylistRate_Click(object? sender, EventArgs e)
@@ -29,29 +29,49 @@ namespace ModularAudience.Forms.Modules
             }
             try
             {
-                Guid audioId = item.Audio.Id;
-
-                double minimumLogPosition = 500.0 * Math.Log2(0.01);
-                double maximumLogPosition = 500.0 * Math.Log2(10.0);
-                if (!_audioRateDragOffset.ContainsKey(audioId))
+                IReadOnlyList<AudioObj> targets = reset
+                    ? [item.Audio]
+                    : ModifierKeys.HasFlag(Keys.Control)
+                        ? this.GetActionTargets(checkedGroup: true)
+                        : [item.Audio];
+                foreach (AudioObj audio in targets.DistinctBy(audio => audio.Id))
                 {
-                    _audioRateDragOffset[audioId] = 500.0 * Math.Log2(Math.Clamp(item.Audio.ManualSampleRateFactor, 0.01f, 10f));
+                    await this.ApplyPlaylistRateToAudioAsync(audio, position, reset);
                 }
-
-                double candidateOffset = reset ? 0.0 : _audioRateDragOffset[audioId] + position;
-                double newOffset = Math.Clamp(candidateOffset, minimumLogPosition, maximumLogPosition);
-                _audioRateDragOffset[audioId] = newOffset;
-
-                float currentFactor = (float)Math.Clamp(Math.Pow(2.0, newOffset / 500.0), 0.01, 10.0);
-
-                item.Audio.ManualSampleRateFactor = currentFactor;
-                this.RefreshPlaylistRowText(rowIndex, item);
-                await item.Audio.ApplyCombinedSampleRateAsync();
-                this.RefreshPlaylistRowText(rowIndex, item);
             }
             catch (Exception ex)
             {
                 LogCollection.Log(ex);
+            }
+        }
+
+        private async Task ApplyPlaylistRateToAudioAsync(AudioObj audio, int position, bool reset)
+        {
+            Guid audioId = audio.Id;
+
+            double minimumLogPosition = 500.0 * Math.Log2(0.01);
+            double maximumLogPosition = 500.0 * Math.Log2(10.0);
+            if (!_audioRateDragOffset.ContainsKey(audioId))
+            {
+                _audioRateDragOffset[audioId] = 500.0 * Math.Log2(Math.Clamp(audio.ManualSampleRateFactor, 0.01f, 10f));
+            }
+
+            double candidateOffset = reset ? 0.0 : _audioRateDragOffset[audioId] + position;
+            double newOffset = Math.Clamp(candidateOffset, minimumLogPosition, maximumLogPosition);
+            _audioRateDragOffset[audioId] = newOffset;
+
+            float currentFactor = (float)Math.Clamp(Math.Pow(2.0, newOffset / 500.0), 0.01, 10.0);
+
+            audio.ManualSampleRateFactor = currentFactor;
+            int rowIndex = this.FindPlaylistTrackIndex(audio.Id);
+            if (rowIndex >= 0 && this.checkedListBox_playlistTracks.Items[rowIndex] is PlaylistTargetItem item)
+            {
+                this.RefreshPlaylistRowText(rowIndex, item);
+            }
+            await audio.ApplyCombinedSampleRateAsync();
+            if (rowIndex >= 0 && this.checkedListBox_playlistTracks.Items[rowIndex] is PlaylistTargetItem refreshedItem)
+            {
+                this.RefreshPlaylistRowText(rowIndex, refreshedItem);
             }
         }
 
