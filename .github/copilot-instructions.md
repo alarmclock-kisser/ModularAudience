@@ -10,6 +10,8 @@
 - All UI labels, strings, button texts, status messages, and logs should be written in English; avoid German UI text in the application.
 - Utilize previously loaded context after interruptions to avoid unnecessary reloading and provide short, concrete progress updates instead of lengthy analysis phases without visible results.
 - For regression tests, prefer a few concrete bug reproductions instead of exhaustive test suites. Report actual product defects with exact test names, evidence, and fix suggestions instead of modifying production code or weakening tests without request.
+- Prefer free open-source software without paid licenses for additional development and DSP dependencies. For pure PDF reading, do not introduce PDF dependencies into the repository; the user will provide raw text as needed. Ensure deterministic source separation operates locally, CPU-based, without cloud or AI models.
+- For standalone DSP components in ModularAudience, use deterministic, thread-safe CPU-local processing with the existing managed MathNet provider and no process-wide configuration changes. Keep scratch arrays call- or worker-local, check cancellation frequently, reject pathological memory requirements explicitly rather than silently reducing quality, use English comments/messages, and moderately sized methods. Respect task-specific new-files-only and no-tests boundaries.
 
 ## Project-Specific Rules
 - The BreakbeatGenerator beatmap should render as a drum-by-step matrix in the picture box.

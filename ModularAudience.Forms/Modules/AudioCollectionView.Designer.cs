@@ -103,6 +103,7 @@
             this.menuToolStripItem_demucsSeparateSelected = new ToolStripMenuItem();
             this.menuToolStripItem_sourceSeparateDemucs = new ToolStripMenuItem();
             this.menuToolStripItem_sourceSeparateAnalog = new ToolStripMenuItem();
+            this.menuToolStripItem_sourceSeparateDeterministic = new ToolStripMenuItem();
             this.menuToolStripItem_pinWindow = new ToolStripMenuItem();
             this.convertToMIDIToolStripMenuItem = new ToolStripMenuItem();
             this.toolStripComboBox_orderBy = new ToolStripComboBox();
@@ -636,8 +637,8 @@
             // 
             this.menuToolStripItem_demucsSeparateSelected.Name = "menuToolStripItem_demucsSeparateSelected";
             this.menuToolStripItem_demucsSeparateSelected.Size = new Size(212, 22);
-            this.menuToolStripItem_demucsSeparateSelected.Text = "Source Separate";
-            this.menuToolStripItem_demucsSeparateSelected.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_sourceSeparateDemucs, this.menuToolStripItem_sourceSeparateAnalog });
+            this.menuToolStripItem_demucsSeparateSelected.Text = "Source Separation";
+            this.menuToolStripItem_demucsSeparateSelected.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_sourceSeparateDemucs, this.menuToolStripItem_sourceSeparateAnalog, this.menuToolStripItem_sourceSeparateDeterministic });
             // 
             // menuToolStripItem_sourceSeparateDemucs
             // 
@@ -652,6 +653,13 @@
             this.menuToolStripItem_sourceSeparateAnalog.Size = new Size(211, 22);
             this.menuToolStripItem_sourceSeparateAnalog.Text = "Analog Separation";
             this.menuToolStripItem_sourceSeparateAnalog.Click += this.menuToolStripItem_sourceSeparateAnalog_Click;
+            //
+            // menuToolStripItem_sourceSeparateDeterministic
+            //
+            this.menuToolStripItem_sourceSeparateDeterministic.Name = "menuToolStripItem_sourceSeparateDeterministic";
+            this.menuToolStripItem_sourceSeparateDeterministic.Size = new Size(250, 22);
+            this.menuToolStripItem_sourceSeparateDeterministic.Text = "Best-practice deterministic";
+            this.menuToolStripItem_sourceSeparateDeterministic.Click += this.menuToolStripItem_sourceSeparateDeterministic_Click;
             // 
             // menuToolStripItem_pinWindow
             // 
@@ -771,6 +779,7 @@
         private ToolStripMenuItem menuToolStripItem_demucsSeparateSelected;
         private ToolStripMenuItem menuToolStripItem_sourceSeparateDemucs;
         private ToolStripMenuItem menuToolStripItem_sourceSeparateAnalog;
+        private ToolStripMenuItem menuToolStripItem_sourceSeparateDeterministic;
         private ToolStripMenuItem menuToolStripItem_pinWindow;
         private ToolStripComboBox toolStripComboBox_orderBy;
         private ToolStripMenuItem convertToMIDIToolStripMenuItem;

@@ -919,6 +919,7 @@ namespace ModularAudience.Forms
             this.menuToolStripItem_demucsSeparateSelected.Enabled = hasSingle;
             this.menuToolStripItem_sourceSeparateDemucs.Enabled = hasSingle;
             this.menuToolStripItem_sourceSeparateAnalog.Enabled = hasSingle;
+            this.menuToolStripItem_sourceSeparateDeterministic.Enabled = hasSingle;
 
             this.menuToolStripItem_atomizeSensitivityConservative.Checked = this.atomizeSensitivity == AtomizeSensitivity.Conservative;
             this.menuToolStripItem_atomizeSensitivityBalanced.Checked = this.atomizeSensitivity == AtomizeSensitivity.Balanced;

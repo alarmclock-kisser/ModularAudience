@@ -399,6 +399,18 @@ namespace ModularAudience.Forms
             separationForm.Show();
         }
 
+        private void menuToolStripItem_sourceSeparateDeterministic_Click(object sender, EventArgs e)
+        {
+            AudioObj? toSeparate = this.GetSingleContextAudio();
+            if (toSeparate == null)
+            {
+                return;
+            }
+
+            DeterministicSeparationDialog separationForm = new(toSeparate);
+            separationForm.Show(this);
+        }
+
         private async void checkBox_autoPlay_CheckedChanged(object? sender, EventArgs e)
         {
             if (!this.checkBox_autoPlay.Checked)
