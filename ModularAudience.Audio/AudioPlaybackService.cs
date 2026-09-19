@@ -756,6 +756,9 @@ namespace ModularAudience.Audio
                 this.volumeControl = null;
                 this.waveProvider = null;
                 this.pipeline = null;
+                this.rawData = null;
+                this.rawSampleRate = 0;
+                this.rawChannels = 0;
                 if (this.ownsPlayer)
                 {
                     try { this.player.Dispose(); } catch { }

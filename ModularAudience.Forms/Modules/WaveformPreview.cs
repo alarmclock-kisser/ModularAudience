@@ -18,9 +18,9 @@ namespace ModularAudience.Forms.Modules
 
         public void ShowWaveform(Bitmap bmp, Point location)
         {
+            this.ReplaceImage(bmp);
             this.Size = new Size(bmp.Width, bmp.Height);
             this.pictureBox_waveform.Size = new Size(bmp.Width, bmp.Height);
-            this.pictureBox_waveform.Image = bmp;
             this.Location = location;
             this.Show();
             this.BringToFront();
@@ -48,6 +48,11 @@ namespace ModularAudience.Forms.Modules
                 }
             }
 
+            foreach (Bitmap bmp in bitmaps)
+            {
+                bmp.Dispose();
+            }
+
             // Scale down if combined bitmap exceeds screen bounds
             Rectangle screenBounds = Screen.FromPoint(location).Bounds;
             int maxH = screenBounds.Height - 40;
@@ -73,9 +78,9 @@ namespace ModularAudience.Forms.Modules
                 displayBmp = combined;
             }
 
+            this.ReplaceImage(displayBmp);
             this.Size = new Size(displayBmp.Width, displayBmp.Height);
             this.pictureBox_waveform.Size = new Size(displayBmp.Width, displayBmp.Height);
-            this.pictureBox_waveform.Image = displayBmp;
 
             // Clamp position to screen
             Rectangle bounds = Screen.FromPoint(location).Bounds;
@@ -85,6 +90,23 @@ namespace ModularAudience.Forms.Modules
             this.Location = new Point(posX, posY);
             this.Show();
             this.BringToFront();
+        }
+
+        private void ReplaceImage(Bitmap image)
+        {
+            Image? previous = this.pictureBox_waveform.Image;
+            this.pictureBox_waveform.Image = image;
+            if (previous != null && !ReferenceEquals(previous, image))
+            {
+                previous.Dispose();
+            }
+        }
+
+        public void ClearImage()
+        {
+            Image? previous = this.pictureBox_waveform.Image;
+            this.pictureBox_waveform.Image = null;
+            previous?.Dispose();
         }
     }
 }

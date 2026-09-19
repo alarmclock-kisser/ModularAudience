@@ -8,6 +8,8 @@ using ModularAudience.Forms.Helpers;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime;
+using System.Runtime.InteropServices;
 using NAudio.Midi;
 using ModularAudience.Audio.Midi;
 
@@ -24,6 +26,7 @@ namespace ModularAudience.Forms
         private CancellationTokenSource? autoPlayCts;
         private AudioObj? autoPlayCurrent;
         private readonly SemaphoreSlim autoPlayLock = new(1, 1);
+        private bool closeCleanupStarted;
         private static readonly HashSet<char> InvalidFileNameChars = [.. Path.GetInvalidFileNameChars()];
 
         public int AudioCount => this.AudioC.Audios.Count;
@@ -57,6 +60,9 @@ namespace ModularAudience.Forms
         private int breakbeatResolution = 16;
         private float breakbeatSwing = 0.06f;
         private bool isPinned;
+
+        [DllImport("psapi.dll", SetLastError = true)]
+        private static extern bool EmptyWorkingSet(IntPtr processHandle);
 
         public AudioCollectionView(IEnumerable<AudioObj> audios)
         {
@@ -113,16 +119,7 @@ namespace ModularAudience.Forms
             this.DragDrop += this.listBox_audios_DragDrop;
             this.DragLeave += this.listBox_audios_DragLeave;
 
-            this.FormClosing += async (s, e) =>
-            {
-                e.Cancel = true;
-                await this.CancelAutoPlayAsync(stopCollection: true).ConfigureAwait(false);
-                this.Hide();
-                this.AudioC.Dispose();
-
-                WindowMain.CollectionViews.Remove(this);
-                GC.SuppressFinalize(this);
-            };
+            this.FormClosing += this.AudioCollectionView_FormClosing;
 
             this.waveformPreviewTimer = new System.Windows.Forms.Timer { Interval = 600 };
             this.waveformPreviewTimer.Tick += this.WaveformPreviewTimer_Tick;
@@ -144,6 +141,43 @@ namespace ModularAudience.Forms
             this._autoGrowAnchorHeight = this.Height - this.FormListBoxClearance;
 
             this.Show();
+        }
+
+        private async void AudioCollectionView_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            if (this.closeCleanupStarted)
+            {
+                return;
+            }
+
+            e.Cancel = true;
+            this.closeCleanupStarted = true;
+            this.FormClosing -= this.AudioCollectionView_FormClosing;
+
+            await this.CancelAutoPlayAsync(stopCollection: true).ConfigureAwait(true);
+            this.waveformPreviewTimer.Stop();
+            this.waveformPreviewTimer.Dispose();
+            this.waveformPreviewForm?.ClearImage();
+            this.waveformPreviewForm?.Dispose();
+            this.waveformPreviewForm = null;
+            this.listBox_audios.DataSource = null;
+            this.AudioC.Dispose();
+            this.autoPlayLock.Dispose();
+
+            WindowMain.CollectionViews.Remove(this);
+            this.Close();
+
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(2, GCCollectionMode.Forced, true, true);
+            try
+            {
+                using Process process = Process.GetCurrentProcess();
+                EmptyWorkingSet(process.Handle);
+            }
+            catch
+            {
+                // Working-set trimming is best effort; managed disposal remains authoritative.
+            }
         }
 
 

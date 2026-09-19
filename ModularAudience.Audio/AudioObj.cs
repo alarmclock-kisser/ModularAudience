@@ -65,6 +65,7 @@ namespace ModularAudience.Audio
 
         // Playback infrastructure
         private readonly AudioPlaybackService playback = new();
+        private bool disposed;
         public bool LoopEnabled { get; set; }
         private bool playbackLoopApplied;
         private long playbackLoopStartBytes;
@@ -232,7 +233,7 @@ namespace ModularAudience.Audio
         public void CreateUndoStep()
         {
             // Invalidate redo stack (new action)
-            this.NextSteps.Clear();
+            ClearSteps(this.NextSteps);
             // push current snapshot to previous steps
             this.PreviousSteps.Add(this.Clone());
         }
@@ -259,6 +260,7 @@ namespace ModularAudience.Audio
                 // apply snapshot and remove it from previous steps
                 this.ApplyStateFrom(snapshot);
                 this.PreviousSteps.RemoveAt(this.PreviousSteps.Count - 1);
+                snapshot.Dispose();
 
                 return true;
             }
@@ -289,6 +291,7 @@ namespace ModularAudience.Audio
                 }
 
                 this.ApplyStateFrom(redoState);
+                redoState.Dispose();
                 return true;
             }
             catch
@@ -299,7 +302,7 @@ namespace ModularAudience.Audio
 
         public async Task CreateUndoStepAsync()
         {
-            this.NextSteps.Clear();
+            ClearSteps(this.NextSteps);
             this.PreviousSteps.Add(await this.CloneAsync().ConfigureAwait(false));
         }
 
@@ -322,6 +325,7 @@ namespace ModularAudience.Audio
 
                 this.ApplyStateFrom(snapshot);
                 this.PreviousSteps.RemoveAt(this.PreviousSteps.Count - 1);
+                snapshot.Dispose();
                 return true;
             }
             catch
@@ -349,6 +353,7 @@ namespace ModularAudience.Audio
                 }
 
                 this.ApplyStateFrom(redoState);
+                redoState.Dispose();
                 return true;
             }
             catch
@@ -430,13 +435,27 @@ namespace ModularAudience.Audio
             this.SkippedPositionBytes = 0;
 
             // Invalidate undo/redo as applying a new state should be considered a new baseline
-            this.NextSteps.Clear();
-            this.PreviousSteps.Clear();
+            ClearSteps(this.NextSteps);
+            ClearSteps(this.PreviousSteps);
 
             if (disposeSource)
             {
                 try { source.Dispose(); } catch { }
             }
+        }
+
+        public void ClearRedoHistory()
+        {
+            ClearSteps(this.NextSteps);
+        }
+
+        private static void ClearSteps(BindingList<AudioObj> steps)
+        {
+            foreach (AudioObj step in steps)
+            {
+                try { step.Dispose(); } catch { }
+            }
+            steps.Clear();
         }
 
         public async Task InsertAudioAtFrameAsync(AudioObj clip, long insertFrame)

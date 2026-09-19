@@ -16,12 +16,28 @@ namespace ModularAudience.Audio
 
         public void Dispose()
         {
+            if (this.disposed)
+            {
+                return;
+            }
+
+            this.disposed = true;
             AudioPlaybackService.Unregister(this);
             this.Playing = false;
             this.Paused = false;
             this.Data = [];
+            this.PlayingChanged = null;
+
+            AudioObj[] history = [.. this.PreviousSteps, .. this.NextSteps];
+            this.PreviousSteps.Clear();
+            this.NextSteps.Clear();
+            foreach (AudioObj snapshot in history)
+            {
+                try { snapshot.Dispose(); } catch { }
+            }
 
             try { this.playback.Stop(); } catch { }
+            try { this.playback.Dispose(); } catch { }
             this.playbackLoopApplied = false;
             this.playbackLoopStartBytes = 0;
             this.playbackLoopEndBytes = 0;

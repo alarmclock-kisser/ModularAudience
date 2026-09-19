@@ -17,6 +17,7 @@ public static class AudioRecorder
     private static bool normalizeOnStop = false;
     private static System.Windows.Forms.Timer? _silenceTimer;
     private static int _lastDataWritten = 0;
+    private static TaskCompletionSource? _stopCompletion;
 
     public static bool IsRecording { get; private set; } = false;
     public static string? RecordedFile { get; private set; } = null;
@@ -153,7 +154,7 @@ public static class AudioRecorder
             _writer = new WaveFileWriter(filePath, _capture.WaveFormat);
 
             _capture.DataAvailable += OnDataAvailable;
-            _capture.RecordingStopped += async (s, e) => await Task.Run(() => OnRecordingStopped(s, e));
+            _capture.RecordingStopped += async (s, e) => await Task.Run(() => OnRecordingStoppedAsync(s, e));
 
             // Start silence timer to write silence when no audio is playing
             _lastDataWritten = 0;
@@ -175,19 +176,40 @@ public static class AudioRecorder
 
     public static void StopRecording(bool normalizeOutput = false)
     {
+        _ = StopRecordingAsync(normalizeOutput);
+    }
+
+    public static async Task StopRecordingAsync(bool normalizeOutput = false)
+    {
         if (!IsRecording)
         {
-            Console.WriteLine("Keine Aufnahme aktiv.");
+            await (_stopCompletion?.Task ?? Task.CompletedTask).ConfigureAwait(false);
             return;
         }
 
+        normalizeOnStop = normalizeOutput;
+        TaskCompletionSource completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        _stopCompletion = completion;
         IsRecording = false;
 
-        Console.WriteLine("Aufnahme wird gestoppt...");
-        _capture?.StopRecording();
-
-        // Notify synchronously, before the async cleanup / 24-bit re-export runs
         RecordingStopped?.Invoke();
+
+        Console.WriteLine("Aufnahme wird gestoppt...");
+        try
+        {
+            WasapiLoopbackCapture? capture = _capture;
+            if (capture == null)
+            {
+                throw new InvalidOperationException("The recording capture is unavailable.");
+            }
+            await Task.Run(capture.StopRecording).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _ = CompleteStopAfterFailureAsync(ex);
+        }
+
+        await completion.Task.ConfigureAwait(false);
     }
 
     public static MMDevice? GetActivePlaybackDevice()
@@ -283,7 +305,7 @@ public static class AudioRecorder
         }
     }
 
-    private static async void OnRecordingStopped(object? sender, StoppedEventArgs e)
+    private static async Task OnRecordingStoppedAsync(object? sender, StoppedEventArgs e)
     {
         Console.WriteLine("Aufnahme gestoppt.");
 
@@ -292,13 +314,37 @@ public static class AudioRecorder
             Console.WriteLine($"Fehler während der Aufnahme: {e.Exception.Message}");
         }
 
-        // Finalize and cleanup
-        _writer?.Flush();
+        try
+        {
+            // Finalize and cleanup
+            _writer?.Flush();
 
-        // Stop time must be set after flushing writer, to ensure correct duration
-        RecordingStopTime = DateTime.UtcNow;
+            // Stop time must be set after flushing writer, to ensure correct duration
+            RecordingStopTime = DateTime.UtcNow;
 
-        await Cleanup();
+            await Cleanup();
+        }
+        finally
+        {
+            _stopCompletion?.TrySetResult();
+            _stopCompletion = null;
+        }
+    }
+
+    private static async Task CompleteStopAfterFailureAsync(Exception exception)
+    {
+        Console.WriteLine($"Fehler beim Stoppen der Aufnahme: {exception.Message}");
+        try
+        {
+            _writer?.Flush();
+            RecordingStopTime = DateTime.UtcNow;
+            await Cleanup();
+        }
+        finally
+        {
+            _stopCompletion?.TrySetResult();
+            _stopCompletion = null;
+        }
     }
 
     private static async Task Cleanup()

@@ -82,6 +82,7 @@ namespace ModularAudience.Forms
 
         // Recording timer
         private System.Windows.Forms.Timer? recordingTimer = null;
+        private bool closeAfterRecordingFinalized;
         private DateTime _infoCtrlToStopAppeared = DateTime.MinValue;
         // Track mouse-driven move so we save on mouse up instead of polling
         private bool _isMouseDownForPosition = false;
@@ -90,6 +91,13 @@ namespace ModularAudience.Forms
 
         // Copy + Paste AudioObj
         internal static AudioObj? ClipboardAudioObj = null;
+
+        internal static void ClearClipboardAudio()
+        {
+            AudioObj? clipboardAudio = ClipboardAudioObj;
+            ClipboardAudioObj = null;
+            try { clipboardAudio?.Dispose(); } catch { }
+        }
 
         // User comment history (newest first) and draft
         public static List<string> CommentHistory { get; } = [];
@@ -367,9 +375,30 @@ namespace ModularAudience.Forms
             }
         }
 
-        private void WindowMain_FormClosing(object? sender, FormClosingEventArgs e)
+        private async void WindowMain_FormClosing(object? sender, FormClosingEventArgs e)
         {
             try { WindowsScreenHelper.SaveFormPosition(this); } catch { }
+            if (AudioRecorder.IsRecording && !this.closeAfterRecordingFinalized)
+            {
+                e.Cancel = true;
+                this.closeAfterRecordingFinalized = true;
+                try
+                {
+                    await AudioRecorder.StopRecordingAsync(normalizeOutput: true);
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log($"Recording finalization during app close failed: {ex}");
+                }
+                finally
+                {
+                    if (!this.IsDisposed && !this.Disposing)
+                    {
+                        this.BeginInvoke((Action) this.Close);
+                    }
+                }
+                return;
+            }
             this.StopSyncer();
             this.StopPausingSyncer();
             this.DisposePlaylist();

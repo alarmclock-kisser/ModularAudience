@@ -47,6 +47,7 @@ namespace ModularAudience.Forms.Modules
         private long renderTickCount;
 
         private CancellationTokenSource? playbackCts;
+        private bool closeCleanupStarted;
 
         private int samplesPerPixel = 512;
         private long offsetFrames;
@@ -140,31 +141,7 @@ namespace ModularAudience.Forms.Modules
             this.LocationChanged += (_, __) => this.PositionSettingsWindow();
             this.SizeChanged += (_, __) => this.PositionSettingsWindow();
 
-            this.FormClosing += async (s, e) =>
-            {
-                // Unsubscribe PlayingChanged before stopping playback
-                this.OriginalAudio.PlayingChanged -= this.OnTrackViewAudioPlayingChanged;
-
-                e.Cancel = true;
-                this.Settings.Hide();
-                this.Hide();
-                this.frameTimer.Stop();
-                this.CancelPendingRender();
-                this.DisposeCurrentBitmap();
-                await this.StopPlaybackAsync().ConfigureAwait(false);
-                try { this.OriginalAudio.Dispose(); } catch { }
-                // Setze LastSelectedTrackView auf null, falls diese Instanz die aktuelle ist
-                if (WindowMain.LastSelectedTrackView == this)
-                {
-                    WindowMain.LastSelectedTrackView = null;
-                }
-                // Remove from TrackViews collection
-                WindowMainStaticHelpers.InvokeIfRequired(WindowMain.Instance, () =>
-                    {
-                        WindowMain.TrackViews.Remove(this);
-                        WindowMain.TrackViewIds.Remove(this.TrackViewId);
-                    });
-            };
+            this.FormClosing += this.TrackView_FormClosing;
 
             this.FormClosed += (_, __) =>
             {
@@ -177,6 +154,41 @@ namespace ModularAudience.Forms.Modules
             WindowMain.TrackViews.Add(this);
 
             this.Show();
+        }
+
+        private async void TrackView_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            if (this.closeCleanupStarted)
+            {
+                return;
+            }
+
+            e.Cancel = true;
+            this.closeCleanupStarted = true;
+            this.FormClosing -= this.TrackView_FormClosing;
+
+            this.OriginalAudio.PlayingChanged -= this.OnTrackViewAudioPlayingChanged;
+            this.Settings.Hide();
+            this.Settings.Dispose();
+            this.frameTimer.Stop();
+            this.frameTimer.Dispose();
+            this.CancelPendingRender();
+            this.DisposeCurrentBitmap();
+            await this.StopPlaybackAsync().ConfigureAwait(true);
+            this.OriginalAudio.Dispose();
+
+            if (WindowMain.LastSelectedTrackView == this)
+            {
+                WindowMain.LastSelectedTrackView = null;
+            }
+
+            WindowMain.TrackViews.Remove(this);
+            WindowMain.TrackViewIds.Remove(this.TrackViewId);
+            if (WindowMain.TrackViews.Count == 0)
+            {
+                WindowMain.ClearClipboardAudio();
+            }
+            this.Close();
         }
 
 
@@ -2044,7 +2056,8 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            // In die statische Zwischenablage legen
+            // In die statische Zwischenablage legen und den vorherigen Clone freigeben.
+            WindowMain.ClearClipboardAudio();
             WindowMain.ClipboardAudioObj = clip;
             LogCollection.Log($"TrackView: AudioObj '{clip.Name}' {(wasSelection ? "(Selection)" : "(Full)")} copied to clipboard.");
         }

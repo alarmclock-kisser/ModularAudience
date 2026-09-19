@@ -76,7 +76,7 @@ namespace ModularAudience.Audio
             }
             try
             {
-                audio.NextSteps.Clear(); // Redo-Stack invalidieren bei neuer Änderung
+                audio.ClearRedoHistory(); // Redo-Stack invalidieren bei neuer Änderung
                 audio.PreviousSteps.Add(await audio.CloneAsync());
                 return true;
             }
@@ -215,8 +215,9 @@ namespace ModularAudience.Audio
                 }
                 ApplyState(audio, snapshot);
 
-                // Aus Undo-Stack entfernen
+                // Aus Undo-Stack entfernen und den nicht mehr benötigten Klon entsorgen.
                 audio.PreviousSteps.RemoveAt(audio.PreviousSteps.Count - 1);
+                snapshot.Dispose();
                 return true;
             }
             catch (Exception ex)
@@ -247,6 +248,7 @@ namespace ModularAudience.Audio
                     return false;
                 }
                 ApplyState(audio, redoState);
+                redoState.Dispose();
                 return true;
             }
             catch (Exception ex)
