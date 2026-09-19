@@ -29,8 +29,20 @@ namespace ModularAudience.Forms.Modules
         public readonly AudioObj OriginalAudio;
         private readonly AudioCollection? sourceCollection;
         private readonly Guid sourceAudioId;
-        internal AudioCollection? SourceCollection => this.sourceCollection
-            ?? WindowMain.CollectionViews.FirstOrDefault(cv => cv.AudioC != null && cv.AudioC.Audios.Any(a => a.Id == this.sourceAudioId))?.AudioC;
+        internal AudioCollection? SourceCollection
+        {
+            get
+            {
+                if (this.sourceCollection != null && this.sourceCollection.Audios.Any(a => a.Id == this.sourceAudioId))
+                {
+                    return this.sourceCollection;
+                }
+
+                return WindowMain.CollectionViews
+                    .Where(cv => !cv.IsDisposed && !cv.Disposing)
+                    .FirstOrDefault(cv => cv.AudioC.Audios.Any(a => a.Id == this.sourceAudioId))?.AudioC;
+            }
+        }
         public readonly TrackViewSettings Settings;
 
 
@@ -2635,10 +2647,11 @@ namespace ModularAudience.Forms.Modules
 
         internal async Task ApplyTrackAsync(bool andClose = false)
         {
-            if (this.SourceCollection == null)
+            AudioCollection? sourceCollection = this.SourceCollection;
+            int sourceIndex = sourceCollection?.Audios.ToList().FindIndex(a => a.Id == this.sourceAudioId) ?? -1;
+            if (sourceCollection == null || sourceIndex < 0)
             {
-                var cv = new AudioCollectionView([this.OriginalAudio]);
-                WindowMain.CollectionViews.Add(cv);
+                var cv = new AudioCollectionView([this.OriginalAudio.Clone()]);
                 LogCollection.Log($"Created new collection view and applied changes to '{this.OriginalAudio.Name}'.");
                 cv.Show();
                 return;
@@ -2646,25 +2659,20 @@ namespace ModularAudience.Forms.Modules
 
             await Task.Run(() =>
             {
-                // Find index of the original source audio in the provided collection find by Id
-                int index = this.SourceCollection.Audios.ToList().FindIndex(a => a.Id == this.sourceAudioId);
-                if (index >= 0)
+                try
                 {
-                    try
-                    {
-                        // Copy edited state into the existing collection item so bindings remain valid
-                        // Do not dispose the editing clone because TrackView is still using it
-                        this.SourceCollection.Audios[index].ReplaceWith(this.OriginalAudio, disposeSource: false);
+                    // Copy edited state into the existing collection item so bindings remain valid
+                    // Do not dispose the editing clone because TrackView is still using it
+                    sourceCollection.Audios[sourceIndex].ReplaceWith(this.OriginalAudio, disposeSource: false);
 
-                        // Notify the BindingList that the item changed so UI updates
-                        this.SourceCollection.Audios.ResetItem(index);
+                    // Notify the BindingList that the item changed so UI updates
+                    sourceCollection.Audios.ResetItem(sourceIndex);
 
-                        LogCollection.Log($"Applied changes to '{this.SourceCollection.Audios[index].Name}' in source collection.");
-                    }
-                    catch (Exception ex)
-                    {
-                        LogCollection.Log(ex);
-                    }
+                    LogCollection.Log($"Applied changes to '{sourceCollection.Audios[sourceIndex].Name}' in source collection.");
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log(ex);
                 }
             });
 
