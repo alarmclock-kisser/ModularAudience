@@ -187,7 +187,7 @@ public static class TimeStretcher_V2
                 ctLocal.ThrowIfCancellationRequested();
 
                 track.Data = finalOut;
-                track.Bpm = (float) ((double) track.Bpm * stretchFactor);
+                track.Bpm = (float) ((double) track.Bpm / stretchFactor);
                 track.Length = track.Data.LongLength;
                 track.Duration = TimeSpan.FromSeconds(track.Length / (double) (sampleRate * track.Channels));
 

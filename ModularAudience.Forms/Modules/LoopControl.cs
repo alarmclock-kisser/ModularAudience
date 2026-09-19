@@ -455,6 +455,31 @@ namespace ModularAudience.Forms.Modules
             this.RefreshPlaylistTargets();
         }
 
+        internal void RefreshAudioTiming(AudioObj audio)
+        {
+            if (this.IsDisposed || this.Disposing)
+            {
+                return;
+            }
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke((Action) (() => this.RefreshAudioTiming(audio)));
+                return;
+            }
+
+            int rowIndex = this.FindPlaylistTrackIndex(audio.Id);
+            if (rowIndex >= 0 && this.checkedListBox_playlistTracks.Items[rowIndex] is PlaylistTargetItem item)
+            {
+                this.RefreshPlaylistRowText(rowIndex, item);
+            }
+
+            if (this.OriginalAudio?.Id == audio.Id)
+            {
+                this._jumpBaseMsByAudioId.Remove(audio.Id);
+                this.UpdateJumpDistanceForRate(audio);
+            }
+        }
+
 
 
         private void BuildLoopControlButtons()

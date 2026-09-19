@@ -353,6 +353,30 @@ namespace ModularAudience.Audio.Tests
         }
 
         [STATestMethod]
+        public void TimestretchMetadataRefreshUpdatesLoopControlTempo()
+        {
+            using AudioTestScope scope = new();
+            AudioObj audio = scope.Create(new float[160000]);
+            audio.Bpm = 120;
+
+            WithPlaylist([audio], (dialog, list) =>
+            {
+                NumericUpDown jump = Field<NumericUpDown>(dialog, "numericUpDown_jump");
+                Assert.AreEqual(125, (double) jump.Value, 0.01);
+
+                audio.Bpm = 150;
+                audio.StretchFactor = 1.0;
+                MethodInfo refresh = typeof(LoopControl).GetMethod(
+                    "RefreshAudioTiming",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                refresh.Invoke(dialog, [audio]);
+
+                Assert.AreEqual(100, (double) jump.Value, 0.01);
+                StringAssert.Contains(list.Items[0]!.ToString()!, "[150.0 BPM]");
+            });
+        }
+
+        [STATestMethod]
         public void RateChangeScalesTheSelectedJumpStepInsteadOfResettingIt()
         {
             using AudioTestScope scope = new();

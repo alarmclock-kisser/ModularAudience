@@ -2442,7 +2442,7 @@ namespace ModularAudience.Forms.Modules
             original.Volume = result.Volume;
             original.ChunkSize = result.ChunkSize;
             original.OverlapSize = result.OverlapSize;
-            original.StretchFactor = result.StretchFactor;
+            original.StretchFactor = 1.0;
             original.SampleTag = result.SampleTag;
             original.ScrollOffset = 0;
             original.StartingOffset = 0;
@@ -2485,6 +2485,7 @@ namespace ModularAudience.Forms.Modules
             this.RecalculateLoopFraction();
             this.ApplyLoopFractionToAudio();
             this.UpdateOffsetScrollbar();
+            WindowMain.LoopControlWindow?.RefreshAudioTiming(original);
             await this.RefreshWaveformAsync();
             this.UpdateTimeDisplay();
 
