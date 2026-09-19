@@ -3,6 +3,7 @@ using ModularAudience.Audio.Processors_V4;
 using ModularAudience.Forms.Helpers;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -27,6 +28,7 @@ namespace ModularAudience.Forms
             ArgumentNullException.ThrowIfNull(source);
             this.source = source;
             this.InitializeComponent();
+            this.InitializeAdvancedControls();
             this.SetSourceInformation(source.Name, source.SampleRate, source.Channels, source.Data?.LongLength ?? 0);
             this.textBox_warnings.Text = AnalysisNotice;
             this.initializing = false;
@@ -42,6 +44,8 @@ namespace ModularAudience.Forms
 
         private DeterministicSeparationSettings ReadSettings()
         {
+            InstrumentEnsembleMode ensembleMode = this.ReadEnsembleMode();
+            ImmutableArray<InstrumentProfileId> profiles = this.ReadSelectedProfiles(ensembleMode);
             DeterministicSeparationSettings settings = new()
             {
                 WindowSize = (int) this.comboBox_windowSize.SelectedItem!,
@@ -54,10 +58,46 @@ namespace ModularAudience.Forms
                 SeparationMargin = (double) this.numeric_separationMargin.Value,
                 MaskFloor = (double) this.numeric_maskFloor.Value,
                 TransientPreservation = (double) this.numeric_transientPreservation.Value / 100.0,
-                Threads = (int) this.numeric_threads.Value
+                Threads = (int) this.numeric_threads.Value,
+                EnsembleMode = ensembleMode,
+                InstrumentProfiles = profiles
             };
             settings.Validate();
             return settings;
+        }
+
+        private void InitializeAdvancedControls()
+        {
+            foreach (InstrumentProfile profile in InstrumentProfileCatalog.All)
+            {
+                this.checkedListBox_profiles.Items.Add(profile);
+            }
+
+            this.domainUpDown_ensembleMode.Items.AddRange(new object[] { "Automatic", "ProfilesOnly", "ProfilesAndAutomatic" });
+            this.domainUpDown_ensembleMode.Text = "Automatic";
+            this.domainUpDown_cqtBinsPerOctave.Items.AddRange(new object[] { "12 bins/octave", "24 bins/octave", "36 bins/octave" });
+            this.domainUpDown_cqtBinsPerOctave.Text = "12 bins/octave";
+        }
+
+        private InstrumentEnsembleMode ReadEnsembleMode()
+        {
+            string text = this.domainUpDown_ensembleMode.Text;
+            return text == "ProfilesOnly" ? InstrumentEnsembleMode.ProfilesOnly
+                : text == "ProfilesAndAutomatic" ? InstrumentEnsembleMode.ProfilesAndAutomatic
+                : InstrumentEnsembleMode.Automatic;
+        }
+
+        private ImmutableArray<InstrumentProfileId> ReadSelectedProfiles(InstrumentEnsembleMode ensembleMode)
+        {
+            if (ensembleMode == InstrumentEnsembleMode.Automatic) return [];
+            List<InstrumentProfileId> selected = new();
+            foreach (int index in this.checkedListBox_profiles.CheckedIndices)
+            {
+                if (this.checkedListBox_profiles.Items[index] is InstrumentProfile profile)
+                    selected.Add(profile.Id);
+            }
+
+            return selected.ToImmutableArray();
         }
 
         private void settings_ValueChanged(object? sender, EventArgs e)
@@ -69,6 +109,19 @@ namespace ModularAudience.Forms
 
             this.label_hopSizeValue.Text = $"{(int) this.comboBox_windowSize.SelectedItem! / 4} samples (fixed)";
             this.InvalidateAnalysis("Settings changed. Detect sources again before separating.");
+        }
+
+        private void profiles_ItemCheck(object? sender, ItemCheckEventArgs e)
+        {
+            if (this.initializing || !this.CanUseUi || this.operationCancellation != null)
+            {
+                return;
+            }
+
+            bool checkedCountChanged = e.NewValue == CheckState.Checked && e.CurrentValue != CheckState.Checked
+                || e.NewValue != CheckState.Checked && e.CurrentValue == CheckState.Checked;
+            if (checkedCountChanged)
+                this.InvalidateAnalysis("Instrument profile selection changed. Detect sources again before separating.");
         }
 
         private void InvalidateAnalysis(string status)
@@ -238,7 +291,7 @@ namespace ModularAudience.Forms
         {
             DeterministicSeparationSettings settings = this.ReadSettings();
             DeterministicSeparationAnalysis? current = this.analysis;
-            if (current == null || current.Settings != settings)
+            if (current == null || !current.Settings.IsEquivalentTo(settings))
             {
                 this.InvalidateAnalysis("Settings changed. Detect sources again before separating.");
                 return;

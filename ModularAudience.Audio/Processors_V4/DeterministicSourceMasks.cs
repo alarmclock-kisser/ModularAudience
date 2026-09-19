@@ -62,7 +62,8 @@ namespace ModularAudience.Audio.Processors_V4
                 for (int source = 0; source < groups.Length; source++)
                 {
                     double groupPower = 0;
-                    foreach (int component in groups[source].Components) groupPower += dictionary[bin][component] * activation[component];
+                    foreach (int component in groups[source].Components)
+                        groupPower += groups[source].WeightFor(component) * dictionary[bin][component] * activation[component];
                     double affinity = Affinity(groups[source], h, p, pan);
                     masks[source][bin] = (float)DeterministicTrainingData.Unit(groupPower / denominator * affinity);
                 }

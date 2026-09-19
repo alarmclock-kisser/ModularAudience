@@ -1,7 +1,11 @@
 namespace ModularAudience.Audio.Processors_V4
 {
     internal sealed record DeterministicSourceGroup(int[] Components, double Harmonic, double Percussive,
-        double Pan, DeterministicSourceDescriptor Descriptor);
+        double Pan, DeterministicSourceDescriptor Descriptor, double[]? ComponentWeights = null)
+    {
+        internal double WeightFor(int componentIndex)
+            => this.ComponentWeights is null ? 1.0 : this.ComponentWeights[componentIndex];
+    }
 
     internal static class DeterministicSourceGrouping
     {

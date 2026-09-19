@@ -9,10 +9,9 @@ namespace ModularAudience.Audio.Processors_V4
             ArgumentNullException.ThrowIfNull(source);
             ArgumentNullException.ThrowIfNull(settings);
             settings.Validate();
-            if (settings.UseCqtAnalysis || settings.UseCqtSynthesis || settings.UsePyin || settings.UseIlrma
-                || settings.EnsembleMode != InstrumentEnsembleMode.Automatic)
+            if (settings.UseCqtAnalysis || settings.UseCqtSynthesis || settings.UsePyin || settings.UseIlrma)
             {
-                throw new NotSupportedException("Advanced DSP cores and instrument profiles are not yet connected to this pipeline. See SOURCE_SEPARATION_HANDOFF.md. Use automatic separation with advanced options disabled for now.");
+                throw new NotSupportedException("Advanced DSP cores are not yet connected to this pipeline. See SOURCE_SEPARATION_HANDOFF.md. Use automatic separation with advanced options disabled for now.");
             }
             float[] samples = source.Data;
             int sampleRate = source.SampleRate;

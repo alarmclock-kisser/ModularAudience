@@ -73,6 +73,101 @@ namespace ModularAudience.Audio.Tests
         }
 
         [STATestMethod]
+        public void AdvancedControlsDefaultToOffAndAutomaticWithNoProfiles()
+        {
+            AssertIsolatedSta();
+            using AudioTestScope scope = new();
+            AudioObj source = scope.Create([0.25f, -0.125f], 8000);
+            using DeterministicSeparationDialog dialog = new(source);
+            dialog.PerformLayout();
+
+            Assert.IsFalse(GetControl<CheckBox>(dialog, "checkBox_cqtAnalysis").Checked, "CQT analysis must default off.");
+            Assert.IsFalse(GetControl<CheckBox>(dialog, "checkBox_cqtSynthesis").Checked, "CQT synthesis must default off.");
+            Assert.IsFalse(GetControl<CheckBox>(dialog, "checkBox_pyin").Checked, "pYIN must default off.");
+            Assert.IsFalse(GetControl<CheckBox>(dialog, "checkBox_ilrma").Checked, "ILRMA must default off.");
+            Assert.IsTrue(GetControl<CheckBox>(dialog, "checkBox_cqtAnalysis").Enabled == false, "CQT analysis is pending and must stay disabled until wired.");
+            Assert.IsTrue(GetControl<CheckBox>(dialog, "checkBox_pyin").Enabled == false, "pYIN is pending and must stay disabled until wired.");
+            Assert.IsTrue(GetControl<CheckBox>(dialog, "checkBox_ilrma").Enabled == false, "ILRMA is pending and must stay disabled until wired.");
+
+            DomainUpDown ensemble = GetControl<DomainUpDown>(dialog, "domainUpDown_ensembleMode");
+            Assert.AreEqual("Automatic", ensemble.Text, "The ensemble mode must default to Automatic.");
+            CollectionAssert.AreEqual(new object[] { "Automatic", "ProfilesOnly", "ProfilesAndAutomatic" }, ensemble.Items.Cast<object>().ToArray(),
+                "The ensemble selector must expose exactly the three supported modes.");
+
+            CheckedListBox profiles = GetControl<CheckedListBox>(dialog, "checkedListBox_profiles");
+            Assert.AreEqual(16, profiles.Items.Count, "All 16 catalog instrument profiles must be listed for selection.");
+            Assert.AreEqual(0, profiles.CheckedItems.Count, "No profile may be preselected by default.");
+
+            DeterministicSeparationSettings settings = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
+            settings.Validate();
+            Assert.IsFalse(settings.UseCqtAnalysis && settings.UseCqtSynthesis && settings.UsePyin && settings.UseIlrma);
+            Assert.AreEqual(InstrumentEnsembleMode.Automatic, settings.EnsembleMode);
+            Assert.IsTrue(settings.InstrumentProfiles.IsEmpty, "Automatic mode must not carry instrument profiles.");
+        }
+
+        [STATestMethod]
+        public void ChangingEnsembleModeOrProfileSelectionInvalidatesAnalysis()
+        {
+            AssertIsolatedSta();
+            using AudioTestScope scope = new();
+            AudioObj source = scope.Create(AudioTestData.Tone(8000, 80, 500, 5, 5), 8000);
+            using DeterministicSeparationDialog dialog = new(source);
+            ConfigureSmallAnalysis(dialog);
+
+            GetControl<DomainUpDown>(dialog, "domainUpDown_ensembleMode").Text = "ProfilesOnly";
+            CheckedListBox profiles = GetControl<CheckedListBox>(dialog, "checkedListBox_profiles");
+            profiles.SetItemChecked(0, true);
+            DeterministicSeparationSettings guided = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
+            Assert.AreEqual(InstrumentEnsembleMode.ProfilesOnly, guided.EnsembleMode);
+            Assert.AreEqual(1, guided.InstrumentProfiles.Length, "A checked profile must be readable as an immutable selection.");
+
+            // Seed the cached analysis from the default Automatic settings (the only connected pipeline path).
+            GetControl<DomainUpDown>(dialog, "domainUpDown_ensembleMode").Text = "Automatic";
+            profiles.SetItemChecked(0, false);
+            DeterministicSeparationSettings baseline = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
+            baseline.Validate();
+            DeterministicSeparationAnalysis analysis = DeterministicSeparationProcessor.AnalyzeAsync(source, baseline).GetAwaiter().GetResult();
+            GetField(dialog, "analysis").SetValue(dialog, analysis);
+            Invoke(dialog, "DisplayAnalysis", analysis);
+            Invoke(dialog, "SetOperationState", false);
+            Assert.IsTrue(GetControl<Button>(dialog, "button_separate").Enabled, "The seeded current analysis must enable separation.");
+
+            profiles.SetItemChecked(1, true);
+            AssertIdleWithoutAnalysis(dialog);
+            Assert.AreEqual("Instrument profile selection changed. Detect sources again before separating.", GetControl<Label>(dialog, "label_status").Text,
+                "Changing the committed profile selection must invalidate the cached model.");
+
+            GetControl<DomainUpDown>(dialog, "domainUpDown_ensembleMode").Text = "ProfilesAndAutomatic";
+            AssertIdleWithoutAnalysis(dialog);
+            Assert.AreEqual("Settings changed. Detect sources again before separating.", GetControl<Label>(dialog, "label_status").Text,
+                "Changing the ensemble mode must invalidate the cached model.");
+        }
+
+        [STATestMethod]
+        public void ReadSettingsRoundTripsEnsembleAndProfilesThroughIsEquivalentTo()
+        {
+            AssertIsolatedSta();
+            using AudioTestScope scope = new();
+            AudioObj source = scope.Create([0.25f, -0.125f], 8000);
+            using DeterministicSeparationDialog dialog = new(source);
+
+            GetControl<DomainUpDown>(dialog, "domainUpDown_ensembleMode").Text = "ProfilesOnly";
+            CheckedListBox profiles = GetControl<CheckedListBox>(dialog, "checkedListBox_profiles");
+            profiles.SetItemChecked(2, true);
+            profiles.SetItemChecked(0, true);
+
+            DeterministicSeparationSettings first = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
+            DeterministicSeparationSettings second = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
+            Assert.IsTrue(first.IsEquivalentTo(second), "Repeated reads of the same UI state must be semantically equivalent.");
+
+            profiles.SetItemChecked(0, false);
+            DeterministicSeparationSettings third = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
+            Assert.IsFalse(first.IsEquivalentTo(third), "Deselecting a profile must change the semantic settings.");
+            Assert.AreEqual(InstrumentEnsembleMode.ProfilesOnly, second.EnsembleMode);
+            Assert.AreEqual(2, second.InstrumentProfiles.Length);
+        }
+
+        [STATestMethod]
         public void ThirdSeparationMenuItemOpensAnIdleModelessDialogOnActualClick()
         {
             AssertIsolatedSta();
