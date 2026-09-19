@@ -42,6 +42,14 @@ namespace ModularAudience.Forms
             public string TrackId { get; init; } = string.Empty;
         }
 
+        private sealed class CachedTrackLogEntry
+        {
+            public DateTime StartUtc { get; set; }
+            public DateTime? EndUtc { get; set; }
+            public string Path { get; init; } = string.Empty;
+            public string TrackId { get; init; } = string.Empty;
+        }
+
         // Designer hookup for context menu opening
         private void contextMenuStrip_playlist_Opening(object? sender, CancelEventArgs e)
         {
@@ -64,6 +72,9 @@ namespace ModularAudience.Forms
         private DateTime? _trackLogRecordStart;          // UTC time when recording started
         private readonly List<TrackLogEntry> _trackLog = [];
         private HashSet<string> _trackLogActivePaths = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<CachedTrackLogEntry> _preRecordingTrackLog = [];
+        private HashSet<string> _preRecordingActivePaths = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly TimeSpan PreRecordingTrackLogDuration = TimeSpan.FromMinutes(5);
 
         // ── Initializer (called from constructor) ──────────────────────────────
         private void InitPlaylist()
@@ -889,35 +900,41 @@ namespace ModularAudience.Forms
         public void StartTrackLog(string recordingFilePath)
         {
             this._trackLogFilePath = Path.ChangeExtension(recordingFilePath, ".txt");
-            this._trackLogRecordStart = DateTime.UtcNow;
+            DateTime recordingLiveStart = AudioRecorder.RecordingStartTime ?? DateTime.UtcNow;
+            DateTime recordingTimelineStart = recordingLiveStart - AudioRecorder.RecordingPreRoll;
+            this._trackLogRecordStart = recordingTimelineStart;
+            this.SyncPreRecordingTrackLog();
+            DateTime now = DateTime.UtcNow;
             this._trackLog.Clear();
             this._trackLogActivePaths.Clear();
 
-            // Capture currently playing tracks (playlist + TrackViews) at recording start
-            this.SyncPlaylistTrackLog(TimeSpan.Zero);
-
-            // Also capture any TrackView tracks that are already playing at recording start
-            // (they won't be in _trackLogActivePaths yet since SyncPlaylistTrackLog was called
-            // before they started playing, or they were playing before recording started)
-            foreach (var tv in WindowMain.TrackViews)
+            foreach (CachedTrackLogEntry cachedEntry in this._preRecordingTrackLog)
             {
-                if (tv == null || tv.IsDisposed || tv.Disposing) continue;
-                var audio = tv.OriginalAudio;
-                if (audio != null && audio.PlayerPlaying && !string.IsNullOrWhiteSpace(audio.FilePath))
+                DateTime entryEnd = cachedEntry.EndUtc ?? now;
+                if (entryEnd <= recordingTimelineStart || cachedEntry.StartUtc >= now)
                 {
-                    string path = audio.FilePath;
-                    if (!this._trackLogActivePaths.Contains(path, StringComparer.OrdinalIgnoreCase))
-                    {
-                        this._trackLog.Add(new TrackLogEntry
-                        {
-                            Start = TimeSpan.Zero,
-                            TrackId = Path.GetFileNameWithoutExtension(path)
-                        });
-                        this._trackLogActivePaths.Add(path);
-                    }
+                    continue;
                 }
+
+                DateTime entryStart = cachedEntry.StartUtc < recordingTimelineStart
+                    ? recordingTimelineStart
+                    : cachedEntry.StartUtc;
+                DateTime clampedEnd = entryEnd > now ? now : entryEnd;
+                if (clampedEnd <= entryStart)
+                {
+                    continue;
+                }
+
+                this._trackLog.Add(new TrackLogEntry
+                {
+                    Start = entryStart - recordingTimelineStart,
+                    End = cachedEntry.EndUtc.HasValue ? clampedEnd - recordingTimelineStart : null,
+                    TrackId = cachedEntry.TrackId
+                });
             }
 
+            this._trackLogActivePaths = new HashSet<string>(this._preRecordingActivePaths, StringComparer.OrdinalIgnoreCase);
+            this._preRecordingTrackLog.Clear();
             this.FlushTrackLog();
         }
 
@@ -944,6 +961,7 @@ namespace ModularAudience.Forms
             this._trackLogFilePath = null;
             this._trackLogRecordStart = null;
             this._trackLogActivePaths.Clear();
+            this.ResetPreRecordingTrackLog();
         }
 
         /// <summary>
@@ -983,6 +1001,7 @@ namespace ModularAudience.Forms
         {
             if (this._trackLogFilePath == null || this._trackLogRecordStart == null)
             {
+                this.SyncPreRecordingTrackLog();
                 return;
             }
 
@@ -1004,6 +1023,7 @@ namespace ModularAudience.Forms
         {
             if (this._trackLogFilePath == null || this._trackLogRecordStart == null)
             {
+                this.SyncPreRecordingTrackLog();
                 return;
             }
 
@@ -1014,21 +1034,7 @@ namespace ModularAudience.Forms
 
         private void SyncPlaylistTrackLog(TimeSpan now)
         {
-            // Collect active paths from both the playlist AND manually playing TrackViews
-            HashSet<string> activePaths = this._playlist.ActiveOriginalPaths
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            // Add manually playing tracks from TrackViews (not from playlist)
-            foreach (var tv in WindowMain.TrackViews)
-            {
-                if (tv == null || tv.IsDisposed || tv.Disposing) continue;
-                var audio = tv.OriginalAudio;
-                if (audio != null && audio.PlayerPlaying && !string.IsNullOrWhiteSpace(audio.FilePath))
-                {
-                    activePaths.Add(audio.FilePath);
-                }
-            }
+            HashSet<string> activePaths = this.GetActiveTrackPaths();
 
             foreach (string endedPath in this._trackLogActivePaths.Except(activePaths, StringComparer.OrdinalIgnoreCase).ToList())
             {
@@ -1053,6 +1059,75 @@ namespace ModularAudience.Forms
             }
 
             this._trackLogActivePaths = activePaths;
+        }
+
+        private void SyncPreRecordingTrackLog()
+        {
+            DateTime now = DateTime.UtcNow;
+            HashSet<string> activePaths = this.GetActiveTrackPaths();
+
+            foreach (string endedPath in this._preRecordingActivePaths.Except(activePaths, StringComparer.OrdinalIgnoreCase))
+            {
+                CachedTrackLogEntry? entry = this._preRecordingTrackLog.LastOrDefault(cachedEntry =>
+                    string.Equals(cachedEntry.Path, endedPath, StringComparison.OrdinalIgnoreCase) &&
+                    !cachedEntry.EndUtc.HasValue);
+                if (entry != null)
+                {
+                    entry.EndUtc = now;
+                }
+            }
+
+            foreach (string startedPath in activePaths.Except(this._preRecordingActivePaths, StringComparer.OrdinalIgnoreCase))
+            {
+                this._preRecordingTrackLog.Add(new CachedTrackLogEntry
+                {
+                    StartUtc = now,
+                    Path = startedPath,
+                    TrackId = Path.GetFileNameWithoutExtension(startedPath)
+                });
+            }
+
+            this._preRecordingActivePaths = activePaths;
+            DateTime cutoff = now - PreRecordingTrackLogDuration;
+            for (int index = this._preRecordingTrackLog.Count - 1; index >= 0; index--)
+            {
+                CachedTrackLogEntry entry = this._preRecordingTrackLog[index];
+                if (entry.EndUtc.HasValue && entry.EndUtc.Value <= cutoff)
+                {
+                    this._preRecordingTrackLog.RemoveAt(index);
+                    continue;
+                }
+
+                if (entry.StartUtc < cutoff)
+                {
+                    entry.StartUtc = cutoff;
+                }
+            }
+        }
+
+        private void ResetPreRecordingTrackLog()
+        {
+            this._preRecordingTrackLog.Clear();
+            this._preRecordingActivePaths = this.GetActiveTrackPaths();
+        }
+
+        private HashSet<string> GetActiveTrackPaths()
+        {
+            HashSet<string> activePaths = this._playlist.ActiveOriginalPaths
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var tv in WindowMain.TrackViews)
+            {
+                if (tv == null || tv.IsDisposed || tv.Disposing) continue;
+                var audio = tv.OriginalAudio;
+                if (audio != null && audio.PlayerPlaying && !string.IsNullOrWhiteSpace(audio.FilePath))
+                {
+                    activePaths.Add(audio.FilePath);
+                }
+            }
+
+            return activePaths;
         }
 
         private void FlushTrackLog()
@@ -1086,15 +1161,16 @@ namespace ModularAudience.Forms
         /// </summary>
         private void OnAudioPlayingChanged()
         {
-            if (this._trackLogFilePath == null || this._trackLogRecordStart == null)
-            {
-                return;
-            }
-
             try
             {
                 WindowMainStaticHelpers.InvokeIfRequired(Instance, () =>
                 {
+                    if (this._trackLogFilePath == null || this._trackLogRecordStart == null)
+                    {
+                        this.SyncPreRecordingTrackLog();
+                        return;
+                    }
+
                     // Re-sync: this handles both new starts and stops
                     this.SyncPlaylistTrackLog(DateTime.UtcNow - this._trackLogRecordStart.Value);
                     this.FlushTrackLog();

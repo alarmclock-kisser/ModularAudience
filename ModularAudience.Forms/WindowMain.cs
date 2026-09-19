@@ -150,6 +150,7 @@ namespace ModularAudience.Forms
             // Finalise the track-log (end timestamps) as soon as the recording stops,
             // before the async 24-bit re-export runs
             AudioRecorder.RecordingStopped += this.OnAudioRecorderStopped;
+            _ = AudioRecorder.StartRollingBufferAsync();
 
             this._keyFilter = new GlobalKeyMessageFilter();
             this._keyFilter.KeyChanged += this.GlobalKeyChanged;
@@ -433,6 +434,15 @@ namespace ModularAudience.Forms
                 }
             }
             catch { }
+
+            try
+            {
+                await AudioRecorder.ShutdownAsync();
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"Recording capture shutdown failed: {ex}");
+            }
 
             // Close child windows quickly on UI thread where necessary (best-effort, non-blocking)
             try

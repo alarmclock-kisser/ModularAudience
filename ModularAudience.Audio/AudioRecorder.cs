@@ -6,6 +6,9 @@ using NAudio.Wave;
 
 public static class AudioRecorder
 {
+    private const int RollingBufferSeconds = 5 * 60;
+    private static readonly object StateLock = new();
+
     public static string RecordsPath { get; set; } = string.Empty;
 
     private static WasapiLoopbackCapture? _capture;
@@ -14,23 +17,37 @@ public static class AudioRecorder
     public static string MMDeviceName => _mmDevice?.FriendlyName ?? "N/A";
     private static WaveFileWriter? _writer;
 
-    private static bool normalizeOnStop = false;
-    private static System.Windows.Forms.Timer? _silenceTimer;
+    private static System.Threading.Timer? _silenceTimer;
     private static int _lastDataWritten = 0;
     private static TaskCompletionSource? _stopCompletion;
+    private static RollingAudioBuffer? _rollingBuffer;
 
     public static bool IsRecording { get; private set; } = false;
     public static string? RecordedFile { get; private set; } = null;
 
     public static DateTime? RecordingStartTime { get; private set; } = null;
     public static DateTime? RecordingStopTime { get; private set; } = null;
+    public static TimeSpan RecordingPreRoll { get; private set; } = TimeSpan.Zero;
     public static TimeSpan? RecordingTime =>
         RecordingStartTime != null
-            ? (RecordingStopTime ?? DateTime.UtcNow) - RecordingStartTime.Value
+            ? RecordingPreRoll + ((RecordingStopTime ?? DateTime.UtcNow) - RecordingStartTime.Value)
             : null;
 
     /// <summary>Raised synchronously when the capture is stopped, before any post-processing (e.g. 24-bit re-export).</summary>
     public static event Action? RecordingStopped;
+
+    /// <summary>Starts the RAM-only five-minute rolling capture used for pre-roll recording.</summary>
+    public static async Task StartRollingBufferAsync(MMDevice? mmDevice = null)
+    {
+        try
+        {
+            await Task.Run(() => EnsureCaptureStarted(mmDevice)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Rolling recording buffer could not start: {ex.Message}");
+        }
+    }
 
     public static float EstimatedBpm => GetPeaksPerMinute();
     public static double MaxDetectionAttention { get; set; } = 4;
@@ -128,50 +145,60 @@ public static class AudioRecorder
     }
 
 
-    public static async Task StartRecording(string filePath, MMDevice? mmDevice = null)
+    public static Task StartRecording(string filePath, MMDevice? mmDevice = null, TimeSpan? preRoll = null)
     {
         if (IsRecording)
         {
             Console.WriteLine("Aufnahme läuft bereits.");
-            return;
+            return Task.CompletedTask;
         }
-
-        RecordingStartTime = DateTime.UtcNow;
-
-        RecordedFile = Path.GetFullPath(filePath);
 
         try
         {
-            MMDevice? captureDevice = null;
-            if (mmDevice != null)
+            EnsureCaptureStarted(mmDevice);
+
+            lock (StateLock)
             {
-                captureDevice = mmDevice;
+                if (IsRecording)
+                {
+                    return Task.CompletedTask;
+                }
+
+                if (_capture == null)
+                {
+                    throw new InvalidOperationException("The audio capture is unavailable.");
+                }
+
+                string fullPath = Path.GetFullPath(filePath);
+                WaveFileWriter writer = new(fullPath, _capture.WaveFormat);
+                int preRollBytes = GetPreRollBytes(_capture.WaveFormat, preRoll ?? TimeSpan.Zero);
+                int availableBytes = _rollingBuffer?.Count ?? 0;
+                int actualPreRollBytes = AlignToFrame(Math.Min(preRollBytes, availableBytes), _capture.WaveFormat.BlockAlign);
+                byte[] prefix = _rollingBuffer?.GetLast(actualPreRollBytes) ?? [];
+                if (prefix.Length > 0)
+                {
+                    writer.Write(prefix, 0, prefix.Length);
+                }
+
+                _writer = writer;
+                RecordedFile = fullPath;
+                RecordingStartTime = DateTime.UtcNow;
+                RecordingStopTime = null;
+                RecordingPreRoll = _capture.WaveFormat.AverageBytesPerSecond > 0
+                    ? TimeSpan.FromSeconds((double) prefix.Length / _capture.WaveFormat.AverageBytesPerSecond)
+                    : TimeSpan.Zero;
+                IsRecording = true;
+                _lastDataWritten = 0;
+                _rollingBuffer?.Clear();
+                Console.WriteLine($"Recording started. Device: {_mmDevice?.FriendlyName ?? "Default"}");
             }
-
-            // Nutze das gefundene Gerät oder das Standardgerät als Fallback
-            _capture = captureDevice != null ? new WasapiLoopbackCapture(captureDevice) : new WasapiLoopbackCapture();
-
-            _writer = new WaveFileWriter(filePath, _capture.WaveFormat);
-
-            _capture.DataAvailable += OnDataAvailable;
-            _capture.RecordingStopped += async (s, e) => await Task.Run(() => OnRecordingStoppedAsync(s, e));
-
-            // Start silence timer to write silence when no audio is playing
-            _lastDataWritten = 0;
-            _silenceTimer = new System.Windows.Forms.Timer { Interval = 100 };
-            _silenceTimer.Tick += OnSilenceTimerTick;
-            _silenceTimer.Start();
-
-            _capture.StartRecording();
-            IsRecording = true;
-            _mmDevice = captureDevice ?? GetDefaultPlaybackDevice();
-            Console.WriteLine($"Aufnahme gestartet. Gerät: {captureDevice?.FriendlyName ?? "Standard"}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Fehler beim Starten der Aufnahme: {ex.Message}");
-            await Cleanup();
+            Console.WriteLine($"Recording could not start: {ex.Message}");
         }
+
+        return Task.CompletedTask;
     }
 
     public static void StopRecording(bool normalizeOutput = false)
@@ -181,35 +208,109 @@ public static class AudioRecorder
 
     public static async Task StopRecordingAsync(bool normalizeOutput = false)
     {
-        if (!IsRecording)
+        TaskCompletionSource? completion;
+        WaveFileWriter? writer = null;
+        string? recordedFile = null;
+        bool shouldFinalize = false;
+
+        lock (StateLock)
         {
-            await (_stopCompletion?.Task ?? Task.CompletedTask).ConfigureAwait(false);
+            if (_stopCompletion != null)
+            {
+                completion = _stopCompletion;
+            }
+            else if (!IsRecording)
+            {
+                return;
+            }
+            else
+            {
+                completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                _stopCompletion = completion;
+                IsRecording = false;
+                writer = _writer;
+                _writer = null;
+                recordedFile = RecordedFile;
+                RecordingStopTime = DateTime.UtcNow;
+                _rollingBuffer?.Clear();
+                shouldFinalize = true;
+            }
+        }
+
+        if (!shouldFinalize)
+        {
+            await completion!.Task.ConfigureAwait(false);
             return;
         }
 
-        normalizeOnStop = normalizeOutput;
-        TaskCompletionSource completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        _stopCompletion = completion;
-        IsRecording = false;
-
-        RecordingStopped?.Invoke();
-
-        Console.WriteLine("Aufnahme wird gestoppt...");
         try
         {
-            WasapiLoopbackCapture? capture = _capture;
-            if (capture == null)
+            writer?.Flush();
+            writer?.Dispose();
+            RecordingStopped?.Invoke();
+
+            if (normalizeOutput && recordedFile != null && File.Exists(recordedFile))
             {
-                throw new InvalidOperationException("The recording capture is unavailable.");
+                await NormalizeRecordingAsync(recordedFile).ConfigureAwait(false);
             }
-            await Task.Run(capture.StopRecording).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            _ = CompleteStopAfterFailureAsync(ex);
+            Console.WriteLine($"Recording could not be finalized: {ex.Message}");
+        }
+        finally
+        {
+            lock (StateLock)
+            {
+                if (ReferenceEquals(_stopCompletion, completion))
+                {
+                    _stopCompletion = null;
+                }
+            }
+
+            completion.TrySetResult();
+        }
+    }
+
+    public static async Task ShutdownAsync()
+    {
+        if (IsRecording)
+        {
+            await StopRecordingAsync().ConfigureAwait(false);
         }
 
-        await completion.Task.ConfigureAwait(false);
+        WasapiLoopbackCapture? capture;
+        System.Threading.Timer? silenceTimer;
+        lock (StateLock)
+        {
+            capture = _capture;
+            _capture = null;
+            silenceTimer = _silenceTimer;
+            _silenceTimer = null;
+            _rollingBuffer?.Clear();
+            _rollingBuffer = null;
+            _lastDataWritten = 0;
+        }
+
+        silenceTimer?.Dispose();
+
+        if (capture != null)
+        {
+            capture.DataAvailable -= OnDataAvailable;
+            capture.RecordingStopped -= OnCaptureStopped;
+            try
+            {
+                await Task.Run(capture.StopRecording).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Recording capture shutdown failed: {ex.Message}");
+            }
+            finally
+            {
+                capture.Dispose();
+            }
+        }
     }
 
     public static MMDevice? GetActivePlaybackDevice()
@@ -260,131 +361,172 @@ public static class AudioRecorder
         }
         try
         {
-            _capture?.Dispose();
-            _capture = new WasapiLoopbackCapture(device);
-            Console.WriteLine($"Gerät auf {device.FriendlyName} gesetzt.");
+            lock (StateLock)
+            {
+                _mmDevice = device;
+            }
+            Console.WriteLine($"Capture device set to {device.FriendlyName}.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Fehler beim Setzen des Geräts: {ex.Message}");
+            Console.WriteLine($"Capture device could not be set: {ex.Message}");
+        }
+    }
+
+    private static void EnsureCaptureStarted(MMDevice? mmDevice)
+    {
+        lock (StateLock)
+        {
+            if (_capture != null)
+            {
+                return;
+            }
+
+            MMDevice? captureDevice = mmDevice ?? _mmDevice;
+            WasapiLoopbackCapture capture = captureDevice != null
+                ? new WasapiLoopbackCapture(captureDevice)
+                : new WasapiLoopbackCapture();
+            RollingAudioBuffer rollingBuffer = new(GetPreRollBytes(capture.WaveFormat, TimeSpan.FromSeconds(RollingBufferSeconds)));
+            System.Threading.Timer silenceTimer = new(OnSilenceTimerTick, null, Timeout.Infinite, Timeout.Infinite);
+
+            try
+            {
+                _capture = capture;
+                _rollingBuffer = rollingBuffer;
+                _silenceTimer = silenceTimer;
+                _lastDataWritten = 0;
+                _mmDevice = captureDevice ?? GetDefaultPlaybackDevice();
+                capture.DataAvailable += OnDataAvailable;
+                capture.RecordingStopped += OnCaptureStopped;
+                capture.StartRecording();
+                silenceTimer.Change(100, 100);
+            }
+            catch
+            {
+                silenceTimer.Dispose();
+                capture.DataAvailable -= OnDataAvailable;
+                capture.RecordingStopped -= OnCaptureStopped;
+                capture.Dispose();
+                _capture = null;
+                _rollingBuffer = null;
+                _silenceTimer = null;
+                throw;
+            }
+        }
+    }
+
+    private static int GetPreRollBytes(WaveFormat format, TimeSpan duration)
+    {
+        double seconds = Math.Clamp(duration.TotalSeconds, 0, RollingBufferSeconds);
+        long bytes = (long)(format.AverageBytesPerSecond * seconds);
+        int boundedBytes = (int)Math.Min(int.MaxValue, bytes);
+        return AlignToFrame(boundedBytes, format.BlockAlign);
+    }
+
+    private static int AlignToFrame(int bytes, int blockAlign)
+    {
+        if (blockAlign <= 1)
+        {
+            return Math.Max(0, bytes);
+        }
+
+        return Math.Max(0, bytes - bytes % blockAlign);
+    }
+
+    private static void OnCaptureStopped(object? sender, StoppedEventArgs e)
+    {
+        if (e.Exception != null)
+        {
+            Console.WriteLine($"Recording capture stopped unexpectedly: {e.Exception.Message}");
+        }
+
+        bool recordingWasActive;
+        lock (StateLock)
+        {
+            if (ReferenceEquals(_capture, sender))
+            {
+                _capture = null;
+            }
+
+            recordingWasActive = IsRecording;
+        }
+
+        if (recordingWasActive)
+        {
+            _ = StopRecordingAsync();
         }
     }
 
     private static void OnDataAvailable(object? sender, WaveInEventArgs e)
     {
-        if (_writer == null)
+        lock (StateLock)
         {
-            _ = Task.Run(() => Console.WriteLine("DEBUG: OnDataAvailable called but _writer is null"));
-            return;
-        }
-        
-        _lastDataWritten = e.BytesRecorded;
-        _writer.Write(e.Buffer, 0, e.BytesRecorded);
-        _ = Task.Run(() => Console.WriteLine($"DEBUG: OnDataAvailable - BytesRecorded: {e.BytesRecorded}"));
-    }
-
-    private static void OnSilenceTimerTick(object? sender, EventArgs e)
-    {
-        if (_writer == null || !IsRecording)
-        {
-            return;
-        }
-
-        // If no data was written in the last 100ms, write silence
-        if (_lastDataWritten == 0)
-        {
-            var format = _capture?.WaveFormat;
-            if (format != null)
+            _lastDataWritten = e.BytesRecorded;
+            if (IsRecording && _writer != null)
             {
-                // Write 100ms of silence
-                int bytesToWrite = (int)(format.AverageBytesPerSecond * 0.1);
-                byte[] silence = new byte[bytesToWrite];
-                _writer.Write(silence, 0, bytesToWrite);
-                _ = Task.Run(() => Console.WriteLine($"DEBUG: OnSilenceTimerTick - Wrote {bytesToWrite} bytes of silence"));
+                _writer.Write(e.Buffer, 0, e.BytesRecorded);
+            }
+            else
+            {
+                _rollingBuffer?.Append(e.Buffer, 0, e.BytesRecorded);
             }
         }
     }
 
-    private static async Task OnRecordingStoppedAsync(object? sender, StoppedEventArgs e)
+    private static void OnSilenceTimerTick(object? state)
     {
-        Console.WriteLine("Aufnahme gestoppt.");
-
-        if (e.Exception != null)
-        {
-            Console.WriteLine($"Fehler während der Aufnahme: {e.Exception.Message}");
-        }
-
         try
         {
-            // Finalize and cleanup
-            _writer?.Flush();
-
-            // Stop time must be set after flushing writer, to ensure correct duration
-            RecordingStopTime = DateTime.UtcNow;
-
-            await Cleanup();
-        }
-        finally
-        {
-            _stopCompletion?.TrySetResult();
-            _stopCompletion = null;
-        }
-    }
-
-    private static async Task CompleteStopAfterFailureAsync(Exception exception)
-    {
-        Console.WriteLine($"Fehler beim Stoppen der Aufnahme: {exception.Message}");
-        try
-        {
-            _writer?.Flush();
-            RecordingStopTime = DateTime.UtcNow;
-            await Cleanup();
-        }
-        finally
-        {
-            _stopCompletion?.TrySetResult();
-            _stopCompletion = null;
-        }
-    }
-
-    private static async Task Cleanup()
-    {
-        _silenceTimer?.Stop();
-        _silenceTimer?.Dispose();
-        _silenceTimer = null;
-
-        _writer?.Dispose();
-        _writer = null;
-        _capture?.Dispose();
-        _capture = null;
-        IsRecording = false;
-
-        if (normalizeOnStop && RecordedFile != null && File.Exists(RecordedFile))
-        {
-            try
+            lock (StateLock)
             {
-                Console.WriteLine("Normalisiere Aufnahme...");
-                var obj = new AudioObj(RecordedFile, true);
-                if (obj.Data.LongLength > 0)
+                if (_lastDataWritten != 0)
                 {
-                    await obj.NormalizeAsync();
-                    // Overwrite the original recording file in-place (no copy)
-                    var exporter = new AudioExporter();
-                    string outDir = Path.GetDirectoryName(RecordedFile) ?? RecordsPath;
-                    await exporter.ExportWavAsync(obj, 24, outDir, writeBpmTag: false, customFilePath: RecordedFile);
+                    _lastDataWritten = 0;
+                    return;
                 }
-                Console.WriteLine("Normalisierung abgeschlossen.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Fehler bei der Normalisierung: {ex.Message}");
-            }
-            finally
-            {
-                normalizeOnStop = false;
+
+                WaveFormat? format = _capture?.WaveFormat;
+                if (format == null)
+                {
+                    return;
+                }
+
+                int bytesToWrite = AlignToFrame((int)(format.AverageBytesPerSecond * 0.1), format.BlockAlign);
+                byte[] silence = new byte[bytesToWrite];
+                if (IsRecording && _writer != null)
+                {
+                    _writer.Write(silence, 0, silence.Length);
+                }
+                else
+                {
+                    _rollingBuffer?.Append(silence, 0, silence.Length);
+                }
             }
         }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Silence timer callback failed: {ex.Message}");
+        }
+    }
 
-        normalizeOnStop = false;
+    private static async Task NormalizeRecordingAsync(string recordedFile)
+    {
+        try
+        {
+            Console.WriteLine("Normalizing recording...");
+            var obj = new AudioObj(recordedFile, true);
+            if (obj.Data.LongLength > 0)
+            {
+                await obj.NormalizeAsync();
+                var exporter = new AudioExporter();
+                string outDir = Path.GetDirectoryName(recordedFile) ?? RecordsPath;
+                await exporter.ExportWavAsync(obj, 24, outDir, writeBpmTag: false, customFilePath: recordedFile);
+            }
+            Console.WriteLine("Recording normalization completed.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Recording normalization failed: {ex.Message}");
+        }
     }
 }

@@ -62,6 +62,12 @@
             this.button_pianoRoll = new Button();
             this.textBox_info = new TextBox();
             this.button_record = new Button();
+            this.contextMenuStrip_record = new ContextMenuStrip(this.components);
+            this.toolStripMenuItem_recordMinus1 = new ToolStripMenuItem();
+            this.toolStripMenuItem_recordMinus2 = new ToolStripMenuItem();
+            this.toolStripMenuItem_recordMinus3 = new ToolStripMenuItem();
+            this.toolStripMenuItem_recordMinus4 = new ToolStripMenuItem();
+            this.toolStripMenuItem_recordMinus5 = new ToolStripMenuItem();
             this.textBox_recordingTime = new TextBox();
             this.label_stopRecordInfo = new Label();
             this.button_newTrack = new Button();
@@ -85,11 +91,12 @@
             this.timeStretchImportedToToolStripMenuItem = new ToolStripMenuItem();
             this.button_controller = new Button();
             this.contextMenuStrip_playlist.SuspendLayout();
+            this.contextMenuStrip_record.SuspendLayout();
             this.contextMenuStrip_random.SuspendLayout();
             this.SuspendLayout();
-            // 
+            //
             // button_import
-            // 
+            //
             this.button_import.BackColor = Color.FromArgb(  255,   255,   192);
             this.button_import.Location = new Point(12, 12);
             this.button_import.Name = "button_import";
@@ -99,9 +106,9 @@
             this.button_import.Text = "Import";
             this.button_import.UseVisualStyleBackColor = false;
             this.button_import.Click += this.button_import_Click;
-            // 
+            //
             // button_browse
-            // 
+            //
             this.button_browse.Font = new Font("Bahnschrift", 9F, FontStyle.Regular, GraphicsUnit.Point,  0);
             this.button_browse.Location = new Point(93, 12);
             this.button_browse.Name = "button_browse";
@@ -111,30 +118,30 @@
             this.button_browse.Text = "[...]";
             this.button_browse.UseVisualStyleBackColor = true;
             this.button_browse.Click += this.button_browse_Click;
-            // 
+            //
             // contextMenuStrip_playlist
-            // 
+            //
             this.contextMenuStrip_playlist.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_playPause, this.toolStripMenuItem_prev, this.toolStripMenuItem_skip, this.toolStripMenuItem_crossfade, this.toolStripMenuItem_crossSyncDuration, this.toolStripMenuItem_shuffle, this.toolStripMenuItem_clear, this.toolStripMenuItem_timestretchEach, this.toolStripMenuItem_countdown, this.toolStripSeparator_playlistQueue, this.toolStripMenuItem_addNext, this.toolStripMenuItem_enqueueLast, this.toolStripSeparator_playlistAutoEnqueue, this.toolStripMenuItem_autoEnqueueOne });
             this.contextMenuStrip_playlist.Name = "contextMenuStrip_playlist";
             this.contextMenuStrip_playlist.Size = new Size(201, 280);
             this.contextMenuStrip_playlist.Opening += this.contextMenuStrip_playlist_Opening;
-            // 
+            //
             // toolStripMenuItem_playPause
-            // 
+            //
             this.toolStripMenuItem_playPause.Name = "toolStripMenuItem_playPause";
             this.toolStripMenuItem_playPause.Size = new Size(200, 22);
             this.toolStripMenuItem_playPause.Text = "Import Tracks ...";
             this.toolStripMenuItem_playPause.Click += this.playlistMenu_ImportTracks_Click;
-            // 
+            //
             // toolStripMenuItem_prev
-            // 
+            //
             this.toolStripMenuItem_prev.Name = "toolStripMenuItem_prev";
             this.toolStripMenuItem_prev.Size = new Size(200, 22);
             this.toolStripMenuItem_prev.Text = "⏮ Rewind / Previous";
             this.toolStripMenuItem_prev.Click += this.playlistMenu_Prev_Click;
-            // 
+            //
             // toolStripMenuItem_skip
-            // 
+            //
             this.toolStripMenuItem_skip.Name = "toolStripMenuItem_skip";
             this.toolStripMenuItem_skip.Size = new Size(200, 22);
             this.toolStripMenuItem_skip.Text = "⏭ Skip Track";
@@ -387,7 +394,60 @@
             this.button_record.TabStop = false;
             this.button_record.Text = "●";
             this.button_record.UseVisualStyleBackColor = true;
+            this.button_record.ContextMenuStrip = this.contextMenuStrip_record;
             this.button_record.Click += this.button_record_Click;
+            //
+            // contextMenuStrip_record
+            //
+            this.contextMenuStrip_record.Items.AddRange(new ToolStripItem[] {
+            this.toolStripMenuItem_recordMinus1,
+            this.toolStripMenuItem_recordMinus2,
+            this.toolStripMenuItem_recordMinus3,
+            this.toolStripMenuItem_recordMinus4,
+            this.toolStripMenuItem_recordMinus5});
+            this.contextMenuStrip_record.Name = "contextMenuStrip_record";
+            this.contextMenuStrip_record.Size = new Size(112, 114);
+            this.contextMenuStrip_record.Opening += this.contextMenuStrip_record_Opening;
+            //
+            // toolStripMenuItem_recordMinus1
+            //
+            this.toolStripMenuItem_recordMinus1.Name = "toolStripMenuItem_recordMinus1";
+            this.toolStripMenuItem_recordMinus1.Size = new Size(111, 22);
+            this.toolStripMenuItem_recordMinus1.Tag = 1;
+            this.toolStripMenuItem_recordMinus1.Text = "-1:00";
+            this.toolStripMenuItem_recordMinus1.Click += this.recordPreRollMenuItem_Click;
+            //
+            // toolStripMenuItem_recordMinus2
+            //
+            this.toolStripMenuItem_recordMinus2.Name = "toolStripMenuItem_recordMinus2";
+            this.toolStripMenuItem_recordMinus2.Size = new Size(111, 22);
+            this.toolStripMenuItem_recordMinus2.Tag = 2;
+            this.toolStripMenuItem_recordMinus2.Text = "-2:00";
+            this.toolStripMenuItem_recordMinus2.Click += this.recordPreRollMenuItem_Click;
+            //
+            // toolStripMenuItem_recordMinus3
+            //
+            this.toolStripMenuItem_recordMinus3.Name = "toolStripMenuItem_recordMinus3";
+            this.toolStripMenuItem_recordMinus3.Size = new Size(111, 22);
+            this.toolStripMenuItem_recordMinus3.Tag = 3;
+            this.toolStripMenuItem_recordMinus3.Text = "-3:00";
+            this.toolStripMenuItem_recordMinus3.Click += this.recordPreRollMenuItem_Click;
+            //
+            // toolStripMenuItem_recordMinus4
+            //
+            this.toolStripMenuItem_recordMinus4.Name = "toolStripMenuItem_recordMinus4";
+            this.toolStripMenuItem_recordMinus4.Size = new Size(111, 22);
+            this.toolStripMenuItem_recordMinus4.Tag = 4;
+            this.toolStripMenuItem_recordMinus4.Text = "-4:00";
+            this.toolStripMenuItem_recordMinus4.Click += this.recordPreRollMenuItem_Click;
+            //
+            // toolStripMenuItem_recordMinus5
+            //
+            this.toolStripMenuItem_recordMinus5.Name = "toolStripMenuItem_recordMinus5";
+            this.toolStripMenuItem_recordMinus5.Size = new Size(111, 22);
+            this.toolStripMenuItem_recordMinus5.Tag = 5;
+            this.toolStripMenuItem_recordMinus5.Text = "-5:00";
+            this.toolStripMenuItem_recordMinus5.Click += this.recordPreRollMenuItem_Click;
             // 
             // textBox_recordingTime
             // 
@@ -676,6 +736,7 @@
             this.Name = "WindowMain";
             this.Text = "ModularAudience (Main Control)";
             this.contextMenuStrip_playlist.ResumeLayout(false);
+            this.contextMenuStrip_record.ResumeLayout(false);
             this.contextMenuStrip_random.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
@@ -701,6 +762,12 @@
         private Button button_pianoRoll;
         private TextBox textBox_info;
         private Button button_record;
+        private ContextMenuStrip contextMenuStrip_record;
+        private ToolStripMenuItem toolStripMenuItem_recordMinus1;
+        private ToolStripMenuItem toolStripMenuItem_recordMinus2;
+        private ToolStripMenuItem toolStripMenuItem_recordMinus3;
+        private ToolStripMenuItem toolStripMenuItem_recordMinus4;
+        private ToolStripMenuItem toolStripMenuItem_recordMinus5;
         private TextBox textBox_recordingTime;
         private Label label_stopRecordInfo;
         private Button button_newTrack;

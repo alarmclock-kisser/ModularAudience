@@ -3,6 +3,7 @@ using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio;
 using ModularAudience.Audio.Processors_V3;
 using ModularAudience.Forms.Helpers;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 namespace ModularAudience.Forms
@@ -161,24 +162,7 @@ namespace ModularAudience.Forms
             {
                 if (!AudioRecorder.IsRecording)
                 {
-                    this.recordingTimer = new System.Windows.Forms.Timer { Interval = 500 };
-                    this.recordingTimer.Tick += async (s, ev) => await this.RecordingTimer_TickAsync();
-                    this.recordingTimer.Start();
-
-                    string recordDir = this.AudioC.RecordPath;
-                    try { Directory.CreateDirectory(recordDir); } catch { }
-
-                    string fileName = "Recording" + DateTime.Now.ToString("_yyyyMMdd_HHmmss") + ".wav";
-                    string fullPath = Path.Combine(recordDir, fileName);
-                    await AudioRecorder.StartRecording(fullPath);
-
-                    // Start playlist track-log tied to this recording
-                    this.StartTrackLog(fullPath);
-
-                    this.button_record.ForeColor = Color.Red;
-                    this.label_stopRecordInfo.Visible = false;
-                    this._infoCtrlToStopAppeared = DateTime.MinValue;
-                    this.button_record.Enabled = true;
+                    await this.BeginRecordingAsync(TimeSpan.Zero);
                 }
                 else if (!ModifierKeys.HasFlag(Keys.Control))
                 {
@@ -204,6 +188,56 @@ namespace ModularAudience.Forms
                 this.label_stopRecordInfo.Visible = false;
                 this.button_record.Enabled = true;
             }
+        }
+
+        private async Task BeginRecordingAsync(TimeSpan preRoll)
+        {
+            this.recordingTimer = new System.Windows.Forms.Timer { Interval = 500 };
+            this.recordingTimer.Tick += async (s, ev) => await this.RecordingTimer_TickAsync();
+            this.recordingTimer.Start();
+
+            string recordDir = this.AudioC.RecordPath;
+            try { Directory.CreateDirectory(recordDir); } catch { }
+
+            string fileName = "Recording" + DateTime.Now.ToString("_yyyyMMdd_HHmmss") + ".wav";
+            string fullPath = Path.Combine(recordDir, fileName);
+            await AudioRecorder.StartRecording(fullPath, preRoll: preRoll);
+            if (!AudioRecorder.IsRecording)
+            {
+                throw new InvalidOperationException("The recording capture could not be started.");
+            }
+
+            this.StartTrackLog(fullPath);
+            this.button_record.ForeColor = Color.Red;
+            this.label_stopRecordInfo.Visible = false;
+            this._infoCtrlToStopAppeared = DateTime.MinValue;
+            this.button_record.Enabled = true;
+        }
+
+        private async void recordPreRollMenuItem_Click(object? sender, EventArgs e)
+        {
+            if (AudioRecorder.IsRecording || sender is not ToolStripMenuItem { Tag: int minutes })
+            {
+                return;
+            }
+
+            try
+            {
+                await this.BeginRecordingAsync(TimeSpan.FromMinutes(minutes));
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"Recording pre-roll error: {ex.Message}");
+                try { this.recordingTimer?.Stop(); this.recordingTimer?.Dispose(); } catch { }
+                this.recordingTimer = null;
+                this.button_record.ForeColor = Color.Black;
+                this.button_record.Enabled = true;
+            }
+        }
+
+        private void contextMenuStrip_record_Opening(object? sender, CancelEventArgs e)
+        {
+            e.Cancel = AudioRecorder.IsRecording;
         }
 
         private async Task RecordingTimer_TickAsync()
