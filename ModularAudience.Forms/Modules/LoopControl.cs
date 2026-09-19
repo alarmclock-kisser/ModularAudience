@@ -1275,28 +1275,38 @@ namespace ModularAudience.Forms.Modules
                 this.numericUpDown_jump.ValueChanged -= this.numericUpDown_jump_ValueChanged;
 
                 double currentValue = (double) this.numericUpDown_jump.Value;
+                AudioObj? audio = this.OriginalAudio;
+                double rateFactor = audio == null ? 1.0 : GetJumpRateFactor(audio);
+                double baseJumpMs = audio == null
+                    ? this.lastJumpMs * rateFactor
+                    : this.GetJumpBaseMs(audio);
 
                 if (currentValue > this.lastJumpValue)
                 {
                     // Moving Up
-                    this.lastJumpMs *= 2;
-                    this.lastJumpMs = Math.Clamp(this.lastJumpMs, (double) this.numericUpDown_jump.Minimum, (double) this.numericUpDown_jump.Maximum);
-                    this.numericUpDown_jump.Value = (decimal) this.lastJumpMs;
+                    baseJumpMs *= 2;
                 }
                 else if (currentValue < this.lastJumpValue)
                 {
                     // Moving Down
-                    this.lastJumpMs = Math.Max((double) this.numericUpDown_jump.Minimum, this.lastJumpMs / 2);
-                    this.numericUpDown_jump.Value = (decimal) this.lastJumpMs;
+                    baseJumpMs /= 2;
                 }
                 else
                 {
-                    // Sync lastJumpMs if value was set directly (e.g. via mouse drag)
-                    this.lastJumpMs = currentValue;
+                    // Preserve direct edits as a new unscaled step.
+                    baseJumpMs = currentValue * rateFactor;
                 }
 
+                double minimumBaseMs = (double) this.numericUpDown_jump.Minimum * rateFactor;
+                double maximumBaseMs = (double) this.numericUpDown_jump.Maximum * rateFactor;
+                baseJumpMs = Math.Clamp(baseJumpMs, minimumBaseMs, maximumBaseMs);
+                this.SetJumpBaseMs(audio, baseJumpMs);
+                double scaledJumpMs = Math.Clamp(baseJumpMs / rateFactor,
+                    (double) this.numericUpDown_jump.Minimum,
+                    (double) this.numericUpDown_jump.Maximum);
+                this.numericUpDown_jump.Value = (decimal) scaledJumpMs;
                 this.lastJumpValue = (double) this.numericUpDown_jump.Value;
-                this.lastJumpMs = this.lastJumpValue; // Ensure they stay in sync
+                this.lastJumpMs = this.lastJumpValue;
 
                 this.numericUpDown_jump.ValueChanged += this.numericUpDown_jump_ValueChanged;
             }
@@ -1310,9 +1320,15 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            AudioObj? audio = this.OriginalAudio;
+            double rateFactor = audio == null ? 1.0 : GetJumpRateFactor(audio);
             double msPerBeat = 60000.0 / this.Bpm;
-            decimal clampedMsPerBeat = (decimal) Math.Clamp(msPerBeat, (double) this.numericUpDown_jump.Minimum, (double) this.numericUpDown_jump.Maximum);
-            this.numericUpDown_jump.Value = clampedMsPerBeat;
+            double baseJumpMs = msPerBeat * rateFactor;
+            this.SetJumpBaseMs(audio, baseJumpMs);
+            double scaledJumpMs = Math.Clamp(baseJumpMs / rateFactor,
+                (double) this.numericUpDown_jump.Minimum,
+                (double) this.numericUpDown_jump.Maximum);
+            this.numericUpDown_jump.Value = (decimal) scaledJumpMs;
             this.lastJumpMs = (double) this.numericUpDown_jump.Value;
             this.lastJumpValue = this.lastJumpMs;
         }
@@ -1324,19 +1340,19 @@ namespace ModularAudience.Forms.Modules
         /// </summary>
         private void UpdateJumpDistanceForRate(AudioObj audio)
         {
-            double rateFactor = audio.SampleRateFactor;
-            if (Math.Abs(rateFactor - 1.0) < 0.0005) rateFactor = 1.0;
+            this.UpdateJumpDistanceForRateImmediately(audio, GetJumpRateFactor(audio));
+        }
 
-            // Keep the default jump at one quarter of the effective beat.
-            // Suppress the ValueChanged handler because this is a programmatic
-            // update, not a user request to double or halve the jump.
-            double effectiveBpm = GetAudioBpm(audio) * audio.StretchFactor * rateFactor;
-            double defaultJumpMs = 60000.0 / effectiveBpm / 4;
-            decimal clampedDefault = (decimal) Math.Clamp(defaultJumpMs, (double) this.numericUpDown_jump.Minimum, (double) this.numericUpDown_jump.Maximum);
+        private void UpdateJumpDistanceForRateImmediately(AudioObj audio, double rateFactor)
+        {
+            double baseJumpMs = this.GetJumpBaseMs(audio);
+            double scaledJumpMs = Math.Clamp(baseJumpMs / rateFactor,
+                (double) this.numericUpDown_jump.Minimum,
+                (double) this.numericUpDown_jump.Maximum);
             this.suppressJumpEvents = true;
             try
             {
-                this.numericUpDown_jump.Value = clampedDefault;
+                this.numericUpDown_jump.Value = (decimal) scaledJumpMs;
                 this.lastJumpMs = (double) this.numericUpDown_jump.Value;
                 this.lastJumpValue = this.lastJumpMs;
             }

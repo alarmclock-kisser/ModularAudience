@@ -353,6 +353,36 @@ namespace ModularAudience.Audio.Tests
         }
 
         [STATestMethod]
+        public void RateChangeScalesTheSelectedJumpStepInsteadOfResettingIt()
+        {
+            using AudioTestScope scope = new();
+            AudioObj audio = scope.Create(new float[160000]);
+            audio.Bpm = 150;
+
+            WithPlaylist([audio], (dialog, _) =>
+            {
+                NumericUpDown jump = Field<NumericUpDown>(dialog, "numericUpDown_jump");
+                MethodInfo update = typeof(LoopControl).GetMethod(
+                    "UpdateJumpDistanceForRate",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                update.Invoke(dialog, [audio]);
+
+                Assert.AreEqual(100, (double) jump.Value, 0.01);
+                jump.Value = 200;
+                jump.Value = 400;
+
+                audio.ManualSampleRateFactor = 1.25;
+                MethodInfo updateFromTrackView = typeof(LoopControl).GetMethod(
+                    "UpdateJumpDistanceFromTrackView",
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
+                updateFromTrackView.Invoke(dialog, [audio]);
+
+                Assert.AreEqual(320, (double) jump.Value, 0.01,
+                    "A 400 ms selected step must be scaled by the current rate, not reset to one beat.");
+            });
+        }
+
+        [STATestMethod]
         public void RateGestureKeepsValueAndInvariantTextWhileSteadyAndAfterRelease()
         {
             using AudioTestScope scope = new();

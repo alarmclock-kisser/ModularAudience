@@ -45,6 +45,7 @@ namespace ModularAudience.Forms.Modules
             bool changed = this.OriginalAudio.ManualSampleRateFactor != (float)newFactor;
             this.OriginalAudio.ManualSampleRateFactor = (float)newFactor;
             this.UpdateRateLabel((float)newFactor);
+            WindowMain.LoopControlWindow?.UpdateJumpDistanceFromTrackView(this.OriginalAudio);
             if (fireAndForget && changed)
             {
                 _ = this.ApplyPlaybackRateAsync();

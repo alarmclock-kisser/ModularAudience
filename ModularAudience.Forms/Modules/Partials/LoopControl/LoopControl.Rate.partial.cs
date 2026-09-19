@@ -9,6 +9,41 @@ namespace ModularAudience.Forms.Modules
     {
         // Absolute rate position per audio in logarithmic scrollbar units.
         private readonly Dictionary<Guid, double> _audioRateDragOffset = new();
+        private readonly Dictionary<Guid, double> _jumpBaseMsByAudioId = new();
+
+        private static double GetJumpRateFactor(AudioObj audio) =>
+            Math.Clamp(audio.SampleRateFactor, 0.01, 10.0);
+
+        private double GetJumpBaseMs(AudioObj audio)
+        {
+            if (!this._jumpBaseMsByAudioId.TryGetValue(audio.Id, out double baseMs))
+            {
+                baseMs = 60000.0
+                    / (GetAudioBpm(audio) * Math.Max(0.01, audio.StretchFactor))
+                    / 4.0;
+                this._jumpBaseMsByAudioId[audio.Id] = baseMs;
+            }
+            return baseMs;
+        }
+
+        private void SetJumpBaseMs(AudioObj? audio, double baseMs)
+        {
+            if (audio != null)
+            {
+                this._jumpBaseMsByAudioId[audio.Id] = Math.Max(0.01, baseMs);
+            }
+        }
+
+        internal void UpdateJumpDistanceFromTrackView(AudioObj audio)
+        {
+            if (this.IsDisposed || this.Disposing || this.OriginalAudio?.Id != audio.Id)
+            {
+                return;
+            }
+
+            this.UpdateJumpDistanceForRateImmediately(audio,
+                Math.Clamp(audio.ManualSampleRateFactor * audio.SyncNudgeSampleRateFactor, 0.01, 10.0));
+        }
 
         private async void checkedListBox_playlistTracks_RatePositionChanged(object? sender, PlaylistTrackRateChangedEventArgs e)
         {
