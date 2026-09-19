@@ -132,19 +132,21 @@ namespace ModularAudience.Forms
             this.tableLayoutPanel_main.Controls.Add(this.label_header, 0, 0);
             this.tableLayoutPanel_main.Controls.Add(this.label_source, 0, 1);
             this.tableLayoutPanel_main.Controls.Add(this.groupBox_settings, 0, 2);
-            this.tableLayoutPanel_main.Controls.Add(this.label_summary, 0, 3);
-            this.tableLayoutPanel_main.Controls.Add(this.dataGridView_sources, 0, 4);
-            this.tableLayoutPanel_main.Controls.Add(this.label_output, 0, 5);
-            this.tableLayoutPanel_main.Controls.Add(this.groupBox_warnings, 0, 6);
-            this.tableLayoutPanel_main.Controls.Add(this.label_status, 0, 7);
-            this.tableLayoutPanel_main.Controls.Add(this.progressBar_operation, 0, 8);
-            this.tableLayoutPanel_main.Controls.Add(this.flowLayoutPanel_buttons, 0, 9);
+            this.tableLayoutPanel_main.Controls.Add(this.tabControl_advanced, 0, 3);
+            this.tableLayoutPanel_main.Controls.Add(this.label_summary, 0, 4);
+            this.tableLayoutPanel_main.Controls.Add(this.dataGridView_sources, 0, 5);
+            this.tableLayoutPanel_main.Controls.Add(this.label_output, 0, 6);
+            this.tableLayoutPanel_main.Controls.Add(this.groupBox_warnings, 0, 7);
+            this.tableLayoutPanel_main.Controls.Add(this.label_status, 0, 8);
+            this.tableLayoutPanel_main.Controls.Add(this.progressBar_operation, 0, 9);
+            this.tableLayoutPanel_main.Controls.Add(this.flowLayoutPanel_buttons, 0, 10);
             this.tableLayoutPanel_main.Dock = DockStyle.Fill;
             this.tableLayoutPanel_main.Name = "tableLayoutPanel_main";
             this.tableLayoutPanel_main.Padding = new Padding(12);
-            this.tableLayoutPanel_main.RowCount = 10;
+            this.tableLayoutPanel_main.RowCount = 11;
             this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+            this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
@@ -186,6 +188,7 @@ namespace ModularAudience.Forms
             this.tabControl_advanced.Padding = new Point(8, 4);
             this.tabControl_advanced.Size = new Size(1036, 240);
             this.tabControl_advanced.TabIndex = 1;
+            this.tabControl_advanced.SelectedIndexChanged += this.settings_ValueChanged;
             this.tabControl_advanced.Controls.Add(this.tabPage_ensemble);
             this.tabControl_advanced.Controls.Add(this.tabPage_advancedDsp);
             //
@@ -388,7 +391,6 @@ namespace ModularAudience.Forms
             //
             // Settings layout
             //
-            this.groupBox_settings.Controls.Add(this.tabControl_advanced);
             this.tableLayoutPanel_settings.AutoSize = true;
             this.tableLayoutPanel_settings.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             this.tableLayoutPanel_settings.ColumnCount = 4;

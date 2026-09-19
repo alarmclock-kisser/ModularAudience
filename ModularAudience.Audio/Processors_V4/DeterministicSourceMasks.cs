@@ -57,7 +57,7 @@ namespace ModularAudience.Audio.Processors_V4
                 double p = DeterministicTrainingData.Unit(block.Percussive[frame][bin]);
                 double pan = DeterministicTrainingData.SignedUnit(block.Pan[frame][bin]);
                 double uncertainty = Math.Clamp(1 - h - p, 0, 1);
-                double residual = Math.Abs(power[bin] - modeled) + power[bin] * (0.03 + 0.45 * uncertainty);
+                double residual = Math.Abs(power[bin] - modeled) + power[bin] * (0.02 + 0.20 * uncertainty);
                 double denominator = Math.Max(1e-300, modeled + residual);
                 for (int source = 0; source < groups.Length; source++)
                 {
