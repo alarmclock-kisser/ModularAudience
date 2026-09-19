@@ -1,5 +1,7 @@
 namespace ModularAudience.Audio.Processors_V4
 {
+    using System.Collections.Immutable;
+
     public static class DeterministicSeparationProcessor
     {
         public static Task<DeterministicSeparationAnalysis> AnalyzeAsync(AudioObj source,
@@ -9,10 +11,11 @@ namespace ModularAudience.Audio.Processors_V4
             ArgumentNullException.ThrowIfNull(source);
             ArgumentNullException.ThrowIfNull(settings);
             settings.Validate();
-            if (settings.UseCqtAnalysis || settings.UseCqtSynthesis || settings.UsePyin || settings.UseIlrma)
-            {
-                throw new NotSupportedException("Advanced DSP cores are not yet connected to this pipeline. See SOURCE_SEPARATION_HANDOFF.md. Use automatic separation with advanced options disabled for now.");
-            }
+            // ILRMA requires stereo input — validate before analysis.
+            if (settings.UseIlrma && source.Channels != 2)
+                throw new ArgumentException("ILRMA requires stereo input (two spatially independent channels).", nameof(settings));
+            if (settings.UseIlrma && settings.InstrumentProfiles.Length > 2)
+                throw new ArgumentException("ILRMA is limited to two source profiles for two-microphone input.", nameof(settings));
             float[] samples = source.Data;
             int sampleRate = source.SampleRate;
             int channels = source.Channels;
@@ -112,7 +115,18 @@ namespace ModularAudience.Audio.Processors_V4
             }
             if (selected.Length > 0)
             {
-                RenderBlocks(analysis, selected, output, progress, token);
+                if (analysis.Settings.UseIlrma)
+                {
+                    if (analysis.Settings.UseCqtSynthesis)
+                        throw new InvalidOperationException("ILRMA is incompatible with CQT synthesis.");
+                    // ILRMA supports at most two spatial sources for two-microphone input.
+                    int[] ilrmaSelected = selected.Length > 2 ? selected[..2] : selected;
+                    DeterministicIlrma.Render(analysis.Source, analysis.Settings, ilrmaSelected, output, progress, token);
+                }
+                else if (analysis.Settings.UseCqtSynthesis)
+                    CqtSliceRenderer.Render(analysis.Source, analysis.Settings, analysis.Model, selected, output, progress, token);
+                else
+                    RenderBlocks(analysis, selected, output, progress, token);
             }
             progress?.Report(new(0.96, "Restoring mixture consistency in Residual"));
             double error = RestoreResidual(analysis.Source.Samples, output, token);

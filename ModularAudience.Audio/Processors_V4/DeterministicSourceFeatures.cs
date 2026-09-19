@@ -1,17 +1,31 @@
+using System.Numerics;
+
 namespace ModularAudience.Audio.Processors_V4
 {
     internal sealed record DeterministicComponentFeatures(int Index, double Energy, double Harmonic,
         double Percussive, double Pan, double FundamentalHz, double PitchScore, double CentroidHz,
-        double[] Envelope, double[] Activation);
+        double[] Envelope, double[] Activation, double CqtEnergy = 0, double PyinPitchHz = 0, double PyinVoiced = 0);
 
     internal static class DeterministicSourceFeatures
     {
-        internal static DeterministicComponentFeatures[] Measure(DeterministicNmfFit fit,
+        internal static DeterministicComponentFeatures[] Measure(DeterministicAudioSnapshot? source, DeterministicNmfFit fit,
             DeterministicTrainingData data, int sampleRate, DeterministicSeparationSettings settings, CancellationToken token)
         {
             int rank = fit.Dictionary[0].Length;
+            double bins = fit.Dictionary.Length;
             double[][] bands = BandDictionary(fit.Dictionary, data.BandOfBin, token);
             double[][] prediction = BandPrediction(bands, fit.Activations, token);
+
+            // Pre-compute optional advanced evidence on the actual source signal (bounded window).
+            double[]? cqtEnergyPerBin = null;
+            double pyinPitch = 0, pyinVoiced = 0;
+            if (source != null && settings.UseCqtAnalysis)
+                cqtEnergyPerBin = MeasureCqtEnergy(source, bins, sampleRate, settings, token);
+            if (source != null && settings.UsePyin)
+            {
+                (pyinPitch, pyinVoiced) = MeasurePyinEvidence(source, sampleRate, settings, token);
+            }
+
             DeterministicComponentFeatures[] result = new DeterministicComponentFeatures[rank];
             ParallelOptions options = new() { MaxDegreeOfParallelism = settings.Threads, CancellationToken = token };
             Parallel.For(0, rank, options, component =>
@@ -24,9 +38,157 @@ namespace ModularAudience.Audio.Processors_V4
                 if (h < 0.35 || p > h) frequency = 0;
                 double centroid = 0;
                 for (int bin = 0; bin < spectrum.Length; bin++) centroid += spectrum[bin] * bin * sampleRate / settings.WindowSize;
-                result[component] = new(component, activation.Sum(), h, p, pan, frequency, score, centroid, envelope, activation);
+
+                // CQT evidence: correlate component spectrum with aggregate constant-Q band energy.
+                double cqtEnergy = 0;
+                if (cqtEnergyPerBin != null)
+                {
+                    double specNorm = 0;
+                    for (int bin = 0; bin < spectrum.Length; bin++) specNorm += spectrum[bin];
+                    if (specNorm > 0)
+                    {
+                        for (int bin = 0; bin < spectrum.Length; bin++)
+                            cqtEnergy += spectrum[bin] / specNorm * cqtEnergyPerBin[bin];
+                    }
+                }
+
+                // pYIN evidence: pitch compatibility boost when component fundamental matches tracked pitch.
+                double compPyinPitch = 0, compPyinVoiced = pyinVoiced;
+                if (pyinPitch > 0 && frequency > 0)
+                {
+                    double ratio = Math.Max(frequency, pyinPitch) / Math.Min(frequency, pyinPitch);
+                    double cents = 1200 * Math.Log2(ratio);
+                    if (cents < 50) compPyinPitch = pyinPitch;
+                }
+                else if (pyinPitch > 0 && frequency == 0)
+                {
+                    // Component has no estimated fundamental; use pYIN pitch if component is tonal.
+                    if (h >= 0.35) compPyinPitch = pyinPitch;
+                }
+
+                result[component] = new(component, activation.Sum(), h, p, pan,
+                    compPyinPitch > 0 ? compPyinPitch : frequency, score, centroid, envelope, activation,
+                    cqtEnergy, compPyinPitch, compPyinVoiced);
             });
             return result;
+        }
+
+        /// <summary>
+        /// Analyzes contiguous source samples with CQT, aggregates positive-band energy,
+        /// and maps to NMF FFT bins via log-normal kernel at each band center frequency.
+        /// Retains stereo energy without anti-phase mono cancellation.
+        /// </summary>
+        private static double[] MeasureCqtEnergy(DeterministicAudioSnapshot source, double nBins,
+            int sampleRate, DeterministicSeparationSettings settings, CancellationToken token)
+        {
+            ConstantQTransform cqt = ConstantQTransform.Create(sampleRate, settings.CqtBinsPerOctave,
+                settings.CqtMinimumHz, token);
+            int length = cqt.Length;
+
+            // Extract one CQT-length slice from the center of the source (bounded window).
+            int channels = source.Channels;
+            long totalSamples = source.Samples.LongLength / channels;
+            long startSample = Math.Max(0, (totalSamples - length) / 2);
+            int sliceLength = (int)Math.Min(length, totalSamples - startSample);
+
+            double[] mono = new double[sliceLength];
+            for (int i = 0; i < sliceLength; i++)
+            {
+                long idx = (startSample + i) * channels;
+                mono[i] = source.Samples[idx];
+                if (channels == 2) mono[i] += source.Samples[idx + 1];
+            }
+
+            Complex[][] coefficients = cqt.Forward(mono, token);
+
+            // Compute aggregate power per positive CQT band (average across time, coefficient-rate scaled).
+            int numPositive = (cqt.Bands.Count - 1) / 2;
+            double[] bandPower = new double[numPositive];
+            for (int b = 1; b <= numPositive; b++)
+            {
+                double sum = 0;
+                Complex[] series = coefficients[b];
+                int m = series.Length, n = length;
+                double scale = (double)m * m / ((double)n * n);
+                for (int t = 0; t < m; t++)
+                {
+                    double re = series[t].Real * scale;
+                    double im = series[t].Imaginary * scale;
+                    sum += re * re + im * im;
+                }
+                bandPower[b - 1] = sum / m;
+            }
+
+            // Map CQT band energy to NMF FFT bins using log-normal kernel at each band center.
+            double[] cqtEnergy = new double[(int)nBins];
+            double binHz = (double)sampleRate / length;
+            for (int bin = 1; bin < cqtEnergy.Length; bin++)
+            {
+                double freq = bin * binHz;
+                if (freq <= 0) continue;
+                double energy = 0;
+                for (int b = 0; b < numPositive; b++)
+                {
+                    ConstantQBand band = cqt.Bands[b + 1];
+                    double logDist = Math.Log2(freq / Math.Abs(band.CenterHz));
+                    // Account for band coefficient time rate: positive band b has coefficient count M_b,
+                    // so the effective energy density scales with M_b/N.
+                    double timeRate = (double)cqt.Bands[b + 1].CoefficientCount / length;
+                    double sigma = 0.04 / timeRate;
+                    energy += bandPower[b] * Math.Exp(-0.5 * logDist * logDist / (sigma * sigma));
+                }
+                cqtEnergy[bin] = energy;
+            }
+            return cqtEnergy;
+        }
+
+        /// <summary>
+        /// Applies pYIN to the dominant-channel mono trajectory of the source.
+        /// Returns (dominant pitch Hz, voiced probability) across all frames.
+        /// Monophonic: does not claim all voices in a polyphonic mix.
+        /// </summary>
+        private static (double PitchHz, double Voiced) MeasurePyinEvidence(DeterministicAudioSnapshot source,
+            int sampleRate, DeterministicSeparationSettings settings, CancellationToken token)
+        {
+            int channels = source.Channels;
+            float[] mono = new float[source.Samples.LongLength / channels];
+            for (long i = 0; i < mono.Length; i++)
+            {
+                long idx = i * channels;
+                mono[(int)i] = source.Samples[idx];
+                if (channels == 2) mono[(int)i] += source.Samples[idx + 1];
+            }
+
+            PyinPitchFrame[] frames = PyinPitchTracker.Track(mono, sampleRate,
+                Math.Max(64, sampleRate / 100), settings.PyinMinimumHz, settings.PyinMaximumHz,
+                Math.Max(1, Environment.ProcessorCount / 2), token);
+
+            // Aggregate: dominant pitch (most frequent voiced frequency within 20 cents) and average voiced mass.
+            double totalVoiced = 0;
+            Dictionary<double, double> pitchMass = new();
+            foreach (PyinPitchFrame frame in frames)
+            {
+                if (frame.FrequencyHz <= 0) continue;
+                totalVoiced += frame.VoicedProbability;
+                // Quantize to nearest semitone for aggregation.
+                double semitone = Math.Round(12 * Math.Log2(frame.FrequencyHz / 27.5));
+                double quantized = 27.5 * Math.Pow(2, semitone / 12);
+                pitchMass[quantized] = pitchMass.GetValueOrDefault(quantized) + frame.VoicedProbability;
+            }
+
+            if (totalVoiced <= 0) return (0, 0);
+            double avgVoiced = totalVoiced / frames.Length;
+            double bestPitch = 0;
+            double bestMass = 0;
+            foreach (var kvp in pitchMass)
+            {
+                if (kvp.Value > bestMass)
+                {
+                    bestMass = kvp.Value;
+                    bestPitch = kvp.Key;
+                }
+            }
+            return (bestPitch, avgVoiced);
         }
 
         private static double[][] BandDictionary(double[][] dictionary, int[] bandMap, CancellationToken token)

@@ -32,7 +32,8 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             // Per-component weights: normalize the profile score vector so memberships sum to at most 1.
-            double[,] weights = new double[profiles.Count, retained.Length];
+            double[][] weights = new double[profiles.Count][];
+            for (int p = 0; p < profiles.Count; p++) weights[p] = new double[retained.Length];
             for (int c = 0; c < retained.Length; c++)
             {
                 double maxScore = scores[c, 0];
@@ -131,28 +132,41 @@ namespace ModularAudience.Audio.Processors_V4
 
         /// <summary>
         /// Scores how well a component matches an instrument profile using pitch bounds,
-        /// spectral brightness (log-normal kernel), HPR character and noise evidence.
+        /// spectral brightness (log-normal kernel), HPR character, noise evidence,
+        /// CQT energy (constant-Q spectral correlation) and pYIN pitch evidence.
         /// </summary>
         private static double ProfileCompatibility(DeterministicComponentFeatures component, InstrumentProfile profile)
         {
             // Pitch: the component fundamental must fall within (or near) the profile's pitch range.
+            // Use pYIN pitch if available and more reliable than the QIFFT estimate.
+            double pitchHz = component.FundamentalHz;
+            if (component.PyinPitchHz > 0 && component.PyinPitchHz != component.FundamentalHz)
+                pitchHz = component.PyinPitchHz;
             double pitchScore = 0;
-            if (component.FundamentalHz > 0)
+            if (pitchHz > 0)
             {
                 double margin = Math.Max(1, (profile.MaximumPitchHz - profile.MinimumPitchHz) * 0.25);
-                double distance = component.FundamentalHz < profile.MinimumPitchHz
-                    ? profile.MinimumPitchHz - component.FundamentalHz
-                    : component.FundamentalHz > profile.MaximumPitchHz
-                        ? component.FundamentalHz - profile.MaximumPitchHz : 0;
+                double distance = pitchHz < profile.MinimumPitchHz
+                    ? profile.MinimumPitchHz - pitchHz
+                    : pitchHz > profile.MaximumPitchHz
+                        ? pitchHz - profile.MaximumPitchHz : 0;
                 pitchScore = Math.Clamp(1 - distance / margin, 0, 1) * component.PitchScore;
             }
 
             // Brightness: compare the component's spectral centroid to the profile's brightness center.
+            // Boost with CQT energy correlation if available.
             double brightnessScore = 0;
             if (component.CentroidHz > 0 && profile.BrightnessHz > 0)
             {
                 double logDistance = Math.Log2(component.CentroidHz / profile.BrightnessHz);
                 brightnessScore = Math.Exp(-0.5 * logDistance * logDistance / 2.25);
+            }
+            // CQT energy provides constant-Q spectral correlation: high CqtEnergy means the component
+            // spectrum aligns well with specific CQT bands (harmonic structure).
+            if (component.CqtEnergy > 0)
+            {
+                double cqtBrightness = profile.SpectralWeight(component.CentroidHz);
+                brightnessScore = Math.Max(brightnessScore, cqtBrightness * 0.9);
             }
 
             // HPR character: cosine-like similarity of the harmonic/percussive pair.
@@ -165,7 +179,14 @@ namespace ModularAudience.Audio.Processors_V4
             double noiseEvidence = Math.Clamp(1 - component.Harmonic - component.Percussive, 0, 1);
             double noiseScore = profile.Noisiness > 0.4 ? noiseEvidence : 1 - noiseEvidence;
 
-            return 0.30 * pitchScore + 0.25 * brightnessScore + 0.30 * characterScore + 0.15 * noiseScore;
+            // pYIN voiced evidence: if the source is mostly voiced, boost harmonic profiles.
+            double voicedBoost = 0;
+            if (component.PyinVoiced > 0.1)
+            {
+                voicedBoost = component.PyinVoiced * (profile.Harmonic > 0.5 ? 0.1 : -0.05);
+            }
+
+            return 0.30 * pitchScore + 0.25 * brightnessScore + 0.30 * characterScore + 0.10 * noiseScore + voicedBoost;
         }
     }
 }

@@ -59,11 +59,27 @@ namespace ModularAudience.Forms
                 MaskFloor = (double) this.numeric_maskFloor.Value,
                 TransientPreservation = (double) this.numeric_transientPreservation.Value / 100.0,
                 Threads = (int) this.numeric_threads.Value,
+                UseCqtAnalysis = this.checkBox_cqtAnalysis.Checked,
+                UseCqtSynthesis = this.checkBox_cqtSynthesis.Checked,
+                UsePyin = this.checkBox_pyin.Checked,
+                UseIlrma = this.checkBox_ilrma.Checked,
+                CqtBinsPerOctave = this.ReadCqtBinsPerOctave(),
+                CqtMinimumHz = (double) this.numeric_cqtMinimumHz.Value,
+                PyinMinimumHz = (double) this.numeric_pyinMinimumHz.Value,
+                PyinMaximumHz = (double) this.numeric_pyinMaximumHz.Value,
+                IlrmaIterations = (int) this.numeric_ilrmaIterations.Value,
+                IlrmaComponents = (int) this.numeric_ilrmaComponents.Value,
                 EnsembleMode = ensembleMode,
                 InstrumentProfiles = profiles
             };
             settings.Validate();
             return settings;
+        }
+
+        private int ReadCqtBinsPerOctave()
+        {
+            string text = this.domainUpDown_cqtBinsPerOctave.Text;
+            return text == "24 bins/octave" ? 24 : text == "36 bins/octave" ? 36 : 12;
         }
 
         private void InitializeAdvancedControls()
