@@ -1259,8 +1259,7 @@ namespace ModularAudience.Forms
                     List<Bitmap> previews = new();
                     foreach (int selIdx in this.listBox_audios.SelectedIndices.Cast<int>().OrderBy(i => i))
                     {
-                        if (this.listBox_audios.Items[selIdx] is AudioObj selAudio &&
-                            selAudio.Duration.TotalSeconds <= 60.0)
+                        if (this.listBox_audios.Items[selIdx] is AudioObj selAudio)
                         {
                             Bitmap? bmp = selAudio.WaveformPreview;
                             if (bmp != null)
