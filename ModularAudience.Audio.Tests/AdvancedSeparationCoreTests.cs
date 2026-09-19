@@ -58,6 +58,36 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public void DetectionOnlySettingsRemainCompatibleForSeparation()
+        {
+            DeterministicSeparationSettings detected = new()
+            {
+                AnalysisFrames = 4096,
+                UseCqtAnalysis = true,
+                UsePyin = true,
+                PyinMinimumHz = 40,
+                PyinMaximumHz = 1200,
+                CqtBinsPerOctave = 36,
+                CqtMinimumHz = 55
+            };
+            DeterministicSeparationSettings changed = detected with
+            {
+                AnalysisFrames = 128,
+                UseCqtAnalysis = false,
+                UsePyin = false,
+                PyinMinimumHz = 80,
+                PyinMaximumHz = 800,
+                CqtBinsPerOctave = 12,
+                CqtMinimumHz = 110
+            };
+
+            Assert.IsFalse(detected.IsEquivalentTo(changed));
+            Assert.IsTrue(detected.IsCompatibleWithAnalysisForSeparation(changed));
+            Assert.IsFalse(detected.IsCompatibleWithAnalysisForSeparation(changed with { WindowSize = 8192 }));
+            Assert.IsFalse(detected.IsCompatibleWithAnalysisForSeparation(changed with { UseCqtSynthesis = true }));
+        }
+
+        [TestMethod]
         public void AdvancedCoresHonorPreCancelledTokens()
         {
             using CancellationTokenSource cancellation = new();

@@ -856,9 +856,9 @@ namespace ModularAudience.Forms
             this.checkedListBox_profiles.ItemCheck += this.profiles_ItemCheck;
             // Advanced DSP controls — wire to settings_ValueChanged for invalidation
             this.checkBox_cqtAnalysis.CheckedChanged += this.settings_ValueChanged;
-            this.checkBox_cqtSynthesis.CheckedChanged += this.settings_ValueChanged;
+            this.checkBox_cqtSynthesis.CheckedChanged += this.checkBox_cqtSynthesis_CheckedChanged;
             this.checkBox_pyin.CheckedChanged += this.settings_ValueChanged;
-            this.checkBox_ilrma.CheckedChanged += this.settings_ValueChanged;
+            this.checkBox_ilrma.CheckedChanged += this.checkBox_ilrma_CheckedChanged;
             this.domainUpDown_cqtBinsPerOctave.TextChanged += this.settings_ValueChanged;
             this.numeric_cqtMinimumHz.ValueChanged += this.settings_ValueChanged;
             this.numeric_cqtMinimumHz.TextChanged += this.settings_ValueChanged;

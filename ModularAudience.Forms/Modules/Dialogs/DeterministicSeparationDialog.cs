@@ -147,6 +147,24 @@ namespace ModularAudience.Forms
             this.UpdateSettingsValidation();
         }
 
+        private void checkBox_cqtSynthesis_CheckedChanged(object? sender, EventArgs e)
+        {
+            if (this.checkBox_cqtSynthesis.Checked && this.checkBox_ilrma.Checked)
+            {
+                this.checkBox_ilrma.Checked = false;
+            }
+            this.settings_ValueChanged(sender, e);
+        }
+
+        private void checkBox_ilrma_CheckedChanged(object? sender, EventArgs e)
+        {
+            if (this.checkBox_ilrma.Checked && this.checkBox_cqtSynthesis.Checked)
+            {
+                this.checkBox_cqtSynthesis.Checked = false;
+            }
+            this.settings_ValueChanged(sender, e);
+        }
+
         private bool TryReadSettings(
             out DeterministicSeparationSettings settings,
             out string validationMessage,
@@ -185,23 +203,29 @@ namespace ModularAudience.Forms
             bool valid = this.TryReadSettings(out DeterministicSeparationSettings currentSettings,
                 out string validationMessage, pendingProfileIndex, pendingProfileState);
             bool operationRunning = this.operationCancellation != null;
-            bool matchesAnalysis = valid && this.analysis != null
+            bool matchesDetectionSettings = valid && this.analysis != null
                 && this.analysis.Settings.IsEquivalentTo(currentSettings);
+            bool canSeparate = valid && this.analysis != null
+                && this.analysis.Settings.IsCompatibleWithAnalysisForSeparation(currentSettings);
 
             this.button_detect.Enabled = !operationRunning && valid;
-            this.button_separate.Enabled = !operationRunning && matchesAnalysis;
+            this.button_separate.Enabled = !operationRunning && canSeparate;
             this.button_restoreSettings.Enabled = !operationRunning
-                && this.analysis != null && !matchesAnalysis;
+                && this.analysis != null && !canSeparate;
             if (!valid)
             {
                 if (!operationRunning)
                     this.label_status.Text = $"Invalid settings: {validationMessage}";
             }
-            else if (!operationRunning && this.analysis != null && !matchesAnalysis)
+            else if (!operationRunning && this.analysis != null && !canSeparate)
             {
                 this.label_status.Text = "Settings differ from the current analysis. Restore detection settings or detect sources again.";
             }
-            else if (!operationRunning && matchesAnalysis)
+            else if (!operationRunning && !matchesDetectionSettings)
+            {
+                this.label_status.Text = "Detection-only settings changed. Separation remains ready and uses the detected model.";
+            }
+            else if (!operationRunning && canSeparate)
             {
                 this.label_status.Text = "Analysis settings match. Separation is ready.";
             }
@@ -408,8 +432,11 @@ namespace ModularAudience.Forms
         private void SetOperationState(bool running)
         {
             this.comboBox_presets.Enabled = !running;
-            this.groupBox_settings.Enabled = !running;
-            this.tabControl_advanced.Enabled = !running;
+            this.groupBox_settings.Enabled = true;
+            this.tableLayoutPanel_settings.Enabled = !running;
+            this.flowLayoutPanel_ensemble.Enabled = !running;
+            this.flowLayoutPanel_advancedDsp.Enabled = !running;
+            this.tabControl_advanced.Enabled = true;
             this.dataGridView_sources.Enabled = !running && this.analysis != null;
             this.UpdateSettingsValidation();
             this.button_cancel.Enabled = running;
@@ -559,16 +586,10 @@ namespace ModularAudience.Forms
 
         private async Task SeparateAsync(CancellationTokenSource cancellation)
         {
-            if (!this.TryReadSettings(out DeterministicSeparationSettings settings, out string validationMessage))
-            {
-                this.InvalidateAnalysis($"Invalid settings: {validationMessage}");
-                return;
-            }
-
             DeterministicSeparationAnalysis? current = this.analysis;
-            if (current == null || !current.Settings.IsEquivalentTo(settings))
+            if (current == null)
             {
-                this.InvalidateAnalysis("Settings changed. Detect sources again before separating.");
+                this.label_status.Text = "No current analysis. Detect sources before separating.";
                 return;
             }
 
@@ -577,6 +598,8 @@ namespace ModularAudience.Forms
             try
             {
                 int[] selectedIds = this.GetSelectedIds();
+                this.CreateProgress(cancellation).Report(new DeterministicSeparationProgress(
+                    0.01, "Preparing separation from the detected model"));
                 result = await DeterministicSeparationProcessor.SeparateAsync(
                     current, selectedIds, this.CreateProgress(cancellation), cancellation.Token);
                 this.acceptingProgress = false;

@@ -8,6 +8,7 @@ namespace ModularAudience.Audio.Processors_V4
             DeterministicSourceModel model, int[] selected, float[][] output,
             IProgress<DeterministicSeparationProgress>? progress, CancellationToken token)
         {
+            progress?.Report(new(0.01, "Preparing CQT synthesis"));
             int sampleRate = source.SampleRate;
             int channels = source.Channels;
             long monoLen = source.Samples.LongLength / channels;
@@ -24,39 +25,36 @@ namespace ModularAudience.Audio.Processors_V4
             long total = (monoLen + hop - 1) / hop;
 
             float[][][] bMasks = BuildMasks(cqt, sampleRate, settings, model, selected, token);
-
-            for (long fr = 0; fr * hop < monoLen; fr++)
+            int workers = ResolveWorkerCount(cqt, channels, settings.Threads);
+            ParallelOptions options = new()
             {
-                token.ThrowIfCancellationRequested();
-                progress?.Report(new(0.94 * fr / total, $"CQT slice {fr + 1}/{total}"));
-                int st = (int)(fr * hop);
-                int act = (int)Math.Min(sliceLen, monoLen - st);
+                CancellationToken = token,
+                MaxDegreeOfParallelism = workers
+            };
+            long completedSlices = 0;
+            progress?.Report(new(0.04, $"CQT synthesis prepared; processing {total} slices with {workers} worker(s)"));
 
-                double[][] slices = new double[channels][];
-                Complex[][][] coeff = new Complex[channels][][];
-                for (int ch = 0; ch < channels; ch++)
+            // With a hop of one quarter window, slices four positions apart do not overlap.
+            // Each phase can therefore write directly into output and norm without synchronization.
+            for (int phase = 0; phase < 4; phase++)
+            {
+                long firstSlice = phase;
+                if (firstSlice >= total) break;
+                long phaseSlices = (total - firstSlice + 3) / 4;
+                long completedPhaseSlices = 0;
+                long progressStep = Math.Max(1, phaseSlices / 100);
+                Parallel.For(0L, phaseSlices, options, index =>
                 {
-                    slices[ch] = new double[sliceLen];
-                    for (int i = 0; i < act; i++)
-                        slices[ch][i] = source.Samples[(st + i) * channels + ch];
-                    coeff[ch] = cqt.Forward(slices[ch], token);
-                }
-
-                for (int src = 0; src < selected.Length; src++)
-                {
-                    for (int ch = 0; ch < channels; ch++)
+                    RenderSlice(firstSlice + index * 4, source, cqt, bMasks, numBands, selected,
+                        output, norm, win, sliceLen, hop, channels, monoLen, normLen, token);
+                    long completed = Interlocked.Increment(ref completedPhaseSlices);
+                    if (completed == phaseSlices || completed % progressStep == 0)
                     {
-                        ApplyMasks(coeff[ch], bMasks[src], numBands, token);
-                        double[] rec = cqt.Inverse(coeff[ch], token);
-                        for (int i = 0; i < sliceLen && st + i < normLen; i++)
-                        {
-                            int idx = (st + i) * channels + ch;
-                            output[src][idx] += (float)(rec[i] * win[i]);
-                            norm[st + i] += win[i] * win[i];
-                        }
-                        coeff[ch] = cqt.Forward(slices[ch], token);
+                        progress?.Report(new(0.04 + 0.90 * (completedSlices + completed) / total,
+                            $"CQT synthesis {completedSlices + completed}/{total} slices"));
                     }
-                }
+                });
+                completedSlices += phaseSlices;
             }
 
             for (int src = 0; src < selected.Length; src++)
@@ -66,6 +64,57 @@ namespace ModularAudience.Audio.Processors_V4
                             output[src][i * channels + ch] /= (float)norm[i];
 
             progress?.Report(new(0.96, "CQT synthesis complete"));
+        }
+
+        private static int ResolveWorkerCount(ConstantQTransform cqt, int channels, int requestedThreads)
+        {
+            long coefficientCount = cqt.Bands.Sum(band => (long) band.CoefficientCount);
+            long bytesPerWorker = checked(channels * (48L * cqt.Length + 32L * coefficientCount) + 1048576);
+            long available = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+            long allocated = GC.GetTotalMemory(false);
+            long budget = available > 0
+                ? Math.Max(64L * 1024 * 1024, (available - allocated) / 2)
+                : 512L * 1024 * 1024;
+            int memoryWorkers = Math.Max(1, (int) Math.Min(int.MaxValue, budget / Math.Max(1, bytesPerWorker)));
+            return Math.Max(1, Math.Min(requestedThreads, Math.Min(Environment.ProcessorCount, memoryWorkers)));
+        }
+
+        private static void RenderSlice(long frame, DeterministicAudioSnapshot source, ConstantQTransform cqt,
+            float[][][] masks, int numBands, int[] selected, float[][] output, double[] norm, double[] window,
+            int sliceLength, int hop, int channels, long monoLength, int normLength, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            int start = checked((int)(frame * hop));
+            int active = (int)Math.Min(sliceLength, monoLength - start);
+            double[][] slices = new double[channels][];
+            Complex[][][] coefficients = new Complex[channels][][];
+            for (int channel = 0; channel < channels; channel++)
+            {
+                slices[channel] = new double[sliceLength];
+                for (int sample = 0; sample < active; sample++)
+                    slices[channel][sample] = source.Samples[(start + sample) * channels + channel];
+                coefficients[channel] = cqt.Forward(slices[channel], token);
+            }
+
+            for (int sample = 0; sample < sliceLength && start + sample < normLength; sample++)
+            {
+                norm[start + sample] += window[sample] * window[sample];
+            }
+
+            for (int sourceIndex = 0; sourceIndex < selected.Length; sourceIndex++)
+            {
+                for (int channel = 0; channel < channels; channel++)
+                {
+                    ApplyMasks(coefficients[channel], masks[sourceIndex], numBands, token);
+                    double[] reconstructed = cqt.Inverse(coefficients[channel], token);
+                    for (int sample = 0; sample < sliceLength && start + sample < normLength; sample++)
+                    {
+                        int outputIndex = (start + sample) * channels + channel;
+                        output[sourceIndex][outputIndex] += (float)(reconstructed[sample] * window[sample]);
+                    }
+                    coefficients[channel] = cqt.Forward(slices[channel], token);
+                }
+            }
         }
 
         private static double[] CreateOuterHann(int n)

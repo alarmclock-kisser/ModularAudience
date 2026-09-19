@@ -248,8 +248,8 @@ namespace ModularAudience.Forms.Modules
             this.vScrollBar_volume.Value = (int) Math.Clamp(this.vScrollBar_volume.Maximum * 0.2f, this.vScrollBar_volume.Minimum, this.vScrollBar_volume.Maximum - 1);
             this.ApplyVolumeFromScrollbar();
 
-            this.hScrollBar_rate.Minimum = -500;
-            this.hScrollBar_rate.Maximum = 500;
+            this.hScrollBar_rate.Minimum = -100;
+            this.hScrollBar_rate.Maximum = 100;
             this.hScrollBar_rate.SmallChange = 1;
             this.hScrollBar_rate.LargeChange = 1;
             this.SetRateAnchor((float)this.OriginalAudio.ManualSampleRateFactor);
@@ -1750,7 +1750,7 @@ namespace ModularAudience.Forms.Modules
             this.RequestWaveformRender();
         }
 
-        private async Task StopPlaybackAsync()
+        private async Task StopPlaybackAsync(bool preserveManualRate = false)
         {
             var cts = Interlocked.Exchange(ref this.playbackCts, null);
             if (cts != null)
@@ -1759,7 +1759,7 @@ namespace ModularAudience.Forms.Modules
                 try { cts.Dispose(); } catch { }
             }
 
-            try { await this.OriginalAudio.StopAsync().ConfigureAwait(false); } catch { }
+            try { await this.OriginalAudio.StopAsync(preserveManualRate).ConfigureAwait(false); } catch { }
             this.InvokeIfRequired(() => this.button_playback.Text = "▶");
 
             // Update the recording track-log when a manually played track is stopped
@@ -2406,6 +2406,8 @@ namespace ModularAudience.Forms.Modules
             var original = this.OriginalAudio;
             bool wasPlaying = original.PlayerPlaying;
             bool wasPaused = original.Paused;
+            double manualRate = original.ManualSampleRateFactor;
+            double syncNudgeRate = original.SyncNudgeSampleRateFactor;
             int sourceChannels = Math.Max(1, original.Channels);
             double stretchFactor = stretchFactorOverride
                 ?? (Math.Abs(result.StretchFactor) > double.Epsilon ? result.StretchFactor : 1.0);
@@ -2417,7 +2419,7 @@ namespace ModularAudience.Forms.Modules
             DateTime playbackSnapshotUtc = DateTime.UtcNow;
             long sourcePositionSamples = original.Position * sourceChannels;
 
-            await this.StopPlaybackAsync();
+            await this.StopPlaybackAsync(preserveManualRate: true);
 
             if (wasPlaying)
             {
@@ -2444,6 +2446,9 @@ namespace ModularAudience.Forms.Modules
             original.OverlapSize = result.OverlapSize;
             original.StretchFactor = 1.0;
             original.SampleTag = result.SampleTag;
+            original.ManualSampleRateFactor = manualRate;
+            original.SyncNudgeSampleRateFactor = syncNudgeRate;
+            original.SampleRateFactor = Math.Clamp(manualRate * syncNudgeRate, 0.01, 10.0);
             original.ScrollOffset = 0;
             original.StartingOffset = 0;
             original.SelectionStart = -1;
@@ -2498,6 +2503,7 @@ namespace ModularAudience.Forms.Modules
                         CancellationToken.None,
                         () => this.InvokeIfRequired(() => this.button_playback.Text = "▶"),
                         this.CurrentVolume).ConfigureAwait(false);
+                    await original.ApplyCombinedSampleRateAsync().ConfigureAwait(false);
                     this.InvokeIfRequired(() => this.button_playback.Text = "■");
                 }
                 catch

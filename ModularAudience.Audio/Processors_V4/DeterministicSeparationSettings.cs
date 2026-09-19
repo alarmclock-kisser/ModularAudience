@@ -35,6 +35,39 @@ namespace ModularAudience.Audio.Processors_V4
                 && (this with { InstrumentProfiles = [], Threads = 1 }) == (other with { InstrumentProfiles = [], Threads = 1 });
         }
 
+        public bool IsCompatibleWithAnalysisForSeparation(DeterministicSeparationSettings other)
+        {
+            if (this.UseCqtSynthesis != other.UseCqtSynthesis)
+            {
+                return false;
+            }
+
+            DeterministicSeparationSettings current = this with
+            {
+                AnalysisFrames = 0,
+                UseCqtAnalysis = false,
+                UsePyin = false,
+                PyinMinimumHz = 0,
+                PyinMaximumHz = 0,
+                Threads = 1,
+                CqtBinsPerOctave = this.UseCqtSynthesis ? this.CqtBinsPerOctave : 0,
+                CqtMinimumHz = this.UseCqtSynthesis ? this.CqtMinimumHz : 0
+            };
+            DeterministicSeparationSettings candidate = other with
+            {
+                AnalysisFrames = 0,
+                UseCqtAnalysis = false,
+                UsePyin = false,
+                PyinMinimumHz = 0,
+                PyinMaximumHz = 0,
+                Threads = 1,
+                CqtBinsPerOctave = other.UseCqtSynthesis ? other.CqtBinsPerOctave : 0,
+                CqtMinimumHz = other.UseCqtSynthesis ? other.CqtMinimumHz : 0
+            };
+            return current.InstrumentProfiles.AsSpan().SequenceEqual(candidate.InstrumentProfiles.AsSpan())
+                && (current with { InstrumentProfiles = [] }) == (candidate with { InstrumentProfiles = [] });
+        }
+
         public void Validate()
         {
             Require(this.WindowSize is >= 256 and <= 16384 && (this.WindowSize & (this.WindowSize - 1)) == 0, nameof(this.WindowSize));

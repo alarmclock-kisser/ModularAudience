@@ -61,7 +61,7 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
-        public async Task PauseAndStopDoNotResetTheSelectedRate()
+        public async Task TimeStretchStopPreservesTheSelectedRate()
         {
             using RateTestAudio audio = new(playing: true);
             audio.ManualSampleRateFactor = 1.25;
@@ -69,7 +69,7 @@ namespace ModularAudience.Audio.Tests
             await audio.PauseAsync();
             Assert.AreEqual(1.25, audio.SampleRateFactor);
             Assert.AreEqual(1.25, audio.ManualSampleRateFactor);
-            await audio.StopAsync();
+            await audio.StopAsync(preserveManualRate: true);
             Assert.AreEqual(1.25, audio.SampleRateFactor);
             Assert.AreEqual(1.25, audio.ManualSampleRateFactor);
         }

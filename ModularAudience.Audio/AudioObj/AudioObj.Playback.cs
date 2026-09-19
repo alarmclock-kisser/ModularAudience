@@ -298,7 +298,7 @@ namespace ModularAudience.Audio
             }
         }
 
-        public async Task StopAsync()
+        public async Task StopAsync(bool preserveManualRate = false)
         {
             this.PlayingChanged?.Invoke();
             this.Playing = false;
@@ -310,7 +310,10 @@ namespace ModularAudience.Audio
             this.playbackLoopEndBytes = 0;
             this.SkippedPositionBytes = 0;
             this.positionOriginBytes = 0;
-            this.ManualSampleRateFactor = 1.0;
+            if (!preserveManualRate)
+            {
+                this.ManualSampleRateFactor = 1.0;
+            }
             await this.ApplyCombinedSampleRateAsync().ConfigureAwait(false);
             await Task.CompletedTask;
         }

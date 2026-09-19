@@ -358,8 +358,8 @@
             // 
             this.hScrollBar_rate.ContextMenuStrip = this.contextMenu_rate;
             this.hScrollBar_rate.Location = new Point(2, 103);
-            this.hScrollBar_rate.Maximum = 500;
-            this.hScrollBar_rate.Minimum = -500;
+            this.hScrollBar_rate.Maximum = 100;
+            this.hScrollBar_rate.Minimum = -100;
             this.hScrollBar_rate.Name = "hScrollBar_rate";
             this.hScrollBar_rate.Size = new Size(113, 17);
             this.hScrollBar_rate.TabIndex = 17;
