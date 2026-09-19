@@ -12,6 +12,18 @@ set "PUBLISH_DIR=%RELEASE_DIR%\net10.0-windows\win-x64"
 set "EXE_PATH=%PUBLISH_DIR%\ModularAudience.Forms.exe"
 set "LNK_PATH=%ROOT%\ModularAudience.lnk"
 
+rem === Step 0: Stop stale .NET host and app processes ===
+echo.
+echo ==========================================
+echo Stopping stale .NET host and ModularAudience processes...
+echo ==========================================
+
+rem Ignore the error when no matching process is running.
+taskkill /F /T /IM dotnet.exe >nul 2>&1
+taskkill /F /T /IM ModularAudience.Forms.exe >nul 2>&1
+
+echo OK: Stale processes have been stopped.
+
 rem === Step 1: Wipe the entire bin\Release directory recursively ===
 echo.
 echo ==========================================
