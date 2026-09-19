@@ -44,6 +44,68 @@ namespace ModularAudience.Audio
             GC.SuppressFinalize(this);
         }
 
+        // Internal synchronous dispose - called by AudioCollection in batches
+        internal void DisposeInternal()
+        {
+            if (this.disposed)
+            {
+                return;
+            }
+
+            this.disposed = true;
+            AudioPlaybackService.Unregister(this);
+            this.Playing = false;
+            this.Paused = false;
+            // Clear Data array to release memory, but do it gradually via collection
+            this.Data = [];
+            this.PlayingChanged = null;
+
+            AudioObj[] history = [.. this.PreviousSteps, .. this.NextSteps];
+            this.PreviousSteps.Clear();
+            this.NextSteps.Clear();
+            foreach (AudioObj snapshot in history)
+            {
+                try { snapshot.DisposeInternal(); } catch { }
+            }
+
+            try { this.playback.Stop(); } catch { }
+            try { this.playback.Dispose(); } catch { }
+            this.playbackLoopApplied = false;
+            this.playbackLoopStartBytes = 0;
+            this.playbackLoopEndBytes = 0;
+        }
+
+        // Internal async dispose - called by AudioCollection.ClearAsync() in batches
+        internal async ValueTask DisposeAsyncInternal()
+        {
+            if (this.disposed)
+            {
+                return;
+            }
+
+            this.disposed = true;
+            AudioPlaybackService.Unregister(this);
+            this.Playing = false;
+            this.Paused = false;
+            this.Data = [];
+            this.PlayingChanged = null;
+
+            AudioObj[] history = [.. this.PreviousSteps, .. this.NextSteps];
+            this.PreviousSteps.Clear();
+            this.NextSteps.Clear();
+            foreach (AudioObj snapshot in history)
+            {
+                try { await snapshot.DisposeAsyncInternal().ConfigureAwait(false); } catch { }
+            }
+
+            try { this.playback.Stop(); } catch { }
+            try { this.playback.Dispose(); } catch { }
+            this.playbackLoopApplied = false;
+            this.playbackLoopStartBytes = 0;
+            this.playbackLoopEndBytes = 0;
+            GC.SuppressFinalize(this);
+        }
+
         public bool LoadAudioFile()
         {
             if (string.IsNullOrWhiteSpace(this.FilePath))

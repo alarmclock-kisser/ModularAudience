@@ -166,18 +166,6 @@ namespace ModularAudience.Forms
 
             WindowMain.CollectionViews.Remove(this);
             this.Close();
-
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(2, GCCollectionMode.Forced, true, true);
-            try
-            {
-                using Process process = Process.GetCurrentProcess();
-                EmptyWorkingSet(process.Handle);
-            }
-            catch
-            {
-                // Working-set trimming is best effort; managed disposal remains authoritative.
-            }
         }
 
 

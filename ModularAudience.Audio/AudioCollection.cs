@@ -141,26 +141,61 @@ namespace ModularAudience.Audio
             }
         }
 
+        // Dispose tracks in small batches to avoid a massive GC spike when many tracks are closed at once
+        private static async Task DisposeAudioObjBatch(IEnumerable<AudioObj> audios, int batchSize = 5)
+        {
+            var audioList = audios.ToList();
+            for (int i = 0; i < audioList.Count; i += batchSize)
+            {
+                var batch = audioList.Skip(i).Take(batchSize).ToList();
+                foreach (var audio in batch)
+                {
+                    try
+                    {
+                        await audio.DisposeAsyncInternal().ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogCollection.Log(ex);
+                    }
+                }
+                // Small yield between batches to let GC process incrementally
+                if (i + batchSize < audioList.Count)
+                {
+                    await Task.Delay(1).ConfigureAwait(false);
+                }
+            }
+        }
+
         public async Task ClearAsync()
         {
-            foreach (var audio in this.Audios)
-            {
-                await Task.Run(audio.Dispose);
-            }
+            await DisposeAudioObjBatch(this.Audios).ConfigureAwait(false);
             this.Audios.Clear();
         }
 
         public void Dispose()
         {
-            foreach (var audio in this.Audios)
+            // Dispose in batches to avoid GC spikes
+            var audioList = this.Audios.ToList();
+            for (int i = 0; i < audioList.Count; i += 5)
             {
-                try
+                var batch = audioList.Skip(i).Take(5).ToList();
+                foreach (var audio in batch)
                 {
-                    audio.Dispose();
+                    try
+                    {
+                        audio.DisposeInternal();
+                    }
+                    catch (Exception ex)
+                    {
+                        LogCollection.Log(ex);
+                    }
                 }
-                catch (Exception ex)
+                // Small delay between batches to spread GC pressure
+                if (i + 5 < audioList.Count)
                 {
-                    LogCollection.Log(ex);
+                    // Use synchronous delay - no await needed in non-async method
+                    Thread.Sleep(1);
                 }
             }
             this.Audios.Clear();

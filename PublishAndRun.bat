@@ -48,23 +48,18 @@ echo.
 echo OK: bin\Release directory fully wiped.
 echo ==========================================
 
-rem === Step 2: Publish (Release, self-contained, ready-to-run, NOT single-file) ===
+rem === Step 2: Publish (Release, self-contained, NOT single-file) ===
 echo.
 echo ==========================================
-echo Publishing ModularAudience.Forms (Release, self-contained, ready-to-run)...
+echo Publishing ModularAudience.Forms (Release, self-contained, NOT ready-to-run)...
 echo ==========================================
 
 rem -o points the output directly at the win-x64 folder, so NO "publish"
 rem    subfolder is created and there are no duplicate binaries.
-rem -p:PublishSingleFile=false  -> not single-file
-rem -p:PublishReadyToRun=true  -> ready-to-run
 dotnet publish "%ROOT%\ModularAudience.Forms\ModularAudience.Forms.csproj" ^
     -c Release ^
-    --self-contained true ^
     -r win-x64 ^
-    -o "%PUBLISH_DIR%" ^
-    -p:PublishSingleFile=false ^
-    -p:PublishReadyToRun=true
+    -o "%PUBLISH_DIR%"
 
 if errorlevel 1 (
     echo.
@@ -100,7 +95,7 @@ powershell -NoProfile -Command ^
     "$s = $ws.CreateShortcut('%LNK_PATH%'); " ^
     "$s.TargetPath = '%EXE_PATH%'; " ^
     "$s.WorkingDirectory = '%PUBLISH_DIR%'; " ^
-    "$s.Description = 'ModularAudience.Forms (Release, self-contained, ready-to-run)'; " ^
+    "$s.Description = 'ModularAudience.Forms (Release, self-contained, NOT ready-to-run)'; " ^
     "$s.Save()"
 
 if errorlevel 1 (
