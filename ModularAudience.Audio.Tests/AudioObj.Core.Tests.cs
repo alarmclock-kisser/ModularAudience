@@ -6,8 +6,6 @@ using ModularAudience.Audio;
 
 namespace ModularAudience.Audio.Tests
 {
-    [assembly: DoNotParallelize]
-
     [TestClass]
     internal sealed class AudioObjCoreTests
     {
