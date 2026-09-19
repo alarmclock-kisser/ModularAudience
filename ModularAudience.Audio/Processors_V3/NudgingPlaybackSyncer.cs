@@ -10,7 +10,8 @@ namespace ModularAudience.Audio.Processors_V3
     // The implementation below follows the high-level guidance in the comments while keeping the logic lightweight and non-destructive.
     public class NudgingPlaybackSyncer
     {
-        private readonly List<AudioObj> tracks;
+        private readonly object tracksLock = new();
+        private List<AudioObj> tracks;
         private readonly CancellationToken token;
         private readonly double intervalSeconds;
         private readonly double maxNudge;
@@ -25,6 +26,17 @@ namespace ModularAudience.Audio.Processors_V3
 
             // start loop immediately
             this.loopTask = Task.Run(this.SyncLoopAsync, cancellationToken);
+        }
+
+        public void UpdateTracks(IEnumerable<AudioObj> tracks)
+        {
+            lock (this.tracksLock)
+            {
+                this.tracks = tracks?
+                    .Where(track => track != null)
+                    .Distinct()
+                    .ToList() ?? [];
+            }
         }
 
         private async Task SyncLoopAsync()
@@ -51,7 +63,13 @@ namespace ModularAudience.Audio.Processors_V3
         private async Task SyncOnceAsync()
         {
             // Consider only playing tracks with valid BPM
-            var playing = this.tracks
+            List<AudioObj> tracksSnapshot;
+            lock (this.tracksLock)
+            {
+                tracksSnapshot = this.tracks.ToList();
+            }
+
+            var playing = tracksSnapshot
                 .Where(t => t != null && t.PlayerPlaying && t.Bpm > 0)
                 .ToList();
 
@@ -190,7 +208,13 @@ namespace ModularAudience.Audio.Processors_V3
 
         private async Task SmoothResetRatesAsync()
         {
-            var playable = this.tracks.Where(t => t != null && t.PlayerPlaying).ToList();
+            List<AudioObj> tracksSnapshot;
+            lock (this.tracksLock)
+            {
+                tracksSnapshot = this.tracks.ToList();
+            }
+
+            var playable = tracksSnapshot.Where(t => t != null && t.PlayerPlaying).ToList();
             const int steps = 8;
             const int stepDelayMs = 20;
             for (int i = 1; i <= steps; i++)

@@ -166,10 +166,7 @@ namespace ModularAudience.Forms
             {
                 if (cv != null && !cv.IsDisposed && cv.AudioC != null)
                 {
-                    foreach (var audio in cv.AudioC.Audios)
-                    {
-                        audio.PlayingChanged += this.OnAudioPlayingChanged;
-                    }
+                    this.RegisterAudioCollectionSyncHooks(cv);
                 }
             }
 
@@ -402,6 +399,7 @@ namespace ModularAudience.Forms
             }
             this.StopSyncer();
             this.StopPausingSyncer();
+            ResetCapsLockState();
             this.DisposePlaylist();
             if (this._keyFilter != null)
             {

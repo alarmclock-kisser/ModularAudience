@@ -93,6 +93,8 @@ namespace ModularAudience.Forms
                     return;
                 }
 
+                this.RegisterAudioCollectionSyncHooks(addedView);
+
                 if (addedView.IsHandleCreated)
                 {
                     try { this.PositionCollectionView(addedView); } catch { }
@@ -131,6 +133,31 @@ namespace ModularAudience.Forms
             }
 
             this.UpdateTrackDependentUI();
+        }
+
+        private void RegisterAudioCollectionSyncHooks(AudioCollectionView collectionView)
+        {
+            collectionView.AudioC.Audios.ListChanged -= this.CollectionAudios_ListChanged;
+            collectionView.AudioC.Audios.ListChanged += this.CollectionAudios_ListChanged;
+            foreach (AudioObj audio in collectionView.AudioC.Audios)
+            {
+                audio.PlayingChanged -= this.OnAudioPlayingChanged;
+                audio.PlayingChanged += this.OnAudioPlayingChanged;
+            }
+        }
+
+        private void CollectionAudios_ListChanged(object? sender, ListChangedEventArgs e)
+        {
+            if (sender is BindingList<AudioObj> audios &&
+                e.ListChangedType == ListChangedType.ItemAdded &&
+                e.NewIndex >= 0 && e.NewIndex < audios.Count)
+            {
+                AudioObj audio = audios[e.NewIndex];
+                audio.PlayingChanged -= this.OnAudioPlayingChanged;
+                audio.PlayingChanged += this.OnAudioPlayingChanged;
+            }
+
+            this.RefreshActiveSyncerTracks();
         }
 
         private void checkBox_singleCollection_CheckedChanged(object? sender, EventArgs e)

@@ -3291,11 +3291,13 @@ namespace ModularAudience.Forms.Modules
             // On start: ensure entry exists (Start=now, End=ongoing)
             if (this.OriginalAudio.Playing)
             {
+                instance.RefreshActiveSyncerTracks();
                 try { instance.SyncTrackLogNow(); } catch { }
                 return;
             }
 
             // On real stop (Playing == false && Paused == false): close the entry
+            instance.RefreshActiveSyncerTracks();
             try { instance.SyncTrackLogNow(); } catch { }
         }
     }

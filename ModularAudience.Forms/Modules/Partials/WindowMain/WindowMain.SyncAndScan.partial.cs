@@ -434,9 +434,15 @@ namespace ModularAudience.Forms
 
         // P/Invoke to detect right-alt state (we need to distinguish left vs right Alt)
         private const int VK_RMENU = 0xA5;
+        private const byte VK_CAPITAL = 0x14;
+        private const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
+        private const uint KEYEVENTF_KEYUP = 0x0002;
 
         [DllImport("user32.dll")]
         private static extern short GetAsyncKeyState(int vKey);
+
+        [DllImport("user32.dll")]
+        private static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
 
         private static bool IsKeyDown(int vKey)
         {
@@ -447,6 +453,22 @@ namespace ModularAudience.Forms
             catch
             {
                 return false;
+            }
+        }
+
+        private static void ResetCapsLockState()
+        {
+            try
+            {
+                if (IsKeyLocked(Keys.CapsLock))
+                {
+                    keybd_event(VK_CAPITAL, 0x45, KEYEVENTF_EXTENDEDKEY, UIntPtr.Zero);
+                    keybd_event(VK_CAPITAL, 0x45, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, UIntPtr.Zero);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log($"CapsLock reset during shutdown failed: {ex.Message}");
             }
         }
 
@@ -462,6 +484,7 @@ namespace ModularAudience.Forms
             if (playingTracks.Count < 2)
             {
                 LogCollection.Log("SYNCER : ON (no-op, need >=2 playing tracks)");
+                ResetCapsLockState();
                 return;
             }
 
@@ -484,6 +507,16 @@ namespace ModularAudience.Forms
                 LogCollection.Log("SYNCER : OFF");
             }
             this._nudgingActive = false;
+        }
+
+        internal void RefreshActiveSyncerTracks()
+        {
+            if (!this._nudgingActive || this._syncer == null)
+            {
+                return;
+            }
+
+            this._syncer.UpdateTracks(this.CollectActiveSyncTracks(includePaused: false));
         }
 
         private void StartPausingSyncer()

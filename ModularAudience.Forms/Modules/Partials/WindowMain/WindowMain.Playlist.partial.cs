@@ -999,6 +999,8 @@ namespace ModularAudience.Forms
         /// </summary>
         private void OnPlaylistTrackChanged()
         {
+            this.RefreshActiveSyncerTracks();
+
             if (this._trackLogFilePath == null || this._trackLogRecordStart == null)
             {
                 this.SyncPreRecordingTrackLog();
@@ -1165,6 +1167,8 @@ namespace ModularAudience.Forms
             {
                 WindowMainStaticHelpers.InvokeIfRequired(Instance, () =>
                 {
+                    this.RefreshActiveSyncerTracks();
+
                     if (this._trackLogFilePath == null || this._trackLogRecordStart == null)
                     {
                         this.SyncPreRecordingTrackLog();
