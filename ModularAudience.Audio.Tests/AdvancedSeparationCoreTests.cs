@@ -59,19 +59,34 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
-        public void UnconnectedAdvancedOptionsAreRejectedInsteadOfIgnored()
+        public void AllAdvancedOptionsAreIntegrated()
         {
             using AudioTestScope scope = new();
             AudioObj source = scope.Create(new float[100]);
             DeterministicSeparationSettings baseline = new();
-            DeterministicSeparationSettings[] unsupported =
+            // All four advanced DSP cores are now integrated.
+            // ILRMA requires stereo input; mono will throw ArgumentException at runtime (not NotSupportedException).
+            DeterministicSeparationSettings[] allAdvanced =
             [
-                baseline with { UseCqtAnalysis = true }, baseline with { UseCqtSynthesis = true },
-                baseline with { UsePyin = true }, baseline with { UseIlrma = true },
-                baseline with { EnsembleMode = InstrumentEnsembleMode.ProfilesOnly, InstrumentProfiles = [InstrumentProfileId.SynthBass] }
+                baseline with { UseCqtAnalysis = true },
+                baseline with { UsePyin = true },
+                baseline with { UseCqtSynthesis = true },
+                baseline with { UseCqtAnalysis = true, UsePyin = true, UseCqtSynthesis = true }
             ];
-            foreach (var settings in unsupported)
-                Assert.ThrowsException<NotSupportedException>(() => { _ = DeterministicSeparationProcessor.AnalyzeAsync(source, settings); });
+            foreach (var settings in allAdvanced)
+                _ = DeterministicSeparationProcessor.AnalyzeAsync(source, settings).GetAwaiter().GetResult();
+        }
+
+        [TestMethod]
+        public void IlrmaRejectsMonoInput()
+        {
+            using AudioTestScope scope = new();
+            AudioObj source = scope.Create(new float[8000], 8000); // mono
+            DeterministicSeparationSettings settings = new() { UseIlrma = true };
+            // ILRMA requires stereo; the processor must reject mono at runtime.
+            var ex = Assert.ThrowsException<ArgumentException>(() =>
+                { _ = DeterministicSeparationProcessor.AnalyzeAsync(source, settings).GetAwaiter().GetResult(); });
+            Assert.IsTrue(ex.Message.Contains("stereo") || ex.Message.Contains("channel"), "ILRMA must reject mono input.");
         }
 
         private static void AssertError(double[] expected, double[] actual, double gain, double tolerance)

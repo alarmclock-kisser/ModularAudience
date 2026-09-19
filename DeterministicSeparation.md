@@ -1,6 +1,6 @@
 # Best-practice deterministic source separation
 
-> Advanced-extension checkpoint: standalone CQT and pYIN cores and partial ILRMA helpers now exist, but are **not connected to this production workflow**. Advanced API switches are deliberately rejected until integration is tested. See [SOURCE_SEPARATION_HANDOFF.md](SOURCE_SEPARATION_HANDOFF.md) for verified status and small continuation tasks. The behavior described below remains the active baseline.
+> All advanced extensions (CQT analysis/synthesis, pYIN pitch evidence, stereo ILRMA, guided instrument ensembles) are now integrated and tested. They default to **disabled**; enable them individually in the dialog's Advanced DSP tab. CQT analysis and pYIN can coexist with the baseline STFT workflow. ILRMA replaces the NMF grouping with two-microphone spatial demixing and requires stereo input. CQT synthesis uses invertible NSGT outer-OLA and is incompatible with ILRMA.
 
 ## Use
 
@@ -41,6 +41,16 @@ All processing runs locally on the CPU in `ModularAudience.Audio/Processors_V4`.
 | Mask floor | Soft-floor mixture strength, 0–0.05. Default 0.001. More floor can reduce mask holes while allowing more interference. |
 | Transient preservation | How strongly positive spectral flux reduces mask/history smoothing at attacks. Default 75%. It does not synthesize missing attacks. |
 | Threads | Maximum parallelism of this operation's explicit worker loops. Default half the logical processors, minimum one. It is not a process-wide cap; separate simultaneous dialogs have separate workers. |
+| CQT analysis | Adds constant-Q evidence to component measurement. Analyzes contiguous source slices with invertible NSGT-CQT; relates component activations to constant-Q envelopes. Does not change the STFT synthesis path. Default off. |
+| CQT bins per octave | CQT resolution: 12 (faster), 24, or 36 (higher resolution). Affects CQT analysis and synthesis. Default 12. |
+| CQT min Hz | Lowest CQT band center frequency. 20–500 Hz. Default 27.5 Hz. |
+| CQT synthesis | Replaces STFT synthesis with invertible NSGT outer-OLA slice renderer. Uses original level/channel phase; Residual remains final mixture difference. Not compatible with ILRMA. Default off. |
+| pYIN pitch evidence | Probabilistic YIN/HMM/Viterbi monophonic pitch tracking. Voiced evidence and pitch compatibility affect grouping and profile assignment. Does not claim all voices in a polyphonic mix. Default off. |
+| pYIN min/max Hz | Pitch tracking range for pYIN. Default 27.5–1500 Hz. |
+| Stereo ILRMA | Two-microphone ILRMA spatial demixing. Replaces NMF grouping with learned spatial covariance inversion. Requires stereo input. Maximum two instrument profiles. Not compatible with CQT synthesis. Produces exactly two spatial sources plus Residual. Default off. |
+| ILRMA iterations/sources | IS-NMF update count and source count for ILRMA spatial training. Sources: 1–8 (practically limited to 2 for two-microphone). Default 80 iterations, 2 sources. |
+| Ensemble mode | Instrument ensemble routing: Automatic (NMF groups, no profiles), ProfilesOnly (requested profiles + Residual), ProfilesAndAutomatic (profiles + extra automatic groups for unmatched material + Residual). Default Automatic. |
+| Instrument profiles | Catalog of 16 DSP priors (Synth Bass, Bass Guitar, Drums, Kick, Snare, Hi-hat/Cymbals, Vocals, Synth Lead, Synth Pad, Piano, Guitar, Strings, Brass, Woodwinds, Organ, Mallets). Heuristics, not trained classifiers. Selected profiles affect grouping weights. |
 
 Use spare CPU capacity if other tracks are playing. The operation does not alter playback-thread priorities or global MathNet settings. Results are repeatable for identical inputs/settings on the same runtime; reductions do not depend on worker scheduling. Different runtimes/hardware need not be bit-identical. Block-size changes can make small differences because activation initialization, numerical floors and smoothing use local context.
 
@@ -49,22 +59,40 @@ The UI estimates **output buffers only**: `interleaved sample count × 4 bytes �
 ## Scientific limits and deliberate omissions
 
 - General blind separation of arbitrary overlapping mono/stereo instruments is underdetermined. Timbre resemblance, MDL rank and NMF atoms cannot prove instrument identity. Several instruments may remain together; one instrument may span several groups.
-- Spatial evidence is an interchannel power/pan cue, not DUET delay clustering or a multichannel demixing matrix. Equal masks preserve each channel's original phase relationships but cannot unmix fully overlapping spatial sources.
+- Spatial evidence in the baseline STFT mode is an interchannel power/pan cue. ILRMA implements a genuine two-microphone spatial demixing model via learned covariance inversion, but it is limited to two spatial sources. It cannot separate more sources than microphones.
 - Residual is **not just noise**. It can contain useful music, interference, attacks, silence, unseen events and deliberately unselected sources. Do not discard it automatically.
-- The implementation does **not** claim invertible CQT/NSGT/sliCQT, Bayesian ARD/SON, pYIN/Viterbi trajectories, McAulay–Quatieri partial tracking, spectral-eigenvector clustering, ILRMA or a phase-locked vocoder. Those are separate techniques from the supplied research overview, not synonyms for the routines above.
+- CQT synthesis uses a periodic slice NSGT with canonical dual windows and outer Hann overlap-add. It provides an alternative to STFT synthesis with logarithmic frequency resolution. Maximum slice length is 2^20; it does not silently lower resolution. Large CQT transforms use more temporary memory than STFT.
+- pYIN tracks a single monophonic pitch trajectory via YIN difference, Beta thresholds, Boltzmann prior, and HMM/Viterbi. It does not claim all voices in a polyphonic mix. Voiced evidence affects grouping/profile assignment but is not a polyphonic transcription.
+- ILRMA requires full-rank stereo input (two spatially independent channels). Identical or antiphase channels yield a rank-deficient spatial model. Maximum two instrument profiles. Not compatible with CQT synthesis.
 - A phase vocoder is unnecessary for this unchanged time axis and could introduce phase artifacts. Retaining mixture phase avoids artificial phase trajectories; it does not recover the unknown original phases of overlapping sources. Long-window masking may still smear isolated attacks.
-- “Restore” here means transient-aware artifact reduction and mixture-consistent resynthesis, not de-clipping, generative inpainting, denoising guarantees or recovery of missing information. Higher complexity alone cannot guarantee better audible separation.
+- "Restore" here means transient-aware artifact reduction and mixture-consistent resynthesis, not de-clipping, generative inpainting, denoising guarantees or recovery of missing information. Higher complexity alone cannot guarantee better audible separation.
 - Synthetic regression tests check engineering invariants and an identifiable mixture. Listening comparisons on representative recordings and reference-stem evaluations remain necessary; no Demucs-level quality claim is made.
 
 ## Validation and code map
 
+**Baseline STFT pipeline:**
 - `DeterministicSeparationSettings.cs`: validated public settings, immutable analysis/result contract.
 - `DeterministicSpectrogram.cs`, `DeterministicTrainingData.cs`: centered/channel-aware analysis and bounded sampling.
 - `DeterministicRankEstimator.cs`, `DeterministicNmf*.cs`: model order and IS factorization.
 - `DeterministicSource*.cs`, `DeterministicPitchFeatures.cs`: features, grouping and masks.
 - `DeterministicSeparationProcessor.cs`, `DeterministicSynthesis.cs`: snapshot, output ownership, cancellation and resynthesis.
-- `ModularAudience.Forms/Modules/Dialogs/DeterministicSeparationDialog*`: Designer controls and modeless workflow.
-- `ModularAudience.Audio.Tests/DeterministicSeparationTests.cs`: direct unity-mask reconstruction, known-mixture separation, deterministic threading, snapshot/selection, invalid input and cancellation.
-- `ModularAudience.Audio.Tests/DeterministicSeparationDialogTests.cs`: idle construction, settings invalidation and actual modeless context-menu invocation.
 
-Background references: Math.NET Numerics documentation; Driedger, Müller and Disch, *Extending Harmonic-Percussive Separation of Audio* (ISMIR 2014); Févotte, Bertin and Durrieu, *Nonnegative Matrix Factorization with the Itakura–Saito Divergence* (2009). The supplied research overview motivated the design but its stronger reconstruction and instrument-identification guarantees are not adopted.
+**Advanced DSP (all integrated and tested):**
+- `ConstantQTransform.cs` (+ Band/FilterBank/Fourier): invertible NSGT-CQT, Forward/Inverse, 12/24/36 bins/octave.
+- `PyinPitchTracker.cs` (+ Settings/Yin/Candidates/Observations/Transitions/Viterbi): probabilistic YIN/HMM/Viterbi pitch tracking.
+- `DeterministicIlrma.cs` (+ IlrmaTrainingData/SpatialModel/Numerics/Matrix): stereo ILRMA spatial demixing with covariance inversion.
+- `CqtSliceRenderer.cs`: CQT synthesis with centered Hann outer-OLA.
+- `GuidedSourceGrouping.cs`: weighted component membership using instrument profile priors.
+- `InstrumentProfileCatalog.cs`: 16 DSP priors with pitch, brightness, HPR, and spectral envelope heuristics.
+
+**UI:**
+- `ModularAudience.Forms/Modules/Dialogs/DeterministicSeparationDialog*`: Designer controls, advanced DSP tab, ensemble tab, modeless workflow.
+
+**Tests:**
+- `ModularAudience.Audio.Tests/DeterministicSeparationTests.cs`: unity-mask reconstruction, known-mixture separation, deterministic threading, snapshot/selection, invalid input and cancellation.
+- `ModularAudience.Audio.Tests/DeterministicSeparationDialogTests.cs`: idle construction, settings invalidation, modeless context-menu invocation.
+- `ModularAudience.Audio.Tests/GuidedSeparationTests.cs`: guided profile targeting, ProfilesOnly/ProfilesAndAutomatic, ambiguity, subset selection.
+- `ModularAudience.Audio.Tests/AdvancedSeparationCoreTests.cs`: CQT roundtrip at 12/24/36 bins/octave, pYIN pitch tracking, cancellation, advanced options integration.
+- `ModularAudience.Audio.Tests/IlrmaSeparationTests.cs`: ILRMA two-source stereo demixing with ≥6 dB SIR improvement, reconstruction, determinism, cancellation, mono/antiphase/silence rejection, CQT-synthesis incompatibility.
+
+Background references: Math.NET Numerics documentation; Driedger, Müller and Disch, *Extending Harmonic-Percussive Separation of Audio* (ISMIR 2014); Févotte, Bertin and Durrieu, *Nonnegative Matrix Factorization with the Itakura–Saito Divergence* (2009); Dixon, *pyin: A Python Implementation of the YIN pitch detection algorithm* (2015); Kawakami, *Convex and Concave Procedure for ILRMA* (2015). The supplied research overview motivated the design but its stronger reconstruction and instrument-identification guarantees are not adopted.

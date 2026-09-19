@@ -18,6 +18,7 @@ namespace ModularAudience.Audio.Processors_V4
 
         internal IReadOnlyList<DeterministicSourceDescriptor> Sources { get; }
         internal int EstimatedRank { get; }
+        internal double[][] Dictionary => this.dictionary;
 
         internal static DeterministicSourceModel Train(DeterministicAudioSnapshot source,
             DeterministicSeparationSettings settings, IProgress<DeterministicSeparationProgress>? progress,
@@ -39,16 +40,17 @@ namespace ModularAudience.Audio.Processors_V4
                 reporter.Report(1, "Analysis complete: no modeled sources");
                 return new(DeterministicSpectrogram.Allocate(settings.WindowSize / 2 + 1, 0), [], 0, settings.WindowSize);
             }
-            return Learn(data, source.SampleRate, rank, settings, reporter, cancellationToken);
+            return Learn(source, data, source.SampleRate, rank, settings, reporter, cancellationToken);
         }
 
-        private static DeterministicSourceModel Learn(DeterministicTrainingData data, int sampleRate, int rank,
-            DeterministicSeparationSettings settings, DeterministicModelProgress reporter, CancellationToken token)
+        private static DeterministicSourceModel Learn(DeterministicAudioSnapshot source, DeterministicTrainingData data,
+            int sampleRate, int rank, DeterministicSeparationSettings settings, DeterministicModelProgress reporter,
+            CancellationToken token)
         {
             // Use at least as many candidate NMF components as requested profiles (validation already enforces this).
             DeterministicNmfFit fit = DeterministicNmf.Train(data, rank, settings, reporter, token);
             reporter.Report(0.88, "Measuring harmonic, percussive and stereo evidence");
-            DeterministicComponentFeatures[] features = DeterministicSourceFeatures.Measure(fit, data, sampleRate, settings, token);
+            DeterministicComponentFeatures[] features = DeterministicSourceFeatures.Measure(source, fit, data, sampleRate, settings, token);
             reporter.Report(0.96, settings.EnsembleMode == InstrumentEnsembleMode.Automatic
                 ? "Grouping redundant components conservatively" : "Assigning weighted membership to instrument profiles");
             DeterministicSourceGroup[] groups = settings.EnsembleMode == InstrumentEnsembleMode.Automatic

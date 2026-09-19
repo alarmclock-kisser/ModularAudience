@@ -85,9 +85,11 @@ namespace ModularAudience.Audio.Tests
             Assert.IsFalse(GetControl<CheckBox>(dialog, "checkBox_cqtSynthesis").Checked, "CQT synthesis must default off.");
             Assert.IsFalse(GetControl<CheckBox>(dialog, "checkBox_pyin").Checked, "pYIN must default off.");
             Assert.IsFalse(GetControl<CheckBox>(dialog, "checkBox_ilrma").Checked, "ILRMA must default off.");
-            Assert.IsTrue(GetControl<CheckBox>(dialog, "checkBox_cqtAnalysis").Enabled == false, "CQT analysis is pending and must stay disabled until wired.");
-            Assert.IsTrue(GetControl<CheckBox>(dialog, "checkBox_pyin").Enabled == false, "pYIN is pending and must stay disabled until wired.");
-            Assert.IsTrue(GetControl<CheckBox>(dialog, "checkBox_ilrma").Enabled == false, "ILRMA is pending and must stay disabled until wired.");
+            // All four advanced DSP cores (C1, C2, D, E) are now wired.
+            Assert.IsTrue(GetControl<CheckBox>(dialog, "checkBox_cqtAnalysis").Enabled, "CQT analysis must be enabled.");
+            Assert.IsTrue(GetControl<CheckBox>(dialog, "checkBox_pyin").Enabled, "pYIN must be enabled.");
+            Assert.IsTrue(GetControl<CheckBox>(dialog, "checkBox_cqtSynthesis").Enabled, "CQT synthesis must be enabled.");
+            Assert.IsTrue(GetControl<CheckBox>(dialog, "checkBox_ilrma").Enabled, "ILRMA must be enabled.");
 
             DomainUpDown ensemble = GetControl<DomainUpDown>(dialog, "domainUpDown_ensembleMode");
             Assert.AreEqual("Automatic", ensemble.Text, "The ensemble mode must default to Automatic.");
