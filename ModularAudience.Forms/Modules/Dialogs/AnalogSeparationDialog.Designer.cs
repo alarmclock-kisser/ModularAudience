@@ -186,7 +186,7 @@ namespace ModularAudience.Forms
             // numeric_threads
             //
             this.numeric_threads.Location = new Point(300, 54);
-            this.numeric_threads.Maximum = new decimal(new int[] { 256, 0, 0, 0 });
+            this.numeric_threads.Maximum = new decimal(new int[] { Environment.ProcessorCount, 0, 0, 0 });
             this.numeric_threads.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             this.numeric_threads.Name = "numeric_threads";
             this.numeric_threads.Size = new Size(70, 23);

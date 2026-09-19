@@ -14,6 +14,8 @@ namespace ModularAudience.Forms
         private readonly List<BandRow> bandRows = [];
         private readonly System.Windows.Forms.Timer selectionStateTimer;
         private bool operationRunning;
+        private decimal lastWindowSizeValue;
+        private bool adjustingWindowSize;
 
         private sealed class BandRow
         {
@@ -33,7 +35,10 @@ namespace ModularAudience.Forms
             this.selectionStateTimer.Start();
 
             int processorCount = Environment.ProcessorCount;
+            this.numeric_threads.Maximum = processorCount;
             this.numeric_threads.Value = Math.Clamp(processorCount / 2, 1, processorCount);
+            this.lastWindowSizeValue = this.numeric_windowSize.Value;
+            this.numeric_windowSize.ValueChanged += this.numeric_windowSize_ValueChanged;
 
             this.AddBandRow("SubBass", 20, 120);
             this.AddBandRow("Bass", 120, 250);
@@ -41,6 +46,45 @@ namespace ModularAudience.Forms
             this.AddBandRow("Mid", 2000, 4000);
             this.AddBandRow("High", 4000, 20000);
             this.UpdateSelectionButtonState();
+        }
+
+        private void numeric_windowSize_ValueChanged(object? sender, EventArgs e)
+        {
+            if (this.adjustingWindowSize)
+            {
+                return;
+            }
+
+            decimal current = this.numeric_windowSize.Value;
+            int direction = current.CompareTo(this.lastWindowSizeValue);
+            if (direction == 0)
+            {
+                return;
+            }
+
+            decimal power = 1;
+            while (power * 2 <= current)
+            {
+                power *= 2;
+            }
+
+            decimal next = direction > 0 ? power * 2 : power;
+            if (direction < 0 && current == power)
+            {
+                next = power / 2;
+            }
+
+            next = Math.Clamp(next, this.numeric_windowSize.Minimum, this.numeric_windowSize.Maximum);
+            this.adjustingWindowSize = true;
+            try
+            {
+                this.numeric_windowSize.Value = next;
+                this.lastWindowSizeValue = next;
+            }
+            finally
+            {
+                this.adjustingWindowSize = false;
+            }
         }
 
         private void AddBandRow(string name, double lowHz, double highHz)
