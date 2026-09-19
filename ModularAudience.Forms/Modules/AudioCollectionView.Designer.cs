@@ -107,6 +107,15 @@
             this.contextMenuStrip_audios.SuspendLayout();
             this.SuspendLayout();
             // 
+            // toolTip_audios
+            // 
+            this.toolTip_audios = new ToolTip(this.components);
+            this.toolTip_audios.AutoPopDelay = 10000;
+            this.toolTip_audios.InitialDelay = 500;
+            this.toolTip_audios.ReshowDelay = 100;
+            this.toolTip_audios.ShowAlways = true;
+            this.toolTip_audios.IsBalloon = false;
+            // 
             // listBox_audios
             // 
             this.listBox_audios.FormattingEnabled = true;
@@ -116,6 +125,7 @@
             this.listBox_audios.Size = new Size(220, 289);
             this.listBox_audios.TabIndex = 0;
             this.listBox_audios.SelectedIndexChanged += this.listBox_audios_SelectedIndexChanged;
+            this.toolTip_audios.SetToolTip(this.listBox_audios, "Right-click for more actions...\nCtrl+click to (un)select multiple.");
             // 
             // checkBox_autoPlay
             // 
@@ -137,6 +147,7 @@
             this.button_export.Text = "Export";
             this.button_export.UseVisualStyleBackColor = false;
             this.button_export.Click += this.button_export_Click;
+            this.toolTip_audios.SetToolTip(this.button_export, "Export selected audio(s).\nNormal click: export selected.\nShift+click: export with modified settings.\nCtrl+click: export with different modification.");
             // 
             // checkBox_preview
             // 
@@ -146,7 +157,7 @@
             this.checkBox_preview.Size = new Size(67, 19);
             this.checkBox_preview.TabIndex = 3;
             this.checkBox_preview.Text = "Preview";
-            this.checkBox_preview.Checked = true;
+            this.checkBox_preview.Checked = false;
             this.checkBox_preview.UseVisualStyleBackColor = true;
             // 
             // contextMenuStrip_audios
@@ -746,5 +757,6 @@
         private ToolStripComboBox toolStripComboBox_orderBy;
         private ToolStripMenuItem convertToMIDIToolStripMenuItem;
         private ToolStripMenuItem neuralFeedbackEngineToolStripMenuItem;
+        private ToolTip toolTip_audios;
     }
 }

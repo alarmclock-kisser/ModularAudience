@@ -289,25 +289,64 @@ namespace ModularAudience.Forms
                     .ToArray()
                 : Array.Empty<string>();
 
-            string? randomFile = allAudioFiles.Length > 0 ? allAudioFiles[rand.Next(allAudioFiles.Length)] : this.TryGetRandomResourceFile();
-
-            // Import
-            if (randomFile != null)
+            // Random selection: pick a random file, load it, and keep it only if its
+            // duration is shorter than 12 minutes. Try another file otherwise.
+            const double maxDurationSeconds = 12.0 * 60.0;
+            AudioObj? randomAudio = null;
+            int attempts = 0;
+            int maxAttempts = allAudioFiles.Length > 0 ? allAudioFiles.Length : 100;
+            while (attempts < maxAttempts && randomAudio == null)
             {
-                await this.ImportAndPlaceAsync([randomFile], fromResources: false);
-
-                if (this._importStretchSettings != null)
+                attempts++;
+                string candidate = allAudioFiles[rand.Next(allAudioFiles.Length)];
+                var loaded = (await this.AudioC.LoadManyAsync([candidate])).ToList();
+                var audio = loaded.FirstOrDefault(a => a != null);
+                if (audio != null && audio.Duration.TotalSeconds < maxDurationSeconds)
                 {
-                    var track = LastSelectedTrackView?.OriginalAudio ?? CollectionViews.LastOrDefault(cv => cv != null && !cv.IsDisposed)?.AudioC.Audios.LastOrDefault();
-                    if (track != null)
-                    {
-                        track.ReplaceWith(await TimeStretcher.TimeStretchAllThreadsAsync(track, this._importStretchSettings.ChunkSize, this._importStretchSettings.Overlap, this._importStretchSettings.StretchFactor, false, 0.8f, this._importStretchSettings.Threads, null, this._importStretchSettings.Offload, true));
-                    }
+                    randomAudio = audio;
+                }
+                else
+                {
+                    this.AudioC.Audios.Remove(audio);
+                    audio?.Dispose();
                 }
             }
-            else
+
+            if (randomAudio == null)
             {
-                LogCollection.Log("Random import: No audio files found.");
+                LogCollection.Log("Random import: No audio files shorter than 12 minutes found.");
+                return;
+            }
+
+            // Import into an existing AudioCollectionView (not a new one)
+            var importDir = Path.GetDirectoryName(randomAudio.FilePath) ?? string.Empty;
+            var targetView = CollectionViews
+                .FirstOrDefault(cv => cv != null && !cv.IsDisposed &&
+                    cv.AudioC.Audios.Any(a => Path.GetDirectoryName(a.FilePath) == importDir));
+
+            if (targetView == null)
+            {
+                targetView = CollectionViews.LastOrDefault(cv => cv != null && !cv.IsDisposed);
+            }
+
+            if (targetView == null)
+            {
+                targetView = new AudioCollectionView([]);
+            }
+
+            int num = WindowMain.GetCollectionNumber(targetView);
+            targetView.AudioC.Audios.Add(randomAudio);
+            WindowMain.AudioCollectionTags[randomAudio.Id] = num;
+            LogCollection.Log($"{randomAudio.Name} imported into existing collection.");
+            targetView.Show();
+
+            if (this._importStretchSettings != null)
+            {
+                var track = LastSelectedTrackView?.OriginalAudio ?? CollectionViews.LastOrDefault(cv => cv != null && !cv.IsDisposed)?.AudioC.Audios.LastOrDefault();
+                if (track != null)
+                {
+                    track.ReplaceWith(await TimeStretcher.TimeStretchAllThreadsAsync(track, this._importStretchSettings.ChunkSize, this._importStretchSettings.Overlap, this._importStretchSettings.StretchFactor, false, 0.8f, this._importStretchSettings.Threads, null, this._importStretchSettings.Offload, true));
+                }
             }
         }
 
@@ -510,8 +549,14 @@ namespace ModularAudience.Forms
                     else
                     {
                         var audioList = pairs.Select(x => x.Audio).ToList();
-                        var last = CollectionViews.LastOrDefault();
-                        if (last == null)
+                        // Find an existing collection from the same directory, or the last one
+                        var importDir = pairs[0].Path != null ? Path.GetDirectoryName(pairs[0].Path) ?? string.Empty : string.Empty;
+                        var targetView = CollectionViews
+                            .FirstOrDefault(cv => cv != null && !cv.IsDisposed &&
+                                (cv.AudioC.Audios.Any(a => Path.GetDirectoryName(a.FilePath) == importDir) ||
+                                 cv.AudioC.Audios.Count == 0));
+
+                        if (targetView == null)
                         {
                             var newView = new AudioCollectionView(audioList);
                             int num = GetCollectionNumber(newView);
@@ -521,15 +566,15 @@ namespace ModularAudience.Forms
                             }
                             newView.Show();
                         }
-                        else if (last.AudioCount == 0)
+                        else if (targetView.AudioCount == 0)
                         {
-                            int num = GetCollectionNumber(last);
+                            int num = GetCollectionNumber(targetView);
                             foreach (var audio in audioList)
                             {
-                                last.AudioC.Audios.Add(audio);
+                                targetView.AudioC.Audios.Add(audio);
                                 AudioCollectionTags[audio.Id] = num;
                             }
-                            last.Show();
+                            targetView.Show();
                         }
                         else
                         {

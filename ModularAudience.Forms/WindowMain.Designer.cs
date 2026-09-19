@@ -46,6 +46,11 @@
             this.toolStripMenuItem_enqueueLast = new ToolStripMenuItem();
             this.toolStripSeparator_playlistAutoEnqueue = new ToolStripSeparator();
             this.toolTip_playlist = new ToolTip(this.components);
+            this.toolTip_playlist.AutoPopDelay = 10000;
+            this.toolTip_playlist.InitialDelay = 500;
+            this.toolTip_playlist.ReshowDelay = 100;
+            this.toolTip_playlist.ShowAlways = true;
+            this.toolTip_playlist.IsBalloon = false;
             this.button_scanBpm = new Button();
             this.textBox_scanBpmResult = new TextBox();
             this.textBox_scanTimingResult = new TextBox();
@@ -689,6 +694,10 @@
             this.button_controller.Text = "MIDI-Ctrl";
             this.button_controller.UseVisualStyleBackColor = true;
             this.button_controller.Click += this.button_controller_Click;
+            this.toolTip_playlist.SetToolTip(this.button_playlist, "Right-click to configure.\nPlaylist empty.");
+            this.toolTip_playlist.SetToolTip(this.button_random, "Import random track.\nNormal click: import a random track from the focused track's root directory.\nRight-click: toggle auto-stretch to target BPM for imported tracks.");
+            this.toolTip_playlist.SetToolTip(this.button_import, "Import audio files.\nNormal click: browse from last folder or MyMusic.\nShift+click: select folder and import all audio files.\nAlt+click: import from current selection.");
+            this.toolTip_playlist.SetToolTip(this.button_record, "Record.\nRight-click: select recording start negative offset (pre-roll).");
             // 
             // WindowMain
             // 

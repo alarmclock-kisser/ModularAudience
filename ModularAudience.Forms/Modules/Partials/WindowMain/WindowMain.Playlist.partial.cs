@@ -662,7 +662,7 @@ namespace ModularAudience.Forms
             var paths = snapshot.FilePaths;
             if (paths.Count == 0)
             {
-                this.toolTip_playlist.SetToolTip(this.button_playlist, "Playlist is empty.");
+                this.toolTip_playlist.SetToolTip(this.button_playlist, "Right-click to configure.\nPlaylist empty.");
                 return;
             }
 

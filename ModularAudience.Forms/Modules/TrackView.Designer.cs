@@ -65,6 +65,12 @@
             this.menuItem_rateResetCenter = new ToolStripMenuItem();
             this.label_info_rate = new Label();
             this.toolStripMenuItem_jumpHere = new ToolStripMenuItem();
+            this.toolTip_trackView = new ToolTip(this.components);
+            this.toolTip_trackView.AutoPopDelay = 10000;
+            this.toolTip_trackView.InitialDelay = 500;
+            this.toolTip_trackView.ReshowDelay = 100;
+            this.toolTip_trackView.ShowAlways = true;
+            this.toolTip_trackView.IsBalloon = false;
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_waveform).BeginInit();
             this.contextMenu_waveform.SuspendLayout();
             this.contextMenu_rate.SuspendLayout();
@@ -81,6 +87,7 @@
             this.button_loop.TabStop = false;
             this.button_loop.Text = "↺";
             this.button_loop.UseVisualStyleBackColor = true;
+            this.toolTip_trackView.SetToolTip(this.button_loop, "Loop toggle.\nNormal click: enable loop.\nClick again: cycle forward.\nCtrl+click: disable loop.\nShift+click: cycle backward.");
             // 
             // button_playback
             // 
@@ -94,6 +101,7 @@
             this.button_playback.Text = "▶";
             this.button_playback.UseVisualStyleBackColor = true;
             this.button_playback.Click += this.button_playback_Click;
+            this.toolTip_trackView.SetToolTip(this.button_playback, "Play/Stop.\nCtrl+click: toggle all TrackViews.");
             // 
             // button_pause
             // 
@@ -107,6 +115,7 @@
             this.button_pause.Text = "||";
             this.button_pause.UseVisualStyleBackColor = true;
             this.button_pause.Click += this.button_pause_Click;
+            this.toolTip_trackView.SetToolTip(this.button_pause, "Pause/Resume.\nCtrl+click: toggle all TrackViews.");
             // 
             // pictureBox_waveform
             // 
@@ -118,6 +127,7 @@
             this.pictureBox_waveform.Size = new Size(917, 160);
             this.pictureBox_waveform.TabIndex = 7;
             this.pictureBox_waveform.TabStop = false;
+            this.toolTip_trackView.SetToolTip(this.pictureBox_waveform, "Right-click for more actions...");
             // 
             // contextMenu_waveform
             // 
@@ -314,6 +324,7 @@
             this.checkBox_sync.Text = "Sync Playback";
             this.checkBox_sync.UseVisualStyleBackColor = true;
             this.checkBox_sync.CheckedChanged += this.checkBox_sync_CheckedChanged;
+            this.toolTip_trackView.SetToolTip(this.checkBox_sync, "Sync Playback.\nCtrl+click: toggle all TrackViews (if on, unchecks all; if off, checks all).");
             // 
             // checkBox_mute
             // 
@@ -355,6 +366,7 @@
             this.hScrollBar_rate.MouseDown += this.hScrollBar_rate_MouseDown;
             this.hScrollBar_rate.Scroll += this.hScrollBar_rate_Scroll;
             this.hScrollBar_rate.ValueChanged += this.hScrollBar_rate_ValueChanged;
+            this.toolTip_trackView.SetToolTip(this.hScrollBar_rate, "Playback rate (varispeed).\nCtrl+click: change rate on all TrackViews.\nRight-click: context menu (jump here, reset center).");
             // 
             // contextMenu_rate
             // 
@@ -465,5 +477,6 @@
         private ToolStripMenuItem menuItem_rateJumpHere;
         private ToolStripMenuItem menuItem_rateResetCenter;
         private ToolStripMenuItem toolStripMenuItem_jumpHere;
+        private ToolTip toolTip_trackView;
     }
 }

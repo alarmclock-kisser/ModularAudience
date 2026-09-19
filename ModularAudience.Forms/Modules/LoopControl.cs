@@ -516,6 +516,9 @@ namespace ModularAudience.Forms.Modules
 
                 copy.Click += this.LoopButton_Click;
 
+                string tooltipText = $"Loop {buttonLabels[i]}.\nCtrl+click: set loop fraction on all tracks.";
+                this.toolTip_playlistTracks.SetToolTip(copy, tooltipText);
+
                 this.panel_buttons.Controls.Add(copy);
                 created.Add(copy);
             }

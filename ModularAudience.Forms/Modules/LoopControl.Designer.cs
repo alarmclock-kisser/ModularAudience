@@ -116,6 +116,12 @@
             button_playlistAllOff.TabStop = false;
             button_playlistAllOff.Text = "−";
             toolTip_playlistTracks.SetToolTip(button_playlistAllOff, "Uncheck all rows. An empty Ctrl+loop group does nothing; loops and playback are unchanged.");
+            toolTip_playlistTracks.SetToolTip(button_loop, "Loop range buttons (generated dynamically).\nEach button sets the loop fraction for all tracks.\nCtrl+click: set loop fraction on all tracks.\nFirst half (16..1/8): start looping backward from that range.\nSecond half (1/8..16): start looping forward from that range.");
+            toolTip_playlistTracks.SetToolTip(button_copy, "Copy ensemble.\nNormal click: capture all tracks (backwards, multiplier×1 beat).\nCtrl+click: capture only current looped track(s).\nCtrl+click with multiple looped: capture only looped tracks in max range.");
+            toolTip_playlistTracks.SetToolTip(domainUpDown_multiplier, "Loop multiplier.\nCtrl+click: toggle multiplier for all tracks.\nNo active loop: determines capture duration globally.");
+            toolTip_playlistTracks.SetToolTip(numericUpDown_jump, "Jump ms.\nCtrl+click: increment/decrement for all tracks.\nSame for forward/backward buttons.");
+            toolTip_playlistTracks.SetToolTip(button_forward, "Forward jump.\nCtrl+click: jump all tracks forward.");
+            toolTip_playlistTracks.SetToolTip(button_backward, "Backward jump.\nCtrl+click: jump all tracks backward.");
             button_playlistAllOff.UseVisualStyleBackColor = true;
             button_playlistAllOff.Click += button_playlistAllOff_Click;
             // 
