@@ -4,8 +4,8 @@ namespace ModularAudience.Audio.Processors_V4
     internal sealed class PyinSettings
     {
         private const int MaximumFrameLength = 1 << 18;
-        private const long MaximumBackpointerBytes = 128L * 1024 * 1024;
-        private const long MaximumWorkingBytes = 512L * 1024 * 1024;
+        private const long MaximumBackpointerBytes = 512L * 1024 * 1024;
+        private const long MaximumWorkingBytes = 2L * 1024 * 1024 * 1024;
         internal const int BinsPerOctave = 120;
 
         private PyinSettings(int sampleCount, int sampleRate, int hopSize,
@@ -99,7 +99,7 @@ namespace ModularAudience.Audio.Processors_V4
             long backpointerBytes = frames * this.StateCount * sizeof(int);
             if (backpointerBytes > MaximumBackpointerBytes)
             {
-                throw new ArgumentException($"pYIN needs {backpointerBytes} backpointer bytes, exceeding the {MaximumBackpointerBytes}-byte limit. Analyze shorter windows or increase hopSize.");
+                throw new ArgumentException($"pYIN needs {backpointerBytes} backpointer bytes, exceeding the {MaximumBackpointerBytes}-byte limit. Reduce the source duration or disable pYIN.");
             }
             // Two dense acoustic tables, the banded decoder's backpointers, result objects,
             // per-worker FFT/candidate scratch and conservative managed FFT allocation headroom.
@@ -108,7 +108,7 @@ namespace ModularAudience.Audio.Processors_V4
                 + 128L * this.PitchCount + 16384;
             if (estimatedBytes > MaximumWorkingBytes)
             {
-                throw new ArgumentException($"pYIN needs an estimated {estimatedBytes} working bytes, exceeding the {MaximumWorkingBytes}-byte limit. Analyze shorter windows, increase hopSize or use fewer threads; pitch resolution is not reduced automatically.");
+                throw new ArgumentException($"pYIN needs an estimated {estimatedBytes} working bytes, exceeding the {MaximumWorkingBytes}-byte limit. Reduce the source duration or disable pYIN; pitch resolution is not reduced automatically.");
             }
         }
     }

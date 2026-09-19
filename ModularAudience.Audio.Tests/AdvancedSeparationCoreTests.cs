@@ -49,6 +49,15 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public void PyinAllowsGeometryBeyondTheFormerBackpointerLimit()
+        {
+            PyinSettings settings = PyinSettings.Create(6_000_000, 8000, 80, 100, 500, 1);
+
+            Assert.IsTrue((long) settings.FrameCount * settings.StateCount * sizeof(int) > 128L * 1024 * 1024,
+                "The test geometry must exceed the former 128 MiB backpointer limit.");
+        }
+
+        [TestMethod]
         public void AdvancedCoresHonorPreCancelledTokens()
         {
             using CancellationTokenSource cancellation = new();
