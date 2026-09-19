@@ -8,6 +8,24 @@ namespace ModularAudience.Audio.Processors_V4
             DeterministicSeparationSettings settings, IProgress<DeterministicSeparationProgress>? progress = null,
             CancellationToken cancellationToken = default)
         {
+            ValidateSettingsForSource(source, settings);
+            float[] samples = source.Data;
+            int sampleRate = source.SampleRate;
+            int channels = source.Channels;
+            string name = source.Name;
+            float bpm = source.Bpm;
+            string key = source.Key;
+            return Task.Run(() =>
+            {
+                float[] copy = CopySamples(samples, cancellationToken);
+                DeterministicAudioSnapshot snapshot = new(copy, sampleRate, channels, name, bpm, key);
+                DeterministicSourceModel model = DeterministicSourceModel.Train(snapshot, settings, progress, cancellationToken);
+                return new DeterministicSeparationAnalysis(snapshot, settings, model, Warnings(snapshot, settings, model));
+            }, cancellationToken);
+        }
+
+        public static void ValidateSettingsForSource(AudioObj source, DeterministicSeparationSettings settings)
+        {
             ArgumentNullException.ThrowIfNull(source);
             ArgumentNullException.ThrowIfNull(settings);
             settings.Validate();
@@ -16,20 +34,15 @@ namespace ModularAudience.Audio.Processors_V4
                 throw new ArgumentException("ILRMA requires stereo input (two spatially independent channels).", nameof(settings));
             if (settings.UseIlrma && settings.InstrumentProfiles.Length > 2)
                 throw new ArgumentException("ILRMA is limited to two source profiles for two-microphone input.", nameof(settings));
-            float[] samples = source.Data;
-            int sampleRate = source.SampleRate;
-            int channels = source.Channels;
-            string name = source.Name;
-            float bpm = source.Bpm;
-            string key = source.Key;
-            ValidateFormat(samples, sampleRate, channels);
-            return Task.Run(() =>
+
+            ValidateFormat(source.Data, source.SampleRate, source.Channels);
+            if (settings.UsePyin)
             {
-                float[] copy = CopySamples(samples, cancellationToken);
-                DeterministicAudioSnapshot snapshot = new(copy, sampleRate, channels, name, bpm, key);
-                DeterministicSourceModel model = DeterministicSourceModel.Train(snapshot, settings, progress, cancellationToken);
-                return new DeterministicSeparationAnalysis(snapshot, settings, model, Warnings(snapshot, settings, model));
-            }, cancellationToken);
+                int monoSampleCount = source.Data.Length / source.Channels;
+                _ = PyinSettings.Create(monoSampleCount, source.SampleRate,
+                    Math.Max(64, source.SampleRate / 100), settings.PyinMinimumHz,
+                    settings.PyinMaximumHz, Math.Max(1, Environment.ProcessorCount / 2));
+            }
         }
 
         public static Task<DeterministicSeparationResult> SeparateAsync(DeterministicSeparationAnalysis analysis,

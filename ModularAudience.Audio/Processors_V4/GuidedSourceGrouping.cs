@@ -31,9 +31,10 @@ namespace ModularAudience.Audio.Processors_V4
                     scores[c, p] = ProfileCompatibility(component, profiles[p]);
             }
 
-            // Per-component weights: normalize the profile score vector so memberships sum to at most 1.
+            // ProfilesAndAutomatic reserves weakly matched material for automatic groups.
             double[][] weights = new double[profiles.Count][];
             for (int p = 0; p < profiles.Count; p++) weights[p] = new double[retained.Length];
+            double[] automaticWeights = new double[retained.Length];
             for (int c = 0; c < retained.Length; c++)
             {
                 double maxScore = scores[c, 0];
@@ -42,13 +43,16 @@ namespace ModularAudience.Audio.Processors_V4
                 double sum = 0;
                 for (int p = 0; p < profiles.Count; p++) sum += Math.Max(0, scores[c, p] - 0.02);
                 if (sum <= 0) continue;
+                double profileCoverage = mode == InstrumentEnsembleMode.ProfilesAndAutomatic
+                    ? Math.Min(0.85, Math.Clamp((maxScore - 0.05) / 0.95, 0, 1))
+                    : 1;
                 for (int p = 0; p < profiles.Count; p++)
-                    weights[p][c] = Math.Max(0, scores[c, p] - 0.02) / sum;
+                    weights[p][c] = Math.Max(0, scores[c, p] - 0.02) / sum * profileCoverage;
+                automaticWeights[c] = 1 - profileCoverage;
             }
 
             // Build one group per requested profile with its weighted members.
             List<DeterministicSourceGroup> result = new();
-            HashSet<int> assigned = [];
             for (int p = 0; p < profiles.Count; p++)
             {
                 token.ThrowIfCancellationRequested();
@@ -76,22 +80,56 @@ namespace ModularAudience.Audio.Processors_V4
                     representativePitch(retained, memberIndices, weights[p]), Math.Clamp(pan / fittedEnergy, -1, 1));
                 result.Add(new(memberIndices.ToArray(), h / fittedEnergy, perc / fittedEnergy, pan / fittedEnergy,
                     descriptor, WeightsForProfile(weights[p], retained)));
-                foreach (int index in memberIndices) assigned.Add(index);
             }
 
-            // ProfilesAndAutomatic: add stable automatic groups for components not meaningfully claimed by any profile.
+            // ProfilesAndAutomatic: group profile residuals as independent automatic sources.
             if (mode == InstrumentEnsembleMode.ProfilesAndAutomatic)
             {
                 List<DeterministicComponentFeatures> unmatched = retained
-                    .Where(component => !assigned.Contains(component.Index))
+                    .Where((component, index) => automaticWeights[index] > 1e-4)
                     .OrderByDescending(component => component.Energy).ThenBy(component => component.Index)
                     .ToList();
                 if (unmatched.Count > 0)
                 {
                     DeterministicSourceGroup[] automatic = DeterministicSourceGrouping.Create(unmatched.ToArray(), token);
-                    int nextId = result.Count;
+                    Dictionary<int, int> retainedPositions = retained
+                        .Select((component, index) => (component.Index, index))
+                        .ToDictionary(item => item.Index, item => item.index);
+                    int rank = retained.Max(component => component.Index) + 1;
+                    int nextId = result.Count == 0 ? 0 : result.Max(group => group.Descriptor.Id);
                     foreach (DeterministicSourceGroup group in automatic)
-                        result.Add(group with { Descriptor = group.Descriptor with { Id = ++nextId } });
+                    {
+                        double[] componentWeights = new double[rank];
+                        double energy = 0, h = 0, perc = 0, pan = 0;
+                        foreach (int componentIndex in group.Components)
+                        {
+                            int position = retainedPositions[componentIndex];
+                            double weight = automaticWeights[position];
+                            componentWeights[componentIndex] = weight;
+                            energy += weight * retained[position].Energy;
+                            h += weight * retained[position].Harmonic;
+                            perc += weight * retained[position].Percussive;
+                            pan += weight * retained[position].Pan;
+                        }
+
+                        double fittedEnergy = Math.Max(energy, 1e-300);
+                        DeterministicSourceDescriptor descriptor = group.Descriptor with
+                        {
+                            Id = ++nextId,
+                            Name = $"Automatic {group.Descriptor.Name}",
+                            Character = $"{group.Descriptor.Character}; profile-residual grouping",
+                            EnergyFraction = energy / total,
+                            Pan = Math.Clamp(pan / fittedEnergy, -1, 1)
+                        };
+                        result.Add(group with
+                        {
+                            Harmonic = h / fittedEnergy,
+                            Percussive = perc / fittedEnergy,
+                            Pan = pan / fittedEnergy,
+                            Descriptor = descriptor,
+                            ComponentWeights = componentWeights
+                        });
+                    }
                 }
             }
 

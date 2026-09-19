@@ -32,7 +32,7 @@ namespace ModularAudience.Audio.Processors_V4
         public bool IsEquivalentTo(DeterministicSeparationSettings other)
         {
             return this.InstrumentProfiles.AsSpan().SequenceEqual(other.InstrumentProfiles.AsSpan())
-                && (this with { InstrumentProfiles = [] }) == (other with { InstrumentProfiles = [] });
+                && (this with { InstrumentProfiles = [], Threads = 1 }) == (other with { InstrumentProfiles = [], Threads = 1 });
         }
 
         public void Validate()

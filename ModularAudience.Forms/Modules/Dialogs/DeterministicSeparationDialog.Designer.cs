@@ -21,6 +21,7 @@ namespace ModularAudience.Forms
             this.components = new System.ComponentModel.Container();
             this.tableLayoutPanel_main = new TableLayoutPanel();
             this.label_header = new Label();
+            this.comboBox_presets = new ComboBox();
             this.label_source = new Label();
             this.groupBox_settings = new GroupBox();
             this.tableLayoutPanel_settings = new TableLayoutPanel();
@@ -50,6 +51,7 @@ namespace ModularAudience.Forms
             this.label_hopSizeValue = new Label();
             this.label_summary = new Label();
             this.dataGridView_sources = new DataGridView();
+            this.panel_sources = new Panel();
             this.column_use = new DataGridViewCheckBoxColumn();
             this.column_name = new DataGridViewTextBoxColumn();
             this.column_character = new DataGridViewTextBoxColumn();
@@ -62,19 +64,18 @@ namespace ModularAudience.Forms
             this.textBox_warnings = new TextBox();
             this.label_status = new Label();
             this.progressBar_operation = new ProgressBar();
-            this.flowLayoutPanel_buttons = new FlowLayoutPanel();
+            this.flowLayoutPanel_buttons = new TableLayoutPanel();
+            this.flowLayoutPanel_primaryButtons = new FlowLayoutPanel();
             this.button_detect = new Button();
             this.button_separate = new Button();
+            this.button_restoreSettings = new Button();
             this.button_cancel = new Button();
             this.button_close = new Button();
             this.toolTip_settings = new ToolTip(this.components);
             this.tabControl_advanced = new TabControl();
             this.tabPage_ensemble = new TabPage();
-            this.flowLayoutPanel_ensemble = new FlowLayoutPanel();
-            this.label_ensembleMode = new Label();
-            this.domainUpDown_ensembleMode = new DomainUpDown();
-            this.checkBox_profilesOnly = new CheckBox();
-            this.checkBox_profilesAndAutomatic = new CheckBox();
+            this.flowLayoutPanel_ensemble = new TableLayoutPanel();
+            this.checkBox_addAutomaticProfiles = new CheckBox();
             this.label_profiles = new Label();
             this.checkedListBox_profiles = new CheckedListBox();
             this.label_profileNote = new Label();
@@ -96,6 +97,7 @@ namespace ModularAudience.Forms
             this.numeric_ilrmaComponents = new NumericUpDown();
             this.label_ilrmaComponents = new Label();
             this.label_advancedPending = new Label();
+            this.label_eta = new Label();
             this.tableLayoutPanel_main.SuspendLayout();
             this.groupBox_settings.SuspendLayout();
             this.tabControl_advanced.SuspendLayout();
@@ -126,45 +128,64 @@ namespace ModularAudience.Forms
             //
             // tableLayoutPanel_main
             //
-            this.tableLayoutPanel_main.AutoScroll = true;
-            this.tableLayoutPanel_main.ColumnCount = 1;
-            this.tableLayoutPanel_main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            this.tableLayoutPanel_main.Controls.Add(this.label_header, 0, 0);
+            this.tableLayoutPanel_main.ColumnCount = 2;
+            this.tableLayoutPanel_main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70F));
+            this.tableLayoutPanel_main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
+            this.tableLayoutPanel_main.Controls.Add(this.comboBox_presets, 1, 1);
             this.tableLayoutPanel_main.Controls.Add(this.label_source, 0, 1);
             this.tableLayoutPanel_main.Controls.Add(this.groupBox_settings, 0, 2);
             this.tableLayoutPanel_main.Controls.Add(this.tabControl_advanced, 0, 3);
             this.tableLayoutPanel_main.Controls.Add(this.label_summary, 0, 4);
-            this.tableLayoutPanel_main.Controls.Add(this.dataGridView_sources, 0, 5);
+            this.tableLayoutPanel_main.Controls.Add(this.panel_sources, 0, 5);
             this.tableLayoutPanel_main.Controls.Add(this.label_output, 0, 6);
             this.tableLayoutPanel_main.Controls.Add(this.groupBox_warnings, 0, 7);
-            this.tableLayoutPanel_main.Controls.Add(this.label_status, 0, 8);
-            this.tableLayoutPanel_main.Controls.Add(this.progressBar_operation, 0, 9);
-            this.tableLayoutPanel_main.Controls.Add(this.flowLayoutPanel_buttons, 0, 10);
+            this.tableLayoutPanel_main.Controls.Add(this.label_eta, 0, 8);
+            this.tableLayoutPanel_main.Controls.Add(this.label_status, 0, 9);
+            this.tableLayoutPanel_main.Controls.Add(this.progressBar_operation, 0, 10);
+            this.tableLayoutPanel_main.Controls.Add(this.flowLayoutPanel_buttons, 0, 11);
+            this.tableLayoutPanel_main.SetColumnSpan(this.label_source, 1);
+            this.tableLayoutPanel_main.SetColumnSpan(this.groupBox_settings, 2);
+            this.tableLayoutPanel_main.SetColumnSpan(this.tabControl_advanced, 2);
+            this.tableLayoutPanel_main.SetColumnSpan(this.label_summary, 2);
+            this.tableLayoutPanel_main.SetColumnSpan(this.panel_sources, 2);
+            this.tableLayoutPanel_main.SetColumnSpan(this.label_output, 2);
+            this.tableLayoutPanel_main.SetColumnSpan(this.groupBox_warnings, 2);
+            this.tableLayoutPanel_main.SetColumnSpan(this.label_eta, 2);
+            this.tableLayoutPanel_main.SetColumnSpan(this.label_status, 2);
+            this.tableLayoutPanel_main.SetColumnSpan(this.progressBar_operation, 2);
+            this.tableLayoutPanel_main.SetColumnSpan(this.flowLayoutPanel_buttons, 2);
+            this.tableLayoutPanel_main.AutoScroll = true;
             this.tableLayoutPanel_main.Dock = DockStyle.Fill;
             this.tableLayoutPanel_main.Name = "tableLayoutPanel_main";
-            this.tableLayoutPanel_main.Padding = new Padding(12);
-            this.tableLayoutPanel_main.RowCount = 11;
-            this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            this.tableLayoutPanel_main.Padding = new Padding(12, 12, 12, 4);
+            this.tableLayoutPanel_main.RowCount = 12;
+            this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.Absolute, 0F));
             this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
             this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.Absolute, 230F));
             this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.Absolute, 170F));
             this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.Absolute, 112F));
-            this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+            this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.Absolute, 75F));
+            this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
+            this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
             this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
             this.tableLayoutPanel_main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             this.tableLayoutPanel_main.TabIndex = 0;
             //
-            // Header and source
+            // Preset and source
             //
-            this.label_header.AutoSize = true;
-            this.label_header.Dock = DockStyle.Fill;
-            this.label_header.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
-            this.label_header.Margin = new Padding(3, 3, 3, 6);
-            this.label_header.Name = "label_header";
-            this.label_header.Text = "CPU only • No models • 75% overlap • Original phase";
+            this.comboBox_presets.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            this.comboBox_presets.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.comboBox_presets.FormattingEnabled = true;
+            this.comboBox_presets.Items.AddRange(new object[] { "Balanced", "Best Quality", "High Quality", "Faster", "Draft", "DnB / Breaks", "Electro / Synth", "Pop / Band", "Complex Ensemble" });
+            this.comboBox_presets.Margin = new Padding(0, 3, 0, 2);
+            this.comboBox_presets.Name = "comboBox_presets";
+            this.comboBox_presets.Size = new Size(170, 23);
+            this.comboBox_presets.SelectedIndex = 0;
+            this.comboBox_presets.TabIndex = 5;
+            this.comboBox_presets.SelectedIndexChanged += this.comboBox_presets_SelectedIndexChanged;
+            this.toolTip_settings.SetToolTip(this.comboBox_presets, "Apply a preset to all DSP settings. Best Quality uses maximum resolution, components, iterations and evidence. Genre presets are tuned for typical instrument content.");
             this.label_source.AutoEllipsis = true;
             this.label_source.Dock = DockStyle.Fill;
             this.label_source.Name = "label_source";
@@ -186,7 +207,7 @@ namespace ModularAudience.Forms
             this.tabControl_advanced.Dock = DockStyle.Fill;
             this.tabControl_advanced.Name = "tabControl_advanced";
             this.tabControl_advanced.Padding = new Point(8, 4);
-            this.tabControl_advanced.Size = new Size(1036, 240);
+            this.tabControl_advanced.Size = new Size(1036, 230);
             this.tabControl_advanced.TabIndex = 1;
             this.tabControl_advanced.SelectedIndexChanged += this.settings_ValueChanged;
             this.tabControl_advanced.Controls.Add(this.tabPage_ensemble);
@@ -201,56 +222,53 @@ namespace ModularAudience.Forms
             this.tabPage_ensemble.Text = "Instrument ensemble";
             this.flowLayoutPanel_ensemble.AutoSize = true;
             this.flowLayoutPanel_ensemble.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            this.flowLayoutPanel_ensemble.ColumnCount = 3;
+            this.flowLayoutPanel_ensemble.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 225F));
+            this.flowLayoutPanel_ensemble.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 225F));
+            this.flowLayoutPanel_ensemble.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             this.flowLayoutPanel_ensemble.Dock = DockStyle.Fill;
-            this.flowLayoutPanel_ensemble.FlowDirection = FlowDirection.LeftToRight;
             this.flowLayoutPanel_ensemble.Name = "flowLayoutPanel_ensemble";
-            this.flowLayoutPanel_ensemble.WrapContents = true;
-            this.flowLayoutPanel_ensemble.Controls.Add(this.label_ensembleMode);
-            this.flowLayoutPanel_ensemble.Controls.Add(this.domainUpDown_ensembleMode);
-            this.flowLayoutPanel_ensemble.Controls.Add(this.checkBox_profilesOnly);
-            this.flowLayoutPanel_ensemble.Controls.Add(this.checkBox_profilesAndAutomatic);
-            this.flowLayoutPanel_ensemble.Controls.Add(this.label_profiles);
-            this.flowLayoutPanel_ensemble.Controls.Add(this.checkedListBox_profiles);
-            this.flowLayoutPanel_ensemble.Controls.Add(this.label_profileNote);
-            this.label_ensembleMode.Anchor = AnchorStyles.Left;
-            this.label_ensembleMode.AutoSize = true;
-            this.label_ensembleMode.Margin = new Padding(3, 9, 3, 0);
-            this.label_ensembleMode.Name = "label_ensembleMode";
-            this.label_ensembleMode.Text = "Ensemble mode:";
-            this.domainUpDown_ensembleMode.Anchor = AnchorStyles.Left;
-            this.domainUpDown_ensembleMode.Margin = new Padding(3, 3, 12, 0);
-            this.domainUpDown_ensembleMode.Name = "domainUpDown_ensembleMode";
-            this.domainUpDown_ensembleMode.Text = "Automatic";
-            this.domainUpDown_ensembleMode.TextAlign = HorizontalAlignment.Center;
-            this.checkBox_profilesOnly.Anchor = AnchorStyles.Left;
-            this.checkBox_profilesOnly.AutoSize = true;
-            this.checkBox_profilesOnly.Checked = true;
-            this.checkBox_profilesOnly.Margin = new Padding(3, 9, 12, 0);
-            this.checkBox_profilesOnly.Name = "checkBox_profilesOnly";
-            this.checkBox_profilesOnly.Text = "Selected profiles + Residual only";
-            this.checkBox_profilesAndAutomatic.Anchor = AnchorStyles.Left;
-            this.checkBox_profilesAndAutomatic.AutoSize = true;
-            this.checkBox_profilesAndAutomatic.Margin = new Padding(3, 9, 12, 0);
-            this.checkBox_profilesAndAutomatic.Name = "checkBox_profilesAndAutomatic";
-            this.checkBox_profilesAndAutomatic.Text = "Selected profiles + extra automatic groups + Residual";
+            this.flowLayoutPanel_ensemble.RowCount = 3;
+            this.flowLayoutPanel_ensemble.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+            this.flowLayoutPanel_ensemble.RowStyles.Add(new RowStyle(SizeType.Absolute, 18F));
+            this.flowLayoutPanel_ensemble.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            this.flowLayoutPanel_ensemble.Controls.Add(this.checkBox_addAutomaticProfiles, 0, 0);
+            this.flowLayoutPanel_ensemble.Controls.Add(this.label_profiles, 0, 1);
+            this.flowLayoutPanel_ensemble.Controls.Add(this.checkedListBox_profiles, 0, 2);
+            this.flowLayoutPanel_ensemble.Controls.Add(this.label_profileNote, 2, 2);
+            this.flowLayoutPanel_ensemble.SetColumnSpan(this.checkBox_addAutomaticProfiles, 3);
+            this.flowLayoutPanel_ensemble.SetColumnSpan(this.label_profiles, 3);
+            this.flowLayoutPanel_ensemble.SetColumnSpan(this.checkedListBox_profiles, 2);
+            this.checkBox_addAutomaticProfiles.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            this.checkBox_addAutomaticProfiles.AutoSize = false;
+            this.checkBox_addAutomaticProfiles.Checked = true;
+            this.checkBox_addAutomaticProfiles.CheckState = CheckState.Checked;
+            this.checkBox_addAutomaticProfiles.Margin = new Padding(3, 2, 8, 2);
+            this.checkBox_addAutomaticProfiles.Name = "checkBox_addAutomaticProfiles";
+            this.checkBox_addAutomaticProfiles.Size = new Size(249, 38);
+            this.checkBox_addAutomaticProfiles.Text = "Add extra automatic profiles";
             this.label_profiles.Anchor = AnchorStyles.Left | AnchorStyles.Top;
             this.label_profiles.AutoSize = true;
-            this.label_profiles.Location = new Point(8, 34);
+            this.label_profiles.Margin = new Padding(3, 3, 3, 0);
             this.label_profiles.Name = "label_profiles";
             this.label_profiles.Text = "Instrument profiles (select the instruments to target):";
-            this.checkedListBox_profiles.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
-            this.checkedListBox_profiles.ColumnWidth = 150;
+            this.checkedListBox_profiles.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom;
+            this.checkedListBox_profiles.CheckOnClick = true;
+            this.checkedListBox_profiles.ColumnWidth = 140;
+            this.checkedListBox_profiles.HorizontalScrollbar = false;
+            this.checkedListBox_profiles.HorizontalExtent = 0;
             this.checkedListBox_profiles.IntegralHeight = false;
-            this.checkedListBox_profiles.Location = new Point(8, 56);
+            this.checkedListBox_profiles.ItemHeight = 15;
             this.checkedListBox_profiles.MultiColumn = true;
             this.checkedListBox_profiles.Name = "checkedListBox_profiles";
-            this.checkedListBox_profiles.Size = new Size(340, 150);
+            this.checkedListBox_profiles.MinimumSize = new Size(420, 96);
+            this.checkedListBox_profiles.Size = new Size(420, 96);
             this.label_profileNote.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
             this.label_profileNote.AutoSize = true;
-            this.label_profileNote.Location = new Point(360, 56);
-            this.label_profileNote.MaximumSize = new Size(280, 0);
+            this.label_profileNote.Margin = new Padding(12, 3, 3, 3);
+            this.label_profileNote.MaximumSize = new Size(230, 0);
             this.label_profileNote.Name = "label_profileNote";
-            this.label_profileNote.Text = "Guided grouping is enabled. Profiles are acoustic heuristics, not trained classifiers; several instruments may still remain together.";
+            this.label_profileNote.Text = "Selected profiles guide grouping; no selection uses automatic detection. Profiles are acoustic heuristics, not trained classifiers.";
             //
             // Advanced DSP tab
             //
@@ -287,6 +305,7 @@ namespace ModularAudience.Forms
             this.checkBox_cqtAnalysis.Margin = new Padding(3, 9, 8, 0);
             this.checkBox_cqtAnalysis.Name = "checkBox_cqtAnalysis";
             this.checkBox_cqtAnalysis.Text = "CQT analysis";
+            this.toolTip_settings.SetToolTip(this.checkBox_cqtAnalysis, "Adds constant-Q spectral evidence when evaluating component pitch and harmonic structure. It affects analysis only, not output synthesis.");
             this.domainUpDown_cqtBinsPerOctave.Anchor = AnchorStyles.Left;
             this.domainUpDown_cqtBinsPerOctave.Enabled = true;
             this.domainUpDown_cqtBinsPerOctave.Margin = new Padding(3, 3, 8, 0);
@@ -308,6 +327,7 @@ namespace ModularAudience.Forms
             this.numeric_cqtMinimumHz.Margin = new Padding(3, 3, 16, 0);
             this.numeric_cqtMinimumHz.Name = "numeric_cqtMinimumHz";
             this.numeric_cqtMinimumHz.Value = 27.5M;
+            this.toolTip_settings.SetToolTip(this.numeric_cqtMinimumHz, "Lowest frequency represented by CQT evidence. Raise it to ignore sub-bass content; keep it no higher than the material you want to identify.");
             this.checkBox_cqtSynthesis.Anchor = AnchorStyles.Left;
             this.checkBox_cqtSynthesis.AutoSize = true;
             this.checkBox_cqtSynthesis.Enabled = true;
@@ -336,6 +356,7 @@ namespace ModularAudience.Forms
             this.numeric_pyinMinimumHz.Margin = new Padding(3, 3, 8, 0);
             this.numeric_pyinMinimumHz.Name = "numeric_pyinMinimumHz";
             this.numeric_pyinMinimumHz.Value = 27.5M;
+            this.toolTip_settings.SetToolTip(this.numeric_pyinMinimumHz, "Lowest fundamental frequency pYIN will consider. A narrower range reduces pitch-tracking work and false candidates.");
             this.label_pyinMaximumHz.Anchor = AnchorStyles.Left;
             this.label_pyinMaximumHz.AutoSize = true;
             this.label_pyinMaximumHz.Margin = new Padding(8, 9, 3, 0);
@@ -350,6 +371,7 @@ namespace ModularAudience.Forms
             this.numeric_pyinMaximumHz.Margin = new Padding(3, 3, 16, 0);
             this.numeric_pyinMaximumHz.Name = "numeric_pyinMaximumHz";
             this.numeric_pyinMaximumHz.Value = 1500M;
+            this.toolTip_settings.SetToolTip(this.numeric_pyinMaximumHz, "Highest fundamental frequency pYIN will consider. It must remain above the pYIN minimum frequency.");
             this.checkBox_ilrma.Anchor = AnchorStyles.Left;
             this.checkBox_ilrma.AutoSize = true;
             this.checkBox_ilrma.Enabled = true;
@@ -369,6 +391,7 @@ namespace ModularAudience.Forms
             this.numeric_ilrmaIterations.Margin = new Padding(3, 3, 8, 0);
             this.numeric_ilrmaIterations.Name = "numeric_ilrmaIterations";
             this.numeric_ilrmaIterations.Value = 80;
+            this.toolTip_settings.SetToolTip(this.numeric_ilrmaIterations, "Number of ILRMA optimization passes. More passes can improve stereo demixing but increase processing time.");
             this.label_ilrmaComponents.Anchor = AnchorStyles.Left;
             this.label_ilrmaComponents.AutoSize = true;
             this.label_ilrmaComponents.Margin = new Padding(8, 9, 3, 0);
@@ -381,6 +404,7 @@ namespace ModularAudience.Forms
             this.numeric_ilrmaComponents.Margin = new Padding(3, 3, 0, 0);
             this.numeric_ilrmaComponents.Name = "numeric_ilrmaComponents";
             this.numeric_ilrmaComponents.Value = 2;
+            this.toolTip_settings.SetToolTip(this.numeric_ilrmaComponents, "Number of NMF bases per ILRMA source. Higher values model more spectral detail but need more stable stereo evidence.");
             this.label_advancedPending.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
             this.label_advancedPending.AutoSize = true;
             this.label_advancedPending.ForeColor = Color.DimGray;
@@ -589,6 +613,11 @@ namespace ModularAudience.Forms
             //
             // Source estimates
             //
+            this.panel_sources.Controls.Add(this.dataGridView_sources);
+            this.panel_sources.Dock = DockStyle.Fill;
+            this.panel_sources.Name = "panel_sources";
+            this.panel_sources.Padding = new Padding(0, 0, 0, 8);
+            this.panel_sources.TabIndex = 5;
             this.label_summary.AutoSize = true;
             this.label_summary.Dock = DockStyle.Fill;
             this.label_summary.Margin = new Padding(3, 6, 3, 6);
@@ -597,8 +626,9 @@ namespace ModularAudience.Forms
             this.dataGridView_sources.AllowUserToAddRows = false;
             this.dataGridView_sources.AllowUserToDeleteRows = false;
             this.dataGridView_sources.AllowUserToResizeRows = false;
-            this.dataGridView_sources.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            this.dataGridView_sources.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
+            this.dataGridView_sources.AllowUserToResizeColumns = true;
+            this.dataGridView_sources.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+            this.dataGridView_sources.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.DisplayedCells;
             this.dataGridView_sources.BackgroundColor = SystemColors.Window;
             this.dataGridView_sources.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             this.dataGridView_sources.Columns.AddRange(new DataGridViewColumn[]
@@ -610,10 +640,13 @@ namespace ModularAudience.Forms
             this.dataGridView_sources.Dock = DockStyle.Fill;
             this.dataGridView_sources.EditMode = DataGridViewEditMode.EditOnEnter;
             this.dataGridView_sources.Enabled = false;
+            this.dataGridView_sources.Margin = new Padding(0);
+            this.dataGridView_sources.MaximumSize = new Size(0, 260);
             this.dataGridView_sources.MinimumSize = new Size(0, 140);
             this.dataGridView_sources.MultiSelect = false;
             this.dataGridView_sources.Name = "dataGridView_sources";
             this.dataGridView_sources.RowHeadersVisible = false;
+            this.dataGridView_sources.ScrollBars = ScrollBars.Both;
             this.dataGridView_sources.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             this.dataGridView_sources.TabIndex = 1;
             this.toolTip_settings.SetToolTip(this.dataGridView_sources, "Only Use is editable. Deselect every group for Residual only. Scores, pitch and energy are acoustic hints, not instrument identification.");
@@ -624,19 +657,24 @@ namespace ModularAudience.Forms
             this.column_use.ReadOnly = false;
             this.column_use.SortMode = DataGridViewColumnSortMode.NotSortable;
             this.column_use.Width = 45;
+            this.column_name.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             this.column_name.FillWeight = 140;
             this.column_name.HeaderText = "Name";
             this.column_name.MinimumWidth = 100;
             this.column_name.Name = "column_name";
             this.column_name.ReadOnly = true;
             this.column_name.SortMode = DataGridViewColumnSortMode.NotSortable;
+            this.column_name.Width = 140;
             this.column_character.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
+            this.column_character.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             this.column_character.FillWeight = 270;
             this.column_character.HeaderText = "Acoustic evidence";
             this.column_character.MinimumWidth = 180;
             this.column_character.Name = "column_character";
             this.column_character.ReadOnly = true;
             this.column_character.SortMode = DataGridViewColumnSortMode.NotSortable;
+            this.column_character.Width = 270;
+            this.column_score.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             this.column_score.DefaultCellStyle.Format = "F3";
             this.column_score.FillWeight = 85;
             this.column_score.HeaderText = "Score (0–1)";
@@ -645,6 +683,8 @@ namespace ModularAudience.Forms
             this.column_score.ReadOnly = true;
             this.column_score.SortMode = DataGridViewColumnSortMode.NotSortable;
             this.column_score.ToolTipText = "Heuristic acoustic score, not a calibrated probability.";
+            this.column_score.Width = 85;
+            this.column_energy.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             this.column_energy.DefaultCellStyle.Format = "P1";
             this.column_energy.FillWeight = 95;
             this.column_energy.HeaderText = "Energy share";
@@ -653,6 +693,8 @@ namespace ModularAudience.Forms
             this.column_energy.ReadOnly = true;
             this.column_energy.SortMode = DataGridViewColumnSortMode.NotSortable;
             this.column_energy.ToolTipText = "Estimated energy share, not isolated instrument loudness.";
+            this.column_energy.Width = 95;
+            this.column_pitch.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             this.column_pitch.DefaultCellStyle.Format = "F1";
             this.column_pitch.DefaultCellStyle.NullValue = "—";
             this.column_pitch.FillWeight = 100;
@@ -662,6 +704,8 @@ namespace ModularAudience.Forms
             this.column_pitch.ReadOnly = true;
             this.column_pitch.SortMode = DataGridViewColumnSortMode.NotSortable;
             this.column_pitch.ToolTipText = "Approximate fundamental frequency when available; not a note transcription.";
+            this.column_pitch.Width = 100;
+            this.column_pan.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             this.column_pan.DefaultCellStyle.Format = "F2";
             this.column_pan.FillWeight = 65;
             this.column_pan.HeaderText = "Pan";
@@ -670,12 +714,13 @@ namespace ModularAudience.Forms
             this.column_pan.ReadOnly = true;
             this.column_pan.SortMode = DataGridViewColumnSortMode.NotSortable;
             this.column_pan.ToolTipText = "Estimated pan: -1 left, 0 center, +1 right.";
+            this.column_pan.Width = 65;
             //
             // Output memory and copyable warnings
             //
             this.label_output.AutoSize = true;
             this.label_output.Dock = DockStyle.Fill;
-            this.label_output.Margin = new Padding(3, 6, 3, 6);
+            this.label_output.Margin = new Padding(3, 2, 3, 2);
             this.label_output.Name = "label_output";
             this.label_output.Text = "Approx. OUTPUT: analyze first (Residual is always included).\r\nAdditional snapshot and processing workspace are excluded; this is not a total RAM estimate.";
             this.groupBox_warnings.Controls.Add(this.textBox_warnings);
@@ -693,6 +738,17 @@ namespace ModularAudience.Forms
             this.textBox_warnings.ScrollBars = ScrollBars.Vertical;
             this.textBox_warnings.ShortcutsEnabled = true;
             this.textBox_warnings.TabIndex = 0;
+            //
+            // Elapsed / ETA label above progress bar
+            //
+            this.label_eta.AutoSize = true;
+            this.label_eta.Dock = DockStyle.Fill;
+            this.label_eta.Font = new Font("Segoe UI", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            this.label_eta.ForeColor = Color.DimGray;
+            this.label_eta.Margin = new Padding(3, 0, 3, 2);
+            this.label_eta.Name = "label_eta";
+            this.label_eta.Text = "Elapsed: 0:00 · ETA: --:--";
+            this.label_eta.TextAlign = ContentAlignment.MiddleRight;
             //
             // Independent operation status and progress
             //
@@ -712,15 +768,28 @@ namespace ModularAudience.Forms
             //
             this.flowLayoutPanel_buttons.AutoSize = true;
             this.flowLayoutPanel_buttons.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            this.flowLayoutPanel_buttons.Controls.Add(this.button_detect);
-            this.flowLayoutPanel_buttons.Controls.Add(this.button_separate);
-            this.flowLayoutPanel_buttons.Controls.Add(this.button_cancel);
-            this.flowLayoutPanel_buttons.Controls.Add(this.button_close);
+            this.flowLayoutPanel_buttons.ColumnCount = 2;
+            this.flowLayoutPanel_buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            this.flowLayoutPanel_buttons.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            this.flowLayoutPanel_buttons.Controls.Add(this.flowLayoutPanel_primaryButtons, 0, 0);
+            this.flowLayoutPanel_buttons.Controls.Add(this.button_restoreSettings, 1, 0);
             this.flowLayoutPanel_buttons.Dock = DockStyle.Fill;
-            this.flowLayoutPanel_buttons.Margin = new Padding(0, 6, 0, 0);
+            this.flowLayoutPanel_buttons.Margin = new Padding(0);
             this.flowLayoutPanel_buttons.Name = "flowLayoutPanel_buttons";
+            this.flowLayoutPanel_buttons.RowCount = 1;
+            this.flowLayoutPanel_buttons.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             this.flowLayoutPanel_buttons.TabIndex = 4;
-            this.flowLayoutPanel_buttons.WrapContents = true;
+            this.flowLayoutPanel_primaryButtons.AutoSize = true;
+            this.flowLayoutPanel_primaryButtons.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            this.flowLayoutPanel_primaryButtons.Controls.Add(this.button_detect);
+            this.flowLayoutPanel_primaryButtons.Controls.Add(this.button_separate);
+            this.flowLayoutPanel_primaryButtons.Controls.Add(this.button_cancel);
+            this.flowLayoutPanel_primaryButtons.Controls.Add(this.button_close);
+            this.flowLayoutPanel_primaryButtons.Dock = DockStyle.Fill;
+            this.flowLayoutPanel_primaryButtons.Margin = new Padding(0);
+            this.flowLayoutPanel_primaryButtons.Name = "flowLayoutPanel_primaryButtons";
+            this.flowLayoutPanel_primaryButtons.TabStop = false;
+            this.flowLayoutPanel_primaryButtons.WrapContents = false;
             this.button_detect.AutoSize = true;
             this.button_detect.MinimumSize = new Size(130, 32);
             this.button_detect.Name = "button_detect";
@@ -736,17 +805,26 @@ namespace ModularAudience.Forms
             this.button_separate.UseMnemonic = false;
             this.button_separate.UseVisualStyleBackColor = true;
             this.toolTip_settings.SetToolTip(this.button_separate, "Create selected groups plus Residual and restore mixture consistency. All groups may be deselected. Original phase is retained; lost information cannot be recovered.");
+            this.button_restoreSettings.AutoSize = true;
+            this.button_restoreSettings.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            this.button_restoreSettings.Enabled = false;
+            this.button_restoreSettings.MinimumSize = new Size(180, 32);
+            this.button_restoreSettings.Name = "button_restoreSettings";
+            this.button_restoreSettings.TabIndex = 2;
+            this.button_restoreSettings.Text = "Restore detection settings";
+            this.button_restoreSettings.UseVisualStyleBackColor = true;
+            this.toolTip_settings.SetToolTip(this.button_restoreSettings, "Restore the settings used for the current source detection so separation can use the detected analysis.");
             this.button_cancel.AutoSize = true;
             this.button_cancel.Enabled = false;
             this.button_cancel.MinimumSize = new Size(90, 32);
             this.button_cancel.Name = "button_cancel";
-            this.button_cancel.TabIndex = 2;
+            this.button_cancel.TabIndex = 3;
             this.button_cancel.Text = "Cancel";
             this.button_cancel.UseVisualStyleBackColor = true;
             this.button_close.AutoSize = true;
             this.button_close.MinimumSize = new Size(90, 32);
             this.button_close.Name = "button_close";
-            this.button_close.TabIndex = 3;
+            this.button_close.TabIndex = 4;
             this.button_close.Text = "Close";
             this.button_close.UseVisualStyleBackColor = true;
             this.toolTip_settings.AutoPopDelay = 10000;
@@ -774,11 +852,7 @@ namespace ModularAudience.Forms
             this.numeric_maskFloor.TextChanged += this.settings_ValueChanged;
             this.numeric_transientPreservation.ValueChanged += this.settings_ValueChanged;
             this.numeric_transientPreservation.TextChanged += this.settings_ValueChanged;
-            this.numeric_threads.ValueChanged += this.settings_ValueChanged;
-            this.numeric_threads.TextChanged += this.settings_ValueChanged;
-            this.domainUpDown_ensembleMode.TextChanged += this.settings_ValueChanged;
-            this.checkBox_profilesOnly.CheckedChanged += this.settings_ValueChanged;
-            this.checkBox_profilesAndAutomatic.CheckedChanged += this.settings_ValueChanged;
+            this.checkBox_addAutomaticProfiles.CheckedChanged += this.settings_ValueChanged;
             this.checkedListBox_profiles.ItemCheck += this.profiles_ItemCheck;
             // Advanced DSP controls — wire to settings_ValueChanged for invalidation
             this.checkBox_cqtAnalysis.CheckedChanged += this.settings_ValueChanged;
@@ -797,9 +871,11 @@ namespace ModularAudience.Forms
             this.numeric_ilrmaComponents.ValueChanged += this.settings_ValueChanged;
             this.numeric_ilrmaComponents.TextChanged += this.settings_ValueChanged;
             this.dataGridView_sources.CurrentCellDirtyStateChanged += this.dataGridView_sources_CurrentCellDirtyStateChanged;
+            this.dataGridView_sources.CellClick += this.dataGridView_sources_CellClick;
             this.dataGridView_sources.CellValueChanged += this.dataGridView_sources_CellValueChanged;
             this.button_detect.Click += this.button_detect_Click;
             this.button_separate.Click += this.button_separate_Click;
+            this.button_restoreSettings.Click += this.button_restoreSettings_Click;
             this.button_cancel.Click += this.button_cancel_Click;
             this.button_close.Click += this.button_close_Click;
             this.FormClosing += this.DeterministicSeparationDialog_FormClosing;
@@ -808,10 +884,12 @@ namespace ModularAudience.Forms
             //
             this.AutoScaleDimensions = new SizeF(96F, 96F);
             this.AutoScaleMode = AutoScaleMode.Dpi;
-            this.ClientSize = new Size(1060, 860);
+            this.ClientSize = new Size(900, 850);
             this.Controls.Add(this.tableLayoutPanel_main);
             this.FormBorderStyle = FormBorderStyle.Sizable;
-            this.MinimumSize = new Size(920, 800);
+            this.MinimumSize = new Size(820, 620);
+            this.Shown += this.DeterministicSeparationDialog_Shown;
+            this.Resize += this.DeterministicSeparationDialog_Resize;
             this.Name = "DeterministicSeparationDialog";
             this.StartPosition = FormStartPosition.CenterParent;
             this.Text = "Deterministic separation";
@@ -848,6 +926,8 @@ namespace ModularAudience.Forms
             this.groupBox_warnings.PerformLayout();
             this.flowLayoutPanel_buttons.ResumeLayout(false);
             this.flowLayoutPanel_buttons.PerformLayout();
+            this.flowLayoutPanel_primaryButtons.ResumeLayout(false);
+            this.flowLayoutPanel_primaryButtons.PerformLayout();
             this.ResumeLayout(false);
         }
 
@@ -855,6 +935,7 @@ namespace ModularAudience.Forms
 
         private TableLayoutPanel tableLayoutPanel_main = null!;
         private Label label_header = null!;
+        private ComboBox comboBox_presets = null!;
         private Label label_source = null!;
         private GroupBox groupBox_settings = null!;
         private TableLayoutPanel tableLayoutPanel_settings = null!;
@@ -884,11 +965,8 @@ namespace ModularAudience.Forms
         private Label label_hopSizeValue = null!;
         private TabControl tabControl_advanced = null!;
         private TabPage tabPage_ensemble = null!;
-        private FlowLayoutPanel flowLayoutPanel_ensemble = null!;
-        private Label label_ensembleMode = null!;
-        private DomainUpDown domainUpDown_ensembleMode = null!;
-        private CheckBox checkBox_profilesOnly = null!;
-        private CheckBox checkBox_profilesAndAutomatic = null!;
+        private TableLayoutPanel flowLayoutPanel_ensemble = null!;
+        private CheckBox checkBox_addAutomaticProfiles = null!;
         private Label label_profiles = null!;
         private CheckedListBox checkedListBox_profiles = null!;
         private Label label_profileNote = null!;
@@ -912,6 +990,7 @@ namespace ModularAudience.Forms
         private Label label_advancedPending = null!;
         private Label label_summary = null!;
         private DataGridView dataGridView_sources = null!;
+        private Panel panel_sources = null!;
         private DataGridViewCheckBoxColumn column_use = null!;
         private DataGridViewTextBoxColumn column_name = null!;
         private DataGridViewTextBoxColumn column_character = null!;
@@ -922,11 +1001,14 @@ namespace ModularAudience.Forms
         private Label label_output = null!;
         private GroupBox groupBox_warnings = null!;
         private TextBox textBox_warnings = null!;
+        private Label label_eta = null!;
         private Label label_status = null!;
         private ProgressBar progressBar_operation = null!;
-        private FlowLayoutPanel flowLayoutPanel_buttons = null!;
+        private TableLayoutPanel flowLayoutPanel_buttons = null!;
+        private FlowLayoutPanel flowLayoutPanel_primaryButtons = null!;
         private Button button_detect = null!;
         private Button button_separate = null!;
+        private Button button_restoreSettings = null!;
         private Button button_cancel = null!;
         private Button button_close = null!;
         private ToolTip toolTip_settings = null!;

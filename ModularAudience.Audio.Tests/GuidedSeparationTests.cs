@@ -75,6 +75,8 @@ namespace ModularAudience.Audio.Tests
                 .Any(stem => stem.Name.Contains("Synth Bass", StringComparison.OrdinalIgnoreCase)
                     || stem.Name.Contains("Drums", StringComparison.OrdinalIgnoreCase));
             Assert.IsTrue(hasProfile, "At least one guided profile target must appear in output names.");
+            Assert.IsTrue(analysis.Sources.Any(source => source.Name.StartsWith("Automatic ", StringComparison.Ordinal)),
+                "ProfilesAndAutomatic must expose at least one automatic profile-residual group.");
             AssertReconstruction(mixWithPad, result);
         }
 
