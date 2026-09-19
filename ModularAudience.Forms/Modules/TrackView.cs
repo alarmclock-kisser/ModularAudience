@@ -10,7 +10,6 @@ using ModularAudience.Forms.Helpers;
 using System.ComponentModel;
 using System.Media;
 using System.Reflection;
-using System.Runtime;
 using System.Runtime.Versioning;
 using System.Threading.Tasks;
 using Timer = System.Windows.Forms.Timer;
@@ -158,9 +157,6 @@ namespace ModularAudience.Forms.Modules
             this.FormClosed += (_, __) =>
             {
                 this.DisposeCurrentBitmap();
-                // Erzwingt eine Kompaktierung und einen tiefen GC-Sweep
-                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-                GC.Collect(2, GCCollectionMode.Forced, true);
             };
 
             WindowMain.TrackViews.Add(this);

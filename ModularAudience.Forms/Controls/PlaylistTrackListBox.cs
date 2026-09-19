@@ -15,6 +15,7 @@ namespace ModularAudience.Forms.Controls
         private bool rateDragAllowed;
         private bool draggingRate;
         private bool controlRateGesture;
+        private bool shiftRateGesture;
         private int lastMouseX;
         private int dragPixels;
         private int lastMappedPosition;
@@ -91,6 +92,7 @@ namespace ModularAudience.Forms.Controls
             this.rateDragAllowed = this.interactionTextBounds.Contains(point);
             this.draggingRate = false;
             this.controlRateGesture = (ModifierKeys & Keys.Control) != 0;
+            this.shiftRateGesture = (ModifierKeys & Keys.Shift) != 0;
             this.lastMouseX = point.X;
             this.dragPixels = 0;
             this.lastMappedPosition = 0;
@@ -184,7 +186,9 @@ namespace ModularAudience.Forms.Controls
             {
                 return;
             }
-            this.RatePositionChanged?.Invoke(this, new PlaylistTrackRateChangedEventArgs(this.interactionRowIndex, position));
+            this.RatePositionChanged?.Invoke(this,
+                new PlaylistTrackRateChangedEventArgs(this.interactionRowIndex, position,
+                    shiftAll: this.shiftRateGesture));
         }
 
         protected override void OnKeyPress(KeyPressEventArgs e)
@@ -231,6 +235,7 @@ namespace ModularAudience.Forms.Controls
             this.rateDragAllowed = false;
             this.draggingRate = false;
             this.controlRateGesture = false;
+            this.shiftRateGesture = false;
             this.dragPixels = 0;
             this.lastMappedPosition = 0;
             if (resetRate)
@@ -278,15 +283,17 @@ namespace ModularAudience.Forms.Controls
 
     internal sealed class PlaylistTrackRateChangedEventArgs : EventArgs
     {
-        public PlaylistTrackRateChangedEventArgs(int rowIndex, int position, bool resetAll = false)
+        public PlaylistTrackRateChangedEventArgs(int rowIndex, int position, bool resetAll = false, bool shiftAll = false)
         {
             this.RowIndex = rowIndex;
             this.Position = position;
             this.ResetAll = resetAll;
+            this.ShiftAll = shiftAll;
         }
 
         public int RowIndex { get; }
         public int Position { get; }
         public bool ResetAll { get; }
+        public bool ShiftAll { get; }
     }
 }

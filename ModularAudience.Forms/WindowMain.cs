@@ -24,6 +24,16 @@ namespace ModularAudience.Forms
         internal static DeveloperFunctions? DeveloperFunctionsWindow = null;
         internal static CudaFunctions? CudaFunctionsWindow = null;
 
+        internal static bool IsMouseOverLoopControl
+        {
+            get
+            {
+                LoopControl? loopControl = LoopControlWindow;
+                return loopControl != null && !loopControl.IsDisposed && !loopControl.Disposing
+                    && loopControl.Visible && loopControl.Bounds.Contains(Cursor.Position);
+            }
+        }
+
         internal static readonly BindingList<AudioCollectionView> CollectionViews = [];
         internal static int TotalTracks => CollectionViews.Sum(cv => cv.AudioCount);
         internal static IEnumerable<AudioObj> SelectedTracks => CollectionViews.Where(cv => !cv.IsDisposed).SelectMany(cv => cv.SelectedAudios);
@@ -104,6 +114,15 @@ namespace ModularAudience.Forms
         public static string CommentDraft { get; set; } = string.Empty;
         // When true, typing in comment dialog should not trigger pausing/syncer key handlers
         internal bool IsCommentDialogOpen = false;
+
+        internal void SuppressPausingSyncerForLoopControl()
+        {
+            this._shiftPressed = false;
+            if (this._pausingActive)
+            {
+                this.StopPausingSyncer();
+            }
+        }
 
         // Crossfade duration in seconds
         public static double CrossfadeDurationSeconds = 0.0;

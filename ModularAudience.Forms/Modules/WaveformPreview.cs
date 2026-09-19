@@ -5,6 +5,18 @@ namespace ModularAudience.Forms.Modules
 {
     public partial class WaveformPreview : Form
     {
+        protected override bool ShowWithoutActivation => true;
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams createParams = base.CreateParams;
+                createParams.ExStyle |= 0x08000000;
+                return createParams;
+            }
+        }
+
         public WaveformPreview()
         {
             this.InitializeComponent();

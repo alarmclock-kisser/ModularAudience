@@ -331,6 +331,12 @@ namespace ModularAudience.Forms
                     return;
                 }
 
+                if (isDown && IsMouseOverLoopControl)
+                {
+                    this.SuppressPausingSyncerForLoopControl();
+                    return;
+                }
+
                 if (isDown)
                 {
                     if (!this._shiftPressed)

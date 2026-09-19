@@ -55,6 +55,11 @@ namespace ModularAudience.Forms.Modules
         // Relative rate drag state: tracks cumulative log-rate position per audio
         private void checkedListBox_playlistTracks_MouseDown(object? sender, MouseEventArgs e)
         {
+            if (e.Button == MouseButtons.Left)
+            {
+                WindowMain.Instance?.SuppressPausingSyncerForLoopControl();
+            }
+
             if (e.Button != MouseButtons.Right)
             {
                 return;

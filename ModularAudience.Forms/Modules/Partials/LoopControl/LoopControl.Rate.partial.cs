@@ -48,7 +48,7 @@ namespace ModularAudience.Forms.Modules
         private async void checkedListBox_playlistTracks_RatePositionChanged(object? sender, PlaylistTrackRateChangedEventArgs e)
         {
             await this.ApplyPlaylistRateAsync(e.RowIndex, e.Position,
-                reset: e.Position == 0, resetAll: e.ResetAll);
+                reset: e.Position == 0, resetAll: e.ResetAll, shiftAll: e.ShiftAll);
         }
 
         private async void toolStripMenuItem_resetPlaylistRate_Click(object? sender, EventArgs e)
@@ -59,7 +59,8 @@ namespace ModularAudience.Forms.Modules
                 0, reset: true, resetAll: resetAll);
         }
 
-        private async Task ApplyPlaylistRateAsync(int rowIndex, int position, bool reset = false, bool resetAll = false)
+        private async Task ApplyPlaylistRateAsync(int rowIndex, int position, bool reset = false, bool resetAll = false,
+            bool shiftAll = false)
         {
             if (this.suppressPlaylistChecklistEvents || rowIndex < 0 || rowIndex >= this.checkedListBox_playlistTracks.Items.Count
                 || this.checkedListBox_playlistTracks.Items[rowIndex] is not PlaylistTargetItem item)
@@ -68,6 +69,12 @@ namespace ModularAudience.Forms.Modules
             }
             try
             {
+                if (shiftAll && !reset && !resetAll)
+                {
+                    await this.ApplyPlaylistRateToAllAudiosAsync(position);
+                    return;
+                }
+
                 IReadOnlyList<AudioObj> targets = resetAll
                     ? this.checkedListBox_playlistTracks.Items
                         .OfType<PlaylistTargetItem>()
@@ -87,6 +94,31 @@ namespace ModularAudience.Forms.Modules
             catch (Exception ex)
             {
                 LogCollection.Log(ex);
+            }
+        }
+
+        private async Task ApplyPlaylistRateToAllAudiosAsync(int position)
+        {
+            AudioObj[] targets = this.checkedListBox_playlistTracks.Items
+                .OfType<PlaylistTargetItem>()
+                .Select(item => item.Audio)
+                .DistinctBy(audio => audio.Id)
+                .ToArray();
+            if (targets.Length == 0)
+            {
+                return;
+            }
+
+            double minimumLogPosition = 500.0 * Math.Log2(0.01);
+            double maximumLogPosition = 500.0 * Math.Log2(10.0);
+            double anchorOffset = position > 0
+                ? targets.Max(audio => 500.0 * Math.Log2(Math.Clamp(audio.ManualSampleRateFactor, 0.01f, 10f)))
+                : targets.Min(audio => 500.0 * Math.Log2(Math.Clamp(audio.ManualSampleRateFactor, 0.01f, 10f)));
+            double newOffset = Math.Clamp(anchorOffset + position, minimumLogPosition, maximumLogPosition);
+
+            foreach (AudioObj audio in targets)
+            {
+                await this.ApplyPlaylistRateAtOffsetAsync(audio, newOffset);
             }
         }
 
@@ -111,6 +143,13 @@ namespace ModularAudience.Forms.Modules
             double candidateOffset = reset ? 0.0 : _audioRateDragOffset[audioId] + position;
             double newOffset = Math.Clamp(candidateOffset, minimumLogPosition, maximumLogPosition);
             _audioRateDragOffset[audioId] = newOffset;
+
+            await this.ApplyPlaylistRateAtOffsetAsync(audio, newOffset);
+        }
+
+        private async Task ApplyPlaylistRateAtOffsetAsync(AudioObj audio, double newOffset)
+        {
+            _audioRateDragOffset[audio.Id] = newOffset;
 
             float currentFactor = (float)Math.Clamp(Math.Pow(2.0, newOffset / 500.0), 0.01, 10.0);
 

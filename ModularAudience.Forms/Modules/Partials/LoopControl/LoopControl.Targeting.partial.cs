@@ -41,7 +41,8 @@ namespace ModularAudience.Forms.Modules
             !view.IsDisposed && !view.Disposing && view.OriginalAudio.Id == audio.Id);
 
         private List<AudioObj> GetActiveTargetAudios() => this.PlaylistAudios
-            .Concat(WindowMain.TrackViews.Where(view => !view.IsDisposed && !view.Disposing && view.OriginalAudio.PlayerPlaying)
+            .Concat(WindowMain.TrackViews.Where(view => !view.IsDisposed && !view.Disposing
+                    && (view.OriginalAudio.PlayerPlaying || view.OriginalAudio.Paused))
                 .Select(view => view.OriginalAudio))
             .DistinctBy(audio => audio.Id)
             .ToList();

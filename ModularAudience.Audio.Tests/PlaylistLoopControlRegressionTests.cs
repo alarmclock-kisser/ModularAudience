@@ -533,6 +533,58 @@ namespace ModularAudience.Audio.Tests
         }
 
         [STATestMethod]
+        public void ShiftRateGestureAlignsAllListedTracksFromHighestRateWhenMovingRight()
+        {
+            using AudioTestScope scope = new();
+            AudioObj[] audios = CreateTracks(scope);
+            audios[0].ManualSampleRateFactor = 1.25f;
+            audios[1].ManualSampleRateFactor = 0.8f;
+            audios[2].ManualSampleRateFactor = 1.5f;
+
+            WithPlaylist(audios, (_, list) =>
+            {
+                Point start = TextPoint(list, 1);
+                Point target = new(list.ClientRectangle.Right - 5, start.Y);
+                WithShiftKey(true, () =>
+                {
+                    Mouse(list, MouseDown, start);
+                    Mouse(list, MouseMove, target);
+                    Mouse(list, MouseUp, target);
+                });
+
+                Assert.IsTrue(audios.All(audio => audio.ManualSampleRateFactor > 1.5f));
+                Assert.AreEqual(audios[0].ManualSampleRateFactor, audios[1].ManualSampleRateFactor, 0.000001);
+                Assert.AreEqual(audios[0].ManualSampleRateFactor, audios[2].ManualSampleRateFactor, 0.000001);
+            });
+        }
+
+        [STATestMethod]
+        public void ShiftRateGestureAlignsAllListedTracksFromLowestRateWhenMovingLeft()
+        {
+            using AudioTestScope scope = new();
+            AudioObj[] audios = CreateTracks(scope);
+            audios[0].ManualSampleRateFactor = 1.25f;
+            audios[1].ManualSampleRateFactor = 0.8f;
+            audios[2].ManualSampleRateFactor = 1.5f;
+
+            WithPlaylist(audios, (_, list) =>
+            {
+                Point start = TextPoint(list, 1);
+                Point target = new(10, start.Y);
+                WithShiftKey(true, () =>
+                {
+                    Mouse(list, MouseDown, start);
+                    Mouse(list, MouseMove, target);
+                    Mouse(list, MouseUp, target);
+                });
+
+                Assert.IsTrue(audios.All(audio => audio.ManualSampleRateFactor < 0.8f));
+                Assert.AreEqual(audios[0].ManualSampleRateFactor, audios[1].ManualSampleRateFactor, 0.000001);
+                Assert.AreEqual(audios[0].ManualSampleRateFactor, audios[2].ManualSampleRateFactor, 0.000001);
+            });
+        }
+
+        [STATestMethod]
         public void ControlRateClickResetsOnlyClickedTrack()
         {
             using AudioTestScope scope = new();
@@ -699,6 +751,25 @@ namespace ModularAudience.Audio.Tests
             {
                 Assert.IsTrue(SetKeyboardState(state));
                 Assert.AreEqual(pressed, System.Windows.Forms.Control.ModifierKeys.HasFlag(Keys.Control));
+                action();
+            }
+            finally
+            {
+                Assert.IsTrue(SetKeyboardState(previous), "Keyboard state must be restored after each gesture.");
+            }
+        }
+
+        private static void WithShiftKey(bool pressed, Action action)
+        {
+            byte[] previous = new byte[256];
+            Assert.IsTrue(GetKeyboardState(previous));
+            byte[] state = (byte[]) previous.Clone();
+            state[(int) Keys.ShiftKey] = state[(int) Keys.LShiftKey] = pressed ? (byte) 0x80 : (byte) 0;
+            state[(int) Keys.RShiftKey] = 0;
+            try
+            {
+                Assert.IsTrue(SetKeyboardState(state));
+                Assert.AreEqual(pressed, System.Windows.Forms.Control.ModifierKeys.HasFlag(Keys.Shift));
                 action();
             }
             finally

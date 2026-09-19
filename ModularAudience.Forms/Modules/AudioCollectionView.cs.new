@@ -667,7 +667,7 @@ namespace ModularAudience.Forms
             {
                 if (this.checkBox_autoPlay.Checked)
                 {
-                    await this.TriggerAutoPlayAsync(audio, toggleSameTrack: true).ConfigureAwait(false);
+                    await this.TriggerAutoPlayAsync(audio).ConfigureAwait(false);
                 }
             }
 
@@ -882,14 +882,8 @@ namespace ModularAudience.Forms
         private void listBox_audios_KeyDown(object? sender, KeyEventArgs e)
         {
             // Handle arrow key navigation for track selection (single selection only)
-            // Important: Hide waveform preview first to ensure list box retains keyboard focus
             if (e.KeyCode == Keys.Up || e.KeyCode == Keys.Down)
             {
-                // Hide any showing waveform preview to return focus to list box
-                this.waveformPreviewTimer.Stop();
-                this.waveformPreviewIndex = -1;
-                this.HideWaveformPreview();
-
                 int currentIndex = this.listBox_audios.SelectedIndex;
                 int newIndex = currentIndex;
 
@@ -908,27 +902,23 @@ namespace ModularAudience.Forms
                     this.listBox_audios.ClearSelected();
                     this.listBox_audios.SelectedIndex = newIndex;
                     this.listBox_audios.SetSelected(newIndex, true);
-                }
 
-                // If auto-play is checked, play the newly selected track
-                if (this.checkBox_autoPlay.Checked && newIndex >= 0 && newIndex < this.listBox_audios.Items.Count)
-                {
-                    AudioObj audio = (AudioObj)this.listBox_audios.Items[newIndex];
-                    _ = this.TriggerAutoPlayAsync(audio);
-                }
+                    // If preview is checked, show waveform preview for the newly selected track
+                    if (this.checkBox_preview.Checked && newIndex >= 0 && newIndex < this.listBox_audios.Items.Count)
+                    {
+                        this.ShowWaveformPreviewForIndex(newIndex);
+                    }
 
-                if (this.ShowPreview && newIndex >= 0 && newIndex < this.listBox_audios.Items.Count)
-                {
-                    this.waveformPreviewIndex = newIndex;
-                    this.ShowWaveformPreviewForIndex(newIndex);
-                    this.listBox_audios.Focus();
+                    // If auto-play is checked, play the newly selected track
+                    if (this.checkBox_autoPlay.Checked && newIndex >= 0 && newIndex < this.listBox_audios.Items.Count)
+                    {
+                        AudioObj audio = (AudioObj)this.listBox_audios.Items[newIndex];
+                        _ = this.TriggerAutoPlayAsync(audio);
+                    }
                 }
 
                 e.Handled = true;
-            }
-            else
-            {
-                base.OnKeyDown(e);
+                e.SuppressKeyPress = true;
             }
         }
 
@@ -1079,7 +1069,7 @@ namespace ModularAudience.Forms
             tagEditor.ShowDialog(this);
         }
 
-        private async Task TriggerAutoPlayAsync(AudioObj audio, bool toggleSameTrack = false)
+        private async Task TriggerAutoPlayAsync(AudioObj audio)
         {
             if (audio == null)
             {
@@ -1091,22 +1081,6 @@ namespace ModularAudience.Forms
             bool disposeCts = false;
             try
             {
-                if (toggleSameTrack)
-                {
-                    bool sameTrack;
-                    lock (this.autoPlayGate)
-                    {
-                        sameTrack = ReferenceEquals(this.autoPlayCurrent, audio);
-                    }
-
-                    if (sameTrack)
-                    {
-                        await this.CancelAutoPlayInternalAsync(stopCollection: false).ConfigureAwait(false);
-                        disposeCts = true;
-                        return;
-                    }
-                }
-
                 await this.CancelAutoPlayInternalAsync(stopCollection: false).ConfigureAwait(false);
                 await this.AudioC.StopAllAsync().ConfigureAwait(false);
 
@@ -1388,13 +1362,14 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            if (this.listBox_audios.Items[index] is AudioObj audio && audio.WaveformPreview is Bitmap bmp)
+            if (this.waveformPreviewForm == null || this.waveformPreviewForm.IsDisposed)
             {
-                if (this.waveformPreviewForm == null || this.waveformPreviewForm.IsDisposed)
-                {
-                    this.waveformPreviewForm = new WaveformPreview();
-                }
+                this.waveformPreviewForm = new WaveformPreview();
+            }
 
+            if (this.listBox_audios.Items[index] is AudioObj audio && audio.WaveformPreview != null)
+            {
+                Bitmap bmp = audio.WaveformPreview;
                 Point screenPos = this.listBox_audios.PointToScreen(this.listBox_audios.GetItemRectangle(index).Location);
                 screenPos.Offset(20, 10); // etwas rechts/unten von der ListBox
                 this.waveformPreviewForm.ShowWaveform(bmp, screenPos);
