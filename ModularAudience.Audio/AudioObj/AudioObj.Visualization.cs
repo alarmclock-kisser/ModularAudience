@@ -51,14 +51,7 @@ namespace ModularAudience.Audio
 
             int channelsToDraw = drawEachChannel ? this.Channels : 1;
 
-            // Quick decision: if cache is compatible, try to serve from it
-            bool cacheCompatible = (this._waveCacheStrip != null)
-                                   && this._cacheSamplesPerPixel == samplesPerPixel
-                                   && this._cacheHeight == height
-                                   && this._cacheChannelsToDraw == channelsToDraw
-                                   && this._cacheDrawEachChannel == drawEachChannel
-                                   && this._cacheWaveColor.ToArgb() == waveColor.Value.ToArgb()
-                                   && this._cacheBackColor.ToArgb() == backColor.Value.ToArgb();
+            bool cacheCompatible = false;
 
             if (!cacheCompatible)
             {

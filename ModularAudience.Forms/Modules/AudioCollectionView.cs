@@ -64,7 +64,7 @@ namespace ModularAudience.Forms
         [DllImport("psapi.dll", SetLastError = true)]
         private static extern bool EmptyWorkingSet(IntPtr processHandle);
 
-        public AudioCollectionView(IEnumerable<AudioObj> audios)
+        public AudioCollectionView(IEnumerable<AudioObj> audios, string? title = null)
         {
             this.InitializeComponent();
             this.StartPosition = FormStartPosition.Manual;
@@ -74,7 +74,7 @@ namespace ModularAudience.Forms
 
             WindowMain.CollectionViews.Add(this);
 
-            this.Text = "Audio Collection #" + (WindowMain.CollectionViews.Where(cv => !cv.IsDisposed).Count()).ToString("D2");
+            this.Text = title ?? ("Audio Collection #" + (WindowMain.CollectionViews.Where(cv => !cv.IsDisposed).Count()).ToString("D2"));
 
             foreach (AudioObj audio in audios)
             {
@@ -917,6 +917,8 @@ namespace ModularAudience.Forms
             this.menuToolStripItem_aggregateMixSelected.Enabled = selectedCount > 1;
             this.menuToolStripItem_timeStretchSelected.Enabled = hasAny;
             this.menuToolStripItem_demucsSeparateSelected.Enabled = hasSingle;
+            this.menuToolStripItem_sourceSeparateDemucs.Enabled = hasSingle;
+            this.menuToolStripItem_sourceSeparateAnalog.Enabled = hasSingle;
 
             this.menuToolStripItem_atomizeSensitivityConservative.Checked = this.atomizeSensitivity == AtomizeSensitivity.Conservative;
             this.menuToolStripItem_atomizeSensitivityBalanced.Checked = this.atomizeSensitivity == AtomizeSensitivity.Balanced;

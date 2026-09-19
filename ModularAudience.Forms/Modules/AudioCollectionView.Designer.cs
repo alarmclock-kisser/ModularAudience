@@ -101,6 +101,8 @@
             this.menuToolStripItem_aggregateMixSelected = new ToolStripMenuItem();
             this.menuToolStripItem_timeStretchSelected = new ToolStripMenuItem();
             this.menuToolStripItem_demucsSeparateSelected = new ToolStripMenuItem();
+            this.menuToolStripItem_sourceSeparateDemucs = new ToolStripMenuItem();
+            this.menuToolStripItem_sourceSeparateAnalog = new ToolStripMenuItem();
             this.menuToolStripItem_pinWindow = new ToolStripMenuItem();
             this.convertToMIDIToolStripMenuItem = new ToolStripMenuItem();
             this.toolStripComboBox_orderBy = new ToolStripComboBox();
@@ -634,8 +636,22 @@
             // 
             this.menuToolStripItem_demucsSeparateSelected.Name = "menuToolStripItem_demucsSeparateSelected";
             this.menuToolStripItem_demucsSeparateSelected.Size = new Size(212, 22);
-            this.menuToolStripItem_demucsSeparateSelected.Text = "Demucs Separate Selected";
-            this.menuToolStripItem_demucsSeparateSelected.Click += this.menuToolStripItem_demucsSeparateSelected_Click;
+            this.menuToolStripItem_demucsSeparateSelected.Text = "Source Separate";
+            this.menuToolStripItem_demucsSeparateSelected.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_sourceSeparateDemucs, this.menuToolStripItem_sourceSeparateAnalog });
+            // 
+            // menuToolStripItem_sourceSeparateDemucs
+            // 
+            this.menuToolStripItem_sourceSeparateDemucs.Name = "menuToolStripItem_sourceSeparateDemucs";
+            this.menuToolStripItem_sourceSeparateDemucs.Size = new Size(211, 22);
+            this.menuToolStripItem_sourceSeparateDemucs.Text = "Demucs";
+            this.menuToolStripItem_sourceSeparateDemucs.Click += this.menuToolStripItem_demucsSeparateSelected_Click;
+            // 
+            // menuToolStripItem_sourceSeparateAnalog
+            // 
+            this.menuToolStripItem_sourceSeparateAnalog.Name = "menuToolStripItem_sourceSeparateAnalog";
+            this.menuToolStripItem_sourceSeparateAnalog.Size = new Size(211, 22);
+            this.menuToolStripItem_sourceSeparateAnalog.Text = "Analog Separation";
+            this.menuToolStripItem_sourceSeparateAnalog.Click += this.menuToolStripItem_sourceSeparateAnalog_Click;
             // 
             // menuToolStripItem_pinWindow
             // 
@@ -753,6 +769,8 @@
         private ToolStripMenuItem menuToolStripItem_aggregateMixSelected;
         private ToolStripMenuItem menuToolStripItem_timeStretchSelected;
         private ToolStripMenuItem menuToolStripItem_demucsSeparateSelected;
+        private ToolStripMenuItem menuToolStripItem_sourceSeparateDemucs;
+        private ToolStripMenuItem menuToolStripItem_sourceSeparateAnalog;
         private ToolStripMenuItem menuToolStripItem_pinWindow;
         private ToolStripComboBox toolStripComboBox_orderBy;
         private ToolStripMenuItem convertToMIDIToolStripMenuItem;

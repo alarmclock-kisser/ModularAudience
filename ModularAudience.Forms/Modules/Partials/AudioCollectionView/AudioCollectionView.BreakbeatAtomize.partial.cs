@@ -387,6 +387,18 @@ namespace ModularAudience.Forms
             WindowMain.Instance?.RefreshAllCollectionViews();
         }
 
+        private void menuToolStripItem_sourceSeparateAnalog_Click(object sender, EventArgs e)
+        {
+            AudioObj? toSeparate = this.GetSingleContextAudio();
+            if (toSeparate == null)
+            {
+                return;
+            }
+
+            var separationForm = new AnalogSeparationDialog(toSeparate);
+            separationForm.Show();
+        }
+
         private async void checkBox_autoPlay_CheckedChanged(object? sender, EventArgs e)
         {
             if (!this.checkBox_autoPlay.Checked)
