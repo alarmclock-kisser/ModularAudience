@@ -5,6 +5,7 @@ using ModularAudience.Audio.Processing;
 using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio.Processors_V4;
+using ModularAudience.Forms.Controls;
 using ModularAudience.Forms.Helpers;
 using System.ComponentModel;
 using System.Media;
@@ -27,7 +28,9 @@ namespace ModularAudience.Forms.Modules
         public readonly int TrackViewId;
         public readonly AudioObj OriginalAudio;
         private readonly AudioCollection? sourceCollection;
-        internal AudioCollection? SourceCollection => WindowMain.CollectionViews.FirstOrDefault(cv => cv.AudioC != null && cv.AudioC.Audios.Any(a => a.Id == this.OriginalAudio.Id))?.AudioC;
+        private readonly Guid sourceAudioId;
+        internal AudioCollection? SourceCollection => this.sourceCollection
+            ?? WindowMain.CollectionViews.FirstOrDefault(cv => cv.AudioC != null && cv.AudioC.Audios.Any(a => a.Id == this.sourceAudioId))?.AudioC;
         public readonly TrackViewSettings Settings;
 
 
@@ -72,7 +75,9 @@ namespace ModularAudience.Forms.Modules
             this.StartPosition = FormStartPosition.Manual;
             this.designerClientWidth = this.ClientSize.Width;
             this.designerWaveWidth = this.pictureBox_waveform.Width;
+            this.sourceAudioId = audio.Id;
             this.OriginalAudio = audio.Clone();
+            this.OriginalAudio.Id = Guid.NewGuid();
             this.Settings = new TrackViewSettings(this)
             {
                 Owner = this
@@ -98,6 +103,10 @@ namespace ModularAudience.Forms.Modules
             this.OriginalAudio.SelectionStart = -1;
             this.OriginalAudio.SelectionEnd = -1;
             this.OriginalAudio.LoopEnabled = false;
+
+            // Subscribe PlayingChanged so the recording track-log captures start/stop of
+            // this TrackView's audio (the clone is not in any CollectionView.Audios list).
+            this.OriginalAudio.PlayingChanged += this.OnTrackViewAudioPlayingChanged;
 
             this.EnablePictureBoxDoubleBuffering();
             this.InitializeTrackControls();
@@ -133,6 +142,9 @@ namespace ModularAudience.Forms.Modules
 
             this.FormClosing += async (s, e) =>
             {
+                // Unsubscribe PlayingChanged before stopping playback
+                this.OriginalAudio.PlayingChanged -= this.OnTrackViewAudioPlayingChanged;
+
                 e.Cancel = true;
                 this.Settings.Hide();
                 this.Hide();
@@ -216,6 +228,7 @@ namespace ModularAudience.Forms.Modules
             this.hScrollBar_rate.Maximum = 500;
             this.hScrollBar_rate.SmallChange = 1;
             this.hScrollBar_rate.LargeChange = 1;
+            this.SetRateAnchor((float)this.OriginalAudio.ManualSampleRateFactor);
             this.SetPlaybackRateFromScrollbar(0, updateScrollbar: true, fireAndForget: false);
 
             this.UpdateOffsetScrollbar();
@@ -809,12 +822,12 @@ namespace ModularAudience.Forms.Modules
             {
                 return;
             }
-            this.SetPlaybackRateSynced(e.NewValue);
+            this.SetPlaybackRateSynced(e.NewValue, broadcast: !this.IsRateResetGesture());
         }
 
         private void hScrollBar_rate_ValueChanged(object? sender, EventArgs e)
         {
-            this.SetPlaybackRateSynced(this.hScrollBar_rate.Value);
+            this.SetPlaybackRateSynced(this.hScrollBar_rate.Value, broadcast: !this.IsRateResetGesture());
         }
 
         private void hScrollBar_rate_MouseDown(object? sender, MouseEventArgs e)
@@ -830,16 +843,10 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            if ((ModifierKeys & Keys.Control) == Keys.Control)
-            {
-                if (this.hScrollBar_rate.Value != 0)
-                {
-                    this.hScrollBar_rate.Value = 0;
-                }
-                this.SetPlaybackRateSynced(0);
-                return;
-            }
         }
+
+        private bool IsRateResetGesture() =>
+            this.hScrollBar_rate is LiveRateScrollBar rateScrollBar && rateScrollBar.IsCtrlResetGesture;
 
         private void menuItem_rateResetCenter_Click(object? sender, EventArgs e)
         {
@@ -853,7 +860,7 @@ namespace ModularAudience.Forms.Modules
 
         private void contextMenu_rate_Opening(object? sender, CancelEventArgs e)
         {
-            float factor = MapRateScrollbarToFactor(this._lastRateContextMenuValue);
+            float factor = GetRateFactorFromScrollbar(this._lastRateContextMenuValue);
             this.menuItem_rateJumpHere.Text = $"Jump here ({factor * 100f:F1}%)";
         }
 
@@ -874,7 +881,8 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            bool doBroadcast = broadcast && this.Synced && !ModifierKeys.HasFlag(Keys.Control);
+            bool controlGesture = ModifierKeys.HasFlag(Keys.Control);
+            bool doBroadcast = broadcast && (controlGesture || this.Synced);
 
             this.suppressRateSync = true;
             try
@@ -883,7 +891,10 @@ namespace ModularAudience.Forms.Modules
 
                 if (doBroadcast && changed)
                 {
-                    foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
+                    IEnumerable<TrackView> targets = controlGesture
+                        ? WindowMain.TrackViews
+                        : WindowMain.SyncedTrackViews;
+                    foreach (var tv in targets.Where(tv => tv != this && !tv.IsDisposed && !tv.Disposing))
                     {
                         tv.SetPlaybackRateSynced(scrollbarValue, broadcast: false);
                     }
@@ -903,13 +914,14 @@ namespace ModularAudience.Forms.Modules
                 this.hScrollBar_rate.Value = clampedValue;
             }
 
-            float factor = MapRateScrollbarToFactor(clampedValue);
+            float factor = GetRateFactorFromScrollbar(clampedValue);
             return this.ApplyPlaybackRateFactor(factor, fireAndForget);
         }
 
-        private static float MapRateScrollbarToFactor(int scrollbarValue)
+        private float GetRateFactorFromScrollbar(int scrollbarValue)
         {
-            return PlaybackRateMapping.MapFactor(scrollbarValue);
+            float relativeOffset = scrollbarValue / 1000.0f;
+            return Math.Clamp(this.rateAnchorFactor + relativeOffset, 0.01f, 10.0f);
         }
 
         private int GetRateScrollbarValueFromMouseX(int mouseX)
@@ -1001,8 +1013,8 @@ namespace ModularAudience.Forms.Modules
 
         private void Wave_MouseWheel(object? sender, MouseEventArgs e)
         {
-            // Zoom mit Ctrl: samplesPerPixel ändern, Zoom um den Cursor herum (Sample unter Cursor bleibt an gleicher Pixel-Position)
-            if ((ModifierKeys & Keys.Control) != 0)
+            bool controlPressed = ModifierKeys.HasFlag(Keys.Control);
+            if (controlPressed || this.OriginalAudio.Playing)
             {
                 int current = this.samplesPerPixel;
                 int newSamplesPerPixel;
@@ -1019,23 +1031,16 @@ namespace ModularAudience.Forms.Modules
 
                 if (newSamplesPerPixel != current)
                 {
-                    // Bestimme X relativ zur PictureBox (sicher clamped)
-                    int width = Math.Max(1, this.pictureBox_waveform.Width);
-                    int localX = Math.Clamp(e.X, 0, width - 1);
+                    this.ApplyWaveformZoom(newSamplesPerPixel, e.X);
+                }
 
-                    // Sample unter dem Cursor vor dem Zoom
-                    long sampleAtCursor = this.offsetFrames + (long) localX * current;
-
-                    // Setze neuen Zoom
-                    this.samplesPerPixel = newSamplesPerPixel;
-
-                    // Berechne offset so dass sampleAtCursor wieder unter localX landet
-                    long desiredOffset = sampleAtCursor - (long) localX * this.samplesPerPixel;
-                    desiredOffset = Math.Max(0, desiredOffset);
-                    this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
-
-                    this.UpdateOffsetScrollbar();
-                    this.pictureBox_waveform.Invalidate();
+                if (controlPressed && this.OriginalAudio.Playing)
+                {
+                    foreach (TrackView trackView in WindowMain.TrackViews
+                        .Where(view => view != this && !view.IsDisposed && !view.Disposing))
+                    {
+                        trackView.ApplyWaveformZoom(newSamplesPerPixel, e.X);
+                    }
                 }
 
                 return;
@@ -1057,6 +1062,27 @@ namespace ModularAudience.Forms.Modules
             {
                 this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), this.offsetFrames + stepFrames);
             }
+            this.UpdateOffsetScrollbar();
+            this.pictureBox_waveform.Invalidate();
+        }
+
+        private void ApplyWaveformZoom(int newSamplesPerPixel, int cursorX)
+        {
+            newSamplesPerPixel = Math.Clamp(newSamplesPerPixel, MinSamplesPerPixel, MaxSamplesPerPixel);
+            if (newSamplesPerPixel == this.samplesPerPixel)
+            {
+                return;
+            }
+
+            int width = Math.Max(1, this.pictureBox_waveform.Width);
+            int localX = Math.Clamp(cursorX, 0, width - 1);
+            long sampleAtCursor = this.offsetFrames + (long) localX * this.samplesPerPixel;
+
+            this.samplesPerPixel = newSamplesPerPixel;
+            long desiredOffset = sampleAtCursor - (long) localX * this.samplesPerPixel;
+            desiredOffset = Math.Max(0, desiredOffset);
+            this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
+
             this.UpdateOffsetScrollbar();
             this.pictureBox_waveform.Invalidate();
         }
@@ -1231,7 +1257,8 @@ namespace ModularAudience.Forms.Modules
 
         internal async Task TogglePlayAsync()
         {
-            var group = GetPlaybackGroup(this);
+            WindowMain.LastSelectedTrackView = this;
+            IReadOnlyList<TrackView> group = GetPlaybackGroup(this);
             if (group.Count == 0)
             {
                 return;
@@ -1242,7 +1269,25 @@ namespace ModularAudience.Forms.Modules
 
             if (!anyPlaying)
             {
-                if (anyPaused)
+                bool ctrlPressed = ModifierKeys.HasFlag(Keys.Control);
+                TrackView initiator = this;
+                if (ctrlPressed)
+                {
+                    group = WindowMain.TrackViews
+                        .Where(tv => tv != null && !tv.IsDisposed && !tv.Disposing
+                            && !tv.OriginalAudio.Playing && !tv.OriginalAudio.Paused)
+                        .ToList();
+                    if (group.Count == 0)
+                    {
+                        return;
+                    }
+
+                    if (!group.Contains(this))
+                    {
+                        initiator = group[0];
+                    }
+                }
+                else if (anyPaused)
                 {
                     var resumeTasks = group
                         .Where(tv => tv.OriginalAudio.Paused)
@@ -1294,17 +1339,52 @@ namespace ModularAudience.Forms.Modules
                     tv.lastClickFrame = startFrame;
                 }
 
-                await StartPlaybackForGroupAsync(group, this);
+                await StartPlaybackForGroupAsync(group, initiator);
+                WindowMain.LoopControlWindow?.RefreshPlaylistTargetsNow();
             }
             else
             {
-                var stopTasks = group.Select(tv => tv.OriginalAudio.StopAsync());
-                await Task.WhenAll(stopTasks);
+                bool ctrlPressed = ModifierKeys.HasFlag(Keys.Control);
 
-                foreach (var tv in group)
+                if (ctrlPressed)
                 {
-                    tv.InvokeIfRequired(() => tv.button_playback.Text = "▶");
+                    // Ctrl+Stop: Stop all playing tracks (not paused) - regardless of sync status
+                    var allTrackViews = WindowMain.TrackViews
+                        .Where(tv => tv != null && !tv.IsDisposed && !tv.Disposing)
+                        .ToList();
+                    var playingTracks = allTrackViews.Where(tv => tv.OriginalAudio.Playing).ToList();
+
+                    var stopTasks = playingTracks.Select(tv => tv.OriginalAudio.StopAsync());
+                    await Task.WhenAll(stopTasks);
+
+                    foreach (var tv in playingTracks)
+                    {
+                        tv.InvokeIfRequired(() => tv.button_playback.Text = "▶");
+                    }
                 }
+                else
+                {
+                    // Normal Stop: Only stop the playback group (synced tracks)
+                    var stopTasks = group.Select(tv => tv.OriginalAudio.StopAsync());
+                    await Task.WhenAll(stopTasks);
+
+                    foreach (var tv in group)
+                    {
+                        tv.InvokeIfRequired(() => tv.button_playback.Text = "▶");
+                    }
+                }
+
+                // Update the recording track-log after stopping via TogglePlayAsync
+                // (StopAsync alone does not update the log — only StopPlaybackAsync does)
+                try
+                {
+                    var instance = WindowMain.Instance;
+                    if (instance != null && !instance.IsDisposed)
+                    {
+                        instance.SyncTrackLogNow();
+                    }
+                }
+                catch { }
             }
         }
 
@@ -1316,54 +1396,90 @@ namespace ModularAudience.Forms.Modules
 
         private async Task TogglePauseAsync()
         {
+            bool ctrlPressed = ModifierKeys.HasFlag(Keys.Control);
             var group = GetPlaybackGroup(this);
 
-            // Fall 1: Diese Spur spielt -> nur spielende pausieren
+            // Fall 1: Diese Spur spielt -> pausieren
             if (this.OriginalAudio.Playing)
             {
                 await this.OriginalAudio.PauseAsync();
                 this.button_playback.Text = "▶";
 
-                if (!ModifierKeys.HasFlag(Keys.Control))
+                if (ctrlPressed)
                 {
-                    foreach (var tv in group.Where(tv => tv != this && !tv.IsDisposed && tv.OriginalAudio.Playing))
+                    // Ctrl+Pause: Pause all playing tracks (not paused) - regardless of sync status
+                    var allTrackViews = WindowMain.TrackViews
+                        .Where(tv => tv != null && !tv.IsDisposed && !tv.Disposing)
+                        .ToList();
+                    foreach (var tv in allTrackViews.Where(tv => tv != this && tv.OriginalAudio.Playing))
                     {
-                        try { _ = tv.OriginalAudio.PauseAsync(); } catch { }
+                        try
+                        {
+                            await tv.OriginalAudio.PauseAsync();
+                            tv.InvokeIfRequired(() => tv.button_playback.Text = "▶");
+                        }
+                        catch { }
+                    }
+                }
+                else
+                {
+                    // Normal Pause: Only pause the playback group (synced tracks)
+                    foreach (var tv in group.Where(tv => tv != this && tv.OriginalAudio.Playing))
+                    {
+                        try
+                        {
+                            await tv.OriginalAudio.PauseAsync();
+                            tv.InvokeIfRequired(() => tv.button_playback.Text = "▶");
+                        }
+                        catch { }
                     }
                 }
                 return;
             }
 
-            // Fall 2: Diese Spur ist pausiert -> nur pausierte fortsetzen
+            // Fall 2: Diese Spur ist pausiert -> fortsetzen
             if (this.OriginalAudio.Paused)
             {
                 await this.OriginalAudio.PauseAsync(); // toggle = Resume
                 this.button_playback.Text = "■";
 
-                if (!ModifierKeys.HasFlag(Keys.Control))
+                if (ctrlPressed)
                 {
-                    foreach (var tv in group.Where(tv => tv != this && !tv.IsDisposed && tv.OriginalAudio.Paused))
+                    // Ctrl+Resume: Resume all paused tracks (not stopped) - regardless of sync status
+                    var allTrackViews = WindowMain.TrackViews
+                        .Where(tv => tv != null && !tv.IsDisposed && !tv.Disposing)
+                        .ToList();
+                    foreach (var tv in allTrackViews.Where(tv => tv != this && tv.OriginalAudio.Paused))
                     {
-                        try { _ = tv.OriginalAudio.PauseAsync(); } catch { }
+                        try
+                        {
+                            await tv.OriginalAudio.PauseAsync(); // toggle = Resume
+                            tv.InvokeIfRequired(() => tv.button_playback.Text = "■");
+                        }
+                        catch { }
+                    }
+                }
+                else
+                {
+                    // Normal Resume: Only resume the playback group (synced tracks)
+                    foreach (var tv in group.Where(tv => tv != this && tv.OriginalAudio.Paused))
+                    {
+                        try
+                        {
+                            await tv.OriginalAudio.PauseAsync(); // toggle = Resume
+                            tv.InvokeIfRequired(() => tv.button_playback.Text = "■");
+                        }
+                        catch { }
                     }
                 }
                 return;
             }
 
-            // Fall 3: Weder Playing noch Paused -> nur diese Spur starten, 
-            // und optional andere pausierte fortsetzen (logisch konsistent mit Resume)
+            // Fall 3: Weder Playing noch Paused -> nur diese Spur starten
             this.ApplyLoopFractionToAudio();
             Action onStopped = () => this.InvokeIfRequired(() => this.button_playback.Text = "▶");
             await this.OriginalAudio.PlayAsync(CancellationToken.None, onStopped, this.CurrentVolume);
             this.button_playback.Text = "■";
-
-            if (!ModifierKeys.HasFlag(Keys.Control))
-            {
-                foreach (var tv in group.Where(tv => tv != this && !tv.IsDisposed && tv.OriginalAudio.Paused))
-                {
-                    try { _ = tv.OriginalAudio.PauseAsync(); } catch { }
-                }
-            }
         }
 
         private void ToggleLoop(MouseEventArgs? e, bool forceOff = false)
@@ -1621,6 +1737,29 @@ namespace ModularAudience.Forms.Modules
 
             try { await this.OriginalAudio.StopAsync().ConfigureAwait(false); } catch { }
             this.InvokeIfRequired(() => this.button_playback.Text = "▶");
+
+            // Update the recording track-log when a manually played track is stopped
+            try
+            {
+                var instance = WindowMain.Instance;
+                if (instance != null && !instance.IsDisposed)
+                {
+                    instance.SyncTrackLogNow();
+                }
+            }
+            catch { }
+
+            // Explicitly close the track-log entry for this TrackView's audio
+            // (SyncTrackLogNow may miss it if the clone was never captured as "active")
+            try
+            {
+                var instance = WindowMain.Instance;
+                if (instance != null && !instance.IsDisposed && !string.IsNullOrWhiteSpace(this.OriginalAudio.FilePath))
+                {
+                    instance.FinaliseTrackLogEntryForPath(this.OriginalAudio.FilePath);
+                }
+            }
+            catch { }
         }
 
         private async void TrackView_KeyDown(object? sender, KeyEventArgs e)
@@ -2495,7 +2634,7 @@ namespace ModularAudience.Forms.Modules
             await Task.Run(() =>
             {
                 // Find index of the original source audio in the provided collection find by Id
-                int index = this.SourceCollection.Audios.ToList().FindIndex(a => a.Id == this.OriginalAudio.Id);
+                int index = this.SourceCollection.Audios.ToList().FindIndex(a => a.Id == this.sourceAudioId);
                 if (index >= 0)
                 {
                     try
@@ -3104,6 +3243,39 @@ namespace ModularAudience.Forms.Modules
             this.UpdateOffsetScrollbar();
 
             this.lastClickFrame = frame;
+        }
+
+        /// <summary>
+        /// Called when this TrackView's cloned AudioObj starts or stops playing.
+        /// Triggers the recording track-log sync so that manually-played TrackView tracks
+        /// are captured with start/end timestamps during an active recording.
+        /// - On start (Playing == true): ensures the entry exists with Start=now, End=ongoing.
+        /// - On real stop (Playing == false && Paused == false): closes the entry with End=now.
+        /// - On pause (Paused == true): does nothing (no timestamp written).
+        /// </summary>
+        private void OnTrackViewAudioPlayingChanged()
+        {
+            var instance = WindowMain.Instance;
+            if (instance == null || instance.IsDisposed)
+            {
+                return;
+            }
+
+            // Do not log on pause: Paused == true means the track is paused, not stopped.
+            if (this.OriginalAudio.Paused)
+            {
+                return;
+            }
+
+            // On start: ensure entry exists (Start=now, End=ongoing)
+            if (this.OriginalAudio.Playing)
+            {
+                try { instance.SyncTrackLogNow(); } catch { }
+                return;
+            }
+
+            // On real stop (Playing == false && Paused == false): close the entry
+            try { instance.SyncTrackLogNow(); } catch { }
         }
     }
 }

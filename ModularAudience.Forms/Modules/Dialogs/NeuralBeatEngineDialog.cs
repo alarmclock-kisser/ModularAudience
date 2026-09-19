@@ -1,5 +1,6 @@
 using ModularAudience.Audio;
 using ModularAudience.Generators;
+using ModularAudience.Forms.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -113,9 +114,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Neural beat generation failed: {ex}");
-                this.label_status.Text = "Generation failed. See log for details.";
-                MessageBox.Show(this, ex.Message, "Neural Beat Engine", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Neural Beat Engine", ex);
             }
             finally
             {
@@ -275,9 +274,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Neural beat feedback failed: {ex}");
-                this.label_status.Text = "Feedback failed. See log for details.";
-                MessageBox.Show(this, ex.Message, "Neural Beat Engine", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Neural Beat Engine", ex);
             }
         }
 
@@ -298,9 +295,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Neural beat remix failed: {ex}");
-                this.label_status.Text = "Remix failed. See log for details.";
-                MessageBox.Show(this, ex.Message, "Neural Beat Engine", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Neural Beat Engine", ex);
             }
         }
 

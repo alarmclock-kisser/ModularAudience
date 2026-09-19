@@ -12,15 +12,19 @@ namespace ModularAudience.Forms.Modules
 
         private async void checkedListBox_playlistTracks_RatePositionChanged(object? sender, PlaylistTrackRateChangedEventArgs e)
         {
-            await this.ApplyPlaylistRateAsync(e.RowIndex, e.Position, reset: e.Position == 0);
+            await this.ApplyPlaylistRateAsync(e.RowIndex, e.Position,
+                reset: e.Position == 0, resetAll: e.ResetAll);
         }
 
         private async void toolStripMenuItem_resetPlaylistRate_Click(object? sender, EventArgs e)
         {
-            await this.ApplyPlaylistRateAsync(this.checkedListBox_playlistTracks.SelectedIndex, 0, reset: true);
+            bool resetAll = this.resetPlaylistRateForAllTracks;
+            this.resetPlaylistRateForAllTracks = false;
+            await this.ApplyPlaylistRateAsync(this.checkedListBox_playlistTracks.SelectedIndex,
+                0, reset: true, resetAll: resetAll);
         }
 
-        private async Task ApplyPlaylistRateAsync(int rowIndex, int position, bool reset = false)
+        private async Task ApplyPlaylistRateAsync(int rowIndex, int position, bool reset = false, bool resetAll = false)
         {
             if (this.suppressPlaylistChecklistEvents || rowIndex < 0 || rowIndex >= this.checkedListBox_playlistTracks.Items.Count
                 || this.checkedListBox_playlistTracks.Items[rowIndex] is not PlaylistTargetItem item)
@@ -29,7 +33,13 @@ namespace ModularAudience.Forms.Modules
             }
             try
             {
-                IReadOnlyList<AudioObj> targets = reset
+                IReadOnlyList<AudioObj> targets = resetAll
+                    ? this.checkedListBox_playlistTracks.Items
+                        .OfType<PlaylistTargetItem>()
+                        .Select(item => item.Audio)
+                        .DistinctBy(audio => audio.Id)
+                        .ToArray()
+                    : reset
                     ? [item.Audio]
                     : ModifierKeys.HasFlag(Keys.Control)
                         ? this.GetActionTargets(checkedGroup: true)
@@ -49,11 +59,18 @@ namespace ModularAudience.Forms.Modules
         {
             Guid audioId = audio.Id;
 
+            if (!audio.Playing && !audio.Paused && Math.Abs(audio.ManualSampleRateFactor - 1.0) < 0.000001)
+            {
+                this._audioRateDragOffset.Remove(audioId);
+            }
+
             double minimumLogPosition = 500.0 * Math.Log2(0.01);
             double maximumLogPosition = 500.0 * Math.Log2(10.0);
-            if (!_audioRateDragOffset.ContainsKey(audioId))
+            double currentAudioOffset = 500.0 * Math.Log2(Math.Clamp(audio.ManualSampleRateFactor, 0.01f, 10f));
+            if (!_audioRateDragOffset.TryGetValue(audioId, out double dragOffset)
+                || Math.Abs(dragOffset - currentAudioOffset) > 0.000001)
             {
-                _audioRateDragOffset[audioId] = 500.0 * Math.Log2(Math.Clamp(audio.ManualSampleRateFactor, 0.01f, 10f));
+                _audioRateDragOffset[audioId] = currentAudioOffset;
             }
 
             double candidateOffset = reset ? 0.0 : _audioRateDragOffset[audioId] + position;
@@ -69,10 +86,17 @@ namespace ModularAudience.Forms.Modules
                 this.RefreshPlaylistRowText(rowIndex, item);
             }
             await audio.ApplyCombinedSampleRateAsync();
+            foreach (TrackView trackView in WindowMain.TrackViews
+                .Where(view => !view.IsDisposed && !view.Disposing && view.MatchesRateAudio(audio)))
+            {
+                trackView.SyncRateAnchorFromLoopControl();
+            }
             if (rowIndex >= 0 && this.checkedListBox_playlistTracks.Items[rowIndex] is PlaylistTargetItem refreshedItem)
             {
                 this.RefreshPlaylistRowText(rowIndex, refreshedItem);
             }
+            // Update the jump distance to reflect the new rate
+            this.UpdateJumpDistanceForRate(audio);
         }
 
         private void RefreshPlaylistRowText(int rowIndex, PlaylistTargetItem item)
@@ -88,6 +112,7 @@ namespace ModularAudience.Forms.Modules
 
         private static string BuildPlaylistRateText(AudioObj audio)
         {
+            // SampleRateFactor is already the combined live varispeed rate.
             double effectiveBpm = GetAudioBpm(audio) * audio.StretchFactor * audio.SampleRateFactor;
             string bpm = effectiveBpm.ToString("F1", CultureInfo.InvariantCulture);
             string rate = ((audio.ManualSampleRateFactor - 1.0) * 100.0)

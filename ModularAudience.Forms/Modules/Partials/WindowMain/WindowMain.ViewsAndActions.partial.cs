@@ -496,7 +496,7 @@ namespace ModularAudience.Forms
             catch (Exception ex)
             {
                 LogCollection.Log(ex);
-                MessageBox.Show(this, ex.ToString(), "Loop Control Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ShowErrorWithCopyButton(this, "Loop Control Error", ex);
             }
         }
 

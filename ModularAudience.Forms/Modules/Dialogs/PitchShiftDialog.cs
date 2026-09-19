@@ -121,7 +121,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             if (totalItems == 0)
             {
-                MessageBox.Show("No audio samples selected.");
+                // No audio samples selected - this is not an exception, keep as is
                 return;
             }
 

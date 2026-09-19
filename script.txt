@@ -1,1 +1,0 @@
-list volume  ; powershell -ExecutionPolicy Bypass -File script.txt

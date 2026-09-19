@@ -235,7 +235,8 @@ namespace ModularAudience.Forms.Controls
             this.lastMappedPosition = 0;
             if (resetRate)
             {
-                this.RatePositionChanged?.Invoke(this, new PlaylistTrackRateChangedEventArgs(endedRowIndex, 0));
+                this.RatePositionChanged?.Invoke(this,
+                    new PlaylistTrackRateChangedEventArgs(endedRowIndex, 0));
             }
             this.RateInteractionEnded?.Invoke(this, EventArgs.Empty);
             this.Capture = false;
@@ -277,13 +278,15 @@ namespace ModularAudience.Forms.Controls
 
     internal sealed class PlaylistTrackRateChangedEventArgs : EventArgs
     {
-        public PlaylistTrackRateChangedEventArgs(int rowIndex, int position)
+        public PlaylistTrackRateChangedEventArgs(int rowIndex, int position, bool resetAll = false)
         {
             this.RowIndex = rowIndex;
             this.Position = position;
+            this.ResetAll = resetAll;
         }
 
         public int RowIndex { get; }
         public int Position { get; }
+        public bool ResetAll { get; }
     }
 }

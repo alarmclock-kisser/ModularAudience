@@ -139,6 +139,10 @@ namespace ModularAudience.Forms
             this.InitPlaylist();
             AudioPlaybackService.SetMasterLimiter(this.MasterLimiter);
 
+            // Finalise the track-log (end timestamps) as soon as the recording stops,
+            // before the async 24-bit re-export runs
+            AudioRecorder.RecordingStopped += this.OnAudioRecorderStopped;
+
             this._keyFilter = new GlobalKeyMessageFilter();
             this._keyFilter.KeyChanged += this.GlobalKeyChanged;
             Application.AddMessageFilter(this._keyFilter);
@@ -147,6 +151,23 @@ namespace ModularAudience.Forms
             this.MouseUp += this.WindowMain_MouseUp_ForPositionSave;
             this.KeyDown += this.WindowMain_KeyDown_ForPositionSave;
             this.UpdateTrackDependentUI();
+
+            // Subscribe to PlayingChanged for all existing audios so track-log updates on stop/end
+            foreach (var cv in CollectionViews)
+            {
+                if (cv != null && !cv.IsDisposed && cv.AudioC != null)
+                {
+                    foreach (var audio in cv.AudioC.Audios)
+                    {
+                        audio.PlayingChanged += this.OnAudioPlayingChanged;
+                    }
+                }
+            }
+
+            // Set build information timestamp from file last write time
+            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+            string buildTimestamp = System.IO.File.GetLastWriteTime(assembly.Location).ToString("dd/MM/yyyy - HH:mm:ss");
+            this.label_currentlyEnqueued.Text = $"Build: {buildTimestamp}";
         }
 
         private void button_copyLog_Click(object? sender, EventArgs e)
@@ -166,6 +187,65 @@ namespace ModularAudience.Forms
                 }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Shows an error message box with OK and Copy buttons that allows copying the exception text to clipboard.
+        /// </summary>
+        /// <param title="title">The title of the message box</param>
+        /// <param ex="ex">The exception to display</param>
+        private static void ShowErrorWithCopyButton(Form owner, string title, Exception ex)
+        {
+            var message = ex.ToString();
+            using var dialog = new Form
+            {
+                Text = title,
+                StartPosition = FormStartPosition.CenterParent,
+                ClientSize = new Size(700, 500),
+                MinimizeBox = false,
+                MaximizeBox = false,
+                ShowInTaskbar = false
+            };
+
+            var textBox = new TextBox
+            {
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = ScrollBars.Both,
+                Dock = DockStyle.Fill,
+                Text = message
+            };
+
+            var panel = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 40,
+                Padding = new Padding(5)
+            };
+
+            var buttonOk = new Button
+            {
+                Text = "OK",
+                DialogResult = DialogResult.OK,
+                AutoSize = true,
+                Location = new Point(10, 10)
+            };
+
+            var buttonCopy = new Button
+            {
+                Text = "Copy",
+                AutoSize = true,
+                Location = new Point(buttonOk.Right + 15, 10)
+            };
+            buttonCopy.Click += (_, _) => Clipboard.SetText(message);
+
+            panel.Controls.Add(buttonOk);
+            panel.Controls.Add(buttonCopy);
+
+            dialog.Controls.Add(textBox);
+            dialog.Controls.Add(panel);
+            dialog.AcceptButton = buttonOk;
+            dialog.ShowDialog(owner);
         }
 
         private void WindowMain_LocationChanged_ForPositionSave(object? sender, EventArgs e)

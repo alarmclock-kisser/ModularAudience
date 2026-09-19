@@ -1,7 +1,6 @@
 ﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Midi;
-using ModularAudience.Llama.Dtos;
-using System;
+using ModularAudience.Llama.Dtos;using ModularAudience.Forms.Helpers;using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Security;
@@ -211,7 +210,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             catch (Exception ex)
             {
                 LogCollection.Log($"MIDI export failed: {ex}");
-                MessageBox.Show(this, ex.Message, "MIDI export failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI export failed", ex);
             }
             finally
             {

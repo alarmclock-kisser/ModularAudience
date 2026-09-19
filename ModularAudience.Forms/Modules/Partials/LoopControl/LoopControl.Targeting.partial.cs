@@ -20,12 +20,12 @@ namespace ModularAudience.Forms.Modules
         {
             get
             {
+                var tv = SelectedTrackView;
+                if (tv != null && !this.checkedListBox_playlistTracks.ContainsFocus)
+                    return tv;
+
                 if (FocusedPlaylistAudio != null)
                     return FindTrackView(FocusedPlaylistAudio);
-
-                var tv = SelectedTrackView;
-                if (tv != null && !this.checkedListBox_playlistTracks.SelectedItems.Contains(tv) && !this.checkedListBox_playlistTracks.ContainsFocus)
-                    return tv;
 
                 if (this.checkedListBox_playlistTracks.SelectedItem is PlaylistTargetItem sel)
                     return FindTrackView(sel.Audio);
@@ -60,6 +60,40 @@ namespace ModularAudience.Forms.Modules
 
         private static float GetAudioBpm(AudioObj audio) =>
             audio.Bpm > 0 ? audio.Bpm : audio.ScannedBpm > 0 ? audio.ScannedBpm : 120f;
+
+        private void SynchronizeMultiplierForAudio(AudioObj? audio)
+        {
+            if (audio?.LoopEnabled != true)
+            {
+                return;
+            }
+
+            double multiplier = 1.0;
+            if (audio.Metrics.TryGetValue("loop.ui.multiplier", out double storedMultiplier) &&
+                storedMultiplier > 0)
+            {
+                multiplier = storedMultiplier;
+            }
+
+            string? matchingItem = this.domainUpDown_multiplier.Items
+                .OfType<string>()
+                .FirstOrDefault(item => TryParseMultiplier(item, out double value) &&
+                    Math.Abs(value - multiplier) < 0.0001);
+            if (matchingItem == null || Equals(this.domainUpDown_multiplier.SelectedItem, matchingItem))
+            {
+                return;
+            }
+
+            this.suppressMultiplierEvents = true;
+            try
+            {
+                this.domainUpDown_multiplier.SelectedItem = matchingItem;
+            }
+            finally
+            {
+                this.suppressMultiplierEvents = false;
+            }
+        }
 
         private static float GetUiLoopFraction(AudioObj audio)
         {

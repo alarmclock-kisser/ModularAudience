@@ -189,6 +189,8 @@ namespace ModularAudience.Forms
                 {
                     this.button_record.Enabled = false;
                     AudioRecorder.StopRecording(normalizeOutput: true);
+                    // Finalise the playlist track-log for this recording
+                    this.FinaliseTrackLog();
                     this.label_stopRecordInfo.Visible = true;
                     this._infoCtrlToStopAppeared = DateTime.Now;
                 }

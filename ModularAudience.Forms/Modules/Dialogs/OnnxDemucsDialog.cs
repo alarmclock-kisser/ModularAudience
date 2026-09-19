@@ -1,4 +1,5 @@
 ﻿using ModularAudience.Audio;
+using ModularAudience.Forms.Helpers;
 using ModularAudience.Onnx;
 using System;
 using System.Collections.Generic;
@@ -52,7 +53,7 @@ namespace ModularAudience.Forms
         {
             if (!this.Onnx.IsOnline)
             {
-                MessageBox.Show("ONNX session is not initialized.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, "The ONNX Demucs model is not available. Please check your model configuration.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 

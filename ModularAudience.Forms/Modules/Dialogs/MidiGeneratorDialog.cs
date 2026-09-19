@@ -1,6 +1,7 @@
 using ModularAudience.Audio;
 using ModularAudience.Audio.Midi;
 using ModularAudience.Generators;
+using ModularAudience.Forms.Helpers;
 using System.Reflection;
 
 namespace ModularAudience.Forms.Modules.Dialogs
@@ -142,7 +143,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 LogCollection.Log($"MIDI generation failed: {ex}");
                 this.label_status.Text = "Generation failed.";
-                MessageBox.Show(this, ex.Message, "MIDI generation failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI generation failed", ex);
             }
             finally
             {

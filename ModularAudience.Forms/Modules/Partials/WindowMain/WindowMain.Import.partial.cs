@@ -211,7 +211,7 @@ namespace ModularAudience.Forms
                 catch (Exception ex)
                 {
                     LogCollection.Log($"MIDI import failed for '{midiFile}': {ex}");
-                    MessageBox.Show(this, ex.Message, "MIDI import failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    ShowErrorWithCopyButton(this, "MIDI import failed", ex);
                 }
             }
 
@@ -249,7 +249,7 @@ namespace ModularAudience.Forms
                 catch (Exception ex)
                 {
                     LogCollection.Log($"PDF import failed for '{pdfFile}': {ex}");
-                    MessageBox.Show(this, ex.Message, "PDF import failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    ShowErrorWithCopyButton(this, "PDF import failed", ex);
                 }
             }
 
@@ -553,6 +553,11 @@ namespace ModularAudience.Forms
             {
                 this.AudioC.Audios.Remove(audio);
             }
+
+            // Opening a track directly counts as playlist activity, so the bottom
+            // label switches from the build timestamp to the live playback info.
+            this._playlistActivityStarted = true;
+            WindowMainStaticHelpers.InvokeIfRequired(Instance, this.UpdatePlaylistUI);
         }
 
         internal void PlaceRenderedAudio(AudioObj audio)

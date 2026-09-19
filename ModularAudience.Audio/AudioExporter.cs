@@ -244,8 +244,11 @@ namespace ModularAudience.Audio
                 return null;
             }
 
-            // Sichere eindeutige Zieldatei ermitteln
-            finalPath = EnsureUniquePath(finalPath);
+            // Sichere eindeutige Zieldatei ermitteln (nur wenn keine customFilePath vorgegeben ist)
+            if (string.IsNullOrEmpty(customFilePath))
+            {
+                finalPath = EnsureUniquePath(finalPath);
+            }
 
             Stopwatch sw = Stopwatch.StartNew();
 

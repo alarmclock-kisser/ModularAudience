@@ -78,12 +78,14 @@ namespace ModularAudience.Forms.Modules
                 {
                     this.checkedListBox_playlistTracks.SelectedIndex = index;
                 }
+
+                // Also sync the loop buttons to reflect the currently selected track
+                this.UpdateLoopButtonsState();
             }
             finally
             {
                 this.suppressPlaylistChecklistEvents = wasSuppressed;
             }
-            this.UpdateLoopButtonsState();
         }
 
         private int FindPlaylistTrackIndex(Guid? audioId)

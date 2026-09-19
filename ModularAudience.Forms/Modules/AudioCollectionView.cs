@@ -690,7 +690,7 @@ namespace ModularAudience.Forms
             AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
             if (selectedAudio != null)
             {
-                var tv = new TrackView(selectedAudio);
+                var tv = new TrackView(selectedAudio, this.AudioC);
 
             }
             else
@@ -1374,7 +1374,7 @@ namespace ModularAudience.Forms
             {
                 LogCollection.Log($"MIDI conversion failed: {ex}");
                 progressDialog.Close();
-                MessageBox.Show(this, ex.Message, "MIDI conversion failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI conversion failed", ex);
             }
             finally
             {

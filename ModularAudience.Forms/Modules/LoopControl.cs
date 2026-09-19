@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using static ModularAudience.Audio.Processing.DropManager;
@@ -59,12 +60,14 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            this.resetPlaylistRateForAllTracks = false;
             try
             {
                 int idx = this.checkedListBox_playlistTracks.IndexFromPoint(e.Location);
                 if (idx >= 0 && idx < this.checkedListBox_playlistTracks.Items.Count)
                 {
                     this.checkedListBox_playlistTracks.SelectedIndex = idx;
+                    this.resetPlaylistRateForAllTracks = ModifierKeys.HasFlag(Keys.Control);
                     // ensure the right-clicked item is selected (not only focused)
                 }
             }
@@ -73,6 +76,19 @@ namespace ModularAudience.Forms.Modules
 
         private void contextMenuStrip_playlistItem_Opening(object? sender, CancelEventArgs e)
         {
+            bool resetAll = this.resetPlaylistRateForAllTracks || ModifierKeys.HasFlag(Keys.Control);
+            this.resetPlaylistRateForAllTracks = false;
+            if (resetAll)
+            {
+                e.Cancel = true;
+                int selectedIndex = this.checkedListBox_playlistTracks.SelectedIndex;
+                if (selectedIndex >= 0 && selectedIndex < this.checkedListBox_playlistTracks.Items.Count)
+                {
+                    _ = this.ApplyPlaylistRateAsync(selectedIndex, 0, reset: true, resetAll: true);
+                }
+                return;
+            }
+
             // Only allow opening when an item is under mouse / selected
             try
             {
@@ -131,11 +147,56 @@ namespace ModularAudience.Forms.Modules
         private readonly HashSet<Guid> selectedPlaylistTrackIds = [];
         private readonly HashSet<Guid> knownPlaylistTrackIds = [];
         private readonly System.Windows.Forms.Timer playlistTargetsTimer = new() { Interval = 250 };
+        private bool resetPlaylistRateForAllTracks;
         private bool suppressPlaylistChecklistEvents;
 
         private float Bpm => this.OriginalAudio is AudioObj audio ? GetAudioBpm(audio) : 120f;
-        private int Multiplier => (int) this.numericUpDown_multiplier.Value;
-        private int JumpMs => (int) this.numericUpDown_jump.Value;
+        private double Multiplier
+        {
+            get
+            {
+                if (this.domainUpDown_multiplier.SelectedItem is string selectedItem &&
+                    TryParseMultiplier(selectedItem, out double val))
+                {
+                    return val;
+                }
+                return 1.0;
+            }
+        }
+
+        // Parses the multiplier label, which may be a plain number ("2", "0.5")
+        // or a fraction ("1/2", "1/4", "1/8"). double.TryParse rejects the
+        // fraction form, so handle it explicitly.
+        private static bool TryParseMultiplier(string item, out double value)
+        {
+            value = 0.0;
+            string trimmed = item.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                return false;
+            }
+
+            int slash = trimmed.IndexOf('/');
+            if (slash >= 0)
+            {
+                string left = trimmed[..slash].Trim();
+                string right = trimmed[(slash + 1)..].Trim();
+                if (double.TryParse(left, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double numerator) &&
+                    double.TryParse(right, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double denominator) &&
+                    denominator != 0.0)
+                {
+                    value = numerator / denominator;
+                    return true;
+                }
+                return false;
+            }
+
+            return double.TryParse(trimmed, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out value);
+        }
+        private double JumpMs => (double) this.numericUpDown_jump.Value;
 
         private void button_playlistAllOn_Click(object? sender, EventArgs e)
         {
@@ -171,8 +232,10 @@ namespace ModularAudience.Forms.Modules
         private readonly HashSet<Control> containerMonitored = [];
 
         private bool lastActionWasMultiplierChange = false;
-        private float lastJumpMs = 1;
-        private float lastJumpValue = 1;
+        private bool suppressMultiplierEvents;
+        private bool suppressJumpEvents;
+        private double lastJumpMs = 1;
+        private double lastJumpValue = 1;
         private Guid _lastJumpAudioId = Guid.Empty;
 
 
@@ -193,6 +256,7 @@ namespace ModularAudience.Forms.Modules
             this.playlistTargetsTimer.Start();
 
             this.numericUpDown_jump.Click += this.numericUpDown_jump_Click;
+            this.domainUpDown_multiplier.Click += this.domainUpDown_multiplier_Click;
 
             this.RefreshPlaylistTargets();
 
@@ -277,6 +341,10 @@ namespace ModularAudience.Forms.Modules
             }
             string state = audio.PlayerPlaying ? "▶" : audio.Paused ? "||" : "■";
             string shortId = audio.Id.ToString("N")[..6];
+            if (name.Length > 45)
+            {
+                name = name[..45] + "...";
+            }
             return $"{state} {name} · {BuildPlaylistRateText(audio)} {shortId}";
         }
 
@@ -286,7 +354,8 @@ namespace ModularAudience.Forms.Modules
             {
                 return;
             }
-            Guid? selectedAudioId = (this.checkedListBox_playlistTracks.SelectedItem as PlaylistTargetItem)?.Audio.Id;
+            Guid? selectedAudioId = SelectedTrackView?.OriginalAudio.Id
+                ?? (this.checkedListBox_playlistTracks.SelectedItem as PlaylistTargetItem)?.Audio.Id;
             int previousIndex = this.checkedListBox_playlistTracks.SelectedIndex;
             List<AudioObj> activePlaylistAudios = this.GetActiveTargetAudios();
             HashSet<Guid> activeIds = activePlaylistAudios.Select(audio => audio.Id).ToHashSet();
@@ -370,6 +439,20 @@ namespace ModularAudience.Forms.Modules
             {
                 this.UpdateLoopButtonsState();
             }
+        }
+
+        internal void RefreshPlaylistTargetsNow()
+        {
+            if (this.IsDisposed || this.Disposing)
+            {
+                return;
+            }
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke((Action) this.RefreshPlaylistTargetsNow);
+                return;
+            }
+            this.RefreshPlaylistTargets();
         }
 
 
@@ -490,6 +573,12 @@ namespace ModularAudience.Forms.Modules
             this.CurrentTrackView?.Focus();
             this.BringToFront();
 
+            // Sync selection back to WindowMain so TrackViews know which is selected
+            if (this.CurrentTrackView != null)
+            {
+                WindowMain.LastSelectedTrackView = this.CurrentTrackView;
+            }
+
             if (this.CurrentTrackView != null)
             {
                 int index = this.FindPlaylistTrackIndex(this.CurrentTrackView.OriginalAudio.Id);
@@ -515,6 +604,7 @@ namespace ModularAudience.Forms.Modules
             {
                 audio.UpdateLoopFraction(0, 0, 0, false, true);
                 audio.Metrics["loop.ui.fraction"] = 0f;
+                audio.Metrics.Remove("loop.ui.multiplier");
                 this.loopTargetStates.Remove(audio.Id);
                 RefreshTargetWaveform(audio);
                 return;
@@ -533,7 +623,7 @@ namespace ModularAudience.Forms.Modules
             try
             {
                 int channels = Math.Max(1, audio.Channels);
-                long framesPerBeat = Math.Max(1L, (long) (audio.SampleRate * 60f / GetAudioBpm(audio) * 2f) * this.Multiplier);
+                long framesPerBeat = Math.Max(1L, (long) Math.Round((double) audio.SampleRate * 60.0 / GetAudioBpm(audio) * 2.0 * this.Multiplier));
                 long totalFrames = Math.Max(0L, audio.Length / channels);
                 long totalSamples = totalFrames * channels;
 
@@ -705,6 +795,7 @@ namespace ModularAudience.Forms.Modules
                     audio.JumpToSamples(desiredSamples);
                 }
                 audio.Metrics["loop.ui.fraction"] = fraction;
+                audio.Metrics["loop.ui.multiplier"] = this.Multiplier;
 
                 // Track last applied loop and fraction for future relative scaling
                 state.StartSamples = baseStartSamples;
@@ -725,6 +816,7 @@ namespace ModularAudience.Forms.Modules
         {
             AudioObj? audio = this.OriginalAudio;
             this.UpdateTargetLabel();
+            this.SynchronizeMultiplierForAudio(audio);
             // Guard
             if (audio == null)
             {
@@ -740,19 +832,7 @@ namespace ModularAudience.Forms.Modules
             {
                 // GANZ WICHTIG: Die ID jetzt merken, damit die Bedingung beim nächsten Timer-Tick false ist!
                 this._lastJumpAudioId = audio.Id;
-
-                this.numericUpDown_jump.ValueChanged -= this.numericUpDown_jump_ValueChanged;
-
-                decimal defaultJumpMs = (decimal) (60000f / GetAudioBpm(audio) / 4);
-                // Optional, aber sicherheitshalber klammern, damit es bei wilden BPM nicht crasht:
-                defaultJumpMs = Math.Clamp(defaultJumpMs, this.numericUpDown_jump.Minimum, this.numericUpDown_jump.Maximum);
-
-                this.numericUpDown_jump.Value = defaultJumpMs;
-
-                this.lastJumpMs = (float) this.numericUpDown_jump.Value;
-                this.lastJumpValue = (float) this.numericUpDown_jump.Value; // <-- Das hier auch nachziehen!
-
-                this.numericUpDown_jump.ValueChanged += this.numericUpDown_jump_ValueChanged;
+                this.UpdateJumpDistanceForRate(audio);
             }
 
             // Enable all buttons
@@ -791,6 +871,22 @@ namespace ModularAudience.Forms.Modules
 
         private async void button_copy_Click(object sender, EventArgs e)
         {
+            // Check if Ctrl key is held down for "copy looping tracks only" mode
+            bool ctrlPressed = Control.ModifierKeys == Keys.Control;
+
+            if (ctrlPressed)
+            {
+                // Ctrl+Click: Copy only looping tracks without other playbacks, at their rates
+                await this.CopyLoopingTracksCtrlClickAsync();
+                return;
+            }
+
+            // Normal Click: Copy looping range from all playing tracks with rate modifications
+            await this.CopyLoopingTracksNormalClickAsync();
+            return;
+
+            // Original code (kept for reference, now unreachable due to early returns above):
+            /*
             AudioObj? audio = this.OriginalAudio;
             if (audio == null || !audio.LoopEnabled)
             {
@@ -871,6 +967,111 @@ namespace ModularAudience.Forms.Modules
                     };
                 }
                 this.CollectionView.AudioC.Audios.Add(copiedLoop);
+            }
+            */
+        }
+
+        private async Task CopyLoopingTracksNormalClickAsync()
+        {
+            bool ctrlPressed = Control.ModifierKeys == Keys.Control;
+
+            // Get all currently playing track views AND playlist tracks
+            var playingTrackViews = WindowMain.PlayingTrackViews.ToList();
+
+            // Also get playing playlist tracks
+            var playingPlaylistTracks = WindowMain.TrackViews
+                .Where(tv => tv.OriginalAudio != null && tv.OriginalAudio.PlayerPlaying)
+                .Select(tv => tv.OriginalAudio)
+                .DistinctBy(audio => audio.Id)
+                .ToList();
+
+            // Combine both sources, deduplicating by ID
+            var allPlayingAudios = playingTrackViews
+                .Select(tv => tv.OriginalAudio)
+                .Where(audio => audio != null)
+                .Concat(playingPlaylistTracks)
+                .DistinctBy(audio => audio.Id)
+                .ToList();
+
+            if (allPlayingAudios.Count == 0)
+            {
+                return;
+            }
+
+            if (ctrlPressed)
+            {
+                // Ctrl+Click: Copy only looping tracks without other playbacks, at their rates
+                // Collect all looping audio objects from all playing tracks
+                var loopingAudios = allPlayingAudios
+                    .Where(audio => audio != null && audio.LoopEnabled)
+                    .ToList();
+
+                if (loopingAudios.Count == 0)
+                {
+                    return;
+                }
+
+                // Merge all looping tracks into a single resampled sample
+                var merged = await this.MergeLoopedTracksAsync(loopingAudios);
+                if (merged != null)
+                {
+                    this.AddMergedLoopToCollectionView(merged, loopingAudios, "Looped Tracks");
+                }
+            }
+            else
+            {
+                // Normal Click: Copy looping range from all playing tracks with rate modifications
+                // Collect all audio objects from all playing tracks (both looping and non-looping)
+                var allPlayingAudiosFiltered = allPlayingAudios
+                    .Where(audio => audio != null)
+                    .ToList();
+
+                if (allPlayingAudiosFiltered.Count == 0)
+                {
+                    return;
+                }
+
+                // Merge all playing tracks into a single resampled sample
+                var merged = await this.MergeLoopedTracksAsync(allPlayingAudiosFiltered);
+                if (merged != null)
+                {
+                    this.AddMergedLoopToCollectionView(merged, allPlayingAudiosFiltered, "Looped Tracks");
+                }
+            }
+        }
+
+        private async Task CopyLoopingTracksCtrlClickAsync()
+        {
+            // Collect all looping audio objects from all playing tracks
+            var playingTrackViews = WindowMain.PlayingTrackViews.ToList();
+            var playingPlaylistTracks = WindowMain.TrackViews
+                .Where(tv => tv.OriginalAudio != null && tv.OriginalAudio.PlayerPlaying)
+                .Select(tv => tv.OriginalAudio)
+                .DistinctBy(a => a.Id)
+                .ToList();
+
+            var allPlayingAudios = playingTrackViews
+                .Select(tv => tv.OriginalAudio)
+                .Where(a => a != null)
+                .Concat(playingPlaylistTracks)
+                .DistinctBy(a => a.Id)
+                .ToList();
+
+            var loopingAudios = allPlayingAudios
+                .Where(a => a != null && a.LoopEnabled)
+                .ToList();
+
+            if (loopingAudios.Count == 0)
+            {
+                return;
+            }
+
+            // Merge all looping tracks into a single resampled sample
+            var merged = await this.MergeLoopedTracksAsync(loopingAudios);
+            if (merged != null)
+            {
+                string baseName = loopingAudios[0].OriginalName;
+                this.AddMergedLoopToCollectionView(merged, loopingAudios, $"Looped Track - {baseName}");
             }
         }
 
@@ -990,8 +1191,52 @@ namespace ModularAudience.Forms.Modules
             catch { }
         }
 
-        private void numericUpDown_multiplier_ValueChanged(object sender, EventArgs e)
+        private void domainUpDown_multiplier_SelectedItemChanged(object? sender, EventArgs e)
         {
+            if (this.suppressMultiplierEvents)
+            {
+                return;
+            }
+
+            // DomainUpDown selection changed - update multiplier
+            this.UpdateMultiplierFromSelection();
+
+            IReadOnlyList<AudioObj> targets = this.GetActionTargets(ModifierKeys.HasFlag(Keys.Control));
+            this.lastActionWasMultiplierChange = true;
+            try
+            {
+                foreach (AudioObj audio in targets.Where(audio => audio.LoopEnabled))
+                {
+                    this.SetLoopRange(audio, GetUiLoopFraction(audio), true);
+                }
+            }
+            finally
+            {
+                this.lastActionWasMultiplierChange = false;
+            }
+            this.UpdateLoopButtonsState();
+        }
+
+        private void UpdateMultiplierFromSelection()
+        {
+            if (this.domainUpDown_multiplier.SelectedItem is string selectedItem &&
+                double.TryParse(selectedItem, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double val))
+            {
+                // Value changed via selection - no snapping needed as values are discrete
+            }
+        }
+
+        private void domainUpDown_multiplier_Click(object? sender, EventArgs e)
+        {
+            if (ModifierKeys.HasFlag(Keys.Control))
+            {
+                return;
+            }
+
+            // DomainUpDown click - no special handling needed as items are discrete
+            this.UpdateMultiplierFromSelection();
+
             IReadOnlyList<AudioObj> targets = this.GetActionTargets(ModifierKeys.HasFlag(Keys.Control));
             this.lastActionWasMultiplierChange = true;
             try
@@ -1020,23 +1265,28 @@ namespace ModularAudience.Forms.Modules
 
         private void numericUpDown_jump_ValueChanged(object? sender, EventArgs e)
         {
+            if (this.suppressJumpEvents)
+            {
+                return;
+            }
+
             if (!ModifierKeys.HasFlag(Keys.Shift) && !ModifierKeys.HasFlag(Keys.Control))
             {
                 this.numericUpDown_jump.ValueChanged -= this.numericUpDown_jump_ValueChanged;
 
-                float currentValue = (float) this.numericUpDown_jump.Value;
+                double currentValue = (double) this.numericUpDown_jump.Value;
 
                 if (currentValue > this.lastJumpValue)
                 {
                     // Moving Up
                     this.lastJumpMs *= 2;
-                    this.lastJumpMs = (float) Math.Clamp((decimal) this.lastJumpMs, 1m, this.numericUpDown_jump.Maximum);
+                    this.lastJumpMs = Math.Clamp(this.lastJumpMs, (double) this.numericUpDown_jump.Minimum, (double) this.numericUpDown_jump.Maximum);
                     this.numericUpDown_jump.Value = (decimal) this.lastJumpMs;
                 }
                 else if (currentValue < this.lastJumpValue)
                 {
                     // Moving Down
-                    this.lastJumpMs = Math.Max(1, this.lastJumpMs / 2);
+                    this.lastJumpMs = Math.Max((double) this.numericUpDown_jump.Minimum, this.lastJumpMs / 2);
                     this.numericUpDown_jump.Value = (decimal) this.lastJumpMs;
                 }
                 else
@@ -1045,7 +1295,7 @@ namespace ModularAudience.Forms.Modules
                     this.lastJumpMs = currentValue;
                 }
 
-                this.lastJumpValue = (float) this.numericUpDown_jump.Value;
+                this.lastJumpValue = (double) this.numericUpDown_jump.Value;
                 this.lastJumpMs = this.lastJumpValue; // Ensure they stay in sync
 
                 this.numericUpDown_jump.ValueChanged += this.numericUpDown_jump_ValueChanged;
@@ -1060,10 +1310,40 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            int msPerBeat = (int) Math.Round(60000f / this.Bpm);
-            this.numericUpDown_jump.Value = msPerBeat;
-            this.lastJumpMs = msPerBeat;
-            this.lastJumpValue = msPerBeat;
+            double msPerBeat = 60000.0 / this.Bpm;
+            decimal clampedMsPerBeat = (decimal) Math.Clamp(msPerBeat, (double) this.numericUpDown_jump.Minimum, (double) this.numericUpDown_jump.Maximum);
+            this.numericUpDown_jump.Value = clampedMsPerBeat;
+            this.lastJumpMs = (double) this.numericUpDown_jump.Value;
+            this.lastJumpValue = this.lastJumpMs;
+        }
+
+        /// <summary>
+        /// Updates the jump distance to reflect the current rate of the audio.
+        /// When the rate changes, the jump distance in milliseconds must be adjusted
+        /// so that the same number of samples is jumped.
+        /// </summary>
+        private void UpdateJumpDistanceForRate(AudioObj audio)
+        {
+            double rateFactor = audio.SampleRateFactor;
+            if (Math.Abs(rateFactor - 1.0) < 0.0005) rateFactor = 1.0;
+
+            // Keep the default jump at one quarter of the effective beat.
+            // Suppress the ValueChanged handler because this is a programmatic
+            // update, not a user request to double or halve the jump.
+            double effectiveBpm = GetAudioBpm(audio) * audio.StretchFactor * rateFactor;
+            double defaultJumpMs = 60000.0 / effectiveBpm / 4;
+            decimal clampedDefault = (decimal) Math.Clamp(defaultJumpMs, (double) this.numericUpDown_jump.Minimum, (double) this.numericUpDown_jump.Maximum);
+            this.suppressJumpEvents = true;
+            try
+            {
+                this.numericUpDown_jump.Value = clampedDefault;
+                this.lastJumpMs = (double) this.numericUpDown_jump.Value;
+                this.lastJumpValue = this.lastJumpMs;
+            }
+            finally
+            {
+                this.suppressJumpEvents = false;
+            }
         }
 
 
@@ -1084,8 +1364,16 @@ namespace ModularAudience.Forms.Modules
             int channels = Math.Max(1, audio.Channels);
             long totalSamples = Math.Max(0L, audio.Length);
 
-            // JumpSamples ist in Frames gerechnet (SampleRate * ms / 1000)
-            long deltaFrames = (long) (audio.SampleRate * this.JumpMs / 1000f) * direction;
+            // SampleRateFactor is the rate currently applied by the live varispeed pipeline.
+            double rateFactor = audio.SampleRateFactor;
+            if (Math.Abs(rateFactor - 1.0) < 0.0005) rateFactor = 1.0;
+
+            // JumpSamples ist in Frames gerechnet (SampleRate * ms / 1000),
+            // skaliert mit dem Loop-Multiplier, damit die Sprungdistanz proportional
+            // zur Loop-Länge ist (multi < 1 -> kürzerer Sprung, multi > 1 -> weiter).
+            // JumpMs is audible playback time. Varispeed advances farther through
+            // the source during that time, so source frames scale with the rate.
+            long deltaFrames = (long) (audio.SampleRate * this.JumpMs / 1000f * this.Multiplier * rateFactor) * direction;
             long currentSamples = audio.Position * channels;
             long deltaSamples = deltaFrames * channels;
 
@@ -1144,6 +1432,571 @@ namespace ModularAudience.Forms.Modules
 
             // Nach Loop-Verschiebung erneut UI-Refresh anstoßen
             RefreshTargetWaveform(audio);
+        }
+
+        /// <summary>
+        /// Resamples the loop audio to default rate (0% / 1.0x) and resets rate factors.
+        /// The audio data is time-stretched/pitch-corrected to play at normal speed.
+        /// Supports mono-to-stereo duplication when needed.
+        /// </summary>
+        private async Task ResampleLoopToDefaultRateAsync(AudioObj loopedAudio, AudioObj originalAudio)
+        {
+            // Calculate the effective sample rate of the original audio with its rate factors
+            double effectiveSampleRate = originalAudio.SampleRate * originalAudio.SampleRateFactor * originalAudio.ManualSampleRateFactor;
+            int targetSampleRate = (int)originalAudio.SampleRate; // Use the original sample rate as target (default 1.0x)
+
+            // If the effective rate is already 1.0x, no resampling needed
+            if (Math.Abs(effectiveSampleRate - targetSampleRate) < 1.0)
+            {
+                return;
+            }
+
+            // Resample the audio data using NAudio's WdlResampler
+            // We need to read the loop range and resample it to the target rate
+            int channels = originalAudio.Channels;
+            long loopStart = loopedAudio.SelectionStart;
+            long loopEnd = loopedAudio.SelectionEnd;
+            long loopLengthSamples = loopEnd - loopStart;
+
+            if (loopLengthSamples <= 0) { return; }
+
+            // Resample the loop audio to default rate (bake in the rate factor)
+            long loopStartRead = loopedAudio.SelectionStart;
+            long loopEndRead = loopedAudio.SelectionEnd;
+
+            // Read the loop audio data directly from the original audio's Data array
+            if (originalAudio.Data == null || originalAudio.Data.Length == 0) { return; }
+
+            // Calculate the start and end indices in the Data array
+            long startSampleIndex = loopStartRead * channels;
+            long endSampleIndex = loopEndRead * channels;
+
+            // Ensure indices are within bounds
+            startSampleIndex = Math.Max(0, Math.Min(startSampleIndex, originalAudio.Data.Length));
+            endSampleIndex = Math.Max(startSampleIndex, Math.Min(endSampleIndex, originalAudio.Data.Length));
+
+            // Extract the loop range from the Data array
+            int sampleCount = (int)(endSampleIndex - startSampleIndex);
+            if (sampleCount <= 0) { return; }
+
+            float[] channelData = new float[sampleCount];
+            Array.Copy(originalAudio.Data, startSampleIndex, channelData, 0, sampleCount);
+
+            // Resample using NAudio's WdlResampler
+            var resampler = new NAudio.Dsp.WdlResampler();
+            resampler.SetMode(true, 0, true, sinc_size: 64, sinc_interpsize: 16);
+            resampler.SetFeedMode(false);
+
+            // SetRates(inputRate, outputRate): input is the effective rate of the source,
+            // output is the target (default) rate. This correctly time-stretches to 1.0x.
+            resampler.SetRates(effectiveSampleRate, targetSampleRate);
+
+            // Prepare output buffer: output length = inputFrames * (outputRate / inputRate)
+            int inputFrames = sampleCount / channels;
+            int outputFrames = (int)Math.Ceiling((double)inputFrames * targetSampleRate / effectiveSampleRate);
+            var outputBuffer = new float[outputFrames * channels];
+
+            // Perform the resampling
+            int needed = resampler.ResamplePrepare(outputFrames, channels, out Span<float> input);
+            for (int i = 0; i < Math.Min(needed * channels, channelData.Length); i++) { input[i] = channelData[i]; }
+            int supplied = channelData.Length / channels;
+            int written = resampler.ResampleOut(outputBuffer, supplied, outputFrames, channels);
+
+            // Update the looped audio with the resampled data
+            loopedAudio.Data = outputBuffer;
+            loopedAudio.SampleRate = targetSampleRate;
+            loopedAudio.Length = outputBuffer.Length;
+            loopedAudio.Duration = TimeSpan.FromSeconds((double)outputBuffer.Length / targetSampleRate / channels);
+
+            // Reset the rate factors since the rate is now baked into the audio data
+            loopedAudio.ManualSampleRateFactor = 1.0;
+            loopedAudio.SampleRateFactor = 1.0;
+        }
+
+        /// <summary>
+        /// Extracts a loop range from an audio object, resamples it to default rate (1.0x),
+        /// and handles mono-to-stereo duplication if needed.
+        /// Returns the resampled float[] data, or null if extraction failed.
+        /// </summary>
+        private async Task<float[]?> ResampleAndExtractAsync(AudioObj audio, long startSample, long endSample, int targetChannels)
+        {
+            if (audio.Data == null || audio.Data.Length == 0) return null;
+
+            int channels = audio.Channels;
+            long loopStart = startSample;
+            long loopEnd = endSample;
+
+            if (loopStart >= loopEnd) return null;
+
+            // Clamp to data bounds
+            long totalSamples = audio.Data.LongLength;
+            loopStart = Math.Max(0, Math.Min(loopStart, totalSamples));
+            loopEnd = Math.Max(loopStart, Math.Min(loopEnd, totalSamples));
+
+            long loopLengthSamples = loopEnd - loopStart;
+            if (loopLengthSamples <= 0) return null;
+
+            // The loop range is stored in original sample indices. When a track plays
+            // at a custom rate (e.g. +50%), the looped region sounds faster and higher
+            // in pitch, but the samples are still at the original sample rate.
+            // We must NOT time-stretch the extracted samples – that would change the
+            // speed and pitch away from what was actually heard during the loop.
+            // Simply extract the raw data at 1:1, handling mono-to-stereo conversion.
+            return ExtractWithChannelConversion(audio, loopStart, loopEnd, targetChannels);
+        }
+
+        /// <summary>
+        /// Extracts a sample range from audio data with mono-to-stereo channel conversion.
+        /// </summary>
+        private float[]? ExtractWithChannelConversion(AudioObj audio, long startSample, long endSample, int targetChannels)
+        {
+            int channels = audio.Channels;
+            long loopLengthSamples = endSample - startSample;
+            if (loopLengthSamples <= 0) return null;
+
+            if (targetChannels == channels)
+            {
+                // Same channels, just extract
+                long startIdx = startSample * channels;
+                long endIdx = endSample * channels;
+                int count = (int)(endIdx - startIdx);
+                float[] result = new float[count];
+                Array.Copy(audio.Data, startIdx, result, 0, count);
+                return result;
+            }
+
+            // Mono to stereo: duplicate each sample
+            if (channels == 1 && targetChannels == 2)
+            {
+                float[] result = new float[(int)loopLengthSamples * 2];
+                for (int i = 0; i < (int)loopLengthSamples; i++)
+                {
+                    result[i * 2] = audio.Data[(int)startSample + i];
+                    result[i * 2 + 1] = audio.Data[(int)startSample + i];
+                }
+                return result;
+            }
+
+            // Stereo to mono: average channels
+            if (channels == 2 && targetChannels == 1)
+            {
+                float[] result = new float[(int)loopLengthSamples];
+                for (int i = 0; i < (int)loopLengthSamples; i++)
+                {
+                    result[i] = (audio.Data[(int)startSample * 2 + i * 2] + audio.Data[(int)startSample * 2 + i * 2 + 1]) * 0.5f;
+                }
+                return result;
+            }
+
+            // Fallback: just extract with original channels
+            long startIdx2 = startSample * channels;
+            long endIdx2 = endSample * channels;
+            int count2 = (int)(endIdx2 - startIdx2);
+            float[] result2 = new float[count2];
+            Array.Copy(audio.Data, startIdx2, result2, 0, count2);
+            return result2;
+        }
+
+        /// <summary>
+        /// Converts channel count of audio data (e.g., mono to stereo or vice versa).
+        /// </summary>
+        private float[] ConvertChannels(float[] data, int fromChannels, int toChannels)
+        {
+            int frames = data.Length / fromChannels;
+            if (toChannels == fromChannels) return data;
+
+            if (fromChannels == 1 && toChannels == 2)
+            {
+                float[] result = new float[frames * 2];
+                for (int i = 0; i < frames; i++)
+                {
+                    result[i * 2] = data[i];
+                    result[i * 2 + 1] = data[i];
+                }
+                return result;
+            }
+
+            if (fromChannels == 2 && toChannels == 1)
+            {
+                float[] result = new float[frames];
+                for (int i = 0; i < frames; i++)
+                {
+                    result[i] = (data[i * 2] + data[i * 2 + 1]) * 0.5f;
+                }
+                return result;
+            }
+
+            return data;
+        }
+
+        /// <summary>
+        /// Computes the range of the largest looping track across multiple audio objects.
+        /// Returns (start, end) or null if no valid loop ranges found.
+        /// </summary>
+        private (long start, long end)? ComputeUnionRange(IReadOnlyList<AudioObj> audios)
+        {
+            (long start, long end)? largest = null;
+
+            foreach (var audio in audios)
+            {
+                if (!audio.LoopEnabled)
+                {
+                    continue;
+                }
+
+                long startSamples = audio.LoopStartSamples;
+                long endSamples = audio.LoopEndSamples;
+                if (endSamples <= startSamples || endSamples <= 0)
+                {
+                    LoopTargetState state = this.GetLoopTargetState(audio);
+                    if (state.StartSamples >= 0 && state.EndSamples > state.StartSamples)
+                    {
+                        startSamples = state.StartSamples;
+                        endSamples = state.EndSamples;
+                    }
+                }
+
+                if (startSamples < 0 || endSamples <= startSamples)
+                {
+                    continue;
+                }
+
+                long length = endSamples - startSamples;
+                if (largest == null || length > largest.Value.end - largest.Value.start)
+                {
+                    largest = (startSamples, endSamples);
+                }
+            }
+
+            return largest;
+        }
+
+        /// <summary>
+        /// Merges multiple audio objects into a single sample.
+        /// Each track is extracted from its current loop position (with wrap-around),
+        /// resampled to the base sample rate if a custom rate is active,
+        /// then all are additively merged with their respective volumes.
+        /// </summary>
+        private async Task<AudioObj?> MergeLoopedTracksAsync(IReadOnlyList<AudioObj> audios)
+        {
+            if (audios.Count == 0) return null;
+
+            // Determine target channel count: stereo if any track is stereo, else mono
+            int targetChannels = audios.Any(a => a.Channels == 2) ? 2 : 1;
+
+            // The longest active loop defines the capture duration. Every playing
+            // track contributes from its exact position at the click time.
+            var trackInfos = new List<(
+                AudioObj audio,
+                long captureStartFrame,
+                long loopStartFrame,
+                long loopEndFrame,
+                double rateFactor,
+                bool wrapsLoop)>();
+            double maxLoopDurationSeconds = 0.0;
+
+            foreach (var audio in audios)
+            {
+                if (audio.Data == null || audio.Data.Length == 0)
+                {
+                    continue;
+                }
+
+                int channels = Math.Max(1, audio.Channels);
+                long totalFrames = Math.Max(0L, audio.Data.LongLength / channels);
+                if (totalFrames <= 0 || audio.SampleRate <= 0)
+                {
+                    continue;
+                }
+
+                // SampleRateFactor is the rate currently applied by the live
+                // varispeed pipeline. Manual and sync factors are already folded into it.
+                double rateFactor = Math.Clamp(audio.SampleRateFactor, 0.01, 10.0);
+                if (Math.Abs(rateFactor - 1.0) < 0.0005) rateFactor = 1.0;
+
+                long captureStartFrame = Math.Clamp(audio.Position, 0L, totalFrames - 1);
+                long loopStartFrame = -1;
+                long loopEndFrame = -1;
+                bool wrapsLoop = false;
+                if (audio.LoopEnabled)
+                {
+                    long startSamples = audio.LoopStartSamples;
+                    long endSamples = audio.LoopEndSamples;
+                    if (endSamples <= startSamples || endSamples <= 0)
+                    {
+                        LoopTargetState state = this.GetLoopTargetState(audio);
+                        startSamples = state.StartSamples;
+                        endSamples = state.EndSamples;
+                    }
+
+                    loopStartFrame = startSamples / channels;
+                    loopEndFrame = endSamples / channels;
+                    wrapsLoop = loopStartFrame >= 0 && loopEndFrame > loopStartFrame && loopEndFrame <= totalFrames;
+                    if (wrapsLoop)
+                    {
+                        long loopLengthFrames = loopEndFrame - loopStartFrame;
+                        double loopDurationSeconds = loopLengthFrames / (double)(audio.SampleRate * rateFactor);
+                        maxLoopDurationSeconds = Math.Max(maxLoopDurationSeconds, loopDurationSeconds);
+                        captureStartFrame = Math.Clamp(captureStartFrame, loopStartFrame, loopEndFrame - 1);
+                    }
+                }
+
+                trackInfos.Add((audio, captureStartFrame, loopStartFrame, loopEndFrame, rateFactor, wrapsLoop));
+            }
+
+            if (trackInfos.Count == 0) return null;
+
+            bool captureBeforeClick = maxLoopDurationSeconds <= 0.0;
+            if (captureBeforeClick)
+            {
+                AudioObj tempoAudio = this.OriginalAudio ?? trackInfos[0].audio;
+                double effectiveBpm = GetAudioBpm(tempoAudio)
+                    * Math.Max(0.01, tempoAudio.StretchFactor)
+                    * Math.Clamp(tempoAudio.SampleRateFactor, 0.01, 10.0);
+                if (effectiveBpm > 0.0)
+                {
+                    maxLoopDurationSeconds = 4.0 * Math.Max(0.01, this.Multiplier) * 60.0 / effectiveBpm;
+                }
+            }
+
+            if (maxLoopDurationSeconds <= 0.0) return null;
+
+            int outputSampleRate = Math.Max(1, trackInfos[0].audio.SampleRate);
+            long maxEffectiveLengthFrames = Math.Max(1L,
+                (long)Math.Ceiling(maxLoopDurationSeconds * outputSampleRate));
+
+            // Capture each track from its click-time position into the same window.
+            var extractedTasks = trackInfos.Select(async info =>
+            {
+                return await this.ExtractLoopWithWrapAsync(info.audio, info.captureStartFrame,
+                    info.loopStartFrame, info.loopEndFrame, info.rateFactor,
+                    info.wrapsLoop, captureBeforeClick, maxEffectiveLengthFrames,
+                    outputSampleRate, targetChannels);
+            });
+
+            var extractedData = await Task.WhenAll(extractedTasks);
+
+            // Find the longest extracted data to determine output length
+            int maxLen = extractedData.Max(d => d?.Length ?? 0);
+            if (maxLen == 0) return null;
+
+            // Add all extracted samples together (additive merge),
+            // scaling each track by its playback volume (Volume is 0-100, 100 = full).
+            float[] merged = new float[maxLen];
+            for (int i = 0; i < maxLen; i++)
+            {
+                float sum = 0f;
+                for (int t = 0; t < extractedData.Length; t++)
+                {
+                    var data = extractedData[t];
+                    if (data != null && i < data.Length)
+                    {
+                        float volumeScale = trackInfos[t].audio.Volume / 100f;
+                        sum += data[i] * volumeScale;
+                    }
+                }
+                merged[i] = sum;
+            }
+
+            // Compute the effective BPM of the merged loop.
+            // Bpm already reflects the stretch (TimeStretcher divides Bpm by the factor),
+            // so only the live rate factors need to be applied on top.
+            // Small differences are averaged. Integer-multiple tempos such as
+            // 105/210 are also compatible, so keep the fastest compatible BPM.
+            float mergedBpm = 0f;
+            var effectiveBpms = trackInfos
+                .Select(info => (double)GetAudioBpm(info.audio) * info.audio.StretchFactor * info.rateFactor)
+                .Where(b => b > 0)
+                .ToList();
+            if (effectiveBpms.Count > 0)
+            {
+                double minBpm = effectiveBpms.Min();
+                double maxBpm = effectiveBpms.Max();
+                if (maxBpm - minBpm <= 0.33)
+                {
+                    mergedBpm = (float)effectiveBpms.Average();
+                }
+                else if (AreCompatibleMultipleBpms(effectiveBpms))
+                {
+                    mergedBpm = (float)maxBpm;
+                }
+            }
+
+            // Create the merged AudioObj
+            var firstAudio = trackInfos[0].audio;
+            var mergedAudio = new AudioObj
+            {
+                Id = Guid.NewGuid(),
+                Name = string.Empty,
+                FilePath = string.Empty,
+                Data = merged,
+                SampleRate = firstAudio.SampleRate,
+                SampleRateFactor = 1.0,
+                ManualSampleRateFactor = 1.0,
+                SyncNudgeSampleRateFactor = 1.0,
+                Channels = targetChannels,
+                BitDepth = firstAudio.BitDepth,
+                Length = merged.Length,
+                Duration = TimeSpan.FromSeconds((double)merged.Length / firstAudio.SampleRate / targetChannels),
+                Bpm = mergedBpm,
+                Timing = firstAudio.Timing,
+                Volume = firstAudio.Volume,
+                SelectionStart = 0,
+                SelectionEnd = merged.Length
+            };
+
+            // Set name
+            string baseName = firstAudio.Name;
+            int extraCount = trackInfos.Count - 1;
+            mergedAudio.Rename($"{baseName} +{extraCount} Merged");
+
+            return mergedAudio;
+        }
+
+        private static bool AreCompatibleMultipleBpms(IReadOnlyList<double> bpms)
+        {
+            if (bpms.Count < 2)
+            {
+                return false;
+            }
+
+            double baseBpm = bpms.Min();
+            foreach (double bpm in bpms)
+            {
+                double multiple = Math.Round(bpm / baseBpm);
+                if (multiple < 1.0 || Math.Abs(bpm - baseBpm * multiple) > 0.33)
+                {
+                    return false;
+                }
+            }
+
+            return bpms.Max() > baseBpm;
+        }
+
+        /// <summary>
+        /// Extracts the loop segment from the loop start and resamples to the
+        /// effective sample rate if a custom rate is active.
+        /// Resampling (NOT time-stretching) changes the sample rate, which shifts
+        /// the pitch up/down while keeping the same duration – exactly like a
+        /// tape-speed change during live playback at the custom rate.
+        /// The output length is exactly <paramref name="targetLength"/> samples.
+        /// </summary>
+        private async Task<float[]?> ExtractLoopWithWrapAsync(
+            AudioObj audio,
+            long captureStartFrame,
+            long loopStartFrame,
+            long loopEndFrame,
+            double rateFactor,
+            bool wrapsLoop,
+            bool captureBeforeClick,
+            long targetLengthFrames,
+            int outputSampleRate,
+            int targetChannels)
+        {
+            if (audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
+            {
+                return null;
+            }
+
+            int channels = Math.Max(1, audio.Channels);
+            int outputFrames = checked((int)Math.Max(1L, targetLengthFrames));
+            rateFactor = Math.Clamp(rateFactor, 0.01, 10.0);
+
+            // If no custom rate, return as-is
+            if (Math.Abs(rateFactor - 1.0) < 0.0005 && audio.SampleRate == outputSampleRate)
+            {
+                float[] source = CaptureSourceFrames(audio, captureStartFrame, loopStartFrame,
+                    loopEndFrame, wrapsLoop, captureBeforeClick, outputFrames);
+                if (targetChannels != channels)
+                {
+                    return ConvertChannels(source, channels, targetChannels);
+                }
+                return source;
+            }
+
+            // Resample from the effective input rate back to the file sample rate.
+            // This changes duration and pitch together, just like live varispeed
+            // playback, rather than applying a pitch-preserving time stretch.
+            double inputRate = audio.SampleRate * rateFactor;
+            var resampler = new NAudio.Dsp.WdlResampler();
+            resampler.SetMode(true, 0, true, sinc_size: 64, sinc_interpsize: 16);
+            resampler.SetFeedMode(false);
+            resampler.SetRates(inputRate, outputSampleRate);
+
+            int needed = resampler.ResamplePrepare(outputFrames, channels, out Span<float> input);
+            float[] sourceData = CaptureSourceFrames(audio, captureStartFrame, loopStartFrame,
+                loopEndFrame, wrapsLoop, captureBeforeClick, needed);
+            input.Clear();
+            sourceData.AsSpan().CopyTo(input);
+
+            var outputBuffer = new float[checked(outputFrames * channels)];
+            resampler.ResampleOut(outputBuffer, needed, outputFrames, channels);
+
+            // Handle mono-to-stereo conversion if needed
+            if (targetChannels != channels)
+            {
+                return ConvertChannels(outputBuffer, channels, targetChannels);
+            }
+
+            return outputBuffer;
+        }
+
+        private static float[] CaptureSourceFrames(
+            AudioObj audio,
+            long captureStartFrame,
+            long loopStartFrame,
+            long loopEndFrame,
+            bool wrapsLoop,
+            bool captureBeforeClick,
+            int frameCount)
+        {
+            int channels = Math.Max(1, audio.Channels);
+            long totalFrames = audio.Data.LongLength / channels;
+            float[] result = new float[checked(frameCount * channels)];
+            long loopLength = loopEndFrame - loopStartFrame;
+
+            for (int frame = 0; frame < frameCount; frame++)
+            {
+                long sourceFrame = captureBeforeClick
+                    ? captureStartFrame - frameCount + frame
+                    : captureStartFrame + frame;
+                if (wrapsLoop && loopLength > 0)
+                {
+                    long relative = (sourceFrame - loopStartFrame) % loopLength;
+                    if (relative < 0) relative += loopLength;
+                    sourceFrame = loopStartFrame + relative;
+                }
+
+                if (sourceFrame < 0 || sourceFrame >= totalFrames) continue;
+
+                int sourceOffset = checked((int)(sourceFrame * channels));
+                Array.Copy(audio.Data, sourceOffset, result, frame * channels, channels);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Adds a merged loop to the CollectionView (creates if null).
+        /// </summary>
+        private void AddMergedLoopToCollectionView(AudioObj merged, IReadOnlyList<AudioObj> audios, string defaultName)
+        {
+            if (this.CollectionView == null)
+            {
+                this.CollectionView = new([]);
+                this.CollectionView.Rename(defaultName + " - " + DateTime.UtcNow.ToString("HH:mm:ss"));
+                this.CollectionView.FormClosing += (s, e) =>
+                {
+                    this.CollectionView = null;
+                };
+            }
+
+            this.CollectionView.AudioC.Audios.Add(merged);
+
+            if (!this.CollectionView.Visible)
+            {
+                this.CollectionView.ShowDialog();
+            }
         }
 
         private void Fill_ComboBox_Drops()

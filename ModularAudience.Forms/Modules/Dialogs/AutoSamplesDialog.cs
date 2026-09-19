@@ -1,6 +1,7 @@
 ﻿using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio;
+using ModularAudience.Forms.Helpers;
 using System.ComponentModel;
 using System.Threading.Tasks;
 
@@ -193,7 +194,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             catch (Exception ex)
             {
                 this.label_status.Text = "Processing failed";
-                MessageBox.Show(this, $"Auto sample cutting failed:{Environment.NewLine}{ex.Message}", "Auto Samples", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Auto Samples Cutting Failed", ex);
             }
             finally
             {

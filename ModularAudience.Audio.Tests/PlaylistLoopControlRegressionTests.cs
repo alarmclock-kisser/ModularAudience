@@ -129,6 +129,68 @@ namespace ModularAudience.Audio.Tests
         }
 
         [STATestMethod]
+        public void MultiplierSelectionFollowsTheFocusedPlaylistTrack()
+        {
+            using AudioTestScope scope = new();
+            AudioObj[] audios = CreateTracks(scope);
+            audios[0].UpdateLoopFraction(0, audios[0].Length, audios[0].Length, true, false);
+            audios[0].Metrics["loop.ui.multiplier"] = 2.0;
+            audios[1].UpdateLoopFraction(0, audios[1].Length, audios[1].Length, true, false);
+            audios[1].Metrics["loop.ui.multiplier"] = 0.5;
+
+            WithPlaylist(audios[..2], (dialog, list) =>
+            {
+                MethodInfo update = typeof(LoopControl).GetMethod(
+                    "UpdateLoopButtonsState",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                DomainUpDown multiplier = Field<DomainUpDown>(dialog, "domainUpDown_multiplier");
+
+                Click(list, TextPoint(list, 0));
+                update.Invoke(dialog, null);
+                Assert.AreEqual("2", multiplier.SelectedItem);
+
+                Click(list, TextPoint(list, 1));
+                update.Invoke(dialog, null);
+                Assert.AreEqual("1/2", multiplier.SelectedItem);
+            });
+        }
+
+        [STATestMethod]
+        public void NoLoopMultiplierRemainsSelectedAndScalesCaptureLength()
+        {
+            using AudioTestScope scope = new();
+            AudioObj focused = scope.Create(Enumerable.Range(0, 40).Select(value => (float)value).ToArray(), 4);
+            AudioObj other = scope.Create(Enumerable.Range(100, 40).Select(value => (float)value).ToArray(), 4);
+            focused.Volume = 100f;
+            other.Volume = 100f;
+            focused.Bpm = 120f;
+            other.Bpm = 120f;
+            focused.SetPosition(30);
+            other.SetPosition(30);
+
+            WithPlaylist([focused, other], (dialog, list) =>
+            {
+                Click(list, TextPoint(list, 0));
+                DomainUpDown multiplier = Field<DomainUpDown>(dialog, "domainUpDown_multiplier");
+                multiplier.SelectedItem = "2";
+
+                typeof(LoopControl).GetMethod(
+                    "UpdateLoopButtonsState",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(dialog, null);
+                Assert.AreEqual("2", multiplier.SelectedItem);
+
+                MethodInfo merge = typeof(LoopControl).GetMethod(
+                    "MergeLoopedTracksAsync",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                Task<AudioObj?> task = (Task<AudioObj?>) merge.Invoke(dialog, [new[] { focused, other }])!;
+                AudioObj merged = task.GetAwaiter().GetResult()!;
+
+                Assert.AreEqual(16, merged.Data.Length,
+                    "Multi 2 must capture eight beats, while Multi 1 captures four beats.");
+            });
+        }
+
+        [STATestMethod]
         public void LoopBoundsStayPerTrackAcrossDifferentSampleRatesChannelsAndFocusChanges()
         {
             using AudioTestScope scope = new();
@@ -153,6 +215,140 @@ namespace ModularAudience.Audio.Tests
                 ClickLoop(dialog, 0.25f, control: false);
                 AssertLoopBounds(stereo, 240000, 272000);
                 AssertLoopBounds(mono, 40000, 48000);
+            });
+        }
+
+        [STATestMethod]
+        public void MergeCaptureUsesCurrentLoopPhaseAndIncludesFreeRunningTrack()
+        {
+            using AudioTestScope scope = new();
+            AudioObj loop = scope.Create([0f, 1f, 2f, 3f, 4f, 5f, 6f, 7f]);
+            AudioObj free = scope.Create([10f, 10f, 10f, 10f, 10f, 10f, 10f, 10f]);
+            loop.Volume = 100f;
+            free.Volume = 100f;
+            loop.UpdateLoopFraction(2, 6, 4, true, false);
+            loop.SetPosition(4);
+            free.SetPosition(1);
+
+            WithPlaylist([loop, free], (dialog, _) =>
+            {
+                MethodInfo merge = typeof(LoopControl).GetMethod(
+                    "MergeLoopedTracksAsync",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                Task<AudioObj?> task = (Task<AudioObj?>) merge.Invoke(dialog, [new[] { loop, free }])!;
+                AudioObj merged = task.GetAwaiter().GetResult()!;
+
+                CollectionAssert.AreEqual(
+                    new[] { 14f, 15f, 12f, 13f },
+                    merged.Data,
+                    "Capture must start at the current loop phase and include the free-running track.");
+            });
+        }
+
+        [STATestMethod]
+        public void MergeCaptureWithoutLoopUsesLastFourFocusedBeats()
+        {
+            using AudioTestScope scope = new();
+            AudioObj focused = scope.Create(Enumerable.Range(0, 20).Select(value => (float)value).ToArray(), 4);
+            AudioObj other = scope.Create(Enumerable.Range(100, 20).Select(value => (float)value).ToArray(), 4);
+            focused.Volume = 100f;
+            other.Volume = 100f;
+            focused.Bpm = 120f;
+            other.Bpm = 120f;
+            focused.SetPosition(12);
+            other.SetPosition(12);
+
+            WithPlaylist([focused, other], (dialog, list) =>
+            {
+                Click(list, TextPoint(list, 0));
+                MethodInfo merge = typeof(LoopControl).GetMethod(
+                    "MergeLoopedTracksAsync",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                Task<AudioObj?> task = (Task<AudioObj?>) merge.Invoke(dialog, [new[] { focused, other }])!;
+                AudioObj merged = task.GetAwaiter().GetResult()!;
+
+                CollectionAssert.AreEqual(
+                    new[] { 108f, 110f, 112f, 114f, 116f, 118f, 120f, 122f },
+                    merged.Data,
+                    "A no-loop copy must contain the four beats immediately before the click.");
+            });
+        }
+
+        [STATestMethod]
+        public void MergeCaptureUsesHighestCompatibleMultipleBpm()
+        {
+            using AudioTestScope scope = new();
+            AudioObj halfTime = scope.Create(new float[8]);
+            AudioObj doubleTime = scope.Create(new float[8]);
+            halfTime.Volume = 100f;
+            doubleTime.Volume = 100f;
+            halfTime.Bpm = 105f;
+            doubleTime.Bpm = 210f;
+            halfTime.UpdateLoopFraction(0, 8, 8, true, false);
+            doubleTime.UpdateLoopFraction(0, 8, 8, true, false);
+
+            WithPlaylist([halfTime, doubleTime], (dialog, _) =>
+            {
+                MethodInfo merge = typeof(LoopControl).GetMethod(
+                    "MergeLoopedTracksAsync",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                Task<AudioObj?> task = (Task<AudioObj?>) merge.Invoke(dialog, [new[] { halfTime, doubleTime }])!;
+                AudioObj merged = task.GetAwaiter().GetResult()!;
+
+                Assert.AreEqual(210f, merged.Bpm, 0.001f);
+            });
+        }
+
+        [STATestMethod]
+        public void JumpUsesCurrentVarispeedRateForAudibleMilliseconds()
+        {
+            using AudioTestScope scope = new();
+            AudioObj audio = scope.Create(new float[160000]);
+            audio.SampleRateFactor = 1.5;
+
+            WithPlaylist([audio], (dialog, _) =>
+            {
+                typeof(LoopControl).GetField("lastJumpMs", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .SetValue(dialog, 100d);
+                typeof(LoopControl).GetField("lastJumpValue", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .SetValue(dialog, 100d);
+                Field<NumericUpDown>(dialog, "numericUpDown_jump").Value = 100;
+                audio.SetPosition(1000);
+
+                MethodInfo jump = typeof(LoopControl).GetMethod(
+                    "JumpByMilliseconds",
+                    BindingFlags.Instance | BindingFlags.NonPublic,
+                    binder: null,
+                    types: [typeof(AudioObj), typeof(int)],
+                    modifiers: null)!;
+                jump.Invoke(dialog, [audio, 1]);
+
+                Assert.AreEqual(3400, audio.Position,
+                    "Jump milliseconds must advance source frames by the current varispeed rate.");
+            });
+        }
+
+        [STATestMethod]
+        public void RateUpdatesJumpDistanceContinuouslyWithoutDiscreteHalving()
+        {
+            using AudioTestScope scope = new();
+            AudioObj audio = scope.Create(new float[160000]);
+            audio.Bpm = 120;
+
+            WithPlaylist([audio], (dialog, _) =>
+            {
+                MethodInfo update = typeof(LoopControl).GetMethod(
+                    "UpdateJumpDistanceForRate",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+                audio.SampleRateFactor = 125.0 / 114.5;
+                update.Invoke(dialog, [audio]);
+                Assert.AreEqual(114.5, (double)Field<NumericUpDown>(dialog, "numericUpDown_jump").Value, 0.01);
+
+                audio.SampleRateFactor = 2.0;
+                update.Invoke(dialog, [audio]);
+                Assert.AreEqual(62.5, (double)Field<NumericUpDown>(dialog, "numericUpDown_jump").Value, 0.01,
+                    "A programmatic rate update must not be halved again by ValueChanged.");
             });
         }
 
@@ -234,6 +430,30 @@ namespace ModularAudience.Audio.Tests
         }
 
         [STATestMethod]
+        public void RateDragResynchronizesAfterTrackViewFineAdjustment()
+        {
+            using AudioTestScope scope = new();
+            AudioObj audio = scope.Create(new float[64000]);
+
+            WithPlaylist([audio], (dialog, _) =>
+            {
+                Dictionary<Guid, double> offsets = Field<Dictionary<Guid, double>>(dialog, "_audioRateDragOffset");
+                offsets[audio.Id] = 500.0 * Math.Log2(1.25);
+                audio.ManualSampleRateFactor = 1.5f;
+
+                MethodInfo apply = typeof(LoopControl).GetMethod(
+                    "ApplyPlaylistRateToAudioAsync",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                Task task = (Task) apply.Invoke(dialog, [audio, 10, false])!;
+                task.GetAwaiter().GetResult();
+
+                double expected = Math.Pow(2.0, (500.0 * Math.Log2(1.5) + 10.0) / 500.0);
+                Assert.AreEqual(expected, audio.ManualSampleRateFactor, 0.000001,
+                    "LoopControl must continue from the TrackView-adjusted rate, not its old drag offset.");
+            });
+        }
+
+        [STATestMethod]
         public void ControlRateGestureTargetsEveryCheckedOverlapTrackNotFocusedRow()
         {
             using AudioTestScope scope = new();
@@ -256,6 +476,83 @@ namespace ModularAudience.Audio.Tests
                     "Ctrl rate dragging must not include the focused unchecked row.");
                 Assert.IsTrue(audios[2].ManualSampleRateFactor > 1.0f);
             });
+        }
+
+        [STATestMethod]
+        public void ControlRateClickResetsOnlyClickedTrack()
+        {
+            using AudioTestScope scope = new();
+            AudioObj[] audios = CreateTracks(scope);
+            audios[0].ManualSampleRateFactor = 1.25f;
+            audios[1].ManualSampleRateFactor = 0.8f;
+            audios[2].ManualSampleRateFactor = 1.5f;
+
+            WithPlaylist(audios, (_, list) =>
+            {
+                Point target = TextPoint(list, 1);
+                WithControlKey(true, () =>
+                {
+                    Mouse(list, MouseDown, target);
+                    Mouse(list, MouseUp, target);
+                    PumpMessages(TimeSpan.FromMilliseconds(200));
+                });
+
+                Assert.AreEqual(1.25, audios[0].ManualSampleRateFactor, 0.000001);
+                Assert.AreEqual(1.0, audios[1].ManualSampleRateFactor, 0.000001);
+                Assert.AreEqual(1.5, audios[2].ManualSampleRateFactor, 0.000001);
+            });
+        }
+
+        [STATestMethod]
+        public void ControlRightClickRateResetResetsEveryListedTrack()
+        {
+            using AudioTestScope scope = new();
+            AudioObj[] audios = CreateTracks(scope);
+            audios[0].ManualSampleRateFactor = 1.25f;
+            audios[1].ManualSampleRateFactor = 0.8f;
+            audios[2].ManualSampleRateFactor = 1.5f;
+
+            WithPlaylist(audios, (dialog, list) =>
+            {
+                Point target = TextPoint(list, 1);
+                MethodInfo rightClick = typeof(LoopControl).GetMethod(
+                    "checkedListBox_playlistTracks_MouseDown",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                MethodInfo opening = typeof(LoopControl).GetMethod(
+                    "contextMenuStrip_playlistItem_Opening",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+                WithControlKey(true, () =>
+                {
+                    rightClick.Invoke(dialog, [list, new MouseEventArgs(MouseButtons.Right, 1, target.X, target.Y, 0)]);
+                    var cancel = new System.ComponentModel.CancelEventArgs();
+                    opening.Invoke(dialog, [null, cancel]);
+                    Assert.IsTrue(cancel.Cancel, "Ctrl-right-click must suppress the context menu.");
+                    PumpMessages(TimeSpan.FromMilliseconds(200));
+                });
+
+                foreach (AudioObj audio in audios)
+                {
+                    Assert.AreEqual(1.0, audio.ManualSampleRateFactor, 0.000001,
+                        "Ctrl-right-click reset must affect every listed track.");
+                }
+            });
+        }
+
+        [STATestMethod]
+        public void StopResetsManualRateButPauseStateDoesNotResetIt()
+        {
+            using AudioTestScope scope = new();
+            AudioObj audio = scope.Create(new float[64000]);
+            audio.ManualSampleRateFactor = 1.5f;
+            audio.SampleRateFactor = 1.5f;
+
+            audio.PauseAsync().GetAwaiter().GetResult();
+            Assert.AreEqual(1.5, audio.ManualSampleRateFactor, 0.000001);
+
+            audio.StopAsync().GetAwaiter().GetResult();
+            Assert.AreEqual(1.0, audio.ManualSampleRateFactor, 0.000001);
+            Assert.AreEqual(1.0, audio.SampleRateFactor, 0.000001);
         }
 
         private static void WithPlaylist(AudioObj[] audios, Action<LoopControl, CheckedListBox> verify)

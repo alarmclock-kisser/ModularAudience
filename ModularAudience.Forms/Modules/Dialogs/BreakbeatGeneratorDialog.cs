@@ -1,4 +1,5 @@
 ﻿using ModularAudience.Audio;
+using ModularAudience.Forms.Helpers;
 using ModularAudience.Generators;
 using NAudio.SoundFont;
 using System;
@@ -1959,7 +1960,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     await this.InvokeOnUiAsync(() =>
                     {
-                        MessageBox.Show(this, ex.Message, "Breakbeat Bot", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Breakbeat Bot", ex);
                     });
                 }
             }

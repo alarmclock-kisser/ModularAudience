@@ -48,6 +48,8 @@ namespace ModularAudience.Audio
         // Playback & navigation state
         public bool Playing { get; protected set; }
         public bool Paused { get; protected set; }
+        public static event Action? GlobalPlayingChanged;
+        public event Action? PlayingChanged;
         public int ChunkSize { get; set; }
         public int OverlapSize { get; set; }
         public double StretchFactor { get; set; } = 1.0;
@@ -70,6 +72,8 @@ namespace ModularAudience.Audio
         private long playbackLoopLengthBytes => Math.Max(0, this.playbackLoopEndBytes - this.playbackLoopStartBytes);
         private long loopFractionStartSamples;
         private long loopFractionEndSamples;
+        public long LoopStartSamples => this.loopFractionStartSamples;
+        public long LoopEndSamples => this.loopFractionEndSamples;
         private long positionOriginBytes;
         private bool resumeFromSetPosition;
         private long pausedBaselineBytes;
@@ -174,6 +178,9 @@ namespace ModularAudience.Audio
                 FilePath = this.FilePath,
                 Data = (float[]) this.Data.Clone(),
                 SampleRate = this.SampleRate,
+                SampleRateFactor = this.SampleRateFactor,
+                ManualSampleRateFactor = this.ManualSampleRateFactor,
+                SyncNudgeSampleRateFactor = this.SyncNudgeSampleRateFactor,
                 Channels = this.Channels,
                 BitDepth = this.BitDepth,
                 Length = this.Length,
@@ -416,6 +423,7 @@ namespace ModularAudience.Audio
             }
 
             // Reset playback state
+            if (this.Playing) GlobalPlayingChanged?.Invoke();
             this.Playing = false;
             this.Paused = false;
             this.positionOriginBytes = 0;

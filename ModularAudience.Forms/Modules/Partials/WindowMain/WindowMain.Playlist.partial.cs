@@ -30,6 +30,10 @@ namespace ModularAudience.Forms
         // Preprocessing status flag
         private volatile bool _isPreprocessingTrack;
 
+        // True once the user has actually interacted with the playlist (enqueue, play, pause, etc.).
+        // Until then the label shows the build timestamp and is not overwritten by the timer.
+        private bool _playlistActivityStarted;
+
         // ── Recording Track-Log ────────────────────────────────────────────────
         private sealed class TrackLogEntry
         {
@@ -79,6 +83,7 @@ namespace ModularAudience.Forms
 
                 // Track-log: close previous entry, open new one
                 this.OnPlaylistTrackChanged();
+                this._playlistActivityStarted = true;
                 WindowMainStaticHelpers.InvokeIfRequired(Instance, this.UpdatePlaylistUI);
                 WindowMainStaticHelpers.InvokeIfRequired(Instance, this.UpdatePlaylistHoverTitle);
             };
@@ -264,6 +269,7 @@ namespace ModularAudience.Forms
 
         private void button_playlist_TogglePlayPause_Click(object sender, EventArgs e)
         {
+            this._playlistActivityStarted = true;
             this._playlist.TogglePlayPause();
             this.UpdatePlaylistButtonText();
             this.UpdatePlaylistUI();
@@ -300,8 +306,10 @@ namespace ModularAudience.Forms
         // ── Right-click context menu handlers ──────────────────────────────────
         private void playlistMenu_PlayPause_Click(object sender, EventArgs e)
         {
+            this._playlistActivityStarted = true;
             this._playlist.TogglePlayPause();
             this.UpdatePlaylistButtonText();
+            this.UpdatePlaylistUI();
         }
 
         private void playlistMenu_Prev_Click(object sender, EventArgs e) => this._playlist.RewindOrPrevious();
@@ -695,8 +703,15 @@ namespace ModularAudience.Forms
 
                 PlaylistQueueSnapshot snapshot = this._playlist.GetQueueSnapshot();
                 this.button_playlist.Text = snapshot.IsPaused ? "|| List" : "▶ List";
-                string label = this.BuildEnqueuedLabelText(snapshot);
-                this.label_currentlyEnqueued.Text = label;
+
+                // Preserve the build timestamp until the user actually interacts with the playlist.
+                // The timer ticks every second, so without this guard the label would be
+                // overwritten immediately after startup.
+                if (this._playlistActivityStarted)
+                {
+                    string newLabel = this.BuildEnqueuedLabelText(snapshot);
+                    this.label_currentlyEnqueued.Text = newLabel;
+                }
                 this.Text = this.GetWindowTitleText(snapshot);
             }
             catch (Exception ex)
@@ -878,7 +893,30 @@ namespace ModularAudience.Forms
             this._trackLog.Clear();
             this._trackLogActivePaths.Clear();
 
+            // Capture currently playing tracks (playlist + TrackViews) at recording start
             this.SyncPlaylistTrackLog(TimeSpan.Zero);
+
+            // Also capture any TrackView tracks that are already playing at recording start
+            // (they won't be in _trackLogActivePaths yet since SyncPlaylistTrackLog was called
+            // before they started playing, or they were playing before recording started)
+            foreach (var tv in WindowMain.TrackViews)
+            {
+                if (tv == null || tv.IsDisposed || tv.Disposing) continue;
+                var audio = tv.OriginalAudio;
+                if (audio != null && audio.PlayerPlaying && !string.IsNullOrWhiteSpace(audio.FilePath))
+                {
+                    string path = audio.FilePath;
+                    if (!this._trackLogActivePaths.Contains(path, StringComparer.OrdinalIgnoreCase))
+                    {
+                        this._trackLog.Add(new TrackLogEntry
+                        {
+                            Start = TimeSpan.Zero,
+                            TrackId = Path.GetFileNameWithoutExtension(path)
+                        });
+                        this._trackLogActivePaths.Add(path);
+                    }
+                }
+            }
 
             this.FlushTrackLog();
         }
@@ -909,6 +947,36 @@ namespace ModularAudience.Forms
         }
 
         /// <summary>
+        /// Explicitly closes the track-log entry for a specific file path.
+        /// Used when a TrackView's cloned audio stops playing but may not have been
+        /// captured in the active set (e.g. clone was never added to _trackLogActivePaths).
+        /// </summary>
+        public void FinaliseTrackLogEntryForPath(string filePath)
+        {
+            if (this._trackLogFilePath == null || this._trackLogRecordStart == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                return;
+            }
+
+            TimeSpan now = DateTime.UtcNow - this._trackLogRecordStart.Value;
+            string trackId = Path.GetFileNameWithoutExtension(filePath);
+
+            TrackLogEntry? entry = this._trackLog.LastOrDefault(e =>
+                e.TrackId == trackId && e.End == null);
+
+            if (entry != null)
+            {
+                entry.End = now;
+                this.FlushTrackLog();
+            }
+        }
+
+        /// <summary>
         /// Called from the TrackChanged event.  Closes the previous entry and opens a new one.
         /// </summary>
         private void OnPlaylistTrackChanged()
@@ -929,11 +997,38 @@ namespace ModularAudience.Forms
             this.FlushTrackLog();
         }
 
+        /// <summary>
+        /// Force-sync the track-log to current state (called when a manually-played track is stopped).
+        /// </summary>
+        public void SyncTrackLogNow()
+        {
+            if (this._trackLogFilePath == null || this._trackLogRecordStart == null)
+            {
+                return;
+            }
+
+            TimeSpan now = DateTime.UtcNow - this._trackLogRecordStart.Value;
+            this.SyncPlaylistTrackLog(now);
+            this.FlushTrackLog();
+        }
+
         private void SyncPlaylistTrackLog(TimeSpan now)
         {
+            // Collect active paths from both the playlist AND manually playing TrackViews
             HashSet<string> activePaths = this._playlist.ActiveOriginalPaths
                 .Where(path => !string.IsNullOrWhiteSpace(path))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // Add manually playing tracks from TrackViews (not from playlist)
+            foreach (var tv in WindowMain.TrackViews)
+            {
+                if (tv == null || tv.IsDisposed || tv.Disposing) continue;
+                var audio = tv.OriginalAudio;
+                if (audio != null && audio.PlayerPlaying && !string.IsNullOrWhiteSpace(audio.FilePath))
+                {
+                    activePaths.Add(audio.FilePath);
+                }
+            }
 
             foreach (string endedPath in this._trackLogActivePaths.Except(activePaths, StringComparer.OrdinalIgnoreCase).ToList())
             {
@@ -984,5 +1079,42 @@ namespace ModularAudience.Forms
 
         private static string FormatLogTs(TimeSpan ts) =>
             $"{(int) ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}.{ts.Milliseconds:D3}";
+
+        /// <summary>
+        /// Called when any AudioObj's Playing state changes (stop/end).
+        /// Updates the recording track-log if a recording is active.
+        /// </summary>
+        private void OnAudioPlayingChanged()
+        {
+            if (this._trackLogFilePath == null || this._trackLogRecordStart == null)
+            {
+                return;
+            }
+
+            try
+            {
+                WindowMainStaticHelpers.InvokeIfRequired(Instance, () =>
+                {
+                    // Re-sync: this handles both new starts and stops
+                    this.SyncPlaylistTrackLog(DateTime.UtcNow - this._trackLogRecordStart.Value);
+                    this.FlushTrackLog();
+                });
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Called synchronously when the recording capture stops, before the async
+        /// 24-bit re-export runs. Finalises the track-log so end timestamps reflect
+        /// the actual stop time, not the time after post-processing.
+        /// </summary>
+        private void OnAudioRecorderStopped()
+        {
+            try
+            {
+                this.FinaliseTrackLog();
+            }
+            catch { }
+        }
     }
 }

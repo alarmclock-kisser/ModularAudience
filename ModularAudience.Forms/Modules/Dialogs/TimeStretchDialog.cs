@@ -6,6 +6,7 @@ using ModularAudience.Audio;
 using ModularAudience.Audio.Processors_V2;
 using MathNet.Numerics;
 using System.Threading;
+using ModularAudience.Forms.Helpers;
 using ModularAudience.Forms.Modules;
 
 namespace ModularAudience.Forms.Modules.Dialogs
@@ -325,7 +326,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, $"Error Time-Stretching: {ex.Message}", "Time Stretch", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Time Stretch Error", ex);
                 this.progressBar_stretching.Value = this.progressBar_stretching.Minimum;
             }
             finally
@@ -541,7 +542,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, $"Fehler beim Time-Stretch: {ex.Message}", "Time Stretch", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Time Stretch Error", ex);
                 this.progressBar_stretching.Value = this.progressBar_stretching.Minimum;
             }
             finally

@@ -1,6 +1,7 @@
 using ModularAudience.Audio;
 using ModularAudience.Audio.Midi;
 using ModularAudience.Generators;
+using ModularAudience.Forms.Helpers;
 using System.Drawing.Drawing2D;
 
 namespace ModularAudience.Forms.Modules.Dialogs
@@ -526,8 +527,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"MIDI editor playback failed: {ex}");
-                MessageBox.Show(this, ex.Message, "MIDI editor playback failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI editor playback failed", ex);
             }
             finally
             {
@@ -655,8 +655,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"MIDI edit save failed: {ex}");
-                MessageBox.Show(this, ex.Message, "MIDI edit failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI edit failed", ex);
             }
             finally
             {
@@ -714,7 +713,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 catch (Exception ex)
                 {
                     LogCollection.Log($"MIDI import failed: {ex}");
-                    MessageBox.Show(this, ex.Message, "MIDI import failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI import failed", ex);
                 }
             }
         }
@@ -772,8 +771,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"MIDI remix failed: {ex}");
-                MessageBox.Show(this, ex.Message, "MIDI remix failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI remix failed", ex);
             }
         }
     }

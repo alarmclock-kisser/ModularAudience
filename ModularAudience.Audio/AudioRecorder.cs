@@ -15,12 +15,21 @@ public static class AudioRecorder
     private static WaveFileWriter? _writer;
 
     private static bool normalizeOnStop = false;
+    private static System.Windows.Forms.Timer? _silenceTimer;
+    private static int _lastDataWritten = 0;
 
     public static bool IsRecording { get; private set; } = false;
     public static string? RecordedFile { get; private set; } = null;
 
     public static DateTime? RecordingStartTime { get; private set; } = null;
-    public static TimeSpan? RecordingTime => RecordingStartTime != null ? DateTime.UtcNow - RecordingStartTime : null;
+    public static DateTime? RecordingStopTime { get; private set; } = null;
+    public static TimeSpan? RecordingTime =>
+        RecordingStartTime != null
+            ? (RecordingStopTime ?? DateTime.UtcNow) - RecordingStartTime.Value
+            : null;
+
+    /// <summary>Raised synchronously when the capture is stopped, before any post-processing (e.g. 24-bit re-export).</summary>
+    public static event Action? RecordingStopped;
 
     public static float EstimatedBpm => GetPeaksPerMinute();
     public static double MaxDetectionAttention { get; set; } = 4;
@@ -146,6 +155,12 @@ public static class AudioRecorder
             _capture.DataAvailable += OnDataAvailable;
             _capture.RecordingStopped += async (s, e) => await Task.Run(() => OnRecordingStopped(s, e));
 
+            // Start silence timer to write silence when no audio is playing
+            _lastDataWritten = 0;
+            _silenceTimer = new System.Windows.Forms.Timer { Interval = 100 };
+            _silenceTimer.Tick += OnSilenceTimerTick;
+            _silenceTimer.Start();
+
             _capture.StartRecording();
             IsRecording = true;
             _mmDevice = captureDevice ?? GetDefaultPlaybackDevice();
@@ -168,11 +183,11 @@ public static class AudioRecorder
 
         IsRecording = false;
 
-        // Optional: Normalisieren
-        normalizeOnStop = normalizeOutput;
-
         Console.WriteLine("Aufnahme wird gestoppt...");
         _capture?.StopRecording();
+
+        // Notify synchronously, before the async cleanup / 24-bit re-export runs
+        RecordingStopped?.Invoke();
     }
 
     public static MMDevice? GetActivePlaybackDevice()
@@ -235,7 +250,37 @@ public static class AudioRecorder
 
     private static void OnDataAvailable(object? sender, WaveInEventArgs e)
     {
-        _writer?.Write(e.Buffer, 0, e.BytesRecorded);
+        if (_writer == null)
+        {
+            _ = Task.Run(() => Console.WriteLine("DEBUG: OnDataAvailable called but _writer is null"));
+            return;
+        }
+        
+        _lastDataWritten = e.BytesRecorded;
+        _writer.Write(e.Buffer, 0, e.BytesRecorded);
+        _ = Task.Run(() => Console.WriteLine($"DEBUG: OnDataAvailable - BytesRecorded: {e.BytesRecorded}"));
+    }
+
+    private static void OnSilenceTimerTick(object? sender, EventArgs e)
+    {
+        if (_writer == null || !IsRecording)
+        {
+            return;
+        }
+
+        // If no data was written in the last 100ms, write silence
+        if (_lastDataWritten == 0)
+        {
+            var format = _capture?.WaveFormat;
+            if (format != null)
+            {
+                // Write 100ms of silence
+                int bytesToWrite = (int)(format.AverageBytesPerSecond * 0.1);
+                byte[] silence = new byte[bytesToWrite];
+                _writer.Write(silence, 0, bytesToWrite);
+                _ = Task.Run(() => Console.WriteLine($"DEBUG: OnSilenceTimerTick - Wrote {bytesToWrite} bytes of silence"));
+            }
+        }
     }
 
     private static async void OnRecordingStopped(object? sender, StoppedEventArgs e)
@@ -250,12 +295,18 @@ public static class AudioRecorder
         // Finalize and cleanup
         _writer?.Flush();
 
+        // Stop time must be set after flushing writer, to ensure correct duration
+        RecordingStopTime = DateTime.UtcNow;
 
         await Cleanup();
     }
 
     private static async Task Cleanup()
     {
+        _silenceTimer?.Stop();
+        _silenceTimer?.Dispose();
+        _silenceTimer = null;
+
         _writer?.Dispose();
         _writer = null;
         _capture?.Dispose();

@@ -118,6 +118,15 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <metadata name="contextMenuStrip_playlistItem.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+    <value>184, 17</value>
+  </metadata>
+  <metadata name="toolTip_playlistTracks.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
     <value>17, 17</value>
   </metadata>
+  <data name="label_targetMode.ToolTip" xml:space="preserve">
+    <value>Loop buttons target the focused row, regardless of checks. Ctrl+loop targets all checked active rows. If all targets already use that fraction, they all turn off; otherwise the fraction is applied to every target.</value>
+  </data>
+  <data name="checkedListBox_playlistTracks.ToolTip" xml:space="preserve">
+    <value>Click text to focus a row without checking it. Use checkboxes or Space to choose the Ctrl group; checks never change playback. Loop and Ctrl-drag: focused row or all checked active rows (none means no action). Drag text horizontally to set the rate; the rate persists after release until stopped. Ctrl+click text resets that row; Ctrl+right-click &gt; Center/Reset Rate resets all listed rows.</value>
+  </data>
 </root>

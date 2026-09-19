@@ -66,12 +66,21 @@ namespace ModularAudience.Audio
 
         public async Task PlayAsync(CancellationToken cancellationToken, Action? onPlaybackStopped = null, float? initialVolume = null, int desiredLatency = 50)
         {
+            if (!this.Playing)
+            {
+                GlobalPlayingChanged?.Invoke();
+            }
             this.Playing = true;
             this.Paused = false;
+            // Raise the instance event on start (StopAsync already does this on stop) so that
+            // per-track listeners (e.g. the recording track-log) can open an entry at the correct
+            // start time for manually-played TrackView tracks.
+            this.PlayingChanged?.Invoke();
             initialVolume ??= this.Volume / 100f;
 
             if (this.Data == null || this.Data.Length == 0 || this.SampleRate <= 0 || this.Channels <= 0)
             {
+                GlobalPlayingChanged?.Invoke();
                 this.Playing = false;
                 return;
             }
@@ -100,6 +109,7 @@ namespace ModularAudience.Audio
                     try { onPlaybackStopped?.Invoke(); }
                     finally
                     {
+                        GlobalPlayingChanged?.Invoke();
                         this.Playing = false;
                         this.Paused = false;
                         this.playback.PlaybackStopped -= handler!;
@@ -131,11 +141,13 @@ namespace ModularAudience.Audio
             catch (OperationCanceledException)
             {
                 Debug.WriteLine("Playback preparation was canceled");
+                GlobalPlayingChanged?.Invoke();
                 this.Playing = false;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Playback initialization failed: {ex.Message}");
+                GlobalPlayingChanged?.Invoke();
                 this.Playing = false;
                 throw;
             }
@@ -288,6 +300,7 @@ namespace ModularAudience.Audio
 
         public async Task StopAsync()
         {
+            this.PlayingChanged?.Invoke();
             this.Playing = false;
             this.Paused = false;
             this.playback.Stop();
@@ -297,6 +310,8 @@ namespace ModularAudience.Audio
             this.playbackLoopEndBytes = 0;
             this.SkippedPositionBytes = 0;
             this.positionOriginBytes = 0;
+            this.ManualSampleRateFactor = 1.0;
+            await this.ApplyCombinedSampleRateAsync().ConfigureAwait(false);
             await Task.CompletedTask;
         }
 

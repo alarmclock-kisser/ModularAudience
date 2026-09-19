@@ -9,10 +9,16 @@ namespace ModularAudience.Forms.Controls
         private const int LeftButtonDown = 0x0201;
         private const int LeftButtonUp = 0x0202;
         private const int LeftButtonDoubleClick = 0x0203;
+        private const int MouseMoveMessage = 0x0200;
         private const int CancelMode = 0x001F;
         private const int RepeatInterval = 50;
         private readonly Timer trackRepeatTimer;
         private bool followingTrack;
+        private bool controlThumbGesture;
+        private Point controlThumbDownPoint;
+        private bool controlThumbMoved;
+
+        internal bool IsCtrlResetGesture { get; private set; }
 
         public LiveRateScrollBar()
         {
@@ -30,6 +36,26 @@ namespace ModularAudience.Forms.Controls
                     return;
                 }
             }
+            if (message.Msg == MouseMoveMessage && this.controlThumbGesture)
+            {
+                Point point = new((short) message.LParam.ToInt64(), (short) (message.LParam.ToInt64() >> 16));
+                int threshold = Math.Max(1, SystemInformation.DragSize.Width / 2);
+                if (Math.Abs(point.X - this.controlThumbDownPoint.X) >= threshold)
+                {
+                    this.controlThumbMoved = true;
+                }
+            }
+            if (message.Msg == LeftButtonUp && this.controlThumbGesture)
+            {
+                bool reset = !this.controlThumbMoved;
+                this.controlThumbGesture = false;
+                base.WndProc(ref message);
+                if (reset && !this.IsDisposed)
+                {
+                    this.ResetFromControlClick();
+                }
+                return;
+            }
             if (message.Msg == LeftButtonUp && this.followingTrack)
             {
                 this.EndTrackFollowing();
@@ -40,6 +66,7 @@ namespace ModularAudience.Forms.Controls
             if (message.Msg == CancelMode)
             {
                 this.EndTrackFollowing();
+                this.controlThumbGesture = false;
             }
             base.WndProc(ref message);
         }
@@ -49,8 +76,16 @@ namespace ModularAudience.Forms.Controls
             if ((ModifierKeys & Keys.Control) != 0)
             {
                 this.EndTrackFollowing();
-                this.Value = 0;
-                this.OnScroll(new ScrollEventArgs(ScrollEventType.ThumbPosition, 0));
+                if (this.TryGetGeometry(out TrackGeometry thumbGeometry)
+                    && point.X >= thumbGeometry.ThumbLeft && point.X < thumbGeometry.ThumbRight)
+                {
+                    this.controlThumbGesture = true;
+                    this.controlThumbDownPoint = point;
+                    this.controlThumbMoved = false;
+                    return false;
+                }
+
+                this.ResetFromControlClick();
                 return true;
             }
             if (!this.Enabled || !this.ClientRectangle.Contains(point)
@@ -69,6 +104,20 @@ namespace ModularAudience.Forms.Controls
                 this.trackRepeatTimer.Start();
             }
             return true;
+        }
+
+        private void ResetFromControlClick()
+        {
+            this.IsCtrlResetGesture = true;
+            try
+            {
+                this.Value = 0;
+                this.OnScroll(new ScrollEventArgs(ScrollEventType.ThumbPosition, 0));
+            }
+            finally
+            {
+                this.IsCtrlResetGesture = false;
+            }
         }
 
         private void TrackRepeatTimer_Tick(object? sender, EventArgs e)
@@ -150,6 +199,7 @@ namespace ModularAudience.Forms.Controls
             if (!this.Enabled)
             {
                 this.EndTrackFollowing();
+                this.controlThumbGesture = false;
             }
             base.OnEnabledChanged(e);
         }
@@ -157,6 +207,7 @@ namespace ModularAudience.Forms.Controls
         protected override void OnHandleDestroyed(EventArgs e)
         {
             this.EndTrackFollowing();
+            this.controlThumbGesture = false;
             base.OnHandleDestroyed(e);
         }
 
@@ -165,6 +216,7 @@ namespace ModularAudience.Forms.Controls
             if (disposing)
             {
                 this.followingTrack = false;
+                this.controlThumbGesture = false;
                 this.trackRepeatTimer.Dispose();
             }
             base.Dispose(disposing);
