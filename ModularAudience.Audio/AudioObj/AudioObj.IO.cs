@@ -124,31 +124,35 @@ namespace ModularAudience.Audio
                 this.Channels = reader.WaveFormat.Channels;
                 this.BitDepth = reader.WaveFormat.BitsPerSample;
 
-                long numSamples = reader.Length > 0 && reader.WaveFormat.BitsPerSample > 0
-                    ? reader.Length / (reader.WaveFormat.BitsPerSample / 8)
+                // reader.WaveFormat is the 32-bit IEEE float output format, so its
+                // BlockAlign is 4 * channels. reader.Length is the float byte length
+                // (frames * 4 * channels). Dividing by sizeof(float) yields the total
+                // interleaved sample count (frames * channels). Dividing by BlockAlign
+                // instead would give only the per-channel frame count, which for
+                // multi-channel audio is a fraction (e.g. half for stereo) of the
+                // samples actually present.
+                long numSamples = reader.Length > 0
+                    ? reader.Length / sizeof(float)
                     : 0;
 
-                if (numSamples > 0)
+                // Use streaming for files that would exceed int.MaxValue samples
+                if (numSamples > int.MaxValue)
                 {
-                    try
+                    this.Data = ReadAllSamplesStreaming(reader).ToArray();
+                }
+                else if (numSamples > 0)
+                {
+                    float[] tmp = new float[checked((int) numSamples)];
+                    int read = reader.Read(tmp.AsSpan());
+                    if (read != numSamples)
                     {
-                        float[] tmp = new float[numSamples];
-                        int read = reader.ToSampleProvider().Read(tmp.AsSpan());
-                        if (read != numSamples)
-                        {
-                            float[] resized = new float[read];
-                            Array.Copy(tmp, resized, read);
-                            this.Data = resized;
-                        }
-                        else
-                        {
-                            this.Data = tmp;
-                        }
+                        float[] resized = new float[checked((int) read)];
+                        Array.Copy(tmp, resized, read);
+                        this.Data = resized;
                     }
-                    catch
+                    else
                     {
-                        // Fallback: stream read (fixed below to use proper block size)
-                        this.Data = ReadAllSamplesStreaming(reader).ToArray();
+                        this.Data = tmp;
                     }
                 }
                 else
@@ -161,7 +165,7 @@ namespace ModularAudience.Audio
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error loading audio file: {ex.Message}");
+                LogCollection.Log($"Error loading audio file: {ex.Message}");
                 this.Dispose();
                 return false;
             }
@@ -281,7 +285,7 @@ namespace ModularAudience.Audio
             int channels = Math.Max(1, reader.WaveFormat.Channels);
             int samplesPerChannelPerBlock = reader.WaveFormat.SampleRate * blockSeconds;
             int blockSize = samplesPerChannelPerBlock * channels; // total interleaved samples
-            float[] buffer = new float[blockSize];
+            float[] buffer = new float[checked((int) blockSize)];
             int read;
             var sampleProvider = reader.ToSampleProvider();
             while ((read = sampleProvider.Read(buffer.AsSpan())) > 0)

@@ -302,8 +302,8 @@ namespace ModularAudience.Audio
 
 
             // allocate compact buffers for min/max per channel per pixel (int16-like ranges map to screen Y)
-            var yMin = new int[channelsToDraw * width];
-            var yMax = new int[channelsToDraw * width];
+            var yMin = new int[checked((int) (channelsToDraw * width))];
+            var yMax = new int[checked((int) (channelsToDraw * width))];
 
 
             // small budget to avoid scanning enormous ranges per pixel (keeps CPU time sane)
@@ -363,7 +363,7 @@ namespace ModularAudience.Audio
                         // iterate with step; this is memory-bounded but predictable
                         for (long s = sampleStart; s < sampleEnd; s += step)
                         {
-                            float v = data[s];
+                            float v = data[checked((int) s)];
                             if (v < min)
                             {
                                 min = v;
@@ -647,9 +647,9 @@ namespace ModularAudience.Audio
                 return 1;
             }
 
-            int totalSamples = this.Data.Length / this.Channels;
-            int samplesPerPixel = (int) Math.Ceiling((double) totalSamples / width);
-            return Math.Max(1, samplesPerPixel);
+            long totalSamples = this.Data.Length / this.Channels;
+            long samplesPerPixel = (long) Math.Ceiling((double) totalSamples / width);
+            return Math.Max(1, checked((int) samplesPerPixel));
         }
 
 
@@ -680,8 +680,8 @@ namespace ModularAudience.Audio
             // allocate small arrays for min/max values for all channels and columns to render
             int cols = pixelCount;
             int chCount = channelsToDraw;
-            var yMin = new int[chCount * cols];
-            var yMax = new int[chCount * cols];
+            var yMin = new int[checked((int) (chCount * cols))];
+            var yMax = new int[checked((int) (chCount * cols))];
 
             int[] channelHeight = new int[chCount];
             int[] centerY = new int[chCount];

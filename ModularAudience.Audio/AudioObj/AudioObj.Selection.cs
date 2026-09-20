@@ -31,7 +31,7 @@ namespace ModularAudience.Audio
             AudioObj clone = new()
             {
                 Name = this.Name + "_selection",
-                Data = new float[selSampleCount],
+                Data = new float[checked((int) selSampleCount)],
                 SampleRate = this.SampleRate,
                 Channels = this.Channels,
                 BitDepth = this.BitDepth,
@@ -44,10 +44,10 @@ namespace ModularAudience.Audio
 
             Buffer.BlockCopy(
                 src: this.Data,
-                srcOffset: (int) (selStartSample * sizeof(float)),
+                srcOffset: checked((int) (selStartSample * sizeof(float))),
                 dst: clone.Data,
                 dstOffset: 0,
-                count: (int) (selSampleCount * sizeof(float)));
+                count: checked((int) (selSampleCount * sizeof(float))));
 
             await Task.CompletedTask;
             return clone;
@@ -76,7 +76,7 @@ namespace ModularAudience.Audio
 
             if (!inverted)
             {
-                // Standardverhalten: Auswahl löschen, Rest behalten
+                // Standardverhalten: Auswahl lï¿½schen, Rest behalten
                 float[] newData = new float[this.Data.Length - selCount];
                 await Task.Run(() =>
                 {
@@ -100,8 +100,8 @@ namespace ModularAudience.Audio
             }
             else
             {
-                // Inverted: alles außer Auswahl löschen -> behalten nur die Auswahl
-                float[] newData = new float[selCount];
+                // Inverted: alles auï¿½er Auswahl lï¿½schen -> behalten nur die Auswahl
+                float[] newData = new float[checked((int) selCount)];
                 await Task.Run(() =>
                 {
                     int srcOffset = checked((int) (selStart * sizeof(float)));
@@ -118,7 +118,7 @@ namespace ModularAudience.Audio
             int channels = Math.Max(1, this.Channels);
             this.Length = this.Data.Length;
             this.Duration = TimeSpan.FromSeconds((double) this.Data.Length / (this.SampleRate * channels));
-            // Auswahl zurücksetzen - TrackView/Callees erwarten meist Selection cleared after erase
+            // Auswahl zurï¿½cksetzen - TrackView/Callees erwarten meist Selection cleared after erase
             this.SelectionStart = -1;
             this.SelectionEnd = -1;
         }

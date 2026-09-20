@@ -73,7 +73,7 @@ namespace ModularAudience.Audio
                 float lf = this.LoopFraction;
                 if (lf > 0f && lf < 1f)
                 {
-                    // Prüfe auf näherungsweise Kehrwert eines Integers (z. B. 0.5 -> 1/2)
+                    // Prï¿½fe auf nï¿½herungsweise Kehrwert eines Integers (z. B. 0.5 -> 1/2)
                     double recip = 1.0 / lf;
                     int recipInt = (int) Math.Round(recip);
                     if (Math.Abs(recip - recipInt) < 1e-3 && recipInt > 1)
@@ -117,7 +117,7 @@ namespace ModularAudience.Audio
                     return [];
                 }
 
-                // Wenn bereits Mono, einfach zurückgeben
+                // Wenn bereits Mono, einfach zurï¿½ckgeben
                 if (this.Channels == 1)
                 {
                     return set ? this.Data : (float[]) this.Data.Clone();
@@ -125,17 +125,17 @@ namespace ModularAudience.Audio
 
                 // Berechnung der Anzahl der Samples pro Kanal
                 int monoSampleCount = this.Data.Length / this.Channels;
-                float[] monoData = new float[monoSampleCount];
+                float[] monoData = new float[checked((int) monoSampleCount)];
 
-                // Konvertierung: Wir nehmen den Durchschnitt der Kanäle (Downmixing)
+                // Konvertierung: Wir nehmen den Durchschnitt der KanÃ¤le (Downmixing)
                 // Das ist klanglich neutraler als nur den ersten Kanal zu nehmen.
                 for (int i = 0; i < monoSampleCount; i++)
                 {
                     float sum = 0;
                     for (int ch = 0; ch < this.Channels; ch++)
                     {
-                        // Index berechnen: (Sample-Index * Anzahl der Kanäle) + aktueller Kanal
-                        sum += this.Data[i * this.Channels + ch];
+                        // Index berechnen: (Sample-Index * Anzahl der KanÃ¤le) + aktueller Kanal
+                        sum += this.Data[checked((int) (i * this.Channels + ch))];
                     }
                     monoData[i] = sum / this.Channels;
                 }
@@ -146,7 +146,7 @@ namespace ModularAudience.Audio
                     this.Data = monoData;
                     // Hinweis: Die Channels-Eigenschaft sollte im restlichen Code 
                     // nach diesem Aufruf auf 1 gesetzt werden.
-                    // Falls du das nicht manuell machst, füge hier ein:
+                    // Falls du das nicht manuell machst, fï¿½ge hier ein:
                     // this.Channels = 1; 
                 }
 

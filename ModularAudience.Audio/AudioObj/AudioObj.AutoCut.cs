@@ -95,17 +95,17 @@ namespace ModularAudience.Audio
                 return regions;
             }
 
-            int minDurationSamples = (int) (minDurationMs * this.SampleRate * this.Channels / 1000.0);
-            int maxDurationSamples = (int) (maxDurationMs * this.SampleRate * this.Channels / 1000.0);
-            int silenceWindowSamples = (int) (silenceWindowMs * this.SampleRate * this.Channels / 1000.0);
+            long minDurationSamples = (long) (minDurationMs * this.SampleRate * this.Channels / 1000.0);
+            long maxDurationSamples = (long) (maxDurationMs * this.SampleRate * this.Channels / 1000.0);
+            long silenceWindowSamples = (long) (silenceWindowMs * this.SampleRate * this.Channels / 1000.0);
 
             bool inSample = false;
-            int sampleStart = 0;
-            int silenceCounter = 0;
+            long sampleStart = 0;
+            long silenceCounter = 0;
 
-            for (int i = 0; i < this.Data.Length; i++)
+            for (long i = 0; i < this.Data.Length; i++)
             {
-                float absValue = Math.Abs(this.Data[i]);
+                float absValue = Math.Abs(this.Data[(int) i]);
 
                 if (absValue >= threshold)
                 {
@@ -120,15 +120,15 @@ namespace ModularAudience.Audio
                     {
                         // Continue sample, reset silence counter
                         silenceCounter = 0; // reset silence gap while active
-                        int currentLen = i - sampleStart;
+                        long currentLen = i - sampleStart;
                         // Split overly long continuous regions proactively
                         if (currentLen >= maxDurationSamples)
                         {
-                            int segmentEnd = sampleStart + maxDurationSamples;
-                            int segmentLen = segmentEnd - sampleStart;
+                            long segmentEnd = sampleStart + maxDurationSamples;
+                            long segmentLen = segmentEnd - sampleStart;
                             if (segmentLen >= minDurationSamples)
                             {
-                                regions.Add(new SampleRegion { Start = sampleStart, End = segmentEnd });
+                                regions.Add(new SampleRegion { Start = (int) sampleStart, End = (int) segmentEnd });
                             }
                             // start next segment at current position to avoid losing continuity
                             sampleStart = segmentEnd; // move start forward
@@ -141,28 +141,28 @@ namespace ModularAudience.Audio
                     if (silenceCounter >= silenceWindowSamples)
                     {
                         // End of sample detected
-                        int sampleEnd = i - silenceCounter; // exclude trailing silence
-                        int sampleLength = sampleEnd - sampleStart;
+                        long sampleEnd = i - silenceCounter; // exclude trailing silence
+                        long sampleLength = sampleEnd - sampleStart;
 
                         if (sampleLength >= minDurationSamples)
                         {
                             // If region still exceeds maxDuration split it
                             if (sampleLength > maxDurationSamples)
                             {
-                                int start = sampleStart;
+                                long start = sampleStart;
                                 while (start + maxDurationSamples <= sampleEnd)
                                 {
-                                    regions.Add(new SampleRegion { Start = start, End = start + maxDurationSamples });
+                                    regions.Add(new SampleRegion { Start = (int) start, End = (int) (start + maxDurationSamples) });
                                     start += maxDurationSamples;
                                 }
                                 if (sampleEnd - start >= minDurationSamples && sampleEnd - start <= maxDurationSamples)
                                 {
-                                    regions.Add(new SampleRegion { Start = start, End = sampleEnd });
+                                    regions.Add(new SampleRegion { Start = (int) start, End = (int) sampleEnd });
                                 }
                             }
                             else if (sampleLength <= maxDurationSamples)
                             {
-                                regions.Add(new SampleRegion { Start = sampleStart, End = sampleEnd });
+                                regions.Add(new SampleRegion { Start = (int) sampleStart, End = (int) sampleEnd });
                             }
                         }
 
@@ -175,26 +175,26 @@ namespace ModularAudience.Audio
             // Handle case where sample extends to end of audio
             if (inSample)
             {
-                int sampleEnd = this.Data.Length;
-                int sampleLength = sampleEnd - sampleStart;
+                long sampleEnd = this.Data.Length;
+                long sampleLength = sampleEnd - sampleStart;
                 if (sampleLength >= minDurationSamples)
                 {
                     if (sampleLength > maxDurationSamples)
                     {
-                        int start = sampleStart;
+                        long start = sampleStart;
                         while (start + maxDurationSamples <= sampleEnd)
                         {
-                            regions.Add(new SampleRegion { Start = start, End = start + maxDurationSamples });
+                            regions.Add(new SampleRegion { Start = (int) start, End = (int) (start + maxDurationSamples) });
                             start += maxDurationSamples;
                         }
                         if (sampleEnd - start >= minDurationSamples && sampleEnd - start <= maxDurationSamples)
                         {
-                            regions.Add(new SampleRegion { Start = start, End = sampleEnd });
+                            regions.Add(new SampleRegion { Start = (int) start, End = (int) sampleEnd });
                         }
                     }
                     else
                     {
-                        regions.Add(new SampleRegion { Start = sampleStart, End = sampleEnd });
+                        regions.Add(new SampleRegion { Start = (int) sampleStart, End = (int) sampleEnd });
                     }
                 }
             }
@@ -264,7 +264,7 @@ namespace ModularAudience.Audio
             }
 
             int length = endSample - startSample;
-            var extractedData = new float[length];
+            var extractedData = new float[checked((int) length)];
             Array.Copy(this.Data, startSample, extractedData, 0, length);
 
             var extracted = new AudioObj
@@ -293,7 +293,7 @@ namespace ModularAudience.Audio
 
             int silenceGapSamples = (int) (silenceGapMs * this.SampleRate * this.Channels / 1000.0);
             int totalLength = regions.Sum(r => r.End - r.Start) + Math.Max(0, (regions.Count - 1) * silenceGapSamples);
-            var paletteData = new float[totalLength];
+            var paletteData = new float[checked((int) totalLength)];
 
             int writePos = 0;
             for (int i = 0; i < regions.Count; i++)

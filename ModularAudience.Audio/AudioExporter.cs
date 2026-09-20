@@ -142,17 +142,17 @@ namespace ModularAudience.Audio
                     await Task.Run(() =>
                     {
                         // Konvertiere float[] Samples zu short[] PCM-Daten
-                        short[] pcm = new short[audio.Data.Length];
+                        short[] pcm = new short[checked((int) audio.Data.Length)];
 
                         var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = maxWorkers };
 
-                        Parallel.For(0, audio.Data.Length, parallelOptions, i =>
+                        Parallel.For(0, checked((int) audio.Data.Length), parallelOptions, i =>
                         {
                             float sample = Math.Clamp(audio.Data[i], -1.0f, 1.0f);
                             pcm[i] = (short) (sample * short.MaxValue);
                         });
 
-                        byte[] pcmBytes = new byte[pcm.Length * sizeof(short)];
+                        byte[] pcmBytes = new byte[checked((int) (pcm.Length * sizeof(short)))];
                         Buffer.BlockCopy(pcm, 0, pcmBytes, 0, pcmBytes.Length);
 
                         var waveFormat = new WaveFormat(audio.SampleRate, audio.Channels);
@@ -263,12 +263,12 @@ namespace ModularAudience.Audio
                         // Konvertierung und Schreiben
                         if (bitDepth == 32)
                         {
-                            writer.WriteSamples(audio.Data, 0, audio.Data.Length);
+                            writer.WriteSamples(audio.Data, 0, checked((int) audio.Data.Length));
                         }
                         else if (bitDepth == 16)
                         {
-                            short[] samples16Bit = new short[audio.Data.Length];
-                            for (int i = 0; i < audio.Data.Length; i++)
+                            short[] samples16Bit = new short[checked((int) audio.Data.Length)];
+                            for (int i = 0; i < checked((int) audio.Data.Length); i++)
                             {
                                 samples16Bit[i] = (short) (audio.Data[i] * short.MaxValue);
                             }
@@ -276,8 +276,8 @@ namespace ModularAudience.Audio
                         }
                         else if (bitDepth == 8)
                         {
-                            byte[] samples8Bit = new byte[audio.Data.Length];
-                            for (int i = 0; i < audio.Data.Length; i++)
+                            byte[] samples8Bit = new byte[checked((int) audio.Data.Length)];
+                            for (int i = 0; i < checked((int) audio.Data.Length); i++)
                             {
                                 // 8-Bit-PCM ist vorzeichenlos, 0 ist die Nulllinie
                                 samples8Bit[i] = (byte) ((audio.Data[i] + 1.0f) * 127.5f);
@@ -286,9 +286,9 @@ namespace ModularAudience.Audio
                         }
                         else if (bitDepth == 24)
                         {
-                            byte[] samples24Bit = new byte[audio.Data.Length * 3];
+                            byte[] samples24Bit = new byte[checked((int) (audio.Data.Length * 3))];
                             int byteIndex = 0;
-                            for (int i = 0; i < audio.Data.Length; i++)
+                            for (int i = 0; i < checked((int) audio.Data.Length); i++)
                             {
                                 // Konvertiere Float zu 24-Bit-Integer und schreibe es als 3 Bytes
                                 int value = (int) (audio.Data[i] * 8388607.0f); // 2^23 - 1

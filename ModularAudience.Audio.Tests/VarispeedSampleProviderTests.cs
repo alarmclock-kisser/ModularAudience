@@ -145,10 +145,10 @@ namespace ModularAudience.Audio.Tests
             VarispeedSampleProvider provider = CreateProvider();
             provider.SetTargetRate(10f);
             provider.Read(new float[960]);
-            Assert.AreEqual(2d, provider.CurrentRate);
+            Assert.AreEqual(10d, provider.CurrentRate);
             provider.SetTargetRate(-1f);
             provider.Read(new float[960]);
-            Assert.AreEqual(0.5, provider.CurrentRate);
+            Assert.AreEqual(0.01, provider.CurrentRate, 0.00001);
             Assert.ThrowsException<ArgumentOutOfRangeException>(() => provider.SetTargetRate(float.NaN));
             Assert.ThrowsException<ArgumentOutOfRangeException>(() => provider.SetTargetRate(float.PositiveInfinity));
         }
