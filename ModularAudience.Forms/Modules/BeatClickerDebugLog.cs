@@ -257,13 +257,14 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        public void LogSummary(float gameTime, int hits, int misses, int bestStreak, float passRate)
+        public void LogSummary(float gameTime, int hits, int misses, int bestStreak, float passRate, double meanTimingMs = 0d, int timingSampleCount = 0)
         {
             lock (_lock)
             {
                 _writer.WriteLine();
                 _writer.WriteLine($"[{Ts(gameTime)}] === GAME SUMMARY ===");
                 _writer.WriteLine($"Hits: {hits}  Misses: {misses}  BestStreak: {bestStreak}  PassRate: {passRate:F2}%");
+                _writer.WriteLine($"Mean Timing (valid hits only): {meanTimingMs:F3} ms  Samples: {timingSampleCount}");
             }
         }
 

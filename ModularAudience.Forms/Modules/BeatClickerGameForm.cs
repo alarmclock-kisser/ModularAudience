@@ -30,6 +30,12 @@ namespace ModularAudience.Forms.Modules
         private int _currentHitIndex;
         private int _score;
         private int _missed;
+        private double _timingOffsetSumMs;
+        private int _timingSampleCount;
+        private float _lastTimingOffsetMs;
+        private Color _lastTimingColor = Color.White;
+        private bool _hasTimingFeedback;
+        private bool _lastTimingWasMiss;
         private bool _gameRunning;
         private bool _paused;
         private float _bpm;
@@ -81,6 +87,8 @@ namespace ModularAudience.Forms.Modules
         private float _sliderMaxProgress;
         private bool _sliderPathValid;
         private bool _leftButtonHeld;
+        private int _completedSliderIndex = -1;
+        private float _completedSliderProgress;
 
         // Classic hit window tolerances (set by difficulty in the constructor)
         private int _hitWindowEarlyMs = 100;  // max ms before hit time a click is valid
@@ -118,6 +126,16 @@ namespace ModularAudience.Forms.Modules
         }
         private readonly List<FailEffect> _failEffects = [];
         private const float FailEffectDuration = 0.6f;
+
+        private struct HitEffect
+        {
+            public float X, Y;
+            public float EndX, EndY;
+            public bool IsSlider;
+            public float StartTime;
+        }
+        private readonly List<HitEffect> _hitEffects = [];
+        private const float HitEffectDuration = 0.28f;
 
         // Spinner mouse tracking
         private int _activeSpinnerIndex = -1;
@@ -1062,12 +1080,20 @@ namespace ModularAudience.Forms.Modules
                 _currentHitIndex = 0;
                 _score = 0;
                 _missed = 0;
+                _timingOffsetSumMs = 0;
+                _timingSampleCount = 0;
+                _lastTimingOffsetMs = 0f;
+                _lastTimingColor = Color.White;
+                _hasTimingFeedback = false;
+                _lastTimingWasMiss = false;
                 _activeSliderIndex = -1;
                 _sliderStartHit = false;
                 _sliderDragged = false;
                 _sliderMaxProgress = 0f;
                 _sliderPathValid = false;
                 _leftButtonHeld = false;
+                _completedSliderIndex = -1;
+                _completedSliderProgress = 0f;
                 _activeSpinnerIndex = -1;
                 _spinnerLastAngle = 0f;
                 _spinnerAccumulatedAngle = 0f;
@@ -1075,6 +1101,7 @@ namespace ModularAudience.Forms.Modules
                 _spinnerRotationCompleted = false;
                 _spinnerHitRegistered = false;
                 _failEffects.Clear();
+                _hitEffects.Clear();
                 _comboPopups.Clear();
                 _comboStreak = 0;
                 _bestComboStreak = 0;
@@ -1169,6 +1196,18 @@ namespace ModularAudience.Forms.Modules
                         var obj = _hitObjects[_currentHitIndex];
                         float objTime = obj.Time;
 
+                        if (obj.Type == BeatCatchHitType.Slider
+                            && _completedSliderIndex == _currentHitIndex)
+                        {
+                            _currentHitIndex++;
+                            _activeSliderIndex = -1;
+                            _sliderStartHit = false;
+                            _sliderDragged = false;
+                            _sliderMaxProgress = 0f;
+                            _sliderPathValid = false;
+                            goto render;
+                        }
+
                         if (obj.Type == BeatCatchHitType.Spinner)
                         {
                             // A spinner owns the only mouse pointer until its full duration
@@ -1220,7 +1259,10 @@ namespace ModularAudience.Forms.Modules
                                     && Math.Max(_sliderMaxProgress, currentProgress) >= 0.95f;
                                 if (heldAtEndpoint)
                                 {
+                                    _completedSliderIndex = _activeSliderIndex;
+                                    _completedSliderProgress = Math.Max(_sliderMaxProgress, currentProgress);
                                     RegisterHit();
+                                    AddSliderHitEffect(obj, currentTime);
                                     _debugLog?.LogHit(currentTime, "Slider", objTime, objTime - currentTime, (int)obj.EndX, (int)obj.EndY);
                                 }
                                 else
@@ -1339,14 +1381,14 @@ namespace ModularAudience.Forms.Modules
                                 _sliderMaxProgress = Math.Max(_sliderMaxProgress, progress);
                             }
 
-                            float sliderEndTime = obj.Time + obj.Duration;
-                            float endTolerance = _hitWindowEarlyMs / 1000f;
                             if (_sliderPathValid
                                 && _sliderDragged
-                                && _sliderMaxProgress >= 0.95f
-                                && currentTime >= sliderEndTime - endTolerance)
+                                && _sliderMaxProgress >= 0.95f)
                             {
+                                _completedSliderIndex = _activeSliderIndex;
+                                _completedSliderProgress = _sliderMaxProgress;
                                 RegisterHit();
+                                AddSliderHitEffect(obj, currentTime);
                                 _debugLog?.LogHit(currentTime, "Slider", obj.Time, obj.Time - currentTime, (int)obj.EndX, (int)obj.EndY);
                                 _currentHitIndex = _activeSliderIndex + 1;
                                 _activeSliderIndex = -1;
@@ -1414,15 +1456,15 @@ namespace ModularAudience.Forms.Modules
                 var slider = _hitObjects[_activeSliderIndex];
                 float currentTime = (float)_gameClock.Elapsed.TotalSeconds;
                 float progress = GetSliderProgress(slider, e.X, e.Y);
-                float sliderEndTime = slider.Time + slider.Duration;
                 bool releasedAtEndpoint = _sliderDragged
                     && IsSliderPointOnPath(slider, e.X, e.Y)
-                    && Math.Max(_sliderMaxProgress, progress) >= 0.95f
-                    && currentTime >= sliderEndTime - _hitWindowEarlyMs / 1000f
-                    && currentTime <= sliderEndTime + _hitWindowLateMs / 1000f;
+                    && Math.Max(_sliderMaxProgress, progress) >= 0.95f;
                 if (releasedAtEndpoint)
                 {
+                    _completedSliderIndex = _activeSliderIndex;
+                    _completedSliderProgress = Math.Max(_sliderMaxProgress, progress);
                     RegisterHit();
+                    AddSliderHitEffect(slider, currentTime);
                     _debugLog?.LogHit(currentTime, "Slider", slider.Time, slider.Time - currentTime, (int)slider.EndX, (int)slider.EndY);
                     _currentHitIndex = _activeSliderIndex + 1;
                 }
@@ -1526,12 +1568,15 @@ namespace ModularAudience.Forms.Modules
                             _sliderDragged = false;
                             _sliderMaxProgress = 0f;
                             _sliderPathValid = true;
-                            _debugLog?.LogHit(currentTime, "Slider-start", obj.Time, timeUntilHit, mouseX, mouseY);
+                            RecordHitTiming(timeUntilHit, BeatCatchHitType.Slider);
+                            _debugLog?.LogEvent(currentTime, $"START Slider objTime={obj.Time:F4}s timeUntilHit={timeUntilHit * 1000:F1}ms @ ({mouseX},{mouseY})");
                             // Don't advance _currentHitIndex yet � slider is still active
                         }
                         else
                         {
                             RegisterHit();
+                            RecordHitTiming(timeUntilHit, BeatCatchHitType.Circle);
+                            AddHitEffect(obj.X, obj.Y, currentTime);
                             _currentHitIndex = i + 1;
                             _debugLog?.LogHit(currentTime, "Circle", obj.Time, timeUntilHit, mouseX, mouseY);
                         }
@@ -1751,12 +1796,18 @@ namespace ModularAudience.Forms.Modules
                         PaintBeatCatchClassic(g, currentTime, width, height);
                     }
 
-                    // Fail effects (red X at missed object positions) and combo popups (green "xN")
+                    // Feedback effects and combo popups are painted above the game objects.
                     lock (_lock)
                     {
+                        PaintHitEffects(g, currentTime);
                         PaintFailEffects(g, currentTime);
                         PaintComboPopups(g, currentTime);
                     }
+                }
+
+                lock (_lock)
+                {
+                    PaintTimingFeedback(g, width);
                 }
 
                 // Score display � fully opaque
@@ -1865,7 +1916,12 @@ namespace ModularAudience.Forms.Modules
                     if (previousObject.Type == BeatCatchHitType.Slider
                         && currentTime < GetVisualEndTime(previousObject))
                     {
-                        PaintSlider(g, previousObject, previousObject.Time - currentTime, currentTime);
+                        PaintSlider(
+                            g,
+                            previousObject,
+                            previousObject.Time - currentTime,
+                            currentTime,
+                            _completedSliderIndex == _currentHitIndex - 1);
                         return;
                     }
                 }
@@ -1944,7 +2000,12 @@ namespace ModularAudience.Forms.Modules
             DrawObjectNumber(g, obj, fadeAlpha);
         }
 
-        private void PaintSlider(Graphics g, BeatCatchHitObject obj, float timeUntilHit, float currentTime)
+        private void PaintSlider(
+            Graphics g,
+            BeatCatchHitObject obj,
+            float timeUntilHit,
+            float currentTime,
+            bool completedVisual = false)
         {
             // Sliders stay visible for their beat-aligned duration and fade out afterwards.
             float fadeAlpha = 1f;
@@ -1957,12 +2018,13 @@ namespace ModularAudience.Forms.Modules
                 fadeAlpha = Math.Clamp(1f + (timeUntilHit + obj.Duration) / PostHitFadeSeconds, 0f, 1f);
             }
 
-            // Approach circle at start � fully opaque
-            float approachScale = 1f + (timeUntilHit / ApproachSeconds) * 2f;
-            float approachRadius = _circleRadius * approachScale;
-            int approachAlpha = Math.Clamp((int)((1f - timeUntilHit / ApproachSeconds) * 255 * fadeAlpha), 0, 255);
-            if (approachAlpha > 0)
+            // The approach circle only exists before the scheduled start. Reusing the
+            // approach formula after the hit would make it grow backward during the fade.
+            if (timeUntilHit >= 0f)
             {
+                float approachScale = 1f + (timeUntilHit / ApproachSeconds) * 2f;
+                float approachRadius = _circleRadius * approachScale;
+                int approachAlpha = Math.Clamp((int)((1f - timeUntilHit / ApproachSeconds) * 255 * fadeAlpha), 0, 255);
                 using var approachPen = new Pen(Color.FromArgb(approachAlpha, 100, 200, 255), 2);
                 g.DrawEllipse(approachPen, obj.X - approachRadius, obj.Y - approachRadius, approachRadius * 2, approachRadius * 2);
             }
@@ -1971,16 +2033,21 @@ namespace ModularAudience.Forms.Modules
             int bodyAlpha = (int)(255 * fadeAlpha);
             if (bodyAlpha > 0)
             {
-                Color bodyColor = isActive ? Color.FromArgb(255, 150, 255, 100) : Color.FromArgb(255, 100, 200, 255);
-                using var sliderPen = new Pen(bodyColor, isActive ? 16 : 12);
+                Color bodyColor = isActive || completedVisual
+                    ? Color.FromArgb(255, 150, 255, 100)
+                    : Color.FromArgb(255, 100, 200, 255);
+                using var sliderPen = new Pen(bodyColor, isActive || completedVisual ? 16 : 12);
                 g.DrawLine(sliderPen, obj.X, obj.Y, obj.EndX, obj.EndY);
             }
 
             // Slider head animation: one bright dot shows the furthest valid progress reached by
             // the player. It does not run on its own schedule or create a second moving target.
-            if (isActive && bodyAlpha > 0)
+            bool showProgressHead = isActive || completedVisual;
+            if (showProgressHead && bodyAlpha > 0)
             {
-                float displayedProgress = Math.Clamp(_sliderMaxProgress, 0f, 1f);
+                float displayedProgress = completedVisual
+                    ? Math.Clamp(_completedSliderProgress, 0f, 1f)
+                    : Math.Clamp(_sliderMaxProgress, 0f, 1f);
                 if (_leftButtonHeld && _sliderPathValid)
                 {
                     displayedProgress = Math.Max(displayedProgress, GetSliderProgress(obj, _mouseX, _mouseY));
@@ -1997,7 +2064,9 @@ namespace ModularAudience.Forms.Modules
             int fillAlpha = (int)(255 * fadeAlpha);
             if (fillAlpha > 0)
             {
-                Color startColor = isActive ? Color.FromArgb(255, 150, 255, 100) : Color.FromArgb(255, 100, 200, 255);
+                Color startColor = isActive || completedVisual
+                    ? Color.FromArgb(255, 150, 255, 100)
+                    : Color.FromArgb(255, 100, 200, 255);
                 using var brush = new SolidBrush(startColor);
                 g.FillEllipse(brush, obj.X - _circleRadius, obj.Y - _circleRadius, _circleRadius * 2, _circleRadius * 2);
             }
@@ -2472,7 +2541,8 @@ namespace ModularAudience.Forms.Modules
             {
                 string path = _debugLog.FilePath;
                 _debugLog.LogSummary((float)_gameClock.Elapsed.TotalSeconds, _score, _missed, _bestComboStreak,
-                    (_score + _missed) > 0 ? (float)_score / (_score + _missed) * 100f : 0f);
+                    (_score + _missed) > 0 ? (float)_score / (_score + _missed) * 100f : 0f,
+                    GetMeanTimingMs(), _timingSampleCount);
                 _debugLog.Dispose();
                 _debugLog = null;
                 Process.Start(new ProcessStartInfo
@@ -2584,6 +2654,17 @@ namespace ModularAudience.Forms.Modules
                 TextAlign = ContentAlignment.MiddleCenter
             };
 
+            // Timing summary
+            var lblTiming = new Label
+            {
+                Text = $"Mean Timing (valid hits only): {GetMeanTimingMs():F3} ms  |  Samples: {_timingSampleCount}",
+                Font = new Font("Consolas", 10.5f),
+                ForeColor = Color.FromArgb(190, 220, 210),
+                Location = new Point(0, 188),
+                Size = new Size(380, 25),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
             // Difficulty label
             var lblDifficulty = new Label
             {
@@ -2599,7 +2680,7 @@ namespace ModularAudience.Forms.Modules
             var btnRestart = new Button
             {
                 Text = "Restart",
-                Location = new Point(40, 210),
+                Location = new Point(40, 225),
                 Size = new Size(140, 45),
                 BackColor = Color.FromArgb(120, 100, 0),
                 ForeColor = Color.White,
@@ -2616,7 +2697,7 @@ namespace ModularAudience.Forms.Modules
             var btnExit = new Button
             {
                 Text = "Exit",
-                Location = new Point(200, 210),
+                Location = new Point(200, 225),
                 Size = new Size(140, 45),
                 BackColor = Color.FromArgb(140, 0, 0),
                 ForeColor = Color.White,
@@ -2634,6 +2715,7 @@ namespace ModularAudience.Forms.Modules
             dialog.Controls.Add(lblPassRate);
             dialog.Controls.Add(lblStats);
             dialog.Controls.Add(lblDifficulty);
+            dialog.Controls.Add(lblTiming);
             dialog.Controls.Add(btnRestart);
             dialog.Controls.Add(btnExit);
 
@@ -2840,6 +2922,24 @@ namespace ModularAudience.Forms.Modules
             _failEffects.Add(new FailEffect { X = x, Y = y, StartTime = time });
         }
 
+        private void AddHitEffect(float x, float y, float time)
+        {
+            _hitEffects.Add(new HitEffect { X = x, Y = y, StartTime = time });
+        }
+
+        private void AddSliderHitEffect(BeatCatchHitObject obj, float time)
+        {
+            _hitEffects.Add(new HitEffect
+            {
+                X = obj.X,
+                Y = obj.Y,
+                EndX = obj.EndX,
+                EndY = obj.EndY,
+                IsSlider = true,
+                StartTime = time
+            });
+        }
+
         private void AddComboPopup(int value, float x, float y, float time)
         {
             _comboPopups.Add(new ComboPopup { Value = value, X = x, Y = y, StartTime = time });
@@ -2867,6 +2967,120 @@ namespace ModularAudience.Forms.Modules
         {
             _missed++;
             _comboStreak = 0;
+            _hasTimingFeedback = true;
+            _lastTimingWasMiss = true;
+            _lastTimingColor = Color.FromArgb(255, 220, 40, 40);
+        }
+
+        private void RecordHitTiming(float timeUntilHitSeconds, BeatCatchHitType type)
+        {
+            float offsetMs = timeUntilHitSeconds * 1000f;
+            float earlyWindowMs = type == BeatCatchHitType.Slider
+                ? _hitWindowEarlyMs + 100f
+                : _hitWindowEarlyMs;
+            _timingOffsetSumMs += offsetMs;
+            _timingSampleCount++;
+            _lastTimingOffsetMs = offsetMs;
+            _lastTimingColor = GetTimingColor(offsetMs, earlyWindowMs, _hitWindowLateMs);
+            _hasTimingFeedback = true;
+            _lastTimingWasMiss = false;
+        }
+
+        private static Color GetTimingColor(float offsetMs, float earlyWindowMs, float lateWindowMs)
+        {
+            float windowMs = offsetMs >= 0f ? earlyWindowMs : lateWindowMs;
+            float closeness = 1f - Math.Clamp(Math.Abs(offsetMs) / Math.Max(1f, windowMs), 0f, 1f);
+            if (closeness < 1f / 3f)
+            {
+                return BlendTimingColors(Color.FromArgb(255, 230, 30, 30), Color.FromArgb(255, 255, 210, 30), closeness * 3f);
+            }
+
+            if (closeness < 2f / 3f)
+            {
+                return BlendTimingColors(Color.FromArgb(255, 255, 210, 30), Color.FromArgb(255, 40, 210, 80), (closeness - 1f / 3f) * 3f);
+            }
+
+            return BlendTimingColors(Color.FromArgb(255, 40, 210, 80), Color.White, (closeness - 2f / 3f) * 3f);
+        }
+
+        private static Color BlendTimingColors(Color from, Color to, float amount)
+        {
+            amount = Math.Clamp(amount, 0f, 1f);
+            return Color.FromArgb(
+                255,
+                (int)(from.R + (to.R - from.R) * amount),
+                (int)(from.G + (to.G - from.G) * amount),
+                (int)(from.B + (to.B - from.B) * amount));
+        }
+
+        private double GetMeanTimingMs()
+        {
+            return _timingSampleCount > 0 ? _timingOffsetSumMs / _timingSampleCount : 0d;
+        }
+
+        private void PaintHitEffects(Graphics g, float currentTime)
+        {
+            for (int i = _hitEffects.Count - 1; i >= 0; i--)
+            {
+                var fx = _hitEffects[i];
+                float age = currentTime - fx.StartTime;
+                if (age > HitEffectDuration)
+                {
+                    _hitEffects.RemoveAt(i);
+                    continue;
+                }
+
+                float progress = Math.Clamp(age / HitEffectDuration, 0f, 1f);
+                int alpha = Math.Clamp((int)(255f * (1f - progress)), 0, 255);
+                if (alpha <= 0)
+                {
+                    continue;
+                }
+
+                using var pen = new Pen(Color.FromArgb(alpha, 255, 255, 255), 6f - progress * 2f);
+                if (fx.IsSlider)
+                {
+                    g.DrawLine(pen, fx.X, fx.Y, fx.EndX, fx.EndY);
+                    float ringRadius = 12f + progress * 18f;
+                    g.DrawEllipse(pen, fx.EndX - ringRadius, fx.EndY - ringRadius, ringRadius * 2f, ringRadius * 2f);
+                }
+                else
+                {
+                    float ringRadius = 12f + progress * 22f;
+                    g.DrawEllipse(pen, fx.X - ringRadius, fx.Y - ringRadius, ringRadius * 2f, ringRadius * 2f);
+                }
+            }
+        }
+
+        private void PaintTimingFeedback(Graphics g, int width)
+        {
+            if (!_hasTimingFeedback)
+            {
+                return;
+            }
+
+            float centerX = width / 2f;
+            float centerY = 58f;
+            if (_lastTimingWasMiss)
+            {
+                using var borderPen = new Pen(Color.White, 8f);
+                using var xPen = new Pen(_lastTimingColor, 4f);
+                borderPen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+                borderPen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                xPen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+                xPen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                g.DrawLine(borderPen, centerX - 13f, centerY - 13f, centerX + 13f, centerY + 13f);
+                g.DrawLine(borderPen, centerX + 13f, centerY - 13f, centerX - 13f, centerY + 13f);
+                g.DrawLine(xPen, centerX - 13f, centerY - 13f, centerX + 13f, centerY + 13f);
+                g.DrawLine(xPen, centerX + 13f, centerY - 13f, centerX - 13f, centerY + 13f);
+                return;
+            }
+
+            string timingText = $"{(_lastTimingOffsetMs >= 0f ? "+" : string.Empty)}{_lastTimingOffsetMs:F3} ms";
+            using var font = new Font("Consolas", 18f, FontStyle.Bold);
+            using var brush = new SolidBrush(_lastTimingColor);
+            var textSize = g.MeasureString(timingText, font);
+            g.DrawString(timingText, font, brush, centerX - textSize.Width / 2f, centerY - textSize.Height / 2f);
         }
 
         private void PaintComboPopups(Graphics g, float currentTime)
@@ -2911,11 +3125,16 @@ namespace ModularAudience.Forms.Modules
                 int a = Math.Clamp((int)alpha, 0, 255);
                 if (a <= 0) continue;
 
-                // Draw a red X at the fail position
+                // Draw a red X with a white border at the fail position
                 int size = 30;
+                using var borderPen = new Pen(Color.FromArgb(a, 255, 255, 255), 8);
                 using var pen = new Pen(Color.FromArgb(a, 255, 50, 50), 4);
+                borderPen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+                borderPen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
                 pen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
                 pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                g.DrawLine(borderPen, fx.X - size, fx.Y - size, fx.X + size, fx.Y + size);
+                g.DrawLine(borderPen, fx.X + size, fx.Y - size, fx.X - size, fx.Y + size);
                 g.DrawLine(pen, fx.X - size, fx.Y - size, fx.X + size, fx.Y + size);
                 g.DrawLine(pen, fx.X + size, fx.Y - size, fx.X - size, fx.Y + size);
             }
