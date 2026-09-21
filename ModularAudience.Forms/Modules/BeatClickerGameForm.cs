@@ -617,8 +617,7 @@ namespace ModularAudience.Forms.Modules
                     // before or after a spinner, so multiple spinners can never overlap in time.
                     BeatCatchHitType type;
                     float spinnerDuration = Math.Max(3.0f, beatInterval * BeatClickerDifficulty.SpinnerDurationBeats(_difficultyIndex));
-                    float spinnerApproachWindow = ApproachSeconds + Math.Min(ApproachSeconds, spinnerDuration * 0.5f);
-                    float spinnerQuietStart = t - spinnerApproachWindow - _spinnerQuietBeats * beatInterval;
+                    float spinnerQuietStart = t - _spinnerQuietBeats * beatInterval;
                     bool spinnerAllowed = true;
                     foreach (var o in _hitObjects)
                     {
@@ -908,8 +907,9 @@ namespace ModularAudience.Forms.Modules
 
         private float GetApproachWindowSeconds(BeatCatchHitObject obj)
         {
+            float beatInterval = _bpm > 0f ? 60f / _bpm : 0.5f;
             return obj.Type == BeatCatchHitType.Spinner
-                ? ApproachSeconds + Math.Min(ApproachSeconds, obj.Duration * 0.5f)
+                ? _spinnerQuietBeats * beatInterval
                 : ApproachSeconds;
         }
 
@@ -948,38 +948,11 @@ namespace ModularAudience.Forms.Modules
 
             foreach (var o in existing)
             {
-                // A track may reuse a position after the old element has disappeared. Only
-                // compare spatial geometry while both elements can be visible together.
-                if (!AreVisuallyConcurrent(candidate, o))
-                {
-                    continue;
-                }
-
-                // Center-to-center distance must exceed the minimum (no overlapping elements).
-                float dc = (float)Math.Sqrt(Math.Pow(candidate.X - o.X, 2) + Math.Pow(candidate.Y - o.Y, 2));
-                if (dc < _minElementDistance)
+                // Only one element may be visible or interactable at a time. This is stricter
+                // than spatial separation because a slider owns the cursor for its full path.
+                if (AreVisuallyConcurrent(candidate, o))
                 {
                     return false;
-                }
-
-                // A slider track must not pass close to any existing element's center.
-                if (candidate.Type == BeatCatchHitType.Slider)
-                {
-                    float d = PointToSegmentDistance((int)o.X, (int)o.Y, candidate.X, candidate.Y, candidate.EndX, candidate.EndY);
-                    if (d < _sliderClearance)
-                    {
-                        return false;
-                    }
-                }
-
-                // An existing slider track must not pass close to the candidate's center.
-                if (o.Type == BeatCatchHitType.Slider)
-                {
-                    float d = PointToSegmentDistance((int)candidate.X, (int)candidate.Y, o.X, o.Y, o.EndX, o.EndY);
-                    if (d < _sliderClearance)
-                    {
-                        return false;
-                    }
                 }
             }
             return true;
@@ -1243,7 +1216,7 @@ namespace ModularAudience.Forms.Modules
                                 float currentProgress = GetSliderProgress(obj, _mouseX, _mouseY);
                                 bool heldAtEndpoint = _leftButtonHeld
                                     && _sliderDragged
-                                    && _sliderPathValid
+                                    && IsSliderPointOnPath(obj, _mouseX, _mouseY)
                                     && Math.Max(_sliderMaxProgress, currentProgress) >= 0.95f;
                                 if (heldAtEndpoint)
                                 {
@@ -1359,11 +1332,8 @@ namespace ModularAudience.Forms.Modules
                             float distanceFromPath = (float)Math.Sqrt(
                                 Math.Pow(e.X - closestX, 2) + Math.Pow(e.Y - closestY, 2));
 
-                            if (distanceFromPath > _circleRadius * 1.5f)
-                            {
-                                _sliderPathValid = false;
-                            }
-                            else
+                            _sliderPathValid = distanceFromPath <= _circleRadius * 1.5f;
+                            if (_sliderPathValid)
                             {
                                 _sliderDragged = true;
                                 _sliderMaxProgress = Math.Max(_sliderMaxProgress, progress);
@@ -1377,6 +1347,7 @@ namespace ModularAudience.Forms.Modules
                                 && currentTime >= sliderEndTime - endTolerance)
                             {
                                 RegisterHit();
+                                _debugLog?.LogHit(currentTime, "Slider", obj.Time, obj.Time - currentTime, (int)obj.EndX, (int)obj.EndY);
                                 _currentHitIndex = _activeSliderIndex + 1;
                                 _activeSliderIndex = -1;
                                 _sliderStartHit = false;
@@ -1433,6 +1404,28 @@ namespace ModularAudience.Forms.Modules
             if (e.Button != MouseButtons.Left)
             {
                 return;
+            }
+
+            if (_activeSliderIndex >= 0
+                && _activeSliderIndex < _hitObjects.Count
+                && _sliderStartHit
+                && _currentHitIndex == _activeSliderIndex)
+            {
+                var slider = _hitObjects[_activeSliderIndex];
+                float currentTime = (float)_gameClock.Elapsed.TotalSeconds;
+                float progress = GetSliderProgress(slider, e.X, e.Y);
+                float sliderEndTime = slider.Time + slider.Duration;
+                bool releasedAtEndpoint = _sliderDragged
+                    && IsSliderPointOnPath(slider, e.X, e.Y)
+                    && Math.Max(_sliderMaxProgress, progress) >= 0.95f
+                    && currentTime >= sliderEndTime - _hitWindowEarlyMs / 1000f
+                    && currentTime <= sliderEndTime + _hitWindowLateMs / 1000f;
+                if (releasedAtEndpoint)
+                {
+                    RegisterHit();
+                    _debugLog?.LogHit(currentTime, "Slider", slider.Time, slider.Time - currentTime, (int)slider.EndX, (int)slider.EndY);
+                    _currentHitIndex = _activeSliderIndex + 1;
+                }
             }
 
             _leftButtonHeld = false;
@@ -1611,6 +1604,12 @@ namespace ModularAudience.Forms.Modules
             }
 
             return Math.Clamp(((mouseX - obj.X) * dx + (mouseY - obj.Y) * dy) / lenSq, 0f, 1f);
+        }
+
+        private bool IsSliderPointOnPath(BeatCatchHitObject obj, int mouseX, int mouseY)
+        {
+            return PointToSegmentDistance(mouseX, mouseY, obj.X, obj.Y, obj.EndX, obj.EndY)
+                <= _circleRadius * 1.5f;
         }
 
         private void HandleTaikoClick(int mouseX, int mouseY, float currentTime)
@@ -1860,55 +1859,46 @@ namespace ModularAudience.Forms.Modules
                     }
                 }
 
-                for (int i = _currentHitIndex; i < _hitObjects.Count; i++)
+                if (_currentHitIndex > 0)
                 {
-                    if (i > _currentHitIndex && _currentHitIndex < _hitObjects.Count)
+                    var previousObject = _hitObjects[_currentHitIndex - 1];
+                    if (previousObject.Type == BeatCatchHitType.Slider
+                        && currentTime < GetVisualEndTime(previousObject))
                     {
-                        var currentObject = _hitObjects[_currentHitIndex];
-                        if (currentObject.Type == BeatCatchHitType.Spinner
-                            || (currentObject.Type == BeatCatchHitType.Slider
-                                && currentTime < currentObject.Time + currentObject.Duration + PostHitFadeSeconds))
-                        {
-                            break;
-                        }
+                        PaintSlider(g, previousObject, previousObject.Time - currentTime, currentTime);
+                        return;
                     }
+                }
 
-                    var obj = _hitObjects[i];
-                    float timeUntilHit = obj.Time - currentTime;
+                if (_currentHitIndex >= _hitObjects.Count)
+                {
+                    return;
+                }
 
-                    // Stop when the object is well past its post-hit fade window. Spinners
-                    // fade out after their full duration, so they stay visible much longer.
-                    float postFade = obj.Type == BeatCatchHitType.Spinner
-                        ? obj.Duration + PostHitFadeSeconds
-                        : PostHitFadeSeconds;
-                    if (timeUntilHit < -postFade)
-                    {
+                var currentObject = _hitObjects[_currentHitIndex];
+                float timeUntilHit = currentObject.Time - currentTime;
+                float postFade = currentObject.Type == BeatCatchHitType.Spinner
+                    ? currentObject.Duration + PostHitFadeSeconds
+                    : PostHitFadeSeconds;
+                float approachWindow = GetApproachWindowSeconds(currentObject);
+                if (timeUntilHit > approachWindow || timeUntilHit < -postFade)
+                {
+                    return;
+                }
+
+                switch (currentObject.Type)
+                {
+                    case BeatCatchHitType.Circle:
+                        PaintCircle(g, currentObject, timeUntilHit, currentTime);
                         break;
-                    }
 
-                    // Skip objects that haven't entered the approach window yet. Spinners get
-                    // a longer lead-in (ApproachSeconds + half their duration) so their
-                    // shrinking approach ring is visible well before the hit time.
-                    float approachWindow = GetApproachWindowSeconds(obj);
-                    if (timeUntilHit > approachWindow)
-                    {
-                        continue;
-                    }
+                    case BeatCatchHitType.Slider:
+                        PaintSlider(g, currentObject, timeUntilHit, currentTime);
+                        break;
 
-                    switch (obj.Type)
-                    {
-                        case BeatCatchHitType.Circle:
-                            PaintCircle(g, obj, timeUntilHit, currentTime);
-                            break;
-
-                        case BeatCatchHitType.Slider:
-                            PaintSlider(g, obj, timeUntilHit, currentTime);
-                            break;
-
-                        case BeatCatchHitType.Spinner:
-                            PaintSpinner(g, obj, timeUntilHit, currentTime);
-                            break;
-                    }
+                    case BeatCatchHitType.Spinner:
+                        PaintSpinner(g, currentObject, timeUntilHit, currentTime);
+                        break;
                 }
             }
         }
@@ -1986,39 +1976,21 @@ namespace ModularAudience.Forms.Modules
                 g.DrawLine(sliderPen, obj.X, obj.Y, obj.EndX, obj.EndY);
             }
 
-            // Slider head animation: when active, a bright dot moves along the track
-            // showing the expected progress. The head position is based on how much
-            // time has elapsed since the slider was activated vs the slider duration.
+            // Slider head animation: one bright dot shows the furthest valid progress reached by
+            // the player. It does not run on its own schedule or create a second moving target.
             if (isActive && bodyAlpha > 0)
             {
-                // Calculate expected progress: time since activation / slider duration
-                float elapsedSinceActivation = currentTime - obj.Time;
-                float expectedProgress = Math.Clamp(elapsedSinceActivation / Math.Max(0.001f, obj.Duration), 0f, 1f);
-                if (currentTime >= obj.Time + obj.Duration - _hitWindowLateMs / 1000f)
+                float displayedProgress = Math.Clamp(_sliderMaxProgress, 0f, 1f);
+                if (_leftButtonHeld && _sliderPathValid)
                 {
-                    expectedProgress = 1f;
+                    displayedProgress = Math.Max(displayedProgress, GetSliderProgress(obj, _mouseX, _mouseY));
                 }
 
-                float headX = obj.X + (obj.EndX - obj.X) * expectedProgress;
-                float headY = obj.Y + (obj.EndY - obj.Y) * expectedProgress;
+                float headX = obj.X + (obj.EndX - obj.X) * displayedProgress;
+                float headY = obj.Y + (obj.EndY - obj.Y) * displayedProgress;
 
-                // Draw the expected head position (ghost, semi-transparent)
-                using var ghostBrush = new SolidBrush(Color.FromArgb(120, 255, 255, 255));
-                g.FillEllipse(ghostBrush, headX - 12, headY - 12, 24, 24);
-
-                // Draw the actual mouse position on the track (bright, full opacity)
-                // Project mouse onto the slider line to show where the player is
-                float dx = obj.EndX - obj.X;
-                float dy = obj.EndY - obj.Y;
-                float lenSq = dx * dx + dy * dy;
-                if (lenSq > 0.001f)
-                {
-                    float t = Math.Clamp((_mouseX - obj.X) * dx + (_mouseY - obj.Y) * dy, 0f, lenSq) / lenSq;
-                    float playerX = obj.X + t * dx;
-                    float playerY = obj.Y + t * dy;
-                    using var playerBrush = new SolidBrush(Color.FromArgb(255, 255, 255, 255));
-                    g.FillEllipse(playerBrush, playerX - 10, playerY - 10, 20, 20);
-                }
+                using var headBrush = new SolidBrush(Color.FromArgb(255, 255, 255, 255));
+                g.FillEllipse(headBrush, headX - 11, headY - 11, 22, 22);
             }
 
             // Start circle � fully opaque
