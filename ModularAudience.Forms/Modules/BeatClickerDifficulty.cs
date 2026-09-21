@@ -37,12 +37,12 @@ namespace ModularAudience.Forms.Modules
             index = System.Math.Clamp(index, 0, Levels.Length - 1);
             switch (index)
             {
-                case 0: return 0.45f;
-                case 1: return 0.58f;
-                case 2: return 0.72f;
-                case 3: return 0.82f;
-                case 4: return 0.90f;
-                case 5: return 0.96f;
+                case 0: return 0.52f;
+                case 1: return 0.68f;
+                case 2: return 0.84f;
+                case 3: return 0.90f;
+                case 4: return 0.95f;
+                case 5: return 0.98f;
                 default: return 1.00f;
             }
         }
@@ -312,35 +312,35 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        /// <summary>Min slider length in px (start/end must not touch; scales with the circle radius).</summary>
+        /// <summary>Min slider length in px (well beyond two circle diameters; scales with difficulty).</summary>
         public static float MinSliderLength(int index)
         {
             index = System.Math.Clamp(index, 0, Levels.Length - 1);
             switch (index)
             {
-                case 0: return 120f;
-                case 1: return 115f;
-                case 2: return 110f;
-                case 3: return 100f;
-                case 4: return 90f;
-                case 5: return 80f;
-                default: return 65f;
+                case 0: return 160f;
+                case 1: return 155f;
+                case 2: return 150f;
+                case 3: return 135f;
+                case 4: return 120f;
+                case 5: return 105f;
+                default: return 90f;
             }
         }
 
-        /// <summary>Max slider length in px (scales with the circle radius).</summary>
+        /// <summary>Max slider length in px (varied long drags remain possible on every level).</summary>
         public static float MaxSliderLength(int index)
         {
             index = System.Math.Clamp(index, 0, Levels.Length - 1);
             switch (index)
             {
-                case 0: return 240f;
-                case 1: return 230f;
-                case 2: return 220f;
-                case 3: return 200f;
-                case 4: return 180f;
-                case 5: return 160f;
-                default: return 130f;
+                case 0: return 360f;
+                case 1: return 390f;
+                case 2: return 420f;
+                case 3: return 380f;
+                case 4: return 340f;
+                case 5: return 300f;
+                default: return 260f;
             }
         }
     }

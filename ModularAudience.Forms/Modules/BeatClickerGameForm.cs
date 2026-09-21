@@ -12,8 +12,8 @@ namespace ModularAudience.Forms.Modules
 {
     /// <summary>
     /// Fullscreen beat-clicker game supporting Classic gameplay (circles, sliders, spinners)
-    /// and Taiko mode. Uses a layered window for true per-pixel transparency: the background
-    /// is 20% opaque (desktop shows through) while game elements are fully opaque.
+    /// and Taiko mode. Uses a layered window for true per-pixel transparency: the configurable
+    /// black background is translucent while game elements are fully opaque.
     /// Swallows all mouse input. Supports an ESC pause menu (Continue / Restart / Exit).
     /// </summary>
     public partial class BeatClickerGameForm : Form
@@ -51,15 +51,14 @@ namespace ModularAudience.Forms.Modules
         private bool _debugLogOpened;
 
         // Count-in (3-2-1) before the game starts: the background darkens from 33% to 48%,
-        // the numbers fade in/out at 700ms intervals, then the background returns to 33%
-        // and the game clock starts.
+        // the numbers advance every two track beats, then the background returns to 33%.
         private bool _countInActive;
         private float _countInStart;
         private float _countInPausedElapsed; // count-in elapsed time captured when paused (to resume in place)
         private bool _beatmapReady;
-        private const float CountInStepSeconds = 0.7f;
         private const float CountInFadeSeconds = 0.45f;
-        private const int BgAlphaCountIn = 122; // 48% = 122/255
+        private const float CountInBeatsPerNumber = 2f;
+        private const int CountInExtraOpacityPercent = 15;
 
         // Esc debounce: the pause menu is opened on Esc key-down. The key-up is a safe
         // boundary (it does NOT toggle). The menu only closes on a NEW Esc key-down that
@@ -100,16 +99,16 @@ namespace ModularAudience.Forms.Modules
         private float _minElementDistance = 150f;       // min center-to-center distance (Beginner 150 -> H�lle 90)
         private float _sliderClearance = 120f;          // min distance from a slider track to other elements
         private float _spinnerQuietBeats = 2f;          // no elements this many beats before/after a spinner
-        private float _minSliderLength = 120f;          // min slider length (start/end must not touch)
-        private float _maxSliderLength = 240f;          // max slider length
+        private float _minSliderLength = 150f;          // min slider length (start/end must stay visibly separated)
+        private float _maxSliderLength = 420f;          // max slider length
         private float _minTimeGapSeconds = 0.25f;       // min time gap between elements (set by difficulty)
 
         // Taiko hit window tolerances (set by difficulty in the constructor)
         private int _taikoHitWindowEarlyMs = 100;
         private int _taikoHitWindowLateMs = 30;
 
-        // Background opacity (33% = 84/255)
-        private const int BgAlpha = 84;
+        // Background opacity is shared through BeatClickerSettings and defaults to 33%.
+        private int _backgroundOpacityPercent = BeatClickerSettings.DefaultBackgroundOpacityPercent;
 
         // Fail animation state
         private struct FailEffect
@@ -244,6 +243,38 @@ namespace ModularAudience.Forms.Modules
             this.MouseUp += GameForm_MouseUp;
         }
 
+        private void LoadBackgroundOpacity()
+        {
+            _backgroundOpacityPercent = BeatClickerSettings.LoadBackgroundOpacityPercent();
+        }
+
+        private int BackgroundOpacityPercent => _backgroundOpacityPercent;
+
+        private void SetBackgroundOpacityPercent(int percent)
+        {
+            _backgroundOpacityPercent = Math.Clamp(
+                percent,
+                BeatClickerSettings.MinBackgroundOpacityPercent,
+                BeatClickerSettings.MaxBackgroundOpacityPercent);
+            BeatClickerSettings.SaveBackgroundOpacityPercent(_backgroundOpacityPercent);
+
+            try { PushLayeredBitmap(); }
+            catch (Exception ex) { Debug.WriteLine($"BeatClickerGame opacity render error: {ex.Message}"); }
+        }
+
+        private int GetBackgroundAlpha()
+        {
+            int opacityPercent = _backgroundOpacityPercent;
+            if (_countInActive)
+            {
+                opacityPercent = Math.Min(
+                    BeatClickerSettings.MaxBackgroundOpacityPercent,
+                    opacityPercent + CountInExtraOpacityPercent);
+            }
+
+            return (int)Math.Round(opacityPercent * 255.0 / 100.0);
+        }
+
         /// <summary>
         /// Runs an audio operation on the UI thread (NAudio's WaveOut is COM-affine to the
         /// thread that created it). Falls back to running inline if the UI thread is not
@@ -270,6 +301,7 @@ namespace ModularAudience.Forms.Modules
 
         public void StartGame()
         {
+            LoadBackgroundOpacity();
             MinimizeAllWindowsOnScreen();
 
             // Always restart the audio from the very beginning. The track may already be
@@ -287,7 +319,7 @@ namespace ModularAudience.Forms.Modules
             RunAudioOnUiThread(() => _audio.PlayAsync(_playbackCts.Token));
 
             // Generate the beatmap asynchronously so the UI never freezes. The count-in
-            // (2.1s) gives the background task time to finish before the game clock starts.
+            // gives the background task time to finish before the first playable beat.
             _beatmapReady = false;
             Task.Run(() =>
             {
@@ -521,10 +553,10 @@ namespace ModularAudience.Forms.Modules
 
             int groupNumber = 0;
             int groupCount = 0;
-            // Skip the first 2 beats: the count-in (2.1s) overlaps with the track start,
-            // so the first elements would appear before the player is ready. Starting at
-            // beat 2 gives the player a moment to orient after the count-in ends.
-            int beatIndex = 2;
+            // Keep the first playable object after the BPM-based count-in. The game clock
+            // already follows the audio timeline while the count-in is displayed.
+            int countInBeats = (int)Math.Ceiling(GetCountInDurationSeconds() / beatInterval);
+            int beatIndex = Math.Max(2, countInBeats + 1);
             float lastPlacedTime = 0f;
 
             while (beatIndex < totalBeats)
@@ -551,12 +583,14 @@ namespace ModularAudience.Forms.Modules
                         continue;
                     }
 
-                    // Density gate: not every beat gets an element (lower difficulty = sparser).
+                    // Density gate: skip this beat, but do not terminate the group or add a
+                    // cooldown. A single random miss must not create a long empty section.
                     double densityRoll = rng.NextDouble();
                     if (densityRoll >= density)
                     {
-                        _debugLog?.LogDecision(t, "BREAK group (density gate)", $"roll={densityRoll:F4} >= density={density:F2}");
-                        break;
+                        _debugLog?.LogDecision(t, "SKIP beat (density gate)", $"roll={densityRoll:F4} >= density={density:F2}");
+                        beatIndex++;
+                        continue;
                     }
 
                     // Advance the meandering line: random-walk the heading, then step forward.
@@ -582,11 +616,13 @@ namespace ModularAudience.Forms.Modules
                     // Spinners are isolated: no element may be placed within SpinnerQuietBeats
                     // before or after a spinner, so multiple spinners can never overlap in time.
                     BeatCatchHitType type;
+                    float spinnerDuration = Math.Max(3.0f, beatInterval * BeatClickerDifficulty.SpinnerDurationBeats(_difficultyIndex));
+                    float spinnerApproachWindow = ApproachSeconds + Math.Min(ApproachSeconds, spinnerDuration * 0.5f);
+                    float spinnerQuietStart = t - spinnerApproachWindow - _spinnerQuietBeats * beatInterval;
                     bool spinnerAllowed = true;
                     foreach (var o in _hitObjects)
                     {
-                        float dt = t - o.Time;
-                        if (dt < _spinnerQuietBeats * beatInterval)
+                        if (GetVisualEndTime(o) > spinnerQuietStart)
                         {
                             spinnerAllowed = false;
                             break;
@@ -595,10 +631,11 @@ namespace ModularAudience.Forms.Modules
 
                     double spinnerRoll = rng.NextDouble();
                     double sliderRoll = rng.NextDouble();
-                    if (spinnerAllowed && e > 0.85f && spinnerRoll < spinnerChance * 0.5f)
+                    float spinnerEnergyChance = e >= 0.8f ? spinnerChance * 0.65f : spinnerChance * 0.35f;
+                    if (spinnerAllowed && e >= 0.55f && spinnerRoll < spinnerEnergyChance)
                     {
                         type = BeatCatchHitType.Spinner;
-                        _debugLog?.LogDecision(t, "TYPE=Spinner", $"energy={e:F3}>0.85, spinnerRoll={spinnerRoll:F4}<spinnerChance*0.5={spinnerChance * 0.5f:F4}, spinnerAllowed={spinnerAllowed}");
+                        _debugLog?.LogDecision(t, "TYPE=Spinner", $"energy={e:F3}>=0.55, spinnerRoll={spinnerRoll:F4}<spinnerChanceByEnergy={spinnerEnergyChance:F4}, spinnerAllowed={spinnerAllowed}");
                     }
                     else if (e > 0.6f && sliderRoll < sliderChance)
                     {
@@ -608,7 +645,7 @@ namespace ModularAudience.Forms.Modules
                     else
                     {
                         type = BeatCatchHitType.Circle;
-                        _debugLog?.LogDecision(t, "TYPE=Circle", $"energy={e:F3} (spinner: allowed={spinnerAllowed}, e>0.85={e > 0.85f}, roll={spinnerRoll:F4}; slider: e>0.6={e > 0.6f}, roll={sliderRoll:F4})");
+                        _debugLog?.LogDecision(t, "TYPE=Circle", $"energy={e:F3} (spinner: allowed={spinnerAllowed}, energy>=0.55={e >= 0.55f}, roll={spinnerRoll:F4}; slider: e>0.6={e > 0.6f}, roll={sliderRoll:F4})");
                     }
 
                     var obj = new BeatCatchHitObject
@@ -629,7 +666,7 @@ namespace ModularAudience.Forms.Modules
                         // slower tracks the beat-based duration stretches well past 3s.
                         obj.X = screenW / 2f;
                         obj.Y = screenH / 2f;
-                        obj.Duration = Math.Max(3.0f, beatInterval * BeatClickerDifficulty.SpinnerDurationBeats(_difficultyIndex));
+                        obj.Duration = spinnerDuration;
                         if (!IsPlacementValid(obj, _hitObjects))
                         {
                             _debugLog?.LogDecision(t, "SKIP spinner", "placement or interaction interval is invalid");
@@ -658,25 +695,23 @@ namespace ModularAudience.Forms.Modules
                     else if (type == BeatCatchHitType.Slider)
                     {
                         float angle = heading + (float)((rng.NextDouble() - 0.5) * 1.0);
-                        // Length: mostly short, but occasionally a long slider (a 15% chance to
-                        // draw from the upper half of the range) so long drags appear sometimes.
+                        // Use a broad length distribution: most sliders are short-to-medium,
+                        // but a substantial share deliberately reaches the long end of the range.
                         float length;
-                        if (rng.NextDouble() < 0.15f)
+                        if (rng.NextDouble() < 0.35f)
                         {
-                            float upper = (_maxSliderLength + _minSliderLength) * 0.5f;
+                            float upper = _minSliderLength + (_maxSliderLength - _minSliderLength) * 0.6f;
                             length = upper + (float)rng.NextDouble() * (_maxSliderLength - upper);
                         }
                         else
                         {
-                            length = _minSliderLength + (float)rng.NextDouble() * (_maxSliderLength - _minSliderLength);
+                            float upper = _minSliderLength + (_maxSliderLength - _minSliderLength) * 0.8f;
+                            length = _minSliderLength + (float)rng.NextDouble() * (upper - _minSliderLength);
                         }
-                        obj.EndX = Math.Clamp(cx + (float)Math.Cos(angle) * length, margin, screenW - margin);
-                        obj.EndY = Math.Clamp(cy + (float)Math.Sin(angle) * length, margin, screenH - margin);
-                        // Duration: a whole number of beats (1-3) so the slider's END lands on a
-                        // beat too (the start is already snapped on-beat). The drag speed then
-                        // follows the distance: a long slider in 1 beat = fast flick, a short
-                        // slider in 3 beats = slow, easy drag.
-                        int sliderBeats = 1 + rng.Next(3); // 1, 2, or 3 beats
+                        SetSliderEndpoint(ref obj, angle, length, margin, screenW, screenH);
+                        // Duration: 2-4 whole beats, scaled to the track length, so long paths
+                        // remain physically reachable while the slider end stays beat-aligned.
+                        int sliderBeats = Math.Clamp((int)Math.Ceiling(length / 120f), 2, 4);
                         obj.Duration = beatInterval * sliderBeats;
                     }
 
@@ -696,20 +731,11 @@ namespace ModularAudience.Forms.Modules
                                 float dx = obj.EndX - obj.X;
                                 float dy = obj.EndY - obj.Y;
                                 float len = (float)Math.Sqrt(dx * dx + dy * dy);
-                                if (len < 0.001f)
-                                {
-                                    len = _minSliderLength;
-                                    dx = 1f;
-                                    dy = 0f;
-                                }
-                                else
-                                {
-                                    dx /= len;
-                                    dy /= len;
-                                }
+                                float angle = len < 0.001f
+                                    ? heading
+                                    : (float)Math.Atan2(dy, dx);
                                 float newLen = Math.Clamp(len, _minSliderLength, _maxSliderLength);
-                                obj.EndX = Math.Clamp(obj.X + dx * newLen, margin, screenW - margin);
-                                obj.EndY = Math.Clamp(obj.Y + dy * newLen, margin, screenH - margin);
+                                SetSliderEndpoint(ref obj, angle, newLen, margin, screenW, screenH);
                             }
                         }
                     }
@@ -751,6 +777,75 @@ namespace ModularAudience.Forms.Modules
 
             _hitObjects.Sort((a, b) => a.Time.CompareTo(b.Time));
             _debugLog?.LogSection(0f, $"beatmap complete: {_hitObjects.Count} elements");
+        }
+
+        private float GetCountInStepSeconds()
+        {
+            float bpm = _bpm > 0f ? _bpm : (_audio.Bpm > 0f ? _audio.Bpm : 120f);
+            return CountInBeatsPerNumber * 60f / bpm;
+        }
+
+        private float GetCountInDurationSeconds()
+        {
+            return GetCountInStepSeconds() * 3f;
+        }
+
+        private void SetSliderEndpoint(ref BeatCatchHitObject obj, float angle, float desiredLength, int margin, int screenW, int screenH)
+        {
+            float dx = (float)Math.Cos(angle);
+            float dy = (float)Math.Sin(angle);
+            float maxForward = float.PositiveInfinity;
+
+            if (dx > 0.001f)
+            {
+                maxForward = Math.Min(maxForward, (screenW - margin - obj.X) / dx);
+            }
+            else if (dx < -0.001f)
+            {
+                maxForward = Math.Min(maxForward, (margin - obj.X) / dx);
+            }
+
+            if (dy > 0.001f)
+            {
+                maxForward = Math.Min(maxForward, (screenH - margin - obj.Y) / dy);
+            }
+            else if (dy < -0.001f)
+            {
+                maxForward = Math.Min(maxForward, (margin - obj.Y) / dy);
+            }
+
+            if (maxForward < _minSliderLength)
+            {
+                dx = screenW / 2f - obj.X;
+                dy = screenH / 2f - obj.Y;
+                float towardCenterLength = (float)Math.Sqrt(dx * dx + dy * dy);
+                if (towardCenterLength > 0.001f)
+                {
+                    dx /= towardCenterLength;
+                    dy /= towardCenterLength;
+                    maxForward = float.PositiveInfinity;
+                    if (dx > 0.001f)
+                    {
+                        maxForward = Math.Min(maxForward, (screenW - margin - obj.X) / dx);
+                    }
+                    else if (dx < -0.001f)
+                    {
+                        maxForward = Math.Min(maxForward, (margin - obj.X) / dx);
+                    }
+                    if (dy > 0.001f)
+                    {
+                        maxForward = Math.Min(maxForward, (screenH - margin - obj.Y) / dy);
+                    }
+                    else if (dy < -0.001f)
+                    {
+                        maxForward = Math.Min(maxForward, (margin - obj.Y) / dy);
+                    }
+                }
+            }
+
+            float length = Math.Clamp(desiredLength, _minSliderLength, Math.Min(_maxSliderLength, maxForward));
+            obj.EndX = obj.X + dx * length;
+            obj.EndY = obj.Y + dy * length;
         }
 
         /// <summary>
@@ -811,6 +906,29 @@ namespace ModularAudience.Forms.Modules
             return true;
         }
 
+        private float GetApproachWindowSeconds(BeatCatchHitObject obj)
+        {
+            return obj.Type == BeatCatchHitType.Spinner
+                ? ApproachSeconds + Math.Min(ApproachSeconds, obj.Duration * 0.5f)
+                : ApproachSeconds;
+        }
+
+        private float GetVisualStartTime(BeatCatchHitObject obj)
+        {
+            return obj.Time - GetApproachWindowSeconds(obj);
+        }
+
+        private float GetVisualEndTime(BeatCatchHitObject obj)
+        {
+            return GetInteractionEndTime(obj) + PostHitFadeSeconds;
+        }
+
+        private bool AreVisuallyConcurrent(BeatCatchHitObject first, BeatCatchHitObject second)
+        {
+            return GetVisualStartTime(first) < GetVisualEndTime(second)
+                && GetVisualStartTime(second) < GetVisualEndTime(first);
+        }
+
         private bool IsPlacementValid(BeatCatchHitObject candidate, List<BeatCatchHitObject> existing)
         {
             // A slider must keep its minimum length (start and end must not overlap).
@@ -830,6 +948,13 @@ namespace ModularAudience.Forms.Modules
 
             foreach (var o in existing)
             {
+                // A track may reuse a position after the old element has disappeared. Only
+                // compare spatial geometry while both elements can be visible together.
+                if (!AreVisuallyConcurrent(candidate, o))
+                {
+                    continue;
+                }
+
                 // Center-to-center distance must exceed the minimum (no overlapping elements).
                 float dc = (float)Math.Sqrt(Math.Pow(candidate.X - o.X, 2) + Math.Pow(candidate.Y - o.Y, 2));
                 if (dc < _minElementDistance)
@@ -1001,17 +1126,15 @@ namespace ModularAudience.Forms.Modules
                 _spinnerIdleAngle += 0.5f * (float)_gameTimer.Interval / 1000f;
             }
 
-            // Count-in phase: the game clock is stopped. Show 3-2-1 at 700ms intervals,
-            // then start the game clock (the music is already playing, so the count-in
-            // lines up with the track's start).
+            // Count-in phase: the game clock follows the already-playing audio while
+            // gameplay is suppressed. Show 3-2-1 at two-beat intervals.
             if (_countInActive)
             {
                 float countInElapsed = (float)Stopwatch.GetTimestamp() / (float)Stopwatch.Frequency - _countInStart;
-                if (countInElapsed >= CountInStepSeconds * 3f)
+                if (countInElapsed >= GetCountInDurationSeconds())
                 {
                     _countInActive = false;
-                    _gameClock.Restart();
-                    _debugLog?.LogEvent(0f, "COUNT-IN complete, game clock started (music already playing)");
+                    _debugLog?.LogEvent((float)_gameClock.Elapsed.TotalSeconds, "COUNT-IN complete (two beats per count, game clock stayed aligned to music)");
                 }
                 try { PushLayeredBitmap(); }
                 catch (Exception ex) { Debug.WriteLine($"BeatClickerGame render error: {ex.Message}"); }
@@ -1117,10 +1240,11 @@ namespace ModularAudience.Forms.Modules
 
                             if (obj.Type == BeatCatchHitType.Slider && _activeSliderIndex == _currentHitIndex && _sliderStartHit)
                             {
+                                float currentProgress = GetSliderProgress(obj, _mouseX, _mouseY);
                                 bool heldAtEndpoint = _leftButtonHeld
                                     && _sliderDragged
                                     && _sliderPathValid
-                                    && _sliderMaxProgress >= 0.98f;
+                                    && Math.Max(_sliderMaxProgress, currentProgress) >= 0.95f;
                                 if (heldAtEndpoint)
                                 {
                                     RegisterHit();
@@ -1249,7 +1373,7 @@ namespace ModularAudience.Forms.Modules
                             float endTolerance = _hitWindowEarlyMs / 1000f;
                             if (_sliderPathValid
                                 && _sliderDragged
-                                && _sliderMaxProgress >= 0.98f
+                                && _sliderMaxProgress >= 0.95f
                                 && currentTime >= sliderEndTime - endTolerance)
                             {
                                 RegisterHit();
@@ -1344,9 +1468,7 @@ namespace ModularAudience.Forms.Modules
                 float timeUntilHit = obj.Time - currentTime;
 
                 bool isSpinner = obj.Type == BeatCatchHitType.Spinner;
-                float approachWindow = isSpinner
-                    ? ApproachSeconds + Math.Min(ApproachSeconds, obj.Duration * 0.5f)
-                    : ApproachSeconds;
+                float approachWindow = GetApproachWindowSeconds(obj);
 
                 // If the object is still far in the future, stop searching.
                 if (timeUntilHit > approachWindow)
@@ -1478,6 +1600,19 @@ namespace ModularAudience.Forms.Modules
             return (float)Math.Sqrt(Math.Pow(px - closestX, 2) + Math.Pow(py - closestY, 2));
         }
 
+        private static float GetSliderProgress(BeatCatchHitObject obj, int mouseX, int mouseY)
+        {
+            float dx = obj.EndX - obj.X;
+            float dy = obj.EndY - obj.Y;
+            float lenSq = dx * dx + dy * dy;
+            if (lenSq <= 0.001f)
+            {
+                return 0f;
+            }
+
+            return Math.Clamp(((mouseX - obj.X) * dx + (mouseY - obj.Y) * dy) / lenSq, 0f, 1f);
+        }
+
         private void HandleTaikoClick(int mouseX, int mouseY, float currentTime)
         {
             int screenW = this.ClientSize.Width;
@@ -1546,7 +1681,7 @@ namespace ModularAudience.Forms.Modules
         /// <summary>
         /// Renders the game to a 32-bit ARGB bitmap and pushes it to the screen
         /// via UpdateLayeredWindow for true per-pixel transparency.
-        /// Background pixels are at 20% alpha (desktop shows through),
+        /// Background pixels use the persisted opacity setting,
         /// game element pixels are at 100% alpha (fully opaque).
         /// </summary>
         private void PushLayeredBitmap()
@@ -1568,10 +1703,9 @@ namespace ModularAudience.Forms.Modules
             {
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
-                // Background: 33% opaque black (desktop shows through at 67%). During the
-                // count-in it darkens to 48% and returns to 33% when the count-in ends.
+                // The persisted black background becomes slightly darker during count-in.
                 // The taskbar area is NOT painted opaque � the taskbar stays visible.
-                int bgAlpha = _countInActive ? BgAlphaCountIn : BgAlpha;
+                int bgAlpha = GetBackgroundAlpha();
                 using var bgBrush = new SolidBrush(Color.FromArgb(bgAlpha, 0, 0, 0));
                 g.FillRectangle(bgBrush, 0, 0, width, height);
 
@@ -1580,17 +1714,19 @@ namespace ModularAudience.Forms.Modules
                 // When paused, use the last game clock value (Stopwatch keeps its elapsed time when stopped)
                 float currentTime = _gameRunning ? (float)_gameClock.Elapsed.TotalSeconds : 0f;
 
-                // Count-in: show 3-2-1 at 700ms intervals, each fading in and out quickly.
+                // Count-in: show 3-2-1 every two track beats, each fading in and out quickly.
                 if (_countInActive)
                 {
                     float countInElapsed = (float)Stopwatch.GetTimestamp() / (float)Stopwatch.Frequency - _countInStart;
-                    int step = (int)(countInElapsed / CountInStepSeconds);
+                    float countInStepSeconds = GetCountInStepSeconds();
+                    int step = (int)(countInElapsed / countInStepSeconds);
                     if (step >= 0 && step < 3)
                     {
-                        float stepElapsed = countInElapsed - step * CountInStepSeconds;
-                        float alpha = stepElapsed < CountInFadeSeconds
-                            ? stepElapsed / CountInFadeSeconds
-                            : Math.Clamp(1f - (stepElapsed - CountInFadeSeconds) / (CountInStepSeconds - CountInFadeSeconds), 0f, 1f);
+                        float stepElapsed = countInElapsed - step * countInStepSeconds;
+                        float fadeSeconds = Math.Min(CountInFadeSeconds, countInStepSeconds * 0.45f);
+                        float alpha = stepElapsed < fadeSeconds
+                            ? stepElapsed / fadeSeconds
+                            : Math.Clamp(1f - (stepElapsed - fadeSeconds) / Math.Max(0.001f, countInStepSeconds - fadeSeconds), 0f, 1f);
                         int a = Math.Clamp((int)(255 * alpha), 0, 255);
                         if (a > 0)
                         {
@@ -1603,9 +1739,8 @@ namespace ModularAudience.Forms.Modules
                     }
                 }
 
-                // During the count-in the game clock is stopped (currentTime=0), so no
-                // elements should be shown and no misses registered. Skip all gameplay
-                // rendering (elements, fail effects, combo popups) while counting in.
+                // During the count-in gameplay is suppressed, so no elements are shown and
+                // no misses are registered. The clock continues to preserve audio alignment.
                 if (!_countInActive)
                 {
                     if (_isTaikoMode)
@@ -1710,6 +1845,23 @@ namespace ModularAudience.Forms.Modules
             {
                 for (int i = _currentHitIndex; i < _hitObjects.Count; i++)
                 {
+                    var candidate = _hitObjects[i];
+                    float candidateTimeUntilHit = candidate.Time - currentTime;
+                    if (candidateTimeUntilHit > GetApproachWindowSeconds(candidate))
+                    {
+                        break;
+                    }
+
+                    if (candidate.Type == BeatCatchHitType.Spinner
+                        && candidateTimeUntilHit >= -(candidate.Duration + PostHitFadeSeconds))
+                    {
+                        PaintSpinner(g, candidate, candidateTimeUntilHit, currentTime);
+                        return;
+                    }
+                }
+
+                for (int i = _currentHitIndex; i < _hitObjects.Count; i++)
+                {
                     if (i > _currentHitIndex && _currentHitIndex < _hitObjects.Count)
                     {
                         var currentObject = _hitObjects[_currentHitIndex];
@@ -1737,9 +1889,7 @@ namespace ModularAudience.Forms.Modules
                     // Skip objects that haven't entered the approach window yet. Spinners get
                     // a longer lead-in (ApproachSeconds + half their duration) so their
                     // shrinking approach ring is visible well before the hit time.
-                    float approachWindow = obj.Type == BeatCatchHitType.Spinner
-                        ? ApproachSeconds + Math.Min(ApproachSeconds, obj.Duration * 0.5f)
-                        : ApproachSeconds;
+                    float approachWindow = GetApproachWindowSeconds(obj);
                     if (timeUntilHit > approachWindow)
                     {
                         continue;
@@ -1808,7 +1958,10 @@ namespace ModularAudience.Forms.Modules
         {
             // Sliders stay visible for their beat-aligned duration and fade out afterwards.
             float fadeAlpha = 1f;
-            bool isActive = _activeSliderIndex >= 0 && _hitObjects[_activeSliderIndex].Time == obj.Time && _sliderStartHit;
+            bool isActive = _activeSliderIndex >= 0
+                && _activeSliderIndex < _hitObjects.Count
+                && _hitObjects[_activeSliderIndex].Time == obj.Time
+                && _sliderStartHit;
             if (timeUntilHit < -obj.Duration && !isActive)
             {
                 fadeAlpha = Math.Clamp(1f + (timeUntilHit + obj.Duration) / PostHitFadeSeconds, 0f, 1f);
@@ -1841,6 +1994,10 @@ namespace ModularAudience.Forms.Modules
                 // Calculate expected progress: time since activation / slider duration
                 float elapsedSinceActivation = currentTime - obj.Time;
                 float expectedProgress = Math.Clamp(elapsedSinceActivation / Math.Max(0.001f, obj.Duration), 0f, 1f);
+                if (currentTime >= obj.Time + obj.Duration - _hitWindowLateMs / 1000f)
+                {
+                    expectedProgress = 1f;
+                }
 
                 float headX = obj.X + (obj.EndX - obj.X) * expectedProgress;
                 float headY = obj.Y + (obj.EndY - obj.Y) * expectedProgress;
@@ -2292,6 +2449,7 @@ namespace ModularAudience.Forms.Modules
 
         private void RestartGame()
         {
+            LoadBackgroundOpacity();
             _playbackCts?.Cancel();
             _audioPausedByGame = false;
             RunAudioOnUiThread(() => _audio.StopAsync());
@@ -2605,17 +2763,46 @@ namespace ModularAudience.Forms.Modules
                 this.StartPosition = FormStartPosition.CenterScreen;
                 this.BackColor = Color.FromArgb(20, 20, 35);
                 this.ForeColor = Color.White;
-                this.ClientSize = new Size(320, 220);
+                this.ClientSize = new Size(320, 241);
                 this.KeyPreview = true;
                 this.TopMost = true;
                 this.ShowInTaskbar = false;
                 this.Opacity = 1.0f; // Pause menu is fully opaque
                 this.DoubleBuffered = true;
 
+                var opacityLabel = new Label
+                {
+                    Text = $"Background opacity: {_game.BackgroundOpacityPercent}%",
+                    Location = new Point(60, 4),
+                    Size = new Size(200, 24),
+                    ForeColor = Color.White,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Font = new Font("Consolas", 10f, FontStyle.Bold)
+                };
+
+                var opacitySlider = new TrackBar
+                {
+                    Minimum = BeatClickerSettings.MinBackgroundOpacityPercent,
+                    Maximum = BeatClickerSettings.MaxBackgroundOpacityPercent,
+                    Value = _game.BackgroundOpacityPercent,
+                    Location = new Point(50, 25),
+                    Size = new Size(220, 42),
+                    TickFrequency = 10,
+                    LargeChange = 10,
+                    SmallChange = 1,
+                    Orientation = Orientation.Horizontal,
+                    AutoSize = false
+                };
+                opacitySlider.ValueChanged += (_, _) =>
+                {
+                    opacityLabel.Text = $"Background opacity: {opacitySlider.Value}%";
+                    _game.SetBackgroundOpacityPercent(opacitySlider.Value);
+                };
+
                 var btnContinue = new Button
                 {
                     Text = "Continue",
-                    Location = new Point(60, 20),
+                    Location = new Point(60, 76),
                     Size = new Size(200, 45),
                     BackColor = Color.FromArgb(0, 120, 60),
                     ForeColor = Color.White,
@@ -2628,7 +2815,7 @@ namespace ModularAudience.Forms.Modules
                 var btnRestart = new Button
                 {
                     Text = "Restart",
-                    Location = new Point(60, 75),
+                    Location = new Point(60, 131),
                     Size = new Size(200, 45),
                     BackColor = Color.FromArgb(120, 100, 0),
                     ForeColor = Color.White,
@@ -2641,7 +2828,7 @@ namespace ModularAudience.Forms.Modules
                 var btnExit = new Button
                 {
                     Text = "Exit",
-                    Location = new Point(60, 130),
+                    Location = new Point(60, 186),
                     Size = new Size(200, 45),
                     BackColor = Color.FromArgb(140, 0, 0),
                     ForeColor = Color.White,
@@ -2651,6 +2838,8 @@ namespace ModularAudience.Forms.Modules
                 btnExit.FlatAppearance.BorderSize = 0;
                 btnExit.Click += (_, _) => { this.Close(); _game.ExitGame(); };
 
+                this.Controls.Add(opacityLabel);
+                this.Controls.Add(opacitySlider);
                 this.Controls.Add(btnContinue);
                 this.Controls.Add(btnRestart);
                 this.Controls.Add(btnExit);
