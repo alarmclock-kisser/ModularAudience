@@ -7,6 +7,7 @@ using System.Data;
 using System.Drawing;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 using static ModularAudience.Audio.Processing.DropManager;
 
@@ -239,6 +240,7 @@ namespace ModularAudience.Forms.Modules
         private bool lastActionWasMultiplierChange = false;
         private bool suppressMultiplierEvents;
         private bool suppressJumpEvents;
+        private CancellationTokenSource? pendingShiftLoopCts;
         private double lastJumpMs = 1;
         private double lastJumpValue = 1;
         private Guid _lastJumpAudioId = Guid.Empty;
@@ -546,7 +548,7 @@ namespace ModularAudience.Forms.Modules
 
                 copy.Click += this.LoopButton_Click;
 
-                string tooltipText = $"Loop {buttonLabels[i]}.\nCtrl+click: set loop fraction on all tracks.";
+                string tooltipText = $"Loop {buttonLabels[i]}.\nShift+click: wait for the next beat-grid point before setting.\nCtrl+click: set loop fraction on all tracks.";
                 this.toolTip_playlistTracks.SetToolTip(copy, tooltipText);
 
                 this.panel_buttons.Controls.Add(copy);
@@ -590,7 +592,7 @@ namespace ModularAudience.Forms.Modules
 
 
 
-        private void LoopButton_Click(object? sender, EventArgs e)
+        private async void LoopButton_Click(object? sender, EventArgs e)
         {
             if (sender is not Button clickedButton ||
                 !float.TryParse(clickedButton.Tag?.ToString(), System.Globalization.NumberStyles.Float,
@@ -599,8 +601,20 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            bool shiftPressed = ModifierKeys.HasFlag(Keys.Shift);
             IReadOnlyList<AudioObj> targets = this.GetActionTargets(ModifierKeys.HasFlag(Keys.Control));
-            this.ToggleTargetLoops(targets, fraction);
+            bool turnOff = targets.Count > 0 && targets.All(audio =>
+                audio.LoopEnabled && Math.Abs(GetUiLoopFraction(audio) - fraction) < 0.0001f);
+
+            if (shiftPressed && !turnOff)
+            {
+                await this.ApplyShiftSnappedLoopsAsync(targets, fraction);
+            }
+            else
+            {
+                this.CancelPendingShiftLoop();
+                this.ToggleTargetLoops(targets, fraction);
+            }
 
             // Focus TrackView but also keep this Form front most
             this.CurrentTrackView?.Focus();
@@ -619,6 +633,127 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
+        private async Task ApplyShiftSnappedLoopsAsync(IReadOnlyList<AudioObj> targets, float fraction)
+        {
+            this.CancelPendingShiftLoop();
+            if (targets.Count == 0)
+            {
+                return;
+            }
+
+            using CancellationTokenSource cts = new();
+            this.pendingShiftLoopCts = cts;
+            try
+            {
+                Task[] pendingLoops = targets
+                    .Select(audio => this.ApplyShiftSnappedLoopAsync(audio, fraction, cts.Token))
+                    .ToArray();
+                await Task.WhenAll(pendingLoops);
+
+                if (!cts.IsCancellationRequested)
+                {
+                    this.UpdateLoopButtonsState();
+                }
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log(ex);
+            }
+            finally
+            {
+                if (ReferenceEquals(this.pendingShiftLoopCts, cts))
+                {
+                    this.pendingShiftLoopCts = null;
+                }
+            }
+        }
+
+        private async Task ApplyShiftSnappedLoopAsync(AudioObj audio, float fraction, CancellationToken cancellationToken)
+        {
+            int channels = Math.Max(1, audio.Channels);
+            long currentFrame = Math.Clamp(audio.Position, 0L,
+                Math.Max(0L, audio.Length / channels - 1L));
+            bool waitForGrid = audio.PlayerPlaying && audio.BeatGrid is { Length: > 0 };
+            long? anchorFrame = waitForGrid ? audio.GetNextBeatGridFrame(currentFrame) : currentFrame;
+
+            if (waitForGrid)
+            {
+                if (!anchorFrame.HasValue)
+                {
+                    return;
+                }
+
+                if (!IsGridFrameReachable(audio, anchorFrame.Value, channels))
+                {
+                    audio.UpdateLoopFraction(0, 0, 0, false, false);
+                }
+
+                anchorFrame = await WaitForNextBeatGridFrameAsync(audio, anchorFrame.Value, cancellationToken);
+                if (!anchorFrame.HasValue || cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+            }
+
+            long anchorSamples = (anchorFrame ?? currentFrame) * channels;
+            this.SetLoopRange(audio, fraction, false, anchorSamples);
+        }
+
+        private static async Task<long?> WaitForNextBeatGridFrameAsync(
+            AudioObj audio,
+            long initialAnchorFrame,
+            CancellationToken cancellationToken)
+        {
+            long anchorFrame = initialAnchorFrame;
+            long previousFrame = audio.Position;
+
+            while (audio.PlayerPlaying)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                long currentFrame = audio.Position;
+                if (currentFrame >= anchorFrame)
+                {
+                    return anchorFrame;
+                }
+
+                if (currentFrame < previousFrame)
+                {
+                    long? wrappedAnchor = audio.GetNextBeatGridFrame(currentFrame);
+                    if (!wrappedAnchor.HasValue || !IsGridFrameReachable(audio, wrappedAnchor.Value, Math.Max(1, audio.Channels)))
+                    {
+                        return null;
+                    }
+
+                    anchorFrame = wrappedAnchor.Value;
+                }
+
+                previousFrame = currentFrame;
+                await Task.Delay(8, cancellationToken);
+            }
+
+            return null;
+        }
+
+        private static bool IsGridFrameReachable(AudioObj audio, long frame, int channels)
+        {
+            if (!audio.LoopEnabled || audio.LoopEndSamples <= audio.LoopStartSamples)
+            {
+                return true;
+            }
+
+            long loopEndFrame = audio.LoopEndSamples / Math.Max(1, channels);
+            return frame < loopEndFrame;
+        }
+
+        private void CancelPendingShiftLoop()
+        {
+            try { this.pendingShiftLoopCts?.Cancel(); } catch { }
+            this.pendingShiftLoopCts = null;
+        }
+
         private void UntoggleAllOtherButtons(Button? sender)
         {
             var buttons = this.panel_buttons.Controls.OfType<Button>().Where(b => b != sender);
@@ -628,7 +763,7 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        private void SetLoopRange(AudioObj audio, float fraction, bool hadActiveBefore = false)
+        private void SetLoopRange(AudioObj audio, float fraction, bool hadActiveBefore = false, long? currentSamplesOverride = null)
         {
             LoopTargetState state = this.GetLoopTargetState(audio);
 
@@ -661,7 +796,7 @@ namespace ModularAudience.Forms.Modules
                 long totalSamples = totalFrames * channels;
 
                 // Capture current position and previous loop bounds before any change
-                long currentSamplesBefore = audio.Position * channels;
+                long currentSamplesBefore = currentSamplesOverride ?? audio.Position * channels;
                 long prevStartSamples = state.StartSamples;
                 long prevEndSamples = state.EndSamples;
 
@@ -754,7 +889,9 @@ namespace ModularAudience.Forms.Modules
                 else
                 {
                     long deltaFrames = Math.Max(1L, (long) Math.Round(Math.Abs(fraction) * framesPerBeat));
-                    long currentFrame = audio.Position;
+                    long currentFrame = currentSamplesOverride.HasValue
+                        ? currentSamplesBefore / channels
+                        : audio.Position;
 
                     if (fraction < 0f)
                     {

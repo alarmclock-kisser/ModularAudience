@@ -257,7 +257,18 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        public void LogSummary(float gameTime, int hits, int misses, int bestStreak, float passRate, double meanTimingMs = 0d, int timingSampleCount = 0)
+        public void LogSummary(
+            float gameTime,
+            int hits,
+            int misses,
+            int bestStreak,
+            float passRate,
+            double meanTimingMs = 0d,
+            int timingSampleCount = 0,
+            double score = 0d,
+            double trackPlayedPercent = 0d,
+            bool completed = false,
+            int finalStreak = 0)
         {
             lock (_lock)
             {
@@ -265,6 +276,7 @@ namespace ModularAudience.Forms.Modules
                 _writer.WriteLine($"[{Ts(gameTime)}] === GAME SUMMARY ===");
                 _writer.WriteLine($"Hits: {hits}  Misses: {misses}  BestStreak: {bestStreak}  PassRate: {passRate:F2}%");
                 _writer.WriteLine($"Mean Timing (valid hits only): {meanTimingMs:F3} ms  Samples: {timingSampleCount}");
+                _writer.WriteLine($"Score: {score:N0}  FinalStreak: {finalStreak}  TrackPlayed: {trackPlayedPercent:F1}%  Completed: {completed}");
             }
         }
 

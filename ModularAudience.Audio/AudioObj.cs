@@ -187,6 +187,8 @@ namespace ModularAudience.Audio
                 Length = this.Length,
                 Duration = this.Duration,
                 Bpm = this.Bpm,
+                DrawBeatGrid = this.DrawBeatGrid,
+                BeatGrid = (bool[]) this.BeatGrid.Clone(),
                 Timing = this.Timing,
                 Volume = this.Volume
             };
@@ -565,6 +567,30 @@ namespace ModularAudience.Audio
             }
 
             return center;
+        }
+
+        public long? GetNextBeatGridFrame(long frameIndex)
+        {
+            if (this.BeatGrid == null || this.BeatGrid.Length == 0)
+            {
+                return null;
+            }
+
+            long startFrame = frameIndex < long.MaxValue ? frameIndex + 1 : long.MaxValue;
+            if (startFrame < 0 || startFrame >= this.BeatGrid.LongLength)
+            {
+                return null;
+            }
+
+            for (long candidate = startFrame; candidate < this.BeatGrid.LongLength; candidate++)
+            {
+                if (this.BeatGrid[candidate])
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
         }
 
         public async Task ResampleAsync(int sampleRate)

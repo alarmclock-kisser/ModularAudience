@@ -39,10 +39,10 @@ namespace ModularAudience.Forms.Modules
             {
                 case 0: return 0.52f;
                 case 1: return 0.68f;
-                case 2: return 0.84f;
-                case 3: return 0.90f;
-                case 4: return 0.95f;
-                case 5: return 0.98f;
+                case 2: return 0.90f;
+                case 3: return 0.98f;
+                case 4: return 1.00f;
+                case 5: return 1.00f;
                 default: return 1.00f;
             }
         }
@@ -54,10 +54,10 @@ namespace ModularAudience.Forms.Modules
             {
                 case 0: return 3;
                 case 1: return 2;
-                case 2: return 1;
-                case 3: return 1;
-                case 4: return 1;
-                case 5: return 1;
+                case 2: return 0;
+                case 3: return 0;
+                case 4: return 0;
+                case 5: return 0;
                 default: return 0;
             }
         }
@@ -69,11 +69,11 @@ namespace ModularAudience.Forms.Modules
             {
                 case 0: return 4;
                 case 1: return 3;
-                case 2: return 2;
-                case 3: return 2;
-                case 4: return 1;
-                case 5: return 1;
-                default: return 1;
+                case 2: return 0;
+                case 3: return 0;
+                case 4: return 0;
+                case 5: return 0;
+                default: return 0;
             }
         }
 
@@ -84,11 +84,11 @@ namespace ModularAudience.Forms.Modules
             {
                 case 0: return 4;
                 case 1: return 5;
-                case 2: return 6;
-                case 3: return 8;
-                case 4: return 10;
-                case 5: return 12;
-                default: return 14;
+                case 2: return 8;
+                case 3: return 12;
+                case 4: return 16;
+                case 5: return 20;
+                default: return 24;
             }
         }
 
@@ -99,11 +99,11 @@ namespace ModularAudience.Forms.Modules
             {
                 case 0: return 12;
                 case 1: return 16;
-                case 2: return 24;
-                case 3: return 30;
-                case 4: return 36;
-                case 5: return 44;
-                default: return 52;
+                case 2: return 16;
+                case 3: return 22;
+                case 4: return 27;
+                case 5: return 31;
+                default: return 36;
             }
         }
 
@@ -114,11 +114,11 @@ namespace ModularAudience.Forms.Modules
             {
                 case 0: return 0.05f;
                 case 1: return 0.10f;
-                case 2: return 0.18f;
-                case 3: return 0.25f;
-                case 4: return 0.35f;
-                case 5: return 0.45f;
-                default: return 0.60f;
+                case 2: return 0.22f;
+                case 3: return 0.30f;
+                case 4: return 0.38f;
+                case 5: return 0.46f;
+                default: return 0.55f;
             }
         }
 
@@ -129,11 +129,25 @@ namespace ModularAudience.Forms.Modules
             {
                 case 0: return 0.10f;
                 case 1: return 0.20f;
-                case 2: return 0.30f;
-                case 3: return 0.40f;
-                case 4: return 0.50f;
-                case 5: return 0.60f;
-                default: return 0.75f;
+                case 2: return 0.36f;
+                case 3: return 0.52f;
+                case 4: return 0.62f;
+                case 5: return 0.70f;
+                default: return 0.78f;
+            }
+        }
+        public static float PatternChance(int index)
+        {
+            index = System.Math.Clamp(index, 0, Levels.Length - 1);
+            switch (index)
+            {
+                case 0: return 0.00f;
+                case 1: return 0.00f;
+                case 2: return 0.01f;
+                case 3: return 0.03f;
+                case 4: return 0.07f;
+                case 5: return 0.12f;
+                default: return 0.18f;
             }
         }
 
@@ -144,11 +158,26 @@ namespace ModularAudience.Forms.Modules
             {
                 case 0: return 0.35f;
                 case 1: return 0.30f;
-                case 2: return 0.25f;
-                case 3: return 0.20f;
-                case 4: return 0.15f;
-                case 5: return 0.12f;
-                default: return 0.08f;
+                case 2: return 0.18f;
+                case 3: return 0.12f;
+                case 4: return 0.09f;
+                case 5: return 0.065f;
+                default: return 0.045f;
+            }
+        }
+
+        public static float SliderProgressTolerance(int index)
+        {
+            index = System.Math.Clamp(index, 0, Levels.Length - 1);
+            switch (index)
+            {
+                case 0: return 0.18f;
+                case 1: return 0.16f;
+                case 2: return 0.13f;
+                case 3: return 0.10f;
+                case 4: return 0.075f;
+                case 5: return 0.055f;
+                default: return 0.035f;
             }
         }
 
@@ -189,11 +218,11 @@ namespace ModularAudience.Forms.Modules
             {
                 case 0: return 180;
                 case 1: return 150;
-                case 2: return 120;
-                case 3: return 90;
-                case 4: return 60;
-                case 5: return 40;
-                default: return 20;
+                case 2: return 110;
+                case 3: return 80;
+                case 4: return 55;
+                case 5: return 35;
+                default: return 18;
             }
         }
 
@@ -204,11 +233,11 @@ namespace ModularAudience.Forms.Modules
             {
                 case 0: return 200;
                 case 1: return 160;
-                case 2: return 120;
-                case 3: return 80;
-                case 4: return 50;
-                case 5: return 35;
-                default: return 20;
+                case 2: return 110;
+                case 3: return 70;
+                case 4: return 45;
+                case 5: return 30;
+                default: return 18;
             }
         }
 
@@ -288,9 +317,23 @@ namespace ModularAudience.Forms.Modules
             index = System.Math.Clamp(index, 0, Levels.Length - 1);
             switch (index)
             {
-                case 5:
-                case 6: return 1f;
+                case 5: return 0.75f;
+                case 6: return 0.50f;
                 default: return 2f;
+            }
+        }
+        public static float SpinnerMinimumDurationSeconds(int index)
+        {
+            index = System.Math.Clamp(index, 0, Levels.Length - 1);
+            switch (index)
+            {
+                case 0: return 3.00f;
+                case 1: return 3.00f;
+                case 2: return 2.75f;
+                case 3: return 2.50f;
+                case 4: return 2.00f;
+                case 5: return 1.50f;
+                default: return 1.15f;
             }
         }
 
@@ -306,9 +349,9 @@ namespace ModularAudience.Forms.Modules
                 case 1: return 7f;
                 case 2: return 6f;
                 case 3: return 5f;
-                case 4: return 4f;
-                case 5: return 4f;
-                default: return 3f;
+                case 4: return 3.5f;
+                case 5: return 3f;
+                default: return 2.5f;
             }
         }
 

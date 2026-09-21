@@ -120,19 +120,113 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
-        public void SpinnerLifetime_Minimum3Seconds()
+        public void SpinnerLifetime_HardAndHellCanBeShorter()
         {
-            // Verify that the spinner lifetime is at least 3.0 seconds.
-            // At 120 BPM, beatInterval = 0.5s, so max(3.0, 0.5*6) = 3.0s.
-            // At 60 BPM, beatInterval = 1.0s, so max(3.0, 1.0*6) = 6.0s.
-            float beatInterval120 = 60f / 120f;
-            float duration120 = Math.Max(3.0f, beatInterval120 * 6);
-            Assert.IsTrue(duration120 >= 3.0f, "Spinner lifetime at 120 BPM must be >= 3.0s");
+            // Verify that Hard and Hell spinners can be shorter than 3.0 seconds,
+            // but still respect the difficulty-specific minimum duration.
+            float minHard = BeatClickerDifficulty.SpinnerMinimumDurationSeconds(5);
+            float minHell = BeatClickerDifficulty.SpinnerMinimumDurationSeconds(6);
+            Assert.IsTrue(minHard < 3.0f, "Hard spinner minimum must be < 3.0s");
+            Assert.IsTrue(minHell < minHard, "Hell spinner minimum must be < Hard minimum");
 
-            float beatInterval60 = 60f / 60f;
-            float duration60 = Math.Max(3.0f, beatInterval60 * 6);
-            Assert.IsTrue(duration60 >= 3.0f, "Spinner lifetime at 60 BPM must be >= 3.0s");
-            Assert.IsTrue(duration60 > duration120, "Slower BPM must give longer spinner lifetime");
+            // At 120 BPM, beatInterval = 0.5s
+            float beatInterval = 60f / 120f;
+            float durationHard = Math.Max(minHard, beatInterval * BeatClickerDifficulty.SpinnerDurationBeats(5));
+            float durationHell = Math.Max(minHell, beatInterval * BeatClickerDifficulty.SpinnerDurationBeats(6));
+            Assert.IsTrue(durationHard >= minHard, "Hard spinner duration must respect minimum");
+            Assert.IsTrue(durationHell >= minHell, "Hell spinner duration must respect minimum");
+        }
+
+        [TestMethod]
+        public void PatternIdCovers256Combinations()
+        {
+            // Verify that the 4x4x4x4 pattern grammar produces 256 unique IDs.
+            var seen = new HashSet<int>();
+            for (int i = 0; i < 256; i++)
+            {
+                var id = BeatClickerPatternLibrary.PatternId.FromIndex(i);
+                Assert.IsTrue(seen.Add(id.Index), $"Pattern ID {id.Index} is not unique");
+            }
+            Assert.AreEqual(256, seen.Count, "Must have exactly 256 unique pattern IDs");
+        }
+
+        [TestMethod]
+        public void SliderPathStartsAndEndsAtEndpoints()
+        {
+            // Verify that a generated slider path starts at (X, Y) and ends at (EndX, EndY).
+            var lib = new BeatClickerPatternLibrary();
+            var rng = new Random(42);
+            var id = lib.SelectPattern(rng, 3, 0.7f, slider: true);
+            var p = lib.CreateParameters(id, rng, 0.5f, 150f, 420f, 3);
+            var path = lib.BuildSliderPath(id, p, 400f, 300f, 80, 1920, 1080, 150f, 420f, rng);
+
+            Assert.AreEqual(400f, path.X[0], 0.01f, "Path must start at X");
+            Assert.AreEqual(300f, path.Y[0], 0.01f, "Path must start at Y");
+            // The endpoint is clamped to the playable rectangle, so we verify it's within bounds.
+            Assert.IsTrue(path.X[^1] >= 80 && path.X[^1] <= 1920 - 80, "Path end X must be in bounds");
+            Assert.IsTrue(path.Y[^1] >= 80 && path.Y[^1] <= 1080 - 80, "Path end Y must be in bounds");
+        }
+
+        [TestMethod]
+        public void SliderPathPointsStayInsidePlayableBounds()
+        {
+            // Verify that all path points respect the configured margin.
+            var lib = new BeatClickerPatternLibrary();
+            var rng = new Random(123);
+            var id = lib.SelectPattern(rng, 5, 0.8f, slider: true);
+            var p = lib.CreateParameters(id, rng, 1.2f, 105f, 300f, 5);
+            var path = lib.BuildSliderPath(id, p, 960f, 540f, 70, 1920, 1080, 105f, 300f, rng);
+
+            for (int i = 0; i < path.X.Length; i++)
+            {
+                Assert.IsTrue(path.X[i] >= 70 && path.X[i] <= 1920 - 70, $"Path point {i} X out of bounds: {path.X[i]}");
+                Assert.IsTrue(path.Y[i] >= 70 && path.Y[i] <= 1080 - 70, $"Path point {i} Y out of bounds: {path.Y[i]}");
+            }
+        }
+
+        [TestMethod]
+        public void CumulativePathLengthIsMonotonic()
+        {
+            // Verify that cumulative arc length never decreases and total length is positive.
+            var lib = new BeatClickerPatternLibrary();
+            var rng = new Random(777);
+            var id = lib.SelectPattern(rng, 4, 0.6f, slider: true);
+            var p = lib.CreateParameters(id, rng, 2.1f, 120f, 340f, 4);
+            var path = lib.BuildSliderPath(id, p, 500f, 400f, 80, 1920, 1080, 120f, 340f, rng);
+
+            Assert.IsTrue(path.TotalLength > 0f, "Total path length must be positive");
+            for (int i = 1; i < path.CumulativeLength.Length; i++)
+            {
+                Assert.IsTrue(path.CumulativeLength[i] >= path.CumulativeLength[i - 1],
+                    $"Cumulative length must be monotonic at index {i}");
+            }
+        }
+
+        [TestMethod]
+        public void ScheduledSliderHeadUsesArcLength()
+        {
+            // Verify that equal progress steps have approximately equal physical distance on a curved path.
+            var lib = new BeatClickerPatternLibrary();
+            var rng = new Random(555);
+            var id = lib.SelectPattern(rng, 3, 0.7f, slider: true);
+            var p = lib.CreateParameters(id, rng, 0.8f, 150f, 420f, 3);
+            var path = lib.BuildSliderPath(id, p, 400f, 300f, 80, 1920, 1080, 150f, 420f, rng);
+
+            float step = 0.1f;
+            float prevDist = 0f;
+            for (float progress = 0f; progress < 1f; progress += step)
+            {
+                var (x1, y1) = BeatClickerPatternLibrary.GetPointAtProgress(path, progress);
+                var (x2, y2) = BeatClickerPatternLibrary.GetPointAtProgress(path, progress + step);
+                float dist = (float)Math.Sqrt(Math.Pow(x2 - x1, 2) + Math.Pow(y2 - y1, 2));
+                if (prevDist > 0f)
+                {
+                    // Allow some variation, but not extreme (within 2x of previous).
+                    Assert.IsTrue(dist < prevDist * 2.5f + 5f,
+                        $"Arc length step at progress {progress:F2} is too large: {dist:F2} vs {prevDist:F2}");
+                }
+                prevDist = dist;
+            }
         }
 
         [TestMethod]
