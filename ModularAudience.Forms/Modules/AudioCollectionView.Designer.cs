@@ -106,6 +106,10 @@
             this.menuToolStripItem_sourceSeparateDeterministic = new ToolStripMenuItem();
             this.menuToolStripItem_pinWindow = new ToolStripMenuItem();
             this.convertToMIDIToolStripMenuItem = new ToolStripMenuItem();
+            this.menuToolStripItem_beatClickerGame = new ToolStripMenuItem();
+            this.menuToolStripItem_taikoMode = new ToolStripMenuItem();
+            this.menuToolStripItem_createDebugLog = new ToolStripMenuItem();
+            this.toolStripComboBox_beatClickerDifficulty = new ToolStripComboBox();
             this.toolStripComboBox_orderBy = new ToolStripComboBox();
             this.contextMenuStrip_audios.SuspendLayout();
             this.SuspendLayout();
@@ -165,7 +169,7 @@
             // 
             // contextMenuStrip_audios
             // 
-            this.contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { this.menuToolStripItem_rename, this.menuToolStripItem_clone, this.menuToolStripItem_editTags, this.menuToolStripItem_splitEqualParts, this.menuToolStripItem_generateBreakbeat, this.menuToolStripItem_atomize, this.menuToolStripItem_delete, this.menuToolStripItem_toNewCollection, this.menuToolStripItem_addIndexToNames, this.menuToolStripItem_aggregateMixSelected, this.menuToolStripItem_timeStretchSelected, this.menuToolStripItem_demucsSeparateSelected, this.menuToolStripItem_pinWindow, this.convertToMIDIToolStripMenuItem, this.toolStripComboBox_orderBy });
+            this.contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { this.menuToolStripItem_rename, this.menuToolStripItem_clone, this.menuToolStripItem_editTags, this.menuToolStripItem_splitEqualParts, this.menuToolStripItem_generateBreakbeat, this.menuToolStripItem_atomize, this.menuToolStripItem_delete, this.menuToolStripItem_toNewCollection, this.menuToolStripItem_addIndexToNames, this.menuToolStripItem_aggregateMixSelected, this.menuToolStripItem_timeStretchSelected, this.menuToolStripItem_demucsSeparateSelected, this.menuToolStripItem_pinWindow, this.convertToMIDIToolStripMenuItem, this.menuToolStripItem_beatClickerGame, this.toolStripComboBox_orderBy });
             this.contextMenuStrip_audios.Name = "contextMenuStrip_audios";
             this.contextMenuStrip_audios.Size = new Size(213, 339);
             this.contextMenuStrip_audios.Opening += this.contextMenuStrip_audios_Opening;
@@ -676,6 +680,37 @@
             this.convertToMIDIToolStripMenuItem.Text = "Convert to MIDI";
             this.convertToMIDIToolStripMenuItem.Click += this.convertToMIDIToolStripMenuItem_Click;
             // 
+            // menuToolStripItem_beatClickerGame
+            // 
+            this.menuToolStripItem_beatClickerGame.Name = "menuToolStripItem_beatClickerGame";
+            this.menuToolStripItem_beatClickerGame.Size = new Size(212, 22);
+            this.menuToolStripItem_beatClickerGame.Text = "Beat Clicker Game";
+            this.menuToolStripItem_beatClickerGame.DropDownItems.AddRange(new ToolStripItem[] { this.toolStripComboBox_beatClickerDifficulty, this.menuToolStripItem_taikoMode, this.menuToolStripItem_createDebugLog });
+            this.menuToolStripItem_beatClickerGame.Click += this.menuToolStripItem_beatClickerGame_Click;
+            // 
+            // toolStripComboBox_beatClickerDifficulty
+            // 
+            this.toolStripComboBox_beatClickerDifficulty.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.toolStripComboBox_beatClickerDifficulty.Items.AddRange(new object[] { "Beginner", "Easy", "Moderate", "Intermediate", "Advanced", "Hard", "\u062C\u0647\u0646\u0645" });
+            this.toolStripComboBox_beatClickerDifficulty.Name = "toolStripComboBox_beatClickerDifficulty";
+            this.toolStripComboBox_beatClickerDifficulty.Size = new Size(180, 23);
+            this.toolStripComboBox_beatClickerDifficulty.SelectedIndexChanged += this.toolStripComboBox_beatClickerDifficulty_SelectedIndexChanged;
+            // 
+            // menuToolStripItem_taikoMode
+            // 
+            this.menuToolStripItem_taikoMode.Name = "menuToolStripItem_taikoMode";
+            this.menuToolStripItem_taikoMode.Size = new Size(180, 22);
+            this.menuToolStripItem_taikoMode.Text = "Taiko Mode";
+            this.menuToolStripItem_taikoMode.Click += this.menuToolStripItem_taikoMode_Click;
+            // 
+            // menuToolStripItem_createDebugLog
+            // 
+            this.menuToolStripItem_createDebugLog.CheckOnClick = true;
+            this.menuToolStripItem_createDebugLog.Name = "menuToolStripItem_createDebugLog";
+            this.menuToolStripItem_createDebugLog.Size = new Size(180, 22);
+            this.menuToolStripItem_createDebugLog.Text = "Create Debug Log";
+            this.menuToolStripItem_createDebugLog.Click += this.menuToolStripItem_createDebugLog_Click;
+            // 
             // toolStripComboBox_orderBy
             // 
             this.toolStripComboBox_orderBy.Items.AddRange(new object[] { "Duration", "Created At", "Name", "BPM" });
@@ -783,6 +818,10 @@
         private ToolStripMenuItem menuToolStripItem_pinWindow;
         private ToolStripComboBox toolStripComboBox_orderBy;
         private ToolStripMenuItem convertToMIDIToolStripMenuItem;
+        private ToolStripMenuItem menuToolStripItem_beatClickerGame;
+        private ToolStripMenuItem menuToolStripItem_taikoMode;
+        private ToolStripMenuItem menuToolStripItem_createDebugLog;
+        private ToolStripComboBox toolStripComboBox_beatClickerDifficulty;
         private ToolStripMenuItem neuralFeedbackEngineToolStripMenuItem;
         private ToolTip toolTip_audios;
     }

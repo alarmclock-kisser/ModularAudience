@@ -1426,28 +1426,20 @@ namespace ModularAudience.Forms.Modules
             long currentSamples = audio.Position * channels;
             long deltaSamples = deltaFrames * channels;
 
-            long targetSamples = currentSamples + deltaSamples;
-
-            // Clamp innerhalb des Files
-            targetSamples = Math.Clamp(targetSamples, 0L, Math.Max(0L, totalSamples - 1));
-
-            // Playhead springen (immer!)
-            audio.JumpToSamples(targetSamples);
-
-            // UI sofort aktualisieren (Caret/Waveform neu rendern)
-            RefreshTargetWaveform(audio);
-
-            // Wenn es keinen aktiven Loop gibt, sind wir fertig
+            // Wenn es keinen aktiven Loop gibt: Playhead einfach um die Distanz springen.
             bool haveLoop = state.StartSamples >= 0 &&
                             state.EndSamples > state.StartSamples &&
                             audio.LoopEnabled;
 
             if (!haveLoop)
             {
+                long targetSamples = Math.Clamp(currentSamples + deltaSamples, 0L, Math.Max(0L, totalSamples - 1));
+                audio.JumpToSamples(targetSamples);
+                RefreshTargetWaveform(audio);
                 return;
             }
 
-            // Aktiven Loop um dieselbe Distanz verschieben (Start & End)
+            // Aktiven Loop um dieselbe Distanz verschieben (Start & End), Länge bleibt gleich.
             long len = state.EndSamples - state.StartSamples;
             if (len <= 0)
             {
@@ -1471,8 +1463,16 @@ namespace ModularAudience.Forms.Modules
 
             long fractionSamples = Math.Max(1L, newEnd - newStart);
 
-            // Loop an neuer Position setzen und weiterspielen
-            audio.UpdateLoopFraction(newStart, newEnd, fractionSamples, true, true);
+            // Playhead-Offset relativ zum alten Loop-Start (Phase innerhalb des Loops).
+            long offsetInLoop = Math.Clamp(currentSamples - state.StartSamples, 0L, len - 1);
+
+            // Loop an neuer Position setzen (adjustPosition=false: Playhead nicht an Loop-Start zwingen).
+            audio.UpdateLoopFraction(newStart, newEnd, fractionSamples, true, false);
+
+            // Playhead an dieselbe Phase im verschobenen Loop setzen:
+            // Der Loop wird als Ganzes verschoben, statt vom aktuellen Punkt im Loop weiterzuloopen.
+            long jumpTargetSamples = Math.Clamp(newStart + offsetInLoop, 0L, Math.Max(0L, totalSamples - 1));
+            audio.JumpToSamples(jumpTargetSamples);
 
             // State im LoopControl aktualisieren
             state.StartSamples = newStart;

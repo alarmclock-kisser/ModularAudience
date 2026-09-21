@@ -58,6 +58,9 @@ dlldata.c
 # Benchmark Results
 BenchmarkDotNet.Artifacts/
 
+# Beat Clicker Game verbose debug logs (generated at runtime, not synced)
+BeatClickerDebugLogs/
+
 # .NET Core
 project.lock.json
 project.fragment.lock.json

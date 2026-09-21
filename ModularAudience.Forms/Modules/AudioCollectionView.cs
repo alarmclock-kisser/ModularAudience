@@ -34,6 +34,7 @@ namespace ModularAudience.Forms
         private System.Windows.Forms.Timer waveformPreviewTimer;
         private int waveformPreviewIndex = -1;
         private Point lastMousePos;
+        private Point contextMenuShowLocation;
         private WaveformPreview? waveformPreviewForm;
         private bool ShowPreview => this.checkBox_preview.Checked;
 
@@ -232,6 +233,7 @@ namespace ModularAudience.Forms
                         this.listBox_audios.SelectedIndex = index;
                     }
                     this.UpdateContextMenuState();
+                    this.contextMenuShowLocation = e.Location;
                     this.contextMenuStrip_audios.Show(this.listBox_audios, e.Location);
                 }
             }
@@ -962,6 +964,12 @@ namespace ModularAudience.Forms
             this.menuToolStripItem_sourceSeparateDemucs.Enabled = hasSingle;
             this.menuToolStripItem_sourceSeparateAnalog.Enabled = hasSingle;
             this.menuToolStripItem_sourceSeparateDeterministic.Enabled = hasSingle;
+            this.menuToolStripItem_beatClickerGame.Enabled = hasSingle;
+            this.menuToolStripItem_taikoMode.Enabled = hasSingle;
+            this.menuToolStripItem_createDebugLog.Enabled = hasSingle;
+            this.menuToolStripItem_createDebugLog.Checked = BeatClickerDifficulty.DebugLogEnabled;
+            this.toolStripComboBox_beatClickerDifficulty.Enabled = hasSingle;
+            this.toolStripComboBox_beatClickerDifficulty.SelectedIndex = BeatClickerDifficulty.SelectedIndex;
 
             this.menuToolStripItem_atomizeSensitivityConservative.Checked = this.atomizeSensitivity == AtomizeSensitivity.Conservative;
             this.menuToolStripItem_atomizeSensitivityBalanced.Checked = this.atomizeSensitivity == AtomizeSensitivity.Balanced;
@@ -1273,9 +1281,59 @@ namespace ModularAudience.Forms
             }
 
             this.waveformPreviewIndex = idx;
-            this.lastMousePos = point;
-            this.waveformPreviewTimer.Stop();
-            this.waveformPreviewTimer.Start();
+        }
+
+        private void menuToolStripItem_beatClickerGame_Click(object sender, EventArgs e)
+        {
+            AudioObj? selectedAudio = this.GetSingleContextAudio();
+            if (selectedAudio == null)
+            {
+                return;
+            }
+
+            // Close the context menu immediately so the UI doesn't appear frozen while
+            // the game window is being created and the beatmap is generated.
+            this.contextMenuStrip_audios.Close();
+
+            var gameForm = new BeatClickerGameForm(selectedAudio, taikoMode: false, difficultyIndex: BeatClickerDifficulty.SelectedIndex);
+            gameForm.StartGame();
+        }
+
+        private void menuToolStripItem_taikoMode_Click(object sender, EventArgs e)
+        {
+            AudioObj? selectedAudio = this.GetSingleContextAudio();
+            if (selectedAudio == null)
+            {
+                return;
+            }
+
+            this.contextMenuStrip_audios.Close();
+
+            var gameForm = new BeatClickerGameForm(selectedAudio, taikoMode: true, difficultyIndex: BeatClickerDifficulty.SelectedIndex);
+            gameForm.StartGame();
+        }
+
+        private void toolStripComboBox_beatClickerDifficulty_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            int idx = this.toolStripComboBox_beatClickerDifficulty.SelectedIndex;
+            if (idx >= 0 && idx < BeatClickerDifficulty.Levels.Length)
+            {
+                BeatClickerDifficulty.SelectedIndex = idx;
+            }
+        }
+
+        private void menuToolStripItem_createDebugLog_Click(object sender, EventArgs e)
+        {
+            // CheckOnClick already toggled the Checked state; persist it app-wide.
+            // Re-open the context menu: this is a simple toggle (no game is launched),
+            // so the menu should stay open so the user can keep choosing. ToolStrip
+            // closes the menu on click, so we re-show it at the last known location.
+            BeatClickerDifficulty.DebugLogEnabled = this.menuToolStripItem_createDebugLog.Checked;
+            if (this.contextMenuStrip_audios.Visible)
+            {
+                return;
+            }
+            this.contextMenuStrip_audios.Show(this.listBox_audios, this.contextMenuShowLocation);
         }
 
         private void ListBox_audios_MouseLeave_WaveformPreview(object? sender, EventArgs e)
