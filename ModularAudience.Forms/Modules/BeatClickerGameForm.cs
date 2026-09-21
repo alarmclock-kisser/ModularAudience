@@ -89,6 +89,7 @@ namespace ModularAudience.Forms.Modules
         private bool _leftButtonHeld;
         private int _completedSliderIndex = -1;
         private float _completedSliderProgress;
+        private int _failedSliderIndex = -1;
 
         // Classic hit window tolerances (set by difficulty in the constructor)
         private int _hitWindowEarlyMs = 100;  // max ms before hit time a click is valid
@@ -1094,6 +1095,7 @@ namespace ModularAudience.Forms.Modules
                 _leftButtonHeld = false;
                 _completedSliderIndex = -1;
                 _completedSliderProgress = 0f;
+                _failedSliderIndex = -1;
                 _activeSpinnerIndex = -1;
                 _spinnerLastAngle = 0f;
                 _spinnerAccumulatedAngle = 0f;
@@ -1267,6 +1269,7 @@ namespace ModularAudience.Forms.Modules
                                 }
                                 else
                                 {
+                                    _failedSliderIndex = _currentHitIndex;
                                     RegisterMiss();
                                     AddFailEffect(obj.X, obj.Y, currentTime);
                                     string reason = _sliderDragged
@@ -1283,6 +1286,7 @@ namespace ModularAudience.Forms.Modules
                             }
                             else if (obj.Type == BeatCatchHitType.Slider)
                             {
+                                _failedSliderIndex = _currentHitIndex;
                                 RegisterMiss();
                                 AddFailEffect(obj.X, obj.Y, currentTime);
                                 _debugLog?.LogMiss(currentTime, "Slider", objTime, objTime - currentTime, "auto-miss (slider duration passed without a click)");
@@ -1468,6 +1472,19 @@ namespace ModularAudience.Forms.Modules
                     _debugLog?.LogHit(currentTime, "Slider", slider.Time, slider.Time - currentTime, (int)slider.EndX, (int)slider.EndY);
                     _currentHitIndex = _activeSliderIndex + 1;
                 }
+                else
+                {
+                    _failedSliderIndex = _activeSliderIndex;
+                    RegisterMiss();
+                    AddFailEffect(slider.X, slider.Y, currentTime);
+                    _debugLog?.LogMiss(
+                        currentTime,
+                        "Slider",
+                        slider.Time,
+                        slider.Time - currentTime,
+                        "slider released before reaching the endpoint");
+                    _currentHitIndex = _activeSliderIndex + 1;
+                }
             }
 
             _leftButtonHeld = false;
@@ -1550,6 +1567,10 @@ namespace ModularAudience.Forms.Modules
                     // Too-early click: outside the valid early window = instant miss
                     if (timeUntilHit > earlyWindow / 1000f)
                     {
+                        if (obj.Type == BeatCatchHitType.Slider)
+                        {
+                            _failedSliderIndex = i;
+                        }
                         RegisterMiss();
                         AddFailEffect(obj.X, obj.Y, currentTime);
                         _debugLog?.LogMiss(currentTime, obj.Type.ToString(), obj.Time, timeUntilHit, $"too early (timeUntilHit={timeUntilHit * 1000:F1}ms > earlyWindow={earlyWindow:F0}ms)");
@@ -1584,6 +1605,10 @@ namespace ModularAudience.Forms.Modules
                     }
 
                     // Clicked near the object but outside the valid window (too late)
+                    if (obj.Type == BeatCatchHitType.Slider)
+                    {
+                        _failedSliderIndex = i;
+                    }
                     RegisterMiss();
                     AddFailEffect(obj.X, obj.Y, currentTime);
                     _debugLog?.LogMiss(currentTime, obj.Type.ToString(), obj.Time, timeUntilHit, $"too late (timeUntilHit={timeUntilHit * 1000:F1}ms < -lateWindow={-_hitWindowLateMs}ms)");
@@ -1914,6 +1939,7 @@ namespace ModularAudience.Forms.Modules
                 {
                     var previousObject = _hitObjects[_currentHitIndex - 1];
                     if (previousObject.Type == BeatCatchHitType.Slider
+                        && _failedSliderIndex != _currentHitIndex - 1
                         && currentTime < GetVisualEndTime(previousObject))
                     {
                         PaintSlider(
@@ -1933,9 +1959,12 @@ namespace ModularAudience.Forms.Modules
 
                 var currentObject = _hitObjects[_currentHitIndex];
                 float timeUntilHit = currentObject.Time - currentTime;
-                float postFade = currentObject.Type == BeatCatchHitType.Spinner
-                    ? currentObject.Duration + PostHitFadeSeconds
-                    : PostHitFadeSeconds;
+                float postFade = currentObject.Type switch
+                {
+                    BeatCatchHitType.Spinner => currentObject.Duration + PostHitFadeSeconds,
+                    BeatCatchHitType.Slider => currentObject.Duration + PostHitFadeSeconds,
+                    _ => PostHitFadeSeconds
+                };
                 float approachWindow = GetApproachWindowSeconds(currentObject);
                 if (timeUntilHit > approachWindow || timeUntilHit < -postFade)
                 {
@@ -3076,7 +3105,7 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            string timingText = $"{(_lastTimingOffsetMs >= 0f ? "+" : string.Empty)}{_lastTimingOffsetMs:F3} ms";
+            string timingText = $"{(_lastTimingOffsetMs >= 0f ? "+" : string.Empty)}{_lastTimingOffsetMs:F1} ms";
             using var font = new Font("Consolas", 18f, FontStyle.Bold);
             using var brush = new SolidBrush(_lastTimingColor);
             var textSize = g.MeasureString(timingText, font);
