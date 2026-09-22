@@ -57,6 +57,9 @@ namespace ModularAudience.Forms.Modules
         private CancellationTokenSource? _playbackCts;
         private BeatClickerPauseMenuForm? _pauseMenu;
         private bool _audioPausedByGame;
+        // Audio output latency in ms (measured once in StartGame). The hit windows are
+        // shifted by this amount so the optimal click time lines up with the heard beat.
+        private float _audioLatencyMs;
 
         // Verbose debug logging (enabled via the "Create Debug Log" context-menu entry).
         // Null when disabled. All timestamps are relative to the game clock (00:00:000 at start).
@@ -176,7 +179,12 @@ namespace ModularAudience.Forms.Modules
         // Win32 message constants for WndProc
         private const int WM_KEYDOWN = 0x0100;
         private const int WM_KEYUP = 0x0101;
+        private const int WM_HOTKEY = 0x0312;
+        private const int HOTKEY_ID_ESC = 1;
+        private const uint MOD_NONE = 0x0000;
         private const int VK_ESCAPE = 0x1B;
+        private const int HOTKEY_ID_ESC_UP = 2;
+        private const uint MOD_SHIFT = 0x0004;
 
         // Window tracking for minimize/restore
         private readonly List<IntPtr> _minimizedWindows = [];
@@ -390,6 +398,12 @@ namespace ModularAudience.Forms.Modules
             _countInActive = true;
             _countInStart = (float)Stopwatch.GetTimestamp() / (float)Stopwatch.Frequency;
 
+            // Measure the audio output latency once (the first call is expensive, ~100ms).
+            // The hit windows are shifted by this amount so the optimal click time lines
+            // up with the actually heard beat instead of the (earlier) sample position.
+            try { _audioLatencyMs = _audio.GetLatencyMs(); }
+            catch { _audioLatencyMs = 0f; }
+
             this.Show();
 
             // Enable layered window for per-pixel transparency
@@ -400,10 +414,14 @@ namespace ModularAudience.Forms.Modules
             this.Focus();
             PushLayeredBitmap();
 
-            // Register a global ESC hotkey. This is the reliable way to catch Esc: it works
+            // Register global ESC hotkeys. This is the reliable way to catch Esc: it works
             // regardless of which window has keyboard focus (the layered game window and the
             // pause menu have unreliable focus routing). The hotkey fires WM_HOTKEY here.
+            // The key-UP hotkey (Shift+Esc) is a safe boundary: it only marks the key as
+            // released so a subsequent (new) Esc key-down can close the pause menu. Without
+            // it, the menu could never be closed by Esc while the pause menu has focus.
             RegisterHotKey(this.Handle, HOTKEY_ID_ESC, MOD_NONE, VK_ESCAPE);
+            RegisterHotKey(this.Handle, HOTKEY_ID_ESC_UP, MOD_SHIFT, VK_ESCAPE);
 
             // Ensure the form has keyboard focus after the window is fully shown
             this.BeginInvoke(new Action(() =>
@@ -441,10 +459,6 @@ namespace ModularAudience.Forms.Modules
 
         [DllImport("user32.dll")]
         private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-
-        private const int WM_HOTKEY = 0x0312;
-        private const int HOTKEY_ID_ESC = 1;
-        private const uint MOD_NONE = 0x0000;
 
         private struct RECT
         {
@@ -596,6 +610,12 @@ namespace ModularAudience.Forms.Modules
             int beatIndex = Math.Max(2, countInBeats + 1);
             float lastPlacedTime = 0f;
 
+            // Keep the last playable element at least 1.5s before the track ends so the
+            // player can actually reach it (the approach window is 1s and the post-hit
+            // fade is 0.5s). Without this, the final elements land in the last second of
+            // the track and are effectively unplayable.
+            int lastPlayableBeat = (int)Math.Floor((_totalDuration - 1.5f) / beatInterval);
+
             while (beatIndex < totalBeats)
             {
                 groupNumber++;
@@ -605,6 +625,14 @@ namespace ModularAudience.Forms.Modules
 
                 while (beatIndex < totalBeats && groupCount < groupTargetSize)
                 {
+                    // Stop placing new elements once the beat is past the last playable
+                    // time (1.5s before the track ends). This prevents the final elements
+                    // from landing in the last second of the track where they are unplayable.
+                    if (beatIndex > lastPlayableBeat)
+                    {
+                        break;
+                    }
+
                     float t = beatTimes[beatIndex];
                     int idx = Math.Clamp(beatIndex, 0, totalBeats - 1);
                     float e = energy[idx];
@@ -1737,8 +1765,13 @@ namespace ModularAudience.Forms.Modules
                     // Sliders: wider early window so the player can grab them
                     float earlyWindow = obj.Type == BeatCatchHitType.Slider ? _hitWindowEarlyMs + 100f : _hitWindowEarlyMs;
 
+                    // The audio output latency shifts the heard beat later than the sample
+                    // position. Shift the hit windows by the measured latency so the optimal
+                    // click time lines up with the actually heard beat (not the sample time).
+                    float latencySeconds = _audioLatencyMs / 1000f;
+
                     // Too-early click: outside the valid early window = instant miss
-                    if (timeUntilHit > earlyWindow / 1000f)
+                    if (timeUntilHit > earlyWindow / 1000f + latencySeconds)
                     {
                         if (obj.Type == BeatCatchHitType.Slider)
                         {
@@ -1746,13 +1779,13 @@ namespace ModularAudience.Forms.Modules
                         }
                         RegisterMiss();
                         AddFailEffect(obj.X, obj.Y, currentTime);
-                        _debugLog?.LogMiss(currentTime, obj.Type.ToString(), obj.Time, timeUntilHit, $"too early (timeUntilHit={timeUntilHit * 1000:F1}ms > earlyWindow={earlyWindow:F0}ms)");
+                        _debugLog?.LogMiss(currentTime, obj.Type.ToString(), obj.Time, timeUntilHit, $"too early (timeUntilHit={timeUntilHit * 1000:F1}ms > earlyWindow={earlyWindow + _audioLatencyMs:F0}ms)");
                         _currentHitIndex = i + 1;
                         return;
                     }
 
-                    // Valid hit window: within early window or late window
-                    if (timeUntilHit >= -_hitWindowLateMs / 1000f && timeUntilHit <= earlyWindow / 1000f)
+                    // Valid hit window: within early window or late window (shifted by latency)
+                    if (timeUntilHit >= -_hitWindowLateMs / 1000f + latencySeconds && timeUntilHit <= earlyWindow / 1000f + latencySeconds)
                     {
                         if (obj.Type == BeatCatchHitType.Slider)
                         {
@@ -1784,7 +1817,7 @@ namespace ModularAudience.Forms.Modules
                     }
                     RegisterMiss();
                     AddFailEffect(obj.X, obj.Y, currentTime);
-                    _debugLog?.LogMiss(currentTime, obj.Type.ToString(), obj.Time, timeUntilHit, $"too late (timeUntilHit={timeUntilHit * 1000:F1}ms < -lateWindow={-_hitWindowLateMs}ms)");
+                    _debugLog?.LogMiss(currentTime, obj.Type.ToString(), obj.Time, timeUntilHit, $"too late (timeUntilHit={timeUntilHit * 1000:F1}ms < -lateWindow={-_hitWindowLateMs + _audioLatencyMs:F0}ms)");
                     _currentHitIndex = i + 1;
                     return;
                 }
@@ -1899,18 +1932,23 @@ namespace ModularAudience.Forms.Modules
 
                 if (typeMatch)
                 {
+                    // The audio output latency shifts the heard beat later than the sample
+                    // position. Shift the hit windows by the measured latency so the optimal
+                    // click time lines up with the actually heard beat (not the sample time).
+                    float latencySeconds = _audioLatencyMs / 1000f;
+
                     // Too-early click = instant miss
-                    if (timeUntilHit > _taikoHitWindowEarlyMs / 1000f)
+                    if (timeUntilHit > _taikoHitWindowEarlyMs / 1000f + latencySeconds)
                     {
                         RegisterMiss();
                         AddFailEffect(drumCenterX, drumCenterY, currentTime);
-                        _debugLog?.LogMiss(currentTime, beat.Type.ToString(), beat.Time, timeUntilHit, $"too early (timeUntilHit={timeUntilHit * 1000:F1}ms > earlyWindow={_taikoHitWindowEarlyMs}ms)");
+                        _debugLog?.LogMiss(currentTime, beat.Type.ToString(), beat.Time, timeUntilHit, $"too early (timeUntilHit={timeUntilHit * 1000:F1}ms > earlyWindow={_taikoHitWindowEarlyMs + _audioLatencyMs:F0}ms)");
                         _currentHitIndex = i + 1;
                         return;
                     }
 
-                    // Valid hit window: within early window or late window
-                    if (timeUntilHit >= -_taikoHitWindowLateMs / 1000f && timeUntilHit <= _taikoHitWindowEarlyMs / 1000f)
+                    // Valid hit window: within early window or late window (shifted by latency)
+                    if (timeUntilHit >= -_taikoHitWindowLateMs / 1000f + latencySeconds && timeUntilHit <= _taikoHitWindowEarlyMs / 1000f + latencySeconds)
                     {
                         RegisterHit();
                         _currentHitIndex = i + 1;
@@ -1921,7 +1959,7 @@ namespace ModularAudience.Forms.Modules
                     // Clicked on drum but outside valid window
                     RegisterMiss();
                         AddFailEffect(drumCenterX, drumCenterY, currentTime);
-                        _debugLog?.LogMiss(currentTime, beat.Type.ToString(), beat.Time, timeUntilHit, $"outside window (timeUntilHit={timeUntilHit * 1000:F1}ms)");
+                        _debugLog?.LogMiss(currentTime, beat.Type.ToString(), beat.Time, timeUntilHit, $"outside window (timeUntilHit={timeUntilHit * 1000:F1}ms, latency={_audioLatencyMs:F0}ms)");
                         _currentHitIndex = i + 1;
                         return;
                 }
@@ -2526,9 +2564,19 @@ namespace ModularAudience.Forms.Modules
             // This is what prevents rapid pause/continue toggling when Esc is held down.
             if (e.KeyCode == Keys.Escape)
             {
-                _escKeyReleased = true;
-                _escCloseRepausePending = false;
+                HandleEscKeyUp();
             }
+        }
+
+        /// <summary>
+        /// Handles an Esc key-up (from the global hotkey or the WM_KEYUP fallback).
+        /// The key-up is a SAFE BOUNDARY: it never toggles the menu. It only marks the key
+        /// as released so that a subsequent (new) Esc key-down can close the pause menu.
+        /// </summary>
+        private void HandleEscKeyUp()
+        {
+            _escKeyReleased = true;
+            _escCloseRepausePending = false;
         }
 
         private void TogglePauseMenu()
@@ -3064,10 +3112,25 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            // Global ESC key-UP hotkey (Shift+Esc): a safe boundary that only marks the key
+            // as released. It never toggles the menu, so holding Esc never re-pauses.
+            if (m.Msg == WM_HOTKEY && (int)m.WParam == HOTKEY_ID_ESC_UP)
+            {
+                HandleEscKeyUp();
+                return;
+            }
+
             // Fallback: direct WM_KEYDOWN interception in case the hotkey is unavailable.
             if (m.Msg == WM_KEYDOWN && (int)m.WParam == VK_ESCAPE)
             {
                 HandleEscKeyDown();
+                return;
+            }
+
+            // Fallback: direct WM_KEYUP interception (only fires when the game form has focus).
+            if (m.Msg == WM_KEYUP && (int)m.WParam == VK_ESCAPE)
+            {
+                HandleEscKeyUp();
                 return;
             }
 
@@ -3088,10 +3151,11 @@ namespace ModularAudience.Forms.Modules
             StopAudioSafely();
             RestoreAllWindows();
 
-            // Unregister the global ESC hotkey and remove the layered window style before closing
+            // Unregister the global ESC hotkeys and remove the layered window style before closing
             if (this.IsHandleCreated)
             {
                 UnregisterHotKey(this.Handle, HOTKEY_ID_ESC);
+                UnregisterHotKey(this.Handle, HOTKEY_ID_ESC_UP);
                 int exStyle = GetWindowLong(this.Handle, GWL_EXSTYLE);
                 SetWindowLong(this.Handle, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
             }

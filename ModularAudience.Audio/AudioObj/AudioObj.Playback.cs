@@ -64,6 +64,14 @@ namespace ModularAudience.Audio
         public double SizeInKb => this.Data.Length * sizeof(float) / 1024.0;
         public long CurrentPlaybackSamples => this.CurrentPlaybackPositionBytes / sizeof(float);
 
+        /// <summary>
+        /// Returns the audio output latency in milliseconds (the time between a sample
+        /// being written to the device and it actually being heard). Used by the beat
+        /// clicker game to shift hit windows so the optimal click time lines up with the
+        /// actually heard beat. Returns 0 if the latency cannot be determined.
+        /// </summary>
+        public float GetLatencyMs() => this.playback.GetLatencyMs();
+
         public async Task PlayAsync(CancellationToken cancellationToken, Action? onPlaybackStopped = null, float? initialVolume = null, int desiredLatency = 50)
         {
             if (!this.Playing)

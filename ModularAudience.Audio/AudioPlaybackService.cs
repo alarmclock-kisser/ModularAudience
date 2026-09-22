@@ -293,6 +293,29 @@ namespace ModularAudience.Audio
         public int DeviceSampleRate { get; private set; } = 44100;
         public int Channels { get; private set; } = 2;
 
+        /// <summary>
+        /// Returns the audio output latency in milliseconds (the time between a sample
+        /// being written to the device and it actually being heard). This is the sum of
+        /// the WaveOut buffer latency and the device's own latency. The first call is
+        /// expensive (~100ms) because it queries the audio device; subsequent calls are
+        /// fast. Returns 0 if the latency cannot be determined.
+        /// </summary>
+        public float GetLatencyMs()
+        {
+            try
+            {
+                // The WaveOut buffer latency is the dominant component (20-40ms, set in
+                // InitializePlayback). The device's own latency is not accessible on the
+                // WaveOut class, so we only return the buffer latency. This is a good
+                // approximation of the total output latency for hit-window shifting.
+                return (float)this.player.BufferMilliseconds;
+            }
+            catch
+            {
+                return 0f;
+            }
+        }
+
         public event EventHandler<StoppedEventArgs>? PlaybackStopped;
 
         public AudioPlaybackService()
