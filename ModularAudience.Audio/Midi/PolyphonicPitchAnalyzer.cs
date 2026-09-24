@@ -67,12 +67,12 @@ internal static class PolyphonicPitchAnalyzer
             double value = float.IsFinite(data[i]) ? data[i] : 0;
             energy += value * value;
         }
-        return (float) Math.Sqrt(energy / Math.Max(1, count * channels));
+        return (float)Math.Sqrt(energy / Math.Max(1, count * channels));
     }
 
     private static void SuppressHarmonics(float[][] strengths, float[][] balances, CancellationToken cancellationToken)
     {
-        float[][] original = strengths.Select(frame => (float[]) frame.Clone()).ToArray();
+        float[][] original = strengths.Select(frame => (float[])frame.Clone()).ToArray();
         int[][] spans = FindPitchSpans(original, cancellationToken);
         for (int frame = 0; frame < strengths.Length; frame++)
         {
@@ -85,7 +85,7 @@ internal static class PolyphonicPitchAnalyzer
                 }
                 for (int harmonic = 2; harmonic <= 8; harmonic++)
                 {
-                    int upper = note + (int) Math.Round(12 * Math.Log2(harmonic));
+                    int upper = note + (int)Math.Round(12 * Math.Log2(harmonic));
                     if (upper > HighestNote || original[frame][upper] <= 0
                         || strengths[frame][note] < original[frame][upper] * 0.08f
                         || HaveDisjointStereoPositions(balances[frame][note], balances[frame][upper]))
@@ -223,8 +223,8 @@ internal static class PolyphonicPitchAnalyzer
             float[] strengths = new float[128];
             float[] balances = new float[128];
             double maximum = this.magnitude.Skip(2).Max();
-            int minimumBin = Math.Max(2, (int) (60.0 * this.buffer.Length / sampleRate));
-            int maximumBin = Math.Min(this.power.Length - 2, (int) (2200.0 * this.buffer.Length / sampleRate));
+            int minimumBin = Math.Max(2, (int)(60.0 * this.buffer.Length / sampleRate));
+            int maximumBin = Math.Min(this.power.Length - 2, (int)(2200.0 * this.buffer.Length / sampleRate));
             for (int bin = minimumBin; bin <= maximumBin; bin++)
             {
                 double peak = this.magnitude[bin];
@@ -235,16 +235,16 @@ internal static class PolyphonicPitchAnalyzer
                 }
                 double frequency = (bin + this.PeakOffset(bin)) * sampleRate / this.buffer.Length;
                 double pitch = 69 + 12 * Math.Log2(frequency / 440);
-                int note = (int) Math.Round(pitch);
+                int note = (int)Math.Round(pitch);
                 if (note < LowestNote || note > HighestNote || Math.Abs(pitch - note) > 0.48)
                 {
                     continue;
                 }
-                float strength = (float) (2 * peak / this.taperSum);
+                float strength = (float)(2 * peak / this.taperSum);
                 if (strength > strengths[note])
                 {
                     strengths[note] = strength;
-                    balances[note] = this.channels == 1 ? 1f : (float) (this.firstChannelPower[bin] / Math.Max(1e-20, this.power[bin]));
+                    balances[note] = this.channels == 1 ? 1f : (float)(this.firstChannelPower[bin] / Math.Max(1e-20, this.power[bin]));
                 }
             }
             return (strengths, balances);

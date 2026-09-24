@@ -9,7 +9,7 @@ namespace ModularAudience.Audio.Processors_V4
             DeterministicSpectrogram block, float[][][] masks, int[] selected, float[][] output,
             int firstFrame, int frameCount, double[] window, CancellationToken token)
         {
-            long offset = (long) firstFrame * settings.HopSize - settings.WindowSize / 2;
+            long offset = (long)firstFrame * settings.HopSize - settings.WindowSize / 2;
             int length = checked((frameCount - 1) * settings.HopSize + settings.WindowSize);
             double[] normalization = Normalization(source, settings, offset, length, window, token);
             ParallelOptions options = new() { MaxDegreeOfParallelism = settings.Threads, CancellationToken = token };
@@ -33,10 +33,10 @@ namespace ModularAudience.Audio.Processors_V4
                 if ((index & 4095) == 0) token.ThrowIfCancellationRequested();
                 long sample = offset + index;
                 if (sample < 0 || sample >= source.Samples.Length / source.Channels) continue;
-                int center = (int) (sample / settings.HopSize);
+                int center = (int)(sample / settings.HopSize);
                 for (int frame = Math.Max(0, center - 2); frame <= Math.Min(frames - 1, center + 2); frame++)
                 {
-                    long position = sample - (long) frame * settings.HopSize + settings.WindowSize / 2;
+                    long position = sample - (long)frame * settings.HopSize + settings.WindowSize / 2;
                     if (position >= 0 && position < window.Length)
                     {
                         normalization[index] += window[position] * window[position];
@@ -80,8 +80,8 @@ namespace ModularAudience.Audio.Processors_V4
                 long frame = offset + index;
                 if (frame < 0 || frame >= output.Length / channels) continue;
                 if (normalization[index] <= 0) throw new ArithmeticException("Uncovered sample in overlap-add synthesis.");
-                int sample = (int) (frame * channels + channel);
-                output[sample] += (float) (accumulation[index] / normalization[index]);
+                int sample = (int)(frame * channels + channel);
+                output[sample] += (float)(accumulation[index] / normalization[index]);
                 if (!float.IsFinite(output[sample])) throw new ArithmeticException("Non-finite overlap-add reconstruction.");
             }
         }

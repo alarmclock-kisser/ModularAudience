@@ -29,19 +29,19 @@ namespace ModularAudience.Audio.Processing
                     switch (audio.BitDepth)
                     {
                         case 8:
-                            result[i] = (byte) (sample * 127f);
+                            result[i] = (byte)(sample * 127f);
                             break;
                         case 16:
-                            short sample16 = (short) (sample * short.MaxValue);
+                            short sample16 = (short)(sample * short.MaxValue);
                             Span<byte> target16 = result.AsSpan(i * 2, 2);
                             BitConverter.TryWriteBytes(target16, sample16);
                             break;
                         case 24:
-                            int sample24 = (int) (sample * 8_388_607f);
+                            int sample24 = (int)(sample * 8_388_607f);
                             Span<byte> target24 = result.AsSpan(i * 3, 3);
-                            target24[0] = (byte) sample24;
-                            target24[1] = (byte) (sample24 >> 8);
-                            target24[2] = (byte) (sample24 >> 16);
+                            target24[0] = (byte)sample24;
+                            target24[1] = (byte)(sample24 >> 8);
+                            target24[2] = (byte)(sample24 >> 16);
                             break;
                         case 32:
                             Span<byte> target32 = result.AsSpan(i * 4, 4);

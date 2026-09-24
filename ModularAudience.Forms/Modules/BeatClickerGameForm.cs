@@ -1,8 +1,10 @@
 using ModularAudience.Audio;
+using NAudio.Wave;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -57,12 +59,10 @@ namespace ModularAudience.Forms.Modules
         private CancellationTokenSource? _playbackCts;
         private BeatClickerPauseMenuForm? _pauseMenu;
         private bool _audioPausedByGame;
-        // Audio output latency in ms (measured once in StartGame). The hit windows are
-        // shifted by this amount so the optimal click time lines up with the heard beat.
-        private float _audioLatencyMs;
+        private bool _calibrationDialogOpen;
 
         // Verbose debug logging (enabled via the "Create Debug Log" context-menu entry).
-        // Null when disabled. All timestamps are relative to the game clock (00:00:000 at start).
+        // Null when disabled. Gameplay timestamps use the synchronized playback timeline.
         private BeatClickerDebugLog? _debugLog;
         private bool _debugLogOpened;
 
@@ -70,7 +70,6 @@ namespace ModularAudience.Forms.Modules
         // the numbers advance every two track beats, then the background returns to 33%.
         private bool _countInActive;
         private float _countInStart;
-        private float _countInPausedElapsed; // count-in elapsed time captured when paused (to resume in place)
         private bool _beatmapReady;
         private const float CountInFadeSeconds = 0.45f;
         private const float CountInBeatsPerNumber = 2f;
@@ -120,6 +119,7 @@ namespace ModularAudience.Forms.Modules
         private float _minElementDistance = 150f;       // min center-to-center distance (Beginner 150 -> H�lle 90)
         private float _sliderClearance = 120f;          // min distance from a slider track to other elements
         private float _spinnerQuietBeats = 2f;          // no elements this many beats before/after a spinner
+        private float _spinnerCooldownBeats = 12f;      // minimum beat distance between spinners
         private float _minSliderLength = 150f;          // min slider length (start/end must stay visibly separated)
         private float _maxSliderLength = 420f;          // max slider length
         private float _minTimeGapSeconds = 0.25f;       // min time gap between elements (set by difficulty)
@@ -130,6 +130,11 @@ namespace ModularAudience.Forms.Modules
 
         // Background opacity is shared through BeatClickerSettings and defaults to 33%.
         private int _backgroundOpacityPercent = BeatClickerSettings.DefaultBackgroundOpacityPercent;
+        // Positive values compensate for input arriving later than the audio beat.
+        private int _inputDelayMs = BeatClickerSettings.DefaultInputDelayMs;
+        private int _clickKeyData = BeatClickerSettings.DefaultClickKeyData;
+        private bool _keyboardClickHeld;
+        private bool _gameClockAudioAnchored;
 
         // Fail animation state
         private struct FailEffect
@@ -260,6 +265,7 @@ namespace ModularAudience.Forms.Modules
             _minElementDistance = BeatClickerDifficulty.MinElementDistance(_difficultyIndex);
             _sliderClearance = BeatClickerDifficulty.SliderClearance(_difficultyIndex);
             _spinnerQuietBeats = BeatClickerDifficulty.SpinnerQuietBeats(_difficultyIndex);
+            _spinnerCooldownBeats = BeatClickerDifficulty.SpinnerCooldownBeats(_difficultyIndex);
             _minSliderLength = BeatClickerDifficulty.MinSliderLength(_difficultyIndex);
             _maxSliderLength = BeatClickerDifficulty.MaxSliderLength(_difficultyIndex);
 
@@ -288,6 +294,16 @@ namespace ModularAudience.Forms.Modules
             _backgroundOpacityPercent = BeatClickerSettings.LoadBackgroundOpacityPercent();
         }
 
+        private void LoadInputDelay()
+        {
+            _inputDelayMs = BeatClickerSettings.LoadInputDelayMs();
+        }
+
+        private void LoadClickKeyData()
+        {
+            _clickKeyData = BeatClickerSettings.LoadClickKeyData();
+        }
+
         private int BackgroundOpacityPercent => _backgroundOpacityPercent;
 
         private void SetBackgroundOpacityPercent(int percent)
@@ -300,6 +316,70 @@ namespace ModularAudience.Forms.Modules
 
             try { PushLayeredBitmap(); }
             catch (Exception ex) { Debug.WriteLine($"BeatClickerGame opacity render error: {ex.Message}"); }
+        }
+
+        private int InputDelayMs => _inputDelayMs;
+
+        private int ClickKeyData => _clickKeyData;
+
+        private void SetInputDelayMs(int delayMs)
+        {
+            _inputDelayMs = Math.Clamp(
+                delayMs,
+                BeatClickerSettings.MinInputDelayMs,
+                BeatClickerSettings.MaxInputDelayMs);
+            BeatClickerSettings.SaveInputDelayMs(_inputDelayMs);
+
+            try { PushLayeredBitmap(); }
+            catch (Exception ex) { Debug.WriteLine($"BeatClickerGame input delay render error: {ex.Message}"); }
+        }
+
+        private void SetClickKeyData(int keyData)
+        {
+            _clickKeyData = (int)NormalizeClickKey((Keys)keyData);
+            BeatClickerSettings.SaveClickKeyData(_clickKeyData);
+        }
+
+        private static Keys NormalizeClickKey(Keys key)
+        {
+            Keys normalized = (key & Keys.KeyCode) switch
+            {
+                Keys.LControlKey or Keys.RControlKey => Keys.ControlKey,
+                Keys.LShiftKey or Keys.RShiftKey => Keys.ShiftKey,
+                Keys.LMenu or Keys.RMenu => Keys.Menu,
+                var keyCode => keyCode
+            };
+            return normalized == Keys.Escape ? Keys.Space : normalized;
+        }
+
+        private static string FormatClickKeyData(int keyData)
+        {
+            return NormalizeClickKey((Keys)keyData) switch
+            {
+                Keys.Space => "Space",
+                Keys.ControlKey => "Ctrl",
+                Keys.ShiftKey => "Shift",
+                Keys.Menu => "Alt",
+                var key => key.ToString()
+            };
+        }
+
+        private float GetCalibrationOutputLatencyMs()
+        {
+            try
+            {
+                float latency = _audio.GetLatencyMs();
+                return latency > 0f ? Math.Clamp(latency, 1f, 250f) : 50f;
+            }
+            catch
+            {
+                return 50f;
+            }
+        }
+
+        private static string FormatInputDelay(int delayMs)
+        {
+            return delayMs > 0 ? $"+{delayMs}" : delayMs.ToString();
         }
 
         private int GetBackgroundAlpha()
@@ -342,6 +422,8 @@ namespace ModularAudience.Forms.Modules
         public void StartGame()
         {
             LoadBackgroundOpacity();
+            LoadInputDelay();
+            LoadClickKeyData();
             MinimizeAllWindowsOnScreen();
 
             // Always restart the audio from the very beginning. The track may already be
@@ -358,25 +440,8 @@ namespace ModularAudience.Forms.Modules
             RunAudioOnUiThread(() => _audio.StopAsync());
             RunAudioOnUiThread(() => _audio.PlayAsync(_playbackCts.Token));
 
-            // Generate the beatmap asynchronously so the UI never freezes. The count-in
-            // gives the background task time to finish before the first playable beat.
-            _beatmapReady = false;
-            Task.Run(() =>
-            {
-                try { GenerateBeatMap(); }
-                catch (Exception ex) { Debug.WriteLine($"BeatClickerGame beatmap generation error: {ex.Message}"); }
-                this.BeginInvoke(new Action(() => { _beatmapReady = true; }));
-            });
-
-            ResetGame();
-            _runHasStarted = true;
-            _runStartedUtc = DateTimeOffset.UtcNow;
-            _gameTimer.Start();
-            _gameRunning = true;
-            _paused = false;
-
-            // Open the verbose debug log (if enabled) so every generation decision and
-            // player input event is recorded to a .TXT file for analysis.
+            // Open the verbose debug log before background generation starts so generation
+            // failures cannot race the logger initialization.
             if (BeatClickerDifficulty.DebugLogEnabled && _debugLog == null)
             {
                 _debugLog = BeatClickerDebugLog.Create(
@@ -387,22 +452,44 @@ namespace ModularAudience.Forms.Modules
                     _audio.Data,
                     _audio.Channels);
                 _debugLogOpened = _debugLog != null;
-                if (_debugLog != null)
-                {
-                    _debugLog.LogEvent(0f, $"Game started (mode={(_isTaikoMode ? "taiko" : "classic")}, difficulty={BeatClickerDifficulty.Levels[_difficultyIndex]})");
-                }
+                _debugLog?.LogEvent(0f, $"Game started (mode={(_isTaikoMode ? "taiko" : "classic")}, difficulty={BeatClickerDifficulty.Levels[_difficultyIndex]})");
             }
 
-            // Start the count-in: the game clock stays stopped until the 3-2-1 count-in
-            // finishes, so the first hit object's time (beatInterval) lands right after "1".
-            _countInActive = true;
-            _countInStart = (float)Stopwatch.GetTimestamp() / (float)Stopwatch.Frequency;
+            // Generate the beatmap asynchronously so the UI never freezes. The count-in
+            // gives the background task time to finish before the first playable beat.
+            _beatmapReady = false;
+            Task.Run(() =>
+            {
+                bool generationSucceeded = false;
+                try
+                {
+                    GenerateBeatMap();
+                    generationSucceeded = true;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"BeatClickerGame beatmap generation error: {ex}");
+                    _debugLog?.LogEvent(0f, $"BEATMAP GENERATION ERROR: {ex}");
+                    lock (_lock)
+                    {
+                        _hitObjects = [];
+                        _taikoBeats = [];
+                    }
+                }
+                this.BeginInvoke(new Action(() => { _beatmapReady = generationSucceeded; }));
+            });
 
-            // Measure the audio output latency once (the first call is expensive, ~100ms).
-            // The hit windows are shifted by this amount so the optimal click time lines
-            // up with the actually heard beat instead of the (earlier) sample position.
-            try { _audioLatencyMs = _audio.GetLatencyMs(); }
-            catch { _audioLatencyMs = 0f; }
+            ResetGame();
+            _runHasStarted = true;
+            _runStartedUtc = DateTimeOffset.UtcNow;
+            _gameTimer.Start();
+            _gameRunning = true;
+            _paused = false;
+
+            // Start the count-in while playback starts. Gameplay uses the synchronized
+            // playback timeline, and the first playable object follows the count-in offset.
+            _countInActive = true;
+            _countInStart = 0f;
 
             this.Show();
 
@@ -571,9 +658,10 @@ namespace ModularAudience.Forms.Modules
             float sliderChance = BeatClickerDifficulty.SliderChance(_difficultyIndex);
             float patternChance = BeatClickerDifficulty.PatternChance(_difficultyIndex);
             float placementGap = _difficultyIndex >= 2 ? _minTimeGapSeconds : beatInterval;
+            bool useSparseOnBeatGrid = BeatClickerDifficulty.UsesSparseOnBeatGrid(_difficultyIndex);
 
             _debugLog?.LogSection(0f, $"classic beatmap generation (BPM={_bpm:F2}, beatInterval={beatInterval:F4}s, totalBeats={(int)(_totalDuration / beatInterval)})");
-            _debugLog?.Log(0f, $"params: density={density:F2} minCooldown={minCooldown} maxCooldown={maxCooldown} groupSize={minGroupSize}-{maxGroupSize} spinnerChance={spinnerChance:F2} sliderChance={sliderChance:F2} patternChance={patternChance:F2} placementGap={placementGap:F3}s minTimeGap={_minTimeGapSeconds:F3}s minElementDist={_minElementDistance:F0} sliderClearance={_sliderClearance:F0} spinnerQuietBeats={_spinnerQuietBeats:F1}");
+            _debugLog?.Log(0f, $"params: density={density:F2} minCooldown={minCooldown} maxCooldown={maxCooldown} groupSize={minGroupSize}-{maxGroupSize} spinnerChance={spinnerChance:F2} spinnerCooldownBeats={_spinnerCooldownBeats:F0} sliderChance={sliderChance:F2} patternChance={patternChance:F2} placementGap={placementGap:F3}s minTimeGap={_minTimeGapSeconds:F3}s minElementDist={_minElementDistance:F0} sliderClearance={_sliderClearance:F0} spinnerQuietBeats={_spinnerQuietBeats:F1} sparseOnBeatGrid={useSparseOnBeatGrid}");
 
             // True randomness: no seed. Every playthrough generates a fresh beatmap.
             var rng = new Random();
@@ -587,13 +675,21 @@ namespace ModularAudience.Forms.Modules
                 energy[i] = GetEnergyAtTime(i * beatInterval);
             }
 
-            // Beat-aligned placement: elements are placed ON the track's beats (the
-            // strongest onsets in a small window around each beat), so the optimal click
-            // timing lines up with the actually heard kick/beat instead of being offset.
+            int countInBeats = (int)Math.Ceiling(GetCountInDurationSeconds() / beatInterval);
+            int firstPlayableBeat = Math.Max(2, countInBeats + 1);
+            float beatPhaseOffset = FindBeatPhaseOffset(
+                beatInterval,
+                firstPlayableBeat,
+                totalBeats,
+                energy);
+            _debugLog?.Log(0f, $"beat grid phase offset={beatPhaseOffset * 1000f:F1}ms (single phase applied to every nominal beat)");
+
             var beatTimes = new List<float>(totalBeats);
             for (int i = 0; i < totalBeats; i++)
             {
-                beatTimes.Add(SnapToOnset(i * beatInterval, beatInterval, totalBeats, energy));
+                float beatTime = Math.Max(0f, i * beatInterval + beatPhaseOffset);
+                beatTimes.Add(beatTime);
+                energy[i] = GetEnergyAtTime(beatTime);
             }
 
             // Elements follow a meandering line (a smooth random walk) instead of being
@@ -606,8 +702,7 @@ namespace ModularAudience.Forms.Modules
             int groupCount = 0;
             // Keep the first playable object after the BPM-based count-in. The game clock
             // already follows the audio timeline while the count-in is displayed.
-            int countInBeats = (int)Math.Ceiling(GetCountInDurationSeconds() / beatInterval);
-            int beatIndex = Math.Max(2, countInBeats + 1);
+            int beatIndex = firstPlayableBeat;
             float lastPlacedTime = 0f;
 
             // Keep the last playable element at least 1.5s before the track ends so the
@@ -616,8 +711,25 @@ namespace ModularAudience.Forms.Modules
             // the track and are effectively unplayable.
             int lastPlayableBeat = (int)Math.Floor((_totalDuration - 1.5f) / beatInterval);
 
-            while (beatIndex < totalBeats)
+            while (beatIndex < totalBeats && beatIndex <= lastPlayableBeat)
             {
+                while (useSparseOnBeatGrid
+                    && beatIndex < totalBeats
+                    && beatIndex <= lastPlayableBeat
+                    && !BeatClickerDifficulty.IsOnBeatGridPosition(beatIndex))
+                {
+                    _debugLog?.LogDecision(
+                        beatTimes[beatIndex],
+                        "SKIP off-beat grid position",
+                        $"beatIndex={beatIndex}, phase={beatIndex % 4}; sparse Easy/Intermediate grid keeps phases 1 and 3");
+                    beatIndex++;
+                }
+
+                if (beatIndex >= totalBeats || beatIndex > lastPlayableBeat)
+                {
+                    break;
+                }
+
                 groupNumber++;
                 groupCount = 0;
                 int groupTargetSize = rng.Next(minGroupSize, maxGroupSize + 1);
@@ -631,6 +743,16 @@ namespace ModularAudience.Forms.Modules
                     if (beatIndex > lastPlayableBeat)
                     {
                         break;
+                    }
+
+                    if (useSparseOnBeatGrid && !BeatClickerDifficulty.IsOnBeatGridPosition(beatIndex))
+                    {
+                        _debugLog?.LogDecision(
+                            beatTimes[beatIndex],
+                            "SKIP off-beat grid position",
+                            $"beatIndex={beatIndex}, phase={beatIndex % 4}; sparse Easy/Intermediate grid keeps phases 1 and 3");
+                        beatIndex++;
+                        continue;
                     }
 
                     float t = beatTimes[beatIndex];
@@ -686,6 +808,7 @@ namespace ModularAudience.Forms.Modules
                     }
                     if (groupCount + patternCount <= groupTargetSize
                         && patternChance > 0f
+                        && !useSparseOnBeatGrid
                         && e >= 0.45f
                         && rng.NextDouble() < patternChance
                         && TryPlaceClickPattern(
@@ -743,20 +866,21 @@ namespace ModularAudience.Forms.Modules
                     foreach (var o in _hitObjects)
                     {
                         if (o.Type == BeatCatchHitType.Spinner
-                            && t - o.Time < beatInterval * 12f)
+                            && t - o.Time < beatInterval * _spinnerCooldownBeats)
                         {
                             recentSpinner = true;
                             break;
                         }
                     }
                     float spinnerEnergyChance = e >= 0.8f ? spinnerChance * 0.65f : spinnerChance * 0.35f;
-                    bool spinnerDue = _difficultyIndex >= 5
-                        && !recentSpinner
-                        && spinnerRoll < 0.35f;
-                    if (spinnerAllowed && e >= 0.45f && (spinnerRoll < spinnerEnergyChance || spinnerDue))
+                    bool spinnerCooldownElapsed = !recentSpinner;
+                    if (spinnerAllowed
+                        && spinnerCooldownElapsed
+                        && e >= 0.45f
+                        && spinnerRoll < spinnerEnergyChance)
                     {
                         type = BeatCatchHitType.Spinner;
-                        _debugLog?.LogDecision(t, "TYPE=Spinner", $"energy={e:F3}>=0.45, spinnerRoll={spinnerRoll:F4}, spinnerChanceByEnergy={spinnerEnergyChance:F4}, spinnerDue={spinnerDue}, spinnerAllowed={spinnerAllowed}");
+                        _debugLog?.LogDecision(t, "TYPE=Spinner", $"energy={e:F3}>=0.45, spinnerRoll={spinnerRoll:F4}, spinnerChanceByEnergy={spinnerEnergyChance:F4}, spinnerCooldownElapsed={spinnerCooldownElapsed}, spinnerAllowed={spinnerAllowed}");
                     }
                     else if (e > 0.6f && sliderRoll < sliderChance)
                     {
@@ -1065,35 +1189,87 @@ namespace ModularAudience.Forms.Modules
             return true;
         }
 
-        /// <summary>
-        /// Snaps a nominal beat time to the strongest onset (energy peak) within a small
-        /// window around it, so the element's hit time lines up with the actually heard
-        /// kick/beat instead of the (possibly off) estimated beat grid.
-        /// </summary>
-        private float SnapToOnset(float beatTime, float beatInterval, int totalBeats, float[] energy)
+        private float FindBeatPhaseOffset(
+            float beatInterval,
+            int firstPlayableBeat,
+            int totalBeats,
+            float[] nominalEnergy)
         {
-            int sampleRate = Math.Max(1, _audio.SampleRate);
-            int windowFrames = sampleRate / 20; // 50ms window
-            int centerFrame = (int)(beatTime * sampleRate);
-            int startFrame = Math.Max(0, centerFrame - windowFrames);
-            int endFrame = Math.Min(_audio.Data?.Length ?? 0, centerFrame + windowFrames);
-
-            float bestTime = beatTime;
-            float bestEnergy = -1f;
-            for (int f = startFrame; f < endFrame; f += 2)
+            int sampleEnd = Math.Min(totalBeats, firstPlayableBeat + 64);
+            if (firstPlayableBeat >= sampleEnd)
             {
-                float e = GetEnergyAtTime((float)f / sampleRate);
-                if (e > bestEnergy)
+                return 0f;
+            }
+
+            float phaseRange = Math.Min(beatInterval * 0.125f, 0.08f);
+            int phaseSteps = Math.Max(1, (int)Math.Round(phaseRange / 0.002f));
+            float bestOffset = 0f;
+            float bestScore = float.NegativeInfinity;
+
+            for (int phaseStep = -phaseSteps; phaseStep <= phaseSteps; phaseStep++)
+            {
+                float offset = phaseStep * 0.002f;
+                float weightedEnergy = 0f;
+                float weightTotal = 0f;
+                for (int beatIndex = firstPlayableBeat; beatIndex < sampleEnd; beatIndex++)
                 {
-                    bestEnergy = e;
-                    bestTime = (float)f / sampleRate;
+                    float weight = nominalEnergy[beatIndex];
+                    if (weight < 0.35f)
+                    {
+                        continue;
+                    }
+
+                    weightedEnergy += GetCenteredEnergyAtTime(beatIndex * beatInterval + offset) * weight;
+                    weightTotal += weight;
+                }
+
+                if (weightTotal > 0f)
+                {
+                    float score = weightedEnergy / weightTotal;
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestOffset = offset;
+                    }
                 }
             }
 
-            // Keep the snapped time within a quarter beat of the nominal beat so the
-            // element stays on the beat grid (no large drift between consecutive elements).
-            float maxOffset = beatInterval * 0.25f;
-            return Math.Clamp(bestTime, beatTime - maxOffset, beatTime + maxOffset);
+            return bestOffset;
+        }
+
+        private float GetCenteredEnergyAtTime(float timeSeconds)
+        {
+            if (_audio.Data == null || _audio.Data.Length == 0)
+            {
+                return 0.5f;
+            }
+
+            int channels = Math.Max(1, _audio.Channels);
+            int sampleRate = Math.Max(1, _audio.SampleRate);
+            int halfWindowFrames = Math.Max(1, sampleRate / 50);
+            int centerFrame = (int)(timeSeconds * sampleRate);
+            int startFrame = Math.Max(0, centerFrame - halfWindowFrames);
+            int endFrame = Math.Min(_audio.Data.Length / channels, centerFrame + halfWindowFrames);
+            if (startFrame >= endFrame)
+            {
+                return 0.5f;
+            }
+
+            float sum = 0f;
+            int count = 0;
+            for (int frame = startFrame; frame < endFrame; frame += 4)
+            {
+                for (int channel = 0; channel < channels; channel++)
+                {
+                    float sample = _audio.Data[frame * channels + channel];
+                    sum += sample * sample;
+                    count++;
+                }
+            }
+
+            return count == 0
+                ? 0.5f
+                : Math.Clamp((float)Math.Sqrt(sum / count) * 4f, 0f, 1f);
         }
 
         /// <summary>
@@ -1131,9 +1307,42 @@ namespace ModularAudience.Forms.Modules
                 : ApproachSeconds;
         }
 
+        private float GetVisualStartTime(BeatCatchHitObject obj)
+        {
+            float approachLead = obj.Type == BeatCatchHitType.Spinner
+                ? Math.Min(ApproachSeconds, Math.Max(0f, obj.Duration) * 0.5f)
+                : ApproachSeconds;
+            return obj.Time - approachLead;
+        }
+
         private float GetVisualEndTime(BeatCatchHitObject obj)
         {
             return GetInteractionEndTime(obj) + PostHitFadeSeconds;
+        }
+
+        private static bool IsLongVisualObject(BeatCatchHitObject obj)
+        {
+            return obj.Type == BeatCatchHitType.Slider || obj.Type == BeatCatchHitType.Spinner;
+        }
+
+        private bool IsVisualIntervalValid(BeatCatchHitObject candidate, List<BeatCatchHitObject> existing)
+        {
+            foreach (var other in existing)
+            {
+                if (!IsLongVisualObject(candidate) && !IsLongVisualObject(other))
+                {
+                    continue;
+                }
+
+                bool overlaps = GetVisualStartTime(candidate) < GetVisualEndTime(other)
+                    && GetVisualStartTime(other) < GetVisualEndTime(candidate);
+                if (overlaps)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private bool IsPlacementValid(BeatCatchHitObject candidate, List<BeatCatchHitObject> existing)
@@ -1153,10 +1362,7 @@ namespace ModularAudience.Forms.Modules
                 return false;
             }
 
-            // Visual overlap is intentional: upcoming objects can be shown together. The
-            // interaction interval check above still prevents two objects from requiring the
-            // cursor at the same time, including a slider's full drag duration.
-            return true;
+            return IsVisualIntervalValid(candidate, existing);
         }
 
         private void GenerateTaikoBeats()
@@ -1295,7 +1501,52 @@ namespace ModularAudience.Forms.Modules
                 _runSummarySaved = false;
             }
             _gameClock.Restart();
+            _gameClockAudioAnchored = false;
             _escKeyReleased = true;
+        }
+
+        private float GetGameplayTimeSeconds()
+        {
+            float fallbackTime = (float)_gameClock.Elapsed.TotalSeconds;
+            if (TryGetAudioTimelineSeconds(out float playbackTime))
+            {
+                return playbackTime;
+            }
+
+            return Math.Max(0f, fallbackTime);
+        }
+
+        private bool TryGetAudioTimelineSeconds(out float playbackTime)
+        {
+            try
+            {
+                if (_audio.PlayerPlaying || _audio.Paused)
+                {
+                    playbackTime = Math.Max(0f, (float)_audio.CurrentTime.TotalSeconds);
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            playbackTime = 0f;
+            return false;
+        }
+
+        private float GetAudioTimelineSeconds()
+        {
+            return TryGetAudioTimelineSeconds(out float playbackTime) ? playbackTime : 0f;
+        }
+
+        private float GetInputTimeSeconds()
+        {
+            return GetInputTimeSeconds(GetGameplayTimeSeconds());
+        }
+
+        private float GetInputTimeSeconds(float gameplayTimeSeconds)
+        {
+            return Math.Max(0f, gameplayTimeSeconds - _inputDelayMs / 1000f);
         }
 
         private void GameTimer_Tick(object? sender, EventArgs e)
@@ -1303,6 +1554,12 @@ namespace ModularAudience.Forms.Modules
             if (!_gameRunning || _paused)
             {
                 return;
+            }
+
+            if (!_gameClockAudioAnchored && TryGetAudioTimelineSeconds(out _))
+            {
+                _gameClock.Restart();
+                _gameClockAudioAnchored = true;
             }
 
             // Idle spinner spin: while no spinner is grabbed, its indicator slowly rotates
@@ -1317,30 +1574,28 @@ namespace ModularAudience.Forms.Modules
             // gameplay is suppressed. Show 3-2-1 at two-beat intervals.
             if (_countInActive)
             {
-                float countInElapsed = (float)Stopwatch.GetTimestamp() / (float)Stopwatch.Frequency - _countInStart;
+                float countInElapsed = GetAudioTimelineSeconds() - _countInStart;
                 if (countInElapsed >= GetCountInDurationSeconds())
                 {
                     _countInActive = false;
-                    _debugLog?.LogEvent((float)_gameClock.Elapsed.TotalSeconds, "COUNT-IN complete (two beats per count, game clock stayed aligned to music)");
+                    _debugLog?.LogEvent(GetGameplayTimeSeconds(), "COUNT-IN complete (two beats per count, playback clock is now the gameplay timeline)");
                 }
                 try { PushLayeredBitmap(); }
                 catch (Exception ex) { Debug.WriteLine($"BeatClickerGame render error: {ex.Message}"); }
                 return;
             }
 
-            float currentTime = (float)_gameClock.Elapsed.TotalSeconds;
+            float gameClockTime = (float)_gameClock.Elapsed.TotalSeconds;
+            float currentTime = GetGameplayTimeSeconds();
 
-            // Audio-position drift: the game clock (Stopwatch) and the actual audio playback
-            // position can diverge (audio latency, pause/resume, rate changes). This is the
-            // single most important signal for diagnosing "off-beat" hits: if the drift is
-            // large, the player is hearing the beat at a different time than the game clock
-            // thinks, so every hit window is effectively shifted.
-            if (_debugLog != null && (int)(currentTime * 10) % 50 == 0)
+            // Keep the raw stopwatch drift visible for diagnostics, while gameplay uses the
+            // playback source clock below so every path shares the same beat timeline.
+            if (_debugLog != null && (int)(gameClockTime * 10) % 50 == 0)
             {
                 float audioPos = 0f;
                 try { audioPos = (float)_audio.CurrentTime.TotalSeconds; }
                 catch { }
-                _debugLog?.LogEvent(currentTime, $"DRIFT gameClock={currentTime:F4}s audioPos={audioPos:F4}s diff={(audioPos - currentTime) * 1000:F1}ms");
+                _debugLog?.LogEvent(currentTime, $"DRIFT gameClock={gameClockTime:F4}s audioPos={audioPos:F4}s diff={(audioPos - gameClockTime) * 1000:F1}ms");
             }
 
             // The beatmap is generated asynchronously. Until it's ready, only render the
@@ -1404,25 +1659,7 @@ namespace ModularAudience.Forms.Modules
                             {
                                 goto render;
                             }
-
-                            if (_spinnerHitRegistered || _spinnerRotationCompleted || _spinnerCombo >= 1)
-                            {
-                                _debugLog?.LogHit(currentTime, "Spinner", objTime, objTime - currentTime, (int)obj.X, (int)obj.Y);
-                            }
-                            else
-                            {
-                                RegisterMiss();
-                                AddFailEffect(obj.X, obj.Y, currentTime);
-                                _debugLog?.LogMiss(currentTime, "Spinner", objTime, objTime - currentTime, "auto-miss (spinner duration expired without a full rotation)");
-                            }
-
-                            _currentHitIndex++;
-                            _activeSpinnerIndex = -1;
-                            _spinnerLastAngle = 0f;
-                            _spinnerAccumulatedAngle = 0f;
-                            _spinnerCombo = 0;
-                            _spinnerRotationCompleted = false;
-                            _spinnerHitRegistered = false;
+                            ResolveExpiredSpinner(currentTime);
                         }
                         else
                         {
@@ -1521,19 +1758,20 @@ namespace ModularAudience.Forms.Modules
             _leftButtonHeld = true;
             _mouseX = e.X;
             _mouseY = e.Y;
-            float currentTime = (float)_gameClock.Elapsed.TotalSeconds;
+            float visualTime = GetGameplayTimeSeconds();
+            float inputTime = GetInputTimeSeconds(visualTime);
 
-            _debugLog?.LogPlayerInput(currentTime, "MouseDown", e.X, e.Y);
+            _debugLog?.LogPlayerInput(inputTime, "MouseDown", e.X, e.Y, visualTime, "rawTime");
 
             lock (_lock)
             {
                 if (_isTaikoMode)
                 {
-                    HandleTaikoClick(e.X, e.Y, currentTime);
+                    HandleTaikoClick(e.X, e.Y, inputTime, visualTime);
                 }
                 else
                 {
-                    HandleBeatCatchMouseDown(e.X, e.Y, currentTime);
+                    HandleBeatCatchMouseDown(e.X, e.Y, inputTime, visualTime);
                 }
             }
 
@@ -1553,7 +1791,8 @@ namespace ModularAudience.Forms.Modules
             // Track slider dragging only while the original left-button grab is held.
             if (_activeSliderIndex >= 0 && _sliderStartHit && _leftButtonHeld)
             {
-                float currentTime = (float)_gameClock.Elapsed.TotalSeconds;
+                float visualTime = GetGameplayTimeSeconds();
+                float inputTime = GetInputTimeSeconds(visualTime);
                 lock (_lock)
                 {
                     if (_activeSliderIndex < _hitObjects.Count)
@@ -1577,7 +1816,7 @@ namespace ModularAudience.Forms.Modules
                                 _sliderMaxProgress = Math.Max(_sliderMaxProgress, progress);
                             }
 
-                            float targetProgress = GetSliderTargetProgress(obj, currentTime);
+                            float targetProgress = GetSliderTargetProgress(obj, inputTime);
                             bool onTimeForCompletion = targetProgress >= 0.95f
                                 && Math.Abs(progress - targetProgress) <= _sliderProgressTolerance;
                             if (_sliderPathValid
@@ -1587,10 +1826,10 @@ namespace ModularAudience.Forms.Modules
                             {
                                 _completedSliderIndex = _activeSliderIndex;
                                 _completedSliderProgress = _sliderMaxProgress;
-                                _completedSliderHitTime = currentTime;
+                                _completedSliderHitTime = visualTime;
                                 RegisterHit();
-                                AddSliderHitEffect(obj, currentTime);
-                                _debugLog?.LogHit(currentTime, "Slider", obj.Time, obj.Time - currentTime, (int)obj.EndX, (int)obj.EndY);
+                                AddSliderHitEffect(obj, visualTime);
+                                _debugLog?.LogHit(inputTime, "Slider", obj.Time, obj.Time - inputTime, (int)obj.EndX, (int)obj.EndY);
                                 _currentHitIndex = _activeSliderIndex + 1;
                                 _activeSliderIndex = -1;
                                 _sliderStartHit = false;
@@ -1609,6 +1848,28 @@ namespace ModularAudience.Forms.Modules
                 if (_activeSpinnerIndex < _hitObjects.Count)
                 {
                     var obj = _hitObjects[_activeSpinnerIndex];
+                    float currentTime = GetGameplayTimeSeconds();
+                    if (_activeSpinnerIndex != _currentHitIndex
+                        || currentTime >= obj.Time + obj.Duration)
+                    {
+                        if (_activeSpinnerIndex == _currentHitIndex)
+                        {
+                            ResolveExpiredSpinner(currentTime);
+                        }
+                        else
+                        {
+                            _activeSpinnerIndex = -1;
+                            _spinnerLastAngle = 0f;
+                            _spinnerAccumulatedAngle = 0f;
+                            _spinnerCombo = 0;
+                            _spinnerRotationCompleted = false;
+                            _spinnerHitRegistered = false;
+                        }
+
+                        PushLayeredBitmap();
+                        return;
+                    }
+
                     float newAngle = (float)Math.Atan2(e.Y - obj.Y, e.X - obj.X);
                     // Seed the idle spin from the current cursor angle so that, when the
                     // player releases the spinner, the idle rotation continues from exactly
@@ -1627,19 +1888,53 @@ namespace ModularAudience.Forms.Modules
                         _spinnerAccumulatedAngle -= Math.Sign(_spinnerAccumulatedAngle) * 2f * (float)Math.PI;
                         _spinnerCombo++;
                         _spinnerRotationCompleted = true;
-                        float currentTime = (float)_gameClock.Elapsed.TotalSeconds;
+                        float inputTime = GetInputTimeSeconds(currentTime);
                         AddComboPopup(_spinnerCombo, obj.X, obj.Y, currentTime);
                         if (!_spinnerHitRegistered)
                         {
                             RegisterHit();
                             _spinnerHitRegistered = true;
-                            _debugLog?.LogHit(currentTime, "Spinner-rotation", obj.Time, obj.Time - currentTime, (int)obj.X, (int)obj.Y);
+                            _debugLog?.LogHit(inputTime, "Spinner-rotation", obj.Time, obj.Time - inputTime, (int)obj.X, (int)obj.Y);
                         }
-                        _debugLog?.LogEvent(currentTime, $"Spinner rotation complete (count={_spinnerCombo})");
+                        _debugLog?.LogEvent(inputTime, $"Spinner rotation complete (count={_spinnerCombo})");
                     }
                 }
                 PushLayeredBitmap();
             }
+        }
+
+        private void ResolveExpiredSpinner(float currentTime)
+        {
+            if (_currentHitIndex < 0 || _currentHitIndex >= _hitObjects.Count)
+            {
+                return;
+            }
+
+            var obj = _hitObjects[_currentHitIndex];
+            if (obj.Type != BeatCatchHitType.Spinner
+                || currentTime < obj.Time + obj.Duration)
+            {
+                return;
+            }
+
+            if (_spinnerHitRegistered || _spinnerRotationCompleted || _spinnerCombo >= 1)
+            {
+                _debugLog?.LogHit(currentTime, "Spinner", obj.Time, obj.Time - currentTime, (int)obj.X, (int)obj.Y);
+            }
+            else
+            {
+                RegisterMiss();
+                AddFailEffect(obj.X, obj.Y, currentTime);
+                _debugLog?.LogMiss(currentTime, "Spinner", obj.Time, obj.Time - currentTime, "auto-miss (spinner duration expired without a full rotation)");
+            }
+
+            _currentHitIndex++;
+            _activeSpinnerIndex = -1;
+            _spinnerLastAngle = 0f;
+            _spinnerAccumulatedAngle = 0f;
+            _spinnerCombo = 0;
+            _spinnerRotationCompleted = false;
+            _spinnerHitRegistered = false;
         }
 
         private void GameForm_MouseUp(object? sender, MouseEventArgs e)
@@ -1655,9 +1950,10 @@ namespace ModularAudience.Forms.Modules
                 && _currentHitIndex == _activeSliderIndex)
             {
                 var slider = _hitObjects[_activeSliderIndex];
-                float currentTime = (float)_gameClock.Elapsed.TotalSeconds;
+                float visualTime = GetGameplayTimeSeconds();
+                float inputTime = GetInputTimeSeconds(visualTime);
                 float progress = GetSliderProgress(slider, e.X, e.Y);
-                float targetProgress = GetSliderTargetProgress(slider, currentTime);
+                float targetProgress = GetSliderTargetProgress(slider, inputTime);
                 bool releasedAtEndpoint = _sliderDragged
                     && IsSliderPointOnPath(slider, e.X, e.Y)
                     && progress >= 0.95f
@@ -1667,22 +1963,22 @@ namespace ModularAudience.Forms.Modules
                 {
                     _completedSliderIndex = _activeSliderIndex;
                     _completedSliderProgress = Math.Max(_sliderMaxProgress, progress);
-                    _completedSliderHitTime = currentTime;
+                    _completedSliderHitTime = visualTime;
                     RegisterHit();
-                    AddSliderHitEffect(slider, currentTime);
-                    _debugLog?.LogHit(currentTime, "Slider", slider.Time, slider.Time - currentTime, (int)slider.EndX, (int)slider.EndY);
+                    AddSliderHitEffect(slider, visualTime);
+                    _debugLog?.LogHit(inputTime, "Slider", slider.Time, slider.Time - inputTime, (int)slider.EndX, (int)slider.EndY);
                     _currentHitIndex = _activeSliderIndex + 1;
                 }
                 else
                 {
                     _failedSliderIndex = _activeSliderIndex;
                     RegisterMiss();
-                    AddFailEffect(slider.X, slider.Y, currentTime);
+                    AddFailEffect(slider.X, slider.Y, visualTime);
                     _debugLog?.LogMiss(
-                        currentTime,
+                        inputTime,
                         "Slider",
                         slider.Time,
-                        slider.Time - currentTime,
+                        slider.Time - inputTime,
                         "slider released before reaching the endpoint");
                     _currentHitIndex = _activeSliderIndex + 1;
                 }
@@ -1702,23 +1998,33 @@ namespace ModularAudience.Forms.Modules
             // Release spinner if active
             if (_activeSpinnerIndex >= 0 && _activeSpinnerIndex < _hitObjects.Count)
             {
-                _mouseX = e.X;
-                _mouseY = e.Y;
-                _spinnerIdleAngle = (float)Math.Atan2(e.Y - _hitObjects[_activeSpinnerIndex].Y, e.X - _hitObjects[_activeSpinnerIndex].X);
-                _activeSpinnerIndex = -1;
-                _spinnerLastAngle = 0f;
-                _spinnerAccumulatedAngle = 0f;
+                float currentTime = GetGameplayTimeSeconds();
+                var spinner = _hitObjects[_activeSpinnerIndex];
+                if (_activeSpinnerIndex == _currentHitIndex
+                    && currentTime >= spinner.Time + spinner.Duration)
+                {
+                    ResolveExpiredSpinner(currentTime);
+                }
+                else
+                {
+                    _mouseX = e.X;
+                    _mouseY = e.Y;
+                    _spinnerIdleAngle = (float)Math.Atan2(e.Y - spinner.Y, e.X - spinner.X);
+                    _activeSpinnerIndex = -1;
+                    _spinnerLastAngle = 0f;
+                    _spinnerAccumulatedAngle = 0f;
+                }
                 PushLayeredBitmap();
             }
         }
 
-        private void HandleBeatCatchMouseDown(int mouseX, int mouseY, float currentTime)
+        private void HandleBeatCatchMouseDown(int mouseX, int mouseY, float inputTime, float visualTime)
         {
             // Find the nearest unhit object
             for (int i = _currentHitIndex; i < _hitObjects.Count; i++)
             {
                 var obj = _hitObjects[i];
-                float timeUntilHit = obj.Time - currentTime;
+                float timeUntilHit = obj.Time - inputTime;
 
                 bool isSpinner = obj.Type == BeatCatchHitType.Spinner;
                 float approachWindow = GetApproachWindowSeconds(obj);
@@ -1746,7 +2052,7 @@ namespace ModularAudience.Forms.Modules
                             _spinnerLastAngle = (float)Math.Atan2(mouseY - obj.Y, mouseX - obj.X);
                             _spinnerIdleAngle = _spinnerLastAngle;
                             _spinnerAccumulatedAngle = 0f;
-                            _debugLog?.LogHit(currentTime, "Spinner-start", obj.Time, timeUntilHit, mouseX, mouseY);
+                            _debugLog?.LogHit(inputTime, "Spinner-start", obj.Time, timeUntilHit, mouseX, mouseY);
                         }
                         return;
                     }
@@ -1765,27 +2071,22 @@ namespace ModularAudience.Forms.Modules
                     // Sliders: wider early window so the player can grab them
                     float earlyWindow = obj.Type == BeatCatchHitType.Slider ? _hitWindowEarlyMs + 100f : _hitWindowEarlyMs;
 
-                    // The audio output latency shifts the heard beat later than the sample
-                    // position. Shift the hit windows by the measured latency so the optimal
-                    // click time lines up with the actually heard beat (not the sample time).
-                    float latencySeconds = _audioLatencyMs / 1000f;
-
                     // Too-early click: outside the valid early window = instant miss
-                    if (timeUntilHit > earlyWindow / 1000f + latencySeconds)
+                    if (timeUntilHit > earlyWindow / 1000f)
                     {
                         if (obj.Type == BeatCatchHitType.Slider)
                         {
                             _failedSliderIndex = i;
                         }
                         RegisterMiss();
-                        AddFailEffect(obj.X, obj.Y, currentTime);
-                        _debugLog?.LogMiss(currentTime, obj.Type.ToString(), obj.Time, timeUntilHit, $"too early (timeUntilHit={timeUntilHit * 1000:F1}ms > earlyWindow={earlyWindow + _audioLatencyMs:F0}ms)");
+                        AddFailEffect(obj.X, obj.Y, visualTime);
+                        _debugLog?.LogMiss(inputTime, obj.Type.ToString(), obj.Time, timeUntilHit, $"too early (timeUntilHit={timeUntilHit * 1000:F1}ms > earlyWindow={earlyWindow:F0}ms)");
                         _currentHitIndex = i + 1;
                         return;
                     }
 
-                    // Valid hit window: within early window or late window (shifted by latency)
-                    if (timeUntilHit >= -_hitWindowLateMs / 1000f + latencySeconds && timeUntilHit <= earlyWindow / 1000f + latencySeconds)
+                    // Valid hit window: the same beat-clock interval used by rendering and auto-miss.
+                    if (timeUntilHit >= -_hitWindowLateMs / 1000f && timeUntilHit <= earlyWindow / 1000f)
                     {
                         if (obj.Type == BeatCatchHitType.Slider)
                         {
@@ -1796,16 +2097,16 @@ namespace ModularAudience.Forms.Modules
                             _sliderMaxProgress = 0f;
                             _sliderPathValid = true;
                             RecordHitTiming(timeUntilHit, BeatCatchHitType.Slider);
-                            _debugLog?.LogEvent(currentTime, $"START Slider objTime={obj.Time:F4}s timeUntilHit={timeUntilHit * 1000:F1}ms @ ({mouseX},{mouseY})");
+                            _debugLog?.LogEvent(inputTime, $"START Slider objTime={obj.Time:F4}s timeUntilHit={timeUntilHit * 1000:F1}ms @ ({mouseX},{mouseY})");
                             // Don't advance _currentHitIndex yet � slider is still active
                         }
                         else
                         {
                             RegisterHit();
                             RecordHitTiming(timeUntilHit, BeatCatchHitType.Circle);
-                            AddHitEffect(obj.X, obj.Y, currentTime);
+                            AddHitEffect(obj.X, obj.Y, visualTime);
                             _currentHitIndex = i + 1;
-                            _debugLog?.LogHit(currentTime, "Circle", obj.Time, timeUntilHit, mouseX, mouseY);
+                            _debugLog?.LogHit(inputTime, "Circle", obj.Time, timeUntilHit, mouseX, mouseY);
                         }
                         return;
                     }
@@ -1816,8 +2117,8 @@ namespace ModularAudience.Forms.Modules
                         _failedSliderIndex = i;
                     }
                     RegisterMiss();
-                    AddFailEffect(obj.X, obj.Y, currentTime);
-                    _debugLog?.LogMiss(currentTime, obj.Type.ToString(), obj.Time, timeUntilHit, $"too late (timeUntilHit={timeUntilHit * 1000:F1}ms < -lateWindow={-_hitWindowLateMs + _audioLatencyMs:F0}ms)");
+                    AddFailEffect(obj.X, obj.Y, visualTime);
+                    _debugLog?.LogMiss(inputTime, obj.Type.ToString(), obj.Time, timeUntilHit, $"too late (timeUntilHit={timeUntilHit * 1000:F1}ms < -lateWindow={-_hitWindowLateMs:F0}ms)");
                     _currentHitIndex = i + 1;
                     return;
                 }
@@ -1828,8 +2129,8 @@ namespace ModularAudience.Forms.Modules
             // nothing to hit (or the nearest object was too far / too far in the future).
             if (_debugLog != null)
             {
-                float nearestTime = _currentHitIndex < _hitObjects.Count ? _hitObjects[_currentHitIndex].Time - currentTime : float.NaN;
-                _debugLog?.LogEvent(currentTime, $"NO-OBJECT click (no hit/miss)  nearestObjTime={nearestTime:F4}s (timeUntilHit={nearestTime * 1000:F1}ms)  approachWindow={ApproachSeconds * 1000:F0}ms");
+                float nearestTime = _currentHitIndex < _hitObjects.Count ? _hitObjects[_currentHitIndex].Time - inputTime : float.NaN;
+                _debugLog?.LogEvent(inputTime, $"NO-OBJECT click (no hit/miss)  nearestObjTime={nearestTime:F4}s (timeUntilHit={nearestTime * 1000:F1}ms)  approachWindow={ApproachSeconds * 1000:F0}ms");
             }
         }
 
@@ -1898,7 +2199,7 @@ namespace ModularAudience.Forms.Modules
                 <= _circleRadius * 1.5f;
         }
 
-        private void HandleTaikoClick(int mouseX, int mouseY, float currentTime)
+        private void HandleTaikoClick(int mouseX, int mouseY, float inputTime, float visualTime)
         {
             int screenW = this.ClientSize.Width;
             int drumCenterX = screenW / 2;
@@ -1909,7 +2210,7 @@ namespace ModularAudience.Forms.Modules
             float dist = (float)Math.Sqrt(Math.Pow(mouseX - drumCenterX, 2) + Math.Pow(mouseY - drumCenterY, 2));
             if (dist > drumRadius)
             {
-                _debugLog?.LogEvent(currentTime, $"NO-OBJECT taiko click outside drum (dist={dist:F0} > drumRadius={drumRadius})");
+                _debugLog?.LogEvent(inputTime, $"NO-OBJECT taiko click outside drum (dist={dist:F0} > drumRadius={drumRadius})");
                 return;
             }
 
@@ -1919,7 +2220,7 @@ namespace ModularAudience.Forms.Modules
             for (int i = _currentHitIndex; i < _taikoBeats.Count; i++)
             {
                 var beat = _taikoBeats[i];
-                float timeUntilHit = beat.Time - currentTime;
+                float timeUntilHit = beat.Time - inputTime;
 
                 // If the beat is still far in the future, stop searching
                 if (timeUntilHit > _taikoHitWindowEarlyMs / 1000f)
@@ -1932,36 +2233,31 @@ namespace ModularAudience.Forms.Modules
 
                 if (typeMatch)
                 {
-                    // The audio output latency shifts the heard beat later than the sample
-                    // position. Shift the hit windows by the measured latency so the optimal
-                    // click time lines up with the actually heard beat (not the sample time).
-                    float latencySeconds = _audioLatencyMs / 1000f;
-
                     // Too-early click = instant miss
-                    if (timeUntilHit > _taikoHitWindowEarlyMs / 1000f + latencySeconds)
+                    if (timeUntilHit > _taikoHitWindowEarlyMs / 1000f)
                     {
                         RegisterMiss();
-                        AddFailEffect(drumCenterX, drumCenterY, currentTime);
-                        _debugLog?.LogMiss(currentTime, beat.Type.ToString(), beat.Time, timeUntilHit, $"too early (timeUntilHit={timeUntilHit * 1000:F1}ms > earlyWindow={_taikoHitWindowEarlyMs + _audioLatencyMs:F0}ms)");
+                        AddFailEffect(drumCenterX, drumCenterY, visualTime);
+                        _debugLog?.LogMiss(inputTime, beat.Type.ToString(), beat.Time, timeUntilHit, $"too early (timeUntilHit={timeUntilHit * 1000:F1}ms > earlyWindow={_taikoHitWindowEarlyMs:F0}ms)");
                         _currentHitIndex = i + 1;
                         return;
                     }
 
-                    // Valid hit window: within early window or late window (shifted by latency)
-                    if (timeUntilHit >= -_taikoHitWindowLateMs / 1000f + latencySeconds && timeUntilHit <= _taikoHitWindowEarlyMs / 1000f + latencySeconds)
+                    // Valid hit window: the same beat-clock interval used by auto-miss.
+                    if (timeUntilHit >= -_taikoHitWindowLateMs / 1000f && timeUntilHit <= _taikoHitWindowEarlyMs / 1000f)
                     {
                         RegisterHit();
                         _currentHitIndex = i + 1;
-                        _debugLog?.LogHit(currentTime, beat.Type.ToString(), beat.Time, timeUntilHit, mouseX, mouseY);
+                        _debugLog?.LogHit(inputTime, beat.Type.ToString(), beat.Time, timeUntilHit, mouseX, mouseY);
                         return;
                     }
 
                     // Clicked on drum but outside valid window
                     RegisterMiss();
-                        AddFailEffect(drumCenterX, drumCenterY, currentTime);
-                        _debugLog?.LogMiss(currentTime, beat.Type.ToString(), beat.Time, timeUntilHit, $"outside window (timeUntilHit={timeUntilHit * 1000:F1}ms, latency={_audioLatencyMs:F0}ms)");
-                        _currentHitIndex = i + 1;
-                        return;
+                    AddFailEffect(drumCenterX, drumCenterY, visualTime);
+                    _debugLog?.LogMiss(inputTime, beat.Type.ToString(), beat.Time, timeUntilHit, $"outside window (timeUntilHit={timeUntilHit * 1000:F1}ms)");
+                    _currentHitIndex = i + 1;
+                    return;
                 }
             }
         }
@@ -1981,8 +2277,9 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            int width = this.ClientSize.Width;
-            int height = this.ClientSize.Height;
+            Rectangle screenBounds = Screen.PrimaryScreen?.Bounds ?? this.Bounds;
+            int width = screenBounds.Width;
+            int height = screenBounds.Height;
             if (width <= 0 || height <= 0)
             {
                 return;
@@ -2001,13 +2298,13 @@ namespace ModularAudience.Forms.Modules
 
                 int taskbarHeight = GetTaskbarHeight();
 
-                // When paused, use the last game clock value (Stopwatch keeps its elapsed time when stopped)
-                float currentTime = _gameRunning ? (float)_gameClock.Elapsed.TotalSeconds : 0f;
+                // The synchronized playback clock remains stable while the game is paused.
+                float currentTime = _gameRunning ? GetGameplayTimeSeconds() : 0f;
 
                 // Count-in: show 3-2-1 every two track beats, each fading in and out quickly.
                 if (_countInActive)
                 {
-                    float countInElapsed = (float)Stopwatch.GetTimestamp() / (float)Stopwatch.Frequency - _countInStart;
+                    float countInElapsed = GetAudioTimelineSeconds() - _countInStart;
                     float countInStepSeconds = GetCountInStepSeconds();
                     int step = (int)(countInElapsed / countInStepSeconds);
                     if (step >= 0 && step < 3)
@@ -2112,7 +2409,7 @@ namespace ModularAudience.Forms.Modules
 
             try
             {
-                POINT dst = new POINT { X = this.Location.X, Y = this.Location.Y };
+                POINT dst = new POINT { X = screenBounds.X, Y = screenBounds.Y };
                 SIZE size = new SIZE { CX = width, CY = height };
                 POINT src = new POINT { X = 0, Y = 0 };
                 BLENDFUNCTION blend = new BLENDFUNCTION
@@ -2165,7 +2462,7 @@ namespace ModularAudience.Forms.Modules
                 {
                     var obj = _hitObjects[i];
                     float timeUntilHit = obj.Time - currentTime;
-                    float visualStart = obj.Time - GetApproachWindowSeconds(obj);
+                    float visualStart = GetVisualStartTime(obj);
                     if (currentTime < visualStart)
                     {
                         continue;
@@ -2555,6 +2852,27 @@ namespace ModularAudience.Forms.Modules
         {
             // ESC is handled in WndProc for reliability with layered windows.
             // This handler is kept as a fallback but does nothing for ESC.
+            if (e.KeyCode == Keys.Escape)
+            {
+                return;
+            }
+
+            if (!_gameRunning || _paused || _countInActive || _keyboardClickHeld
+                || NormalizeClickKey(e.KeyCode) != NormalizeClickKey((Keys)_clickKeyData))
+            {
+                return;
+            }
+
+            _keyboardClickHeld = true;
+            Point clickPoint = PointToClient(Cursor.Position);
+            GameForm_MouseDown(this, new MouseEventArgs(
+                MouseButtons.Left,
+                1,
+                clickPoint.X,
+                clickPoint.Y,
+                0));
+            e.Handled = true;
+            e.SuppressKeyPress = true;
         }
 
         private void BeatClickerGameForm_KeyUp(object? sender, KeyEventArgs e)
@@ -2565,6 +2883,21 @@ namespace ModularAudience.Forms.Modules
             if (e.KeyCode == Keys.Escape)
             {
                 HandleEscKeyUp();
+            }
+
+            if (_keyboardClickHeld
+                && NormalizeClickKey(e.KeyCode) == NormalizeClickKey((Keys)_clickKeyData))
+            {
+                _keyboardClickHeld = false;
+                Point clickPoint = PointToClient(Cursor.Position);
+                GameForm_MouseUp(this, new MouseEventArgs(
+                    MouseButtons.Left,
+                    0,
+                    clickPoint.X,
+                    clickPoint.Y,
+                    0));
+                e.Handled = true;
+                e.SuppressKeyPress = true;
             }
         }
 
@@ -2637,6 +2970,12 @@ namespace ModularAudience.Forms.Modules
                 _pauseMenu = null;
             }
             ResumeGame();
+            if (this.IsHandleCreated && !this.IsDisposed)
+            {
+                SetForegroundWindow(this.Handle);
+                this.Activate();
+                this.Focus();
+            }
         }
 
         /// <summary>
@@ -2650,6 +2989,11 @@ namespace ModularAudience.Forms.Modules
         private void HandleEscKeyDown()
         {
             if (!_gameRunning)
+            {
+                return;
+            }
+
+            if (_calibrationDialogOpen || _pauseMenu?.IsCapturingClickKey == true)
             {
                 return;
             }
@@ -2688,20 +3032,10 @@ namespace ModularAudience.Forms.Modules
 
         private void PauseGame()
         {
-            // The game pause (clock + timer) is independent of the audio pause, so a flaky
-            // audio pause can never prevent the pause menu from opening.
             _paused = true;
             _gameClock.Stop();
 
-            // Freeze the count-in while paused: the count-in uses a wall-clock stopwatch
-            // (_countInStart), which would keep advancing while the game is paused. Capture
-            // the elapsed count-in time so it resumes exactly where it was left off.
-            if (_countInActive)
-            {
-                _countInPausedElapsed = (float)Stopwatch.GetTimestamp() / (float)Stopwatch.Frequency - _countInStart;
-            }
-
-            _debugLog?.LogEvent((float)_gameClock.Elapsed.TotalSeconds, "PAUSED (countInActive=" + _countInActive + ")");
+            _debugLog?.LogEvent(GetGameplayTimeSeconds(), "PAUSED (countInActive=" + _countInActive + ")");
 
             if (!_audioPausedByGame)
             {
@@ -2723,15 +3057,7 @@ namespace ModularAudience.Forms.Modules
             _paused = false;
             _gameClock.Start();
 
-            // Resume the count-in from where it was frozen: rebase the count-in stopwatch
-            // so the elapsed time continues from _countInPausedElapsed instead of having
-            // advanced (and possibly finished) while the game was paused.
-            if (_countInActive)
-            {
-                _countInStart = (float)Stopwatch.GetTimestamp() / (float)Stopwatch.Frequency - _countInPausedElapsed;
-            }
-
-            _debugLog?.LogEvent((float)_gameClock.Elapsed.TotalSeconds, "RESUMED (countInActive=" + _countInActive + ")");
+            _debugLog?.LogEvent(GetGameplayTimeSeconds(), "RESUMED (countInActive=" + _countInActive + ")");
 
             if (_audioPausedByGame)
             {
@@ -2750,6 +3076,8 @@ namespace ModularAudience.Forms.Modules
         {
             SaveRunSummaryIfNeeded();
             LoadBackgroundOpacity();
+            LoadInputDelay();
+            LoadClickKeyData();
             _playbackCts?.Cancel();
             _audioPausedByGame = false;
             RunAudioOnUiThread(() => _audio.StopAsync());
@@ -2761,9 +3089,23 @@ namespace ModularAudience.Forms.Modules
             _beatmapReady = false;
             Task.Run(() =>
             {
-                try { GenerateBeatMap(); }
-                catch (Exception ex) { Debug.WriteLine($"BeatClickerGame beatmap generation error: {ex.Message}"); }
-                this.BeginInvoke(new Action(() => { _beatmapReady = true; }));
+                bool generationSucceeded = false;
+                try
+                {
+                    GenerateBeatMap();
+                    generationSucceeded = true;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"BeatClickerGame beatmap generation error: {ex}");
+                    _debugLog?.LogEvent(0f, $"BEATMAP GENERATION ERROR: {ex}");
+                    lock (_lock)
+                    {
+                        _hitObjects = [];
+                        _taikoBeats = [];
+                    }
+                }
+                this.BeginInvoke(new Action(() => { _beatmapReady = generationSucceeded; }));
             });
 
             ResetGame();
@@ -2772,7 +3114,7 @@ namespace ModularAudience.Forms.Modules
             _paused = false;
             // Re-run the count-in (3-2-1) before the restarted game begins.
             _countInActive = true;
-            _countInStart = (float)Stopwatch.GetTimestamp() / (float)Stopwatch.Frequency;
+            _countInStart = 0f;
             this.Invalidate();
         }
 
@@ -2797,7 +3139,7 @@ namespace ModularAudience.Forms.Modules
         private double GetTrackPlayedPercent()
         {
             return _totalDuration > 0f
-                ? Math.Clamp(_gameClock.Elapsed.TotalSeconds / _totalDuration * 100d, 0d, 100d)
+                ? Math.Clamp(GetGameplayTimeSeconds() / _totalDuration * 100d, 0d, 100d)
                 : 0d;
         }
 
@@ -2831,7 +3173,7 @@ namespace ModularAudience.Forms.Modules
                 TimingSampleCount = _timingSampleCount,
                 TrackPlayedPercent = GetTrackPlayedPercent(),
                 ObjectsResolvedPercent = GetObjectsResolvedPercent(),
-                DurationSeconds = _gameClock.Elapsed.TotalSeconds,
+                DurationSeconds = GetGameplayTimeSeconds(),
                 Completed = IsRunComplete()
             });
             _runSummarySaved = true;
@@ -2869,7 +3211,7 @@ namespace ModularAudience.Forms.Modules
         private void WriteDebugLogSummary()
         {
             _debugLog?.LogSummary(
-                (float)_gameClock.Elapsed.TotalSeconds,
+                GetGameplayTimeSeconds(),
                 _score,
                 _missed,
                 _bestComboStreak,
@@ -3178,6 +3520,9 @@ namespace ModularAudience.Forms.Modules
         private sealed class BeatClickerPauseMenuForm : Form
         {
             private readonly BeatClickerGameForm _game;
+            private bool _capturingClickKey;
+
+            public bool IsCapturingClickKey => _capturingClickKey;
 
             public BeatClickerPauseMenuForm(BeatClickerGameForm game)
             {
@@ -3189,7 +3534,7 @@ namespace ModularAudience.Forms.Modules
                 this.StartPosition = FormStartPosition.CenterScreen;
                 this.BackColor = Color.FromArgb(20, 20, 35);
                 this.ForeColor = Color.White;
-                this.ClientSize = new Size(320, 241);
+                this.ClientSize = new Size(320, 435);
                 this.KeyPreview = true;
                 this.TopMost = true;
                 this.ShowInTaskbar = false;
@@ -3225,10 +3570,108 @@ namespace ModularAudience.Forms.Modules
                     _game.SetBackgroundOpacityPercent(opacitySlider.Value);
                 };
 
+                var inputDelayLabel = new Label
+                {
+                    Text = $"Input delay: {FormatInputDelay(_game.InputDelayMs)} ms",
+                    Location = new Point(60, 76),
+                    Size = new Size(200, 24),
+                    ForeColor = Color.White,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Font = new Font("Consolas", 10f, FontStyle.Bold)
+                };
+
+                var inputDelaySlider = new TrackBar
+                {
+                    Minimum = BeatClickerSettings.MinInputDelayMs,
+                    Maximum = BeatClickerSettings.MaxInputDelayMs,
+                    Value = _game.InputDelayMs,
+                    Location = new Point(50, 97),
+                    Size = new Size(220, 42),
+                    TickFrequency = 50,
+                    LargeChange = 25,
+                    SmallChange = 5,
+                    Orientation = Orientation.Horizontal,
+                    AutoSize = false
+                };
+                inputDelaySlider.ValueChanged += (_, _) =>
+                {
+                    inputDelayLabel.Text = $"Input delay: {FormatInputDelay(inputDelaySlider.Value)} ms";
+                    _game.SetInputDelayMs(inputDelaySlider.Value);
+                };
+
+                var clickKeyLabel = new Label
+                {
+                    Text = $"Click key: {FormatClickKeyData(_game.ClickKeyData)}",
+                    Location = new Point(60, 148),
+                    Size = new Size(200, 24),
+                    ForeColor = Color.White,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Font = new Font("Consolas", 10f, FontStyle.Bold)
+                };
+
+                var btnConfigureClickKey = new Button
+                {
+                    Text = "Configure click key",
+                    Location = new Point(60, 174),
+                    Size = new Size(200, 38),
+                    BackColor = Color.FromArgb(50, 80, 140),
+                    ForeColor = Color.White,
+                    Font = new Font("Consolas", 10f, FontStyle.Bold),
+                    FlatStyle = FlatStyle.Flat
+                };
+                btnConfigureClickKey.FlatAppearance.BorderSize = 0;
+                btnConfigureClickKey.Click += (_, _) =>
+                {
+                    _capturingClickKey = true;
+                    clickKeyLabel.Text = "Press one key (Esc cancels)";
+                    btnConfigureClickKey.Text = "Listening...";
+                    btnConfigureClickKey.BackColor = Color.FromArgb(100, 80, 30);
+                    this.Activate();
+                    btnConfigureClickKey.Focus();
+                };
+
+                var btnCalibrate = new Button
+                {
+                    Text = "Calibrate input",
+                    Location = new Point(60, 220),
+                    Size = new Size(200, 40),
+                    BackColor = Color.FromArgb(70, 80, 120),
+                    ForeColor = Color.White,
+                    Font = new Font("Consolas", 11f, FontStyle.Bold),
+                    FlatStyle = FlatStyle.Flat
+                };
+                btnCalibrate.FlatAppearance.BorderSize = 0;
+                btnCalibrate.Click += (_, _) =>
+                {
+                    _capturingClickKey = false;
+                    btnConfigureClickKey.Text = "Configure click key";
+                    btnConfigureClickKey.BackColor = Color.FromArgb(50, 80, 140);
+                    _game._calibrationDialogOpen = true;
+                    try
+                    {
+                        using var calibration = new BeatClickerCalibrationForm(
+                            _game._audio,
+                            _game.ClickKeyData,
+                            _game.GetCalibrationOutputLatencyMs(),
+                            _game.SetInputDelayMs);
+                        calibration.ShowDialog(this);
+                    }
+                    finally
+                    {
+                        _game._calibrationDialogOpen = false;
+                    }
+                    inputDelayLabel.Text = $"Input delay: {FormatInputDelay(_game.InputDelayMs)} ms";
+                    if (inputDelaySlider.Value != _game.InputDelayMs)
+                    {
+                        inputDelaySlider.Value = _game.InputDelayMs;
+                    }
+                    this.Activate();
+                };
+
                 var btnContinue = new Button
                 {
                     Text = "Continue",
-                    Location = new Point(60, 76),
+                    Location = new Point(60, 270),
                     Size = new Size(200, 45),
                     BackColor = Color.FromArgb(0, 120, 60),
                     ForeColor = Color.White,
@@ -3241,7 +3684,7 @@ namespace ModularAudience.Forms.Modules
                 var btnRestart = new Button
                 {
                     Text = "Restart",
-                    Location = new Point(60, 131),
+                    Location = new Point(60, 325),
                     Size = new Size(200, 45),
                     BackColor = Color.FromArgb(120, 100, 0),
                     ForeColor = Color.White,
@@ -3254,7 +3697,7 @@ namespace ModularAudience.Forms.Modules
                 var btnExit = new Button
                 {
                     Text = "Exit",
-                    Location = new Point(60, 186),
+                    Location = new Point(60, 380),
                     Size = new Size(200, 45),
                     BackColor = Color.FromArgb(140, 0, 0),
                     ForeColor = Color.White,
@@ -3266,9 +3709,47 @@ namespace ModularAudience.Forms.Modules
 
                 this.Controls.Add(opacityLabel);
                 this.Controls.Add(opacitySlider);
+                this.Controls.Add(inputDelayLabel);
+                this.Controls.Add(inputDelaySlider);
+                this.Controls.Add(clickKeyLabel);
+                this.Controls.Add(btnConfigureClickKey);
+                this.Controls.Add(btnCalibrate);
                 this.Controls.Add(btnContinue);
                 this.Controls.Add(btnRestart);
                 this.Controls.Add(btnExit);
+
+                this.KeyDown += (_, e) =>
+                {
+                    if (!_capturingClickKey)
+                    {
+                        return;
+                    }
+
+                    if (e.KeyCode == Keys.Escape)
+                    {
+                        _capturingClickKey = false;
+                        clickKeyLabel.Text = $"Click key: {FormatClickKeyData(_game.ClickKeyData)}";
+                        btnConfigureClickKey.Text = "Configure click key";
+                        btnConfigureClickKey.BackColor = Color.FromArgb(50, 80, 140);
+                        e.Handled = true;
+                        e.SuppressKeyPress = true;
+                        return;
+                    }
+
+                    Keys key = NormalizeClickKey(e.KeyCode);
+                    if (key == Keys.None)
+                    {
+                        return;
+                    }
+
+                    _game.SetClickKeyData((int)key);
+                    _capturingClickKey = false;
+                    clickKeyLabel.Text = $"Click key: {FormatClickKeyData(_game.ClickKeyData)}";
+                    btnConfigureClickKey.Text = "Configure click key";
+                    btnConfigureClickKey.BackColor = Color.FromArgb(50, 80, 140);
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                };
 
                 // ESC is handled by the game's GLOBAL hotkey (RegisterHotKey), which fires
                 // regardless of which window has keyboard focus. The menu's own KeyDown/KeyUp
@@ -3284,6 +3765,668 @@ namespace ModularAudience.Forms.Modules
                 // would resume, then the hotkey would re-pause � the "flicker" bug, and on a
                 // short press the re-pause never happened so the menu appeared stuck open).
                 // Leaving this empty keeps the Esc close reliable and flicker-free.
+            }
+        }
+
+        private sealed class BeatClickerCalibrationForm : Form
+        {
+            private const int SampleRate = 44100;
+            private const int BeatCount = 16;
+            private const double BeatIntervalSeconds = 0.6;
+            private const double CalibrationBeatSpacingBeats = 2.0;
+            private const double LeadInSeconds = 1.2;
+            private const double TailSeconds = 0.9;
+            private const double ToneDurationSeconds = 0.13;
+            private const double ApproachSeconds = 1.0;
+            private const double CompletedVisualSeconds = 0.28;
+            private const int MinimumValidSamples = 4;
+
+            private readonly struct CalibrationSection
+            {
+                public double BeatIntervalSeconds { get; }
+                public double SegmentStartSeconds { get; }
+                public double DurationSeconds { get; }
+                public bool UsingLoadedTrack { get; }
+                public double[] BeatTimes { get; }
+
+                public CalibrationSection(
+                    double beatIntervalSeconds,
+                    double segmentStartSeconds,
+                    double durationSeconds,
+                    bool usingLoadedTrack,
+                    double[] beatTimes)
+                {
+                    BeatIntervalSeconds = beatIntervalSeconds;
+                    SegmentStartSeconds = segmentStartSeconds;
+                    DurationSeconds = durationSeconds;
+                    UsingLoadedTrack = usingLoadedTrack;
+                    BeatTimes = beatTimes;
+                }
+            }
+
+            private readonly AudioObj _audio;
+            private readonly int _clickKeyData;
+            private readonly double _outputLatencyMs;
+            private readonly Action<int> _applyInputDelay;
+            private readonly double _beatIntervalSeconds;
+            private readonly double _segmentStartSeconds;
+            private readonly double _testDurationSeconds;
+            private readonly bool _usingLoadedTrack;
+            private readonly int _playbackSampleRate;
+            private readonly float _targetRadius;
+            private readonly double[] _beatTimes;
+            private readonly bool[] _registeredBeats = new bool[BeatCount];
+            private readonly List<double> _offsetSamplesMs = [];
+            private readonly Stopwatch _testClock = new();
+            private readonly System.Windows.Forms.Timer _timer;
+            private readonly Label _statusLabel;
+            private readonly Label _progressLabel;
+            private readonly Button _closeButton;
+            private readonly MemoryStream _audioBytes;
+            private readonly RawSourceWaveStream _audioStream;
+            private readonly WaveOut _waveOut;
+            private bool _testStarted;
+            private bool _finished;
+            private bool _keyHeld;
+            private bool _mouseHeld;
+            private int _lastRegisteredBeat = -1;
+
+            public BeatClickerCalibrationForm(
+                AudioObj audio,
+                int clickKeyData,
+                float outputLatencyMs,
+                Action<int> applyInputDelay)
+            {
+                _audio = audio;
+                _clickKeyData = (int)NormalizeClickKey((Keys)clickKeyData);
+                _outputLatencyMs = Math.Clamp(outputLatencyMs, 0f, 250f);
+                _applyInputDelay = applyInputDelay;
+
+                CalibrationSection section = CreateCalibrationSection(_audio);
+                _beatIntervalSeconds = section.BeatIntervalSeconds;
+                _segmentStartSeconds = section.SegmentStartSeconds;
+                _testDurationSeconds = section.DurationSeconds;
+                _usingLoadedTrack = section.UsingLoadedTrack;
+                _playbackSampleRate = _usingLoadedTrack
+                    ? Math.Max(1, _audio.SampleRate)
+                    : SampleRate;
+                _targetRadius = BeatClickerDifficulty.CircleRadius(1);
+                _beatTimes = section.BeatTimes;
+
+                this.FormBorderStyle = FormBorderStyle.FixedDialog;
+                this.StartPosition = FormStartPosition.CenterParent;
+                this.ClientSize = new Size(620, 500);
+                this.BackColor = Color.FromArgb(20, 20, 35);
+                this.ForeColor = Color.White;
+                this.Text = "Input Calibration";
+                this.TopMost = true;
+                this.ShowInTaskbar = false;
+                this.KeyPreview = true;
+                this.MaximizeBox = false;
+                this.MinimizeBox = false;
+                this.DoubleBuffered = true;
+
+                var titleLabel = new Label
+                {
+                    Text = "Input calibration",
+                    Location = new Point(20, 18),
+                    Size = new Size(580, 30),
+                    ForeColor = Color.White,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Font = new Font("Consolas", 15f, FontStyle.Bold)
+                };
+
+                var instructionLabel = new Label
+                {
+                    Text = $"Press {FormatClickKeyData(_clickKeyData)} or click the center target on each beat.",
+                    Location = new Point(20, 55),
+                    Size = new Size(580, 28),
+                    ForeColor = Color.FromArgb(210, 215, 230),
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Font = new Font("Consolas", 10f)
+                };
+
+                _statusLabel = new Label
+                {
+                    Text = "Get ready...",
+                    Location = new Point(20, 95),
+                    Size = new Size(580, 35),
+                    ForeColor = Color.FromArgb(255, 220, 120),
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Font = new Font("Consolas", 11f, FontStyle.Bold)
+                };
+
+                _progressLabel = new Label
+                {
+                    Text = $"0/{BeatCount} valid beats" + (_usingLoadedTrack ? " | loaded track middle section" : " | synthetic fallback"),
+                    Location = new Point(20, 135),
+                    Size = new Size(580, 25),
+                    ForeColor = Color.FromArgb(180, 190, 210),
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Font = new Font("Consolas", 10f)
+                };
+
+                _closeButton = new Button
+                {
+                    Text = "Cancel",
+                    Location = new Point(230, 440),
+                    Size = new Size(160, 38),
+                    BackColor = Color.FromArgb(90, 60, 60),
+                    ForeColor = Color.White,
+                    Font = new Font("Consolas", 10f, FontStyle.Bold),
+                    FlatStyle = FlatStyle.Flat
+                };
+                _closeButton.FlatAppearance.BorderSize = 0;
+                _closeButton.Click += (_, _) => this.Close();
+
+                this.Controls.Add(titleLabel);
+                this.Controls.Add(instructionLabel);
+                this.Controls.Add(_statusLabel);
+                this.Controls.Add(_progressLabel);
+                this.Controls.Add(_closeButton);
+
+                int desiredLatency = Math.Clamp((int)Math.Round(_outputLatencyMs), 20, 200);
+                _audioBytes = new MemoryStream(CreateAudioBytes(), writable: false);
+                _audioStream = new RawSourceWaveStream(
+                    _audioBytes,
+                    new WaveFormat(_playbackSampleRate, 16, 1));
+                _waveOut = new WaveOut
+                {
+                    BufferMilliseconds = desiredLatency,
+                    NumberOfBuffers = 2
+                };
+                _waveOut.Init(_audioStream);
+
+                _timer = new System.Windows.Forms.Timer { Interval = 16 };
+                _timer.Tick += CalibrationTimer_Tick;
+                this.KeyDown += CalibrationForm_KeyDown;
+                this.KeyUp += CalibrationForm_KeyUp;
+                this.MouseDown += CalibrationForm_MouseDown;
+                this.MouseUp += CalibrationForm_MouseUp;
+                this.Paint += CalibrationForm_Paint;
+                this.FormClosed += CalibrationForm_FormClosed;
+                this.Shown += (_, _) => StartTest();
+            }
+
+            private static CalibrationSection CreateCalibrationSection(AudioObj audio)
+            {
+                double bpm = audio.Bpm > 0f ? audio.Bpm : 120.0;
+                double beatInterval = 60.0 / bpm * CalibrationBeatSpacingBeats;
+                int channels = Math.Max(1, audio.Channels);
+                double trackDuration = audio.Data == null || audio.Data.Length == 0
+                    ? 0.0
+                    : audio.Data.Length / (double)channels / Math.Max(1, audio.SampleRate);
+                double requiredDuration = LeadInSeconds + (BeatCount - 1) * beatInterval + TailSeconds;
+
+                if (audio.Data == null
+                    || audio.Data.Length == 0
+                    || audio.SampleRate <= 0
+                    || audio.Channels <= 0
+                    || trackDuration < requiredDuration + 0.25)
+                {
+                    return CreateFallbackSection();
+                }
+
+                double minimumFirstBeat = LeadInSeconds;
+                double maximumFirstBeat = trackDuration - (BeatCount - 1) * beatInterval - TailSeconds;
+                double desiredFirstBeat = trackDuration / 2.0 - (BeatCount - 1) * beatInterval / 2.0;
+                desiredFirstBeat = Math.Clamp(desiredFirstBeat, minimumFirstBeat, maximumFirstBeat);
+
+                double bestFirstBeat = desiredFirstBeat;
+                double bestScore = double.NegativeInfinity;
+                int phaseSteps = Math.Max(1, (int)Math.Round(0.08 / 0.002));
+                for (int sectionOffset = -4; sectionOffset <= 4; sectionOffset++)
+                {
+                    double sectionBase = desiredFirstBeat + sectionOffset * beatInterval;
+                    for (int phaseStep = -phaseSteps; phaseStep <= phaseSteps; phaseStep++)
+                    {
+                        double firstBeat = sectionBase + phaseStep * 0.002;
+                        if (firstBeat < minimumFirstBeat || firstBeat > maximumFirstBeat)
+                        {
+                            continue;
+                        }
+
+                        double averageEnergy = 0.0;
+                        double minimumEnergy = 1.0;
+                        for (int beatIndex = 0; beatIndex < BeatCount; beatIndex++)
+                        {
+                            double energy = GetCenteredEnergy(audio, firstBeat + beatIndex * beatInterval);
+                            averageEnergy += energy;
+                            minimumEnergy = Math.Min(minimumEnergy, energy);
+                        }
+
+                        averageEnergy /= BeatCount;
+                        double centerPenalty = Math.Abs(firstBeat - desiredFirstBeat) / Math.Max(beatInterval, 0.001) * 0.01;
+                        double score = averageEnergy + minimumEnergy * 0.2 - centerPenalty;
+                        if (score > bestScore)
+                        {
+                            bestScore = score;
+                            bestFirstBeat = firstBeat;
+                        }
+                    }
+                }
+
+                double segmentStart = bestFirstBeat - LeadInSeconds;
+                double segmentEnd = bestFirstBeat + (BeatCount - 1) * beatInterval + TailSeconds;
+                var beatTimes = new double[BeatCount];
+                for (int beatIndex = 0; beatIndex < BeatCount; beatIndex++)
+                {
+                    beatTimes[beatIndex] = bestFirstBeat + beatIndex * beatInterval - segmentStart;
+                }
+
+                return new CalibrationSection(
+                    beatInterval,
+                    segmentStart,
+                    segmentEnd - segmentStart,
+                    true,
+                    beatTimes);
+            }
+
+            private static CalibrationSection CreateFallbackSection()
+            {
+                var beatTimes = new double[BeatCount];
+                for (int beatIndex = 0; beatIndex < BeatCount; beatIndex++)
+                {
+                    beatTimes[beatIndex] = LeadInSeconds + beatIndex * BeatIntervalSeconds * CalibrationBeatSpacingBeats;
+                }
+
+                return new CalibrationSection(
+                    BeatIntervalSeconds * CalibrationBeatSpacingBeats,
+                    0.0,
+                    LeadInSeconds + BeatCount * BeatIntervalSeconds * CalibrationBeatSpacingBeats + TailSeconds,
+                    false,
+                    beatTimes);
+            }
+
+            private static double GetCenteredEnergy(AudioObj audio, double timeSeconds)
+            {
+                if (audio.Data == null || audio.Data.Length == 0 || audio.SampleRate <= 0)
+                {
+                    return 0.0;
+                }
+
+                int channels = Math.Max(1, audio.Channels);
+                int sampleRate = Math.Max(1, audio.SampleRate);
+                int centerFrame = (int)Math.Round(timeSeconds * sampleRate);
+                int halfWindowFrames = Math.Max(1, sampleRate / 50);
+                int startFrame = Math.Max(0, centerFrame - halfWindowFrames);
+                int endFrame = Math.Min(audio.Data.Length / channels, centerFrame + halfWindowFrames);
+                if (startFrame >= endFrame)
+                {
+                    return 0.0;
+                }
+
+                float sum = 0f;
+                int count = 0;
+                for (int frame = startFrame; frame < endFrame; frame += 4)
+                {
+                    for (int channel = 0; channel < channels; channel++)
+                    {
+                        float sample = audio.Data[frame * channels + channel];
+                        sum += sample * sample;
+                        count++;
+                    }
+                }
+
+                return count == 0
+                    ? 0.0
+                    : Math.Clamp(Math.Sqrt(sum / count) * 4.0, 0.0, 1.0);
+            }
+
+            private byte[] CreateAudioBytes()
+            {
+                if (!_usingLoadedTrack)
+                {
+                    return CreateFallbackAudioBytes();
+                }
+
+                int channels = Math.Max(1, _audio.Channels);
+                int sourceSampleRate = Math.Max(1, _audio.SampleRate);
+                int totalFrames = _audio.Data?.Length / channels ?? 0;
+                int startFrame = Math.Clamp(
+                    (int)Math.Round(_segmentStartSeconds * sourceSampleRate),
+                    0,
+                    Math.Max(0, totalFrames - 1));
+                int frameCount = Math.Clamp(
+                    (int)Math.Ceiling(_testDurationSeconds * sourceSampleRate),
+                    1,
+                    Math.Max(1, totalFrames - startFrame));
+                byte[] audio = new byte[frameCount * 2];
+
+                for (int frame = 0; frame < frameCount; frame++)
+                {
+                    int sourceFrame = startFrame + frame;
+                    float sample = 0f;
+                    for (int channel = 0; channel < channels; channel++)
+                    {
+                        sample += _audio.Data![sourceFrame * channels + channel];
+                    }
+
+                    sample = Math.Clamp(sample / channels, -1f, 1f);
+                    short pcm = (short)Math.Round(sample * short.MaxValue * 0.85f);
+                    int byteIndex = frame * 2;
+                    audio[byteIndex] = (byte)(pcm & 0xFF);
+                    audio[byteIndex + 1] = (byte)((pcm >> 8) & 0xFF);
+                }
+
+                return audio;
+            }
+
+            private static byte[] CreateFallbackAudioBytes()
+            {
+                double beatInterval = BeatIntervalSeconds * CalibrationBeatSpacingBeats;
+                double durationSeconds = LeadInSeconds + BeatCount * beatInterval + TailSeconds;
+                int frameCount = (int)Math.Ceiling(durationSeconds * SampleRate);
+                byte[] audio = new byte[frameCount * 2];
+                int toneFrames = (int)(ToneDurationSeconds * SampleRate);
+
+                for (int beatIndex = 0; beatIndex < BeatCount; beatIndex++)
+                {
+                    int startFrame = (int)Math.Round((LeadInSeconds + beatIndex * beatInterval) * SampleRate);
+                    for (int frame = 0; frame < toneFrames && startFrame + frame < frameCount; frame++)
+                    {
+                        double seconds = frame / (double)SampleRate;
+                        double kickFrequency = 145.0 - 70.0 * Math.Min(seconds / ToneDurationSeconds, 1.0);
+                        double kick = Math.Sin(2.0 * Math.PI * kickFrequency * seconds) * Math.Exp(-seconds * 22.0);
+                        double click = Math.Sin(2.0 * Math.PI * 1450.0 * seconds) * Math.Exp(-seconds * 48.0);
+                        double sample = Math.Clamp(0.82 * kick + 0.18 * click, -1.0, 1.0);
+                        short pcm = (short)Math.Round(sample * short.MaxValue * 0.8);
+                        int byteIndex = (startFrame + frame) * 2;
+                        audio[byteIndex] = (byte)(pcm & 0xFF);
+                        audio[byteIndex + 1] = (byte)((pcm >> 8) & 0xFF);
+                    }
+                }
+
+                return audio;
+            }
+
+            private void StartTest()
+            {
+                try
+                {
+                    _testStarted = true;
+                    _testClock.Restart();
+                    _waveOut.Play();
+                    _timer.Start();
+                    this.Activate();
+                    this.Focus();
+                }
+                catch (Exception ex)
+                {
+                    _statusLabel.Text = "Calibration audio could not start.";
+                    _progressLabel.Text = ex.Message;
+                    _finished = true;
+                    _closeButton.Text = "Close";
+                }
+            }
+
+            private void CalibrationTimer_Tick(object? sender, EventArgs e)
+            {
+                if (!_testStarted || _finished)
+                {
+                    return;
+                }
+
+                bool playbackClockAvailable = TryGetPlaybackSeconds(out double elapsed);
+                if (elapsed < _beatTimes[0] - ApproachSeconds)
+                {
+                    _statusLabel.Text = "Get ready...";
+                }
+                else
+                {
+                    int beatNumber = Math.Clamp(
+                        (int)Math.Floor((elapsed - _beatTimes[0]) / _beatIntervalSeconds) + 1,
+                        1,
+                        BeatCount);
+                    _statusLabel.Text = playbackClockAvailable
+                        ? $"Beat {beatNumber}/{BeatCount}"
+                        : $"Beat {beatNumber}/{BeatCount} (fallback clock)";
+                }
+
+                _progressLabel.Text = $"{_offsetSamplesMs.Count}/{BeatCount} valid beats";
+                Invalidate();
+                double finalHitWindowEnd = _beatTimes[^1] + 0.45;
+                if (elapsed >= finalHitWindowEnd)
+                {
+                    FinishTest();
+                }
+            }
+
+            private bool TryGetPlaybackSeconds(out double playbackSeconds)
+            {
+                try
+                {
+                    long positionBytes = _waveOut.GetPosition();
+                    if (positionBytes > 0)
+                    {
+                        playbackSeconds = positionBytes / (double)Math.Max(1, _audioStream.WaveFormat.AverageBytesPerSecond);
+                        return true;
+                    }
+                }
+                catch
+                {
+                }
+
+                playbackSeconds = _testClock.Elapsed.TotalSeconds;
+                return false;
+            }
+
+            private PointF GetTargetCenter()
+            {
+                return new PointF(ClientSize.Width / 2f, 285f);
+            }
+
+            private int GetVisualBeatIndex(double timingSeconds)
+            {
+                return Math.Clamp(
+                    (int)Math.Round((timingSeconds - _beatTimes[0]) / _beatIntervalSeconds),
+                    0,
+                    BeatCount - 1);
+            }
+
+            private void CalibrationForm_Paint(object? sender, PaintEventArgs e)
+            {
+                if (!_testStarted || _finished)
+                {
+                    return;
+                }
+
+                TryGetPlaybackSeconds(out double timingSeconds);
+                int beatIndex = GetVisualBeatIndex(timingSeconds);
+                if (_lastRegisteredBeat >= 0
+                    && timingSeconds >= _beatTimes[_lastRegisteredBeat]
+                    && timingSeconds - _beatTimes[_lastRegisteredBeat] <= CompletedVisualSeconds)
+                {
+                    beatIndex = _lastRegisteredBeat;
+                }
+
+                double timeUntilHit = _beatTimes[beatIndex] - timingSeconds;
+                if (timeUntilHit > ApproachSeconds || timeUntilHit < -CompletedVisualSeconds)
+                {
+                    return;
+                }
+
+                float approachProgress = Math.Clamp((float)(timeUntilHit / ApproachSeconds), 0f, 1f);
+                float approachRadius = _targetRadius * (1f + approachProgress * 2f);
+                int approachAlpha = Math.Clamp((int)((1f - approachProgress) * 230f), 0, 230);
+                bool registered = _registeredBeats[beatIndex]
+                    && timingSeconds >= _beatTimes[beatIndex];
+                Color targetColor = registered
+                    ? Color.FromArgb(80, 230, 150)
+                    : Color.FromArgb(255, 205, 80);
+                PointF center = GetTargetCenter();
+
+                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using var targetBrush = new SolidBrush(Color.FromArgb(registered ? 210 : 185, targetColor));
+                using var targetPen = new Pen(targetColor, 3f);
+                e.Graphics.FillEllipse(
+                    targetBrush,
+                    center.X - _targetRadius,
+                    center.Y - _targetRadius,
+                    _targetRadius * 2f,
+                    _targetRadius * 2f);
+                e.Graphics.DrawEllipse(
+                    targetPen,
+                    center.X - _targetRadius,
+                    center.Y - _targetRadius,
+                    _targetRadius * 2f,
+                    _targetRadius * 2f);
+
+                if (!registered && approachAlpha > 0)
+                {
+                    using var approachPen = new Pen(Color.FromArgb(approachAlpha, 255, 105, 105), 3f);
+                    e.Graphics.DrawEllipse(
+                        approachPen,
+                        center.X - approachRadius,
+                        center.Y - approachRadius,
+                        approachRadius * 2f,
+                        approachRadius * 2f);
+                }
+            }
+
+            private void RegisterCalibrationHit(double timingSeconds, bool playbackClockAvailable)
+            {
+                if (_finished)
+                {
+                    return;
+                }
+
+                int beatIndex = GetVisualBeatIndex(timingSeconds);
+                if (_registeredBeats[beatIndex])
+                {
+                    return;
+                }
+
+                double offsetMs = (timingSeconds - _beatTimes[beatIndex]) * 1000.0;
+                if (!playbackClockAvailable)
+                {
+                    offsetMs -= _outputLatencyMs;
+                }
+
+                if (Math.Abs(offsetMs) > 350.0)
+                {
+                    return;
+                }
+
+                _registeredBeats[beatIndex] = true;
+                _lastRegisteredBeat = beatIndex;
+                _offsetSamplesMs.Add(offsetMs);
+                _statusLabel.Text = $"Beat {beatIndex + 1}/{BeatCount}: {FormatInputDelay((int)Math.Round(offsetMs))} ms";
+                _progressLabel.Text = $"{_offsetSamplesMs.Count}/{BeatCount} valid beats";
+                Invalidate();
+            }
+
+            private void CalibrationForm_KeyDown(object? sender, KeyEventArgs e)
+            {
+                if (e.KeyCode == Keys.Escape)
+                {
+                    this.Close();
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                    return;
+                }
+
+                if (_finished || _keyHeld || NormalizeClickKey(e.KeyCode) != NormalizeClickKey((Keys)_clickKeyData))
+                {
+                    return;
+                }
+
+                _keyHeld = true;
+                bool playbackClockAvailable = TryGetPlaybackSeconds(out double timingSeconds);
+                RegisterCalibrationHit(timingSeconds, playbackClockAvailable);
+
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+
+            private void CalibrationForm_KeyUp(object? sender, KeyEventArgs e)
+            {
+                if (_keyHeld && NormalizeClickKey(e.KeyCode) == NormalizeClickKey((Keys)_clickKeyData))
+                {
+                    _keyHeld = false;
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
+            }
+
+            private void CalibrationForm_MouseDown(object? sender, MouseEventArgs e)
+            {
+                if (e.Button != MouseButtons.Left || _finished || _mouseHeld)
+                {
+                    return;
+                }
+
+                PointF center = GetTargetCenter();
+                float dx = e.X - center.X;
+                float dy = e.Y - center.Y;
+                if (dx * dx + dy * dy > _targetRadius * _targetRadius * 1.8f)
+                {
+                    return;
+                }
+
+                _mouseHeld = true;
+                bool playbackClockAvailable = TryGetPlaybackSeconds(out double timingSeconds);
+                RegisterCalibrationHit(timingSeconds, playbackClockAvailable);
+            }
+
+            private void CalibrationForm_MouseUp(object? sender, MouseEventArgs e)
+            {
+                if (e.Button == MouseButtons.Left)
+                {
+                    _mouseHeld = false;
+                }
+            }
+
+            private void FinishTest()
+            {
+                if (_finished)
+                {
+                    return;
+                }
+
+                _finished = true;
+                _timer.Stop();
+                try { _waveOut.Stop(); }
+                catch { }
+
+                if (_offsetSamplesMs.Count >= MinimumValidSamples)
+                {
+                    double mean = 0.0;
+                    foreach (double offsetMs in _offsetSamplesMs)
+                    {
+                        mean += offsetMs;
+                    }
+
+                    mean /= _offsetSamplesMs.Count;
+                    int calibratedDelay = (int)Math.Round(mean);
+                    calibratedDelay = Math.Clamp(
+                        calibratedDelay,
+                        BeatClickerSettings.MinInputDelayMs,
+                        BeatClickerSettings.MaxInputDelayMs);
+                    _applyInputDelay(calibratedDelay);
+                    _statusLabel.Text = $"Applied input delay: {FormatInputDelay(calibratedDelay)} ms";
+                    _progressLabel.Text = $"{_offsetSamplesMs.Count}/{BeatCount} valid beats; mean {mean:F0} ms";
+                }
+                else
+                {
+                    _statusLabel.Text = "Not enough valid beats to calibrate.";
+                    _progressLabel.Text = $"{_offsetSamplesMs.Count}/{BeatCount} valid beats; nothing changed";
+                }
+
+                _closeButton.Text = _offsetSamplesMs.Count >= MinimumValidSamples ? "Accept" : "Close";
+                _closeButton.BackColor = Color.FromArgb(0, 120, 60);
+                _closeButton.Focus();
+            }
+
+            private void CalibrationForm_FormClosed(object? sender, FormClosedEventArgs e)
+            {
+                _timer.Stop();
+                _timer.Dispose();
+                try { _waveOut.Stop(); }
+                catch { }
+                _waveOut.Dispose();
+                _audioStream.Dispose();
+                _audioBytes.Dispose();
             }
         }
 

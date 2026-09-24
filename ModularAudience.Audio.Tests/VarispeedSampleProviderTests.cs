@@ -94,7 +94,7 @@ namespace ModularAudience.Audio.Tests
             graph.Pipeline.Read(new float[960]);
             graph.Playback.SeekSamples(500);
             Assert.AreEqual(500L, GetPosition(graph, 0));
-            Assert.AreEqual(1.5, ((VarispeedSampleProvider) graph.Pipeline).CurrentRate);
+            Assert.AreEqual(1.5, ((VarispeedSampleProvider)graph.Pipeline).CurrentRate);
             graph.Playback.SwapRawData(CreateStereoData(), 48000, 2, 1000);
             Assert.AreEqual(1000L, GetPosition(graph, 0));
             graph.Playback.SetLoop(64, 256);
@@ -185,7 +185,7 @@ namespace ModularAudience.Audio.Tests
         }
 
         private static long GetPosition(PlaybackGraph graph, long outputSamples) =>
-            (long) typeof(AudioPlaybackService).GetMethod("GetCurrentSourceSampleIndex", BindingFlags.Instance | BindingFlags.NonPublic)!
+            (long)typeof(AudioPlaybackService).GetMethod("GetCurrentSourceSampleIndex", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(graph.Playback, [outputSamples])!;
     }
 }

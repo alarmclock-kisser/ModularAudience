@@ -25,7 +25,7 @@ namespace ModularAudience.Audio.Processing
             }
 
             audio.ChunkSize = size;
-            audio.OverlapSize = (int) (size * overlap);
+            audio.OverlapSize = (int)(size * overlap);
 
             // Align overlap to channel count to keep L-R frame boundaries intact
             int ch = Math.Max(1, audio.Channels);
@@ -80,7 +80,7 @@ namespace ModularAudience.Audio.Processing
             }
 
             audio.ChunkSize = size;
-            audio.OverlapSize = (int) (size * overlap);
+            audio.OverlapSize = (int)(size * overlap);
 
             // Align overlap to channel count to keep L-R frame boundaries intact
             int ch = Math.Max(1, audio.Channels);
@@ -147,7 +147,7 @@ namespace ModularAudience.Audio.Processing
             int chunkSize = audio.ChunkSize;
             int overlapSize = audio.OverlapSize;
             int originalHopSize = chunkSize - overlapSize;
-            int stretchedHopSize = (int) Math.Round(originalHopSize * stretchFactor);
+            int stretchedHopSize = (int)Math.Round(originalHopSize * stretchFactor);
 
             // Align hop to channel count to keep L-R frame boundaries intact
             int ch = Math.Max(1, audio.Channels);
@@ -194,7 +194,7 @@ namespace ModularAudience.Audio.Processing
             Parallel.For(0, outputLength, parallelOptions, i =>
             {
                 finalOutput[i] = weightSum[i] > 1e-6
-                    ? (float) (outputAccumulator[i] / weightSum[i])
+                    ? (float)(outputAccumulator[i] / weightSum[i])
                     : 0.0f;
             });
 

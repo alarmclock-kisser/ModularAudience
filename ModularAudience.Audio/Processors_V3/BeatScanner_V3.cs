@@ -120,8 +120,8 @@ public static class BeatScanner_V3
         InverseFFT(fft);
 
         // Suche den besten Lag innerhalb der BPM-Grenzen
-        int minLag = (int) (sampleRate * 60.0 / maxBpm);
-        int maxLag = (int) (sampleRate * 60.0 / minBpm);
+        int minLag = (int)(sampleRate * 60.0 / maxBpm);
+        int maxLag = (int)(sampleRate * 60.0 / minBpm);
 
         int bestLag = -1;
         double maxCorr = -1.0;

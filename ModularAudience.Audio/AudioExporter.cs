@@ -142,17 +142,17 @@ namespace ModularAudience.Audio
                     await Task.Run(() =>
                     {
                         // Konvertiere float[] Samples zu short[] PCM-Daten
-                        short[] pcm = new short[checked((int) audio.Data.Length)];
+                        short[] pcm = new short[checked((int)audio.Data.Length)];
 
                         var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = maxWorkers };
 
-                        Parallel.For(0, checked((int) audio.Data.Length), parallelOptions, i =>
+                        Parallel.For(0, checked((int)audio.Data.Length), parallelOptions, i =>
                         {
                             float sample = Math.Clamp(audio.Data[i], -1.0f, 1.0f);
-                            pcm[i] = (short) (sample * short.MaxValue);
+                            pcm[i] = (short)(sample * short.MaxValue);
                         });
 
-                        byte[] pcmBytes = new byte[checked((int) (pcm.Length * sizeof(short)))];
+                        byte[] pcmBytes = new byte[checked((int)(pcm.Length * sizeof(short)))];
                         Buffer.BlockCopy(pcm, 0, pcmBytes, 0, pcmBytes.Length);
 
                         var waveFormat = new WaveFormat(audio.SampleRate, audio.Channels);
@@ -172,7 +172,7 @@ namespace ModularAudience.Audio
                         try
                         {
                             var tagFile = TagLib.File.Create(outFile);
-                            tagFile.Tag.BeatsPerMinute = (uint) Math.Round(audio.Bpm);
+                            tagFile.Tag.BeatsPerMinute = (uint)Math.Round(audio.Bpm);
                             tagFile.Save();
                         }
                         catch (Exception ex)
@@ -263,38 +263,38 @@ namespace ModularAudience.Audio
                         // Konvertierung und Schreiben
                         if (bitDepth == 32)
                         {
-                            writer.WriteSamples(audio.Data, 0, checked((int) audio.Data.Length));
+                            writer.WriteSamples(audio.Data, 0, checked((int)audio.Data.Length));
                         }
                         else if (bitDepth == 16)
                         {
-                            short[] samples16Bit = new short[checked((int) audio.Data.Length)];
-                            for (int i = 0; i < checked((int) audio.Data.Length); i++)
+                            short[] samples16Bit = new short[checked((int)audio.Data.Length)];
+                            for (int i = 0; i < checked((int)audio.Data.Length); i++)
                             {
-                                samples16Bit[i] = (short) (audio.Data[i] * short.MaxValue);
+                                samples16Bit[i] = (short)(audio.Data[i] * short.MaxValue);
                             }
                             writer.WriteSamples(samples16Bit, 0, samples16Bit.Length);
                         }
                         else if (bitDepth == 8)
                         {
-                            byte[] samples8Bit = new byte[checked((int) audio.Data.Length)];
-                            for (int i = 0; i < checked((int) audio.Data.Length); i++)
+                            byte[] samples8Bit = new byte[checked((int)audio.Data.Length)];
+                            for (int i = 0; i < checked((int)audio.Data.Length); i++)
                             {
                                 // 8-Bit-PCM ist vorzeichenlos, 0 ist die Nulllinie
-                                samples8Bit[i] = (byte) ((audio.Data[i] + 1.0f) * 127.5f);
+                                samples8Bit[i] = (byte)((audio.Data[i] + 1.0f) * 127.5f);
                             }
                             writer.Write(samples8Bit, 0, samples8Bit.Length);
                         }
                         else if (bitDepth == 24)
                         {
-                            byte[] samples24Bit = new byte[checked((int) (audio.Data.Length * 3))];
+                            byte[] samples24Bit = new byte[checked((int)(audio.Data.Length * 3))];
                             int byteIndex = 0;
-                            for (int i = 0; i < checked((int) audio.Data.Length); i++)
+                            for (int i = 0; i < checked((int)audio.Data.Length); i++)
                             {
                                 // Konvertiere Float zu 24-Bit-Integer und schreibe es als 3 Bytes
-                                int value = (int) (audio.Data[i] * 8388607.0f); // 2^23 - 1
-                                samples24Bit[byteIndex++] = (byte) (value);
-                                samples24Bit[byteIndex++] = (byte) (value >> 8);
-                                samples24Bit[byteIndex++] = (byte) (value >> 16);
+                                int value = (int)(audio.Data[i] * 8388607.0f); // 2^23 - 1
+                                samples24Bit[byteIndex++] = (byte)(value);
+                                samples24Bit[byteIndex++] = (byte)(value >> 8);
+                                samples24Bit[byteIndex++] = (byte)(value >> 16);
                             }
                             writer.Write(samples24Bit, 0, samples24Bit.Length);
                         }
@@ -312,7 +312,7 @@ namespace ModularAudience.Audio
                         try
                         {
                             var tagFile = TagLib.File.Create(finalPath);
-                            tagFile.Tag.BeatsPerMinute = (uint) Math.Round(audio.Bpm);
+                            tagFile.Tag.BeatsPerMinute = (uint)Math.Round(audio.Bpm);
                             tagFile.Save();
                         }
                         catch (Exception ex)
@@ -433,7 +433,7 @@ namespace ModularAudience.Audio
                             // Fallback: direktes Id3v2-Frame setzen
                             if (tagFile.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                             {
-                                var id3 = (TagLib.Id3v2.Tag) tagFile.GetTag(TagLib.TagTypes.Id3v2);
+                                var id3 = (TagLib.Id3v2.Tag)tagFile.GetTag(TagLib.TagTypes.Id3v2);
                                 var frame = TagLib.Id3v2.TextInformationFrame.Get(id3, id, true);
                                 frame.Text = [value];
                             }

@@ -18,7 +18,7 @@ namespace ModularAudience.Forms
 
         public readonly AudioCollection AudioC = new();
 
-        public float MasterLimiter => 1f - (float) this.vScrollBar_masterLimiter.Value / Math.Max(1, this.vScrollBar_masterLimiter.Maximum);
+        public float MasterLimiter => 1f - (float)this.vScrollBar_masterLimiter.Value / Math.Max(1, this.vScrollBar_masterLimiter.Maximum);
 
         internal static LoopControl? LoopControlWindow = null;
         internal static DeveloperFunctions? DeveloperFunctionsWindow = null;
@@ -354,7 +354,7 @@ namespace ModularAudience.Forms
 
                         if (open.InvokeRequired)
                         {
-                            open.Invoke((Action) (() => BringFormToFrontSafe(open)));
+                            open.Invoke((Action)(() => BringFormToFrontSafe(open)));
                         }
                         else
                         {
@@ -411,7 +411,7 @@ namespace ModularAudience.Forms
                 {
                     if (!this.IsDisposed && !this.Disposing)
                     {
-                        this.BeginInvoke((Action) this.Close);
+                        this.BeginInvoke((Action)this.Close);
                     }
                 }
                 return;
@@ -477,7 +477,7 @@ namespace ModularAudience.Forms
                         {
                             if (tv.InvokeRequired)
                             {
-                                try { tv.Invoke((Action) tv.Close); } catch { /* ignore */ }
+                                try { tv.Invoke((Action)tv.Close); } catch { /* ignore */ }
                             }
                             else
                             {
@@ -532,7 +532,7 @@ namespace ModularAudience.Forms
                         {
                             if (tv.InvokeRequired)
                             {
-                                try { tv.Invoke((Action) tv.Close); } catch { /* ignore */ }
+                                try { tv.Invoke((Action)tv.Close); } catch { /* ignore */ }
                             }
                             else
                             {
@@ -612,7 +612,7 @@ namespace ModularAudience.Forms
                     }
                     if (open.InvokeRequired)
                     {
-                        open.Invoke((Action) (() => BringFormToFrontSafe(open)));
+                        open.Invoke((Action)(() => BringFormToFrontSafe(open)));
                     }
                     else
                     {

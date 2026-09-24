@@ -46,7 +46,7 @@ namespace ModularAudience.Audio
             }
 
             // wieviel Samples sind im Source noch verfügbar
-            int availableInSource = (int) Math.Min((long) count, this.data.Length - this.position);
+            int availableInSource = (int)Math.Min((long)count, this.data.Length - this.position);
 
             // wieviel Platz ist im Zielpuffer ab 'offset'
             int availableInBuffer = buffer.Length - offset;
@@ -59,7 +59,7 @@ namespace ModularAudience.Audio
                 return 0;
             }
 
-            Array.Copy(this.data, (int) this.position, buffer, offset, samplesToRead);
+            Array.Copy(this.data, (int)this.position, buffer, offset, samplesToRead);
             this.position += samplesToRead;
             return samplesToRead;
         }

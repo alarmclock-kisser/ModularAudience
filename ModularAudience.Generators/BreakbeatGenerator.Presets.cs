@@ -273,7 +273,7 @@ namespace ModularAudience.Generators
                                 continue;
                             }
 
-                            double p = 0.4 + 0.4 * (1.0 - Math.Abs(r) / (double) rollLen);
+                            double p = 0.4 + 0.4 * (1.0 - Math.Abs(r) / (double)rollLen);
                             if (rnd.NextDouble() < p * inten)
                             {
                                 patterns[snIdx][pos] = true;
@@ -350,7 +350,7 @@ namespace ModularAudience.Generators
                                         break;
                                     }
 
-                                    double p = 0.7 + 0.3 * (1.0 - r / (double) rollLen);
+                                    double p = 0.7 + 0.3 * (1.0 - r / (double)rollLen);
                                     if (rnd.NextDouble() < p)
                                     {
                                         patterns[snIdx][rp] = true;

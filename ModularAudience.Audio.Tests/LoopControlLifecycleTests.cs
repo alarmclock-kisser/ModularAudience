@@ -152,7 +152,7 @@ namespace ModularAudience.Audio.Tests
         {
             Assert.IsNull(WindowMain.Instance, "Lifecycle tests must not construct WindowMain.");
             Assert.IsNull(GetMainField("_lastSelectedTrackView").GetValue(null), "No TrackView may be selected.");
-            Assert.AreEqual(0, ((ICollection) GetMainField("TrackViews").GetValue(null)!).Count,
+            Assert.AreEqual(0, ((ICollection)GetMainField("TrackViews").GetValue(null)!).Count,
                 "Lifecycle tests must run without any TrackView.");
             Assert.IsFalse(Application.OpenForms.Cast<Form>().Any(form => form is WindowMain or TrackView),
                 "Lifecycle tests must not open WindowMain or TrackView.");
@@ -190,11 +190,11 @@ namespace ModularAudience.Audio.Tests
         {
             Control[] matches = dialog.Controls.Find(name, true);
             Assert.AreEqual(1, matches.Length, $"Expected exactly one control named '{name}'.");
-            return (T) matches[0];
+            return (T)matches[0];
         }
 
         private static Timer GetRefreshTimer(LoopControl dialog) =>
-            (Timer) typeof(LoopControl).GetField("playlistTargetsTimer", BindingFlags.Instance | BindingFlags.NonPublic)!
+            (Timer)typeof(LoopControl).GetField("playlistTargetsTimer", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .GetValue(dialog)!;
 
         private static FieldInfo GetMainField(string name) =>

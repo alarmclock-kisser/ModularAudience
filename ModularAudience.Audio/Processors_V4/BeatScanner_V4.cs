@@ -51,7 +51,7 @@ namespace ModularAudience.Audio.Processors_V4
                     return 0.0f;
                 }
 
-                float averageInterval = (float) (sumIntervals / intervalCount);
+                float averageInterval = (float)(sumIntervals / intervalCount);
 
                 // 3. Frequency Calculation
                 // The logic used (AverageInterval / SampleRate) = Period (seconds)

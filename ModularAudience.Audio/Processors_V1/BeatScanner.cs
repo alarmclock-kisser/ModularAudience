@@ -43,14 +43,14 @@ namespace ModularAudience.Audio.Processors_V1
             double bpm = await EstimateBpmAsync(monoData, obj.SampleRate, minBpm, maxBpm);
 
             sw.Stop();
-            obj["beatScan"] = (float) sw.Elapsed.TotalMilliseconds;
+            obj["beatScan"] = (float)sw.Elapsed.TotalMilliseconds;
 
             if (bpm <= 0.0)
             {
                 return -1.0f;
             }
 
-            obj.ScannedBpm = (float) bpm;
+            obj.ScannedBpm = (float)bpm;
 
             return bpm * timing;
         }
@@ -153,7 +153,7 @@ namespace ModularAudience.Audio.Processors_V1
                 var fft = new Complex32[L];
                 for (int i = 0; i < n; i++)
                 {
-                    fft[i] = new Complex32((float) novelty[i], 0f);
+                    fft[i] = new Complex32((float)novelty[i], 0f);
                 }
 
                 for (int i = n; i < L; i++)
@@ -175,8 +175,8 @@ namespace ModularAudience.Audio.Processors_V1
                 // Realteil, 0..n-1 relevant (lineare Autokorrelation)
                 double r0 = Math.Max(fft[0].Real, 1e-12f);
                 // 3) Lag-Suchbereich aus BPM-Grenzen
-                int minLag = (int) Math.Round(sampleRate * 60.0 / Math.Max(maxBpm, 1));
-                int maxLag = (int) Math.Round(sampleRate * 60.0 / Math.Max(minBpm, 1));
+                int minLag = (int)Math.Round(sampleRate * 60.0 / Math.Max(maxBpm, 1));
+                int maxLag = (int)Math.Round(sampleRate * 60.0 / Math.Max(minBpm, 1));
                 minLag = Math.Clamp(minLag, 1, n - 1);
                 maxLag = Math.Clamp(maxLag, minLag, n - 1);
 
@@ -309,7 +309,7 @@ namespace ModularAudience.Audio.Processors_V1
                 var fft = new Complex32[L];
                 for (int i = 0; i < n; i++)
                 {
-                    fft[i] = new Complex32((float) novelty[i], 0f);
+                    fft[i] = new Complex32((float)novelty[i], 0f);
                 }
                 for (int i = n; i < L; i++)
                 {
@@ -326,8 +326,8 @@ namespace ModularAudience.Audio.Processors_V1
 
                 double r0 = Math.Max(fft[0].Real, 1e-12f);
                 int minBpm = 50, maxBpm = 200;
-                int minLag = Math.Clamp((int) Math.Round(sampleRate * 60.0 / Math.Max(maxBpm, 1)), 1, n - 1);
-                int maxLag = Math.Clamp((int) Math.Round(sampleRate * 60.0 / Math.Max(minBpm, 1)), minLag, n - 1);
+                int minLag = Math.Clamp((int)Math.Round(sampleRate * 60.0 / Math.Max(maxBpm, 1)), 1, n - 1);
+                int maxLag = Math.Clamp((int)Math.Round(sampleRate * 60.0 / Math.Max(minBpm, 1)), minLag, n - 1);
 
                 int bestLag = -1;
                 double bestVal = double.NegativeInfinity;
@@ -421,7 +421,7 @@ namespace ModularAudience.Audio.Processors_V1
                     double tplCorr = MaxCircularCorrelation(phaseAvg, tpl);
 
                     // Bars-Abdeckung (mehr Bars => vertrauenswürdiger)
-                    double nBars = (double) nBeats / K;
+                    double nBars = (double)nBeats / K;
                     double coverage = Math.Min(1.0, nBars / 4.0); // bis 4 Takte hochskalieren
 
                     // Gewichte: Template etwas stärker, Kontrast etwas schwächer
@@ -508,7 +508,7 @@ namespace ModularAudience.Audio.Processors_V1
                 }
 
                 normalized = Math.Clamp(normalized, 0.125, 1.0);
-                return (float) normalized;
+                return (float)normalized;
             });
         }
 
@@ -583,7 +583,7 @@ namespace ModularAudience.Audio.Processors_V1
                                     {
                                         sum += floats[f * channels + c];
                                     }
-                                    sampleBuffer.Add((float) (sum / channels));
+                                    sampleBuffer.Add((float)(sum / channels));
                                 }
                             }
                         }
@@ -603,7 +603,7 @@ namespace ModularAudience.Audio.Processors_V1
                                     {
                                         sum += shorts[f * channels + c] / 32768.0;
                                     }
-                                    sampleBuffer.Add((float) (sum / channels));
+                                    sampleBuffer.Add((float)(sum / channels));
                                 }
                             }
                         }
@@ -640,7 +640,7 @@ namespace ModularAudience.Audio.Processors_V1
                         }
 
                         // Cap snapshot to reasonable length (MaxLiveBpmDurationSeconds seconds)
-                        int maxSamples = sr * Math.Max(1, Math.Min(MaxLiveBpmDurationSeconds, (int) MaxLiveBpmDurationSeconds));
+                        int maxSamples = sr * Math.Max(1, Math.Min(MaxLiveBpmDurationSeconds, (int)MaxLiveBpmDurationSeconds));
                         int take = Math.Min(sampleBuffer.Count, maxSamples);
                         snapshot = sampleBuffer.Skip(Math.Max(0, sampleBuffer.Count - take)).Take(take).ToArray();
                     }
@@ -725,13 +725,13 @@ namespace ModularAudience.Audio.Processors_V1
             // 1. Avoiding Task.Run + .Wait() which can cause thread pool exhaustion
             // 2. Safe because we're on a background thread (called from Parallel.ForEach or Task.Run)
             // 3. GetAwaiter().GetResult() doesn't capture the synchronization context, so no deadlock risk
-            return (float) ScanBpmAsync(audioObj, windowSize, effectiveLookingRange, minBpm, maxBpm).GetAwaiter().GetResult();
+            return (float)ScanBpmAsync(audioObj, windowSize, effectiveLookingRange, minBpm, maxBpm).GetAwaiter().GetResult();
         }
 
         public static Dictionary<string, float> ScanFilesBpm(IEnumerable<string> filePaths, int windowSize = 65536, int? lookingRange = null, int minBpm = 40, int maxBpm = 200, int? maxWorkers = null, bool filterInvalidBpms = false)
         {
             maxWorkers = Math.Clamp(maxWorkers ?? Math.Max(1, Environment.ProcessorCount / 2), 1, Environment.ProcessorCount);
-            
+
             using SemaphoreSlim semaphore = new(maxWorkers.Value);
             ConcurrentDictionary<string, float> results = [];
 
@@ -795,8 +795,8 @@ namespace ModularAudience.Audio.Processors_V1
             int K = x.Length;
 
             // z-Normalisierung
-            double[] xn = (double[]) x.Clone();
-            double[] yn = (double[]) y.Clone();
+            double[] xn = (double[])x.Clone();
+            double[] yn = (double[])y.Clone();
             NormalizeZeroMeanUnitVar(xn);
             NormalizeZeroMeanUnitVar(yn);
 

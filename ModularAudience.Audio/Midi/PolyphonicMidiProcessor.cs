@@ -47,7 +47,7 @@ internal static class PolyphonicMidiProcessor
         float maximum, double bpm, List<DetectedNote> notes, CancellationToken cancellationToken)
     {
         NoteRun run = new();
-        int maximumGap = Math.Max(1, (int) Math.Round(MaximumGapSeconds * analysis.SampleRate / analysis.HopSize));
+        int maximumGap = Math.Max(1, (int)Math.Round(MaximumGapSeconds * analysis.SampleRate / analysis.HopSize));
         for (int frame = 0; frame <= analysis.Strengths.Length; frame++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -74,22 +74,22 @@ internal static class PolyphonicMidiProcessor
 
     private static void AddNote(List<DetectedNote> notes, NoteRun run, int pitch, PolyphonicAnalysis analysis, float maximum, double bpm)
     {
-        long startSample = (long) run.Start * analysis.HopSize;
+        long startSample = (long)run.Start * analysis.HopSize;
         long endSample = Math.Min(analysis.SampleCount, (run.Last + 1L) * analysis.HopSize);
         if (endSample - startSample < Math.Ceiling(MinimumNoteSeconds * analysis.SampleRate) || run.VoicedFrames < 3)
         {
             return;
         }
-        double start = startSample / (double) analysis.SampleRate;
-        double end = endSample / (double) analysis.SampleRate;
+        double start = startSample / (double)analysis.SampleRate;
+        double end = endSample / (double)analysis.SampleRate;
         double strength = run.TotalStrength / run.VoicedFrames / maximum;
-        long startTick = (long) Math.Round(start * bpm / 60 * Ppq);
-        long endTick = (long) Math.Round(end * bpm / 60 * Ppq);
+        long startTick = (long)Math.Round(start * bpm / 60 * Ppq);
+        long endTick = (long)Math.Round(end * bpm / 60 * Ppq);
         MidiNoteData note = new()
         {
             NoteNumber = pitch,
             Channel = 1,
-            Velocity = Math.Clamp((int) Math.Round(127 * Math.Sqrt(strength)), 1, 127),
+            Velocity = Math.Clamp((int)Math.Round(127 * Math.Sqrt(strength)), 1, 127),
             StartTick = startTick,
             DurationTicks = Math.Max(1, endTick - startTick)
         };
@@ -156,7 +156,7 @@ internal static class PolyphonicMidiProcessor
             new() { Index = 0, Name = $"{prefix} - Melody (estimated)" },
             new() { Index = 1, Name = $"{prefix} - Accompaniment (estimated)" }
         ];
-        long length = (long) Math.Ceiling(analysis.SampleCount / (double) analysis.SampleRate * bpm / 60 * Ppq);
+        long length = (long)Math.Ceiling(analysis.SampleCount / (double)analysis.SampleRate * bpm / 60 * Ppq);
         foreach (MidiTrackData track in tracks)
         {
             track.ExtendLengthTo(length);

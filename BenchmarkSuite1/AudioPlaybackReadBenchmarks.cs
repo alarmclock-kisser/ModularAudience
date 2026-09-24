@@ -20,7 +20,7 @@ public class AudioPlaybackReadBenchmarks
         this.destination = new float[2048];
         for (int i = 0; i < this.source.Length; i++)
         {
-            this.source[i] = (float) Math.Sin(i * 0.01);
+            this.source[i] = (float)Math.Sin(i * 0.01);
         }
 
         var assembly = typeof(ModularAudience.Audio.AudioPlaybackService).Assembly;
@@ -43,6 +43,6 @@ public class AudioPlaybackReadBenchmarks
     [Benchmark]
     public int Read()
     {
-        return (int) this.readMethod.Invoke(this.provider, [this.destination, 0, this.destination.Length])!;
+        return (int)this.readMethod.Invoke(this.provider, [this.destination, 0, this.destination.Length])!;
     }
 }

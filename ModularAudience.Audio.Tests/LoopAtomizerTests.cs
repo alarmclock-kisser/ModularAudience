@@ -151,7 +151,7 @@ namespace ModularAudience.Audio.Tests
             using AudioTestScope scope = new();
             float[] hit = AudioTestData.Hit(16000);
             AudioObj source = scope.Create(AudioTestData.Track(16000, 800, (100, hit, 1f), (450, hit, 1f)));
-            float[] original = (float[]) source.Data.Clone();
+            float[] original = (float[])source.Data.Clone();
             source.SelectionStart = 12;
             source.SelectionEnd = 240;
             InlineProgress progress = new();

@@ -116,7 +116,7 @@ namespace ModularAudience.Generators
         private static List<Pattern> DerivePatterns(Pattern source, MidiRemixSettings settings, Random random)
         {
             List<Pattern> result = [source];
-            int count = Math.Max(0, (int) Math.Round(settings.DerivedPatternsPoolSize * settings.PatternDerivationFactor));
+            int count = Math.Max(0, (int)Math.Round(settings.DerivedPatternsPoolSize * settings.PatternDerivationFactor));
             for (int index = 0; index < count; index++)
             {
                 int transpose = random.Next(-7, 8);
@@ -150,7 +150,7 @@ namespace ModularAudience.Generators
 
             if (settings.PatternRearrangementFactor > 0)
             {
-                int swaps = (int) Math.Round(result.Count * settings.PatternRearrangementFactor);
+                int swaps = (int)Math.Round(result.Count * settings.PatternRearrangementFactor);
                 for (int index = 0; index < swaps; index++)
                 {
                     int first = random.Next(result.Count);
@@ -174,10 +174,10 @@ namespace ModularAudience.Generators
                 {
                     bool preserve = random.NextDouble() > settings.DenoiseFactor;
                     int velocity = preserve ? note.Velocity : Math.Clamp(note.Velocity + random.Next(-12, 13), 1, 127);
-                    result.Add(CloneNote(note, note.NoteNumber, cursor + (long) Math.Round(note.StartTick * timeScale), Math.Max(1, (long) Math.Round(note.DurationTicks * timeScale)), velocity));
+                    result.Add(CloneNote(note, note.NoteNumber, cursor + (long)Math.Round(note.StartTick * timeScale), Math.Max(1, (long)Math.Round(note.DurationTicks * timeScale)), velocity));
                 }
 
-                cursor += Math.Max(1, (long) Math.Round(patternLength * timeScale));
+                cursor += Math.Max(1, (long)Math.Round(patternLength * timeScale));
             }
 
             return result;

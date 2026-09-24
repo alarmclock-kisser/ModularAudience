@@ -82,7 +82,7 @@ namespace ModularAudience.Audio.Processors_V1
             float[] backupData = obj.Data;
             int sampleRate = obj.SampleRate;
             int overlapSize = chunkSize > 0
-                ? (int) (chunkSize * overlap)
+                ? (int)(chunkSize * overlap)
                 : obj.OverlapSize;
 
             double totalMs = 0;
@@ -156,7 +156,7 @@ namespace ModularAudience.Audio.Processors_V1
                 obj.Data = backupData;
                 return obj;
             }
-            obj["ifft"] = (float) sw.Elapsed.TotalMilliseconds;
+            obj["ifft"] = (float)sw.Elapsed.TotalMilliseconds;
             totalMs += sw.Elapsed.TotalMilliseconds;
             sw.Restart();
 
@@ -170,9 +170,9 @@ namespace ModularAudience.Audio.Processors_V1
             obj["aggregate"] = sw.Elapsed.TotalMilliseconds;
             totalMs += sw.Elapsed.TotalMilliseconds;
 
-            obj.Bpm = (float) (obj.Bpm / factor);
+            obj.Bpm = (float)(obj.Bpm / factor);
             obj.Length = obj.Data.LongLength;
-            obj.Duration = TimeSpan.FromSeconds(obj.Length / (double) (sampleRate * obj.Channels));
+            obj.Duration = TimeSpan.FromSeconds(obj.Length / (double)(sampleRate * obj.Channels));
 
             sw.Restart();
 
@@ -306,7 +306,7 @@ namespace ModularAudience.Audio.Processors_V1
                 obj.Data = backupData;
                 return obj;
             }
-            obj["ifft"] = (float) sw.Elapsed.TotalMilliseconds;
+            obj["ifft"] = (float)sw.Elapsed.TotalMilliseconds;
             sw.Restart();
 
             await obj.AggregateStretchedChunksAsync(ifftChunks.ToList(), obj.StretchFactor, maxWorkers.Value);
@@ -327,9 +327,9 @@ namespace ModularAudience.Audio.Processors_V1
             obj["normalize"] = sw.Elapsed.TotalMilliseconds;
             sw.Restart();
 
-            obj.Bpm = obj.Bpm / (float) factor;
+            obj.Bpm = obj.Bpm / (float)factor;
             obj.Length = obj.Data.LongLength;
-            obj.Duration = TimeSpan.FromSeconds(obj.Length / (double) (sampleRate * obj.Channels));
+            obj.Duration = TimeSpan.FromSeconds(obj.Length / (double)(sampleRate * obj.Channels));
 
             tracker?.Complete();
 
@@ -400,7 +400,7 @@ namespace ModularAudience.Audio.Processors_V1
                 {
                     return obj;
                 }
-                obj["ifft"] = (float) sw.Elapsed.TotalMilliseconds;
+                obj["ifft"] = (float)sw.Elapsed.TotalMilliseconds;
                 totalMs += sw.Elapsed.TotalMilliseconds;
                 sw.Restart();
 
@@ -583,7 +583,7 @@ namespace ModularAudience.Audio.Processors_V1
             var output = new float[samples.Length];
             for (int i = 0; i < samples.Length; i++)
             {
-                output[i] = (float) samples[i].Real;
+                output[i] = (float)samples[i].Real;
             }
 
             return output;
@@ -609,9 +609,9 @@ namespace ModularAudience.Audio.Processors_V1
             }
 
             double expectedPhaseStep = 2.0 * Math.PI * hopIn / chunkSize;
-            float factorF = (float) factor;
-            float twoPi = 2.0f * (float) Math.PI;
-            float pi = (float) Math.PI;
+            float factorF = (float)factor;
+            float twoPi = 2.0f * (float)Math.PI;
+            float pi = (float)Math.PI;
 
             for (int chunk = 0; chunk < totalChunks; chunk++)
             {
@@ -632,12 +632,12 @@ namespace ModularAudience.Audio.Processors_V1
                     Complex cur = samples[idx];
                     Complex prev = samples[prevIdx];
 
-                    float phaseCur = (float) Math.Atan2(cur.Imaginary, cur.Real);
-                    float phasePrev = (float) Math.Atan2(prev.Imaginary, prev.Real);
-                    float mag = (float) Math.Sqrt(cur.Real * cur.Real + cur.Imaginary * cur.Imaginary);
+                    float phaseCur = (float)Math.Atan2(cur.Imaginary, cur.Real);
+                    float phasePrev = (float)Math.Atan2(prev.Imaginary, prev.Real);
+                    float mag = (float)Math.Sqrt(cur.Real * cur.Real + cur.Imaginary * cur.Imaginary);
 
                     float deltaPhase = phaseCur - phasePrev;
-                    float expectedPhaseAdv = (float) (expectedPhaseStep * bin);
+                    float expectedPhaseAdv = (float)(expectedPhaseStep * bin);
 
                     float delta = deltaPhase - expectedPhaseAdv;
                     delta = (delta + pi) % twoPi - pi;
@@ -700,7 +700,7 @@ namespace ModularAudience.Audio.Processors_V1
             float[] backupData = obj.Data;
             int sampleRate = obj.SampleRate;
             int overlapSize = chunkSize > 0
-                ? (int) (chunkSize * overlap)
+                ? (int)(chunkSize * overlap)
                 : obj.OverlapSize;
 
             var chunkEnumerable = await obj.GetChunksAsync(chunkSize, overlap, keepData, maxWorkers).ConfigureAwait(false);
@@ -817,9 +817,9 @@ namespace ModularAudience.Audio.Processors_V1
                 return obj;
             }
 
-            obj.Bpm = (float) (obj.Bpm / factor);
+            obj.Bpm = (float)(obj.Bpm / factor);
             obj.Length = obj.Data.LongLength;
-            obj.Duration = TimeSpan.FromSeconds(obj.Length / (double) (sampleRate * obj.Channels));
+            obj.Duration = TimeSpan.FromSeconds(obj.Length / (double)(sampleRate * obj.Channels));
 
             if (normalize > 0)
             {
@@ -863,7 +863,7 @@ namespace ModularAudience.Audio.Processors_V1
                 // FIX 2: Streaming statt alles in RAM laden
                 var chunkEnumerable = obj.GetChunksEnumerable(chunkSize, overlap, keepData);
                 int index = 0;
-                int totalChunks = (int) Math.Ceiling((double) backupData.Length / (chunkSize * (1.0 - overlap)));
+                int totalChunks = (int)Math.Ceiling((double)backupData.Length / (chunkSize * (1.0 - overlap)));
 
                 // FIX 3: Chunks einzeln verarbeiten
                 foreach (var chunk in chunkEnumerable)
@@ -938,7 +938,7 @@ namespace ModularAudience.Audio.Processors_V1
                     // Progress
                     if (progress != null && totalChunks > 0)
                     {
-                        double frac = (double) index / (totalChunks * 2.0);
+                        double frac = (double)index / (totalChunks * 2.0);
                         progress.Report(Math.Clamp(frac, 0.0, 0.5));
                     }
 
@@ -958,7 +958,7 @@ namespace ModularAudience.Audio.Processors_V1
                 obj.StretchFactor = factor;
                 if (adjustBpm && obj.Bpm > 0f)
                 {
-                    obj.Bpm = (float) (obj.Bpm / factor);
+                    obj.Bpm = (float)(obj.Bpm / factor);
                 }
 
                 // FIX 6: Kleinere Batches
@@ -1011,7 +1011,7 @@ namespace ModularAudience.Audio.Processors_V1
 
                     if (progress != null && totalFiles > 0)
                     {
-                        double frac = 0.5 + ((double) processedFiles / totalFiles) * 0.5;
+                        double frac = 0.5 + ((double)processedFiles / totalFiles) * 0.5;
                         progress.Report(Math.Clamp(frac, 0.5, 1.0));
                     }
                 }

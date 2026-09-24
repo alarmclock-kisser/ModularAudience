@@ -44,7 +44,7 @@ namespace ModularAudience.Audio.Processing
                 double s = samples[i];
                 sum += s * s;
             }
-            return (float) Math.Sqrt(sum / samples.Length);
+            return (float)Math.Sqrt(sum / samples.Length);
         }
 
         /// <summary>

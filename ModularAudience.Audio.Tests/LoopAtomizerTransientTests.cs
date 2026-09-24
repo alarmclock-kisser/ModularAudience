@@ -28,7 +28,7 @@ namespace ModularAudience.Audio.Tests
             Assert.AreEqual(hits.Length, result.Atomics.Count, Describe(result.Atomics));
             for (int i = 0; i < result.Atomics.Count - 1; i++)
             {
-                int nextStart = (int) (hits[i + 1].StartMs * sampleRate / 1000);
+                int nextStart = (int)(hits[i + 1].StartMs * sampleRate / 1000);
                 AssertEndsBefore(source, result.Atomics[i], nextStart);
             }
         }
@@ -51,7 +51,7 @@ namespace ModularAudience.Audio.Tests
             LoopAtomizerResult result = await LoopAtomizer_V4.AtomizeAsync(source, Settings);
             scope.Own(result.Atomics);
             Assert.AreEqual(2, result.Atomics.Count, Describe(result.Atomics));
-            int nextStart = (int) (nextStartMs * sampleRate / 1000);
+            int nextStart = (int)(nextStartMs * sampleRate / 1000);
             AssertEndsBefore(source, result.Atomics[0], nextStart);
             int secondStart = FindSourceStart(source, result.Atomics[1]);
             Assert.IsTrue(secondStart <= nextStart + Math.Max(1, sampleRate / 4000),
@@ -75,7 +75,7 @@ namespace ModularAudience.Audio.Tests
                 LoopAtomizerResult result = await LoopAtomizer_V4.AtomizeAsync(source, Settings);
                 scope.Own(result.Atomics);
                 Assert.AreEqual(2, result.Atomics.Count, $"Phase {phase}: {Describe(result.Atomics)}");
-                AssertEndsBefore(source, result.Atomics[0], (int) (nextStartMs * sampleRate / 1000));
+                AssertEndsBefore(source, result.Atomics[0], (int)(nextStartMs * sampleRate / 1000));
             }
         }
 
@@ -92,7 +92,7 @@ namespace ModularAudience.Audio.Tests
             for (int i = 0; i < cymbal.Length; i++)
             {
                 double attack = Math.Min(1.0, i / (sampleRate * 0.001));
-                cymbal[i] = (float) ((random.NextDouble() * 2 - 1) * 0.7 * attack * Math.Exp(-i / (sampleRate * 0.16)));
+                cymbal[i] = (float)((random.NextDouble() * 2 - 1) * 0.7 * attack * Math.Exp(-i / (sampleRate * 0.16)));
             }
 
             AudioObj source = scope.Create(AudioTestData.Track(sampleRate, 1000, (100, cymbal, 1f)), sampleRate);

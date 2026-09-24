@@ -58,8 +58,8 @@ namespace ModularAudience.Audio.Processors_V4
                 for (int i = 0; i < analysis.Segments.Count; i++)
                 {
                     AtomicSegment segment = analysis.Segments[i];
-                    long startSample = (long) segment.StartFrame * channels;
-                    long endSample = (long) segment.EndFrame * channels;
+                    long startSample = (long)segment.StartFrame * channels;
+                    long endSample = (long)segment.EndFrame * channels;
                     if (endSample <= startSample)
                     {
                         continue;
@@ -68,7 +68,7 @@ namespace ModularAudience.Audio.Processors_V4
                     working.SelectionStart = startSample;
                     working.SelectionEnd = endSample;
                     AudioObj? atomic = await working.CloneFromSelectionAsync().ConfigureAwait(false);
-                    progress?.Report(0.45 + 0.25 * ((double) (i + 1) / analysis.Segments.Count));
+                    progress?.Report(0.45 + 0.25 * ((double)(i + 1) / analysis.Segments.Count));
                     if (atomic == null)
                     {
                         continue;
@@ -108,7 +108,7 @@ namespace ModularAudience.Audio.Processors_V4
             double energy = 0.0;
             foreach (float sample in samples)
             {
-                energy += (double) sample * sample;
+                energy += (double)sample * sample;
             }
 
             return samples.Length > 0 && Math.Sqrt(energy / samples.Length) >= minimumRmsLevel;
@@ -157,7 +157,7 @@ namespace ModularAudience.Audio.Processors_V4
 
             List<AtomicSegment> classified = ClassifyAtomicSegments(mono, segments, source.SampleRate);
             int classifiedCount = classified.Count(segment => !string.IsNullOrWhiteSpace(segment.Label));
-            bool isLikelyDrumLoop = classified.Count >= 3 && classifiedCount >= Math.Max(2, (int) Math.Ceiling(classified.Count * 0.5));
+            bool isLikelyDrumLoop = classified.Count >= 3 && classifiedCount >= Math.Max(2, (int)Math.Ceiling(classified.Count * 0.5));
 
             if (!isLikelyDrumLoop)
             {
@@ -233,7 +233,7 @@ namespace ModularAudience.Audio.Processors_V4
                     accumulator -= queue.Dequeue();
                 }
 
-                envelope[i] = (float) (accumulator / queue.Count);
+                envelope[i] = (float)(accumulator / queue.Count);
             }
 
             return envelope;
@@ -246,9 +246,9 @@ namespace ModularAudience.Audio.Processors_V4
                 return 0f;
             }
 
-            float[] sorted = (float[]) values.Clone();
+            float[] sorted = (float[])values.Clone();
             Array.Sort(sorted);
-            int index = (int) Math.Round(Math.Clamp(percentile, 0.0, 1.0) * (sorted.Length - 1));
+            int index = (int)Math.Round(Math.Clamp(percentile, 0.0, 1.0) * (sorted.Length - 1));
             return sorted[index];
         }
 
@@ -524,7 +524,7 @@ namespace ModularAudience.Audio.Processors_V4
                     sum += values[j];
                 }
 
-                smoothed[i] = (float) (sum / (end - start + 1));
+                smoothed[i] = (float)(sum / (end - start + 1));
             }
 
             return smoothed;
@@ -788,7 +788,7 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             double rms = Math.Sqrt(totalEnergy / length);
-            int tailStart = startFrame + (int) Math.Round(length * 0.65);
+            int tailStart = startFrame + (int)Math.Round(length * 0.65);
             double tailEnergy = 0.0;
             for (int i = tailStart; i < endFrame; i++)
             {
@@ -798,7 +798,7 @@ namespace ModularAudience.Audio.Processors_V4
 
             double spectralEnergy = Math.Max(1e-9, lowEnergy + highEnergy);
             double durationMs = length * 1000.0 / Math.Max(1, sampleRate);
-            int earlyWindow = Math.Min(length - 2, Math.Max(8, (int) Math.Round(sampleRate * 0.12)));
+            int earlyWindow = Math.Min(length - 2, Math.Max(8, (int)Math.Round(sampleRate * 0.12)));
             int earlyPeakCount = 0;
             double peakThreshold = peak * 0.60;
             int minimumPeakSpacing = Math.Max(1, sampleRate / 250);
@@ -833,7 +833,7 @@ namespace ModularAudience.Audio.Processors_V4
                 Rms: rms,
                 LowEnergyRatio: lowEnergy / spectralEnergy,
                 HighEnergyRatio: highEnergy / spectralEnergy,
-                ZeroCrossingRate: zeroCrossings / (double) Math.Max(1, length - 1),
+                ZeroCrossingRate: zeroCrossings / (double)Math.Max(1, length - 1),
                 TailEnergyRatio: tailEnergy / Math.Max(1e-9, totalEnergy),
                 CrestFactor: peak / Math.Max(1e-9, rms),
                 EarlyPeakCount: earlyPeakCount);

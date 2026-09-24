@@ -50,7 +50,7 @@ public partial class ProgressDialog : Form
             return;
         }
 
-        this.progressBar.Value = (int) Math.Round(progress * 100.0);
+        this.progressBar.Value = (int)Math.Round(progress * 100.0);
         this.label_percent.Text = $"{progress:P0}";
         this.UpdateTimeLabels(progress);
     }
@@ -88,7 +88,7 @@ public partial class ProgressDialog : Form
             return;
         }
 
-        this.timer_close.Interval = Math.Max(1, (int) Math.Min(int.MaxValue, this.windowCloseDelay * 1000.0d));
+        this.timer_close.Interval = Math.Max(1, (int)Math.Min(int.MaxValue, this.windowCloseDelay * 1000.0d));
         this.timer_close.Start();
     }
 

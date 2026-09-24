@@ -222,16 +222,16 @@ public sealed class MidiControllerService : IDisposable
     private static MidiMessageInfo ParseMessage(uint raw)
     {
         int status = (int)((raw >> 24) & 0xFF);
-        int data1  = (int)((raw >> 16) & 0xFF);
-        int data2  = (int)((raw >> 8)  & 0xFF);
+        int data1 = (int)((raw >> 16) & 0xFF);
+        int data2 = (int)((raw >> 8) & 0xFF);
         int channel = status & 0x0F;
 
         return new MidiMessageInfo
         {
-            Channel    = channel,
-            Command    = status & 0xF0,
-            Data1      = data1,
-            Data2      = data2,
+            Channel = channel,
+            Command = status & 0xF0,
+            Data1 = data1,
+            Data2 = data2,
             RawMessage = raw
         };
     }

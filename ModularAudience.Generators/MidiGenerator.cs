@@ -101,7 +101,7 @@ namespace ModularAudience.Generators
                     {
                         NoteNumber = note.NoteNumber,
                         Channel = note.Channel,
-                        Velocity = Math.Clamp((int) Math.Round(note.Velocity * factor), 1, 127),
+                        Velocity = Math.Clamp((int)Math.Round(note.Velocity * factor), 1, 127),
                         StartTick = note.StartTick,
                         DurationTicks = note.DurationTicks
                     });
@@ -188,7 +188,7 @@ namespace ModularAudience.Generators
                     CheckCancellation(cancellationToken, bar * 16 + beat);
                     AddNote(tracks[0], ScaleNote(settings, beat + bar % 4), bar * BarTicks(settings) + beat * step, step, 88);
                 }
-                progress?.Report((bar + 1) / (double) settings.NumberOfBars);
+                progress?.Report((bar + 1) / (double)settings.NumberOfBars);
             }
             FinishTracks(tracks, settings.NumberOfBars * BarTicks(settings));
         }
@@ -208,7 +208,7 @@ namespace ModularAudience.Generators
                 AddDrum(tracks[0], 42, start + beat * 2, beat / 2, 66);
                 AddDrum(tracks[0], 38, start + beat, beat / 2, 82);
                 CheckCancellation(cancellationToken, bar);
-                progress?.Report((bar + 1) / (double) settings.NumberOfBars);
+                progress?.Report((bar + 1) / (double)settings.NumberOfBars);
             }
             FinishTracks(tracks, settings.NumberOfBars * BarTicks(settings));
         }
@@ -228,7 +228,7 @@ namespace ModularAudience.Generators
                 }
                 AddNote(tracks[Math.Min(1, tracks.Count - 1)], ScaleNote(settings, bar % 4, -1), start, BarTicks(settings), 86);
                 CheckCancellation(cancellationToken, bar);
-                progress?.Report((bar + 1) / (double) settings.NumberOfBars);
+                progress?.Report((bar + 1) / (double)settings.NumberOfBars);
             }
             FinishTracks(tracks, settings.NumberOfBars * BarTicks(settings));
         }
@@ -249,7 +249,7 @@ namespace ModularAudience.Generators
                     }
                 }
                 CheckCancellation(cancellationToken, bar);
-                progress?.Report((bar + 1) / (double) settings.NumberOfBars);
+                progress?.Report((bar + 1) / (double)settings.NumberOfBars);
             }
             FinishTracks(tracks, settings.NumberOfBars * BarTicks(settings));
         }
@@ -269,7 +269,7 @@ namespace ModularAudience.Generators
                     if (Chance(random, 0.65)) AddNote(tracks[Math.Min(1, tracks.Count - 1)], ScaleNote(settings, index + bar, 1), tick, step / 2, 70);
                 }
                 CheckCancellation(cancellationToken, bar);
-                progress?.Report((bar + 1) / (double) settings.NumberOfBars);
+                progress?.Report((bar + 1) / (double)settings.NumberOfBars);
             }
             FinishTracks(tracks, settings.NumberOfBars * BarTicks(settings));
         }
@@ -289,7 +289,7 @@ namespace ModularAudience.Generators
                     if (index % 2 == 0 || Chance(random, 0.2)) AddDrum(tracks[0], 42, start + index * step, step / 2, 58 + random.Next(25));
                 }
                 CheckCancellation(cancellationToken, bar);
-                progress?.Report((bar + 1) / (double) settings.NumberOfBars);
+                progress?.Report((bar + 1) / (double)settings.NumberOfBars);
             }
             FinishTracks(tracks, settings.NumberOfBars * BarTicks(settings));
         }
@@ -305,7 +305,7 @@ namespace ModularAudience.Generators
                 AddNote(tracks[trackIndex], ScaleNote(settings, random.Next(7), random.Next(-1, 2)), tick, step, 45 + random.Next(80), trackIndex % 9);
                 if (index % 3 == 0) AddDrum(tracks[0], 37, tick, step / 2, 70);
                 CheckCancellation(cancellationToken, index);
-                progress?.Report((index + 1) / (double) totalSteps);
+                progress?.Report((index + 1) / (double)totalSteps);
             }
             FinishTracks(tracks, settings.NumberOfBars * BarTicks(settings));
         }
@@ -322,7 +322,7 @@ namespace ModularAudience.Generators
                     if (index % 4 == 0) AddDrum(tracks[0], 36, start + index * step, step, 92);
                 }
                 CheckCancellation(cancellationToken, bar);
-                progress?.Report((bar + 1) / (double) settings.NumberOfBars);
+                progress?.Report((bar + 1) / (double)settings.NumberOfBars);
             }
             FinishTracks(tracks, settings.NumberOfBars * BarTicks(settings));
         }
@@ -341,7 +341,7 @@ namespace ModularAudience.Generators
                     if (Chance(random, 0.35)) AddNote(tracks[^1], ScaleNote(settings, random.Next(7), 1), start + index * step, step / 2, 110);
                 }
                 CheckCancellation(cancellationToken, bar);
-                progress?.Report((bar + 1) / (double) settings.NumberOfBars);
+                progress?.Report((bar + 1) / (double)settings.NumberOfBars);
             }
             FinishTracks(tracks, settings.NumberOfBars * BarTicks(settings));
         }

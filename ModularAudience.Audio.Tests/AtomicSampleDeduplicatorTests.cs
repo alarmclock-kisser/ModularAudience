@@ -52,10 +52,10 @@ namespace ModularAudience.Audio.Tests
         {
             using AudioTestScope scope = new();
             float[] first = AudioTestData.Hit(16000, 350, 180, 90);
-            float[] second = (float[]) first.Clone();
+            float[] second = (float[])first.Clone();
             for (int i = 0; i < 160; i++)
             {
-                second[i] = (float) (0.65 * Math.Sin(2 * Math.PI * 2100 * i / 16000));
+                second[i] = (float)(0.65 * Math.Sin(2 * Math.PI * 2100 * i / 16000));
             }
 
             Assert.AreEqual(2, Deduplicate([scope.Create(first), scope.Create(second)]).Count);

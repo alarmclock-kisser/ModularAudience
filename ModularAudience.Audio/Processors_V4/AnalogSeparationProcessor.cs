@@ -76,10 +76,10 @@ namespace ModularAudience.Audio.Processors_V4
                 long totalFrames = source.Data.LongLength / channels;
                 long startFrame = Math.Clamp(selectionStartSamples / channels, 0, totalFrames);
                 long endFrame = Math.Clamp(selectionEndSamples / channels, startFrame, totalFrames);
-                int frameCount = (int) Math.Min(int.MaxValue, endFrame - startFrame);
+                int frameCount = (int)Math.Min(int.MaxValue, endFrame - startFrame);
                 if (frameCount <= 0)
                 {
-                    return (IReadOnlyList<AnalogSeparationBand>) [];
+                    return (IReadOnlyList<AnalogSeparationBand>)[];
                 }
 
                 float[] mono = new float[frameCount];
@@ -92,7 +92,7 @@ namespace ModularAudience.Audio.Processors_V4
                         sum += source.Data[sampleOffset + channel];
                     }
 
-                    mono[frame] = (float) (sum / channels);
+                    mono[frame] = (float)(sum / channels);
                 });
 
                 return AnalyzeBandsCore(mono, source.SampleRate, maxBands, windowSize, threads);
@@ -142,7 +142,7 @@ namespace ModularAudience.Audio.Processors_V4
             {
                 int frame = sampledFrames == 1
                     ? 0
-                    : (int) ((long) sampledFrame * (frameCount - 1) / (sampledFrames - 1));
+                    : (int)((long)sampledFrame * (frameCount - 1) / (sampledFrames - 1));
                 int offset = frame * hop;
                 Complex[] spectrum = new Complex[fftSize];
                 double mean = 0.0;
@@ -161,10 +161,10 @@ namespace ModularAudience.Audio.Processors_V4
                 double[] sampledEnergy = new double[analysisBandCount];
                 for (int analysisBand = 0; analysisBand < analysisBandCount; analysisBand++)
                 {
-                    double bandStart = lowHz * Math.Pow(highHz / lowHz, (double) analysisBand / analysisBandCount);
-                    double bandEnd = lowHz * Math.Pow(highHz / lowHz, (double) (analysisBand + 1) / analysisBandCount);
-                    int firstBin = Math.Max(1, (int) Math.Ceiling(bandStart / sampleRate * fftSize));
-                    int lastBin = Math.Min(fftSize / 2 - 1, (int) Math.Floor(bandEnd / sampleRate * fftSize));
+                    double bandStart = lowHz * Math.Pow(highHz / lowHz, (double)analysisBand / analysisBandCount);
+                    double bandEnd = lowHz * Math.Pow(highHz / lowHz, (double)(analysisBand + 1) / analysisBandCount);
+                    int firstBin = Math.Max(1, (int)Math.Ceiling(bandStart / sampleRate * fftSize));
+                    int lastBin = Math.Min(fftSize / 2 - 1, (int)Math.Floor(bandEnd / sampleRate * fftSize));
                     double power = 0.0;
                     int count = 0;
                     for (int bin = firstBin; bin <= lastBin; bin++)
@@ -250,8 +250,8 @@ namespace ModularAudience.Audio.Processors_V4
                 return CreateFallbackBands(sampleRate, maxBands);
             }
 
-            double activeLowHz = lowHz * Math.Pow(highHz / lowHz, (double) activeStart / analysisBandCount);
-            double activeHighHz = lowHz * Math.Pow(highHz / lowHz, (double) (activeEnd + 1) / analysisBandCount);
+            double activeLowHz = lowHz * Math.Pow(highHz / lowHz, (double)activeStart / analysisBandCount);
+            double activeHighHz = lowHz * Math.Pow(highHz / lowHz, (double)(activeEnd + 1) / analysisBandCount);
             List<double> boundaries = [activeLowHz];
             for (int i = 0; i + 1 < selectedPeaks.Count; i++)
             {
@@ -281,7 +281,7 @@ namespace ModularAudience.Audio.Processors_V4
             List<double> boundaries = [];
             for (int i = 0; i <= count; i++)
             {
-                boundaries.Add(lowHz * Math.Pow(highHz / lowHz, (double) i / count));
+                boundaries.Add(lowHz * Math.Pow(highHz / lowHz, (double)i / count));
             }
 
             return CreateBandsFromBoundaries(boundaries);
@@ -343,12 +343,12 @@ namespace ModularAudience.Audio.Processors_V4
 
             double minimumBandPeak = Math.Max(0.000001, sourcePeak * 0.001);
 
-            int windowSize = (int) Math.Pow(2, Math.Ceiling(Math.Log(Math.Max(2, settings.WindowSize), 2)));
+            int windowSize = (int)Math.Pow(2, Math.Ceiling(Math.Log(Math.Max(2, settings.WindowSize), 2)));
             double overlap = Math.Clamp(settings.Overlap, 0.0, 0.99);
             int sharpness = Math.Max(1, settings.Sharpness);
             int threads = Math.Clamp(settings.Threads, 1, Environment.ProcessorCount);
 
-            int step = (int) (windowSize * (1.0 - overlap));
+            int step = (int)(windowSize * (1.0 - overlap));
             if (step <= 0)
             {
                 step = windowSize / 2;
@@ -399,8 +399,8 @@ namespace ModularAudience.Audio.Processors_V4
             int[] bandHighs = new int[bands.Count];
             for (int bandIndex = 0; bandIndex < bands.Count; bandIndex++)
             {
-                bandLows[bandIndex] = Math.Max(1, (int) Math.Ceiling(bands[bandIndex].LowHz / source.SampleRate * windowSize));
-                bandHighs[bandIndex] = Math.Min(windowSize / 2 - 1, (int) Math.Floor(bands[bandIndex].HighHz / source.SampleRate * windowSize));
+                bandLows[bandIndex] = Math.Max(1, (int)Math.Ceiling(bands[bandIndex].LowHz / source.SampleRate * windowSize));
+                bandHighs[bandIndex] = Math.Min(windowSize / 2 - 1, (int)Math.Floor(bands[bandIndex].HighHz / source.SampleRate * windowSize));
             }
 
             double[][] frameWeightSums = new double[numFrames][];
@@ -506,7 +506,7 @@ namespace ModularAudience.Audio.Processors_V4
 
                     if (filteredPeak <= minimumBandPeak)
                     {
-                        progress?.Report((double) (bandIndex + 1) / bands.Count);
+                        progress?.Report((double)(bandIndex + 1) / bands.Count);
                         continue;
                     }
 
@@ -528,19 +528,19 @@ namespace ModularAudience.Audio.Processors_V4
                     float[] result = new float[mono.Length];
                     for (int i = 0; i < mono.Length; i++)
                     {
-                        result[i] = (float) Math.Clamp(acc[i] * gain, -1.0, 1.0);
+                        result[i] = (float)Math.Clamp(acc[i] * gain, -1.0, 1.0);
                     }
 
                     AudioObj stem = source.Clone();
                     stem.Data = result;
                     stem.Channels = 1;
                     stem.Length = result.LongLength;
-                    stem.Duration = TimeSpan.FromSeconds(result.LongLength / (double) Math.Max(1, stem.SampleRate));
+                    stem.Duration = TimeSpan.FromSeconds(result.LongLength / (double)Math.Max(1, stem.SampleRate));
                     stem.Rename($"{source.OriginalName}_{band.Name}");
                     stems.Add(stem);
                 }
 
-                progress?.Report((double) (bandIndex + 1) / bands.Count);
+                progress?.Report((double)(bandIndex + 1) / bands.Count);
             }
 
             return new AnalogSeparationResult(stems, mono);

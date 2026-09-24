@@ -86,7 +86,7 @@ namespace ModularAudience.Audio.Processors_V1
                 return null;
             }
 
-            int totalSamples = (int) maxSamplesLong;
+            int totalSamples = (int)maxSamplesLong;
             var partialBuffers = new float[trackList.Count][];
 
             var tasks = new System.Threading.Tasks.Task[trackList.Count];
@@ -116,14 +116,14 @@ namespace ModularAudience.Audio.Processors_V1
                         return;
                     }
 
-                    double rate = (double) srcRate / targetSampleRate;
+                    double rate = (double)srcRate / targetSampleRate;
                     if (rate <= 0.0)
                     {
                         rate = 1.0;
                     }
 
                     long maxDestFrames = maxFrames;
-                    long fromSrc = (long) Math.Ceiling(srcFrames / rate);
+                    long fromSrc = (long)Math.Ceiling(srcFrames / rate);
                     if (fromSrc < maxDestFrames)
                     {
                         maxDestFrames = fromSrc;
@@ -142,7 +142,7 @@ namespace ModularAudience.Audio.Processors_V1
                     for (long destFrame = 0; destFrame < maxDestFrames; destFrame++)
                     {
                         double srcPos = destFrame * rate;
-                        long i0 = (long) srcPos;
+                        long i0 = (long)srcPos;
                         if (i0 >= srcFrames)
                         {
                             break;
@@ -164,8 +164,8 @@ namespace ModularAudience.Audio.Processors_V1
                                 break;
                             }
 
-                            int srcIndex0 = (int) (i0 * srcChannels + (ch % srcChannels));
-                            int srcIndex1 = (int) (i1 * srcChannels + (ch % srcChannels));
+                            int srcIndex0 = (int)(i0 * srcChannels + (ch % srcChannels));
+                            int srcIndex1 = (int)(i1 * srcChannels + (ch % srcChannels));
 
                             if (srcIndex0 < 0 || srcIndex0 >= srcData.Length)
                             {
@@ -179,7 +179,7 @@ namespace ModularAudience.Audio.Processors_V1
 
                             float s0 = srcData[srcIndex0];
                             float s1 = srcData[srcIndex1];
-                            float sample = (float) (s0 + (s1 - s0) * frac);
+                            float sample = (float)(s0 + (s1 - s0) * frac);
 
                             local[outSampleIndex] += sample * vol;
                         }
@@ -265,7 +265,7 @@ namespace ModularAudience.Audio.Processors_V1
                 Data = mix,
                 SampleRate = targetSampleRate,
                 Channels = targetChannels,
-                Duration = TimeSpan.FromSeconds(maxFrames / (double) targetSampleRate),
+                Duration = TimeSpan.FromSeconds(maxFrames / (double)targetSampleRate),
                 Length = mix.Length,
                 BitDepth = first.BitDepth > 0 ? first.BitDepth : 32,
                 Bpm = bpm

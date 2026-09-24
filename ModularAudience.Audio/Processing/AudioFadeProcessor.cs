@@ -36,8 +36,8 @@ namespace ModularAudience.Audio.Processing
                 if (selEndLong > selStartLong && selStartLong >= 0)
                 {
                     // Selection stored in SAMPLES; convert to FRAMES by dividing by channels
-                    startFrame = (int) Math.Max(0, Math.Min((selStartLong / channels), totalFrames - 1));
-                    endFrame = (int) Math.Max(0, Math.Min((selEndLong / channels), totalFrames - 1));
+                    startFrame = (int)Math.Max(0, Math.Min((selStartLong / channels), totalFrames - 1));
+                    endFrame = (int)Math.Max(0, Math.Min((selEndLong / channels), totalFrames - 1));
                     // ensure sensible order
                     if (endFrame < startFrame)
                     {
@@ -55,7 +55,7 @@ namespace ModularAudience.Audio.Processing
                 for (int f = 0; f < lengthFrames; f++)
                 {
                     int frameIndex = startFrame + f;
-                    float t = lengthFrames == 1 ? 1f : (float) f / (float) (lengthFrames - 1); // 0..1
+                    float t = lengthFrames == 1 ? 1f : (float)f / (float)(lengthFrames - 1); // 0..1
                     float scale = targetAmplitude + (1f - targetAmplitude) * t; // fade-in from target -> 1.0
 
                     int baseIdx = frameIndex * channels;
@@ -104,8 +104,8 @@ namespace ModularAudience.Audio.Processing
                 if (selEndLong > selStartLong && selStartLong >= 0)
                 {
                     // Selection stored in SAMPLES; convert to FRAMES by dividing by channels
-                    startFrame = (int) Math.Max(0, Math.Min((selStartLong / channels), totalFrames - 1));
-                    endFrame = (int) Math.Max(0, Math.Min((selEndLong / channels), totalFrames - 1));
+                    startFrame = (int)Math.Max(0, Math.Min((selStartLong / channels), totalFrames - 1));
+                    endFrame = (int)Math.Max(0, Math.Min((selEndLong / channels), totalFrames - 1));
                     if (endFrame < startFrame)
                     {
                         (startFrame, endFrame) = (endFrame, startFrame);
@@ -122,8 +122,8 @@ namespace ModularAudience.Audio.Processing
                 for (int f = 0; f < lengthFrames; f++)
                 {
                     int frameIndex = startFrame + f;
-                    float t = lengthFrames == 1 ? 1f : (float) f / (float) (lengthFrames - 1); // 0..1
-                                                                                               // fade-out from 1.0 -> targetAmplitude
+                    float t = lengthFrames == 1 ? 1f : (float)f / (float)(lengthFrames - 1); // 0..1
+                                                                                             // fade-out from 1.0 -> targetAmplitude
                     float scale = 1f - (1f - targetAmplitude) * t;
 
                     int baseIdx = frameIndex * channels;

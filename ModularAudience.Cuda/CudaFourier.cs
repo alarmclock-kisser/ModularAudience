@@ -67,7 +67,7 @@ namespace ModularAudience.Cuda
             {
                 if (mem.Lengths.Distinct().Count() == 1)
                 {
-                    int nx = (int) mem.IndexLength.ToInt64();
+                    int nx = (int)mem.IndexLength.ToInt64();
                     cufftType fftType = cufftType.R2C;
                     int batch = 1;
 
@@ -83,7 +83,7 @@ namespace ModularAudience.Cuda
                 }
                 else
                 {
-                    int[] nx = mem.Lengths.Select(l => (int) l.ToInt64()).ToArray();
+                    int[] nx = mem.Lengths.Select(l => (int)l.ToInt64()).ToArray();
                     cufftType fftType = cufftType.R2C;
                     int batch = 1;
 
@@ -155,7 +155,7 @@ namespace ModularAudience.Cuda
                     return pointer;
                 }
 
-                int nx = (int) mem.IndexLength.ToInt64();
+                int nx = (int)mem.IndexLength.ToInt64();
                 cufftType fftType = cufftType.R2C;
                 int batch = 1;
                 CudaFFTPlan1D plan = new(nx, fftType, batch, stream.Stream);
@@ -228,7 +228,7 @@ namespace ModularAudience.Cuda
 
                 int rank = 1;
                 cufftType fftType = cufftType.R2C;
-                CudaFFTPlanMany plan = new(rank, lengths.Select(l => (int) l.ToInt64()).ToArray(), mem.Count, fftType, stream.Stream);
+                CudaFFTPlanMany plan = new(rank, lengths.Select(l => (int)l.ToInt64()).ToArray(), mem.Count, fftType, stream.Stream);
 
                 for (int i = 0; i < mem.Count; i++)
                 {
@@ -299,7 +299,7 @@ namespace ModularAudience.Cuda
             {
                 if (mem.Lengths.Distinct().Count() == 1)
                 {
-                    int nx = (int) mem.IndexLength.ToInt64();
+                    int nx = (int)mem.IndexLength.ToInt64();
                     cufftType fftType = cufftType.C2R;
                     int batch = 1;
 
@@ -315,7 +315,7 @@ namespace ModularAudience.Cuda
                 }
                 else
                 {
-                    int[] nx = mem.Lengths.Select(l => (int) l.ToInt64()).ToArray();
+                    int[] nx = mem.Lengths.Select(l => (int)l.ToInt64()).ToArray();
                     cufftType fftType = cufftType.C2R;
                     int batch = 1;
 
@@ -387,7 +387,7 @@ namespace ModularAudience.Cuda
                     return pointer;
                 }
 
-                int nx = (int) mem.IndexLength.ToInt64();
+                int nx = (int)mem.IndexLength.ToInt64();
                 cufftType fftType = cufftType.C2R;
                 int batch = 1;
                 CudaFFTPlan1D plan = new(nx, fftType, batch, stream.Stream);
@@ -459,7 +459,7 @@ namespace ModularAudience.Cuda
 
                 int rank = 1;
                 cufftType fftType = cufftType.C2R;
-                CudaFFTPlanMany plan = new(rank, lengths.Select(l => (int) l.ToInt64()).ToArray(), mem.Count, fftType, stream.Stream);
+                CudaFFTPlanMany plan = new(rank, lengths.Select(l => (int)l.ToInt64()).ToArray(), mem.Count, fftType, stream.Stream);
 
                 for (int i = 0; i < mem.Count; i++)
                 {

@@ -20,9 +20,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.LoadPresetOptions();
             this.comboBox_instrument.Items.AddRange(Enum.GetNames<MidiInstrument>());
             this.comboBox_instrument.SelectedIndex = 0;
-            this.numericUpDown_tempo.Value = (decimal) Math.Clamp(this.sourceMidiFile.DefaultBpm, 20.0, 400.0);
+            this.numericUpDown_tempo.Value = (decimal)Math.Clamp(this.sourceMidiFile.DefaultBpm, 20.0, 400.0);
             this.numericUpDown_ppq.Value = Math.Clamp(this.sourceMidiFile.TicksPerQuarterNote, 1, 3840);
-            this.numericUpDown_pitchFrequency.Value = (decimal) Math.Clamp(this.sourceMidiFile.PitchFrequency, 1.0, 1000.0);
+            this.numericUpDown_pitchFrequency.Value = (decimal)Math.Clamp(this.sourceMidiFile.PitchFrequency, 1.0, 1000.0);
             this.textBox_filePath.Text = this.sourceMidiFile.FilePath;
             this.UpdateCustomSampleState();
         }
@@ -65,7 +65,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 throw new InvalidOperationException("Please select a MIDI preset.");
             }
 
-            MidiInstrument instrument = (MidiInstrument) Math.Clamp(this.comboBox_instrument.SelectedIndex, 0, Enum.GetValues<MidiInstrument>().Length - 1);
+            MidiInstrument instrument = (MidiInstrument)Math.Clamp(this.comboBox_instrument.SelectedIndex, 0, Enum.GetValues<MidiInstrument>().Length - 1);
             if (instrument == MidiInstrument.CustomSample && this.customSample == null)
             {
                 throw new InvalidOperationException("Please select a loaded audio object as custom sample.");
@@ -74,19 +74,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
             return new MidiGenerationSettings
             {
                 Preset = selectedPreset.Preset,
-                Tempo = (double) this.numericUpDown_tempo.Value,
-                Intensity = (double) this.numericUpDown_intensity.Value,
-                TimeSignatureNumerator = (int) this.numericUpDown_timeSignatureNumerator.Value,
-                TimeSignatureDenominator = (int) this.numericUpDown_timeSignatureDenominator.Value,
-                KeySignature = (int) this.numericUpDown_keySignature.Value,
-                NumberOfBars = (int) this.numericUpDown_bars.Value,
-                NumberOfTracks = (int) this.numericUpDown_tracks.Value,
-                TicksPerQuarterNote = (int) this.numericUpDown_ppq.Value,
-                Instrument = (int) instrument,
+                Tempo = (double)this.numericUpDown_tempo.Value,
+                Intensity = (double)this.numericUpDown_intensity.Value,
+                TimeSignatureNumerator = (int)this.numericUpDown_timeSignatureNumerator.Value,
+                TimeSignatureDenominator = (int)this.numericUpDown_timeSignatureDenominator.Value,
+                KeySignature = (int)this.numericUpDown_keySignature.Value,
+                NumberOfBars = (int)this.numericUpDown_bars.Value,
+                NumberOfTracks = (int)this.numericUpDown_tracks.Value,
+                TicksPerQuarterNote = (int)this.numericUpDown_ppq.Value,
+                Instrument = (int)instrument,
                 MidiInstrument = instrument,
                 CustomSample = this.customSample,
-                PitchFrequency = (double) this.numericUpDown_pitchFrequency.Value,
-                Seed = this.checkBox_useSeed.Checked ? (int) this.numericUpDown_seed.Value : null,
+                PitchFrequency = (double)this.numericUpDown_pitchFrequency.Value,
+                Seed = this.checkBox_useSeed.Checked ? (int)this.numericUpDown_seed.Value : null,
                 FilePath = this.textBox_filePath.Text.Trim()
             };
         }
@@ -191,7 +191,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void UpdateCustomSampleState()
         {
-            bool customSampleSelected = this.comboBox_instrument.SelectedIndex == (int) MidiInstrument.CustomSample;
+            bool customSampleSelected = this.comboBox_instrument.SelectedIndex == (int)MidiInstrument.CustomSample;
             this.label_customSample.Enabled = customSampleSelected;
             this.textBox_customSample.Enabled = customSampleSelected;
             this.button_selectCustomSample.Enabled = customSampleSelected;

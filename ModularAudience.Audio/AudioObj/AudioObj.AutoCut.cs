@@ -95,9 +95,9 @@ namespace ModularAudience.Audio
                 return regions;
             }
 
-            long minDurationSamples = (long) (minDurationMs * this.SampleRate * this.Channels / 1000.0);
-            long maxDurationSamples = (long) (maxDurationMs * this.SampleRate * this.Channels / 1000.0);
-            long silenceWindowSamples = (long) (silenceWindowMs * this.SampleRate * this.Channels / 1000.0);
+            long minDurationSamples = (long)(minDurationMs * this.SampleRate * this.Channels / 1000.0);
+            long maxDurationSamples = (long)(maxDurationMs * this.SampleRate * this.Channels / 1000.0);
+            long silenceWindowSamples = (long)(silenceWindowMs * this.SampleRate * this.Channels / 1000.0);
 
             bool inSample = false;
             long sampleStart = 0;
@@ -105,7 +105,7 @@ namespace ModularAudience.Audio
 
             for (long i = 0; i < this.Data.Length; i++)
             {
-                float absValue = Math.Abs(this.Data[(int) i]);
+                float absValue = Math.Abs(this.Data[(int)i]);
 
                 if (absValue >= threshold)
                 {
@@ -128,7 +128,7 @@ namespace ModularAudience.Audio
                             long segmentLen = segmentEnd - sampleStart;
                             if (segmentLen >= minDurationSamples)
                             {
-                                regions.Add(new SampleRegion { Start = (int) sampleStart, End = (int) segmentEnd });
+                                regions.Add(new SampleRegion { Start = (int)sampleStart, End = (int)segmentEnd });
                             }
                             // start next segment at current position to avoid losing continuity
                             sampleStart = segmentEnd; // move start forward
@@ -152,17 +152,17 @@ namespace ModularAudience.Audio
                                 long start = sampleStart;
                                 while (start + maxDurationSamples <= sampleEnd)
                                 {
-                                    regions.Add(new SampleRegion { Start = (int) start, End = (int) (start + maxDurationSamples) });
+                                    regions.Add(new SampleRegion { Start = (int)start, End = (int)(start + maxDurationSamples) });
                                     start += maxDurationSamples;
                                 }
                                 if (sampleEnd - start >= minDurationSamples && sampleEnd - start <= maxDurationSamples)
                                 {
-                                    regions.Add(new SampleRegion { Start = (int) start, End = (int) sampleEnd });
+                                    regions.Add(new SampleRegion { Start = (int)start, End = (int)sampleEnd });
                                 }
                             }
                             else if (sampleLength <= maxDurationSamples)
                             {
-                                regions.Add(new SampleRegion { Start = (int) sampleStart, End = (int) sampleEnd });
+                                regions.Add(new SampleRegion { Start = (int)sampleStart, End = (int)sampleEnd });
                             }
                         }
 
@@ -184,17 +184,17 @@ namespace ModularAudience.Audio
                         long start = sampleStart;
                         while (start + maxDurationSamples <= sampleEnd)
                         {
-                            regions.Add(new SampleRegion { Start = (int) start, End = (int) (start + maxDurationSamples) });
+                            regions.Add(new SampleRegion { Start = (int)start, End = (int)(start + maxDurationSamples) });
                             start += maxDurationSamples;
                         }
                         if (sampleEnd - start >= minDurationSamples && sampleEnd - start <= maxDurationSamples)
                         {
-                            regions.Add(new SampleRegion { Start = (int) start, End = (int) sampleEnd });
+                            regions.Add(new SampleRegion { Start = (int)start, End = (int)sampleEnd });
                         }
                     }
                     else
                     {
-                        regions.Add(new SampleRegion { Start = (int) sampleStart, End = (int) sampleEnd });
+                        regions.Add(new SampleRegion { Start = (int)sampleStart, End = (int)sampleEnd });
                     }
                 }
             }
@@ -253,7 +253,7 @@ namespace ModularAudience.Audio
                 sumSquares += val * val;
             }
 
-            return (float) Math.Sqrt(sumSquares / count);
+            return (float)Math.Sqrt(sumSquares / count);
         }
 
         private AudioObj? ExtractRegion(int startSample, int endSample, string name)
@@ -264,7 +264,7 @@ namespace ModularAudience.Audio
             }
 
             int length = endSample - startSample;
-            var extractedData = new float[checked((int) length)];
+            var extractedData = new float[checked((int)length)];
             Array.Copy(this.Data, startSample, extractedData, 0, length);
 
             var extracted = new AudioObj
@@ -276,7 +276,7 @@ namespace ModularAudience.Audio
                 Channels = this.Channels,
                 BitDepth = this.BitDepth,
                 Length = length,
-                Duration = TimeSpan.FromSeconds(length / (double) (this.SampleRate * this.Channels)),
+                Duration = TimeSpan.FromSeconds(length / (double)(this.SampleRate * this.Channels)),
                 Bpm = this.Bpm,
                 Volume = this.Volume
             };
@@ -291,9 +291,9 @@ namespace ModularAudience.Audio
                 return null;
             }
 
-            int silenceGapSamples = (int) (silenceGapMs * this.SampleRate * this.Channels / 1000.0);
+            int silenceGapSamples = (int)(silenceGapMs * this.SampleRate * this.Channels / 1000.0);
             int totalLength = regions.Sum(r => r.End - r.Start) + Math.Max(0, (regions.Count - 1) * silenceGapSamples);
-            var paletteData = new float[checked((int) totalLength)];
+            var paletteData = new float[checked((int)totalLength)];
 
             int writePos = 0;
             for (int i = 0; i < regions.Count; i++)
@@ -320,7 +320,7 @@ namespace ModularAudience.Audio
                 Channels = this.Channels,
                 BitDepth = this.BitDepth,
                 Length = totalLength,
-                Duration = TimeSpan.FromSeconds(totalLength / (double) (this.SampleRate * this.Channels)),
+                Duration = TimeSpan.FromSeconds(totalLength / (double)(this.SampleRate * this.Channels)),
                 Bpm = this.Bpm,
                 Volume = this.Volume
             };

@@ -468,7 +468,7 @@ namespace ModularAudience.Forms
             {
                 try
                 {
-                    this.BeginInvoke((Action) (() => this.button_drumRoll_Click(sender, e)));
+                    this.BeginInvoke((Action)(() => this.button_drumRoll_Click(sender, e)));
                 }
                 catch (Exception ex)
                 {

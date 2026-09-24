@@ -76,7 +76,7 @@ namespace ModularAudience.Audio.Processors_V4
             for (int start = 0; start < samples.Length;)
             {
                 token.ThrowIfCancellationRequested();
-                int end = (int) Math.Min(samples.LongLength, (long) start + 65536);
+                int end = (int)Math.Min(samples.LongLength, (long)start + 65536);
                 for (int index = start; index < end; index++)
                 {
                     float value = samples[index];
@@ -176,7 +176,7 @@ namespace ModularAudience.Audio.Processors_V4
                 token.ThrowIfCancellationRequested();
                 int count = Math.Min(settings.BlockFrames, total - start);
                 int first = Math.Max(0, start - halo);
-                int end = (int) Math.Min(total, (long) start + count + halo);
+                int end = (int)Math.Min(total, (long)start + count + halo);
                 progress?.Report(new(0.94 * start / total, $"Separating frames {start + 1}-{start + count} of {total}"));
                 DeterministicSpectrogram block = DeterministicSpectrogram.Read(analysis.Source, settings, first, end - first, true, token);
                 float[][][] masks = analysis.Model.BuildMasks(block, settings, token);
@@ -193,7 +193,7 @@ namespace ModularAudience.Audio.Processors_V4
                 if ((sample & 65535) == 0) token.ThrowIfCancellationRequested();
                 double sum = 0;
                 for (int stem = 0; stem < output.Length - 1; stem++) sum += output[stem][sample];
-                output[^1][sample] = (float) (original[sample] - sum);
+                output[^1][sample] = (float)(original[sample] - sum);
                 if (!float.IsFinite(output[^1][sample])) throw new ArithmeticException("Non-finite residual reconstruction.");
                 maximumError = Math.Max(maximumError, Math.Abs(original[sample] - (sum + output[^1][sample])));
             }
@@ -230,7 +230,7 @@ namespace ModularAudience.Audio.Processors_V4
             stem.Channels = source.Channels;
             stem.BitDepth = 32;
             stem.Length = data.LongLength;
-            stem.Duration = TimeSpan.FromSeconds(data.LongLength / ((double) source.SampleRate * source.Channels));
+            stem.Duration = TimeSpan.FromSeconds(data.LongLength / ((double)source.SampleRate * source.Channels));
             stem.Bpm = source.Bpm;
             stem.Key = source.Key;
             stem.Rename($"{source.Name} - {name}");

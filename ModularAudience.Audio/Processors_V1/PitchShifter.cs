@@ -31,7 +31,7 @@ namespace ModularAudience.Audio.Processors_V1
                 {
                     childProgress = new Progress<double>(p =>
                     {
-                        double overall = (idx + Math.Clamp(p, 0.0, 1.0)) / (double) total;
+                        double overall = (idx + Math.Clamp(p, 0.0, 1.0)) / (double)total;
                         progress.Report(Math.Clamp(overall, 0.0, 1.0));
                     });
                 }
@@ -68,7 +68,7 @@ namespace ModularAudience.Audio.Processors_V1
             var shifts = new List<float>();
             for (float s = -keysRange; s <= keysRange + 0.000001f; s += semitoneDelta)
             {
-                float rounded = (float) Math.Round(s, 6);
+                float rounded = (float)Math.Round(s, 6);
                 if (!shifts.Contains(rounded))
                 {
                     shifts.Add(rounded);
@@ -181,7 +181,7 @@ namespace ModularAudience.Audio.Processors_V1
             var shifts = new List<float>();
             for (float s = -keysRange; s <= keysRange + 0.000001f; s += semitoneDelta)
             {
-                float rounded = (float) Math.Round(s, 6);
+                float rounded = (float)Math.Round(s, 6);
                 if (!shifts.Contains(rounded))
                 {
                     shifts.Add(rounded);
@@ -196,7 +196,7 @@ namespace ModularAudience.Audio.Processors_V1
 
             string baseName = string.IsNullOrWhiteSpace(sample.Name) ? "sample" : sample.Name;
 
-            int originalFrames = (int) Math.Max(0, (sample.Data?.LongLength ?? 0) / Math.Max(1, sample.Channels));
+            int originalFrames = (int)Math.Max(0, (sample.Data?.LongLength ?? 0) / Math.Max(1, sample.Channels));
 
             var tasks = Enumerable.Range(0, count).Select(index => Task.Run(async () =>
             {
@@ -222,7 +222,7 @@ namespace ModularAudience.Audio.Processors_V1
                     })).ConfigureAwait(false);
 
                     // 2) Time-stretch resampled back to original frame count
-                    int resampledFrames = (int) Math.Max(0, (resampled.Data?.LongLength ?? 0) / Math.Max(1, resampled.Channels));
+                    int resampledFrames = (int)Math.Max(0, (resampled.Data?.LongLength ?? 0) / Math.Max(1, resampled.Channels));
                     int targetFrames = Math.Max(1, originalFrames);
 
                     float[] stretchedData;
@@ -258,7 +258,7 @@ namespace ModularAudience.Audio.Processors_V1
                     try
                     {
                         int sr = Math.Max(1, result.SampleRate);
-                        result.Duration = TimeSpan.FromSeconds((double) (result.Length / Math.Max(1, result.Channels)) / sr);
+                        result.Duration = TimeSpan.FromSeconds((double)(result.Length / Math.Max(1, result.Channels)) / sr);
                     }
                     catch { }
 
@@ -306,8 +306,8 @@ namespace ModularAudience.Audio.Processors_V1
             })).ConfigureAwait(false);
 
             // 2) Time-stretch resampled back to original frame count
-            int originalFrames = (int) Math.Max(0, (sample.Data?.LongLength ?? 0) / Math.Max(1, sample.Channels));
-            int resampledFrames = (int) Math.Max(0, (resampled.Data?.LongLength ?? 0) / Math.Max(1, resampled.Channels));
+            int originalFrames = (int)Math.Max(0, (sample.Data?.LongLength ?? 0) / Math.Max(1, sample.Channels));
+            int resampledFrames = (int)Math.Max(0, (resampled.Data?.LongLength ?? 0) / Math.Max(1, resampled.Channels));
             int targetFrames = Math.Max(1, originalFrames);
             float[] stretchedData;
             if (resampledFrames == 0)
@@ -337,7 +337,7 @@ namespace ModularAudience.Audio.Processors_V1
             try
             {
                 int sr = Math.Max(1, result.SampleRate);
-                result.Duration = TimeSpan.FromSeconds((double) (result.Length / Math.Max(1, result.Channels)) / sr);
+                result.Duration = TimeSpan.FromSeconds((double)(result.Length / Math.Max(1, result.Channels)) / sr);
             }
             catch { }
             // ensure BPM copied
@@ -355,7 +355,7 @@ namespace ModularAudience.Audio.Processors_V1
                     throw new ArgumentNullException(nameof(sample));
                 }
 
-                float pitchFactor = (float) Math.Pow(2.0, semitones / 12.0);
+                float pitchFactor = (float)Math.Pow(2.0, semitones / 12.0);
 
                 float[] inData = sample.Data ?? [];
                 int channels = Math.Max(1, sample.Channels);
@@ -369,7 +369,7 @@ namespace ModularAudience.Audio.Processors_V1
                     return emptyClone;
                 }
 
-                long outputFrames = Math.Max(1L, (long) Math.Round(inputFrames / pitchFactor));
+                long outputFrames = Math.Max(1L, (long)Math.Round(inputFrames / pitchFactor));
 
                 const long MaxFrames = 20_000_000;
                 if (outputFrames > MaxFrames)
@@ -417,12 +417,12 @@ namespace ModularAudience.Audio.Processors_V1
 
                     for (long outFrame = start; outFrame < end; outFrame++)
                     {
-                        double srcPos = outFrame * (inputFrames / (double) outputFrames);
-                        long srcIndexFloor = (long) Math.Floor(srcPos);
+                        double srcPos = outFrame * (inputFrames / (double)outputFrames);
+                        long srcIndexFloor = (long)Math.Floor(srcPos);
                         double frac = srcPos - srcIndexFloor;
 
-                        int left = (int) Math.Max(0, srcIndexFloor - kernelRadius + 1);
-                        int right = (int) Math.Min(inputFrames - 1, srcIndexFloor + kernelRadius);
+                        int left = (int)Math.Max(0, srcIndexFloor - kernelRadius + 1);
+                        int right = (int)Math.Min(inputFrames - 1, srcIndexFloor + kernelRadius);
 
                         for (int c = 0; c < channels; c++)
                         {
@@ -438,7 +438,7 @@ namespace ModularAudience.Audio.Processors_V1
                                 wsum += Math.Abs(w);
                             }
 
-                            float sampleValue = wsum > 1e-12 ? (float) (sum / wsum) : 0f;
+                            float sampleValue = wsum > 1e-12 ? (float)(sum / wsum) : 0f;
                             outChannels[c][outFrame] = sampleValue;
                         }
 
@@ -458,7 +458,7 @@ namespace ModularAudience.Audio.Processors_V1
                                 double p;
                                 lock (progLock)
                                 {
-                                    p = Math.Clamp(processed / (double) outputFrames, 0.0, 1.0);
+                                    p = Math.Clamp(processed / (double)outputFrames, 0.0, 1.0);
                                 }
                                 try { progress.Report(p); } catch { }
                             }
@@ -513,7 +513,7 @@ namespace ModularAudience.Audio.Processors_V1
                 try
                 {
                     int sr = Math.Max(1, clone.SampleRate);
-                    clone.Duration = TimeSpan.FromSeconds((double) outputFrames / sr);
+                    clone.Duration = TimeSpan.FromSeconds((double)outputFrames / sr);
                 }
                 catch { }
 
@@ -561,7 +561,7 @@ namespace ModularAudience.Audio.Processors_V1
             }
 
             // Interleave back
-            var outData = new float[(long) targetFrames * channels];
+            var outData = new float[(long)targetFrames * channels];
             for (int f = 0; f < targetFrames; f++)
             {
                 for (int c = 0; c < channels; c++)
@@ -581,18 +581,18 @@ namespace ModularAudience.Audio.Processors_V1
             int N = 2048; // window size (power of two)
             if (N > inputFrames)
             {
-                N = 1 << (int) Math.Ceiling(Math.Log2(Math.Max(256, inputFrames)));
+                N = 1 << (int)Math.Ceiling(Math.Log2(Math.Max(256, inputFrames)));
             }
 
             int Ha = N / 4; // analysis hop
 
-            double stretchRatio = (double) targetFrames / Math.Max(1, inputFrames);
+            double stretchRatio = (double)targetFrames / Math.Max(1, inputFrames);
             double HsD = Ha * stretchRatio; // synthesis hop (may be fractional)
 
             var window = HannWindow(N);
 
             // number of analysis frames
-            int frames = Math.Max(1, (int) Math.Ceiling((inputFrames - N) / (double) Ha)) + 1;
+            int frames = Math.Max(1, (int)Math.Ceiling((inputFrames - N) / (double)Ha)) + 1;
 
             // pad input to fit
             int padded = (frames - 1) * Ha + N;
@@ -629,7 +629,7 @@ namespace ModularAudience.Audio.Processors_V1
                     phases[m][k] = Math.Atan2(c.Imaginary, c.Real);
                 }
 
-                progress?.Report(m / (double) frames * 0.2); // small report
+                progress?.Report(m / (double)frames * 0.2); // small report
             }
 
             // Phase vocoder processing
@@ -644,7 +644,7 @@ namespace ModularAudience.Audio.Processors_V1
             }
 
             // prepare output length estimate
-            int estOutLen = (int) Math.Ceiling((frames - 1) * HsD + N);
+            int estOutLen = (int)Math.Ceiling((frames - 1) * HsD + N);
             var y = new double[estOutLen + N];
 
             double synthesisTime = 0.0;
@@ -705,10 +705,10 @@ namespace ModularAudience.Audio.Processors_V1
                     }
                 }
 
-                outPos = (int) Math.Round(++synthesisTime * HsD);
+                outPos = (int)Math.Round(++synthesisTime * HsD);
 
                 // progress
-                progress?.Report(0.2 + m / (double) frames * 0.7);
+                progress?.Report(0.2 + m / (double)frames * 0.7);
             }
 
             // Trim or pad to targetFrames
@@ -717,7 +717,7 @@ namespace ModularAudience.Audio.Processors_V1
             {
                 if (i < y.Length)
                 {
-                    output[i] = (float) Math.Clamp(y[i], -1.0, 1.0);
+                    output[i] = (float)Math.Clamp(y[i], -1.0, 1.0);
                 }
                 else
                 {

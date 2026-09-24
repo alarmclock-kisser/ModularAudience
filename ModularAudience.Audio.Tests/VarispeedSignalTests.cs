@@ -22,8 +22,8 @@ namespace ModularAudience.Audio.Tests
             double totalPhase = 0;
             for (int i = 2; i < buffer.Length; i += 2)
             {
-                double cross = (double) buffer[i - 2] * buffer[i + 1] - (double) buffer[i - 1] * buffer[i];
-                double dot = (double) buffer[i - 2] * buffer[i] + (double) buffer[i - 1] * buffer[i + 1];
+                double cross = (double)buffer[i - 2] * buffer[i + 1] - (double)buffer[i - 1] * buffer[i];
+                double dot = (double)buffer[i - 2] * buffer[i] + (double)buffer[i - 1] * buffer[i + 1];
                 totalPhase += Math.Atan2(cross, dot);
             }
             double frequency = totalPhase * outputRate / (2 * Math.PI * (buffer.Length / 2 - 1));
@@ -50,8 +50,8 @@ namespace ModularAudience.Audio.Tests
             for (int frame = 0; frame < data.Length / 2; frame++)
             {
                 double phase = 2 * Math.PI * frequency * frame / 48000;
-                data[frame * 2] = (float) (0.5 * Math.Cos(phase));
-                data[frame * 2 + 1] = (float) (0.5 * Math.Sin(phase));
+                data[frame * 2] = (float)(0.5 * Math.Cos(phase));
+                data[frame * 2 + 1] = (float)(0.5 * Math.Sin(phase));
             }
             return new VarispeedSampleProvider(new ArraySampleProvider(data, 48000, 2), outputRate, 1);
         }

@@ -22,7 +22,7 @@ namespace ModularAudience.Forms
 
             double scannedBpm = await BeatScanner.ScanBpmAsync(audio);
             this.textBox_scanBpmResult.Text = scannedBpm.ToString("F3") + " BPM";
-            audio.ScannedBpm = (float) scannedBpm;
+            audio.ScannedBpm = (float)scannedBpm;
         }
 
         private async void button_scanTiming_Click(object sender, EventArgs e)
@@ -290,12 +290,12 @@ namespace ModularAudience.Forms
 
                 if (m.Msg == WM_KEYDOWN || m.Msg == WM_SYSKEYDOWN)
                 {
-                    Keys key = (Keys) ((int) m.WParam & 0xFFFF);
+                    Keys key = (Keys)((int)m.WParam & 0xFFFF);
                     this.KeyChanged?.Invoke(key, true);
                 }
                 else if (m.Msg == WM_KEYUP || m.Msg == WM_SYSKEYUP)
                 {
-                    Keys key = (Keys) ((int) m.WParam & 0xFFFF);
+                    Keys key = (Keys)((int)m.WParam & 0xFFFF);
                     this.KeyChanged?.Invoke(key, false);
                 }
 

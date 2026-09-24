@@ -180,7 +180,7 @@ namespace ModularAudience.Audio.Tests
                 engine.EnqueueLast([path]);
                 Assert.IsNull(GetField(engine, "_deferredPlayTask"), "Enqueue must not request playback.");
                 engine.Play();
-                Task deferred = (Task) GetField(engine, "_deferredPlayTask")!;
+                Task deferred = (Task)GetField(engine, "_deferredPlayTask")!;
                 Assert.IsNotNull(deferred);
                 engine.Play();
                 Assert.AreSame(deferred, GetField(engine, "_deferredPlayTask"));
@@ -199,7 +199,7 @@ namespace ModularAudience.Audio.Tests
                 engine.Clear();
                 previousLoop.TrySetResult();
                 if (GetField(engine, "_deferredPlayTask") is Task deferred) { await deferred.WaitAsync(WorkerTimeout); }
-                try { await ((Task) GetField(engine, "_runLoopTask")!).WaitAsync(WorkerTimeout); }
+                try { await ((Task)GetField(engine, "_runLoopTask")!).WaitAsync(WorkerTimeout); }
                 catch (OperationCanceledException) { }
                 File.Delete(path);
             }
@@ -216,7 +216,7 @@ namespace ModularAudience.Audio.Tests
                 engine.Clear();
                 engine.EnqueueLast(["pending.wav"]);
                 engine.Play();
-                Task deferred = (Task) GetField(engine, "_deferredPlayTask")!;
+                Task deferred = (Task)GetField(engine, "_deferredPlayTask")!;
                 Assert.IsNotNull(deferred);
                 try
                 {
@@ -254,7 +254,10 @@ namespace ModularAudience.Audio.Tests
             string repeatTemp = Path.ChangeExtension(original, ".repeat.wav");
             PreparedPlaylistTrack first = new()
             {
-                Audio = scope.Create([]), OriginalPath = original, PlayPath = firstTemp, TempPath = firstTemp
+                Audio = scope.Create([]),
+                OriginalPath = original,
+                PlayPath = firstTemp,
+                TempPath = firstTemp
             };
             PreparedPlaylistTrack current = Prepared(scope.Create([]), Head);
             try
@@ -272,9 +275,9 @@ namespace ModularAudience.Audio.Tests
                 Cache(engine)[original] = first;
                 engine.BeforeTrackPlay = (_, _) => Task.FromResult<string?>(repeatTemp);
 
-                Assert.IsFalse(await ((Task<bool>) Invoke(engine, "TryStartPreparedAsync", first, current,
+                Assert.IsFalse(await ((Task<bool>)Invoke(engine, "TryStartPreparedAsync", first, current,
                     1.0f, CancellationToken.None, null)!).WaitAsync(WorkerTimeout), "Active audio identity must still be rejected.");
-                PreparedPlaylistTrack? repeat = await ((Task<PreparedPlaylistTrack?>) Invoke(engine,
+                PreparedPlaylistTrack? repeat = await ((Task<PreparedPlaylistTrack?>)Invoke(engine,
                     "PrepareTrackAsync", original, CancellationToken.None)!).WaitAsync(WorkerTimeout);
                 Assert.IsNotNull(repeat);
                 scope.Own([repeat.Audio]);
@@ -289,13 +292,13 @@ namespace ModularAudience.Audio.Tests
                 Assert.AreSame(repeat, Cache(engine)[original], "Untracking the first occurrence must preserve the repeat cache.");
                 Assert.IsTrue(File.Exists(firstTemp));
                 Assert.IsTrue(File.Exists(repeatTemp));
-                Assert.AreSame(repeat, await ((Task<PreparedPlaylistTrack?>) Invoke(engine,
+                Assert.AreSame(repeat, await ((Task<PreparedPlaylistTrack?>)Invoke(engine,
                     "PrepareTrackAsync", original, CancellationToken.None)!).WaitAsync(WorkerTimeout));
                 Assert.IsFalse(engine.AutoEnqueuePreparedNext(original), "The ban must still apply to automatic selection.");
-                Assert.IsTrue((bool) Invoke(engine, "CanCommitPreparedStartLocked", repeat, current,
+                Assert.IsTrue((bool)Invoke(engine, "CanCommitPreparedStartLocked", repeat, current,
                     CancellationToken.None, null)!, "An explicit queued repeat must not be banned.");
                 engine.Pause();
-                Assert.IsFalse((bool) Invoke(engine, "CanCommitPreparedStartLocked", repeat, current,
+                Assert.IsFalse((bool)Invoke(engine, "CanCommitPreparedStartLocked", repeat, current,
                     CancellationToken.None, null)!, "Explicit repeats must still respect pause.");
             }
             finally
@@ -369,7 +372,7 @@ namespace ModularAudience.Audio.Tests
             {
                 lock (GetField(engine, "_lock")!)
                 {
-                    if (!(bool) GetField(engine, "_autoEnqueuePending")!) { return; }
+                    if (!(bool)GetField(engine, "_autoEnqueuePending")!) { return; }
                 }
                 Assert.IsTrue(elapsed.Elapsed < WorkerTimeout, "Auto-enqueue worker did not finish.");
                 await Task.Delay(10);
@@ -384,10 +387,10 @@ namespace ModularAudience.Audio.Tests
         };
 
         private static Dictionary<string, PreparedPlaylistTrack> Cache(PlaylistEngine engine) =>
-            (Dictionary<string, PreparedPlaylistTrack>) GetField(engine, "_preparedByPath")!;
+            (Dictionary<string, PreparedPlaylistTrack>)GetField(engine, "_preparedByPath")!;
 
         private static Dictionary<Guid, PreparedPlaylistTrack> Active(PlaylistEngine engine) =>
-            (Dictionary<Guid, PreparedPlaylistTrack>) GetField(engine, "_activePreparedTracks")!;
+            (Dictionary<Guid, PreparedPlaylistTrack>)GetField(engine, "_activePreparedTracks")!;
 
         private static void AssertQueue(PlaylistEngine engine, params string[] expected) =>
             CollectionAssert.AreEqual(expected, engine.GetQueueSnapshot().FilePaths.ToArray());

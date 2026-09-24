@@ -42,7 +42,7 @@ public sealed class PlaybackCommandHandler : MidiCommandHandler
                 if (this._audioObj.Duration > TimeSpan.Zero)
                 {
                     double fraction = message.Data2 / 127.0;
-                    this._audioObj.Seek((double) this._audioObj.Duration.TotalSeconds * fraction);
+                    this._audioObj.Seek((double)this._audioObj.Duration.TotalSeconds * fraction);
                 }
                 break;
 

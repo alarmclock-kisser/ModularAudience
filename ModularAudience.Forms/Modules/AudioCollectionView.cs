@@ -712,7 +712,7 @@ namespace ModularAudience.Forms
         {
             // First set really selected  item to the one under the mouse cursor
             this.listBox_audios.SelectedIndex = this.listBox_audios.IndexFromPoint(this.listBox_audios.PointToClient(Cursor.Position));
-            AudioObj? selectedAudio = (AudioObj?) this.listBox_audios.SelectedItem;
+            AudioObj? selectedAudio = (AudioObj?)this.listBox_audios.SelectedItem;
             if (selectedAudio != null)
             {
                 var tv = new TrackView(selectedAudio, this.AudioC);

@@ -25,7 +25,7 @@ namespace ModularAudience.Audio.Tests
         public void UnityMaskReconstructsCenteredHannAcrossCoreBlocks(int frames, int channels, string signal)
         {
             float[] samples = ReconstructionSignal(frames, channels, signal);
-            float[] original = (float[]) samples.Clone();
+            float[] original = (float[])samples.Clone();
             DeterministicAudioSnapshot snapshot = new(samples, SampleRate, channels, signal, 0, string.Empty);
             DeterministicSeparationSettings settings = SmallSettings() with { WindowSize = 256, BlockFrames = 8 };
             double[] window = DeterministicSpectrogram.CreateWindow(settings.WindowSize);
@@ -60,7 +60,7 @@ namespace ModularAudience.Audio.Tests
         {
             using AudioTestScope scope = new();
             float[] input = AudioTestData.Stereo(KnownMixture(4099).Mix, true);
-            float[] original = (float[]) input.Clone();
+            float[] original = (float[])input.Clone();
             AudioObj source = scope.Create(input, SampleRate, 2);
             DeterministicSeparationSettings settings = SmallSettings();
             int globalThreads = MathNet.Numerics.Control.MaxDegreeOfParallelism;
@@ -89,7 +89,7 @@ namespace ModularAudience.Audio.Tests
             using AudioTestScope scope = new();
             float[] mono = KnownMixture(4099).Mix;
             float[] input = channels == 1 ? mono : AudioTestData.Stereo(mono, true);
-            float[] original = (float[]) input.Clone();
+            float[] original = (float[])input.Clone();
             AudioObj source = scope.Create(input, SampleRate, channels);
             source.Name = "Snapshot source";
             source.Bpm = 123;
@@ -281,7 +281,7 @@ namespace ModularAudience.Audio.Tests
                     "impulses" => frame == 0 ? 0.75f : frame == frames - 1 ? -0.625f : frame is 511 or 512 or 513 ? 0.5f : 0,
                     "dc" => 0.375f,
                     "nyquist" => frame % 2 == 0 ? 0.5f : -0.5f,
-                    _ => (float) mixed
+                    _ => (float)mixed
                 };
                 data[frame * channels] = left;
                 if (channels == 2)
@@ -289,7 +289,7 @@ namespace ModularAudience.Audio.Tests
                     data[frame * channels + 1] = signal switch
                     {
                         "antiphase" => -left,
-                        "independent" => (float) (0.21 * Math.Cos(2 * Math.PI * 1800 * frame / SampleRate) - 0.08),
+                        "independent" => (float)(0.21 * Math.Cos(2 * Math.PI * 1800 * frame / SampleRate) - 0.08),
                         _ => 0.4f * left
                     };
                 }
@@ -323,12 +323,12 @@ namespace ModularAudience.Audio.Tests
             float[] mix = new float[frames];
             for (int frame = 0; frame < frames; frame++)
             {
-                double time = frame / (double) SampleRate;
+                double time = frame / (double)SampleRate;
                 double fade = Math.Min(1, Math.Min(frame, frames - 1 - frame) / (SampleRate * 0.02));
                 double lowEnvelope = 0.05 + 0.95 * Math.Pow(Math.Sin(Math.PI * (time / 0.50 + 0.1)), 2);
                 double highEnvelope = 0.05 + 0.95 * Math.Pow(Math.Sin(Math.PI * (time / 0.31 + 0.4)), 2);
-                low[frame] = (float) (0.4 * fade * lowEnvelope * Math.Sin(2 * Math.PI * 250 * time));
-                high[frame] = (float) (0.4 * fade * highEnvelope * Math.Sin(2 * Math.PI * 1406.25 * time + 0.37));
+                low[frame] = (float)(0.4 * fade * lowEnvelope * Math.Sin(2 * Math.PI * 250 * time));
+                high[frame] = (float)(0.4 * fade * highEnvelope * Math.Sin(2 * Math.PI * 1406.25 * time + 0.37));
                 mix[frame] = low[frame] + high[frame];
             }
             return (mix, low, high);
@@ -377,7 +377,7 @@ namespace ModularAudience.Audio.Tests
         private static double Dot(float[] first, float[] second)
         {
             double sum = 0;
-            for (int index = 0; index < first.Length; index++) sum += (double) first[index] * second[index];
+            for (int index = 0; index < first.Length; index++) sum += (double)first[index] * second[index];
             return sum;
         }
 
@@ -413,7 +413,7 @@ namespace ModularAudience.Audio.Tests
         {
             Assert.AreEqual(SampleRate, analysis.SampleRate, "Analysis sample rate must be snapshotted.");
             Assert.AreEqual(channels, analysis.Channels, "Analysis channel count must be snapshotted.");
-            Assert.AreEqual((long) sampleCount, analysis.SampleCount, "Analysis length must be snapshotted.");
+            Assert.AreEqual((long)sampleCount, analysis.SampleCount, "Analysis length must be snapshotted.");
             Assert.AreEqual("Snapshot source", analysis.SourceName, "Analysis name must be snapshotted.");
             HashSet<Guid> ids = [sourceId];
             foreach (AudioObj stem in stems)
@@ -421,9 +421,9 @@ namespace ModularAudience.Audio.Tests
                 Assert.IsTrue(stem.Id != Guid.Empty && ids.Add(stem.Id), "Every returned AudioObj must have a fresh unique ID.");
                 Assert.AreEqual(SampleRate, stem.SampleRate, "Stem sample rate must come from the snapshot.");
                 Assert.AreEqual(channels, stem.Channels, "Stem channel count must come from the snapshot.");
-                Assert.AreEqual((long) sampleCount, stem.Length, "Stem length must come from the snapshot.");
+                Assert.AreEqual((long)sampleCount, stem.Length, "Stem length must come from the snapshot.");
                 Assert.AreEqual(sampleCount, stem.Data.Length, "Stem buffer length must match its metadata.");
-                Assert.AreEqual(TimeSpan.FromSeconds(sampleCount / (double) (SampleRate * channels)), stem.Duration,
+                Assert.AreEqual(TimeSpan.FromSeconds(sampleCount / (double)(SampleRate * channels)), stem.Duration,
                     "Stem duration must retain the original sample-frame count.");
                 Assert.AreEqual(123f, stem.Bpm, "Stem tempo must come from the snapshot.");
                 Assert.AreEqual("Cm", stem.Key, "Stem key must come from the snapshot.");
@@ -463,7 +463,7 @@ namespace ModularAudience.Audio.Tests
             int worst = 0;
             for (int index = 0; index < expected.Length; index++)
             {
-                double error = Math.Abs((double) expected[index] - actual[index]);
+                double error = Math.Abs((double)expected[index] - actual[index]);
                 if (error <= maximum) continue;
                 maximum = error;
                 worst = index;

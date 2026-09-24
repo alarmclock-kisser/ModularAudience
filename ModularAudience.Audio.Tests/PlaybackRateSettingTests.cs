@@ -41,7 +41,7 @@ namespace ModularAudience.Audio.Tests
             for (int i = 0; i < 100; i++)
             {
                 Assert.AreEqual(buffer.Length, pipeline.Read(buffer));
-                Assert.AreEqual(1.25, ((VarispeedSampleProvider) pipeline).CurrentRate, 0.000001);
+                Assert.AreEqual(1.25, ((VarispeedSampleProvider)pipeline).CurrentRate, 0.000001);
                 Assert.AreEqual(1.25, audio.SampleRateFactor);
                 Assert.AreSame(pipeline, audio.Pipeline);
             }
@@ -86,14 +86,14 @@ namespace ModularAudience.Audio.Tests
             await audio.ApplyCombinedSampleRateAsync();
             pipeline.Read(new float[960]);
             Assert.AreEqual(1d, audio.SampleRateFactor);
-            Assert.AreEqual(1d, ((VarispeedSampleProvider) pipeline).CurrentRate);
+            Assert.AreEqual(1d, ((VarispeedSampleProvider)pipeline).CurrentRate);
             Assert.AreSame(pipeline, audio.Pipeline);
         }
 
         private sealed class RateTestAudio : AudioObj
         {
             public AudioPlaybackService Service { get; }
-            public ISampleProvider Pipeline => (ISampleProvider) GetServiceField("pipeline").GetValue(this.Service)!;
+            public ISampleProvider Pipeline => (ISampleProvider)GetServiceField("pipeline").GetValue(this.Service)!;
 
             public RateTestAudio(bool playing, bool paused = false)
             {
@@ -102,7 +102,7 @@ namespace ModularAudience.Audio.Tests
                 this.Data = new float[48000 * 2];
                 this.SampleRate = 48000;
                 this.Channels = 2;
-                this.Service = (AudioPlaybackService) typeof(AudioObj)
+                this.Service = (AudioPlaybackService)typeof(AudioObj)
                     .GetField("playback", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(this)!;
                 this.Service.SetLoop(0, this.Data.LongLength);
                 GetServiceField("rawData").SetValue(this.Service, this.Data);

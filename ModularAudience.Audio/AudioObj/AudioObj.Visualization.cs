@@ -45,7 +45,7 @@ namespace ModularAudience.Audio
             offset ??= this.Position;
 
             long totalFrames = Math.Max(0, this.Length / Math.Max(1, this.Channels));
-            long viewFrames = (long) width * samplesPerPixel;
+            long viewFrames = (long)width * samplesPerPixel;
             long maxOffset = Math.Max(0, totalFrames - viewFrames);
             offset = Math.Clamp(offset.Value, 0, maxOffset);
 
@@ -86,13 +86,13 @@ namespace ModularAudience.Audio
                 long requestedEnd = requestedStart + viewFrames; // exclusive
 
                 long cachedStart = this._cacheOffsetFrames;
-                long cachedEnd = this._cacheOffsetFrames + (long) this._cacheWidthPixels * this._cacheSamplesPerPixel; // frames
+                long cachedEnd = this._cacheOffsetFrames + (long)this._cacheWidthPixels * this._cacheSamplesPerPixel; // frames
 
                 // If requested is fully inside cached strip -> just copy and return
                 if (requestedStart >= cachedStart && requestedEnd <= cachedEnd)
                 {
                     // compute pixel offsets inside cache
-                    int srcX = (int) ((requestedStart - cachedStart) / this._cacheSamplesPerPixel);
+                    int srcX = (int)((requestedStart - cachedStart) / this._cacheSamplesPerPixel);
                     var result = new Bitmap(width, height);
                     using (var g = Graphics.FromImage(result))
                     {
@@ -106,8 +106,8 @@ namespace ModularAudience.Audio
                         using var g = Graphics.FromImage(result);
                         using var caretPen = new Pen(caretColor.Value, caretWidth);
                         int caretX = (caretPosition > 0.0f && caretPosition < 1.0f)
-                            ? (int) Math.Round(caretPosition * (width - 1))
-                            : (int) ((this.Position - offset.Value) / samplesPerPixel);
+                            ? (int)Math.Round(caretPosition * (width - 1))
+                            : (int)((this.Position - offset.Value) / samplesPerPixel);
                         g.DrawLine(caretPen, caretX, 0, caretX, height);
                     }
 
@@ -138,13 +138,13 @@ namespace ModularAudience.Audio
                 int targetCacheWidth = Math.Max(this._cacheWidthPixels, width) * this._cacheCapacityMultiplier;
 
                 // Determine newCacheStartFrames so that requested range is inside new cache and cache size is targetCacheWidth
-                long newCacheSamplesSpan = (long) targetCacheWidth * this._cacheSamplesPerPixel;
+                long newCacheSamplesSpan = (long)targetCacheWidth * this._cacheSamplesPerPixel;
                 long idealCacheStart = requestedStart - (newCacheSamplesSpan - viewFrames) / 2; // center requested range in cache
                 long newCacheStartFrames = Math.Clamp(idealCacheStart, 0L, Math.Max(0L, totalFrames - newCacheSamplesSpan));
                 long newCacheEndFrames = newCacheStartFrames + newCacheSamplesSpan;
 
                 // Convert to pixels
-                int newCacheWidthPixels = (int) Math.Min((long) targetCacheWidth, (long) Math.Ceiling((double) newCacheSamplesSpan / this._cacheSamplesPerPixel));
+                int newCacheWidthPixels = (int)Math.Min((long)targetCacheWidth, (long)Math.Ceiling((double)newCacheSamplesSpan / this._cacheSamplesPerPixel));
                 // if newCacheWidthPixels <= 0 fallback to width
                 if (newCacheWidthPixels <= 0)
                 {
@@ -163,9 +163,9 @@ namespace ModularAudience.Audio
                     if (overlapEnd > overlapStart && this._waveCacheStrip != null)
                     {
                         // copy overlapping pixel region from old cache into new cache
-                        int srcX = (int) ((overlapStart - cachedStart) / this._cacheSamplesPerPixel);
-                        int dstX = (int) ((overlapStart - newCacheStartFrames) / this._cacheSamplesPerPixel);
-                        int overlapPixels = (int) ((overlapEnd - overlapStart) / this._cacheSamplesPerPixel);
+                        int srcX = (int)((overlapStart - cachedStart) / this._cacheSamplesPerPixel);
+                        int dstX = (int)((overlapStart - newCacheStartFrames) / this._cacheSamplesPerPixel);
+                        int overlapPixels = (int)((overlapEnd - overlapStart) / this._cacheSamplesPerPixel);
                         overlapPixels = Math.Clamp(overlapPixels, 0, Math.Min(this._cacheWidthPixels - srcX, newCacheWidthPixels - dstX));
 
                         if (overlapPixels > 0)
@@ -190,8 +190,8 @@ namespace ModularAudience.Audio
                 {
                     long leftMissingFramesStart = newCacheStartFrames;
                     long leftMissingFramesEnd = Math.Min(cachedStart, newCacheEndFrames);
-                    int leftStartPixel = (int) ((leftMissingFramesStart - this._cacheOffsetFrames) / this._cacheSamplesPerPixel);
-                    int leftPixelCount = (int) Math.Ceiling((double) (leftMissingFramesEnd - leftMissingFramesStart) / this._cacheSamplesPerPixel);
+                    int leftStartPixel = (int)((leftMissingFramesStart - this._cacheOffsetFrames) / this._cacheSamplesPerPixel);
+                    int leftPixelCount = (int)Math.Ceiling((double)(leftMissingFramesEnd - leftMissingFramesStart) / this._cacheSamplesPerPixel);
                     leftPixelCount = Math.Clamp(leftPixelCount, 0, this._cacheWidthPixels - leftStartPixel);
                     if (leftPixelCount > 0)
                     {
@@ -204,8 +204,8 @@ namespace ModularAudience.Audio
                 {
                     long rightMissingFramesStart = Math.Max(cachedEnd, newCacheStartFrames);
                     long rightMissingFramesEnd = newCacheEndFrames;
-                    int rightStartPixel = (int) ((rightMissingFramesStart - this._cacheOffsetFrames) / this._cacheSamplesPerPixel);
-                    int rightPixelCount = (int) Math.Ceiling((double) (rightMissingFramesEnd - rightMissingFramesStart) / this._cacheSamplesPerPixel);
+                    int rightStartPixel = (int)((rightMissingFramesStart - this._cacheOffsetFrames) / this._cacheSamplesPerPixel);
+                    int rightPixelCount = (int)Math.Ceiling((double)(rightMissingFramesEnd - rightMissingFramesStart) / this._cacheSamplesPerPixel);
                     rightPixelCount = Math.Clamp(rightPixelCount, 0, this._cacheWidthPixels - rightStartPixel);
                     if (rightPixelCount > 0)
                     {
@@ -220,7 +220,7 @@ namespace ModularAudience.Audio
                 }
 
                 // At this point cache covers requested region. Return the requested slice.
-                int srcX2 = (int) ((requestedStart - this._cacheOffsetFrames) / this._cacheSamplesPerPixel);
+                int srcX2 = (int)((requestedStart - this._cacheOffsetFrames) / this._cacheSamplesPerPixel);
                 var resultBitmap = new Bitmap(width, height);
                 using (var g = Graphics.FromImage(resultBitmap))
                 {
@@ -234,8 +234,8 @@ namespace ModularAudience.Audio
                     using var g = Graphics.FromImage(resultBitmap);
                     using var caretPen = new Pen(caretColor.Value, caretWidth);
                     int caretX = (caretPosition > 0.0f && caretPosition < 1.0f)
-                        ? (int) Math.Round(caretPosition * (width - 1))
-                        : (int) ((this.Position - offset.Value) / samplesPerPixel);
+                        ? (int)Math.Round(caretPosition * (width - 1))
+                        : (int)((this.Position - offset.Value) / samplesPerPixel);
                     g.DrawLine(caretPen, caretX, 0, caretX, height);
                 }
 
@@ -289,7 +289,7 @@ namespace ModularAudience.Audio
 
             // derived values
             long totalFrames = Math.Max(0, this.Length / Math.Max(1, this.Channels));
-            long viewFrames = (long) width * samplesPerPixel;
+            long viewFrames = (long)width * samplesPerPixel;
             long maxOffset = Math.Max(0, totalFrames - viewFrames);
             offset = Math.Clamp(offset.Value, 0, maxOffset);
 
@@ -302,13 +302,13 @@ namespace ModularAudience.Audio
 
 
             // allocate compact buffers for min/max per channel per pixel (int16-like ranges map to screen Y)
-            var yMin = new int[checked((int) (channelsToDraw * width))];
-            var yMax = new int[checked((int) (channelsToDraw * width))];
+            var yMin = new int[checked((int)(channelsToDraw * width))];
+            var yMax = new int[checked((int)(channelsToDraw * width))];
 
 
             // small budget to avoid scanning enormous ranges per pixel (keeps CPU time sane)
             const int targetSamplesPerPixelBudget = 2048;
-            int stride = Math.Max(1, (int) Math.Ceiling((double) samplesPerPixel / targetSamplesPerPixelBudget));
+            int stride = Math.Max(1, (int)Math.Ceiling((double)samplesPerPixel / targetSamplesPerPixelBudget));
 
 
             var data = this.Data ?? [];
@@ -335,7 +335,7 @@ namespace ModularAudience.Audio
                 Parallel.For(0, width, po, () => (localMin: float.MaxValue, localMax: float.MinValue), (x, state, local) =>
                 {
                     // per-x work for all channels
-                    long baseFrameIndex = offset.Value + (long) x * samplesPerPixel;
+                    long baseFrameIndex = offset.Value + (long)x * samplesPerPixel;
                     long baseSampleIndex = baseFrameIndex * channels; // convert frames -> samples
 
 
@@ -356,14 +356,14 @@ namespace ModularAudience.Audio
                         }
 
 
-                        long sampleEnd = Math.Min(sampleStart + (long) samplesPerPixel * channels, dataLength);
-                        long step = (long) channels * stride;
+                        long sampleEnd = Math.Min(sampleStart + (long)samplesPerPixel * channels, dataLength);
+                        long step = (long)channels * stride;
 
 
                         // iterate with step; this is memory-bounded but predictable
                         for (long s = sampleStart; s < sampleEnd; s += step)
                         {
-                            float v = data[checked((int) s)];
+                            float v = data[checked((int)s)];
                             if (v < min)
                             {
                                 min = v;
@@ -386,8 +386,8 @@ namespace ModularAudience.Audio
                         int idx2 = ch * width + x;
                         int chHeight = channelHeight[ch];
                         // map [-1..1] to pixel coordinates (invert Y because GDI has 0 at top)
-                        int yMinPx = centerY[ch] - (int) Math.Round(min * (chHeight / 2.0));
-                        int yMaxPx = centerY[ch] - (int) Math.Round(max * (chHeight / 2.0));
+                        int yMinPx = centerY[ch] - (int)Math.Round(min * (chHeight / 2.0));
+                        int yMaxPx = centerY[ch] - (int)Math.Round(max * (chHeight / 2.0));
                         yMin[idx2] = yMinPx;
                         yMax[idx2] = yMaxPx;
                     }
@@ -427,8 +427,8 @@ namespace ModularAudience.Audio
                     if (highlightEndFrames > highlightStartFrames)
                     {
                         double invSPP = 1.0 / samplesPerPixel;
-                        int x1 = (int) Math.Floor((highlightStartFrames - viewStartFrames) * invSPP);
-                        int x2 = (int) Math.Ceiling((highlightEndFrames - viewStartFrames) * invSPP);
+                        int x1 = (int)Math.Floor((highlightStartFrames - viewStartFrames) * invSPP);
+                        int x2 = (int)Math.Ceiling((highlightEndFrames - viewStartFrames) * invSPP);
                         int rectX = Math.Clamp(x1, 0, width);
                         int rectW = Math.Clamp(x2 - rectX, 0, width - rectX);
                         if (rectW > 0)
@@ -471,8 +471,8 @@ namespace ModularAudience.Audio
                 {
                     using var caretPen = new Pen(caretColor.Value, caretWidth);
                     int caretX = (caretPosition > 0.0f && caretPosition < 1.0f)
-                    ? (int) Math.Round(caretPosition * (width - 1))
-                    : (int) ((this.Position - offset.Value) / samplesPerPixel);
+                    ? (int)Math.Round(caretPosition * (width - 1))
+                    : (int)((this.Position - offset.Value) / samplesPerPixel);
                     g.DrawLine(caretPen, caretX, 0, caretX, height);
                 }
             }
@@ -526,7 +526,7 @@ namespace ModularAudience.Audio
                 using (var brush = new SolidBrush(color.Value))
                 {
                     double invSPP = 1.0 / Math.Max(1, samplesPerPixel);
-                    long intervalFrames = (long) Math.Round(interval * Math.Max(1, this.SampleRate));
+                    long intervalFrames = (long)Math.Round(interval * Math.Max(1, this.SampleRate));
                     if (intervalFrames <= 0)
                     {
                         return waveForm;
@@ -539,13 +539,13 @@ namespace ModularAudience.Audio
                     {
                         if (x >= 0 && x < width)
                         {
-                            g.DrawLine(pen, (float) x, 0, (float) x, height);
+                            g.DrawLine(pen, (float)x, 0, (float)x, height);
                             if (drawTimes)
                             {
-                                double seconds = (offsetFrames + (x * samplesPerPixel)) / (double) this.SampleRate;
+                                double seconds = (offsetFrames + (x * samplesPerPixel)) / (double)this.SampleRate;
                                 TimeSpan time = TimeSpan.FromSeconds(seconds);
                                 string timeLabel = time.ToString(@"mm\:ss");
-                                g.DrawString(timeLabel, font, brush, (float) x + 2, 2);
+                                g.DrawString(timeLabel, font, brush, (float)x + 2, 2);
                             }
                         }
                     }
@@ -576,7 +576,7 @@ namespace ModularAudience.Audio
                 }
 
                 long gridLenLong = grid.LongLength;
-                int gridLen = gridLenLong > int.MaxValue ? int.MaxValue : (int) gridLenLong;
+                int gridLen = gridLenLong > int.MaxValue ? int.MaxValue : (int)gridLenLong;
                 if (gridLen == 0)
                 {
                     return waveForm;
@@ -584,7 +584,7 @@ namespace ModularAudience.Audio
 
                 // Calculate visible range based on offset and samplesPerPixel
                 long visibleStartFrame = offsetFrames;
-                long visibleEndFrame = offsetFrames + (long) width * samplesPerPixel;
+                long visibleEndFrame = offsetFrames + (long)width * samplesPerPixel;
 
                 // Clamp to valid range
                 visibleStartFrame = Math.Max(0, visibleStartFrame);
@@ -593,7 +593,7 @@ namespace ModularAudience.Audio
                 // Collect unique X positions in parallel (thread-safe)
                 var positions = new System.Collections.Concurrent.ConcurrentDictionary<int, byte>();
 
-                Parallel.For((int) visibleStartFrame, (int) visibleEndFrame, i =>
+                Parallel.For((int)visibleStartFrame, (int)visibleEndFrame, i =>
                 {
                     if (!grid[i])
                     {
@@ -602,7 +602,7 @@ namespace ModularAudience.Audio
 
                     // Calculate pixel position based on current zoom and offset
                     long frameRelativeToView = i - offsetFrames;
-                    int x = (int) (frameRelativeToView / samplesPerPixel);
+                    int x = (int)(frameRelativeToView / samplesPerPixel);
 
                     // Only draw if within visible area
                     if (x >= 0 && x < width)
@@ -630,7 +630,7 @@ namespace ModularAudience.Audio
                     foreach (int x in xs)
                     {
                         float fx = x + 0.5f; // draw on half-pixel for 1px sharp line
-                        g.DrawLine(pen, fx, 0f, fx, (float) height);
+                        g.DrawLine(pen, fx, 0f, fx, (float)height);
                     }
                 }
 
@@ -648,8 +648,8 @@ namespace ModularAudience.Audio
             }
 
             long totalSamples = this.Data.Length / this.Channels;
-            long samplesPerPixel = (long) Math.Ceiling((double) totalSamples / width);
-            return Math.Max(1, checked((int) samplesPerPixel));
+            long samplesPerPixel = (long)Math.Ceiling((double)totalSamples / width);
+            return Math.Max(1, checked((int)samplesPerPixel));
         }
 
 
@@ -680,8 +680,8 @@ namespace ModularAudience.Audio
             // allocate small arrays for min/max values for all channels and columns to render
             int cols = pixelCount;
             int chCount = channelsToDraw;
-            var yMin = new int[checked((int) (chCount * cols))];
-            var yMax = new int[checked((int) (chCount * cols))];
+            var yMin = new int[checked((int)(chCount * cols))];
+            var yMax = new int[checked((int)(chCount * cols))];
 
             int[] channelHeight = new int[chCount];
             int[] centerY = new int[chCount];
@@ -693,7 +693,7 @@ namespace ModularAudience.Audio
 
             // sampling stride heuristic same as V2
             const int targetSamplesPerPixelBudget = 2048;
-            int stride = Math.Max(1, (int) Math.Ceiling((double) samplesPerPixel / targetSamplesPerPixelBudget));
+            int stride = Math.Max(1, (int)Math.Ceiling((double)samplesPerPixel / targetSamplesPerPixelBudget));
             var po = new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(maxWorkers, 1, Environment.ProcessorCount) };
 
             // Compute min/max for requested columns in parallel
@@ -702,7 +702,7 @@ namespace ModularAudience.Audio
                 Parallel.For(0, cols, po, xLocal =>
                 {
                     int x = pixelStart + xLocal;
-                    long frameStart = baseFrameOffset + (long) x * cacheSamplesPerPixel;
+                    long frameStart = baseFrameOffset + (long)x * cacheSamplesPerPixel;
                     long sampleStart = frameStart * channels;
 
                     for (int ch = 0; ch < chCount; ch++)
@@ -715,8 +715,8 @@ namespace ModularAudience.Audio
                             continue;
                         }
 
-                        long sampleEnd = Math.Min(sampleStart + (long) samplesPerPixel * channels, dataLength);
-                        long step = (long) channels * stride;
+                        long sampleEnd = Math.Min(sampleStart + (long)samplesPerPixel * channels, dataLength);
+                        long step = (long)channels * stride;
 
                         float min = float.MaxValue;
                         float max = float.MinValue;
@@ -741,8 +741,8 @@ namespace ModularAudience.Audio
 
                         int idx = ch * cols + xLocal;
                         int chH = channelHeight[ch];
-                        int yMinPx = centerY[ch] - (int) Math.Round(min * (chH / 2.0));
-                        int yMaxPx = centerY[ch] - (int) Math.Round(max * (chH / 2.0));
+                        int yMinPx = centerY[ch] - (int)Math.Round(min * (chH / 2.0));
+                        int yMaxPx = centerY[ch] - (int)Math.Round(max * (chH / 2.0));
                         yMin[idx] = yMinPx;
                         yMax[idx] = yMaxPx;
                     }

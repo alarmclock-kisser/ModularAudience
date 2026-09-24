@@ -31,7 +31,7 @@ namespace ModularAudience.Audio.Tests
         public void PyinTracksKnownPitchRejectsSilenceAndIsRepeatable()
         {
             float[] tone = new float[4000];
-            for (int i = 0; i < tone.Length; i++) tone[i] = (float) (0.4 * Math.Sin(2 * Math.PI * 220 * i / 8000));
+            for (int i = 0; i < tone.Length; i++) tone[i] = (float)(0.4 * Math.Sin(2 * Math.PI * 220 * i / 8000));
             PyinPitchFrame[] first = PyinPitchTracker.Track(tone, 8000, 128, 100, 500, 1, CancellationToken.None);
             PyinPitchFrame[] repeated = PyinPitchTracker.Track(tone, 8000, 128, 100, 500,
                 Math.Min(2, Environment.ProcessorCount), CancellationToken.None);
@@ -53,7 +53,7 @@ namespace ModularAudience.Audio.Tests
         {
             PyinSettings settings = PyinSettings.Create(6_000_000, 8000, 80, 100, 500, 1);
 
-            Assert.IsTrue((long) settings.FrameCount * settings.StateCount * sizeof(int) > 128L * 1024 * 1024,
+            Assert.IsTrue((long)settings.FrameCount * settings.StateCount * sizeof(int) > 128L * 1024 * 1024,
                 "The test geometry must exceed the former 128 MiB backpointer limit.");
         }
 

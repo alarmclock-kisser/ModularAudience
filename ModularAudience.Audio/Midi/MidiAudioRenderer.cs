@@ -41,7 +41,7 @@ public static class MidiAudioRenderer
         int channels = 2;
         double secondsPerTick = 60.0 / bpm / Math.Max(1, midi.TicksPerQuarterNote);
         double durationSeconds = Math.Max(0.1, (track.LengthTicks + midi.TicksPerQuarterNote / 2.0) * secondsPerTick);
-        int frameCount = checked((int) Math.Min(int.MaxValue / channels, Math.Ceiling(durationSeconds * sampleRate)));
+        int frameCount = checked((int)Math.Min(int.MaxValue / channels, Math.Ceiling(durationSeconds * sampleRate)));
         float[] output = new float[frameCount * channels];
         Random random = new(17);
         List<MidiNoteData> orderedNotes = track.Notes.OrderBy(note => note.StartTick).ToList();
@@ -57,8 +57,8 @@ public static class MidiAudioRenderer
                 cancellationToken.ThrowIfCancellationRequested();
                 double startSeconds = note.StartTick * secondsPerTick;
                 double noteSeconds = Math.Max(0.01, note.DurationTicks * secondsPerTick);
-                int startFrame = (int) Math.Round(startSeconds * sampleRate);
-                int noteFrames = Math.Max(1, (int) Math.Round(noteSeconds * sampleRate));
+                int startFrame = (int)Math.Round(startSeconds * sampleRate);
+                int noteFrames = Math.Max(1, (int)Math.Round(noteSeconds * sampleRate));
                 float instrumentGain = instrument switch
                 {
                     MidiInstrument.Sine => 1.25f,
@@ -89,7 +89,7 @@ public static class MidiAudioRenderer
                     }
                 }
 
-                progress?.Report(++noteIndex / (double) Math.Max(1, orderedNotes.Count));
+                progress?.Report(++noteIndex / (double)Math.Max(1, orderedNotes.Count));
             }
         }
         finally
@@ -122,8 +122,8 @@ public static class MidiAudioRenderer
             Channels = channels,
             BitDepth = 32,
             Length = output.Length,
-            Duration = TimeSpan.FromSeconds(frameCount / (double) sampleRate),
-            Bpm = (float) bpm,
+            Duration = TimeSpan.FromSeconds(frameCount / (double)sampleRate),
+            Bpm = (float)bpm,
             Volume = 100f
         };
         rendered.Rename(rendered.Name);
@@ -141,7 +141,7 @@ public static class MidiAudioRenderer
 
         AudioObj pitchedSample = Math.Abs(semitones) < 0.001
             ? sample.Clone()
-            : PitchShifter.CreatePitchShiftWithoutTimestretchAsync(sample, (float) semitones)
+            : PitchShifter.CreatePitchShiftWithoutTimestretchAsync(sample, (float)semitones)
                 .GetAwaiter()
                 .GetResult();
 
@@ -151,7 +151,7 @@ public static class MidiAudioRenderer
             int sourceFrames = pitchedSample.Data.Length / Math.Max(1, pitchedSample.Channels);
             if (sourceFrames > 0 && sourceFrames != targetFrames)
             {
-                double stretchFactor = targetFrames / (double) sourceFrames;
+                double stretchFactor = targetFrames / (double)sourceFrames;
                 TimeStretcher.TimeStretchAllThreadsAsync(
                     pitchedSample,
                     chunkSize: renderQuality switch
@@ -193,14 +193,14 @@ public static class MidiAudioRenderer
         }
 
         double pitchRatio = Math.Pow(2.0, semitones / 12.0);
-        int pitchedFrames = Math.Max(1, (int) Math.Round(sourceFrames / pitchRatio));
+        int pitchedFrames = Math.Max(1, (int)Math.Round(sourceFrames / pitchRatio));
         float[] pitchedData = new float[pitchedFrames * channels];
         for (int frame = 0; frame < pitchedFrames; frame++)
         {
             double sourcePosition = Math.Min(sourceFrames - 1, frame * pitchRatio);
-            int sourceFrame = (int) sourcePosition;
+            int sourceFrame = (int)sourcePosition;
             int nextFrame = Math.Min(sourceFrames - 1, sourceFrame + 1);
-            float fraction = (float) (sourcePosition - sourceFrame);
+            float fraction = (float)(sourcePosition - sourceFrame);
             for (int channel = 0; channel < channels; channel++)
             {
                 float first = sample.Data[sourceFrame * channels + channel];
@@ -213,7 +213,7 @@ public static class MidiAudioRenderer
         float[] weights = new float[data.Length / channels];
         int grainSize = Math.Min(1024, Math.Max(64, pitchedFrames));
         int synthesisHop = Math.Max(1, grainSize / 4);
-        int grainCount = Math.Max(1, (int) Math.Ceiling(targetFrames / (double) synthesisHop));
+        int grainCount = Math.Max(1, (int)Math.Ceiling(targetFrames / (double)synthesisHop));
         for (int grain = 0; grain < grainCount; grain++)
         {
             if ((grain & 31) == 0)
@@ -222,7 +222,7 @@ public static class MidiAudioRenderer
             }
 
             int outputStart = grain * synthesisHop;
-            int sourceStart = Math.Min(Math.Max(0, pitchedFrames - grainSize), (int) Math.Round(grain * Math.Max(0, pitchedFrames - grainSize) / (double) Math.Max(1, grainCount - 1)));
+            int sourceStart = Math.Min(Math.Max(0, pitchedFrames - grainSize), (int)Math.Round(grain * Math.Max(0, pitchedFrames - grainSize) / (double)Math.Max(1, grainCount - 1)));
             for (int offset = 0; offset < grainSize && outputStart + offset < targetFrames; offset++)
             {
                 int sourceFrame = Math.Min(pitchedFrames - 1, sourceStart + offset);
@@ -261,7 +261,7 @@ public static class MidiAudioRenderer
             BitDepth = sample.BitDepth,
             Data = data,
             Length = data.LongLength,
-            Duration = TimeSpan.FromSeconds(targetFrames / (double) Math.Max(1, sample.SampleRate)),
+            Duration = TimeSpan.FromSeconds(targetFrames / (double)Math.Max(1, sample.SampleRate)),
             Volume = sample.Volume
         };
     }
@@ -337,7 +337,7 @@ public static class MidiAudioRenderer
                 MidiInstrument.Pluck => RenderPluckSample(pluckBuffer!, ref pluckIndex),
                 _ => 0.0
             };
-            float sample = (float) (value * envelope * amplitude);
+            float sample = (float)(value * envelope * amplitude);
             int outputIndex = (Math.Max(0, startFrame) + frame) * channels;
             for (int channel = 0; channel < channels; channel++)
             {
@@ -406,11 +406,11 @@ public static class MidiAudioRenderer
 
     private static float[] CreatePluckBuffer(double frequency, Random random)
     {
-        int length = Math.Clamp((int) Math.Round(44100.0 / Math.Clamp(frequency, 40.0, 4000.0)), 2, 2205);
+        int length = Math.Clamp((int)Math.Round(44100.0 / Math.Clamp(frequency, 40.0, 4000.0)), 2, 2205);
         float[] buffer = new float[length];
         for (int index = 0; index < buffer.Length; index++)
         {
-            buffer[index] = (float) (random.NextDouble() * 2.0 - 1.0);
+            buffer[index] = (float)(random.NextDouble() * 2.0 - 1.0);
         }
         return buffer;
     }
@@ -445,8 +445,8 @@ public static class MidiAudioRenderer
                 continue;
             }
 
-            double sourcePosition = frame / (double) Math.Max(1, noteFrames - 1) * Math.Max(0, sourceFrames - 1);
-            int sourceFrame = Math.Min(sourceFrames - 1, (int) sourcePosition);
+            double sourcePosition = frame / (double)Math.Max(1, noteFrames - 1) * Math.Max(0, sourceFrames - 1);
+            int sourceFrame = Math.Min(sourceFrames - 1, (int)sourcePosition);
             int nextFrame = Math.Min(sourceFrames - 1, sourceFrame + 1);
             double fraction = sourcePosition - sourceFrame;
             double envelope = Math.Min(
@@ -460,7 +460,7 @@ public static class MidiAudioRenderer
                 int sourceChannel = Math.Min(sourceChannels - 1, channel);
                 float a = sample.Data[sourceFrame * sourceChannels + sourceChannel];
                 float b = sample.Data[nextFrame * sourceChannels + sourceChannel];
-                float value = (float) ((a + (b - a) * fraction) * envelope * amplitude);
+                float value = (float)((a + (b - a) * fraction) * envelope * amplitude);
                 output[outputIndex + channel] = Math.Clamp(output[outputIndex + channel] + value, -1f, 1f);
             }
         }

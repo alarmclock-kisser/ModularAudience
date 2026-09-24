@@ -177,7 +177,7 @@ namespace ModularAudience.Audio.Processors_V1
 
                     if (bestLag > 0)
                     {
-                        double secondsPerBeat = (bestLag * hop) / (double) sr;
+                        double secondsPerBeat = (bestLag * hop) / (double)sr;
                         if (secondsPerBeat > 0)
                         {
                             double bpm = 60.0 / secondsPerBeat;
@@ -187,7 +187,7 @@ namespace ModularAudience.Audio.Processors_V1
                         }
 
                         // Jungle heuristic: high transient density relative to energy frames indicates amen-like loop
-                        double transientDensity = energy.Count > 0 ? transients / (double) energy.Count : 0.0;
+                        double transientDensity = energy.Count > 0 ? transients / (double)energy.Count : 0.0;
                         if (transientDensity > 0.28 || (mono.Length < sr * 10 && transientDensity > 0.18))
                         {
                             // trigger jungle mode
@@ -308,7 +308,7 @@ namespace ModularAudience.Audio.Processors_V1
             double medianScore = Median(score);
             double std = StdDev(score);
             double threshold = Math.Max(0.01, medianScore + 0.25 * std); // adaptive
-            int minSpacingFrames = Math.Max(1, (int) Math.Round((p.MinSpacingMs / 1000.0) * sr / hop));
+            int minSpacingFrames = Math.Max(1, (int)Math.Round((p.MinSpacingMs / 1000.0) * sr / hop));
             var peaks = PickPeaksWithThreshold(score, neighbor: 2, minSpacingFrames, threshold);
 
             var onsets = peaks.Select(x => Math.Clamp(x * hop, 0, mono.Length - 1)).ToList();
@@ -363,7 +363,7 @@ namespace ModularAudience.Audio.Processors_V1
             }
 
             // Keep extras not too close to base onsets (e.g. > 8 ms)
-            int minGap = (int) (0.008 * sr);
+            int minGap = (int)(0.008 * sr);
             var filtered = new List<int>();
             foreach (var s in extra)
             {
@@ -394,8 +394,8 @@ namespace ModularAudience.Audio.Processors_V1
                 diffs.Add(onsets[i] - onsets[i - 1]);
             }
 
-            int medianInterval = diffs.Count > 0 ? (int) Median(diffs.Select(d => (double) d).ToArray()) : Math.Max(1, totalSamples / Math.Max(1, onsets.Count));
-            int atomLen = Math.Clamp((int) Math.Round(medianInterval * 1.05), (int) (p.MinAtomMs * sr / 1000.0), (int) (p.MaxAtomMs * sr / 1000.0));
+            int medianInterval = diffs.Count > 0 ? (int)Median(diffs.Select(d => (double)d).ToArray()) : Math.Max(1, totalSamples / Math.Max(1, onsets.Count));
+            int atomLen = Math.Clamp((int)Math.Round(medianInterval * 1.05), (int)(p.MinAtomMs * sr / 1000.0), (int)(p.MaxAtomMs * sr / 1000.0));
             int half = Math.Max(1, atomLen / 2);
 
             foreach (var o in onsets)
@@ -414,7 +414,7 @@ namespace ModularAudience.Audio.Processors_V1
             }
 
             // Merge tiny overlaps simply here - deeper merging later
-            return MergeOverlapping(list, toleranceSamples: Math.Max(1, (int) (0.01 * sr)));
+            return MergeOverlapping(list, toleranceSamples: Math.Max(1, (int)(0.01 * sr)));
         }
 
         // ----------------------------
@@ -427,15 +427,15 @@ namespace ModularAudience.Audio.Processors_V1
                 return [];
             }
             // Merge tight neighbors first
-            var merged = MergeOverlapping(segments, toleranceSamples: Math.Max(1, (int) (0.01 * sr)));
+            var merged = MergeOverlapping(segments, toleranceSamples: Math.Max(1, (int)(0.01 * sr)));
 
             // Enforce minimum length; merge if too small; split very long segments at energy valleys
             var output = new List<(int start, int end)>();
             foreach (var seg in merged)
             {
                 int len = seg.end - seg.start;
-                int minSamps = (int) (p.MinAtomMs * sr / 1000.0);
-                int maxSamps = (int) (p.MaxAtomMs * sr / 1000.0);
+                int minSamps = (int)(p.MinAtomMs * sr / 1000.0);
+                int maxSamps = (int)(p.MaxAtomMs * sr / 1000.0);
 
                 if (len < Math.Max(1, minSamps / 2))
                 {
@@ -476,7 +476,7 @@ namespace ModularAudience.Audio.Processors_V1
                 {
                     int s = output[i].start, e = output[i].end;
                     int j = i + 1;
-                    while (j < output.Count && (output[j].end - s) <= (int) (0.15 * sr))
+                    while (j < output.Count && (output[j].end - s) <= (int)(0.15 * sr))
                     {
                         e = output[j].end; j++;
                     }
@@ -573,7 +573,7 @@ namespace ModularAudience.Audio.Processors_V1
                 while (j < segments.Count)
                 {
                     int gap = segments[j].start - e;
-                    if (gap <= (int) (p.HiHatMergeMs / 1000.0 * sr) && centroids[j] >= p.HiHatCentroidHz && c >= p.HiHatCentroidHz)
+                    if (gap <= (int)(p.HiHatMergeMs / 1000.0 * sr) && centroids[j] >= p.HiHatCentroidHz && c >= p.HiHatCentroidHz)
                     {
                         // merge
                         e = segments[j].end;
@@ -618,7 +618,7 @@ namespace ModularAudience.Audio.Processors_V1
             }
 
             var sorted = env.ToArray(); Array.Sort(sorted);
-            double threshold = sorted[Math.Clamp((int) (0.08 * sorted.Length), 0, sorted.Length - 1)] * 0.8 + 1e-8;
+            double threshold = sorted[Math.Clamp((int)(0.08 * sorted.Length), 0, sorted.Length - 1)] * 0.8 + 1e-8;
 
             int ns = s, ne = e;
             // find first env window above threshold
@@ -658,7 +658,7 @@ namespace ModularAudience.Audio.Processors_V1
                     s += interleaved[f * channels + c];
                 }
 
-                mono[f] = (float) (s / channels);
+                mono[f] = (float)(s / channels);
             }
             return mono;
         }
@@ -686,7 +686,7 @@ namespace ModularAudience.Audio.Processors_V1
                 return 0.0;
             }
 
-            var copy = (double[]) values.Clone(); Array.Sort(copy);
+            var copy = (double[])values.Clone(); Array.Sort(copy);
             int m = copy.Length / 2;
             return (copy.Length % 2 == 0) ? ((copy[m - 1] + copy[m]) / 2.0) : copy[m];
         }
@@ -756,7 +756,7 @@ namespace ModularAudience.Audio.Processors_V1
             var res = new List<int>();
             for (int i = 0; i < parts; i++)
             {
-                res.Add(Math.Clamp((int) Math.Round(i * (totalSamples / (double) parts)), 0, totalSamples - 1));
+                res.Add(Math.Clamp((int)Math.Round(i * (totalSamples / (double)parts)), 0, totalSamples - 1));
             }
 
             return res;
@@ -854,7 +854,7 @@ namespace ModularAudience.Audio.Processors_V1
             var mono = ToMono(data, channels);
             int sr = Math.Max(1, sample.SampleRate);
             // envelope over small windows
-            int envWin = Math.Clamp((int) (0.006 * sr), 32, 512);
+            int envWin = Math.Clamp((int)(0.006 * sr), 32, 512);
             int nframes = Math.Max(1, mono.Length / envWin);
             var env = new double[nframes];
             for (int i = 0; i < nframes; i++)
@@ -863,8 +863,8 @@ namespace ModularAudience.Audio.Processors_V1
                 double s = 0; for (int j = 0; j < envWin; j++) { double v = mono[pos + j]; s += Math.Abs(v); }
                 env[i] = s / envWin;
             }
-            var sorted = (double[]) env.Clone(); Array.Sort(sorted);
-            double threshold = sorted[Math.Clamp((int) (0.08 * sorted.Length), 0, sorted.Length - 1)] * 0.9 + 1e-9;
+            var sorted = (double[])env.Clone(); Array.Sort(sorted);
+            double threshold = sorted[Math.Clamp((int)(0.08 * sorted.Length), 0, sorted.Length - 1)] * 0.9 + 1e-9;
 
             int startFrame = 0, endFrame = mono.Length;
             for (int i = 0; i < env.Length; i++) { if (env[i] >= threshold) { startFrame = Math.Max(0, i * envWin - envWin); break; } }
@@ -889,7 +889,7 @@ namespace ModularAudience.Audio.Processors_V1
 
             // tiny fades (3-12ms)
             int fadeMs = outFrames < (sampleRate / 10) ? 3 : 8;
-            int fadeSamples = Math.Min(outFrames / 2, (int) (fadeMs * sampleRate / 1000.0));
+            int fadeSamples = Math.Min(outFrames / 2, (int)(fadeMs * sampleRate / 1000.0));
             ApplyLinearFade(outData, channels, fadeSamples);
 
             // gentle peak normalize to 0.95 if above
@@ -986,8 +986,8 @@ namespace ModularAudience.Audio.Processors_V1
             var fp = new double[bins];
             for (int b = 0; b < bins; b++)
             {
-                int a = (int) Math.Round(b * (half / (double) bins));
-                int bb = (int) Math.Round((b + 1) * (half / (double) bins));
+                int a = (int)Math.Round(b * (half / (double)bins));
+                int bb = (int)Math.Round((b + 1) * (half / (double)bins));
                 a = Math.Clamp(a, 0, half - 1); bb = Math.Clamp(bb, a + 1, half);
                 double sum = 0; for (int k = a; k < bb; k++)
                 {
@@ -1023,7 +1023,7 @@ namespace ModularAudience.Audio.Processors_V1
             double mean = sims.Average();
             double std = Math.Sqrt(sims.Average(v => (v - mean) * (v - mean)));
             double thr = mean + 0.35 * std;
-            return (float) Math.Clamp(thr, 0.65, Math.Max(defaultThreshold, 0.95));
+            return (float)Math.Clamp(thr, 0.65, Math.Max(defaultThreshold, 0.95));
         }
 
         private static List<List<int>> GreedyClusterBySimilarity(List<double[]> fps, float threshold)
@@ -1098,7 +1098,7 @@ namespace ModularAudience.Audio.Processors_V1
             fadeSamples = Math.Min(fadeSamples, frames / 2);
             for (int f = 0; f < fadeSamples; f++)
             {
-                float g = f / (float) fadeSamples;
+                float g = f / (float)fadeSamples;
                 for (int c = 0; c < channels; c++)
                 {
                     interleaved[f * channels + c] *= g;
@@ -1107,7 +1107,7 @@ namespace ModularAudience.Audio.Processors_V1
             for (int f = 0; f < fadeSamples; f++)
             {
                 int idx = frames - fadeSamples + f;
-                float g = 1.0f - f / (float) fadeSamples;
+                float g = 1.0f - f / (float)fadeSamples;
                 for (int c = 0; c < channels; c++)
                 {
                     interleaved[idx * channels + c] *= g;
@@ -1163,7 +1163,7 @@ namespace ModularAudience.Audio.Processors_V1
             for (int k = 0; k < half; k++)
             {
                 double mag = buf[k].Magnitude;
-                double freq = (k * (double) sr) / N;
+                double freq = (k * (double)sr) / N;
                 num += freq * mag; den += mag;
             }
             return den > 0 ? num / den : 0.0;

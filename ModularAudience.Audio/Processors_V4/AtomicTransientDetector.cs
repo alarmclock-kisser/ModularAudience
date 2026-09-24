@@ -78,7 +78,7 @@ namespace ModularAudience.Audio.Processors_V4
                 sum -= powers[slot];
                 powers[slot] = second * second;
                 sum += powers[slot];
-                envelope[i] = (float) Math.Sqrt(Math.Max(0.0, sum) / Math.Min(i + 1, window));
+                envelope[i] = (float)Math.Sqrt(Math.Max(0.0, sum) / Math.Min(i + 1, window));
             }
 
             return envelope;

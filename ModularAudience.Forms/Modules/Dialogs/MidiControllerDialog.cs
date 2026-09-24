@@ -138,11 +138,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             if (!Task.Run(() => this._service.OpenInputAsync(new MidiDevice
-                {
-                    Id = inputItem.Id,
-                    Name = inputItem.Name,
-                    IsInput = true
-                })).Result)
+            {
+                Id = inputItem.Id,
+                Name = inputItem.Name,
+                IsInput = true
+            })).Result)
             {
                 MessageBox.Show(this, $"Failed to open input '{inputItem.Name}'.", "MIDI Controller",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);

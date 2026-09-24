@@ -138,6 +138,23 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public void HellTimingWindow_IsThirtyFiveMillisecondsOnBothSides()
+        {
+            Assert.AreEqual(35, BeatClickerDifficulty.HitWindowEarlyMs(6));
+            Assert.AreEqual(35, BeatClickerDifficulty.HitWindowLateMs(6));
+        }
+
+        [TestMethod]
+        public void SpinnerCooldown_IncreasesWithDifficulty()
+        {
+            int hardCooldown = BeatClickerDifficulty.SpinnerCooldownBeats(5);
+            int hellCooldown = BeatClickerDifficulty.SpinnerCooldownBeats(6);
+
+            Assert.IsTrue(hardCooldown > 0);
+            Assert.IsTrue(hellCooldown > hardCooldown);
+        }
+
+        [TestMethod]
         public void PatternIdCovers256Combinations()
         {
             // Verify that the 4x4x4x4 pattern grammar produces 256 unique IDs.
@@ -165,6 +182,26 @@ namespace ModularAudience.Audio.Tests
             // The endpoint is clamped to the playable rectangle, so we verify it's within bounds.
             Assert.IsTrue(path.X[^1] >= 80 && path.X[^1] <= 1920 - 80, "Path end X must be in bounds");
             Assert.IsTrue(path.Y[^1] >= 80 && path.Y[^1] <= 1080 - 80, "Path end Y must be in bounds");
+        }
+
+        [TestMethod]
+        public void SliderPathRecoversWhenHeadingPointsOutsideNearBoundary()
+        {
+            var lib = new BeatClickerPatternLibrary();
+            var rng = new Random(321);
+            var id = BeatClickerPatternLibrary.PatternId.FromIndex(0);
+            var p = lib.CreateParameters(id, rng, 0f, 150f, 420f, 3);
+            p.Heading = (float)Math.PI;
+
+            var path = lib.BuildSliderPath(id, p, 150f, 540f, 150, 1920, 1080, 150f, 420f, rng);
+
+            Assert.AreEqual(150f, path.X[0], 0.01f);
+            Assert.AreEqual(540f, path.Y[0], 0.01f);
+            float endpointDistance = (float)Math.Sqrt(
+                Math.Pow(path.X[^1] - path.X[0], 2) + Math.Pow(path.Y[^1] - path.Y[0], 2));
+            Assert.IsTrue(endpointDistance >= 150f, $"Slider endpoint distance must preserve the minimum length: {endpointDistance:F2}");
+            Assert.IsTrue(path.X[^1] >= 150f && path.X[^1] <= 1920 - 150, "Path end X must be in bounds");
+            Assert.IsTrue(path.Y[^1] >= 150f && path.Y[^1] <= 1080 - 150, "Path end Y must be in bounds");
         }
 
         [TestMethod]
@@ -226,6 +263,24 @@ namespace ModularAudience.Audio.Tests
                         $"Arc length step at progress {progress:F2} is too large: {dist:F2} vs {prevDist:F2}");
                 }
                 prevDist = dist;
+            }
+        }
+
+        [TestMethod]
+        public void SparseEasyAndIntermediateUseFirstAndThirdBeatPhases()
+        {
+            Assert.IsFalse(BeatClickerDifficulty.UsesSparseOnBeatGrid(0));
+            Assert.IsTrue(BeatClickerDifficulty.UsesSparseOnBeatGrid(1));
+            Assert.IsFalse(BeatClickerDifficulty.UsesSparseOnBeatGrid(2));
+            Assert.IsTrue(BeatClickerDifficulty.UsesSparseOnBeatGrid(3));
+
+            for (int beatIndex = 0; beatIndex < 8; beatIndex++)
+            {
+                bool expectedOnBeat = beatIndex % 4 is 0 or 2;
+                Assert.AreEqual(
+                    expectedOnBeat,
+                    BeatClickerDifficulty.IsOnBeatGridPosition(beatIndex),
+                    $"Unexpected sparse-grid phase for beat index {beatIndex}");
             }
         }
 

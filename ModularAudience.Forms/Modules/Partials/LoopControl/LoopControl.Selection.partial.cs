@@ -60,7 +60,7 @@ namespace ModularAudience.Forms.Modules
             }
             if (this.InvokeRequired)
             {
-                this.BeginInvoke((Action) this.SynchronizeTrackSelection);
+                this.BeginInvoke((Action)this.SynchronizeTrackSelection);
                 return;
             }
             if (this.suppressPlaylistChecklistEvents || this.checkedListBox_playlistTracks.IsInteracting ||

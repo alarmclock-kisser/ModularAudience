@@ -60,9 +60,9 @@ namespace ModularAudience.Audio.Tests
                 Assert.IsTrue(list.GetItemChecked(0));
                 Assert.AreEqual(1, checks);
 
-                SendMessage(list.Handle, 0x0100, (IntPtr) Keys.Space, (IntPtr) 1);
-                SendMessage(list.Handle, 0x0102, (IntPtr) ' ', (IntPtr) 1);
-                SendMessage(list.Handle, 0x0101, (IntPtr) Keys.Space, (IntPtr) 1);
+                SendMessage(list.Handle, 0x0100, (IntPtr)Keys.Space, (IntPtr)1);
+                SendMessage(list.Handle, 0x0102, (IntPtr)' ', (IntPtr)1);
+                SendMessage(list.Handle, 0x0101, (IntPtr)Keys.Space, (IntPtr)1);
                 Assert.IsFalse(list.GetItemChecked(0));
                 Assert.AreEqual(2, checks, "One Space keypress must toggle once, not once per native message.");
 
@@ -182,7 +182,7 @@ namespace ModularAudience.Audio.Tests
                 MethodInfo merge = typeof(LoopControl).GetMethod(
                     "MergeLoopedTracksAsync",
                     BindingFlags.Instance | BindingFlags.NonPublic)!;
-                Task<AudioObj?> task = (Task<AudioObj?>) merge.Invoke(dialog, [new[] { focused, other }])!;
+                Task<AudioObj?> task = (Task<AudioObj?>)merge.Invoke(dialog, [new[] { focused, other }])!;
                 AudioObj merged = task.GetAwaiter().GetResult()!;
 
                 Assert.AreEqual(16, merged.Data.Length,
@@ -235,7 +235,7 @@ namespace ModularAudience.Audio.Tests
                 MethodInfo merge = typeof(LoopControl).GetMethod(
                     "MergeLoopedTracksAsync",
                     BindingFlags.Instance | BindingFlags.NonPublic)!;
-                Task<AudioObj?> task = (Task<AudioObj?>) merge.Invoke(dialog, [new[] { loop, free }])!;
+                Task<AudioObj?> task = (Task<AudioObj?>)merge.Invoke(dialog, [new[] { loop, free }])!;
                 AudioObj merged = task.GetAwaiter().GetResult()!;
 
                 CollectionAssert.AreEqual(
@@ -264,7 +264,7 @@ namespace ModularAudience.Audio.Tests
                 MethodInfo merge = typeof(LoopControl).GetMethod(
                     "MergeLoopedTracksAsync",
                     BindingFlags.Instance | BindingFlags.NonPublic)!;
-                Task<AudioObj?> task = (Task<AudioObj?>) merge.Invoke(dialog, [new[] { focused, other }])!;
+                Task<AudioObj?> task = (Task<AudioObj?>)merge.Invoke(dialog, [new[] { focused, other }])!;
                 AudioObj merged = task.GetAwaiter().GetResult()!;
 
                 CollectionAssert.AreEqual(
@@ -292,7 +292,7 @@ namespace ModularAudience.Audio.Tests
                 MethodInfo merge = typeof(LoopControl).GetMethod(
                     "MergeLoopedTracksAsync",
                     BindingFlags.Instance | BindingFlags.NonPublic)!;
-                Task<AudioObj?> task = (Task<AudioObj?>) merge.Invoke(dialog, [new[] { halfTime, doubleTime }])!;
+                Task<AudioObj?> task = (Task<AudioObj?>)merge.Invoke(dialog, [new[] { halfTime, doubleTime }])!;
                 AudioObj merged = task.GetAwaiter().GetResult()!;
 
                 Assert.AreEqual(210f, merged.Bpm, 0.001f);
@@ -362,7 +362,7 @@ namespace ModularAudience.Audio.Tests
             WithPlaylist([audio], (dialog, list) =>
             {
                 NumericUpDown jump = Field<NumericUpDown>(dialog, "numericUpDown_jump");
-                Assert.AreEqual(125, (double) jump.Value, 0.01);
+                Assert.AreEqual(125, (double)jump.Value, 0.01);
 
                 audio.Bpm = 150;
                 audio.StretchFactor = 1.0;
@@ -371,7 +371,7 @@ namespace ModularAudience.Audio.Tests
                     BindingFlags.Instance | BindingFlags.NonPublic)!;
                 refresh.Invoke(dialog, [audio]);
 
-                Assert.AreEqual(100, (double) jump.Value, 0.01);
+                Assert.AreEqual(100, (double)jump.Value, 0.01);
                 StringAssert.Contains(list.Items[0]!.ToString()!, "[150.0 BPM]");
             });
         }
@@ -391,7 +391,7 @@ namespace ModularAudience.Audio.Tests
                     BindingFlags.Instance | BindingFlags.NonPublic)!;
                 update.Invoke(dialog, [audio]);
 
-                Assert.AreEqual(100, (double) jump.Value, 0.01);
+                Assert.AreEqual(100, (double)jump.Value, 0.01);
                 jump.Value = 200;
                 jump.Value = 400;
 
@@ -401,7 +401,7 @@ namespace ModularAudience.Audio.Tests
                     BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
                 updateFromTrackView.Invoke(dialog, [audio]);
 
-                Assert.AreEqual(320, (double) jump.Value, 0.01,
+                Assert.AreEqual(320, (double)jump.Value, 0.01,
                     "A 400 ms selected step must be scaled by the current rate, not reset to one beat.");
             });
         }
@@ -498,7 +498,7 @@ namespace ModularAudience.Audio.Tests
                 MethodInfo apply = typeof(LoopControl).GetMethod(
                     "ApplyPlaylistRateToAudioAsync",
                     BindingFlags.Instance | BindingFlags.NonPublic)!;
-                Task task = (Task) apply.Invoke(dialog, [audio, 10, false])!;
+                Task task = (Task)apply.Invoke(dialog, [audio, 10, false])!;
                 task.GetAwaiter().GetResult();
 
                 double expected = Math.Pow(2.0, (500.0 * Math.Log2(1.5) + 10.0) / 500.0);
@@ -666,7 +666,7 @@ namespace ModularAudience.Audio.Tests
             Assert.AreEqual(ApartmentState.STA, Thread.CurrentThread.GetApartmentState());
             Assert.IsNull(WindowMain.Instance, "Tests must not construct WindowMain.");
             Assert.IsNull(typeof(WindowMain).GetField("_lastSelectedTrackView", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null));
-            Assert.AreEqual(0, ((ICollection) typeof(WindowMain).GetField("TrackViews", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!).Count);
+            Assert.AreEqual(0, ((ICollection)typeof(WindowMain).GetField("TrackViews", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!).Count);
             using PlaylistEngine engine = new();
             using LoopControl dialog = new();
             using Timer refreshTimer = Field<Timer>(dialog, "playlistTargetsTimer");
@@ -700,7 +700,7 @@ namespace ModularAudience.Audio.Tests
         private static WindowMain CreatePlaylistShell(PlaylistEngine engine)
         {
             // Only GetActivePlaylistAudios uses this shell; no Form constructor, handle or main-window services run.
-            WindowMain shell = (WindowMain) RuntimeHelpers.GetUninitializedObject(typeof(WindowMain));
+            WindowMain shell = (WindowMain)RuntimeHelpers.GetUninitializedObject(typeof(WindowMain));
             GC.SuppressFinalize(shell);
             typeof(WindowMain).GetField("_playlist", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(shell, engine);
             return shell;
@@ -730,7 +730,7 @@ namespace ModularAudience.Audio.Tests
         }
 
         private static void Mouse(CheckedListBox list, int message, Point point) => SendMessage(list.Handle, message,
-            message == MouseUp ? IntPtr.Zero : (IntPtr) 1, (IntPtr) ((point.Y << 16) | (point.X & 0xffff)));
+            message == MouseUp ? IntPtr.Zero : (IntPtr)1, (IntPtr)((point.Y << 16) | (point.X & 0xffff)));
 
         private static void ClickLoop(LoopControl dialog, float fraction, bool control)
         {
@@ -744,9 +744,9 @@ namespace ModularAudience.Audio.Tests
         {
             byte[] previous = new byte[256];
             Assert.IsTrue(GetKeyboardState(previous));
-            byte[] state = (byte[]) previous.Clone();
-            state[(int) Keys.ControlKey] = state[(int) Keys.LControlKey] = pressed ? (byte) 0x80 : (byte) 0;
-            state[(int) Keys.RControlKey] = 0;
+            byte[] state = (byte[])previous.Clone();
+            state[(int)Keys.ControlKey] = state[(int)Keys.LControlKey] = pressed ? (byte)0x80 : (byte)0;
+            state[(int)Keys.RControlKey] = 0;
             try
             {
                 Assert.IsTrue(SetKeyboardState(state));
@@ -763,9 +763,9 @@ namespace ModularAudience.Audio.Tests
         {
             byte[] previous = new byte[256];
             Assert.IsTrue(GetKeyboardState(previous));
-            byte[] state = (byte[]) previous.Clone();
-            state[(int) Keys.ShiftKey] = state[(int) Keys.LShiftKey] = pressed ? (byte) 0x80 : (byte) 0;
-            state[(int) Keys.RShiftKey] = 0;
+            byte[] state = (byte[])previous.Clone();
+            state[(int)Keys.ShiftKey] = state[(int)Keys.LShiftKey] = pressed ? (byte)0x80 : (byte)0;
+            state[(int)Keys.RShiftKey] = 0;
             try
             {
                 Assert.IsTrue(SetKeyboardState(state));
@@ -803,10 +803,10 @@ namespace ModularAudience.Audio.Tests
         }
 
         private static T Control<T>(LoopControl dialog, string name) where T : System.Windows.Forms.Control =>
-            (T) dialog.Controls.Find(name, true).Single();
+            (T)dialog.Controls.Find(name, true).Single();
 
         private static T Field<T>(object instance, string name) =>
-            (T) instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance)!;
+            (T)instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance)!;
 
         [DllImport("user32.dll")]
         private static extern IntPtr SendMessage(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam);

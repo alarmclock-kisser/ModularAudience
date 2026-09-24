@@ -272,7 +272,7 @@ namespace ModularAudience.Onnx
                 }
 
                 processed += currentChunkFrames;
-                progress?.Report((double) processed / totalFrames);
+                progress?.Report((double)processed / totalFrames);
             }
 
             return finalResult;

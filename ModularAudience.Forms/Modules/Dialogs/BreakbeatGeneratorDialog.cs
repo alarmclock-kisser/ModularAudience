@@ -34,13 +34,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
         internal AudioObj? SelectedTrack => this.listBox_samples.SelectedItem as AudioObj;
 
         private bool AutoPlayEnabled => this.checkBox_autoPlay.Checked;
-        private int Bars => (int) this.numericUpDown_bars.Value;
-        private int Bpm => (int) this.numericUpDown_bpm.Value;
-        private float Density => (float) this.numericUpDown_density.Value;
-        private int Resolution => (int) this.numericUpDown_resolution.Value;
-        private float Swing => (float) this.numericUpDown_swing.Value;
-        private float Complexity => (float) this.numericUpDown_complexity.Value;
-        private int Seed => (int) this.numericUpDown_seed.Value;
+        private int Bars => (int)this.numericUpDown_bars.Value;
+        private int Bpm => (int)this.numericUpDown_bpm.Value;
+        private float Density => (float)this.numericUpDown_density.Value;
+        private int Resolution => (int)this.numericUpDown_resolution.Value;
+        private float Swing => (float)this.numericUpDown_swing.Value;
+        private float Complexity => (float)this.numericUpDown_complexity.Value;
+        private int Seed => (int)this.numericUpDown_seed.Value;
 
         private bool Interleaved => this.checkBox_interleaved.Checked;
         internal string SelectedPreset => this.comboBox_preset.SelectedItem as string ?? " - None - ";
@@ -185,7 +185,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 return;
             }
-            AudioObj item = (AudioObj) this.listBox_samples.Items[e.Index];
+            AudioObj item = (AudioObj)this.listBox_samples.Items[e.Index];
             // Determine the color based on whether the item has a tag
             Color textColor = item.Tag is not null ? Color.Gray : e.ForeColor;
             // Draw the background
@@ -624,7 +624,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                throw new HttpRequestException($"LLM request failed with HTTP {(int) response.StatusCode}: {responseBody}");
+                throw new HttpRequestException($"LLM request failed with HTTP {(int)response.StatusCode}: {responseBody}");
             }
 
             using JsonDocument responseJson = JsonDocument.Parse(responseBody);
@@ -648,7 +648,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
                     if (!response.IsSuccessStatusCode)
                     {
-                        throw new HttpRequestException($"HTTP {(int) response.StatusCode}: {responseBody}");
+                        throw new HttpRequestException($"HTTP {(int)response.StatusCode}: {responseBody}");
                     }
 
                     using JsonDocument responseJson = JsonDocument.Parse(responseBody);
@@ -2002,7 +2002,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    int rerollInterval = await this.InvokeOnUiAsync(() => Math.Max(1, (int) this.numericUpDown_reroll.Value));
+                    int rerollInterval = await this.InvokeOnUiAsync(() => Math.Max(1, (int)this.numericUpDown_reroll.Value));
                     bool shouldAutoExport = await this.InvokeOnUiAsync(() => this.checkBox_autoExport.Checked);
                     bool exportThisGeneration = shouldAutoExport && generationNumber % rerollInterval == 0;
 
@@ -2227,7 +2227,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                 chain.Data = chainData;
                 chain.Length = chainData.Length;
-                chain.Duration = TimeSpan.FromSeconds((double) chain.Length / (chain.SampleRate * Math.Max(1, chain.Channels)));
+                chain.Duration = TimeSpan.FromSeconds((double)chain.Length / (chain.SampleRate * Math.Max(1, chain.Channels)));
                 chain.BitDepth = prepared.Audio.BitDepth;
                 chain.Bpm = prepared.Audio.Bpm;
             }

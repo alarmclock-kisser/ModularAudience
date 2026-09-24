@@ -90,7 +90,7 @@ public sealed class PolyphonicMidiConversionTests
         {
             double time = i / 16000.0;
             phase += 2 * Math.PI * frequency * Math.Pow(2, 0.3 * Math.Sin(2 * Math.PI * 5 * time) / 12) / 16000;
-            signal[i] = (float) (0.12 * Math.Sin(phase)
+            signal[i] = (float)(0.12 * Math.Sin(phase)
                 + 0.32 * (0.65 + 0.35 * Math.Sin(2 * Math.PI * 7 * time)) * Math.Sin(2 * phase)
                 + 0.18 * (0.65 + 0.35 * Math.Sin(2 * Math.PI * 11 * time)) * Math.Sin(3 * phase)
                 + 0.1 * (0.65 + 0.35 * Math.Sin(2 * Math.PI * 9 * time)) * Math.Sin(4 * phase));
@@ -178,7 +178,7 @@ public sealed class PolyphonicMidiConversionTests
     {
         using AudioTestScope scope = new();
         float[] stereo = AudioTestData.Stereo(Tone(69, 800), true);
-        float[] original = (float[]) stereo.Clone();
+        float[] original = (float[])stereo.Clone();
         MidiFileData midi = Convert(scope.Create(stereo, channels: 2));
         AssertPitches(midi, 69);
         CollectionAssert.AreEqual(original, stereo);
@@ -224,7 +224,7 @@ public sealed class PolyphonicMidiConversionTests
         Assert.AreEqual(0, Notes(Convert(scope.Create(new float[8000]))).Length);
         Assert.AreEqual(0, Notes(Convert(scope.Create(new float[2]))).Length);
         Random random = new(42);
-        float[] signal = Enumerable.Range(0, 16000).Select(_ => (float) (random.NextDouble() - 0.5)).ToArray();
+        float[] signal = Enumerable.Range(0, 16000).Select(_ => (float)(random.NextDouble() - 0.5)).ToArray();
         MidiFileData midi = Convert(scope.Create(signal));
         Assert.AreEqual(0, Notes(midi).Length, Describe(midi));
     }
@@ -302,7 +302,7 @@ public sealed class PolyphonicMidiConversionTests
         {
             double phase = 2 * Math.PI * frequency * i / 16000;
             double envelope = Math.Min(1, i / 80.0) * Math.Min(1, (signal.Length - i) / 80.0);
-            signal[i] = (float) (envelope * (0.25 * Math.Sin(phase) + 0.45 * Math.Sin(2 * phase) + 0.18 * Math.Sin(3 * phase) + 0.12 * Math.Sin(4 * phase)));
+            signal[i] = (float)(envelope * (0.25 * Math.Sin(phase) + 0.45 * Math.Sin(2 * phase) + 0.18 * Math.Sin(3 * phase) + 0.12 * Math.Sin(4 * phase)));
         }
         return signal;
     }

@@ -24,7 +24,7 @@ namespace ModularAudience.Audio
         public double SampleRateFactor { get; set; } = 1.0;
         public double ManualSampleRateFactor { get; set; } = 1.0;
         public double SyncNudgeSampleRateFactor { get; set; } = 1.0;
-        public int AdjustedSampleRate => (int) (this.SampleRate * this.SampleRateFactor);
+        public int AdjustedSampleRate => (int)(this.SampleRate * this.SampleRateFactor);
         public int Channels { get; set; }
         public int BitDepth { get; set; }
         public long Length { get; set; }
@@ -177,7 +177,7 @@ namespace ModularAudience.Audio
                 Name = this.Name,
                 OriginalName = this.OriginalName,
                 FilePath = this.FilePath,
-                Data = (float[]) this.Data.Clone(),
+                Data = (float[])this.Data.Clone(),
                 SampleRate = this.SampleRate,
                 SampleRateFactor = this.SampleRateFactor,
                 ManualSampleRateFactor = this.ManualSampleRateFactor,
@@ -188,7 +188,7 @@ namespace ModularAudience.Audio
                 Duration = this.Duration,
                 Bpm = this.Bpm,
                 DrawBeatGrid = this.DrawBeatGrid,
-                BeatGrid = (bool[]) this.BeatGrid.Clone(),
+                BeatGrid = (bool[])this.BeatGrid.Clone(),
                 Timing = this.Timing,
                 Volume = this.Volume
             };
@@ -478,7 +478,7 @@ namespace ModularAudience.Audio
             Array.Copy(this.Data, insertIndex, newData, insertIndex + clip.Data.Length, this.Data.Length - insertIndex);
             this.Data = newData;
             this.Length = this.Data.Length;
-            this.Duration = TimeSpan.FromSeconds((double) this.Length / (this.SampleRate * this.Channels));
+            this.Duration = TimeSpan.FromSeconds((double)this.Length / (this.SampleRate * this.Channels));
 
             await Task.CompletedTask;
         }
@@ -511,7 +511,7 @@ namespace ModularAudience.Audio
             }
 
             // Compute frame index (floor to avoid stepping past requested time)
-            long frameIndex = (long) Math.Floor(seconds * this.SampleRate);
+            long frameIndex = (long)Math.Floor(seconds * this.SampleRate);
 
             // Ensure within bounds [0, totalFrames-1]
             frameIndex = Math.Clamp(frameIndex, 0L, Math.Max(0L, totalFrames - 1));
@@ -538,7 +538,7 @@ namespace ModularAudience.Audio
             }
 
             long clamped = Math.Clamp(frameIndex, 0L, total - 1);
-            int center = (int) clamped;
+            int center = (int)clamped;
 
             if (this.BeatGrid[center])
             {
@@ -605,18 +605,18 @@ namespace ModularAudience.Audio
             await Task.Run(() =>
             {
                 // Simple nearest-neighbor resampling for demonstration (replace with better algorithm if needed)
-                int newLength = (int) ((long) this.Data.Length * sampleRate / this.SampleRate);
+                int newLength = (int)((long)this.Data.Length * sampleRate / this.SampleRate);
                 float[] newData = new float[newLength];
                 for (int i = 0; i < newLength; i++)
                 {
-                    int oldIndex = (int) ((long) i * this.SampleRate / sampleRate);
+                    int oldIndex = (int)((long)i * this.SampleRate / sampleRate);
                     oldIndex = Math.Min(oldIndex, this.Data.Length - 1);
                     newData[i] = this.Data[oldIndex];
                 }
                 this.Data = newData;
                 this.SampleRate = sampleRate;
                 this.Length = newData.Length;
-                this.Duration = TimeSpan.FromSeconds((double) this.Length / (this.SampleRate * this.Channels));
+                this.Duration = TimeSpan.FromSeconds((double)this.Length / (this.SampleRate * this.Channels));
             }).ConfigureAwait(false);
         }
 
@@ -644,7 +644,7 @@ namespace ModularAudience.Audio
                 this.Data = newData;
                 this.Channels = channels;
                 this.Length = newData.Length;
-                this.Duration = TimeSpan.FromSeconds((double) this.Length / (this.SampleRate * this.Channels));
+                this.Duration = TimeSpan.FromSeconds((double)this.Length / (this.SampleRate * this.Channels));
             }).ConfigureAwait(false);
         }
     }

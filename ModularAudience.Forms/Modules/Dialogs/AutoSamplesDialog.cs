@@ -13,9 +13,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public readonly BindingList<AudioObj> ResultSamples = [];
 
-        internal int CutMinDuration => this.numericUpDown_minDuration.Enabled ? (int) this.numericUpDown_minDuration.Value : 0;
-        internal int CutMaxDuration => this.numericUpDown_maxDuration.Enabled ? (int) this.numericUpDown_maxDuration.Value : 0;
-        internal int CutSilenceDuration => this.numericUpDown_silenceDuration.Enabled ? (int) this.numericUpDown_silenceDuration.Value : 0;
+        internal int CutMinDuration => this.numericUpDown_minDuration.Enabled ? (int)this.numericUpDown_minDuration.Value : 0;
+        internal int CutMaxDuration => this.numericUpDown_maxDuration.Enabled ? (int)this.numericUpDown_maxDuration.Value : 0;
+        internal int CutSilenceDuration => this.numericUpDown_silenceDuration.Enabled ? (int)this.numericUpDown_silenceDuration.Value : 0;
 
         private CancellationTokenSource? cuttingCts;
 
@@ -88,7 +88,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             var progress = new Progress<double>(value =>
             {
                 double clamped = Math.Max(0d, Math.Min(1d, value));
-                int percent = (int) Math.Round(clamped * 100d);
+                int percent = (int)Math.Round(clamped * 100d);
                 percent = Math.Max(this.progressBar_cutting.Minimum, Math.Min(this.progressBar_cutting.Maximum, percent));
                 this.progressBar_cutting.Value = percent;
                 this.label_status.Text = $"Processing… {percent}%";
@@ -152,7 +152,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             var progress = new Progress<double>(value =>
             {
                 double clamped = Math.Max(0d, Math.Min(1d, value));
-                int percent = (int) Math.Round(clamped * 100d);
+                int percent = (int)Math.Round(clamped * 100d);
                 percent = Math.Max(this.progressBar_cutting.Minimum, Math.Min(this.progressBar_cutting.Maximum, percent));
                 this.progressBar_cutting.Value = percent;
                 this.label_status.Text = $"Processing… {percent}%";
@@ -230,7 +230,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async void button_split_Click(object sender, EventArgs e)
         {
-            var samples = await AutoSampleCutter.CutFractionSamplesAsync(this.OriginalAudio, (float) this.numericUpDown_fractions.Value);
+            var samples = await AutoSampleCutter.CutFractionSamplesAsync(this.OriginalAudio, (float)this.numericUpDown_fractions.Value);
 
             foreach (var sample in samples)
             {

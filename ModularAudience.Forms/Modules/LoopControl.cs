@@ -202,7 +202,7 @@ namespace ModularAudience.Forms.Modules
             return double.TryParse(trimmed, System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out value);
         }
-        private double JumpMs => (double) this.numericUpDown_jump.Value;
+        private double JumpMs => (double)this.numericUpDown_jump.Value;
 
         private void button_playlistAllOn_Click(object? sender, EventArgs e)
         {
@@ -422,7 +422,7 @@ namespace ModularAudience.Forms.Modules
                         continue;
                     }
 
-                    var existingItem = (PlaylistTargetItem) listBox.Items[currentIndex];
+                    var existingItem = (PlaylistTargetItem)listBox.Items[currentIndex];
                     this.RefreshPlaylistRowText(currentIndex, existingItem);
                     if (listBox.GetItemChecked(currentIndex) != shouldBeChecked)
                     {
@@ -456,7 +456,7 @@ namespace ModularAudience.Forms.Modules
             }
             if (this.InvokeRequired)
             {
-                this.BeginInvoke((Action) this.RefreshPlaylistTargetsNow);
+                this.BeginInvoke((Action)this.RefreshPlaylistTargetsNow);
                 return;
             }
             this.RefreshPlaylistTargets();
@@ -470,7 +470,7 @@ namespace ModularAudience.Forms.Modules
             }
             if (this.InvokeRequired)
             {
-                this.BeginInvoke((Action) (() => this.RefreshAudioTiming(audio)));
+                this.BeginInvoke((Action)(() => this.RefreshAudioTiming(audio)));
                 return;
             }
 
@@ -791,7 +791,7 @@ namespace ModularAudience.Forms.Modules
             try
             {
                 int channels = Math.Max(1, audio.Channels);
-                long framesPerBeat = Math.Max(1L, (long) Math.Round((double) audio.SampleRate * 60.0 / GetAudioBpm(audio) * 2.0 * this.Multiplier));
+                long framesPerBeat = Math.Max(1L, (long)Math.Round((double)audio.SampleRate * 60.0 / GetAudioBpm(audio) * 2.0 * this.Multiplier));
                 long totalFrames = Math.Max(0L, audio.Length / channels);
                 long totalSamples = totalFrames * channels;
 
@@ -825,7 +825,7 @@ namespace ModularAudience.Forms.Modules
                 {
                     long prevLenSamples = Math.Max(1L, prevEndSamples - prevStartSamples);
                     double ratio = Math.Abs(fraction) / Math.Max(1e-9, Math.Abs(state.Fraction));
-                    long newLenSamples = Math.Max(1L, (long) Math.Round(prevLenSamples * ratio));
+                    long newLenSamples = Math.Max(1L, (long)Math.Round(prevLenSamples * ratio));
 
                     if (fraction >= 0f)
                     {
@@ -845,7 +845,7 @@ namespace ModularAudience.Forms.Modules
                     {
                         // Normal: anchor at previous end.
                         // If we switched from positive->negative, anchor at previous START (shared boundary).
-                        long anchorEndSamples = Math.Clamp(signChanged ? prevStartSamples : prevEndSamples, (long) channels, totalSamples);
+                        long anchorEndSamples = Math.Clamp(signChanged ? prevStartSamples : prevEndSamples, (long)channels, totalSamples);
 
                         long desiredStartSamples = anchorEndSamples - newLenSamples;
                         long clampedStart = Math.Clamp(desiredStartSamples, 0L, Math.Max(0L, anchorEndSamples - 1));
@@ -858,7 +858,7 @@ namespace ModularAudience.Forms.Modules
                 }
                 else if (anchoredAbsoluteByMultiplier)
                 {
-                    long targetLenFrames = Math.Max(1L, (long) Math.Round(Math.Abs(fraction) * framesPerBeat));
+                    long targetLenFrames = Math.Max(1L, (long)Math.Round(Math.Abs(fraction) * framesPerBeat));
                     long targetLenSamples = Math.Max(1L, targetLenFrames * channels);
 
                     if (fraction >= 0f)
@@ -875,7 +875,7 @@ namespace ModularAudience.Forms.Modules
                     }
                     else
                     {
-                        long anchorEndSamples = Math.Clamp(signChanged ? prevStartSamples : prevEndSamples, (long) channels, totalSamples);
+                        long anchorEndSamples = Math.Clamp(signChanged ? prevStartSamples : prevEndSamples, (long)channels, totalSamples);
 
                         long desiredStartSamples = anchorEndSamples - targetLenSamples;
                         long clampedStart = Math.Clamp(desiredStartSamples, 0L, Math.Max(0L, anchorEndSamples - 1));
@@ -888,7 +888,7 @@ namespace ModularAudience.Forms.Modules
                 }
                 else
                 {
-                    long deltaFrames = Math.Max(1L, (long) Math.Round(Math.Abs(fraction) * framesPerBeat));
+                    long deltaFrames = Math.Max(1L, (long)Math.Round(Math.Abs(fraction) * framesPerBeat));
                     long currentFrame = currentSamplesOverride.HasValue
                         ? currentSamplesBefore / channels
                         : audio.Position;
@@ -1273,7 +1273,7 @@ namespace ModularAudience.Forms.Modules
                 try
                 {
                     // BeginInvoke stellt sicher, dass das auslösende Event komplettExecuted
-                    this.BeginInvoke((Action) (() =>
+                    this.BeginInvoke((Action)(() =>
                     {
                         try
                         {
@@ -1444,7 +1444,7 @@ namespace ModularAudience.Forms.Modules
             {
                 this.numericUpDown_jump.ValueChanged -= this.numericUpDown_jump_ValueChanged;
 
-                double currentValue = (double) this.numericUpDown_jump.Value;
+                double currentValue = (double)this.numericUpDown_jump.Value;
                 AudioObj? audio = this.OriginalAudio;
                 double rateFactor = audio == null ? 1.0 : GetJumpRateFactor(audio);
                 double baseJumpMs = audio == null
@@ -1467,15 +1467,15 @@ namespace ModularAudience.Forms.Modules
                     baseJumpMs = currentValue * rateFactor;
                 }
 
-                double minimumBaseMs = (double) this.numericUpDown_jump.Minimum * rateFactor;
-                double maximumBaseMs = (double) this.numericUpDown_jump.Maximum * rateFactor;
+                double minimumBaseMs = (double)this.numericUpDown_jump.Minimum * rateFactor;
+                double maximumBaseMs = (double)this.numericUpDown_jump.Maximum * rateFactor;
                 baseJumpMs = Math.Clamp(baseJumpMs, minimumBaseMs, maximumBaseMs);
                 this.SetJumpBaseMs(audio, baseJumpMs);
                 double scaledJumpMs = Math.Clamp(baseJumpMs / rateFactor,
-                    (double) this.numericUpDown_jump.Minimum,
-                    (double) this.numericUpDown_jump.Maximum);
-                this.numericUpDown_jump.Value = (decimal) scaledJumpMs;
-                this.lastJumpValue = (double) this.numericUpDown_jump.Value;
+                    (double)this.numericUpDown_jump.Minimum,
+                    (double)this.numericUpDown_jump.Maximum);
+                this.numericUpDown_jump.Value = (decimal)scaledJumpMs;
+                this.lastJumpValue = (double)this.numericUpDown_jump.Value;
                 this.lastJumpMs = this.lastJumpValue;
 
                 this.numericUpDown_jump.ValueChanged += this.numericUpDown_jump_ValueChanged;
@@ -1496,10 +1496,10 @@ namespace ModularAudience.Forms.Modules
             double baseJumpMs = msPerBeat * rateFactor;
             this.SetJumpBaseMs(audio, baseJumpMs);
             double scaledJumpMs = Math.Clamp(baseJumpMs / rateFactor,
-                (double) this.numericUpDown_jump.Minimum,
-                (double) this.numericUpDown_jump.Maximum);
-            this.numericUpDown_jump.Value = (decimal) scaledJumpMs;
-            this.lastJumpMs = (double) this.numericUpDown_jump.Value;
+                (double)this.numericUpDown_jump.Minimum,
+                (double)this.numericUpDown_jump.Maximum);
+            this.numericUpDown_jump.Value = (decimal)scaledJumpMs;
+            this.lastJumpMs = (double)this.numericUpDown_jump.Value;
             this.lastJumpValue = this.lastJumpMs;
         }
 
@@ -1517,13 +1517,13 @@ namespace ModularAudience.Forms.Modules
         {
             double baseJumpMs = this.GetJumpBaseMs(audio);
             double scaledJumpMs = Math.Clamp(baseJumpMs / rateFactor,
-                (double) this.numericUpDown_jump.Minimum,
-                (double) this.numericUpDown_jump.Maximum);
+                (double)this.numericUpDown_jump.Minimum,
+                (double)this.numericUpDown_jump.Maximum);
             this.suppressJumpEvents = true;
             try
             {
-                this.numericUpDown_jump.Value = (decimal) scaledJumpMs;
-                this.lastJumpMs = (double) this.numericUpDown_jump.Value;
+                this.numericUpDown_jump.Value = (decimal)scaledJumpMs;
+                this.lastJumpMs = (double)this.numericUpDown_jump.Value;
                 this.lastJumpValue = this.lastJumpMs;
             }
             finally
@@ -1559,7 +1559,7 @@ namespace ModularAudience.Forms.Modules
             // zur Loop-Länge ist (multi < 1 -> kürzerer Sprung, multi > 1 -> weiter).
             // JumpMs is audible playback time. Varispeed advances farther through
             // the source during that time, so source frames scale with the rate.
-            long deltaFrames = (long) (audio.SampleRate * this.JumpMs / 1000f * this.Multiplier * rateFactor) * direction;
+            long deltaFrames = (long)(audio.SampleRate * this.JumpMs / 1000f * this.Multiplier * rateFactor) * direction;
             long currentSamples = audio.Position * channels;
             long deltaSamples = deltaFrames * channels;
 
@@ -2240,7 +2240,7 @@ namespace ModularAudience.Forms.Modules
             {
                 // compute median bpm for selected tracks
                 double? medianBpm = null;
-                var bpms = audios.Where(a => a != null && a.Bpm > 0).Select(a => (double) a.Bpm).OrderBy(x => x).ToArray();
+                var bpms = audios.Where(a => a != null && a.Bpm > 0).Select(a => (double)a.Bpm).OrderBy(x => x).ToArray();
                 if (bpms.Length > 0)
                 {
                     medianBpm = bpms[bpms.Length / 2];

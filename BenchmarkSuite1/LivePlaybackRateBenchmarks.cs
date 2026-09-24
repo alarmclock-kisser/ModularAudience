@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace BenchmarkSuite1;
+
 [WarmupCount(3)]
 [IterationCount(50)]
 [InvocationCount(1)]

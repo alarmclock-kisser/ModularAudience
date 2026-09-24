@@ -153,7 +153,7 @@ namespace ModularAudience.Audio.Processors_V3
                 double rate = 1.0 - normalized * this.maxNudge;
                 rate = Math.Clamp(rate, 1.0 - this.maxNudge, 1.0 + this.maxNudge);
 
-                await ApplyRateAsync(slave, (float) rate).ConfigureAwait(false);
+                await ApplyRateAsync(slave, (float)rate).ConfigureAwait(false);
             }
         }
 
@@ -175,7 +175,7 @@ namespace ModularAudience.Audio.Processors_V3
 
         private static double GetPhase(AudioObj track, double beatDuration)
         {
-            double t = Math.Max(0, track.CurrentTime.TotalSeconds - Math.Max(0, track.StartingOffset / (double) Math.Max(1, track.Channels) / track.SampleRate));
+            double t = Math.Max(0, track.CurrentTime.TotalSeconds - Math.Max(0, track.StartingOffset / (double)Math.Max(1, track.Channels) / track.SampleRate));
             double phase = t % beatDuration;
             return phase;
         }
@@ -219,10 +219,10 @@ namespace ModularAudience.Audio.Processors_V3
             const int stepDelayMs = 20;
             for (int i = 1; i <= steps; i++)
             {
-                float blend = i / (float) steps;
+                float blend = i / (float)steps;
                 foreach (var t in playable)
                 {
-                    float rate = (float) (t.SyncNudgeSampleRateFactor + (1.0 - t.SyncNudgeSampleRateFactor) * blend);
+                    float rate = (float)(t.SyncNudgeSampleRateFactor + (1.0 - t.SyncNudgeSampleRateFactor) * blend);
                     t.SyncNudgeSampleRateFactor = rate;
                     try { await t.ApplyCombinedSampleRateAsync().ConfigureAwait(false); } catch { }
                 }

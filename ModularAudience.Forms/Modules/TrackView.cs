@@ -4,6 +4,7 @@ using ModularAudience.Audio;
 using ModularAudience.Audio.Processing;
 using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio.Processors_V2;
+using ModularAudience.Audio.Processors_V3;
 using ModularAudience.Audio.Processors_V4;
 using ModularAudience.Forms.Controls;
 using ModularAudience.Forms.Helpers;
@@ -45,7 +46,7 @@ namespace ModularAudience.Forms.Modules
         public readonly TrackViewSettings Settings;
 
 
-        private float CurrentVolume => 1f - (float) this.vScrollBar_volume.Value / Math.Max(1, this.vScrollBar_volume.Maximum);
+        private float CurrentVolume => 1f - (float)this.vScrollBar_volume.Value / Math.Max(1, this.vScrollBar_volume.Maximum);
         internal bool Synced => this.checkBox_sync.Checked;
         internal bool Muted => this.checkBox_mute.Checked;
         internal bool Soloed => this.checkBox_solo.Checked;
@@ -78,12 +79,17 @@ namespace ModularAudience.Forms.Modules
         private long loopFractionSamples;
         private bool suppressSettingsCheckbox;
         private int _lastRateContextMenuValue;
+        private int beatGridGranularity = 4;
+        private ToolStripComboBox? beatGridV3DivisionCombo;
+        private ToolStripComboBox? beatGridAnalogDivisionCombo;
+        private bool synchronizingBeatDivisionCombos;
         private readonly int designerClientWidth;
         private readonly int designerWaveWidth;
 
         public TrackView(AudioObj audio, AudioCollection? sourceCollection = null)
         {
             this.InitializeComponent();
+            this.SetupBeatGridDivisionMenus();
             this.StartPosition = FormStartPosition.Manual;
             this.designerClientWidth = this.ClientSize.Width;
             this.designerWaveWidth = this.pictureBox_waveform.Width;
@@ -241,7 +247,7 @@ namespace ModularAudience.Forms.Modules
         {
             this.vScrollBar_volume.Minimum = 0;
             this.vScrollBar_volume.Maximum = Math.Max(1, this.vScrollBar_volume.Maximum);
-            this.vScrollBar_volume.Value = (int) Math.Clamp(this.vScrollBar_volume.Maximum * 0.2f, this.vScrollBar_volume.Minimum, this.vScrollBar_volume.Maximum - 1);
+            this.vScrollBar_volume.Value = (int)Math.Clamp(this.vScrollBar_volume.Maximum * 0.2f, this.vScrollBar_volume.Minimum, this.vScrollBar_volume.Maximum - 1);
             this.ApplyVolumeFromScrollbar();
 
             this.hScrollBar_rate.Minimum = -100;
@@ -272,7 +278,7 @@ namespace ModularAudience.Forms.Modules
             this.samplesPerPixel = baseSamplesPerPixel;
 
             int desiredWidth = totalFrames > 0
-                ? (int) Math.Ceiling(totalFrames / (double) this.samplesPerPixel)
+                ? (int)Math.Ceiling(totalFrames / (double)this.samplesPerPixel)
                 : minWidth;
 
             Rectangle workingArea = Screen.FromControl(this).WorkingArea;
@@ -282,12 +288,12 @@ namespace ModularAudience.Forms.Modules
             // Add 10% clearance on the right end for initial view
             if (desiredWidth == maxWidth)
             {
-                desiredWidth = (int) (maxWidth * 0.9);
+                desiredWidth = (int)(maxWidth * 0.9);
             }
 
             if (totalFrames > 0)
             {
-                int requiredSamplesPerPixel = (int) Math.Ceiling(totalFrames / (double) Math.Max(1, desiredWidth));
+                int requiredSamplesPerPixel = (int)Math.Ceiling(totalFrames / (double)Math.Max(1, desiredWidth));
                 this.samplesPerPixel = Math.Clamp(requiredSamplesPerPixel, MinSamplesPerPixel, MaxSamplesPerPixel);
             }
 
@@ -350,7 +356,7 @@ namespace ModularAudience.Forms.Modules
 
         private void UpdateFrameTimerInterval()
         {
-            int desiredInterval = (int) Math.Max(1, 1000.0 / this.Settings.FrameRate);
+            int desiredInterval = (int)Math.Max(1, 1000.0 / this.Settings.FrameRate);
             this.frameTimer.Interval = desiredInterval;
         }
 
@@ -388,22 +394,22 @@ namespace ModularAudience.Forms.Modules
             TimeSpan current;
             if (this.OriginalAudio.Playing)
             {
-                current = TimeSpan.FromSeconds(this.OriginalAudio.Position / (double) sampleRate);
+                current = TimeSpan.FromSeconds(this.OriginalAudio.Position / (double)sampleRate);
                 this.textBox_time.ForeColor = Color.Black;
             }
             else if (this.mouseOverWave)
             {
-                long frame = this.offsetFrames + (long) Math.Clamp(this.mouseX, 0, Math.Max(1, this.pictureBox_waveform.Width)) * this.samplesPerPixel;
-                current = TimeSpan.FromSeconds(frame / (double) sampleRate);
+                long frame = this.offsetFrames + (long)Math.Clamp(this.mouseX, 0, Math.Max(1, this.pictureBox_waveform.Width)) * this.samplesPerPixel;
+                current = TimeSpan.FromSeconds(frame / (double)sampleRate);
                 this.textBox_time.ForeColor = Color.RoyalBlue;
             }
             else
             {
                 long frame = Math.Clamp(this.OriginalAudio.Position, 0, Math.Max(0, this.GetTotalFrames()));
-                current = TimeSpan.FromSeconds(frame / (double) sampleRate);
+                current = TimeSpan.FromSeconds(frame / (double)sampleRate);
                 this.textBox_time.ForeColor = Color.Black;
             }
-            this.textBox_time.Text = string.Format("{0}:{1:D2}:{2:D2}.{3:D3}", (int) current.TotalHours, current.Minutes, current.Seconds, current.Milliseconds);
+            this.textBox_time.Text = string.Format("{0}:{1:D2}:{2:D2}.{3:D3}", (int)current.TotalHours, current.Minutes, current.Seconds, current.Milliseconds);
         }
 
         private async Task RefreshWaveformAsync()
@@ -453,7 +459,7 @@ namespace ModularAudience.Forms.Modules
                 int height = Math.Max(1, this.pictureBox_waveform.Height);
 
                 // Calculate visible frames and clamp offset so the waveform rendering routine always draws a valid range
-                long visibleFrames = (long) width * this.samplesPerPixel;
+                long visibleFrames = (long)width * this.samplesPerPixel;
                 long totalFrames = this.GetTotalFrames();
                 long maxNormalOffset = Math.Max(0, totalFrames - visibleFrames);
 
@@ -462,12 +468,12 @@ namespace ModularAudience.Forms.Modules
 
                 // If caller offset is beyond clamp, compute how many pixels we must shift the rendered image to the left
                 long extraShiftSamples = Math.Max(0, this.offsetFrames - clampOffsetFrames);
-                int extraShiftPixels = (int) Math.Round(extraShiftSamples / (double) Math.Max(1, this.samplesPerPixel));
+                int extraShiftPixels = (int)Math.Round(extraShiftSamples / (double)Math.Max(1, this.samplesPerPixel));
 
                 // Compute caret position relative to the clamped render offset
                 long position = this.OriginalAudio.Position;
-                double caretPx = (position - clampOffsetFrames) / (double) Math.Max(1, this.samplesPerPixel);
-                float caretNormalizedForRender = (float) Math.Clamp(caretPx / Math.Max(1, width), 0.0, 1.0);
+                double caretPx = (position - clampOffsetFrames) / (double)Math.Max(1, this.samplesPerPixel);
+                float caretNormalizedForRender = (float)Math.Clamp(caretPx / Math.Max(1, width), 0.0, 1.0);
 
                 var bmp = await this.OriginalAudio.DrawWaveformAsync(
                     width: width,
@@ -535,7 +541,7 @@ namespace ModularAudience.Forms.Modules
 
                 if (this.pictureBox_waveform.IsHandleCreated)
                 {
-                    this.pictureBox_waveform.Invoke((Action) (() =>
+                    this.pictureBox_waveform.Invoke((Action)(() =>
                     {
                         this.DisposeCurrentBitmap();
                         this.currentWaveformBitmap = finalBmp;
@@ -577,7 +583,7 @@ namespace ModularAudience.Forms.Modules
             long selStartFrames = selectionStart / channels;
             long selEndFrames = selectionEnd / channels;
             long visibleStart = this.offsetFrames;
-            long visibleEnd = visibleStart + (long) bmp.Width * this.samplesPerPixel;
+            long visibleEnd = visibleStart + (long)bmp.Width * this.samplesPerPixel;
 
             long drawStart = Math.Max(selStartFrames, visibleStart);
             long drawEnd = Math.Min(selEndFrames, visibleEnd);
@@ -586,8 +592,8 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            float pxStart = (drawStart - visibleStart) / (float) this.samplesPerPixel;
-            float pxEnd = (drawEnd - visibleStart) / (float) this.samplesPerPixel;
+            float pxStart = (drawStart - visibleStart) / (float)this.samplesPerPixel;
+            float pxEnd = (drawEnd - visibleStart) / (float)this.samplesPerPixel;
             using var g = Graphics.FromImage(bmp);
             using var brush = new SolidBrush(Color.FromArgb(80, selectionColor));
             g.FillRectangle(brush, pxStart, 0, Math.Max(1f, pxEnd - pxStart), bmp.Height);
@@ -637,8 +643,8 @@ namespace ModularAudience.Forms.Modules
                 {
                     pxStart = this.FrameToPixel(insideStart);
                     pxEnd = this.FrameToPixel(insideEnd);
-                    int x = (Int32) pxStart;
-                    int w = (Int32) Math.Max(1, pxEnd - pxStart);
+                    int x = (Int32)pxStart;
+                    int w = (Int32)Math.Max(1, pxEnd - pxStart);
 
                     int drawX = Math.Max(0, x);
                     int drawWidth = Math.Min(clipWidth, x + w) - drawX;
@@ -947,10 +953,10 @@ namespace ModularAudience.Forms.Modules
         private int GetRateScrollbarValueFromMouseX(int mouseX)
         {
             int width = Math.Max(1, this.hScrollBar_rate.ClientSize.Width - 1);
-            double fraction = Math.Clamp(mouseX / (double) width, 0.0, 1.0);
+            double fraction = Math.Clamp(mouseX / (double)width, 0.0, 1.0);
             int min = this.hScrollBar_rate.Minimum;
             int max = this.hScrollBar_rate.Maximum;
-            return min + (int) Math.Round((max - min) * fraction);
+            return min + (int)Math.Round((max - min) * fraction);
         }
 
         private async Task ApplyPlaybackRateAsync()
@@ -986,17 +992,17 @@ namespace ModularAudience.Forms.Modules
         private void UpdateOffsetScrollbar()
         {
             long maxOffset = this.GetMaxOffsetFrames();
-            long visibleFrames = (long) Math.Max(1, this.pictureBox_waveform.Width) * this.samplesPerPixel;
+            long visibleFrames = (long)Math.Max(1, this.pictureBox_waveform.Width) * this.samplesPerPixel;
             var sb = this.hScrollBar_offset;
-            int large = (int) Math.Min(int.MaxValue / 4, Math.Max(1, visibleFrames));
+            int large = (int)Math.Min(int.MaxValue / 4, Math.Max(1, visibleFrames));
             int small = Math.Max(1, large / 10);
 
             sb.Minimum = 0;
             sb.LargeChange = large;
             sb.SmallChange = small;
             long maxValue = Math.Min(int.MaxValue - large, maxOffset);
-            sb.Maximum = (int) (maxValue + large);
-            int desired = (int) Math.Clamp(this.offsetFrames, sb.Minimum, sb.Maximum - sb.LargeChange);
+            sb.Maximum = (int)(maxValue + large);
+            int desired = (int)Math.Clamp(this.offsetFrames, sb.Minimum, sb.Maximum - sb.LargeChange);
             if (sb.Value != desired)
             {
                 sb.Value = desired;
@@ -1013,11 +1019,11 @@ namespace ModularAudience.Forms.Modules
         {
             long totalFrames = this.GetTotalFrames();
             // Anzahl der sichtbaren Frames in der PictureBox (wie bisher)
-            long visibleFrames = (long) Math.Max(1, this.pictureBox_waveform.Width) * this.samplesPerPixel;
+            long visibleFrames = (long)Math.Max(1, this.pictureBox_waveform.Width) * this.samplesPerPixel;
 
             // Zusätzlicher visueller Puffer am Ende: 20% der sichtbaren Breite
             const double extraFraction = 0.20;
-            long extraFrames = (long) Math.Round(visibleFrames * extraFraction);
+            long extraFrames = (long)Math.Round(visibleFrames * extraFraction);
 
             // Erlaube Scrolling bis (end-of-samples) + extraFrames, aber never negative
             long max = totalFrames - visibleFrames + extraFrames;
@@ -1028,7 +1034,7 @@ namespace ModularAudience.Forms.Modules
         {
             int width = Math.Max(1, this.pictureBox_waveform.Width);
             x = Math.Clamp(x, 0, width);
-            return this.offsetFrames + (long) x * this.samplesPerPixel;
+            return this.offsetFrames + (long)x * this.samplesPerPixel;
         }
 
         private void Wave_MouseWheel(object? sender, MouseEventArgs e)
@@ -1072,8 +1078,8 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            long visibleFrames = (long) Math.Max(1, this.pictureBox_waveform.Width) * this.samplesPerPixel;
-            long stepFrames = Math.Max(1, (long) (visibleFrames * 0.15));
+            long visibleFrames = (long)Math.Max(1, this.pictureBox_waveform.Width) * this.samplesPerPixel;
+            long stepFrames = Math.Max(1, (long)(visibleFrames * 0.15));
             if (e.Delta > 0)
             {
                 this.offsetFrames = Math.Max(0, this.offsetFrames - stepFrames);
@@ -1096,10 +1102,10 @@ namespace ModularAudience.Forms.Modules
 
             int width = Math.Max(1, this.pictureBox_waveform.Width);
             int localX = Math.Clamp(cursorX, 0, width - 1);
-            long sampleAtCursor = this.offsetFrames + (long) localX * this.samplesPerPixel;
+            long sampleAtCursor = this.offsetFrames + (long)localX * this.samplesPerPixel;
 
             this.samplesPerPixel = newSamplesPerPixel;
-            long desiredOffset = sampleAtCursor - (long) localX * this.samplesPerPixel;
+            long desiredOffset = sampleAtCursor - (long)localX * this.samplesPerPixel;
             desiredOffset = Math.Max(0, desiredOffset);
             this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
 
@@ -1170,7 +1176,7 @@ namespace ModularAudience.Forms.Modules
                     long overflow = (e.X >= width - 1) ? (e.X - (width - 1)) : (0 - e.X);
 
                     // Wandle das Pixel-Overflow in Frames um
-                    long frameOverflow = (long) (overflow * this.samplesPerPixel);
+                    long frameOverflow = (long)(overflow * this.samplesPerPixel);
 
                     // Update den Offset
                     long newOffset = this.offsetFrames + (e.X >= width - 1 ? frameOverflow : -frameOverflow);
@@ -1683,8 +1689,8 @@ namespace ModularAudience.Forms.Modules
                 return regionLength;
             }
 
-            double fraction = Math.Ceiling(regionLength / (double) this.loopDenominator);
-            return Math.Max(1, (long) fraction);
+            double fraction = Math.Ceiling(regionLength / (double)this.loopDenominator);
+            return Math.Max(1, (long)fraction);
         }
 
         private void AlignViewToCurrentPosition()
@@ -1700,8 +1706,8 @@ namespace ModularAudience.Forms.Modules
         {
             int width = Math.Max(1, this.pictureBox_waveform.Width - 1);
             float normalized = this.GetCaretAnchorNormalized();
-            int caretPx = (int) Math.Round(width * normalized);
-            return (long) caretPx * this.samplesPerPixel;
+            int caretPx = (int)Math.Round(width * normalized);
+            return (long)caretPx * this.samplesPerPixel;
         }
 
         private float GetCaretAnchorNormalized()
@@ -1716,7 +1722,7 @@ namespace ModularAudience.Forms.Modules
             int width = Math.Max(1, this.pictureBox_waveform.Width - 1);
             long position = this.OriginalAudio.Position;
             long visibleStart = this.offsetFrames;
-            long visibleEnd = visibleStart + (long) width * this.samplesPerPixel;
+            long visibleEnd = visibleStart + (long)width * this.samplesPerPixel;
 
             if (position <= visibleStart)
             {
@@ -1728,8 +1734,8 @@ namespace ModularAudience.Forms.Modules
                 return 1f;
             }
 
-            double px = (position - visibleStart) / (double) Math.Max(1, this.samplesPerPixel);
-            return (float) Math.Clamp(px / width, 0.0, 1.0);
+            double px = (position - visibleStart) / (double)Math.Max(1, this.samplesPerPixel);
+            return (float)Math.Clamp(px / width, 0.0, 1.0);
         }
 
         private void TrackView_SizeChanged(object? sender, EventArgs e)
@@ -1878,7 +1884,7 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            const Keys LessGreaterPipeKey = (Keys) 226;
+            const Keys LessGreaterPipeKey = (Keys)226;
 
             // Ctrl + <  -> Fade In
             if (e.Control && !e.Shift && e.KeyCode == LessGreaterPipeKey)
@@ -1987,7 +1993,7 @@ namespace ModularAudience.Forms.Modules
                     this.OriginalAudio.Length = sampleCount;
                     int channels = Math.Max(1, this.OriginalAudio.Channels);
                     int sampleRate = Math.Max(1, this.OriginalAudio.SampleRate);
-                    this.OriginalAudio.Duration = TimeSpan.FromSeconds(sampleCount / (double) (sampleRate * channels));
+                    this.OriginalAudio.Duration = TimeSpan.FromSeconds(sampleCount / (double)(sampleRate * channels));
                 }
                 catch { }
             }
@@ -2122,7 +2128,7 @@ namespace ModularAudience.Forms.Modules
         {
             long sampleIndexUnderMouse = this.MapPixelToFrameInView(this.pictureBox_waveform.PointToClient(Cursor.Position).X) * Math.Max(1, this.OriginalAudio.Channels);
             this.toolStripMenuItem_jumpHere.Tag = sampleIndexUnderMouse;
-            string timeStamp = TimeSpan.FromSeconds(sampleIndexUnderMouse / (double) Math.Max(1, this.OriginalAudio.SampleRate * this.OriginalAudio.Channels)).ToString(@"hh\:mm\:ss\.fff");
+            string timeStamp = TimeSpan.FromSeconds(sampleIndexUnderMouse / (double)Math.Max(1, this.OriginalAudio.SampleRate * this.OriginalAudio.Channels)).ToString(@"hh\:mm\:ss\.fff");
             this.toolStripMenuItem_jumpHere.Text = "Jump to " + $"[{timeStamp}]";
 
             bool hasSelection = this.HasValidSelection();
@@ -2319,7 +2325,7 @@ namespace ModularAudience.Forms.Modules
             bool activated = this.beatGridV1ToolStripMenuItem.Checked;
             if (activated)
             {
-                if (this.OriginalAudio.Data.LongLength != this.OriginalAudio.BeatGrid.LongLength * 2 || this.beatGridV2ToolStripMenuItem.Checked)
+                if (!HasBeatGridForAudio() || this.beatGridV2ToolStripMenuItem.Checked || this.beatGridV3ToolStripMenuItem.Checked)
                 {
                     // Make cursor for Form busy
                     Cursor previousCursor = this.Cursor;
@@ -2332,6 +2338,8 @@ namespace ModularAudience.Forms.Modules
                 }
 
                 this.beatGridV2ToolStripMenuItem.Checked = false;
+                this.beatGridV3ToolStripMenuItem.Checked = false;
+                this.beatGridAnalogToolStripMenuItem.Checked = false;
             }
 
             this.OriginalAudio.DrawBeatGrid = activated;
@@ -2348,7 +2356,7 @@ namespace ModularAudience.Forms.Modules
             bool activated = this.beatGridV2ToolStripMenuItem.Checked;
             if (activated)
             {
-                if (this.OriginalAudio.Data.LongLength != this.OriginalAudio.BeatGrid.LongLength * 2 || this.beatGridV1ToolStripMenuItem.Checked)
+                if (!HasBeatGridForAudio() || this.beatGridV1ToolStripMenuItem.Checked || this.beatGridV3ToolStripMenuItem.Checked)
                 {
                     // Make cursor for Form busy
                     Cursor previousCursor = this.Cursor;
@@ -2361,6 +2369,8 @@ namespace ModularAudience.Forms.Modules
                 }
 
                 this.beatGridV1ToolStripMenuItem.Checked = false;
+                this.beatGridV3ToolStripMenuItem.Checked = false;
+                this.beatGridAnalogToolStripMenuItem.Checked = false;
             }
 
             this.OriginalAudio.DrawBeatGrid = activated;
@@ -2370,6 +2380,142 @@ namespace ModularAudience.Forms.Modules
                 // Redraw waveform
                 await this.RefreshWaveformAsync();
             }
+        }
+
+        private async void beatGridV3ToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            bool activated = this.beatGridV3ToolStripMenuItem.Checked;
+            if (activated)
+            {
+                Cursor previousCursor = this.Cursor;
+                this.Cursor = Cursors.WaitCursor;
+
+                await BeatGridFinder_V3.GenerateBeatGridAsync(this.OriginalAudio, granularity: this.beatGridGranularity);
+
+                this.Cursor = previousCursor;
+
+                this.beatGridV1ToolStripMenuItem.Checked = false;
+                this.beatGridV2ToolStripMenuItem.Checked = false;
+                this.beatGridAnalogToolStripMenuItem.Checked = false;
+            }
+
+            this.OriginalAudio.DrawBeatGrid = activated;
+
+            if (activated && !this.OriginalAudio.Playing)
+            {
+                await this.RefreshWaveformAsync();
+            }
+        }
+
+        private async void beatGridAnalogToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            bool activated = this.beatGridAnalogToolStripMenuItem.Checked;
+            if (activated)
+            {
+                Cursor previousCursor = this.Cursor;
+                this.Cursor = Cursors.WaitCursor;
+
+                await BeatGridFinder_Analog.GenerateBeatGridAsync(this.OriginalAudio, granularity: this.beatGridGranularity);
+
+                this.Cursor = previousCursor;
+
+                this.beatGridV1ToolStripMenuItem.Checked = false;
+                this.beatGridV2ToolStripMenuItem.Checked = false;
+                this.beatGridV3ToolStripMenuItem.Checked = false;
+            }
+
+            this.OriginalAudio.DrawBeatGrid = activated;
+
+            if (activated && !this.OriginalAudio.Playing)
+            {
+                await this.RefreshWaveformAsync();
+            }
+        }
+
+        private void SetupBeatGridDivisionMenus()
+        {
+            this.beatGridV3DivisionCombo = AddDivisionCombo(this.beatGridV3ToolStripMenuItem, analog: false);
+            this.beatGridAnalogDivisionCombo = AddDivisionCombo(this.beatGridAnalogToolStripMenuItem, analog: true);
+
+            ToolStripComboBox AddDivisionCombo(ToolStripMenuItem parent, bool analog)
+            {
+                parent.DropDownItems.Add(new ToolStripLabel("Beat division"));
+                var combo = new ToolStripComboBox
+                {
+                    DropDownStyle = ComboBoxStyle.DropDownList,
+                    AutoSize = false,
+                    Width = 90
+                };
+                foreach (int division in new[] { 1, 2, 4, 8, 16 })
+                {
+                    combo.Items.Add($"1/{division}");
+                }
+                combo.SelectedItem = $"1/{this.beatGridGranularity}";
+                combo.SelectedIndexChanged += async (_, _) =>
+                {
+                    if (this.synchronizingBeatDivisionCombos || combo.SelectedItem is not string selected)
+                    {
+                        return;
+                    }
+                    int division = int.Parse(selected.AsSpan(2));
+                    this.synchronizingBeatDivisionCombos = true;
+                    try
+                    {
+                        if (this.beatGridV3DivisionCombo != null) this.beatGridV3DivisionCombo.SelectedItem = selected;
+                        if (this.beatGridAnalogDivisionCombo != null) this.beatGridAnalogDivisionCombo.SelectedItem = selected;
+                    }
+                    finally
+                    {
+                        this.synchronizingBeatDivisionCombos = false;
+                    }
+                    await SelectBeatGridDivisionAsync(division, analog);
+                };
+                parent.DropDownItems.Add(combo);
+                return combo;
+            }
+        }
+
+        private async Task SelectBeatGridDivisionAsync(int division, bool analog)
+        {
+            this.beatGridGranularity = division;
+            Cursor previousCursor = this.Cursor;
+            this.Cursor = Cursors.WaitCursor;
+            try
+            {
+                if (analog)
+                {
+                    this.beatGridAnalogToolStripMenuItem.Checked = true;
+                    this.beatGridV1ToolStripMenuItem.Checked = false;
+                    this.beatGridV2ToolStripMenuItem.Checked = false;
+                    this.beatGridV3ToolStripMenuItem.Checked = false;
+                    await BeatGridFinder_Analog.GenerateBeatGridAsync(this.OriginalAudio, granularity: division);
+                }
+                else
+                {
+                    this.beatGridV3ToolStripMenuItem.Checked = true;
+                    this.beatGridV1ToolStripMenuItem.Checked = false;
+                    this.beatGridV2ToolStripMenuItem.Checked = false;
+                    this.beatGridAnalogToolStripMenuItem.Checked = false;
+                    await BeatGridFinder_V3.GenerateBeatGridAsync(this.OriginalAudio, granularity: division);
+                }
+                this.OriginalAudio.DrawBeatGrid = true;
+                if (!this.OriginalAudio.Playing)
+                {
+                    await this.RefreshWaveformAsync();
+                }
+            }
+            finally
+            {
+                this.Cursor = previousCursor;
+            }
+        }
+
+        private bool HasBeatGridForAudio()
+        {
+            int channels = Math.Max(1, this.OriginalAudio.Channels);
+            return this.OriginalAudio.Data != null
+                && this.OriginalAudio.BeatGrid != null
+                && this.OriginalAudio.BeatGrid.LongLength == this.OriginalAudio.Data.LongLength / channels;
         }
 
 
@@ -2420,7 +2566,7 @@ namespace ModularAudience.Forms.Modules
             if (wasPlaying)
             {
                 double lagSeconds = Math.Max(0.0, (DateTime.UtcNow - playbackSnapshotUtc).TotalSeconds);
-                long lagSamples = (long) Math.Round(lagSeconds * Math.Max(1, original.SampleRate) * sourceChannels);
+                long lagSamples = (long)Math.Round(lagSeconds * Math.Max(1, original.SampleRate) * sourceChannels);
                 sourcePositionSamples += Math.Max(0L, lagSamples);
             }
 
@@ -2455,7 +2601,7 @@ namespace ModularAudience.Forms.Modules
             original.Length = sampleCount;
             int channels = Math.Max(1, original.Channels);
             int sampleRate = Math.Max(1, original.SampleRate);
-            original.Duration = TimeSpan.FromSeconds(sampleCount / (double) (sampleRate * channels));
+            original.Duration = TimeSpan.FromSeconds(sampleCount / (double)(sampleRate * channels));
 
             original.Metrics.Clear();
             foreach (var metric in result.Metrics)
@@ -2463,7 +2609,7 @@ namespace ModularAudience.Forms.Modules
                 original.Metrics[metric.Key] = metric.Value;
             }
 
-            long resumedSamples = (long) Math.Round(sourcePositionSamples * stretchFactor);
+            long resumedSamples = (long)Math.Round(sourcePositionSamples * stretchFactor);
             resumedSamples = Math.Clamp(resumedSamples, 0L, Math.Max(0L, sampleCount - channels));
             long resumedFrames = resumedSamples / channels;
 
@@ -2718,13 +2864,13 @@ namespace ModularAudience.Forms.Modules
             long totalFrames = this.GetTotalFrames();
             int spp = Math.Max(1, this.samplesPerPixel);
 
-            long frameUnderCursor = this.offsetFrames + (long) x * spp;
+            long frameUnderCursor = this.offsetFrames + (long)x * spp;
             frameUnderCursor = Math.Clamp(frameUnderCursor, 0L, Math.Max(0L, totalFrames - 1));
 
             long snappedFrame = this.OriginalAudio.GetNearestSnapSamplePosition(frameUnderCursor);
 
             double invSpp = 1.0 / spp;
-            int snappedX = (int) Math.Round((snappedFrame - this.offsetFrames) * invSpp);
+            int snappedX = (int)Math.Round((snappedFrame - this.offsetFrames) * invSpp);
             snappedX = Math.Clamp(snappedX, 0, width - 1);
 
             Point newWaveClient = new(snappedX, waveClient.Y);
@@ -2752,7 +2898,7 @@ namespace ModularAudience.Forms.Modules
 
             // Division kann negative Werte erzeugen -> cast/rounding zu int ist OK,
             // aber wir clampen das Ergebnis später, wenn nötig.
-            return (int) (relativeFrame / samplesPerPixel);
+            return (int)(relativeFrame / samplesPerPixel);
         }
 
         private long GetCurrentFramePosition()

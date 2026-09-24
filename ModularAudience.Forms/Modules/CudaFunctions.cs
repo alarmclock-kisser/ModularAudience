@@ -19,8 +19,8 @@ namespace ModularAudience.Forms.Modules
         internal readonly AudioCollection AudioC = new();
 
 
-        private int _chunkSize => (int) this.numericUpDown_chunkSize.Value;
-        private float _overlap => (float) this.numericUpDown_overlap.Value;
+        private int _chunkSize => (int)this.numericUpDown_chunkSize.Value;
+        private float _overlap => (float)this.numericUpDown_overlap.Value;
         private IntPtr? _selectedIndexPointer => this.GetSelectedIndexPointer();
         private string? _selectedKernelName => this.comboBox_kernels.SelectedItem as string;
 
@@ -282,8 +282,8 @@ namespace ModularAudience.Forms.Modules
                         argType == typeof(short) ? short.MinValue :
                         argType == typeof(int) ? int.MinValue :
                         argType == typeof(long) ? long.MinValue :
-                        argType == typeof(float) ? (decimal) -3.4028235E+28 :
-                        argType == typeof(double) ? (decimal) -1.7976931348623157E+28 :
+                        argType == typeof(float) ? (decimal)-3.4028235E+28 :
+                        argType == typeof(double) ? (decimal)-1.7976931348623157E+28 :
                         decimal.MinValue;
 
                     decimal max =
@@ -291,8 +291,8 @@ namespace ModularAudience.Forms.Modules
                         argType == typeof(short) ? short.MaxValue :
                         argType == typeof(int) ? int.MaxValue :
                         argType == typeof(long) ? long.MaxValue :
-                        argType == typeof(float) ? (decimal) 3.4028235E+28 :
-                        argType == typeof(double) ? (decimal) 1.7976931348623157E+28 :
+                        argType == typeof(float) ? (decimal)3.4028235E+28 :
+                        argType == typeof(double) ? (decimal)1.7976931348623157E+28 :
                         decimal.MaxValue;
 
                     int y = baseY + i * (controlHeight + controlMargin);
@@ -309,7 +309,7 @@ namespace ModularAudience.Forms.Modules
                 panel.Controls.Clear();
 
                 // Breiten zunächst ohne Scrollbar berechnen
-                int controlWidth = (int) ((panelWidth - controlMargin) * inputWidthPart);
+                int controlWidth = (int)((panelWidth - controlMargin) * inputWidthPart);
                 int labelWidth = panelWidth - controlWidth;
 
                 // Controls erzeugen
@@ -526,20 +526,20 @@ namespace ModularAudience.Forms.Modules
 
         private void NumericUpDown_RegisterToAlwaysGoBy2(NumericUpDown numericUpDown)
         {
-            numericUpDown.Tag = (decimal) numericUpDown.Value;
+            numericUpDown.Tag = (decimal)numericUpDown.Value;
 
             numericUpDown.ValueChanged += (s, e) =>
             {
-                int value = (int) numericUpDown.Value;
+                int value = (int)numericUpDown.Value;
                 int oldValue = numericUpDown.Tag is int tagValue ? tagValue : 1024;
                 if (value > oldValue)
                 {
-                    value = (int) Math.Clamp(numericUpDown.Minimum, oldValue * 2, numericUpDown.Maximum);
+                    value = (int)Math.Clamp(numericUpDown.Minimum, oldValue * 2, numericUpDown.Maximum);
                     numericUpDown.Value = value;
                 }
                 else if (value < oldValue)
                 {
-                    value = (int) Math.Clamp(numericUpDown.Minimum, oldValue / 2, numericUpDown.Maximum);
+                    value = (int)Math.Clamp(numericUpDown.Minimum, oldValue / 2, numericUpDown.Maximum);
                     numericUpDown.Value = value;
                 }
                 numericUpDown.Tag = value;
@@ -564,17 +564,17 @@ namespace ModularAudience.Forms.Modules
 
         private void numericUpDown_chunkSize_ValueChanged(object sender, EventArgs e)
         {
-            int value = (int) this.numericUpDown_chunkSize.Value;
+            int value = (int)this.numericUpDown_chunkSize.Value;
             int oldValue = this.numericUpDown_chunkSize.Tag is int tagValue ? tagValue : 1024;
 
             if (value > oldValue)
             {
-                value = (int) Math.Clamp(this.numericUpDown_chunkSize.Minimum, oldValue * 2, this.numericUpDown_chunkSize.Maximum);
+                value = (int)Math.Clamp(this.numericUpDown_chunkSize.Minimum, oldValue * 2, this.numericUpDown_chunkSize.Maximum);
                 this.numericUpDown_chunkSize.Value = value;
             }
             else if (value < oldValue)
             {
-                value = (int) Math.Clamp(this.numericUpDown_chunkSize.Minimum, oldValue / 2, this.numericUpDown_chunkSize.Maximum);
+                value = (int)Math.Clamp(this.numericUpDown_chunkSize.Minimum, oldValue / 2, this.numericUpDown_chunkSize.Maximum);
                 this.numericUpDown_chunkSize.Value = value;
             }
 

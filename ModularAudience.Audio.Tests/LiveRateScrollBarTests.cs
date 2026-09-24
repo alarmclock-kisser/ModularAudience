@@ -145,7 +145,7 @@ namespace ModularAudience.Audio.Tests
             Assert.IsTrue(bar.Value < previous);
             Assert.IsTrue(bar.Capture);
             Assert.IsTrue(GetTimer(bar).Enabled);
-            Assert.IsTrue((bool) GetField("followingTrack").GetValue(bar)!);
+            Assert.IsTrue((bool)GetField("followingTrack").GetValue(bar)!);
         }
 
         [STATestMethod]
@@ -155,7 +155,7 @@ namespace ModularAudience.Audio.Tests
             TrackGeometry geometry = GetGeometry(bar);
             foreach (int mouseX in new[] { geometry.Left - 1, geometry.Right, geometry.ThumbLeft, geometry.ThumbRight - 1 })
             {
-                Assert.IsFalse((bool) Invoke(bar, "HandleLeftButtonDown", new Point(mouseX, bar.Height / 2))!);
+                Assert.IsFalse((bool)Invoke(bar, "HandleLeftButtonDown", new Point(mouseX, bar.Height / 2))!);
                 Assert.AreEqual(0, bar.Value);
                 Assert.IsFalse(GetTimer(bar).Enabled);
             }
@@ -184,7 +184,7 @@ namespace ModularAudience.Audio.Tests
             bar.Capture = false;
             Invoke(bar, "TrackRepeatTimer_Tick", null, EventArgs.Empty);
             Assert.IsFalse(GetTimer(bar).Enabled);
-            Assert.IsFalse((bool) GetField("followingTrack").GetValue(bar)!);
+            Assert.IsFalse((bool)GetField("followingTrack").GetValue(bar)!);
             Assert.AreEqual(previous, bar.Value);
         }
 
@@ -225,7 +225,7 @@ namespace ModularAudience.Audio.Tests
             const int arrowWidth = 20;
             const int thumbWidth = 12;
             int travel = width - 2 * arrowWidth - thumbWidth;
-            int thumbLeft = arrowWidth + (int) Math.Round((value + 500) / 1000.0 * travel);
+            int thumbLeft = arrowWidth + (int)Math.Round((value + 500) / 1000.0 * travel);
             return new TrackGeometry(arrowWidth, width - arrowWidth, thumbLeft, thumbLeft + thumbWidth);
         }
 
@@ -242,7 +242,7 @@ namespace ModularAudience.Audio.Tests
         private static void BeginTrackGesture(LiveRateScrollBar bar)
         {
             TrackGeometry geometry = GetGeometry(bar);
-            Assert.IsTrue((bool) Invoke(bar, "HandleLeftButtonDown", new Point(geometry.Right - 1, bar.Height / 2))!);
+            Assert.IsTrue((bool)Invoke(bar, "HandleLeftButtonDown", new Point(geometry.Right - 1, bar.Height / 2))!);
             Assert.IsTrue(bar.Value > 0);
             Assert.IsTrue(bar.Capture);
             Assert.IsTrue(GetTimer(bar).Enabled);
@@ -251,8 +251,8 @@ namespace ModularAudience.Audio.Tests
         private static TrackGeometry GetGeometry(LiveRateScrollBar bar)
         {
             object?[] args = [default(TrackGeometry)];
-            Assert.IsTrue((bool) Invoke(bar, "TryGetGeometry", args)!);
-            return (TrackGeometry) args[0]!;
+            Assert.IsTrue((bool)Invoke(bar, "TryGetGeometry", args)!);
+            return (TrackGeometry)args[0]!;
         }
 
         private static object? Invoke(LiveRateScrollBar bar, string name, params object?[] args) =>
@@ -261,6 +261,6 @@ namespace ModularAudience.Audio.Tests
         private static FieldInfo GetField(string name) =>
             typeof(LiveRateScrollBar).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!;
 
-        private static Timer GetTimer(LiveRateScrollBar bar) => (Timer) GetField("trackRepeatTimer").GetValue(bar)!;
+        private static Timer GetTimer(LiveRateScrollBar bar) => (Timer)GetField("trackRepeatTimer").GetValue(bar)!;
     }
 }

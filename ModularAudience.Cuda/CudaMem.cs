@@ -63,7 +63,7 @@ namespace ModularAudience.Cuda
             }
 
             this.DevicePointers = pointers;
-            this.Pointers = pointers.Select(ptr => (nint) ptr.Pointer).ToArray();
+            this.Pointers = pointers.Select(ptr => (nint)ptr.Pointer).ToArray();
             this.Lengths = lengths;
             this.ElementType = type;
 

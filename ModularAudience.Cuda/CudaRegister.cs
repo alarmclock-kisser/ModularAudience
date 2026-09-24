@@ -391,7 +391,7 @@ namespace ModularAudience.Cuda
 
             try
             {
-                CudaDeviceVariable<T> devVariable = new((long) length);
+                CudaDeviceVariable<T> devVariable = new((long)length);
                 var pointer = devVariable.DevicePointer;
                 CudaMem mem = new(pointer, length, typeof(T));
                 if (this.memory.TryAdd(mem.Id, mem))
@@ -430,7 +430,7 @@ namespace ModularAudience.Cuda
                     return null;
                 }
 
-                CudaDeviceVariable<T> devVariable = new((long) length, stream);
+                CudaDeviceVariable<T> devVariable = new((long)length, stream);
                 var pointer = devVariable.DevicePointer;
 
                 CudaMem mem = new(pointer, length, typeof(T));
@@ -465,7 +465,7 @@ namespace ModularAudience.Cuda
 
             try
             {
-                CudaDeviceVariable<T>[] devVariables = lengths.Select(l => new CudaDeviceVariable<T>((long) l)).ToArray();
+                CudaDeviceVariable<T>[] devVariables = lengths.Select(l => new CudaDeviceVariable<T>((long)l)).ToArray();
                 var pointers = devVariables.Select(v => v.DevicePointer).ToArray();
                 CudaMem mem = new(pointers, lengths, typeof(T));
                 if (this.memory.TryAdd(mem.Id, mem))
@@ -505,7 +505,7 @@ namespace ModularAudience.Cuda
 
             try
             {
-                CudaDeviceVariable<T>[] devVariables = lengths.Select(l => new CudaDeviceVariable<T>((long) l, stream)).ToArray();
+                CudaDeviceVariable<T>[] devVariables = lengths.Select(l => new CudaDeviceVariable<T>((long)l, stream)).ToArray();
                 var pointers = devVariables.Select(v => v.DevicePointer).ToArray();
 
                 CudaMem mem = new(pointers, lengths, typeof(T));
@@ -545,7 +545,7 @@ namespace ModularAudience.Cuda
 
             try
             {
-                IntPtr length = (nint) data.LongCount();
+                IntPtr length = (nint)data.LongCount();
                 CudaDeviceVariable<T> devVariable = new(length);
                 var pointer = devVariable.DevicePointer;
 
@@ -581,8 +581,8 @@ namespace ModularAudience.Cuda
 
             try
             {
-                IntPtr[] lengths = chunks.Select(chunk => (nint) chunk.LongCount()).ToArray();
-                CudaDeviceVariable<T>[] devVariables = chunks.Select(chunk => new CudaDeviceVariable<T>((nint) chunk.LongCount())).ToArray();
+                IntPtr[] lengths = chunks.Select(chunk => (nint)chunk.LongCount()).ToArray();
+                CudaDeviceVariable<T>[] devVariables = chunks.Select(chunk => new CudaDeviceVariable<T>((nint)chunk.LongCount())).ToArray();
                 var pointers = devVariables.Select(v => v.DevicePointer).ToArray();
 
                 for (int i = 0; i < chunks.Count(); i++)
@@ -628,7 +628,7 @@ namespace ModularAudience.Cuda
 
             try
             {
-                IntPtr length = (nint) data.LongCount();
+                IntPtr length = (nint)data.LongCount();
                 CudaDeviceVariable<T> devVariable = new(length, stream);
                 var pointer = devVariable.DevicePointer;
 
@@ -669,8 +669,8 @@ namespace ModularAudience.Cuda
 
             try
             {
-                IntPtr[] lengths = chunks.Select(chunk => (nint) chunk.LongCount()).ToArray();
-                CudaDeviceVariable<T>[] devVariables = chunks.Select(chunk => new CudaDeviceVariable<T>((nint) chunk.LongCount(), stream)).ToArray();
+                IntPtr[] lengths = chunks.Select(chunk => (nint)chunk.LongCount()).ToArray();
+                CudaDeviceVariable<T>[] devVariables = chunks.Select(chunk => new CudaDeviceVariable<T>((nint)chunk.LongCount(), stream)).ToArray();
                 var pointers = devVariables.Select(v => v.DevicePointer).ToArray();
 
                 for (int i = 0; i < chunks.Count(); i++)
@@ -808,9 +808,9 @@ namespace ModularAudience.Cuda
                     fixed (T* pData = data)
                     {
                         var res = DriverAPINativeMethods.AsynchronousMemcpy_v2.cuMemcpyAsync(
-                            new CUdeviceptr((IntPtr) pData),
+                            new CUdeviceptr((IntPtr)pData),
                             devicePtr,
-                            (SizeT) byteSize,
+                            (SizeT)byteSize,
                             stream.Stream
                         );
                         if (res != CUResult.Success)
@@ -875,9 +875,9 @@ namespace ModularAudience.Cuda
                         fixed (T* pData = data)
                         {
                             var res = DriverAPINativeMethods.AsynchronousMemcpy_v2.cuMemcpyAsync(
-                                new CUdeviceptr((IntPtr) pData),
+                                new CUdeviceptr((IntPtr)pData),
                                 devicePtr,
-                                (SizeT) byteSize,
+                                (SizeT)byteSize,
                                 stream.Stream
                             );
                             if (res != CUResult.Success)

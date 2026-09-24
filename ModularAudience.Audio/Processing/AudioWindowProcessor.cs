@@ -16,7 +16,7 @@ namespace ModularAudience.Audio.Processing
 
             windowSize = Math.Max(1, windowSize);
             lookingRange = Math.Max(1, lookingRange);
-            windowSize = (int) Math.Pow(2, Math.Ceiling(Math.Log(windowSize, 2)));
+            windowSize = (int)Math.Pow(2, Math.Ceiling(Math.Log(windowSize, 2)));
 
             long posFrames = audio.Position;
             int halfWindowFrames = (windowSize * lookingRange) / 2;
@@ -55,14 +55,14 @@ namespace ModularAudience.Audio.Processing
                 }
 
                 float[] current = new float[fullWindowFrames];
-                await Task.Run(() => Array.Copy(data, (int) startFrame, current, 0, fullWindowFrames)).ConfigureAwait(false);
+                await Task.Run(() => Array.Copy(data, (int)startFrame, current, 0, fullWindowFrames)).ConfigureAwait(false);
                 return current;
             }
             else
             {
                 float[] data = audio.Data;
                 long startFloatIndex = (posFrames - (lookBackwards ? halfWindowFrames : 0)) * audio.Channels;
-                long endFloatIndexExclusive = startFloatIndex + ((long) fullWindowFrames * audio.Channels);
+                long endFloatIndexExclusive = startFloatIndex + ((long)fullWindowFrames * audio.Channels);
 
                 while (endFloatIndexExclusive > data.Length)
                 {
@@ -84,7 +84,7 @@ namespace ModularAudience.Audio.Processing
 
                 int lengthFloats = fullWindowFrames * audio.Channels;
                 float[] current = new float[lengthFloats];
-                await Task.Run(() => Array.Copy(data, (int) startFloatIndex, current, 0, lengthFloats)).ConfigureAwait(false);
+                await Task.Run(() => Array.Copy(data, (int)startFloatIndex, current, 0, lengthFloats)).ConfigureAwait(false);
                 return current;
             }
         }

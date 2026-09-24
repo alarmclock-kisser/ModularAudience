@@ -28,7 +28,7 @@ namespace ModularAudience.Audio.Tests
                     short[] pcm = new short[frames * channels];
                     for (int i = 0; i < pcm.Length; i++)
                     {
-                        pcm[i] = (short) (i % 1000);
+                        pcm[i] = (short)(i % 1000);
                     }
                     writer.WriteSamples(pcm, 0, pcm.Length);
                 }
@@ -59,7 +59,7 @@ namespace ModularAudience.Audio.Tests
             {
                 var audio = scope.Create(new float[] { 0.1f, 0.2f }, 44100, 1);
                 audio.Dispose();
-                
+
                 Assert.IsFalse(audio.Playing);
                 Assert.IsFalse(audio.Paused);
                 Assert.AreEqual(0, audio.Data.Length);

@@ -114,7 +114,7 @@ namespace ModularAudience.Generators
                         float sumExp = expValues.Sum();
 
                         // 3. Stochastisches Sampling
-                        float roll = (float) rng.NextDouble() * sumExp;
+                        float roll = (float)rng.NextDouble() * sumExp;
                         float current = 0f;
                         int selected = 0;
 
@@ -330,7 +330,7 @@ namespace ModularAudience.Generators
                             for (int s = 0; s < this._config.SampleCount; s++)
                             {
                                 // Gaussian / Uniform Rauschen injizieren
-                                float noise = ((float) rng.NextDouble() * 2f - 1f) * mutationIntensity;
+                                float noise = ((float)rng.NextDouble() * 2f - 1f) * mutationIntensity;
                                 float inheritedWeight = parentNode.Weights[step, s];
 
                                 childNode.Weights[step, s] = Math.Clamp(inheritedWeight + noise, this._config.MinWeight, this._config.MaxWeight);

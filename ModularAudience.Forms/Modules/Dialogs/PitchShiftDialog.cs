@@ -17,18 +17,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private readonly AudioCollection AudioC = new();
 
-        private int SamplesPerAudio => (int) ((float) this.numericUpDown_range.Value / (float.TryParse(this.domainUpDown_step.SelectedItem?.ToString(), out var flt) ? flt : 1.0f));
+        private int SamplesPerAudio => (int)((float)this.numericUpDown_range.Value / (float.TryParse(this.domainUpDown_step.SelectedItem?.ToString(), out var flt) ? flt : 1.0f));
 
 
         internal AudioCollectionView? CollectionView { get; private set; } = null;
 
 
-        private int ShiftRange => (int) this.numericUpDown_range.Value;
+        private int ShiftRange => (int)this.numericUpDown_range.Value;
         private float Steps => float.TryParse(this.domainUpDown_step.SelectedItem?.ToString(), out float val) ? val : 1.0f;
         private bool UseFftPv => this.checkBox_fftPv.Checked;
 
-        private float Semitones => (float) this.numericUpDown_semitones.Value;
-        private double Percent => (double) this.numericUpDown_percent.Value;
+        private float Semitones => (float)this.numericUpDown_semitones.Value;
+        private double Percent => (double)this.numericUpDown_percent.Value;
 
 
 
@@ -67,7 +67,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             IProgress<double> progress = new Progress<double>(p =>
             {
-                int percent = (int) (p * this.progressBar_processing.Maximum);
+                int percent = (int)(p * this.progressBar_processing.Maximum);
 
                 this.progressBar_processing.Value = Math.Min(percent, this.progressBar_processing.Maximum);
             });
@@ -78,7 +78,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             foreach (var samples in pitchedSamples)
             {
-                int take = Math.Clamp((int) this.numericUpDown_take.Value, 1, samples.Count);
+                int take = Math.Clamp((int)this.numericUpDown_take.Value, 1, samples.Count);
 
                 // Snapshot als IList für effizienten Indexzugriff (falls bereits IList vorhanden, wiederverwenden)
                 IList<AudioObj> list = samples is IList<AudioObj> l ? l : [.. samples];
@@ -146,7 +146,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     }
                     double overall = sum / totalItems;
 
-                    int progressValue = (int) (overall * this.progressBar_processing.Maximum);
+                    int progressValue = (int)(overall * this.progressBar_processing.Maximum);
                     this.progressBar_processing.Value = Math.Min(progressValue, this.progressBar_processing.Maximum);
                 });
 
@@ -157,7 +157,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         if (obj == null)
                         {
                             // markiere als fertig
-                            ((IProgress<double>) childProgress).Report(1.0);
+                            ((IProgress<double>)childProgress).Report(1.0);
                             return;
                         }
 
@@ -175,7 +175,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     finally
                     {
                         // Stelle sicher, dass dieses Element als 100% gemeldet wird
-                        try { ((IProgress<double>) childProgress).Report(1.0); } catch { }
+                        try { ((IProgress<double>)childProgress).Report(1.0); } catch { }
                     }
                 });
             }).ToArray();
@@ -209,14 +209,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void numericUpDown_semitones_ValueChanged(object sender, EventArgs e)
         {
-            double percentShift = Math.Pow(2.0, (double) this.Semitones / 12.0) - 1.0;
-            this.numericUpDown_percent.Value = (decimal) (percentShift * 100.0);
+            double percentShift = Math.Pow(2.0, (double)this.Semitones / 12.0) - 1.0;
+            this.numericUpDown_percent.Value = (decimal)(percentShift * 100.0);
         }
 
         private void numericUpDown_percent_ValueChanged(object sender, EventArgs e)
         {
-            float semitoneShift = (float) (12.0 * Math.Log2(1.0 + ((double) this.Percent / 100.0)));
-            this.numericUpDown_semitones.Value = (decimal) semitoneShift;
+            float semitoneShift = (float)(12.0 * Math.Log2(1.0 + ((double)this.Percent / 100.0)));
+            this.numericUpDown_semitones.Value = (decimal)semitoneShift;
         }
     }
 }

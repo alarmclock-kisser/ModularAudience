@@ -103,7 +103,7 @@ namespace ModularAudience.Forms.Modules
                 return 0f;
             }
             return audio.Metrics.TryGetValue("loop.ui.fraction", out double fraction)
-                ? (float) fraction : audio.LoopFraction;
+                ? (float)fraction : audio.LoopFraction;
         }
 
         private LoopTargetState GetLoopTargetState(AudioObj audio)

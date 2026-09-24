@@ -20,11 +20,11 @@ namespace ModularAudience.Audio.Tests
             dialog.PerformLayout();
             Assert.IsFalse(dialog.Visible, "Constructing the dialog must not show it automatically.");
             AssertIdleWithoutAnalysis(dialog);
-            Assert.AreEqual((decimal) Environment.ProcessorCount, GetControl<NumericUpDown>(dialog, "numeric_threads").Maximum,
+            Assert.AreEqual((decimal)Environment.ProcessorCount, GetControl<NumericUpDown>(dialog, "numeric_threads").Maximum,
                 "The thread selector maximum must match the logical core count.");
             Assert.IsInstanceOfType(GetControl<ComboBox>(dialog, "comboBox_windowSize").SelectedItem, typeof(int),
                 "FFT options must remain boxed integers, including during designer layout.");
-            DeterministicSeparationSettings settings = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
+            DeterministicSeparationSettings settings = (DeterministicSeparationSettings)Invoke(dialog, "ReadSettings")!;
             settings.Validate();
             Assert.AreEqual(4096, settings.WindowSize, "The default FFT selection must be readable without an invalid cast.");
             Button separate = GetControl<Button>(dialog, "button_separate");
@@ -50,7 +50,7 @@ namespace ModularAudience.Audio.Tests
             AudioObj source = scope.Create(AudioTestData.Tone(8000, 80, 500, 5, 5), 8000);
             using DeterministicSeparationDialog dialog = new(source);
             ConfigureSmallAnalysis(dialog);
-            DeterministicSeparationSettings settings = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
+            DeterministicSeparationSettings settings = (DeterministicSeparationSettings)Invoke(dialog, "ReadSettings")!;
             DeterministicSeparationAnalysis analysis = DeterministicSeparationProcessor.AnalyzeAsync(source, settings).GetAwaiter().GetResult();
             Assert.IsTrue(analysis.Sources.Count > 0, "The invalidation regression requires a populated analysis.");
             GetField(dialog, "analysis").SetValue(dialog, analysis);
@@ -100,7 +100,7 @@ namespace ModularAudience.Audio.Tests
             Assert.AreEqual(16, profiles.Items.Count, "All 16 catalog instrument profiles must be listed for selection.");
             Assert.AreEqual(0, profiles.CheckedItems.Count, "No profile may be preselected by default.");
 
-            DeterministicSeparationSettings settings = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
+            DeterministicSeparationSettings settings = (DeterministicSeparationSettings)Invoke(dialog, "ReadSettings")!;
             settings.Validate();
             Assert.IsFalse(settings.UseCqtAnalysis && settings.UseCqtSynthesis && settings.UsePyin && settings.UseIlrma);
             Assert.AreEqual(InstrumentEnsembleMode.Automatic, settings.EnsembleMode);
@@ -119,14 +119,14 @@ namespace ModularAudience.Audio.Tests
             GetControl<DomainUpDown>(dialog, "domainUpDown_ensembleMode").Text = "ProfilesOnly";
             CheckedListBox profiles = GetControl<CheckedListBox>(dialog, "checkedListBox_profiles");
             profiles.SetItemChecked(0, true);
-            DeterministicSeparationSettings guided = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
+            DeterministicSeparationSettings guided = (DeterministicSeparationSettings)Invoke(dialog, "ReadSettings")!;
             Assert.AreEqual(InstrumentEnsembleMode.ProfilesOnly, guided.EnsembleMode);
             Assert.AreEqual(1, guided.InstrumentProfiles.Length, "A checked profile must be readable as an immutable selection.");
 
             // Seed the cached analysis from the default Automatic settings (the only connected pipeline path).
             GetControl<DomainUpDown>(dialog, "domainUpDown_ensembleMode").Text = "Automatic";
             profiles.SetItemChecked(0, false);
-            DeterministicSeparationSettings baseline = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
+            DeterministicSeparationSettings baseline = (DeterministicSeparationSettings)Invoke(dialog, "ReadSettings")!;
             baseline.Validate();
             DeterministicSeparationAnalysis analysis = DeterministicSeparationProcessor.AnalyzeAsync(source, baseline).GetAwaiter().GetResult();
             GetField(dialog, "analysis").SetValue(dialog, analysis);
@@ -158,12 +158,12 @@ namespace ModularAudience.Audio.Tests
             profiles.SetItemChecked(2, true);
             profiles.SetItemChecked(0, true);
 
-            DeterministicSeparationSettings first = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
-            DeterministicSeparationSettings second = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
+            DeterministicSeparationSettings first = (DeterministicSeparationSettings)Invoke(dialog, "ReadSettings")!;
+            DeterministicSeparationSettings second = (DeterministicSeparationSettings)Invoke(dialog, "ReadSettings")!;
             Assert.IsTrue(first.IsEquivalentTo(second), "Repeated reads of the same UI state must be semantically equivalent.");
 
             profiles.SetItemChecked(0, false);
-            DeterministicSeparationSettings third = (DeterministicSeparationSettings) Invoke(dialog, "ReadSettings")!;
+            DeterministicSeparationSettings third = (DeterministicSeparationSettings)Invoke(dialog, "ReadSettings")!;
             Assert.IsFalse(first.IsEquivalentTo(third), "Deselecting a profile must change the semantic settings.");
             Assert.AreEqual(InstrumentEnsembleMode.ProfilesOnly, second.EnsembleMode);
             Assert.AreEqual(2, second.InstrumentProfiles.Length);
@@ -304,7 +304,7 @@ namespace ModularAudience.Audio.Tests
         {
             FieldInfo? field = typeof(WindowMain).GetField("CollectionViews", BindingFlags.Static | BindingFlags.NonPublic);
             Assert.IsNotNull(field, "The collection registry must be available for isolated form cleanup.");
-            return (IList) field.GetValue(null)!;
+            return (IList)field.GetValue(null)!;
         }
 
         private static T GetControl<T>(Control parent, string name) where T : Control
@@ -313,14 +313,14 @@ namespace ModularAudience.Audio.Tests
             Assert.AreEqual(1, matches.Length, $"Expected exactly one designer control named {name}.");
             Assert.IsInstanceOfType(matches[0], typeof(T), $"Designer control {name} has an unexpected type.");
             Assert.AreSame(GetField(parent, name).GetValue(parent), matches[0], $"Designer field {name} must reference the displayed control.");
-            return (T) matches[0];
+            return (T)matches[0];
         }
 
         private static T GetFieldValue<T>(object instance, string name)
         {
             object? value = GetField(instance, name).GetValue(instance);
             Assert.IsInstanceOfType(value, typeof(T), $"Field {name} has an unexpected value or type.");
-            return (T) value!;
+            return (T)value!;
         }
 
         private static FieldInfo GetField(object instance, string name)

@@ -42,12 +42,12 @@ namespace ModularAudience.Audio.Processors_V4
             int frames = audio.Data.Length / audio.Channels;
             double[] spectrum = BuildSpectrum(audio, frames);
             double[] envelope = BuildEnvelope(audio, frames);
-            double peak = audio.Data.Max(value => Math.Abs((double) value));
+            double peak = audio.Data.Max(value => Math.Abs((double)value));
             int clipped = audio.Data.Count(value => Math.Abs(value) >= 0.999f);
             int active = audio.Data.Count(value => Math.Abs(value) >= peak * 0.02);
             double quality = (0.75 + (0.25 * active / Math.Max(1, audio.Data.Length))) /
                 (1.0 + (50.0 * clipped / Math.Max(1, audio.Data.Length)));
-            return new Fingerprint(spectrum, envelope, frames / (double) audio.SampleRate,
+            return new Fingerprint(spectrum, envelope, frames / (double)audio.SampleRate,
                 GetSpectralCentroid(spectrum, audio.SampleRate), quality);
         }
 
@@ -90,7 +90,7 @@ namespace ModularAudience.Audio.Processors_V4
                 Array.Clear(buffer);
                 for (int i = 0; i < length; i++)
                 {
-                    double position = i / (double) Math.Max(1, length - 1);
+                    double position = i / (double)Math.Max(1, length - 1);
                     double window = attack ? 0.5 * (1.0 + Math.Cos(Math.PI * position)) :
                         0.5 * (1.0 - Math.Cos(2.0 * Math.PI * position));
                     buffer[i] = new Complex(audio.Data[((start + i) * audio.Channels) + channel] * window, 0.0);
@@ -113,8 +113,8 @@ namespace ModularAudience.Audio.Processors_V4
             double frequencyRange = Math.Log(Math.Max(21.0, sampleRate / 2.0) / 20.0);
             for (int bin = 1; bin <= buffer.Length / 2; bin++)
             {
-                double frequency = bin * (double) sampleRate / buffer.Length;
-                int band = Math.Clamp((int) (Math.Log(Math.Max(20.0, frequency) / 20.0) / frequencyRange * SpectralBins), 0, SpectralBins - 1);
+                double frequency = bin * (double)sampleRate / buffer.Length;
+                int band = Math.Clamp((int)(Math.Log(Math.Max(20.0, frequency) / 20.0) / frequencyRange * SpectralBins), 0, SpectralBins - 1);
                 double magnitude = buffer[bin].Magnitude;
                 bands[band] += magnitude * magnitude;
             }
@@ -125,8 +125,8 @@ namespace ModularAudience.Audio.Processors_V4
             double[] envelope = new double[32];
             for (int block = 0; block < envelope.Length; block++)
             {
-                int start = (int) ((long) block * frames / envelope.Length);
-                int end = Math.Min(frames, Math.Max(start + 1, (int) ((long) (block + 1) * frames / envelope.Length)));
+                int start = (int)((long)block * frames / envelope.Length);
+                int end = Math.Min(frames, Math.Max(start + 1, (int)((long)(block + 1) * frames / envelope.Length)));
                 double energy = 0.0;
                 for (int frame = start; frame < end; frame++)
                 {

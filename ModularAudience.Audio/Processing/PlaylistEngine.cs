@@ -726,7 +726,7 @@ namespace ModularAudience.Audio.Processing
                                 {
                                     double beatMs = 60000.0 / bpm; // ms per beat
                                     // Use quarter-note count: count 3 beats (3,2,1) so interval = beatMs
-                                    intervalMs = (int) Math.Max(150, Math.Round(beatMs));
+                                    intervalMs = (int)Math.Max(150, Math.Round(beatMs));
                                 }
 
                                 try { LogCollection.Log($"Countdown: 3 (interval={intervalMs}ms)"); } catch { }
@@ -1285,7 +1285,7 @@ namespace ModularAudience.Audio.Processing
                         {
                             if (!ct.IsCancellationRequested) { this.ReleaseQueueHeadLocked(currentOriginalPath); }
                             this._skipRequested = false;
-                            this.SetSecondaryTrack((PreparedPlaylistTrack?) null);
+                            this.SetSecondaryTrack((PreparedPlaylistTrack?)null);
                         }
                         TrackChanged?.Invoke();
                     }
@@ -1297,7 +1297,7 @@ namespace ModularAudience.Audio.Processing
                         lock (this._lock)
                         {
                             if (!ct.IsCancellationRequested) { this.ReleaseQueueHeadLocked(currentOriginalPath); }
-                            this.SetSecondaryTrack((PreparedPlaylistTrack?) null);
+                            this.SetSecondaryTrack((PreparedPlaylistTrack?)null);
                         }
                         TrackChanged?.Invoke();
                     }
@@ -1326,7 +1326,7 @@ namespace ModularAudience.Audio.Processing
                     remainingPrepared = this._activePreparedTracks.Values.Concat(this._preparedByPath.Values)
                         .DistinctBy(prepared => prepared.Audio.Id).ToArray();
                     this.ClearCurrentTrackState();
-                    this.SetSecondaryTrack((PreparedPlaylistTrack?) null);
+                    this.SetSecondaryTrack((PreparedPlaylistTrack?)null);
                     this.ReserveQueueHeadLocked(null);
                     this._queuedPreparedStart = null;
                     this._activePreparedTracks.Clear();
@@ -1444,7 +1444,7 @@ namespace ModularAudience.Audio.Processing
             double waitSeconds = ComputeNextBeatWaitSeconds(currentPrepared.Audio, request.MaxDelaySeconds - elapsedSeconds);
             if (waitSeconds > 0.025 && elapsedSeconds + waitSeconds <= request.MaxDelaySeconds)
             {
-                int countdownSecond = Math.Max(1, (int) Math.Ceiling(waitSeconds));
+                int countdownSecond = Math.Max(1, (int)Math.Ceiling(waitSeconds));
                 if (request.LastCountdownSecond != countdownSecond)
                 {
                     request.LastCountdownSecond = countdownSecond;
@@ -1560,7 +1560,7 @@ namespace ModularAudience.Audio.Processing
                 {
                     // Keep original tag BPM as base and store stretch factor so UI computes effective BPM correctly.
                     audio.Bpm = originalTagBpm;
-                    try { audio.StretchFactor = (double) resolvedPlayBpm / originalTagBpm; } catch { audio.StretchFactor = 1.0; }
+                    try { audio.StretchFactor = (double)resolvedPlayBpm / originalTagBpm; } catch { audio.StretchFactor = 1.0; }
                 }
                 else
                 {
@@ -1631,7 +1631,7 @@ namespace ModularAudience.Audio.Processing
                         rateFactor = prepared.Audio.StretchFactor * prepared.Audio.SampleRateFactor * prepared.Audio.ManualSampleRateFactor * prepared.Audio.SyncNudgeSampleRateFactor;
                     }
                     catch { }
-                    effectiveBpm = (float) (prepared.Audio.Bpm * rateFactor);
+                    effectiveBpm = (float)(prepared.Audio.Bpm * rateFactor);
                 }
                 // If we couldn't compute an effective BPM from factors, fall back to the stored metadata BPM.
                 if (effectiveBpm <= 0)
@@ -1822,7 +1822,7 @@ namespace ModularAudience.Audio.Processing
 
                 float bpm = 0f;
 
-                try { if (file.Tag != null && file.Tag.BeatsPerMinute > 0) { bpm = (float) file.Tag.BeatsPerMinute; } } catch { }
+                try { if (file.Tag != null && file.Tag.BeatsPerMinute > 0) { bpm = (float)file.Tag.BeatsPerMinute; } } catch { }
 
                 if (bpm <= 0)
                 {
@@ -1830,7 +1830,7 @@ namespace ModularAudience.Audio.Processing
                     {
                         if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                         {
-                            var id3 = (TagLib.Id3v2.Tag?) file.GetTag(TagLib.TagTypes.Id3v2);
+                            var id3 = (TagLib.Id3v2.Tag?)file.GetTag(TagLib.TagTypes.Id3v2);
                             var frame = id3 != null ? TagLib.Id3v2.TextInformationFrame.Get(id3, "TBPM", false) : null;
                             if (frame != null)
                             {

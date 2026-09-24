@@ -68,14 +68,14 @@ namespace ModularAudience.Audio.Processors_V4
 
         private static int ResolveWorkerCount(ConstantQTransform cqt, int channels, int requestedThreads)
         {
-            long coefficientCount = cqt.Bands.Sum(band => (long) band.CoefficientCount);
+            long coefficientCount = cqt.Bands.Sum(band => (long)band.CoefficientCount);
             long bytesPerWorker = checked(channels * (48L * cqt.Length + 32L * coefficientCount) + 1048576);
             long available = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
             long allocated = GC.GetTotalMemory(false);
             long budget = available > 0
                 ? Math.Max(64L * 1024 * 1024, (available - allocated) / 2)
                 : 512L * 1024 * 1024;
-            int memoryWorkers = Math.Max(1, (int) Math.Min(int.MaxValue, budget / Math.Max(1, bytesPerWorker)));
+            int memoryWorkers = Math.Max(1, (int)Math.Min(int.MaxValue, budget / Math.Max(1, bytesPerWorker)));
             return Math.Max(1, Math.Min(requestedThreads, Math.Min(Environment.ProcessorCount, memoryWorkers)));
         }
 

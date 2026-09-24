@@ -37,14 +37,14 @@ namespace ModularAudience.Audio.Processors_V3
                 }
                 if (audioObj.Bpm > 0)
                 {
-                    audioObj.Bpm = (float) (audioObj.Bpm * targetSpeedFactor);
+                    audioObj.Bpm = (float)(audioObj.Bpm * targetSpeedFactor);
                 }
                 return;
             }
 
             // Playing: adjust playback rate; optionally revert after durationSeconds
             double originalFactor = audioObj.SampleRateFactor;
-            await audioObj.AdjustSampleRate((float) targetSpeedFactor).ConfigureAwait(false);
+            await audioObj.AdjustSampleRate((float)targetSpeedFactor).ConfigureAwait(false);
             audioObj.SampleRateFactor = targetSpeedFactor;
 
             if (durationSeconds > 0)
@@ -62,7 +62,7 @@ namespace ModularAudience.Audio.Processors_V3
                 if (Math.Abs(audioObj.SampleRateFactor - targetSpeedFactor) < 1e-6 && audioObj.PlayerPlaying)
                 {
                     audioObj.SampleRateFactor = originalFactor;
-                    await audioObj.AdjustSampleRate((float) originalFactor).ConfigureAwait(false);
+                    await audioObj.AdjustSampleRate((float)originalFactor).ConfigureAwait(false);
                 }
             }
         }

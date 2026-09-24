@@ -47,6 +47,23 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
+        public static bool UsesSparseOnBeatGrid(int index)
+        {
+            index = System.Math.Clamp(index, 0, Levels.Length - 1);
+            return index == 1 || index == 3;
+        }
+
+        public static bool IsOnBeatGridPosition(int beatIndex)
+        {
+            int phase = beatIndex % 4;
+            if (phase < 0)
+            {
+                phase += 4;
+            }
+
+            return phase == 0 || phase == 2;
+        }
+
         public static int MinGroupCooldownBeats(int index)
         {
             index = System.Math.Clamp(index, 0, Levels.Length - 1);
@@ -119,6 +136,21 @@ namespace ModularAudience.Forms.Modules
                 case 4: return 0.38f;
                 case 5: return 0.46f;
                 default: return 0.55f;
+            }
+        }
+
+        public static int SpinnerCooldownBeats(int index)
+        {
+            index = System.Math.Clamp(index, 0, Levels.Length - 1);
+            switch (index)
+            {
+                case 0: return 8;
+                case 1: return 8;
+                case 2: return 10;
+                case 3: return 12;
+                case 4: return 16;
+                case 5: return 24;
+                default: return 32;
             }
         }
 
@@ -222,7 +254,7 @@ namespace ModularAudience.Forms.Modules
                 case 3: return 80;
                 case 4: return 55;
                 case 5: return 35;
-                default: return 18;
+                default: return 35;
             }
         }
 
@@ -237,7 +269,7 @@ namespace ModularAudience.Forms.Modules
                 case 3: return 70;
                 case 4: return 45;
                 case 5: return 30;
-                default: return 18;
+                default: return 35;
             }
         }
 

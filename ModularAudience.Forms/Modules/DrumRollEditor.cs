@@ -41,15 +41,15 @@ namespace ModularAudience.Forms.Modules
         private readonly Lock launchpadLock = new();
         private readonly List<AudioObj> pendingInitialSamples = [];
 
-        public float Bpm => (float) this.numericUpDown_bpm.Value;
+        public float Bpm => (float)this.numericUpDown_bpm.Value;
         public int Hits => this.domainUpDown_hits.SelectedItem is null ? 16 : int.Parse(this.domainUpDown_hits.SelectedItem.ToString() ?? "16");
         public int Bars => this.domainUpDown_bars.SelectedItem is null ? 1 : int.Parse(this.domainUpDown_bars.SelectedItem.ToString() ?? "1");
         private int TotalSteps => Math.Max(1, this.Hits) * Math.Max(1, this.Bars);
-        public float Volume => (float) this.numericUpDown_volume.Value / 100.0f;
+        public float Volume => (float)this.numericUpDown_volume.Value / 100.0f;
         private bool InterleavedPlaybackEnabled => this.checkBox_interleaved.Checked;
         private bool LaunchpadModeEnabled => this.checkBox_launchpad.Checked;
 
-        internal int RerollInterval => (int) this.numericUpDown_rerollInterval.Value;
+        internal int RerollInterval => (int)this.numericUpDown_rerollInterval.Value;
         internal int RerollCountdown { get; private set; } = -1;
         internal bool InterleavedRandom { get; private set; } = false;
 
@@ -642,10 +642,10 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            double density = (double) this.numericUpDown_randomDensity.Value / 100d;
-            double accent = (double) this.numericUpDown_randomAccent.Value / 100d;
-            double streak = (double) this.numericUpDown_randomStreak.Value / 100d;
-            double variation = (double) this.numericUpDown_randomVariation.Value / 100d;
+            double density = (double)this.numericUpDown_randomDensity.Value / 100d;
+            double accent = (double)this.numericUpDown_randomAccent.Value / 100d;
+            double streak = (double)this.numericUpDown_randomStreak.Value / 100d;
+            double variation = (double)this.numericUpDown_randomVariation.Value / 100d;
 
             foreach (int rowIndex in unlockedRows)
             {
@@ -748,7 +748,7 @@ namespace ModularAudience.Forms.Modules
                 {
                     float step = ModifierKeys.HasFlag(Keys.Control) ? 0.1f : 1.0f;
                     decimal current = this.numericUpDown_bpm.Value;
-                    decimal delta = (decimal) (keyData == Keys.Up ? step : -step);
+                    decimal delta = (decimal)(keyData == Keys.Up ? step : -step);
                     decimal next = Math.Clamp(current + delta, this.numericUpDown_bpm.Minimum, this.numericUpDown_bpm.Maximum);
                     this.numericUpDown_bpm.Value = next;
                 }
@@ -880,7 +880,7 @@ namespace ModularAudience.Forms.Modules
                             {
                                 if (this.IsHandleCreated && !this.IsDisposed)
                                 {
-                                    this.BeginInvoke((MethodInvoker) (() =>
+                                    this.BeginInvoke((MethodInvoker)(() =>
                                     {
                                         this.HandleCurrentStepUI(scheduledUiStep, this.TotalSteps);
                                         this.currentStep = scheduledUiStep;
@@ -922,7 +922,7 @@ namespace ModularAudience.Forms.Modules
                                         {
                                             if (this.IsHandleCreated && !this.IsDisposed)
                                             {
-                                                this.Invoke((MethodInvoker) (() =>
+                                                this.Invoke((MethodInvoker)(() =>
                                                 {
                                                     try
                                                     {
@@ -1173,7 +1173,7 @@ namespace ModularAudience.Forms.Modules
             {
                 if (this.IsHandleCreated && !this.IsDisposed)
                 {
-                    this.BeginInvoke((MethodInvoker) (() =>
+                    this.BeginInvoke((MethodInvoker)(() =>
                     {
                         this.HandleCurrentStepUI(-1, this.Hits);
                         this.currentStep = -1;
@@ -1251,7 +1251,7 @@ namespace ModularAudience.Forms.Modules
 
             // Dauer / Samples berechnen
             float secondsPerStep = 60f / bpm * 4f / hits; // 4/4-Takt
-            int totalSamples = (int) (secondsPerStep * totalSteps * sampleRate);
+            int totalSamples = (int)(secondsPerStep * totalSteps * sampleRate);
             if (totalSamples <= 0)
             {
                 totalSamples = 1;
@@ -1277,7 +1277,7 @@ namespace ModularAudience.Forms.Modules
                     }
 
                     float stepGain = ComputeStepGain(activeTracks.Count);
-                    int stepStart = (int) (step * secondsPerStep * sampleRate);
+                    int stepStart = (int)(step * secondsPerStep * sampleRate);
 
                     foreach (int trackIdx in activeTracks)
                     {
@@ -1669,9 +1669,9 @@ namespace ModularAudience.Forms.Modules
 
             int hits = Math.Max(1, this.Hits);
             int totalSteps = this.TotalSteps;
-            double density = this.GetRowDensity((double) this.numericUpDown_randomDensity.Value / 100d, (double) this.numericUpDown_randomVariation.Value / 100d);
-            double accent = (double) this.numericUpDown_randomAccent.Value / 100d;
-            double streak = (double) this.numericUpDown_randomStreak.Value / 100d;
+            double density = this.GetRowDensity((double)this.numericUpDown_randomDensity.Value / 100d, (double)this.numericUpDown_randomVariation.Value / 100d);
+            double accent = (double)this.numericUpDown_randomAccent.Value / 100d;
+            double streak = (double)this.numericUpDown_randomStreak.Value / 100d;
 
             Array.Clear(row.Steps, 0, row.Steps.Length);
             for (int step = 0; step < totalSteps; step++)
@@ -2107,7 +2107,7 @@ namespace ModularAudience.Forms.Modules
             }
 
             double intervalMs = 60000.0 / bpm * 4.0 / hits;
-            return TimeSpan.FromTicks((long) Math.Round(intervalMs * TimeSpan.TicksPerMillisecond));
+            return TimeSpan.FromTicks((long)Math.Round(intervalMs * TimeSpan.TicksPerMillisecond));
         }
 
         private void Bpm_ValueChanged(object? sender, EventArgs e)

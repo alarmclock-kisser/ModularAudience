@@ -50,12 +50,12 @@ namespace ModularAudience.Audio.Processors_V2
                 int finalReleaseMs = releaseMs ?? 150; // Standard Release, falls nicht angegeben
 
                 // Parameter in Sample-Frames konvertieren
-                int limitMaxSamples = maxDurationMs.HasValue ? (int) (maxDurationMs.Value * sampleRate / 1000.0) : int.MaxValue;
+                int limitMaxSamples = maxDurationMs.HasValue ? (int)(maxDurationMs.Value * sampleRate / 1000.0) : int.MaxValue;
                 // Min-Samples muss mindestens 1 Frame sein
-                int limitMinSamples = Math.Max(1, (int) (finalMinDurationMs * sampleRate / 1000.0));
+                int limitMinSamples = Math.Max(1, (int)(finalMinDurationMs * sampleRate / 1000.0));
 
                 // Threshold in linearen Wert wandeln
-                float thresholdLinear = (float) Math.Pow(10, finalThresholdDb / 20.0);
+                float thresholdLinear = (float)Math.Pow(10, finalThresholdDb / 20.0);
                 // Silence Floor (deutlich leiser als Trigger)
                 float silenceFloorLinear = thresholdLinear * 0.25f;
 
@@ -127,11 +127,11 @@ namespace ModularAudience.Audio.Processors_V2
                     // Progress reporten (grob)
                     if (envelopeIndex % 100 == 0)
                     {
-                        progress?.Report((double) envelopeIndex / rmsEnvelope.Length * 100.0);
+                        progress?.Report((double)envelopeIndex / rmsEnvelope.Length * 100.0);
                     }
                 }
 
-                return (IReadOnlyList<AudioObj>) results;
+                return (IReadOnlyList<AudioObj>)results;
 
             }, cancellationToken);
         }
@@ -178,13 +178,13 @@ namespace ModularAudience.Audio.Processors_V2
             double totalRms = Math.Sqrt(sumSquares / Math.Max(1, count));
 
             float noiseFloorAvg = noiseCandidates.Count > 0 ? noiseCandidates.Average() : 0.0001f;
-            float detectedNoiseDb = 20.0f * (float) Math.Log10(noiseFloorAvg + float.Epsilon);
+            float detectedNoiseDb = 20.0f * (float)Math.Log10(noiseFloorAvg + float.Epsilon);
             // Threshold: 12dB über dem Noise Floor, limitiert auf -60dB bis -6dB
             float suggestedThresholdDb = Math.Clamp(detectedNoiseDb + 12.0f, -60.0f, -6.0f);
 
             double crestFactor = (totalRms > 0) ? (maxPeak / totalRms) : 1.0;
             // Sensitivity: Niedriger Crest Factor (komprimiert) -> Höhere Sensitivity (braucht mehr Veränderung)
-            float suggestedSensitivity = (float) Math.Clamp(2.5 - (crestFactor * 0.1), 1.1, 3.0);
+            float suggestedSensitivity = (float)Math.Clamp(2.5 - (crestFactor * 0.1), 1.1, 3.0);
 
 
             // --- 2. Min Duration (NEU) ---
@@ -194,7 +194,7 @@ namespace ModularAudience.Audio.Processors_V2
                 // Musikalische Grundlage: 1/64 Note als Minimum
                 float msPer64th = 60000.0f / bpm / 64.0f;
                 // Cap es zwischen 15ms (für scharfe Transienten) und 40ms (für langsame Grooves)
-                suggestedMinDurationMs = (int) Math.Clamp(msPer64th, 15, 40);
+                suggestedMinDurationMs = (int)Math.Clamp(msPer64th, 15, 40);
             }
             else
             {
@@ -230,7 +230,7 @@ namespace ModularAudience.Audio.Processors_V2
                 {
                     sum += data[i] * data[i];
                 }
-                env[b] = (float) Math.Sqrt(sum / (end - start));
+                env[b] = (float)Math.Sqrt(sum / (end - start));
             });
             return env;
         }
@@ -316,8 +316,8 @@ namespace ModularAudience.Audio.Processors_V2
         private static AudioObj? ExtractSlice(AudioObj source, float[] sourceData, int startFrame, int lengthFrames, int index)
         {
             int channels = Math.Max(1, source.Channels);
-            long startSampleIdx = (long) startFrame * channels;
-            long lengthSamples = (long) lengthFrames * channels;
+            long startSampleIdx = (long)startFrame * channels;
+            long lengthSamples = (long)lengthFrames * channels;
 
             if (startSampleIdx >= sourceData.LongLength)
             {
@@ -335,8 +335,8 @@ namespace ModularAudience.Audio.Processors_V2
             }
 
             // Use int indices for Array.Copy (reasonable for typical audio sizes). Cast safe for <2GB arrays.
-            int srcIndex = (int) startSampleIdx;
-            int copyCount = (int) lengthSamples;
+            int srcIndex = (int)startSampleIdx;
+            int copyCount = (int)lengthSamples;
             var newData = new float[copyCount];
             Array.Copy(sourceData, srcIndex, newData, 0, copyCount);
 
@@ -353,7 +353,7 @@ namespace ModularAudience.Audio.Processors_V2
                 // IMPORTANT: Length is number of float32 samples (f32), not frames.
                 Length = lengthSamples,
                 // Duration must reflect actual frames / sampleRate
-                Duration = TimeSpan.FromSeconds((double) framesActual / source.SampleRate),
+                Duration = TimeSpan.FromSeconds((double)framesActual / source.SampleRate),
                 Bpm = source.Bpm,
                 Volume = 100.0f,
                 SelectionStart = -1,

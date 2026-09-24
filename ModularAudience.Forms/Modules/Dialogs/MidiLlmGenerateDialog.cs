@@ -1,6 +1,8 @@
 ﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Midi;
-using ModularAudience.Llama.Dtos;using ModularAudience.Forms.Helpers;using System;
+using ModularAudience.Llama.Dtos;
+using ModularAudience.Forms.Helpers;
+using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Security;
@@ -96,9 +98,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     this.label_model.Text = $"Model: {model}";
                 }
 
-                double bpm = (double) this.numericUpDown_bpm.Value;
-                int bars = (int) this.numericUpDown_bars.Value;
-                int ticksPerQuarterNote = (int) this.numericUpDown_ppq.Value;
+                double bpm = (double)this.numericUpDown_bpm.Value;
+                int bars = (int)this.numericUpDown_bars.Value;
+                int ticksPerQuarterNote = (int)this.numericUpDown_ppq.Value;
                 string userPrompt = string.IsNullOrWhiteSpace(this.textBox_prompt.Text)
                     ? "Generate a simple, musically coherent MIDI pattern."
                     : this.textBox_prompt.Text.Trim();
@@ -300,7 +302,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                throw new HttpRequestException($"LLM request failed with HTTP {(int) response.StatusCode}: {responseBody}");
+                throw new HttpRequestException($"LLM request failed with HTTP {(int)response.StatusCode}: {responseBody}");
             }
 
             using JsonDocument responseJson = JsonDocument.Parse(responseBody);
@@ -324,7 +326,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
                     if (!response.IsSuccessStatusCode)
                     {
-                        throw new HttpRequestException($"HTTP {(int) response.StatusCode}: {responseBody}");
+                        throw new HttpRequestException($"HTTP {(int)response.StatusCode}: {responseBody}");
                     }
 
                     using JsonDocument responseJson = JsonDocument.Parse(responseBody);

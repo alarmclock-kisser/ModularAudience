@@ -44,14 +44,14 @@ namespace ModularAudience.Audio.Processors_V2
                 double bpm = await EstimateBpmAsync(monoData, obj.SampleRate, minEff, maxEff).ConfigureAwait(false);
 
                 sw.Stop();
-                obj["beatScan"] = (float) sw.Elapsed.TotalMilliseconds;
+                obj["beatScan"] = (float)sw.Elapsed.TotalMilliseconds;
 
                 if (bpm <= 0.0)
                 {
                     return -1.0f;
                 }
 
-                obj.ScannedBpm = (float) bpm;
+                obj.ScannedBpm = (float)bpm;
 
                 return bpm * timing;
             }
@@ -111,7 +111,7 @@ namespace ModularAudience.Audio.Processors_V2
                 if (bpmHint > 0)
                 {
                     double lagF = noveltyRate * 60.0 / bpmHint;
-                    beatLag = (int) Math.Round(lagF);
+                    beatLag = (int)Math.Round(lagF);
                     // clamp
                     beatLag = Math.Clamp(beatLag, 2, Math.Max(2, novelty.Length / 8));
                 }
@@ -189,7 +189,7 @@ namespace ModularAudience.Audio.Processors_V2
                     double[] tpl = BuildMeterTemplate(K);
                     double tplCorr = MaxCircularCorrelation(phaseAvg, tpl);
 
-                    double nBars = (double) nBeats / K;
+                    double nBars = (double)nBeats / K;
                     double coverage = Math.Min(1.0, nBars / 4.0);
 
                     double score = 0.55 * ac + 0.20 * contrast + 0.50 * tplCorr;
@@ -252,9 +252,9 @@ namespace ModularAudience.Audio.Processors_V2
                 normalized = Math.Clamp(normalized, 0.125, 1.0);
 
                 // Persist timing
-                obj.Timing = (float) normalized;
+                obj.Timing = (float)normalized;
 
-                return (float) normalized;
+                return (float)normalized;
             }
             catch (Exception ex)
             {
@@ -405,8 +405,8 @@ namespace ModularAudience.Audio.Processors_V2
                 {
                     // Use a band around hint
                     double h = hint.Value;
-                    minEff = (int) Math.Max(30, Math.Round(h / 2.0));
-                    maxEff = (int) Math.Min(260, Math.Round(h * 2.0));
+                    minEff = (int)Math.Max(30, Math.Round(h / 2.0));
+                    maxEff = (int)Math.Min(260, Math.Round(h * 2.0));
                 }
                 else
                 {
@@ -416,11 +416,11 @@ namespace ModularAudience.Audio.Processors_V2
             }
             else if (minEff <= 0)
             {
-                minEff = Math.Max(30, (int) Math.Round(maxEff / 2.0));
+                minEff = Math.Max(30, (int)Math.Round(maxEff / 2.0));
             }
             else if (maxEff <= 0)
             {
-                maxEff = Math.Min(260, (int) Math.Round(minEff * 2.0));
+                maxEff = Math.Min(260, (int)Math.Round(minEff * 2.0));
             }
 
             if (minEff > maxEff)
@@ -465,7 +465,7 @@ namespace ModularAudience.Audio.Processors_V2
                 for (int i = 0; i < fftSize; i++)
                 {
                     float s = start + i < n ? samples[start + i] : 0f;
-                    fft[i] = new Complex32((float) (s * window[i]), 0f);
+                    fft[i] = new Complex32((float)(s * window[i]), 0f);
                 }
 
                 Fourier.Forward(fft, FourierOptions.Matlab);
@@ -524,7 +524,7 @@ namespace ModularAudience.Audio.Processors_V2
             var fft = new Complex32[L];
             for (int i = 0; i < n; i++)
             {
-                fft[i] = new Complex32((float) x[i], 0f);
+                fft[i] = new Complex32((float)x[i], 0f);
             }
 
             for (int i = n; i < L; i++)
@@ -553,8 +553,8 @@ namespace ModularAudience.Audio.Processors_V2
             }
 
             int n = acf.Length;
-            int minLag = Math.Clamp((int) Math.Round(frameRate * 60.0 / Math.Max(maxBpm, 1)), 1, n - 1);
-            int maxLag = Math.Clamp((int) Math.Round(frameRate * 60.0 / Math.Max(minBpm, 1)), minLag, n - 1);
+            int minLag = Math.Clamp((int)Math.Round(frameRate * 60.0 / Math.Max(maxBpm, 1)), 1, n - 1);
+            int maxLag = Math.Clamp((int)Math.Round(frameRate * 60.0 / Math.Max(minBpm, 1)), minLag, n - 1);
 
             int bestLag = -1; double bestVal = double.NegativeInfinity;
             for (int k = minLag; k <= maxLag; k++)
@@ -581,7 +581,7 @@ namespace ModularAudience.Audio.Processors_V2
                 {
                     double delta = 0.5 * (y1 - y3) / denom;
                     double lagF = Math.Clamp(bestLag + delta, minLag, maxLag);
-                    bestLag = (int) Math.Round(lagF);
+                    bestLag = (int)Math.Round(lagF);
                 }
             }
             return bestLag;
@@ -595,7 +595,7 @@ namespace ModularAudience.Audio.Processors_V2
             }
 
             double lag = frameRate * 60.0 / bpm;
-            int k = (int) Math.Round(lag);
+            int k = (int)Math.Round(lag);
             k = Math.Clamp(k, 1, acf.Length - 1);
             return Math.Max(0.0, acf[k]);
         }
@@ -633,8 +633,8 @@ namespace ModularAudience.Audio.Processors_V2
             int K = x.Length;
 
             // z-Normalisierung
-            double[] xn = (double[]) x.Clone();
-            double[] yn = (double[]) y.Clone();
+            double[] xn = (double[])x.Clone();
+            double[] yn = (double[])y.Clone();
             NormalizeZeroMeanUnitVar(xn);
             NormalizeZeroMeanUnitVar(yn);
 
@@ -742,7 +742,7 @@ namespace ModularAudience.Audio.Processors_V2
                     for (int i = 0; i < fftSize; i++)
                     {
                         float s = start + i < mono.Length ? mono[start + i] : 0f;
-                        fft[i] = new Complex32((float) (s * window[i]), 0f);
+                        fft[i] = new Complex32((float)(s * window[i]), 0f);
                     }
 
                     // FFT
@@ -753,7 +753,7 @@ namespace ModularAudience.Audio.Processors_V2
                     int nyq = fftSize / 2;
                     for (int k = 1; k < nyq; k++)
                     {
-                        double freq = (double) k * sampleRate / fftSize;
+                        double freq = (double)k * sampleRate / fftSize;
                         if (freq < minFreq || freq > maxFreq)
                         {
                             continue;
@@ -776,7 +776,7 @@ namespace ModularAudience.Audio.Processors_V2
 
                             // MIDI (A4=440Hz -> 69)
                             double midi = 69.0 + 12.0 * Math.Log(fH / 440.0, 2.0);
-                            int mLow = (int) Math.Floor(midi);
+                            int mLow = (int)Math.Floor(midi);
                             int mHigh = mLow + 1;
                             double wHigh = midi - mLow;
                             double wLow = 1.0 - wHigh;

@@ -205,7 +205,7 @@ namespace ModularAudience.Generators
                 if (method != null)
                 {
                     LogCollection.Log("Using BreakbeatGenerator preset '" + method.Name + "'.");
-                    var task = (Task<List<bool[]>>) method.Invoke(null, [drumset, bars, density, resolution, swing, complexity, interleaved, seed])!;
+                    var task = (Task<List<bool[]>>)method.Invoke(null, [drumset, bars, density, resolution, swing, complexity, interleaved, seed])!;
                     return await task;
                 }
                 LogCollection.Log("Could not get Method 'Preset_" + key + "', fallback to default break generation.");
@@ -222,7 +222,7 @@ namespace ModularAudience.Generators
             {
                 int idx = i;
                 var elem = elements[idx];
-                int elemSeed = baseSeed ^ (idx * 397) ^ (int) elem;
+                int elemSeed = baseSeed ^ (idx * 397) ^ (int)elem;
                 tasks.Add(Task.Run(() =>
                 {
                     var rnd = new Random(elemSeed);
@@ -259,7 +259,7 @@ namespace ModularAudience.Generators
                         bestIdx = j;
                     }
                 }
-                results[i] = bestIdx >= 0 ? (DrumsetElement) bestIdx : DrumsetElement.Snare;
+                results[i] = bestIdx >= 0 ? (DrumsetElement)bestIdx : DrumsetElement.Snare;
             }
             return results;
         }
@@ -293,7 +293,7 @@ namespace ModularAudience.Generators
             EnsureAnchors(elem, line, barCount, stepsPerBar, density, rnd);
 
             float typeFactor = TypeDensityFactor(elem);
-            int desiredHits = (int) Math.Round(density * totalSteps * typeFactor * complexity);
+            int desiredHits = (int)Math.Round(density * totalSteps * typeFactor * complexity);
             desiredHits = Math.Max(1, desiredHits);
 
             int currentHits = line.Count(x => x);
@@ -622,8 +622,8 @@ namespace ModularAudience.Generators
                 return idxFrom16;
             }
 
-            double scaled = idxFrom16 * (toResolution / (double) fromResolution);
-            return (int) Math.Round(scaled);
+            double scaled = idxFrom16 * (toResolution / (double)fromResolution);
+            return (int)Math.Round(scaled);
         }
 
         static float TemplateUseChanceFor(DrumsetElement elem)
@@ -831,7 +831,7 @@ namespace ModularAudience.Generators
             int channels = 2;
 
             float secondsPerStep = 60f / bpm * 4f / resolution;
-            int totalSamples = (int) Math.Ceiling(secondsPerStep * steps * sampleRate);
+            int totalSamples = (int)Math.Ceiling(secondsPerStep * steps * sampleRate);
 
             float[] mixBuffer = new float[totalSamples * channels];
             var sampleList = samples.ToList();
@@ -865,7 +865,7 @@ namespace ModularAudience.Generators
                         swingOffset = secondsPerStep * swing;
                     }
 
-                    int stepStart = (int) ((step * secondsPerStep + swingOffset) * sampleRate);
+                    int stepStart = (int)((step * secondsPerStep + swingOffset) * sampleRate);
 
                     for (int n = 0; n < audioLen; n++)
                     {
@@ -885,7 +885,7 @@ namespace ModularAudience.Generators
                                 vol = 1.0f;
                             }
 
-                            vol = (float) Math.Clamp(vol, 0.0, 1.0);
+                            vol = (float)Math.Clamp(vol, 0.0, 1.0);
                             mixBuffer[mixPos + c] += sample * vol;
                         }
                     }

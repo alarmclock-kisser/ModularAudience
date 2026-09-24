@@ -142,11 +142,11 @@ namespace ModularAudience.Audio
                 }
                 else if (numSamples > 0)
                 {
-                    float[] tmp = new float[checked((int) numSamples)];
+                    float[] tmp = new float[checked((int)numSamples)];
                     int read = reader.Read(tmp.AsSpan());
                     if (read != numSamples)
                     {
-                        float[] resized = new float[checked((int) read)];
+                        float[] resized = new float[checked((int)read)];
                         Array.Copy(tmp, resized, read);
                         this.Data = resized;
                     }
@@ -191,12 +191,12 @@ namespace ModularAudience.Audio
                     using var file = TagLib.File.Create(this.FilePath);
                     if (file.Tag.BeatsPerMinute > 0)
                     {
-                        roughBpm = (float) file.Tag.BeatsPerMinute;
+                        roughBpm = (float)file.Tag.BeatsPerMinute;
                     }
 
                     if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                     {
-                        var id3v2Tag = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
+                        var id3v2Tag = (TagLib.Id3v2.Tag)file.GetTag(TagLib.TagTypes.Id3v2);
                         var tagTextFrame = TagLib.Id3v2.TextInformationFrame.Get(id3v2Tag, tag, false);
 
                         if (tagTextFrame != null && tagTextFrame.Text.Any())
@@ -254,11 +254,11 @@ namespace ModularAudience.Audio
                     using var file = TagLib.File.Create(this.FilePath);
                     if (file.Tag.BeatsPerMinute > 0)
                     {
-                        bpm = (float) file.Tag.BeatsPerMinute;
+                        bpm = (float)file.Tag.BeatsPerMinute;
                     }
                     else if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                     {
-                        var id3v2Tag = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
+                        var id3v2Tag = (TagLib.Id3v2.Tag)file.GetTag(TagLib.TagTypes.Id3v2);
                         var bpmFrame = TagLib.Id3v2.UserTextInformationFrame.Get(id3v2Tag, tag, false);
                         if (bpmFrame != null && float.TryParse(bpmFrame.Text.FirstOrDefault(), out float parsedBpm))
                         {
@@ -285,7 +285,7 @@ namespace ModularAudience.Audio
             int channels = Math.Max(1, reader.WaveFormat.Channels);
             int samplesPerChannelPerBlock = reader.WaveFormat.SampleRate * blockSeconds;
             int blockSize = samplesPerChannelPerBlock * channels; // total interleaved samples
-            float[] buffer = new float[checked((int) blockSize)];
+            float[] buffer = new float[checked((int)blockSize)];
             int read;
             var sampleProvider = reader.ToSampleProvider();
             while ((read = sampleProvider.Read(buffer.AsSpan())) > 0)
@@ -313,12 +313,12 @@ namespace ModularAudience.Audio
                 using var file = TagLib.File.Create(filePath);
                 if (file.Tag.BeatsPerMinute > 0)
                 {
-                    roughBpm = (float) file.Tag.BeatsPerMinute;
+                    roughBpm = (float)file.Tag.BeatsPerMinute;
                 }
 
                 if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                 {
-                    var id3v2Tag = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
+                    var id3v2Tag = (TagLib.Id3v2.Tag)file.GetTag(TagLib.TagTypes.Id3v2);
                     var tagTextFrame = TagLib.Id3v2.TextInformationFrame.Get(id3v2Tag, tag, false);
 
                     if (tagTextFrame != null && tagTextFrame.Text.Any())
@@ -370,11 +370,11 @@ namespace ModularAudience.Audio
                     using var file = TagLib.File.Create(filePath);
                     if (file.Tag.BeatsPerMinute > 0)
                     {
-                        bpm = (float) file.Tag.BeatsPerMinute;
+                        bpm = (float)file.Tag.BeatsPerMinute;
                     }
                     else if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                     {
-                        var id3v2Tag = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
+                        var id3v2Tag = (TagLib.Id3v2.Tag)file.GetTag(TagLib.TagTypes.Id3v2);
                         var bpmFrame = TagLib.Id3v2.UserTextInformationFrame.Get(id3v2Tag, "BPM", false);
                         if (bpmFrame != null && float.TryParse(bpmFrame.Text.FirstOrDefault(), out float parsedBpm))
                         {
@@ -470,12 +470,12 @@ namespace ModularAudience.Audio
                 if (bpmValue.HasValue && bpmValue.Value > 0)
                 {
                     // Write standard BPM field (ID3v2 TBPM / Vorbis BPM= / APE BPM)
-                    file.Tag.BeatsPerMinute = (ushort) bpmValue.Value;
+                    file.Tag.BeatsPerMinute = (ushort)bpmValue.Value;
 
                     // Also write the custom text frame (e.g. "TBPM") for consistency with ReadFileBpmTag
                     if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                     {
-                        var id3v2Tag = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
+                        var id3v2Tag = (TagLib.Id3v2.Tag)file.GetTag(TagLib.TagTypes.Id3v2);
                         var frame = TagLib.Id3v2.TextInformationFrame.Get(id3v2Tag, tag, false);
                         if (frame == null)
                         {
@@ -498,7 +498,7 @@ namespace ModularAudience.Audio
 
                     if (file.TagTypes.HasFlag(TagLib.TagTypes.Id3v2))
                     {
-                        var id3v2Tag = (TagLib.Id3v2.Tag) file.GetTag(TagLib.TagTypes.Id3v2);
+                        var id3v2Tag = (TagLib.Id3v2.Tag)file.GetTag(TagLib.TagTypes.Id3v2);
                         var frame = TagLib.Id3v2.TextInformationFrame.Get(id3v2Tag, tag, false);
                         if (frame != null)
                         {

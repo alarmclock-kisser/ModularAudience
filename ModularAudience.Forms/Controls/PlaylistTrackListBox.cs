@@ -54,7 +54,7 @@ namespace ModularAudience.Forms.Controls
         }
 
         private static Point GetMessagePoint(Message message) =>
-            new((short) message.LParam.ToInt64(), (short) (message.LParam.ToInt64() >> 16));
+            new((short)message.LParam.ToInt64(), (short)(message.LParam.ToInt64() >> 16));
 
         private bool HandleLeftButtonDown(Point point, int clicks)
         {
@@ -142,7 +142,7 @@ namespace ModularAudience.Forms.Controls
             if (this.IsInteracting && this.rateDragAllowed)
             {
                 int threshold = Math.Max(1, SystemInformation.DragSize.Width / 2);
-                if (this.draggingRate || Math.Abs((long) e.X - this.mouseDownX) >= threshold)
+                if (this.draggingRate || Math.Abs((long)e.X - this.mouseDownX) >= threshold)
                 {
                     this.draggingRate = true;
 

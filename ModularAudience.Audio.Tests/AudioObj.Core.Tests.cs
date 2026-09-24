@@ -86,14 +86,14 @@ namespace ModularAudience.Audio.Tests
             using (var scope = new AudioTestScope())
             {
                 var audio = scope.Create(new float[] { 0.1f }, 44100, 1);
-                
+
                 audio["TestMetric"] = 42.0;
                 audio["testmetric"] = 10.0; // Case insensitivity check
 
                 Assert.AreEqual(42.0, audio["TestMetric"]);
                 Assert.AreEqual(10.0, audio["testmetric"]);
                 Assert.AreEqual(42.0, audio["TESTMETRIC"]);
-                
+
                 Assert.AreEqual(0.0, audio["NonExistent"]);
             }
         }

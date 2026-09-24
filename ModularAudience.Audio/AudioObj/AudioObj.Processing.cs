@@ -75,7 +75,7 @@ namespace ModularAudience.Audio
                 {
                     // Pr�fe auf n�herungsweise Kehrwert eines Integers (z. B. 0.5 -> 1/2)
                     double recip = 1.0 / lf;
-                    int recipInt = (int) Math.Round(recip);
+                    int recipInt = (int)Math.Round(recip);
                     if (Math.Abs(recip - recipInt) < 1e-3 && recipInt > 1)
                     {
                         fraction = "1/" + recipInt.ToString(CultureInfo.InvariantCulture);
@@ -87,7 +87,7 @@ namespace ModularAudience.Audio
                 }
                 else if (lf >= 1f)
                 {
-                    int whole = (int) Math.Round(lf);
+                    int whole = (int)Math.Round(lf);
                     fraction = Math.Abs(lf - whole) < 1e-3
                         ? whole.ToString(CultureInfo.InvariantCulture)
                         : lf.ToString("F1", CultureInfo.InvariantCulture);
@@ -99,7 +99,7 @@ namespace ModularAudience.Audio
                     fraction = len > 0 ? "1" : "0";
                 }
 
-                double loopStartTime = (double) startSample.Value / Math.Max(1, this.SampleRate) / Math.Max(1, this.Channels);
+                double loopStartTime = (double)startSample.Value / Math.Max(1, this.SampleRate) / Math.Max(1, this.Channels);
 
                 clone.Rename($"{this.OriginalName} (Looped {fraction} at {loopStartTime:F1}s)");
             }
@@ -120,12 +120,12 @@ namespace ModularAudience.Audio
                 // Wenn bereits Mono, einfach zur�ckgeben
                 if (this.Channels == 1)
                 {
-                    return set ? this.Data : (float[]) this.Data.Clone();
+                    return set ? this.Data : (float[])this.Data.Clone();
                 }
 
                 // Berechnung der Anzahl der Samples pro Kanal
                 int monoSampleCount = this.Data.Length / this.Channels;
-                float[] monoData = new float[checked((int) monoSampleCount)];
+                float[] monoData = new float[checked((int)monoSampleCount)];
 
                 // Konvertierung: Wir nehmen den Durchschnitt der Kanäle (Downmixing)
                 // Das ist klanglich neutraler als nur den ersten Kanal zu nehmen.
@@ -135,7 +135,7 @@ namespace ModularAudience.Audio
                     for (int ch = 0; ch < this.Channels; ch++)
                     {
                         // Index berechnen: (Sample-Index * Anzahl der Kanäle) + aktueller Kanal
-                        sum += this.Data[checked((int) (i * this.Channels + ch))];
+                        sum += this.Data[checked((int)(i * this.Channels + ch))];
                     }
                     monoData[i] = sum / this.Channels;
                 }

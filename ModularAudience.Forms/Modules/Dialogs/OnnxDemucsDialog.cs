@@ -73,7 +73,7 @@ namespace ModularAudience.Forms
             this.progressBar_inferencing.Maximum = 1000;
             var progress = new Progress<double>(percent =>
             {
-                this.progressBar_inferencing.Value = Math.Clamp((int) (percent * this.progressBar_inferencing.Maximum), 0, this.progressBar_inferencing.Maximum);
+                this.progressBar_inferencing.Value = Math.Clamp((int)(percent * this.progressBar_inferencing.Maximum), 0, this.progressBar_inferencing.Maximum);
             });
 
 

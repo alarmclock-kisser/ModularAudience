@@ -263,11 +263,37 @@ namespace ModularAudience.Forms.Modules
             float dy = (float)Math.Sin(p.Heading);
 
             // Clamp the straight endpoint to the playable rectangle.
-            float maxForward = float.PositiveInfinity;
-            if (dx > 0.001f) maxForward = Math.Min(maxForward, (screenW - margin - startX) / dx);
-            else if (dx < -0.001f) maxForward = Math.Min(maxForward, (margin - startX) / dx);
-            if (dy > 0.001f) maxForward = Math.Min(maxForward, (screenH - margin - startY) / dy);
-            else if (dy < -0.001f) maxForward = Math.Min(maxForward, (margin - startY) / dy);
+            float maxForward = GetMaxForwardDistance(startX, startY, dx, dy, margin, screenW, screenH);
+            if (maxForward < minSliderLength)
+            {
+                float towardCenterX = screenW / 2f - startX;
+                float towardCenterY = screenH / 2f - startY;
+                float towardCenterLength = (float)Math.Sqrt(towardCenterX * towardCenterX + towardCenterY * towardCenterY);
+                if (towardCenterLength > 0.001f)
+                {
+                    dx = towardCenterX / towardCenterLength;
+                    dy = towardCenterY / towardCenterLength;
+                    maxForward = GetMaxForwardDistance(startX, startY, dx, dy, margin, screenW, screenH);
+                }
+            }
+            if (maxForward < minSliderLength)
+            {
+                float left = Math.Max(0f, startX - margin);
+                float right = Math.Max(0f, screenW - margin - startX);
+                float top = Math.Max(0f, startY - margin);
+                float bottom = Math.Max(0f, screenH - margin - startY);
+                if (Math.Max(left, right) >= Math.Max(top, bottom))
+                {
+                    dx = right >= left ? 1f : -1f;
+                    dy = 0f;
+                }
+                else
+                {
+                    dx = 0f;
+                    dy = bottom >= top ? 1f : -1f;
+                }
+                maxForward = GetMaxForwardDistance(startX, startY, dx, dy, margin, screenW, screenH);
+            }
             length = Math.Clamp(length, minSliderLength, Math.Min(maxSliderLength, maxForward));
 
             float endX = startX + dx * length;
@@ -348,6 +374,23 @@ namespace ModularAudience.Forms.Modules
                 CumulativeLength = cumulative,
                 TotalLength = total
             };
+        }
+
+        private static float GetMaxForwardDistance(
+            float startX,
+            float startY,
+            float dx,
+            float dy,
+            int margin,
+            int screenW,
+            int screenH)
+        {
+            float maxForward = float.PositiveInfinity;
+            if (dx > 0.001f) maxForward = Math.Min(maxForward, (screenW - margin - startX) / dx);
+            else if (dx < -0.001f) maxForward = Math.Min(maxForward, (margin - startX) / dx);
+            if (dy > 0.001f) maxForward = Math.Min(maxForward, (screenH - margin - startY) / dy);
+            else if (dy < -0.001f) maxForward = Math.Min(maxForward, (margin - startY) / dy);
+            return maxForward;
         }
 
         public ClickPattern BuildClickPattern(

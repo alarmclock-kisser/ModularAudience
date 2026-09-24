@@ -140,7 +140,7 @@ public static class AudioRecorder
 
             // Rate auf Minuten hochgerechnet
             double rate = (_peakHits.Count - 1) / spanSeconds * 60.0;
-            return (float) rate;
+            return (float)rate;
         }
     }
 
@@ -185,7 +185,7 @@ public static class AudioRecorder
                 RecordingStartTime = DateTime.UtcNow;
                 RecordingStopTime = null;
                 RecordingPreRoll = _capture.WaveFormat.AverageBytesPerSecond > 0
-                    ? TimeSpan.FromSeconds((double) prefix.Length / _capture.WaveFormat.AverageBytesPerSecond)
+                    ? TimeSpan.FromSeconds((double)prefix.Length / _capture.WaveFormat.AverageBytesPerSecond)
                     : TimeSpan.Zero;
                 IsRecording = true;
                 _lastDataWritten = 0;

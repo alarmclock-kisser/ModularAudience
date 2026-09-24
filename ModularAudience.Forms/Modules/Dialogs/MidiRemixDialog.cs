@@ -19,11 +19,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             int selected = this.sourceMidiFile.Tracks.ToList().FindIndex(track => track.Index == defaultTrackIndex);
             this.comboBox_track.SelectedIndex = selected >= 0 ? selected : 0;
             MidiRemixSettings defaults = new();
-            this.numericUpDown_denoise.Value = (decimal) defaults.DenoiseFactor;
-            this.numericUpDown_frequency.Value = (decimal) defaults.FrequencyShift;
-            this.numericUpDown_tempo.Value = (decimal) defaults.TempoShift;
-            this.numericUpDown_derivation.Value = (decimal) defaults.PatternDerivationFactor;
-            this.numericUpDown_rearrangement.Value = (decimal) defaults.PatternRearrangementFactor;
+            this.numericUpDown_denoise.Value = (decimal)defaults.DenoiseFactor;
+            this.numericUpDown_frequency.Value = (decimal)defaults.FrequencyShift;
+            this.numericUpDown_tempo.Value = (decimal)defaults.TempoShift;
+            this.numericUpDown_derivation.Value = (decimal)defaults.PatternDerivationFactor;
+            this.numericUpDown_rearrangement.Value = (decimal)defaults.PatternRearrangementFactor;
             this.numericUpDown_minLength.Value = defaults.PatternMinLength;
             this.numericUpDown_maxLength.Value = defaults.PatternMaxLength;
             this.numericUpDown_poolSize.Value = defaults.DerivedPatternsPoolSize;
@@ -45,14 +45,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.TrackIndex = selectedTrack.Index;
             this.Settings = new MidiRemixSettings
             {
-                DenoiseFactor = (float) this.numericUpDown_denoise.Value,
-                FrequencyShift = (float) this.numericUpDown_frequency.Value,
-                TempoShift = (float) this.numericUpDown_tempo.Value,
-                PatternDerivationFactor = (float) this.numericUpDown_derivation.Value,
-                PatternRearrangementFactor = (float) this.numericUpDown_rearrangement.Value,
-                PatternMinLength = (int) this.numericUpDown_minLength.Value,
-                PatternMaxLength = (int) this.numericUpDown_maxLength.Value,
-                DerivedPatternsPoolSize = (int) this.numericUpDown_poolSize.Value
+                DenoiseFactor = (float)this.numericUpDown_denoise.Value,
+                FrequencyShift = (float)this.numericUpDown_frequency.Value,
+                TempoShift = (float)this.numericUpDown_tempo.Value,
+                PatternDerivationFactor = (float)this.numericUpDown_derivation.Value,
+                PatternRearrangementFactor = (float)this.numericUpDown_rearrangement.Value,
+                PatternMinLength = (int)this.numericUpDown_minLength.Value,
+                PatternMaxLength = (int)this.numericUpDown_maxLength.Value,
+                DerivedPatternsPoolSize = (int)this.numericUpDown_poolSize.Value
             };
         }
     }

@@ -332,7 +332,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // generisches Id3v2-TextFrame als Fallback
             if (file.TagTypes.HasFlag(TagTypes.Id3v2))
             {
-                var id3 = (TagLib.Id3v2.Tag) file.GetTag(TagTypes.Id3v2);
+                var id3 = (TagLib.Id3v2.Tag)file.GetTag(TagTypes.Id3v2);
 
                 if (upper.Length == 4)
                 {
@@ -617,7 +617,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                                     audio.Duration = ts;
                                     if (audio.SampleRate > 0 && audio.Channels > 0)
                                     {
-                                        long frames = (long) Math.Round(ts.TotalSeconds * audio.SampleRate);
+                                        long frames = (long)Math.Round(ts.TotalSeconds * audio.SampleRate);
                                         audio.Length = Math.Max(0L, frames * Math.Max(1, audio.Channels));
                                     }
                                 }
@@ -630,7 +630,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                                         audio.Duration = duration;
                                         if (audio.SampleRate > 0 && audio.Channels > 0)
                                         {
-                                            long frames = (long) Math.Round(duration.TotalSeconds * audio.SampleRate);
+                                            long frames = (long)Math.Round(duration.TotalSeconds * audio.SampleRate);
                                             audio.Length = Math.Max(0L, frames * Math.Max(1, audio.Channels));
                                         }
                                     }

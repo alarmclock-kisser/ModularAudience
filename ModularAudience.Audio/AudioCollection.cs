@@ -295,7 +295,7 @@ namespace ModularAudience.Audio
 
         private static void ApplyState(AudioObj target, AudioObj source)
         {
-            target.Data = (float[]) source.Data.Clone();
+            target.Data = (float[])source.Data.Clone();
             target.SampleRate = source.SampleRate;
             target.Channels = source.Channels;
             target.BitDepth = source.BitDepth;
@@ -388,7 +388,7 @@ namespace ModularAudience.Audio
             {
                 return null;
             }
-            float bpm = (float) await BeatScanner.ScanBpmAsync(audio, windowSize, lookingRange, this.BeatScanMinimumBpm, this.BeatScanMaximumBpm);
+            float bpm = (float)await BeatScanner.ScanBpmAsync(audio, windowSize, lookingRange, this.BeatScanMinimumBpm, this.BeatScanMaximumBpm);
             if (set)
             {
                 audio.Bpm = bpm;

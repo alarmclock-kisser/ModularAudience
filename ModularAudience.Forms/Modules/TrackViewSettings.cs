@@ -11,10 +11,10 @@
         internal bool SmoothWaveform => this.checkBox_smoothen.Checked;
         internal bool DrawChannelsSeparately => this.checkBox_drawEachChannel.Checked;
         internal bool ShowTimeMarkers => this.checkBox_timeMarkers.Checked;
-        internal double TimeMarkersInterval => (double) this.numericUpDown_timeMarkers.Value;
-        internal int CaretWidth => (int) this.numericUpDown_caretWidth.Value;
-        internal float CaretPosition => (float) (this.hScrollBar_caretPosition.Value - this.hScrollBar_caretPosition.Maximum / 2) / (this.hScrollBar_caretPosition.Maximum / 2);
-        internal float FrameRate => (float) this.numericUpDown_frameRate.Value;
+        internal double TimeMarkersInterval => (double)this.numericUpDown_timeMarkers.Value;
+        internal int CaretWidth => (int)this.numericUpDown_caretWidth.Value;
+        internal float CaretPosition => (float)(this.hScrollBar_caretPosition.Value - this.hScrollBar_caretPosition.Maximum / 2) / (this.hScrollBar_caretPosition.Maximum / 2);
+        internal float FrameRate => (float)this.numericUpDown_frameRate.Value;
 
         internal bool HueEnabled => this.checkBox_hue.Checked;
         internal bool StrobeEnabled { get; private set; }
@@ -29,7 +29,7 @@
             this.InitializeComponent();
             this.StartPosition = FormStartPosition.Manual;
             this.Track = trackView;
-            this.numericUpDown_frameRate.Value = (decimal) WindowsScreenHelper.GetScreenRefreshRate();
+            this.numericUpDown_frameRate.Value = (decimal)WindowsScreenHelper.GetScreenRefreshRate();
             this.InitializeHandlers();
             this.button_strobe.Text = "⚡";
             this.UpdateCaretPositionLabel();
@@ -57,9 +57,9 @@
             factor = Math.Clamp(factor, 0.0f, 1.0f);
             return Color.FromArgb(
                 color.A,
-                (int) (color.R * factor),
-                (int) (color.G * factor),
-                (int) (color.B * factor));
+                (int)(color.R * factor),
+                (int)(color.G * factor),
+                (int)(color.B * factor));
         }
 
         private void InitializeHandlers()
@@ -185,7 +185,7 @@
                 {
                     this.numericUpDown_hue.Value = 1.75m;
                 }
-                this.StoredHueValue = (float) this.numericUpDown_hue.Value;
+                this.StoredHueValue = (float)this.numericUpDown_hue.Value;
 
                 if (this.StrobeEnabled)
                 {
@@ -236,7 +236,7 @@
 
         private void numericUpDown_hue_ValueChanged(object? sender, EventArgs e)
         {
-            this.StoredHueValue = (float) this.numericUpDown_hue.Value;
+            this.StoredHueValue = (float)this.numericUpDown_hue.Value;
             if (!this.StrobeEnabled && this.HueEnabled)
             {
                 this.HueAdjustment = this.DefaultHueAdjustment;
@@ -275,7 +275,7 @@
         internal static Color ColorFromHSV(float hue, float saturation, float value)
         {
             int hi = Convert.ToInt32(Math.Floor(hue / 60)) % 6;
-            float f = hue / 60 - (float) Math.Floor(hue / 60);
+            float f = hue / 60 - (float)Math.Floor(hue / 60);
             value = value * 255;
             int v = Convert.ToInt32(value);
             int p = Convert.ToInt32(value * (1 - saturation));

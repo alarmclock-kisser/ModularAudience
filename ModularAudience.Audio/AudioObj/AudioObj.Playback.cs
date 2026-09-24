@@ -60,15 +60,15 @@ namespace ModularAudience.Audio
             }
         }
 
-        public TimeSpan CurrentTime => TimeSpan.FromSeconds((double) this.Position / Math.Max(1, this.SampleRate));
+        public TimeSpan CurrentTime => TimeSpan.FromSeconds((double)this.Position / Math.Max(1, this.SampleRate));
         public double SizeInKb => this.Data.Length * sizeof(float) / 1024.0;
         public long CurrentPlaybackSamples => this.CurrentPlaybackPositionBytes / sizeof(float);
 
         /// <summary>
-        /// Returns the audio output latency in milliseconds (the time between a sample
-        /// being written to the device and it actually being heard). Used by the beat
-        /// clicker game to shift hit windows so the optimal click time lines up with the
-        /// actually heard beat. Returns 0 if the latency cannot be determined.
+        /// Returns the configured WaveOut buffer duration in milliseconds. The beat clicker
+        /// uses it to configure a matching calibration stream; calibration measures the
+        /// actual playback position instead of subtracting this estimate. Returns 0 if the
+        /// value cannot be determined.
         /// </summary>
         public float GetLatencyMs() => this.playback.GetLatencyMs();
 
@@ -140,7 +140,7 @@ namespace ModularAudience.Audio
 
                     if (Math.Abs(this.SampleRateFactor - 1.0) > double.Epsilon)
                     {
-                        await this.playback.AdjustSampleRate((float) this.SampleRateFactor).ConfigureAwait(false);
+                        await this.playback.AdjustSampleRate((float)this.SampleRateFactor).ConfigureAwait(false);
                     }
 
                     this.positionOriginBytes = this.playback.GetPositionBytes();
@@ -200,7 +200,7 @@ namespace ModularAudience.Audio
         {
             this.LoopFraction = loopEnabled
                 ? (fractionSamples >= 0
-                    ? (float) fractionSamples / (baseEndSamples - baseStartSamples)
+                    ? (float)fractionSamples / (baseEndSamples - baseStartSamples)
                     : 0f)
                 : 0f;
             bool wasLooping = this.playbackLoopApplied;
@@ -350,7 +350,7 @@ namespace ModularAudience.Audio
             long totalFrames = (this.Data?.LongLength ?? 0L) / channels;
             long totalBytes = totalFrames * bytesPerFrame;
 
-            long bytePosition = framePosition * (long) bytesPerFrame;
+            long bytePosition = framePosition * (long)bytesPerFrame;
             this.SkippedPositionBytes = Math.Clamp(bytePosition, 0, totalBytes);
 
             if (this.Paused || !this.Playing)
@@ -375,7 +375,7 @@ namespace ModularAudience.Audio
 
         public void Seek(double seconds)
         {
-            long frames = (long) Math.Round(seconds * this.SampleRate);
+            long frames = (long)Math.Round(seconds * this.SampleRate);
             this.SetPosition(frames);
         }
 
@@ -384,13 +384,13 @@ namespace ModularAudience.Audio
             this.SampleRateFactor = factor;
             if (this.PlayerPlaying || this.Paused)
             {
-                await this.playback.AdjustSampleRate((float) this.SampleRateFactor).ConfigureAwait(false);
+                await this.playback.AdjustSampleRate((float)this.SampleRateFactor).ConfigureAwait(false);
             }
         }
 
         public async Task ApplyCombinedSampleRateAsync()
         {
-            float combinedFactor = (float) Math.Clamp(this.ManualSampleRateFactor * this.SyncNudgeSampleRateFactor, 0.01, 10.0);
+            float combinedFactor = (float)Math.Clamp(this.ManualSampleRateFactor * this.SyncNudgeSampleRateFactor, 0.01, 10.0);
             await this.AdjustSampleRate(combinedFactor).ConfigureAwait(false);
         }
 

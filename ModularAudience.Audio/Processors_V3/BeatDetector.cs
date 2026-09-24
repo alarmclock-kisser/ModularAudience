@@ -39,7 +39,7 @@ public static class BeatDetector
         int totalFrames = audio.Data.Length / audio.Channels;
 
         // Schritt 3: Schätzungen der Intervalllänge (Frames pro Beat)
-        int intervalFrames = (int) (sampleRate * 60.0 / bpm);  // Frames pro Schlag
+        int intervalFrames = (int)(sampleRate * 60.0 / bpm);  // Frames pro Schlag
         intervalFrames = Math.Max(1, (intervalFrames / granularity) * granularity);  // Granularität berücksichtigen
 
         // Schritt 4: BeatGrid erzeugen
@@ -113,7 +113,7 @@ public static class BeatDetector
         }
 
         // Durchschnittliches Intervall zwischen den Peaks
-        double avgInterval = (double) intervalSum / peakCount;
+        double avgInterval = (double)intervalSum / peakCount;
         double bpm = 60.0 * sampleRate / avgInterval;
 
         return bpm;
@@ -178,7 +178,7 @@ public static class BeatDetector
     {
         // Berechnung eines dynamischen peakThreshold basierend auf der Hüllkurve
         // Hier verwenden wir eine einfache Heuristik basierend auf den Extremen der Envelope
-        int threshold = (int) (envelopeLength * 0.05);  // Einfacher Wert (5% der gesamten Länge)
+        int threshold = (int)(envelopeLength * 0.05);  // Einfacher Wert (5% der gesamten Länge)
         return Math.Max(threshold, 2);  // Minimalwert, damit es keine zu niedrige Schwelle gibt
     }
 

@@ -53,7 +53,7 @@ namespace ModularAudience.Audio.Tests
             {
                 double phase = 2 * Math.PI * 220 * i / 16000;
                 double gain = i >= 7200 && i < 7680 ? 0.03 : 1;
-                signal[i] = (float) (gain * (0.25 * Math.Sin(phase) + 0.5 * Math.Sin(2 * phase) + 0.15 * Math.Sin(3 * phase)));
+                signal[i] = (float)(gain * (0.25 * Math.Sin(phase) + 0.5 * Math.Sin(2 * phase) + 0.15 * Math.Sin(3 * phase)));
             }
             MidiFileData midi = MidiFileData.Convert(scope.Create(signal));
             Assert.AreEqual(1, midi.Tracks[0].Notes.Count, Describe(midi));
@@ -97,7 +97,7 @@ namespace ModularAudience.Audio.Tests
             using AudioTestScope scope = new();
             Assert.AreEqual(0, MidiFileData.Convert(scope.Create(new float[8000])).Tracks[0].Notes.Count);
             Random random = new(42);
-            float[] noise = Enumerable.Range(0, 8000).Select(_ => (float) (random.NextDouble() - 0.5)).ToArray();
+            float[] noise = Enumerable.Range(0, 8000).Select(_ => (float)(random.NextDouble() - 0.5)).ToArray();
             MidiFileData midi = MidiFileData.Convert(scope.Create(noise));
             Assert.AreEqual(0, midi.Tracks[0].Notes.Count, Describe(midi));
         }
@@ -160,7 +160,7 @@ namespace ModularAudience.Audio.Tests
             {
                 double pitchOffset = 0.35 * Math.Sin(2 * Math.PI * 5 * i / 16000);
                 phase += 2 * Math.PI * 440 * Math.Pow(2, pitchOffset / 12) / 16000;
-                signal[i] = (float) (0.5 * Math.Sin(phase));
+                signal[i] = (float)(0.5 * Math.Sin(phase));
             }
             MidiFileData midi = MidiFileData.Convert(scope.Create(signal));
             Assert.AreEqual(1, midi.Tracks[0].Notes.Count, Describe(midi));
@@ -252,12 +252,12 @@ namespace ModularAudience.Audio.Tests
             Assert.IsTrue(audio.LoadAudioFile(), "The diagnostic MP3 must decode successfully.");
             if (durationSeconds.HasValue)
             {
-                int start = (int) (startSeconds * audio.SampleRate) * audio.Channels;
-                int count = Math.Min((int) (durationSeconds.Value * audio.SampleRate) * audio.Channels, audio.Data.Length - start);
+                int start = (int)(startSeconds * audio.SampleRate) * audio.Channels;
+                int count = Math.Min((int)(durationSeconds.Value * audio.SampleRate) * audio.Channels, audio.Data.Length - start);
                 Assert.IsTrue(count > 0, "The diagnostic excerpt must contain audio.");
                 audio.Data = audio.Data.AsSpan(start, count).ToArray();
                 audio.Length = audio.Data.Length;
-                audio.Duration = TimeSpan.FromSeconds(count / (double) (audio.SampleRate * audio.Channels));
+                audio.Duration = TimeSpan.FromSeconds(count / (double)(audio.SampleRate * audio.Channels));
             }
             MidiFileData midi = await MidiFileData.ConvertAsync(audio, maxWorkers: 4, preset: preset);
             MidiNoteData[] notes = midi.Tracks.SelectMany(track => track.Notes).ToArray();

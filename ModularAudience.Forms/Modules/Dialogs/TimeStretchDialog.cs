@@ -81,12 +81,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false, WindowMain.CurrentScreenId);
 
-            this.numericUpDown_chunkSize.Tag = (int) this.numericUpDown_chunkSize.Value;
-            this.numericUpDown_initialBpm.Value = this.Tracks.Count != 0 ? this.GetSafeInitialBpm(this.Tracks.First()) : (decimal) LastInitialBpm;
+            this.numericUpDown_chunkSize.Tag = (int)this.numericUpDown_chunkSize.Value;
+            this.numericUpDown_initialBpm.Value = this.Tracks.Count != 0 ? this.GetSafeInitialBpm(this.Tracks.First()) : (decimal)LastInitialBpm;
             this.numericUpDown_threads.Minimum = 1;
             this.numericUpDown_threads.Maximum = Math.Max(Environment.ProcessorCount, 1);
             this.numericUpDown_threads.Value = Math.Max(Environment.ProcessorCount / 2, 1);
-            this.numericUpDown_targetBpm.Value = (decimal) LastTargetBpm;
+            this.numericUpDown_targetBpm.Value = (decimal)LastTargetBpm;
 
             this.Load += this.TimeStretchDialog_Load;
             this.FormClosing += this.TimeStretchDialog_FormClosing;
@@ -108,7 +108,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private void numericUpDown_chunkSize_ValueChanged(object sender, EventArgs e)
         {
             int prev = this.numericUpDown_chunkSize.Tag is int val ? val : 128;
-            int curr = (int) this.numericUpDown_chunkSize.Value;
+            int curr = (int)this.numericUpDown_chunkSize.Value;
 
             if (curr > prev)
             {
@@ -119,7 +119,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.numericUpDown_chunkSize.Value = Math.Clamp(prev / 2, this.numericUpDown_chunkSize.Minimum, this.numericUpDown_chunkSize.Maximum);
             }
 
-            this.numericUpDown_chunkSize.Tag = (int) this.numericUpDown_chunkSize.Value;
+            this.numericUpDown_chunkSize.Tag = (int)this.numericUpDown_chunkSize.Value;
         }
 
         private void numericUpDown_initialBpm_ValueChanged(object? sender, EventArgs e)
@@ -160,10 +160,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
             }
 
-            double factor = (double) currentValue / (double) this.numericUpDown_targetBpm.Value;
-            this.numericUpDown_stretchFactor.Value = Math.Clamp((decimal) factor, this.numericUpDown_stretchFactor.Minimum, this.numericUpDown_stretchFactor.Maximum);
+            double factor = (double)currentValue / (double)this.numericUpDown_targetBpm.Value;
+            this.numericUpDown_stretchFactor.Value = Math.Clamp((decimal)factor, this.numericUpDown_stretchFactor.Minimum, this.numericUpDown_stretchFactor.Maximum);
             this.previousInitialBpmValue = this.numericUpDown_initialBpm.Value;
-            LastInitialBpm = (float) this.numericUpDown_initialBpm.Value;
+            LastInitialBpm = (float)this.numericUpDown_initialBpm.Value;
         }
 
         private void numericUpDown_targetBpm_ValueChanged(object sender, EventArgs e)
@@ -204,16 +204,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
             }
 
-            double factor = (double) this.numericUpDown_initialBpm.Value / (double) currentValue;
-            this.numericUpDown_stretchFactor.Value = Math.Clamp((decimal) factor, this.numericUpDown_stretchFactor.Minimum, this.numericUpDown_stretchFactor.Maximum);
+            double factor = (double)this.numericUpDown_initialBpm.Value / (double)currentValue;
+            this.numericUpDown_stretchFactor.Value = Math.Clamp((decimal)factor, this.numericUpDown_stretchFactor.Minimum, this.numericUpDown_stretchFactor.Maximum);
             this.previousTargetBpmValue = this.numericUpDown_targetBpm.Value;
-            LastTargetBpm = (float) this.numericUpDown_targetBpm.Value;
+            LastTargetBpm = (float)this.numericUpDown_targetBpm.Value;
         }
 
         private void numericUpDown_stretchFactor_ValueChanged(object sender, EventArgs e)
         {
-            double targetBpm = (double) this.numericUpDown_initialBpm.Value / (double) this.numericUpDown_stretchFactor.Value;
-            this.numericUpDown_targetBpm.Value = Math.Clamp((decimal) targetBpm, this.numericUpDown_targetBpm.Minimum, this.numericUpDown_targetBpm.Maximum);
+            double targetBpm = (double)this.numericUpDown_initialBpm.Value / (double)this.numericUpDown_stretchFactor.Value;
+            this.numericUpDown_targetBpm.Value = Math.Clamp((decimal)targetBpm, this.numericUpDown_targetBpm.Minimum, this.numericUpDown_targetBpm.Maximum);
         }
 
         private async void button_stretch_Click(object sender, EventArgs e)
@@ -239,7 +239,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 var progress = new Progress<double>(percent =>
                 {
-                    int scaled = (int) Math.Round(percent * this.progressBar_stretching.Maximum);
+                    int scaled = (int)Math.Round(percent * this.progressBar_stretching.Maximum);
                     this.progressBar_stretching.Value = Math.Clamp(scaled, this.progressBar_stretching.Minimum, this.progressBar_stretching.Maximum);
                 });
 
@@ -251,16 +251,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     for (int i = 0; i < this.Tracks.Count; i++)
                     {
                         this.Text = $"Time Stretch - {this.Tracks.Count} Tracks (Processing {i + 1}/{this.Tracks.Count})";
-                        this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked ? this.numericUpDown_initialBpm.Value : this.Tracks.ElementAt(i).Bpm > 0 ? (decimal) this.Tracks.ElementAt(i).Bpm : this.Tracks.ElementAt(i).ScannedBpm > 30 ? (decimal) this.Tracks.ElementAt(i).ScannedBpm : (decimal) LastInitialBpm;
-                        float originalPeak = await this.Tracks.ElementAt(i).GetPeakAmplitudeAsync((int) this.numericUpDown_threads.Value);
+                        this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked ? this.numericUpDown_initialBpm.Value : this.Tracks.ElementAt(i).Bpm > 0 ? (decimal)this.Tracks.ElementAt(i).Bpm : this.Tracks.ElementAt(i).ScannedBpm > 30 ? (decimal)this.Tracks.ElementAt(i).ScannedBpm : (decimal)LastInitialBpm;
+                        float originalPeak = await this.Tracks.ElementAt(i).GetPeakAmplitudeAsync((int)this.numericUpDown_threads.Value);
                         await TimeStretcher.TimeStretchAllThreadsAsync(
                                                 this.Tracks.ElementAt(i),
-                                                (int) this.numericUpDown_chunkSize.Value,
-                                                (float) this.numericUpDown_overlap.Value,
-                                                (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
+                                                (int)this.numericUpDown_chunkSize.Value,
+                                                (float)this.numericUpDown_overlap.Value,
+                                                (double)this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double)this.numericUpDown_stretchFactor.Value : (double)this.numericUpDown_stretchFactor.Value,
                                                 keepData: false,
                                                 normalize: 1.0f,
-                                                maxWorkers: (int) this.numericUpDown_threads.Value,
+                                                maxWorkers: (int)this.numericUpDown_threads.Value,
                                                 progress: progress,
                                                 offload: this.checkBox_offload.Checked, channeled: this.checkBox_channeled.Checked);
 
@@ -272,7 +272,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                         if (originalPeak > 0f)
                         {
-                            await this.Tracks.ElementAt(i).NormalizeAsync(originalPeak, (int) this.numericUpDown_threads.Value);
+                            await this.Tracks.ElementAt(i).NormalizeAsync(originalPeak, (int)this.numericUpDown_threads.Value);
                         }
                     }
                     this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
@@ -289,16 +289,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     }
 
                     bool resumePlaybackAfterReplace = this.TrackView.OriginalAudio.PlayerPlaying;
-                    float originalPeak = await this.Tracks.First().GetPeakAmplitudeAsync((int) this.numericUpDown_threads.Value);
+                    float originalPeak = await this.Tracks.First().GetPeakAmplitudeAsync((int)this.numericUpDown_threads.Value);
 
                     var result = await TimeStretcher.TimeStretchAllThreadsAsync(
                                             this.Tracks.First(),
-                                            (int) this.numericUpDown_chunkSize.Value,
-                                            (float) this.numericUpDown_overlap.Value,
-                                            (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
+                                            (int)this.numericUpDown_chunkSize.Value,
+                                            (float)this.numericUpDown_overlap.Value,
+                                            (double)this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double)this.numericUpDown_stretchFactor.Value : (double)this.numericUpDown_stretchFactor.Value,
                                             keepData: false,
                                             normalize: 0.0f,
-                                            maxWorkers: (int) this.numericUpDown_threads.Value,
+                                            maxWorkers: (int)this.numericUpDown_threads.Value,
                                             progress: progress,
                                             offload: this.checkBox_offload.Checked, channeled: this.checkBox_channeled.Checked);
 
@@ -310,11 +310,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                     if (originalPeak > 0f)
                     {
-                        await result.NormalizeAsync(originalPeak, (int) this.numericUpDown_threads.Value);
+                        await result.NormalizeAsync(originalPeak, (int)this.numericUpDown_threads.Value);
                     }
 
                     await this.TrackView.OriginalAudio.CreateUndoStepAsync();
-                    double stretchFactor = (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value;
+                    double stretchFactor = (double)this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double)this.numericUpDown_stretchFactor.Value : (double)this.numericUpDown_stretchFactor.Value;
                     await this.TrackView.ApplyStretchedAudioAsync(result, stretchFactor, resumePlaybackAfterReplace);
                     this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
                     closeAfterSuccess = true;
@@ -380,11 +380,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             this.ConfirmedUsedV2 = useV2;
             this.ConfirmedSettings = new PlaylistStretchSettings(
-                TargetBpm: (float) this.numericUpDown_targetBpm.Value,
-                StretchFactor: (float) this.numericUpDown_stretchFactor.Value,
-                ChunkSize: (int) this.numericUpDown_chunkSize.Value,
-                Overlap: (float) this.numericUpDown_overlap.Value,
-                Threads: (int) this.numericUpDown_threads.Value,
+                TargetBpm: (float)this.numericUpDown_targetBpm.Value,
+                StretchFactor: (float)this.numericUpDown_stretchFactor.Value,
+                ChunkSize: (int)this.numericUpDown_chunkSize.Value,
+                Overlap: (float)this.numericUpDown_overlap.Value,
+                Threads: (int)this.numericUpDown_threads.Value,
                 UseV2: useV2,
                 AutoChunking: this.checkBox_autoChunking.Checked,
                 Offload: this.checkBox_offload.Checked,
@@ -455,7 +455,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 // Progress mapper: for multi-track, map each track to its portion of the progress bar
                 var rawProgress = new Progress<double>(percent =>
                 {
-                    int scaled = (int) Math.Round(percent * this.progressBar_stretching.Maximum);
+                    int scaled = (int)Math.Round(percent * this.progressBar_stretching.Maximum);
                     this.progressBar_stretching.Value = Math.Clamp(scaled, this.progressBar_stretching.Minimum, this.progressBar_stretching.Maximum);
                 });
 
@@ -463,18 +463,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 int index = 0;
                 void ReportComposite(double local)
                 {
-                    double baseStart = (double) index / Math.Max(1, total);
-                    double baseEnd = (double) (index + 1) / Math.Max(1, total);
+                    double baseStart = (double)index / Math.Max(1, total);
+                    double baseEnd = (double)(index + 1) / Math.Max(1, total);
                     double mapped = baseStart + (baseEnd - baseStart) * Math.Clamp(local, 0.0, 1.0);
-                    ((IProgress<double>) rawProgress).Report(mapped); // <-- Fix: explizites Interface-Casting
+                    ((IProgress<double>)rawProgress).Report(mapped); // <-- Fix: explizites Interface-Casting
                 }
 
                 var perTrackProgress = new Progress<double>(p => ReportComposite(p));
 
                 await this.TrackView.OriginalAudio.CreateUndoStepAsync();
 
-                int? chunkSize = this.checkBox_autoChunking.Checked ? null : (int?) this.numericUpDown_chunkSize.Value;
-                float? overlap = this.checkBox_autoChunking.Checked ? null : (float?) this.numericUpDown_overlap.Value;
+                int? chunkSize = this.checkBox_autoChunking.Checked ? null : (int?)this.numericUpDown_chunkSize.Value;
+                float? overlap = this.checkBox_autoChunking.Checked ? null : (float?)this.numericUpDown_overlap.Value;
 
                 try { this.button_stretchV2.Text = "Cancel"; } catch { }
 
@@ -484,12 +484,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     index = 0;
                     foreach (var t in this.Tracks)
                     {
-                        this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked ? this.numericUpDown_initialBpm.Value : t.Bpm > 0 ? (decimal) t.Bpm : t.ScannedBpm > 30 ? (decimal) t.ScannedBpm : (decimal) LastInitialBpm;
+                        this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked ? this.numericUpDown_initialBpm.Value : t.Bpm > 0 ? (decimal)t.Bpm : t.ScannedBpm > 30 ? (decimal)t.ScannedBpm : (decimal)LastInitialBpm;
 
                         // Process each track in-place with V2
                         await TimeStretcher_V2.Timestretch_V2Async(
                             t,
-                            (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
+                            (double)this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double)this.numericUpDown_stretchFactor.Value : (double)this.numericUpDown_stretchFactor.Value,
                             chunkSize,
                             overlap,
                             perTrackProgress,
@@ -511,11 +511,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     // Single track: process, then apply to TrackView
                     var track = this.Tracks.First();
                     bool resumePlaybackAfterReplace = this.TrackView.OriginalAudio.PlayerPlaying;
-                    float originalPeak = await track.GetPeakAmplitudeAsync((int) this.numericUpDown_threads.Value);
+                    float originalPeak = await track.GetPeakAmplitudeAsync((int)this.numericUpDown_threads.Value);
 
                     await TimeStretcher_V2.Timestretch_V2Async(
                         track,
-                        (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value,
+                        (double)this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double)this.numericUpDown_stretchFactor.Value : (double)this.numericUpDown_stretchFactor.Value,
                         chunkSize,
                         overlap,
                         perTrackProgress,
@@ -523,10 +523,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                     if (originalPeak > 0f)
                     {
-                        await track.NormalizeAsync(originalPeak, (int) this.numericUpDown_threads.Value);
+                        await track.NormalizeAsync(originalPeak, (int)this.numericUpDown_threads.Value);
                     }
 
-                    double stretchFactor = (double) this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double) this.numericUpDown_stretchFactor.Value : (double) this.numericUpDown_stretchFactor.Value;
+                    double stretchFactor = (double)this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double)this.numericUpDown_stretchFactor.Value : (double)this.numericUpDown_stretchFactor.Value;
                     await this.TrackView.ApplyStretchedAudioAsync(track, stretchFactor, resumePlaybackAfterReplace);
                     this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
                     closeAfterSuccess = true;
@@ -572,10 +572,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private decimal GetSafeInitialBpm(AudioObj track)
         {
             decimal bpm = track.Bpm > 0
-                ? (decimal) track.Bpm
+                ? (decimal)track.Bpm
                 : track.ScannedBpm > 0
-                    ? (decimal) track.ScannedBpm
-                    : (decimal) LastInitialBpm;
+                    ? (decimal)track.ScannedBpm
+                    : (decimal)LastInitialBpm;
 
             return Math.Clamp(bpm, this.numericUpDown_initialBpm.Minimum, this.numericUpDown_initialBpm.Maximum);
         }

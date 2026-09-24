@@ -14,9 +14,9 @@ namespace ModularAudience.Audio.Tests
             float[] data = new float[sampleCount];
             for (int i = 0; i < sampleCount; i++)
             {
-                double time = i / (double) sampleRate;
+                double time = i / (double)sampleRate;
                 double envelope = Math.Clamp((time - 0.05) / 0.1, 0.0, 1.0) * Math.Clamp((2.0 - time) / 0.1, 0.0, 1.0);
-                data[i] = (float) (envelope * (
+                data[i] = (float)(envelope * (
                     0.5 * Math.Sin(2.0 * Math.PI * 110.0 * time) +
                     0.3 * Math.Sin(2.0 * Math.PI * 880.0 * time) +
                     0.2 * Math.Sin(2.0 * Math.PI * 4400.0 * time)));

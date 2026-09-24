@@ -26,7 +26,7 @@ namespace ModularAudience.Forms.Modules
 
         internal string? SelectedMethod => this.comboBox_methods.SelectedItem as string;
 
-        private int Threads => (int) this.numericUpDown_maxProcessors.Value;
+        private int Threads => (int)this.numericUpDown_maxProcessors.Value;
         private bool ShowAutoParameters => this.checkBox_autoParameters.Checked;
         private bool ShowOptionalParameters => this.checkBox_optionalParameters.Checked;
 
@@ -174,8 +174,8 @@ namespace ModularAudience.Forms.Modules
                             int keyIndex = kv.Key;
 
                             // Compute both interpretations
-                            double secondsInterleaved = keyIndex / (double) channels / (double) sampleRate; // if key is interleaved samples
-                            double secondsMono = keyIndex / (double) sampleRate; // if key is mono samples
+                            double secondsInterleaved = keyIndex / (double)channels / (double)sampleRate; // if key is interleaved samples
+                            double secondsMono = keyIndex / (double)sampleRate; // if key is mono samples
 
                             bool useMonoInterpretation;
                             if (double.IsFinite(trackDuration))
@@ -206,9 +206,9 @@ namespace ModularAudience.Forms.Modules
                             }
 
                             int interleavedSamples = useMonoInterpretation && channels > 1 ? Math.Max(0, keyIndex) * channels : keyIndex;
-                            double seconds = interleavedSamples / (double) channels / (double) sampleRate;
+                            double seconds = interleavedSamples / (double)channels / (double)sampleRate;
                             var ts = TimeSpan.FromSeconds(seconds);
-                            string formatted = string.Format(CultureInfo.InvariantCulture, "{0:D2}:{1:D2}.{2:D3}", (int) ts.TotalMinutes, ts.Seconds, ts.Milliseconds);
+                            string formatted = string.Format(CultureInfo.InvariantCulture, "{0:D2}:{1:D2}.{2:D3}", (int)ts.TotalMinutes, ts.Seconds, ts.Milliseconds);
                             mapped.Add($"{keyIndex} -> {formatted} (mappedSamples:{interleavedSamples}) => conf:{kv.Value:F6}");
                         }
 
@@ -287,7 +287,7 @@ namespace ModularAudience.Forms.Modules
             int innerPadding = margin * 3 + scrollBarWidth;
 
             // Label etwa 33% der verfügbaren Breite, aber mindestens 100px
-            int labelW = Math.Max(100, (int) (totalWidth * 0.33));
+            int labelW = Math.Max(100, (int)(totalWidth * 0.33));
             // Rest für das Eingabefeld
             int ctrlW = Math.Max(80, totalWidth - labelW - innerPadding);
 
@@ -470,8 +470,8 @@ namespace ModularAudience.Forms.Modules
                     else if (pType == typeof(long))
                     {
                         // NumericUpDown arbeitet mit decimal; sichere Grenzen verwenden (long range fits into decimal)
-                        min = (decimal) long.MinValue;
-                        max = (decimal) long.MaxValue;
+                        min = (decimal)long.MinValue;
+                        max = (decimal)long.MaxValue;
                         increment = 1m;
                         decimalPlaces = 0;
                     }
@@ -756,7 +756,7 @@ namespace ModularAudience.Forms.Modules
                     }
                     else if (pType == typeof(ICollection<AudioObj>))
                     {
-                        args[i] = (ICollection<AudioObj>) list;
+                        args[i] = (ICollection<AudioObj>)list;
                     }
                     else
                     {
@@ -774,7 +774,7 @@ namespace ModularAudience.Forms.Modules
                     {
                         try
                         {
-                            var v = (int) Math.Clamp(d * this.progressBar_processing.Maximum, 0.0, this.progressBar_processing.Maximum);
+                            var v = (int)Math.Clamp(d * this.progressBar_processing.Maximum, 0.0, this.progressBar_processing.Maximum);
                             if (this.progressBar_processing.InvokeRequired)
                             {
                                 this.progressBar_processing.Invoke(() => this.progressBar_processing.Value = v);
@@ -930,8 +930,8 @@ namespace ModularAudience.Forms.Modules
 
                                 float fv = 0f; bool valOk = false;
                                 if (kv.Value is float f) { fv = f; valOk = true; }
-                                else if (kv.Value is double d) { fv = (float) d; valOk = true; }
-                                else if (kv.Value is decimal dec) { fv = (float) dec; valOk = true; }
+                                else if (kv.Value is double d) { fv = (float)d; valOk = true; }
+                                else if (kv.Value is decimal dec) { fv = (float)dec; valOk = true; }
                                 else if (kv.Value is string s && float.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var pf)) { fv = pf; valOk = true; }
                                 else
                                 {
@@ -1253,19 +1253,19 @@ namespace ModularAudience.Forms.Modules
 
                 if (convType == typeof(int))
                 {
-                    return Convert.ChangeType((int) val, convType, CultureInfo.InvariantCulture);
+                    return Convert.ChangeType((int)val, convType, CultureInfo.InvariantCulture);
                 }
                 if (convType == typeof(long))
                 {
-                    return Convert.ChangeType((long) val, convType, CultureInfo.InvariantCulture);
+                    return Convert.ChangeType((long)val, convType, CultureInfo.InvariantCulture);
                 }
                 if (convType == typeof(float))
                 {
-                    return Convert.ChangeType((float) val, convType, CultureInfo.InvariantCulture);
+                    return Convert.ChangeType((float)val, convType, CultureInfo.InvariantCulture);
                 }
                 if (convType == typeof(double))
                 {
-                    return Convert.ChangeType((double) val, convType, CultureInfo.InvariantCulture);
+                    return Convert.ChangeType((double)val, convType, CultureInfo.InvariantCulture);
                 }
                 if (convType == typeof(decimal))
                 {

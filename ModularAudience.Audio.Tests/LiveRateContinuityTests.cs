@@ -28,7 +28,7 @@ namespace ModularAudience.Audio.Tests
             for (int update = 0; update < 100; update++)
             {
                 float rate = GetRate(update);
-                graph.SetIdealSourceAnchor((long) sourceFrames * Channels);
+                graph.SetIdealSourceAnchor((long)sourceFrames * Channels);
                 ISampleProvider previous = graph.Pipeline;
                 long before = GC.GetAllocatedBytesForCurrentThread();
                 graph.Playback.AdjustSampleRate(rate).GetAwaiter().GetResult();
@@ -37,7 +37,7 @@ namespace ModularAudience.Audio.Tests
                 Assert.AreEqual(buffer.Length, read);
                 replacements += ReferenceEquals(previous, graph.Pipeline) ? 0 : 1;
                 metrics.Observe(buffer);
-                sourceFrames += buffer.Length / Channels * (double) rate;
+                sourceFrames += buffer.Length / Channels * (double)rate;
             }
 
             string result = $"Synthetic interval={intervalMs} ms; requests=100; replacements={replacements}; " +
@@ -65,7 +65,7 @@ namespace ModularAudience.Audio.Tests
             if (update == 0) { return 2f; }
             if (update == 99) { return 1f; }
             int position = update < 50 ? -500 + update * 20 : 500 - (update - 50) * 20;
-            return (float) Math.Pow(2.0, position / 500.0);
+            return (float)Math.Pow(2.0, position / 500.0);
         }
 
         private static float[] CreateQuadratureTone()
@@ -74,8 +74,8 @@ namespace ModularAudience.Audio.Tests
             for (int frame = 0; frame < data.Length / Channels; frame++)
             {
                 double phase = 2 * Math.PI * 440 * frame / SampleRate;
-                data[frame * Channels] = (float) (0.5 * Math.Cos(phase));
-                data[frame * Channels + 1] = (float) (0.5 * Math.Sin(phase));
+                data[frame * Channels] = (float)(0.5 * Math.Cos(phase));
+                data[frame * Channels + 1] = (float)(0.5 * Math.Sin(phase));
             }
             return data;
         }
@@ -111,7 +111,7 @@ namespace ModularAudience.Audio.Tests
         {
             private static readonly FieldInfo PipelineField = GetField("pipeline");
             public AudioPlaybackService Playback { get; } = new();
-            public ISampleProvider Pipeline => (ISampleProvider) PipelineField.GetValue(this.Playback)!;
+            public ISampleProvider Pipeline => (ISampleProvider)PipelineField.GetValue(this.Playback)!;
 
             public PlaybackGraph(float[] data, int sampleRate, int channels, int? outputRate = null)
             {
@@ -126,7 +126,7 @@ namespace ModularAudience.Audio.Tests
             // Give it an ideal frame-aligned anchor so this probe isolates signal-state resets, not clock jitter.
             public void SetIdealSourceAnchor(long sourceSamples)
             {
-                SetField("positionOriginSourceSamples", (double) sourceSamples);
+                SetField("positionOriginSourceSamples", (double)sourceSamples);
                 SetField("positionOriginOutputSamples", 0L);
             }
 

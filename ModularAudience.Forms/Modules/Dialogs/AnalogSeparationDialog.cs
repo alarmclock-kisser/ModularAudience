@@ -104,7 +104,7 @@ namespace ModularAudience.Forms
                 Size = new Size(70, 23),
                 Minimum = 1,
                 Maximum = 24000,
-                Value = (decimal) Math.Clamp(lowHz, 1, 24000)
+                Value = (decimal)Math.Clamp(lowHz, 1, 24000)
             };
 
             row.HighBox = new NumericUpDown
@@ -113,7 +113,7 @@ namespace ModularAudience.Forms
                 Size = new Size(70, 23),
                 Minimum = 1,
                 Maximum = 24000,
-                Value = (decimal) Math.Clamp(highHz, 1, 24000)
+                Value = (decimal)Math.Clamp(highHz, 1, 24000)
             };
 
             row.RemoveButton = new Button
@@ -151,7 +151,7 @@ namespace ModularAudience.Forms
 
         private void button_AddBand_Click(object sender, EventArgs e)
         {
-            double lastHigh = this.bandRows.Count > 0 ? (double) this.bandRows[^1].HighBox.Value : 20;
+            double lastHigh = this.bandRows.Count > 0 ? (double)this.bandRows[^1].HighBox.Value : 20;
             double newLow = Math.Min(lastHigh, 23999);
             double newHigh = Math.Min(newLow + 1000, 24000);
             this.AddBandRow($"Band {this.bandRows.Count + 1}", newLow, newHigh);
@@ -216,8 +216,8 @@ namespace ModularAudience.Forms
                 var bands = await AnalogSeparationProcessor.AnalyzeBandsAsync(
                     this.OriginalAudio,
                     maxBands: 8,
-                    windowSize: (int) this.numeric_windowSize.Value,
-                    threads: Math.Clamp((int) this.numeric_threads.Value, 1, Environment.ProcessorCount));
+                    windowSize: (int)this.numeric_windowSize.Value,
+                    threads: Math.Clamp((int)this.numeric_threads.Value, 1, Environment.ProcessorCount));
 
                 if (bands.Count == 0)
                 {
@@ -262,8 +262,8 @@ namespace ModularAudience.Forms
                     selectedAudio.SelectionStart,
                     selectedAudio.SelectionEnd,
                     maxBands: 8,
-                    windowSize: (int) this.numeric_windowSize.Value,
-                    threads: Math.Clamp((int) this.numeric_threads.Value, 1, Environment.ProcessorCount));
+                    windowSize: (int)this.numeric_windowSize.Value,
+                    threads: Math.Clamp((int)this.numeric_threads.Value, 1, Environment.ProcessorCount));
 
                 if (bands.Count == 0)
                 {
@@ -275,8 +275,8 @@ namespace ModularAudience.Forms
                 foreach (var band in bands)
                 {
                     bool alreadyExists = this.bandRows.Any(row =>
-                        (double) row.LowBox.Value == band.LowHz &&
-                        (double) row.HighBox.Value == band.HighHz);
+                        (double)row.LowBox.Value == band.LowHz &&
+                        (double)row.HighBox.Value == band.HighHz);
                     if (alreadyExists)
                     {
                         continue;
@@ -308,7 +308,7 @@ namespace ModularAudience.Forms
             foreach (var row in this.bandRows)
             {
                 string name = string.IsNullOrWhiteSpace(row.NameBox.Text) ? "Band" : row.NameBox.Text.Trim();
-                bands.Add(new AnalogSeparationBand(name, (double) row.LowBox.Value, (double) row.HighBox.Value));
+                bands.Add(new AnalogSeparationBand(name, (double)row.LowBox.Value, (double)row.HighBox.Value));
             }
 
             return bands;
@@ -327,11 +327,11 @@ namespace ModularAudience.Forms
             }
 
             var settings = new AnalogSeparationSettings(
-                (int) this.numeric_windowSize.Value,
-                (double) this.numeric_overlap.Value / 100.0,
-                (int) this.numeric_sharpness.Value,
+                (int)this.numeric_windowSize.Value,
+                (double)this.numeric_overlap.Value / 100.0,
+                (int)this.numeric_sharpness.Value,
                 this.checkBox_subtract.Checked,
-                Math.Clamp((int) this.numeric_threads.Value, 1, Environment.ProcessorCount),
+                Math.Clamp((int)this.numeric_threads.Value, 1, Environment.ProcessorCount),
                 this.checkBox_timbreAware.Checked,
                 this.checkBox_harmonicAware.Checked);
 
@@ -342,7 +342,7 @@ namespace ModularAudience.Forms
 
             IProgress<double> progress = new Progress<double>(percent =>
             {
-                this.progressBar_separating.Value = Math.Clamp((int) (percent * this.progressBar_separating.Maximum), 0, this.progressBar_separating.Maximum);
+                this.progressBar_separating.Value = Math.Clamp((int)(percent * this.progressBar_separating.Maximum), 0, this.progressBar_separating.Maximum);
             });
 
             try

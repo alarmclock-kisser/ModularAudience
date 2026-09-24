@@ -31,7 +31,7 @@ namespace ModularAudience.Audio
             AudioObj clone = new()
             {
                 Name = this.Name + "_selection",
-                Data = new float[checked((int) selSampleCount)],
+                Data = new float[checked((int)selSampleCount)],
                 SampleRate = this.SampleRate,
                 Channels = this.Channels,
                 BitDepth = this.BitDepth,
@@ -39,15 +39,15 @@ namespace ModularAudience.Audio
                 Timing = this.Timing,
                 Volume = this.Volume,
                 Length = selSampleCount,
-                Duration = TimeSpan.FromSeconds((double) selSampleCount / (this.SampleRate * channels))
+                Duration = TimeSpan.FromSeconds((double)selSampleCount / (this.SampleRate * channels))
             };
 
             Buffer.BlockCopy(
                 src: this.Data,
-                srcOffset: checked((int) (selStartSample * sizeof(float))),
+                srcOffset: checked((int)(selStartSample * sizeof(float))),
                 dst: clone.Data,
                 dstOffset: 0,
-                count: checked((int) (selSampleCount * sizeof(float))));
+                count: checked((int)(selSampleCount * sizeof(float))));
 
             await Task.CompletedTask;
             return clone;
@@ -80,9 +80,9 @@ namespace ModularAudience.Audio
                 float[] newData = new float[this.Data.Length - selCount];
                 await Task.Run(() =>
                 {
-                    int bytesBefore = checked((int) (selStart * sizeof(float)));
-                    int srcAfterOffset = checked((int) (selEnd * sizeof(float)));
-                    int bytesAfter = checked((int) ((totalSamples - selEnd) * sizeof(float)));
+                    int bytesBefore = checked((int)(selStart * sizeof(float)));
+                    int srcAfterOffset = checked((int)(selEnd * sizeof(float)));
+                    int bytesAfter = checked((int)((totalSamples - selEnd) * sizeof(float)));
                     int dstAfterOffset = bytesBefore;
 
                     if (bytesBefore > 0)
@@ -101,11 +101,11 @@ namespace ModularAudience.Audio
             else
             {
                 // Inverted: alles au�er Auswahl l�schen -> behalten nur die Auswahl
-                float[] newData = new float[checked((int) selCount)];
+                float[] newData = new float[checked((int)selCount)];
                 await Task.Run(() =>
                 {
-                    int srcOffset = checked((int) (selStart * sizeof(float)));
-                    int copyBytes = checked((int) (selCount * sizeof(float)));
+                    int srcOffset = checked((int)(selStart * sizeof(float)));
+                    int copyBytes = checked((int)(selCount * sizeof(float)));
                     if (copyBytes > 0)
                     {
                         Buffer.BlockCopy(this.Data, srcOffset, newData, 0, copyBytes);
@@ -117,7 +117,7 @@ namespace ModularAudience.Audio
 
             int channels = Math.Max(1, this.Channels);
             this.Length = this.Data.Length;
-            this.Duration = TimeSpan.FromSeconds((double) this.Data.Length / (this.SampleRate * channels));
+            this.Duration = TimeSpan.FromSeconds((double)this.Data.Length / (this.SampleRate * channels));
             // Auswahl zur�cksetzen - TrackView/Callees erwarten meist Selection cleared after erase
             this.SelectionStart = -1;
             this.SelectionEnd = -1;

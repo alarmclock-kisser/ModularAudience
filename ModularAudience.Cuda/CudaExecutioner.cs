@@ -129,8 +129,8 @@ namespace ModularAudience.Cuda
                     // Calculate grid and block dimensions
                     dim3 blockDim = new(16, 16);
                     dim3 gridDim = new(
-                        (uint) (mem.Lengths[i] + blockDim.x - 1) / blockDim.x,
-                        (uint) (mem.Count + blockDim.y - 1) / blockDim.y
+                        (uint)(mem.Lengths[i] + blockDim.x - 1) / blockDim.x,
+                        (uint)(mem.Count + blockDim.y - 1) / blockDim.y
                     );
 
                     var k = this.Kernel;
@@ -257,8 +257,8 @@ namespace ModularAudience.Cuda
                     // Calculate grid and block dimensions
                     dim3 blockDim = new(16, 16);
                     dim3 gridDim = new(
-                        (uint) (mem.Lengths[i] + blockDim.x - 1) / blockDim.x,
-                        (uint) (mem.Count + blockDim.y - 1) / blockDim.y
+                        (uint)(mem.Lengths[i] + blockDim.x - 1) / blockDim.x,
+                        (uint)(mem.Count + blockDim.y - 1) / blockDim.y
                     );
 
                     var k = this.Kernel;
@@ -385,8 +385,8 @@ namespace ModularAudience.Cuda
                     int numChunks = mem.Count;
                     dim3 blockSize = new(16, 16);
                     dim3 gridSize = new(
-                        (uint) (chunkSize + blockSize.x - 1) / blockSize.x,
-                        (uint) (numChunks + blockSize.y - 1) / blockSize.y
+                        (uint)(chunkSize + blockSize.x - 1) / blockSize.x,
+                        (uint)(numChunks + blockSize.y - 1) / blockSize.y
                     );
 
                     var k = this.Kernel;

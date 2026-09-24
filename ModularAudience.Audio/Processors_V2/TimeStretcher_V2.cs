@@ -62,18 +62,18 @@ public static class TimeStretcher_V2
             ov = Math.Clamp(ov, 0.0f, 0.95f);
 
 
-            int hopAnalysis = Math.Max(1, (int) (frameSize * (1.0 - ov)));
-            int hopSynthesis = Math.Max(1, (int) Math.Round(hopAnalysis * stretchFactor));
+            int hopAnalysis = Math.Max(1, (int)(frameSize * (1.0 - ov)));
+            int hopSynthesis = Math.Max(1, (int)Math.Round(hopAnalysis * stretchFactor));
 
 
             // Use Blackman-Harris window for better sidelobe suppression
             double[] window = CreateBlackmanHarrisWindow(frameSize);
 
 
-            long estimatedOut = (long) Math.Ceiling(samples * stretchFactor) + frameSize * 2;
+            long estimatedOut = (long)Math.Ceiling(samples * stretchFactor) + frameSize * 2;
             var pool = ArrayPool<double>.Shared;
-            double[] outBuffer = pool.Rent((int) Math.Min(int.MaxValue, estimatedOut + frameSize + 16));
-            double[] winSum = pool.Rent((int) Math.Min(int.MaxValue, estimatedOut + frameSize + 16));
+            double[] outBuffer = pool.Rent((int)Math.Min(int.MaxValue, estimatedOut + frameSize + 16));
+            double[] winSum = pool.Rent((int)Math.Min(int.MaxValue, estimatedOut + frameSize + 16));
             Array.Clear(outBuffer, 0, outBuffer.Length);
             Array.Clear(winSum, 0, winSum.Length);
 
@@ -139,7 +139,7 @@ public static class TimeStretcher_V2
                         omega,
                         outBuffer,
                         winSum,
-                        (float) stretchFactor,
+                        (float)stretchFactor,
                         regionLocks,
                         ref processedFrames,
                         totalFrames,
@@ -180,16 +180,16 @@ public static class TimeStretcher_V2
                         s = -1.0 + (s + 1.0) / (1.0 - (s + 1.0));
                     }
 
-                    finalOut[i] = (float) s;
+                    finalOut[i] = (float)s;
                 }
 
 
                 ctLocal.ThrowIfCancellationRequested();
 
                 track.Data = finalOut;
-                track.Bpm = (float) ((double) track.Bpm / stretchFactor);
+                track.Bpm = (float)((double)track.Bpm / stretchFactor);
                 track.Length = track.Data.LongLength;
-                track.Duration = TimeSpan.FromSeconds(track.Length / (double) (sampleRate * track.Channels));
+                track.Duration = TimeSpan.FromSeconds(track.Length / (double)(sampleRate * track.Channels));
 
                 progress?.Report(1.0);
             }
@@ -314,7 +314,7 @@ public static class TimeStretcher_V2
         const double a3 = 0.01168;
 
         double[] w = new double[n];
-        double N = (double) n;
+        double N = (double)n;
         for (int i = 0; i < n; i++)
         {
             double phase = 2.0 * Math.PI * i / N;
@@ -518,7 +518,7 @@ CancellationToken ct)
             Fourier.Inverse(sBuf, FourierOptions.Matlab);
 
 
-            int writePos = (int) Math.Round(pos * stretchFactorFloat);
+            int writePos = (int)Math.Round(pos * stretchFactorFloat);
             object rlock = regionLocks[(writePos & 0x3F)];
             lock (rlock)
             {
@@ -542,7 +542,7 @@ CancellationToken ct)
                 processedFramesCounter++;
                 if (progress != null)
                 {
-                    double p = Math.Min(1.0, (double) processedFramesCounter / Math.Max(1.0, (double) totalFrames));
+                    double p = Math.Min(1.0, (double)processedFramesCounter / Math.Max(1.0, (double)totalFrames));
                     progress.Report(p);
                 }
             }

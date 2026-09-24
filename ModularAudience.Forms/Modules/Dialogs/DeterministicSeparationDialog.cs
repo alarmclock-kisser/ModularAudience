@@ -65,27 +65,27 @@ namespace ModularAudience.Forms
                     : InstrumentEnsembleMode.ProfilesOnly;
             DeterministicSeparationSettings settings = new()
             {
-                WindowSize = (int) this.comboBox_windowSize.SelectedItem!,
-                MaxComponents = (int) this.numeric_maxComponents.Value,
-                Iterations = (int) this.numeric_iterations.Value,
-                AnalysisFrames = (int) this.numeric_analysisFrames.Value,
-                BlockFrames = (int) this.numeric_blockFrames.Value,
-                MedianFrames = (int) this.numeric_medianFrames.Value,
-                MedianBins = (int) this.numeric_medianBins.Value,
-                SeparationMargin = (double) this.numeric_separationMargin.Value,
-                MaskFloor = (double) this.numeric_maskFloor.Value,
-                TransientPreservation = (double) this.numeric_transientPreservation.Value / 100.0,
-                Threads = (int) this.numeric_threads.Value,
+                WindowSize = (int)this.comboBox_windowSize.SelectedItem!,
+                MaxComponents = (int)this.numeric_maxComponents.Value,
+                Iterations = (int)this.numeric_iterations.Value,
+                AnalysisFrames = (int)this.numeric_analysisFrames.Value,
+                BlockFrames = (int)this.numeric_blockFrames.Value,
+                MedianFrames = (int)this.numeric_medianFrames.Value,
+                MedianBins = (int)this.numeric_medianBins.Value,
+                SeparationMargin = (double)this.numeric_separationMargin.Value,
+                MaskFloor = (double)this.numeric_maskFloor.Value,
+                TransientPreservation = (double)this.numeric_transientPreservation.Value / 100.0,
+                Threads = (int)this.numeric_threads.Value,
                 UseCqtAnalysis = this.checkBox_cqtAnalysis.Checked,
                 UseCqtSynthesis = this.checkBox_cqtSynthesis.Checked,
                 UsePyin = this.checkBox_pyin.Checked,
                 UseIlrma = this.checkBox_ilrma.Checked,
                 CqtBinsPerOctave = this.ReadCqtBinsPerOctave(),
-                CqtMinimumHz = (double) this.numeric_cqtMinimumHz.Value,
-                PyinMinimumHz = (double) this.numeric_pyinMinimumHz.Value,
-                PyinMaximumHz = (double) this.numeric_pyinMaximumHz.Value,
-                IlrmaIterations = (int) this.numeric_ilrmaIterations.Value,
-                IlrmaComponents = (int) this.numeric_ilrmaComponents.Value,
+                CqtMinimumHz = (double)this.numeric_cqtMinimumHz.Value,
+                PyinMinimumHz = (double)this.numeric_pyinMinimumHz.Value,
+                PyinMaximumHz = (double)this.numeric_pyinMaximumHz.Value,
+                IlrmaIterations = (int)this.numeric_ilrmaIterations.Value,
+                IlrmaComponents = (int)this.numeric_ilrmaComponents.Value,
                 EnsembleMode = ensembleMode,
                 InstrumentProfiles = profiles
             };
@@ -139,7 +139,7 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            this.label_hopSizeValue.Text = $"{(int) this.comboBox_windowSize.SelectedItem! / 4} samples (fixed)";
+            this.label_hopSizeValue.Text = $"{(int)this.comboBox_windowSize.SelectedItem! / 4} samples (fixed)";
             if (this.analysis == null)
             {
                 this.InvalidateAnalysis("Settings changed. Detect sources again before separating.");
@@ -243,7 +243,7 @@ namespace ModularAudience.Forms
             string preset = this.comboBox_presets.SelectedItem as string;
             if (preset == null) return;
             this.ApplyPreset(preset);
-            this.label_hopSizeValue.Text = $"{(int) this.comboBox_windowSize.SelectedItem! / 4} samples (fixed)";
+            this.label_hopSizeValue.Text = $"{(int)this.comboBox_windowSize.SelectedItem! / 4} samples (fixed)";
             if (this.analysis == null)
             {
                 this.InvalidateAnalysis($"Preset '{preset}' applied. Detect sources again before separating.");
@@ -275,9 +275,9 @@ namespace ModularAudience.Forms
             this.numeric_blockFrames.Value = v.Item5;
             this.numeric_medianFrames.Value = v.Item6;
             this.numeric_medianBins.Value = v.Item7;
-            this.numeric_separationMargin.Value = (decimal) v.Item8;
-            this.numeric_maskFloor.Value = (decimal) v.Item9;
-            this.numeric_transientPreservation.Value = (decimal) v.Item10;
+            this.numeric_separationMargin.Value = (decimal)v.Item8;
+            this.numeric_maskFloor.Value = (decimal)v.Item9;
+            this.numeric_transientPreservation.Value = (decimal)v.Item10;
             this.checkBox_cqtAnalysis.Checked = v.Item11;
             this.domainUpDown_cqtBinsPerOctave.Text = $"{v.Item12} bins/octave";
             this.checkBox_pyin.Checked = v.Item13;
@@ -354,18 +354,18 @@ namespace ModularAudience.Forms
                 this.numeric_blockFrames.Value = settings.BlockFrames;
                 this.numeric_medianFrames.Value = settings.MedianFrames;
                 this.numeric_medianBins.Value = settings.MedianBins;
-                this.numeric_separationMargin.Value = (decimal) settings.SeparationMargin;
-                this.numeric_maskFloor.Value = (decimal) settings.MaskFloor;
-                this.numeric_transientPreservation.Value = (decimal) (settings.TransientPreservation * 100.0);
+                this.numeric_separationMargin.Value = (decimal)settings.SeparationMargin;
+                this.numeric_maskFloor.Value = (decimal)settings.MaskFloor;
+                this.numeric_transientPreservation.Value = (decimal)(settings.TransientPreservation * 100.0);
                 this.numeric_threads.Value = settings.Threads;
                 this.checkBox_cqtAnalysis.Checked = settings.UseCqtAnalysis;
                 this.checkBox_cqtSynthesis.Checked = settings.UseCqtSynthesis;
                 this.checkBox_pyin.Checked = settings.UsePyin;
                 this.checkBox_ilrma.Checked = settings.UseIlrma;
                 this.domainUpDown_cqtBinsPerOctave.Text = $"{settings.CqtBinsPerOctave} bins/octave";
-                this.numeric_cqtMinimumHz.Value = (decimal) settings.CqtMinimumHz;
-                this.numeric_pyinMinimumHz.Value = (decimal) settings.PyinMinimumHz;
-                this.numeric_pyinMaximumHz.Value = (decimal) settings.PyinMaximumHz;
+                this.numeric_cqtMinimumHz.Value = (decimal)settings.CqtMinimumHz;
+                this.numeric_pyinMinimumHz.Value = (decimal)settings.PyinMinimumHz;
+                this.numeric_pyinMaximumHz.Value = (decimal)settings.PyinMaximumHz;
                 this.numeric_ilrmaIterations.Value = settings.IlrmaIterations;
                 this.numeric_ilrmaComponents.Value = settings.IlrmaComponents;
                 this.checkBox_addAutomaticProfiles.Checked = settings.EnsembleMode == InstrumentEnsembleMode.ProfilesAndAutomatic;
@@ -459,7 +459,7 @@ namespace ModularAudience.Forms
                 }
 
                 double fraction = double.IsFinite(progress.Fraction) ? Math.Clamp(progress.Fraction, 0, 1) : 0;
-                this.progressBar_operation.Value = (int) (fraction * this.progressBar_operation.Maximum);
+                this.progressBar_operation.Value = (int)(fraction * this.progressBar_operation.Maximum);
                 this.label_status.Text = progress.Stage;
                 this.UpdateElapsedLabel(fraction);
             });
@@ -489,8 +489,8 @@ namespace ModularAudience.Forms
 
         private string FormatElapsed(double totalSeconds)
         {
-            int minutes = (int) totalSeconds / 60;
-            int seconds = (int) totalSeconds % 60;
+            int minutes = (int)totalSeconds / 60;
+            int seconds = (int)totalSeconds % 60;
             return $"{minutes}:{seconds:D2}";
         }
 
@@ -540,7 +540,7 @@ namespace ModularAudience.Forms
         {
             return this.dataGridView_sources.Rows.Cast<DataGridViewRow>()
                 .Where(row => row.Tag is int && row.Cells[this.column_use.Index].Value is true)
-                .Select(row => (int) row.Tag!).ToArray();
+                .Select(row => (int)row.Tag!).ToArray();
         }
 
         private void UpdateOutputEstimate()
@@ -552,7 +552,7 @@ namespace ModularAudience.Forms
             }
 
             int selected = this.GetSelectedIds().Length;
-            double selectedMiB = this.analysis.SampleCount * (double) sizeof(float) * (selected + 1) / 1048576.0;
+            double selectedMiB = this.analysis.SampleCount * (double)sizeof(float) * (selected + 1) / 1048576.0;
             double allMiB = this.analysis.EstimatedOutputBytes / 1048576.0;
             this.label_output.Text = FormattableString.Invariant(
                 $"Approx. OUTPUT: {selectedMiB:F1} MiB ({selected} groups + Residual); all groups + Residual: {allMiB:F1} MiB.\r\nAdditional snapshot and processing workspace are excluded; this is not a total RAM estimate.");

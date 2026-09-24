@@ -50,6 +50,8 @@
             this.drawBeatGridToolStripMenuItem = new ToolStripMenuItem();
             this.beatGridV1ToolStripMenuItem = new ToolStripMenuItem();
             this.beatGridV2ToolStripMenuItem = new ToolStripMenuItem();
+            this.beatGridV3ToolStripMenuItem = new ToolStripMenuItem();
+            this.beatGridAnalogToolStripMenuItem = new ToolStripMenuItem();
             this.vScrollBar_volume = new VScrollBar();
             this.hScrollBar_offset = new HScrollBar();
             this.label_volume = new Label();
@@ -229,7 +231,7 @@
             // 
             // drawBeatGridToolStripMenuItem
             // 
-            this.drawBeatGridToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { this.beatGridV1ToolStripMenuItem, this.beatGridV2ToolStripMenuItem });
+            this.drawBeatGridToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { this.beatGridV1ToolStripMenuItem, this.beatGridV2ToolStripMenuItem, this.beatGridV3ToolStripMenuItem, this.beatGridAnalogToolStripMenuItem });
             this.drawBeatGridToolStripMenuItem.Name = "drawBeatGridToolStripMenuItem";
             this.drawBeatGridToolStripMenuItem.Size = new Size(182, 22);
             this.drawBeatGridToolStripMenuItem.Text = "Draw Beat-Grid";
@@ -249,6 +251,21 @@
             this.beatGridV2ToolStripMenuItem.Size = new Size(121, 22);
             this.beatGridV2ToolStripMenuItem.Text = "Version 2";
             this.beatGridV2ToolStripMenuItem.Click += this.beatGridV2ToolStripMenuItem_Click;
+            // beatGridV3ToolStripMenuItem
+            //
+            this.beatGridV3ToolStripMenuItem.CheckOnClick = true;
+            this.beatGridV3ToolStripMenuItem.Name = "beatGridV3ToolStripMenuItem";
+            this.beatGridV3ToolStripMenuItem.Size = new Size(121, 22);
+            this.beatGridV3ToolStripMenuItem.Text = "Version 3";
+            this.beatGridV3ToolStripMenuItem.Click += this.beatGridV3ToolStripMenuItem_Click;
+            // 
+            // beatGridAnalogToolStripMenuItem
+            // 
+            this.beatGridAnalogToolStripMenuItem.CheckOnClick = true;
+            this.beatGridAnalogToolStripMenuItem.Name = "beatGridAnalogToolStripMenuItem";
+            this.beatGridAnalogToolStripMenuItem.Size = new Size(121, 22);
+            this.beatGridAnalogToolStripMenuItem.Text = "Version analog";
+            this.beatGridAnalogToolStripMenuItem.Click += this.beatGridAnalogToolStripMenuItem_Click;
             // 
             // vScrollBar_volume
             // 
@@ -469,6 +486,8 @@
 		private ToolStripMenuItem drawBeatGridToolStripMenuItem;
         private ToolStripMenuItem beatGridV1ToolStripMenuItem;
         private ToolStripMenuItem beatGridV2ToolStripMenuItem;
+        private ToolStripMenuItem beatGridV3ToolStripMenuItem;
+        private ToolStripMenuItem beatGridAnalogToolStripMenuItem;
         private CheckBox checkBox_mute;
         private CheckBox checkBox_solo;
         private HScrollBar hScrollBar_rate;

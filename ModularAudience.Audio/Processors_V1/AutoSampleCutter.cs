@@ -64,7 +64,7 @@ namespace ModularAudience.Audio.Processors_V1
 
             if (fractions >= 1f)
             {
-                int parts = (int) Math.Round(fractions);
+                int parts = (int)Math.Round(fractions);
                 parts = Math.Max(1, parts);
 
                 int baseFrames = totalFrames / parts;
@@ -118,7 +118,7 @@ namespace ModularAudience.Audio.Processors_V1
                         Channels = audio.Channels,
                         BitDepth = audio.BitDepth,
                         Length = newData.Length,
-                        Duration = TimeSpan.FromSeconds(framesThis / (double) audio.SampleRate),
+                        Duration = TimeSpan.FromSeconds(framesThis / (double)audio.SampleRate),
                         Bpm = audio.Bpm,
                         Timing = audio.Timing,
                         Volume = audio.Volume
@@ -136,7 +136,7 @@ namespace ModularAudience.Audio.Processors_V1
                     repeatFactor = 1.0;
                 }
 
-                int newFrames = (int) Math.Round(totalFrames * repeatFactor);
+                int newFrames = (int)Math.Round(totalFrames * repeatFactor);
                 newFrames = Math.Max(1, newFrames);
 
                 var newData = new float[newFrames * channels];
@@ -163,7 +163,7 @@ namespace ModularAudience.Audio.Processors_V1
                     Channels = audio.Channels,
                     BitDepth = audio.BitDepth,
                     Length = newData.Length,
-                    Duration = TimeSpan.FromSeconds(newFrames / (double) audio.SampleRate),
+                    Duration = TimeSpan.FromSeconds(newFrames / (double)audio.SampleRate),
                     Bpm = audio.Bpm,
                     Timing = audio.Timing,
                     Volume = audio.Volume
@@ -197,17 +197,17 @@ namespace ModularAudience.Audio.Processors_V1
             }
 
             double framesPerMs = Math.Max(1d, audio.SampleRate / 1000d);
-            int minFrames = (int) Math.Max(1, Math.Round(framesPerMs * minDurationMs));
-            int maxFrames = (int) Math.Max(minFrames, Math.Round(framesPerMs * maxDurationMs));
-            int silenceFrames = (int) Math.Max(1, Math.Round(framesPerMs * silenceDurationMs));
+            int minFrames = (int)Math.Max(1, Math.Round(framesPerMs * minDurationMs));
+            int maxFrames = (int)Math.Max(minFrames, Math.Round(framesPerMs * maxDurationMs));
+            int silenceFrames = (int)Math.Max(1, Math.Round(framesPerMs * silenceDurationMs));
 
-            int analysisWindowFrames = Math.Max((int) Math.Round(framesPerMs * 5), 32); // ~5ms window for envelope
-            int blockCount = (int) Math.Ceiling(totalFrames / (double) analysisWindowFrames);
+            int analysisWindowFrames = Math.Max((int)Math.Round(framesPerMs * 5), 32); // ~5ms window for envelope
+            int blockCount = (int)Math.Ceiling(totalFrames / (double)analysisWindowFrames);
             float[] envelope = new float[blockCount];
 
             Parallel.For(0, blockCount, new ParallelOptions { CancellationToken = cancellationToken }, blockIndex =>
             {
-                long frameStart = (long) blockIndex * analysisWindowFrames;
+                long frameStart = (long)blockIndex * analysisWindowFrames;
                 long frameEnd = Math.Min(totalFrames, frameStart + analysisWindowFrames);
                 if (frameStart >= frameEnd)
                 {
@@ -269,7 +269,7 @@ namespace ModularAudience.Audio.Processors_V1
                     if (trailingSilence >= silenceBlocks)
                     {
                         int endBlockExclusive = block - trailingSilence;
-                        AppendSegment(segments, startBlock, endBlockExclusive, analysisWindowFrames, (int) totalFrames, minFrames, maxFrames);
+                        AppendSegment(segments, startBlock, endBlockExclusive, analysisWindowFrames, (int)totalFrames, minFrames, maxFrames);
                         inside = false;
                         trailingSilence = 0;
                     }
@@ -283,7 +283,7 @@ namespace ModularAudience.Audio.Processors_V1
 
             if (inside)
             {
-                AppendSegment(segments, startBlock, blockCount - 1, analysisWindowFrames, (int) totalFrames, minFrames, maxFrames);
+                AppendSegment(segments, startBlock, blockCount - 1, analysisWindowFrames, (int)totalFrames, minFrames, maxFrames);
             }
 
             if (segments.Count == 0)
@@ -321,7 +321,7 @@ namespace ModularAudience.Audio.Processors_V1
                     Timing = audio.Timing,
                     Volume = audio.Volume,
                     Length = clipData.LongLength,
-                    Duration = TimeSpan.FromSeconds(frameLength / (double) audio.SampleRate)
+                    Duration = TimeSpan.FromSeconds(frameLength / (double)audio.SampleRate)
                 };
 
                 clips[i] = clip;
@@ -388,14 +388,14 @@ namespace ModularAudience.Audio.Processors_V1
             float[] buffer = values.ToArray();
             Array.Sort(buffer);
             double index = Math.Clamp(percentile, 0d, 1d) * (buffer.Length - 1);
-            int lower = (int) Math.Floor(index);
-            int upper = (int) Math.Ceiling(index);
+            int lower = (int)Math.Floor(index);
+            int upper = (int)Math.Ceiling(index);
             if (lower == upper)
             {
                 return buffer[lower];
             }
 
-            float fraction = (float) (index - lower);
+            float fraction = (float)(index - lower);
             return buffer[lower] + fraction * (buffer[upper] - buffer[lower]);
         }
 

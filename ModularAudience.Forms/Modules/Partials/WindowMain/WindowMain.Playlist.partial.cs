@@ -564,7 +564,7 @@ namespace ModularAudience.Forms
                 float initialBpm = audio.Bpm > 0 ? audio.Bpm : audio.ScannedBpm;
                 if (initialBpm <= 0)
                 {
-                    initialBpm = (float) await BeatScanner.ScanBpmAsync(audio).ConfigureAwait(false);
+                    initialBpm = (float)await BeatScanner.ScanBpmAsync(audio).ConfigureAwait(false);
                     audio.ScannedBpm = initialBpm;
                 }
 
@@ -574,8 +574,8 @@ namespace ModularAudience.Forms
                 }
 
                 double stretchFactor = settings.Fixed
-                    ? (double) settings.StretchFactor
-                    : initialBpm / (double) settings.TargetBpm;
+                    ? (double)settings.StretchFactor
+                    : initialBpm / (double)settings.TargetBpm;
 
                 // Guard: half/double tempo if way off
                 if (stretchFactor < 0.5)
@@ -587,8 +587,8 @@ namespace ModularAudience.Forms
 
                 if (settings.UseV2)
                 {
-                    int? chunkSize = settings.AutoChunking ? null : (int?) settings.ChunkSize;
-                    float? overlap = settings.AutoChunking ? null : (float?) settings.Overlap;
+                    int? chunkSize = settings.AutoChunking ? null : (int?)settings.ChunkSize;
+                    float? overlap = settings.AutoChunking ? null : (float?)settings.Overlap;
 
                     float preRms = PlaylistNormalizer.MeasureRms(audio.Data);
                     await TimeStretcher_V2.Timestretch_V2Async(
@@ -681,7 +681,7 @@ namespace ModularAudience.Forms
 
                 var meta = this.GetOrFetchMeta(path);
                 string dur = meta.Duration > TimeSpan.Zero
-                    ? $"{(int) meta.Duration.TotalMinutes:D2}:{meta.Duration.Seconds:D2}"
+                    ? $"{(int)meta.Duration.TotalMinutes:D2}:{meta.Duration.Seconds:D2}"
                     : "--:--";
                 string bpm = meta.Bpm > 0 ? $"{meta.Bpm:F0}" : "?";
 
@@ -801,8 +801,8 @@ namespace ModularAudience.Forms
             string stateIcon = snapshot.IsPaused ? "||" : "▶";
             TimeSpan pos = snapshot.CurrentPosition;
             TimeSpan dur = snapshot.CurrentDuration;
-            string posStr = $"{(int) pos.TotalMinutes:D2}:{pos.Seconds:D2}";
-            string durStr = $"{(int) dur.TotalMinutes:D2}:{dur.Seconds:D2}";
+            string posStr = $"{(int)pos.TotalMinutes:D2}:{pos.Seconds:D2}";
+            string durStr = $"{(int)dur.TotalMinutes:D2}:{dur.Seconds:D2}";
 
             string name = GetCurrentPlaylistTrackName(snapshot) ?? "–";
             if (name.Length > 96)
@@ -1155,7 +1155,7 @@ namespace ModularAudience.Forms
         }
 
         private static string FormatLogTs(TimeSpan ts) =>
-            $"{(int) ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}.{ts.Milliseconds:D3}";
+            $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}.{ts.Milliseconds:D3}";
 
         /// <summary>
         /// Called when any AudioObj's Playing state changes (stop/end).

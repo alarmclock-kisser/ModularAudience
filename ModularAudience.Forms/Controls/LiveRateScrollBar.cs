@@ -30,7 +30,7 @@ namespace ModularAudience.Forms.Controls
         {
             if (message.Msg == LeftButtonDown || message.Msg == LeftButtonDoubleClick)
             {
-                Point point = new((short) message.LParam.ToInt64(), (short) (message.LParam.ToInt64() >> 16));
+                Point point = new((short)message.LParam.ToInt64(), (short)(message.LParam.ToInt64() >> 16));
                 if (this.HandleLeftButtonDown(point))
                 {
                     return;
@@ -38,7 +38,7 @@ namespace ModularAudience.Forms.Controls
             }
             if (message.Msg == MouseMoveMessage && this.controlThumbGesture)
             {
-                Point point = new((short) message.LParam.ToInt64(), (short) (message.LParam.ToInt64() >> 16));
+                Point point = new((short)message.LParam.ToInt64(), (short)(message.LParam.ToInt64() >> 16));
                 int threshold = Math.Max(1, SystemInformation.DragSize.Width / 2);
                 if (Math.Abs(point.X - this.controlThumbDownPoint.X) >= threshold)
                 {
@@ -161,15 +161,15 @@ namespace ModularAudience.Forms.Controls
                 return current;
             }
             int direction = mouseX < geometry.ThumbLeft ? -1 : 1;
-            double distance = direction < 0 ? (double) geometry.ThumbLeft - mouseX : (double) mouseX - geometry.ThumbRight + 1;
+            double distance = direction < 0 ? (double)geometry.ThumbLeft - mouseX : (double)mouseX - geometry.ThumbRight + 1;
             double rateStep = 0.001 + 0.014 * Math.Clamp(distance / (travel / 2.0), 0.0, 1.0);
             double rate = Math.Clamp(PlaybackRateMapping.MapFactor(current) + direction * rateStep, 0.5, 2.0);
             double position = 500.0 * Math.Log2(rate);
-            int next = direction > 0 ? (int) Math.Floor(position) : (int) Math.Ceiling(position);
+            int next = direction > 0 ? (int)Math.Floor(position) : (int)Math.Ceiling(position);
             next = direction > 0 ? Math.Max(current + 1, next) : Math.Min(current - 1, next);
             double thumbHalfWidth = (geometry.ThumbRight - geometry.ThumbLeft) / 2.0;
             double fraction = Math.Clamp((mouseX - geometry.Left - thumbHalfWidth) / travel, 0.0, 1.0);
-            int target = minimum + (int) Math.Round((maximum - minimum) * fraction);
+            int target = minimum + (int)Math.Round((maximum - minimum) * fraction);
             return Math.Clamp(next, Math.Min(current, target), Math.Max(current, target));
         }
 

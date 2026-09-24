@@ -82,14 +82,14 @@ namespace ModularAudience.Forms
 
             DEVMODE dm = new()
             {
-                dmSize = (short) Marshal.SizeOf(typeof(DEVMODE))
+                dmSize = (short)Marshal.SizeOf(typeof(DEVMODE))
             };
 
             int result = EnumDisplaySettings(screen.DeviceName, ENUM_CURRENT_SETTINGS, ref dm);
 
             if (result != 0 && dm.dmDisplayFrequency > 1)
             {
-                return (float) dm.dmDisplayFrequency;
+                return (float)dm.dmDisplayFrequency;
             }
 
             return 60.0f;

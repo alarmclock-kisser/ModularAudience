@@ -24,7 +24,7 @@ namespace ModularAudience.Audio.Processing
             this.source = source ?? throw new ArgumentNullException(nameof(source));
             this.WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(outputSampleRate, source.WaveFormat.Channels);
             this.rampFrames = Math.Max(1, outputSampleRate / 100);
-            this.SetTargetRate((float) rate);
+            this.SetTargetRate((float)rate);
             this.currentRate = this.rampTarget = this.targetRate;
             // Keep one filter topology on both sides of unity; moving an IIR filter between input
             // and output at 1x would reuse its history for a different signal.

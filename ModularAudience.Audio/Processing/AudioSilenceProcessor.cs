@@ -16,20 +16,20 @@ namespace ModularAudience.Audio.Processing
 
             maxWorkers = Math.Clamp(maxWorkers, 1, Environment.ProcessorCount);
 
-            int blockSize = (int) (audio.SampleRate * audio.Channels * 0.01);
+            int blockSize = (int)(audio.SampleRate * audio.Channels * 0.01);
             if (blockSize == 0)
             {
                 blockSize = Math.Max(1, audio.Channels);
             }
 
-            int numBlocks = (int) Math.Ceiling((double) audio.Data.Length / blockSize);
+            int numBlocks = (int)Math.Ceiling((double)audio.Data.Length / blockSize);
             float[] rmsBlocks = new float[numBlocks];
 
             await Task.Run(() =>
             {
                 Parallel.For(0, numBlocks, new ParallelOptions { MaxDegreeOfParallelism = maxWorkers }, i =>
                 {
-                    long start = (long) i * blockSize;
+                    long start = (long)i * blockSize;
                     long end = Math.Min(start + blockSize, audio.Data.LongLength);
 
                     double sumOfSquares = 0.0;
@@ -39,7 +39,7 @@ namespace ModularAudience.Audio.Processing
                         sumOfSquares += audio.Data[s] * audio.Data[s];
                     }
 
-                    rmsBlocks[i] = count > 0 ? (float) Math.Sqrt(sumOfSquares / count) : 0.0f;
+                    rmsBlocks[i] = count > 0 ? (float)Math.Sqrt(sumOfSquares / count) : 0.0f;
                 });
             }).ConfigureAwait(false);
 
@@ -71,8 +71,8 @@ namespace ModularAudience.Audio.Processing
                 return (0, audio.Data.LongLength);
             }
 
-            long startIndex = (long) startBlock * blockSize;
-            long endIndex = Math.Min((long) (endBlock + 1) * blockSize, audio.Data.LongLength);
+            long startIndex = (long)startBlock * blockSize;
+            long endIndex = Math.Min((long)(endBlock + 1) * blockSize, audio.Data.LongLength);
             return (startIndex, endIndex);
         }
     }

@@ -44,7 +44,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private bool isPlaying;
         private volatile int currentStep;
 
-        public float Bpm => (float) this.numericUpDown_bpm.Value;
+        public float Bpm => (float)this.numericUpDown_bpm.Value;
         public float Volume => 1.0f;
 
         public PianoRollEditor()
@@ -773,7 +773,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 if (this.IsHandleCreated && !this.IsDisposed)
                 {
-                    this.BeginInvoke((MethodInvoker) (() =>
+                    this.BeginInvoke((MethodInvoker)(() =>
                     {
                         this.currentStep = -1;
                         this.panel_roll.Invalidate();
@@ -807,7 +807,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     {
                         if (this.IsHandleCreated && !this.IsDisposed)
                         {
-                            this.BeginInvoke((MethodInvoker) (() =>
+                            this.BeginInvoke((MethodInvoker)(() =>
                             {
                                 this.currentStep = scheduledStep;
                                 this.panel_roll.Invalidate();
@@ -838,7 +838,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return 125;
             }
 
-            return (int) (60000.0f / bpm / 4.0f);
+            return (int)(60000.0f / bpm / 4.0f);
         }
 
         private List<int> GetActiveTrackIndicesForStep(int stepIndex)

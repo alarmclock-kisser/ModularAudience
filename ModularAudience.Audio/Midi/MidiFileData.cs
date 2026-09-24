@@ -64,7 +64,7 @@ public sealed class MidiFileData
     public double PitchFrequency { get; }
     public IReadOnlyList<MidiTrackData> Tracks { get; }
     public long LengthTicks => this.Tracks.Count == 0 ? 0 : this.Tracks.Max(track => track.LengthTicks);
-    public double LengthBeats => this.LengthTicks / (double) Math.Max(1, this.TicksPerQuarterNote);
+    public double LengthBeats => this.LengthTicks / (double)Math.Max(1, this.TicksPerQuarterNote);
 
     public MidiFileData WithPitchFrequency(double pitchFrequency)
     {
@@ -343,14 +343,14 @@ public sealed class MidiFileData
         ApplyPitchStabilityFilter(frames, options.MaxPitchJumpSemitones);
 
         float maximumRms = frames.Count == 0 ? 0f : frames.Max(frame => frame.Rms);
-        float noiseFloor = maximumRms * (float) options.NoiseFloorMultiplier;
+        float noiseFloor = maximumRms * (float)options.NoiseFloorMultiplier;
         List<MidiNoteData> notes = CreateNotes(frames, audioObj.SampleRate, frameCount, bpm, ticksPerQuarterNote, noiseFloor, maximumRms, options);
 
         MidiTrackData track = new()
         {
             Index = 0,
             Name = string.IsNullOrWhiteSpace(audioObj.Name) ? "Audio conversion" : audioObj.Name,
-            LengthTicks = Math.Max(1, (long) Math.Ceiling(frameCount / (double) audioObj.SampleRate * bpm / 60.0 * ticksPerQuarterNote))
+            LengthTicks = Math.Max(1, (long)Math.Ceiling(frameCount / (double)audioObj.SampleRate * bpm / 60.0 * ticksPerQuarterNote))
         };
         track.Notes.AddRange(notes);
         if (track.Notes.Count > 0)
@@ -389,14 +389,14 @@ public sealed class MidiFileData
         ApplyPitchStabilityFilter(frames, options.MaxPitchJumpSemitones);
         progress?.Report(0.90);
         float maximumRms = frames.Count == 0 ? 0f : frames.Max(frame => frame.Rms);
-        float noiseFloor = maximumRms * (float) options.NoiseFloorMultiplier;
+        float noiseFloor = maximumRms * (float)options.NoiseFloorMultiplier;
         List<MidiNoteData> notes = CreateNotes(frames, audioObj.SampleRate, frameCount, bpm, 960, noiseFloor, maximumRms, options);
         progress?.Report(0.98);
         MidiTrackData track = new()
         {
             Index = 0,
             Name = string.IsNullOrWhiteSpace(audioObj.Name) ? "Audio conversion" : audioObj.Name,
-            LengthTicks = Math.Max(1, (long) Math.Ceiling(frameCount / (double) audioObj.SampleRate * bpm / 60.0 * 960))
+            LengthTicks = Math.Max(1, (long)Math.Ceiling(frameCount / (double)audioObj.SampleRate * bpm / 60.0 * 960))
         };
         track.Notes.AddRange(notes);
         if (track.Notes.Count > 0)
@@ -472,11 +472,11 @@ public sealed class MidiFileData
                 if (float.IsFinite(value))
                 {
                     sum += value;
-                    channelEnergy[channel] += (double) value * value;
+                    channelEnergy[channel] += (double)value * value;
                 }
             }
-            mono[frame] = (float) (sum / channels);
-            monoEnergy += (double) mono[frame] * mono[frame];
+            mono[frame] = (float)(sum / channels);
+            monoEnergy += (double)mono[frame] * mono[frame];
         }
         int strongestChannel = Array.IndexOf(channelEnergy, channelEnergy.Max());
         if (monoEnergy < channelEnergy[strongestChannel] * 0.1)
@@ -500,7 +500,7 @@ public sealed class MidiFileData
         mean /= signal.Length;
         for (int index = 0; index < signal.Length; index++)
         {
-            signal[index] = (float) (signal[index] - mean);
+            signal[index] = (float)(signal[index] - mean);
         }
     }
 
@@ -533,7 +533,7 @@ public sealed class MidiFileData
                 endFrame,
                 result,
                 cancellationToken,
-                () => progress?.Report(Interlocked.Increment(ref completedFrames) / (double) frameTotal * 0.85)), cancellationToken);
+                () => progress?.Report(Interlocked.Increment(ref completedFrames) / (double)frameTotal * 0.85)), cancellationToken);
         }
         Task.WaitAll(workers);
         return [.. result];
@@ -542,8 +542,8 @@ public sealed class MidiFileData
     private static void AnalysePitchRange(float[] signal, int sampleRate, int windowSize, int hopSize, int startFrame, int endFrame, PitchFrame[] result, CancellationToken cancellationToken, Action? frameCompleted)
     {
         float[] window = new float[windowSize];
-        int minimumLag = Math.Max(2, (int) Math.Floor(sampleRate / 4186.0));
-        int maximumLag = Math.Min(windowSize / 2 - 2, (int) Math.Ceiling(sampleRate / 27.5));
+        int minimumLag = Math.Max(2, (int)Math.Floor(sampleRate / 4186.0));
+        int maximumLag = Math.Min(windowSize / 2 - 2, (int)Math.Ceiling(sampleRate / 27.5));
         double[] difference = new double[maximumLag + 1];
         double[] normalized = new double[maximumLag + 1];
 
@@ -565,7 +565,7 @@ public sealed class MidiFileData
                 window[index] = sourceIndex >= 0 && sourceIndex < signal.Length ? signal[sourceIndex] : 0f;
             }
 
-            float rms = (float) Math.Sqrt(sumSquares / Math.Max(1, localLength));
+            float rms = (float)Math.Sqrt(sumSquares / Math.Max(1, localLength));
             if (rms < 1e-7f || maximumLag <= minimumLag)
             {
                 result[frameIndex] = new PitchFrame(centerSample, 0, rms, 0);
@@ -673,7 +673,7 @@ public sealed class MidiFileData
             ? frames.Zip(frames.Skip(1), (left, right) => right.CenterSample - left.CenterSample).Where(step => step > 0).DefaultIfEmpty(sampleRate * 0.01).Average()
             : sampleRate * 0.01;
         int[] noteNumbers = GetStableNoteNumbers(frames, noiseFloor, options);
-        BridgePitchGaps(noteNumbers, frames, noiseFloor, (int) Math.Round(options.MaximumMergeGapSeconds * sampleRate / frameStep));
+        BridgePitchGaps(noteNumbers, frames, noiseFloor, (int)Math.Round(options.MaximumMergeGapSeconds * sampleRate / frameStep));
         int start = -1;
         int currentNote = -1;
         for (int index = 0; index <= frames.Count; index++)
@@ -689,12 +689,12 @@ public sealed class MidiFileData
                 PitchFrame last = frames[index - 1];
                 double startSeconds = Math.Max(0, first.CenterSample - frameStep / 2) / sampleRate;
                 double endSeconds = Math.Min(sampleCount, last.CenterSample + frameStep / 2) / sampleRate;
-                long startTick = Math.Max(0, (long) Math.Round(startSeconds * bpm / 60 * ppq));
-                long endTick = Math.Max(startTick + 1, (long) Math.Round(endSeconds * bpm / 60 * ppq));
+                long startTick = Math.Max(0, (long)Math.Round(startSeconds * bpm / 60 * ppq));
+                long endTick = Math.Max(startTick + 1, (long)Math.Round(endSeconds * bpm / 60 * ppq));
                 if (endSeconds - startSeconds >= options.MinimumNoteSeconds)
                 {
                     float rms = frames.Skip(start).Take(index - start).Average(frame => frame.Rms);
-                    int velocity = Math.Clamp((int) Math.Round(127 * Math.Sqrt(Math.Clamp(rms / Math.Max(maximumRms, 1e-7f), 0, 1))), 1, 127);
+                    int velocity = Math.Clamp((int)Math.Round(127 * Math.Sqrt(Math.Clamp(rms / Math.Max(maximumRms, 1e-7f), 0, 1))), 1, 127);
                     notes.Add(new MidiNoteData { NoteNumber = currentNote, Channel = 1, Velocity = velocity, StartTick = startTick, DurationTicks = endTick - startTick });
                 }
             }
@@ -729,7 +729,7 @@ public sealed class MidiFileData
             double pitch = 69 + 12 * Math.Log2(frame.Frequency / 440.0);
             int note = previous >= 0 && Math.Abs(pitch - previous) < 0.65
                 ? previous
-                : Math.Clamp((int) Math.Round(pitch, MidpointRounding.AwayFromZero), 0, 127);
+                : Math.Clamp((int)Math.Round(pitch, MidpointRounding.AwayFromZero), 0, 127);
             notes[index] = note;
             previous = note;
         }
@@ -758,7 +758,7 @@ public sealed class MidiFileData
         }
     }
 
-    private static int GetAnalysisWindowSize(int sampleRate) => Math.Max(256, 2 * ((int) Math.Ceiling(sampleRate / 27.5) + 2));
+    private static int GetAnalysisWindowSize(int sampleRate) => Math.Max(256, 2 * ((int)Math.Ceiling(sampleRate / 27.5) + 2));
 
     private static string FindTrackName(IList<MidiEvent> events, int trackIndex)
     {
@@ -778,7 +778,7 @@ public sealed class MidiFileData
                 {
                     List<MidiEvent> events = new();
                     events.Add(new TextEvent(track.Name, MetaEventType.SequenceTrackName, 0));
-                    events.Add(new TempoEvent((int) Math.Round(60_000_000.0 / this.DefaultBpm), 0));
+                    events.Add(new TempoEvent((int)Math.Round(60_000_000.0 / this.DefaultBpm), 0));
                     foreach (MidiNoteData note in track.Notes)
                     {
                         int channel = Math.Clamp(note.Channel, 1, 16);

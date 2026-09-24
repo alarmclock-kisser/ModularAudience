@@ -294,20 +294,16 @@ namespace ModularAudience.Audio
         public int Channels { get; private set; } = 2;
 
         /// <summary>
-        /// Returns the audio output latency in milliseconds (the time between a sample
-        /// being written to the device and it actually being heard). This is the sum of
-        /// the WaveOut buffer latency and the device's own latency. The first call is
-        /// expensive (~100ms) because it queries the audio device; subsequent calls are
-        /// fast. Returns 0 if the latency cannot be determined.
+        /// Returns the configured WaveOut buffer duration in milliseconds. This value is
+        /// useful for configuring a matching calibration stream, but it is not a direct
+        /// measurement of total device output latency. Returns 0 if it cannot be read.
         /// </summary>
         public float GetLatencyMs()
         {
             try
             {
-                // The WaveOut buffer latency is the dominant component (20-40ms, set in
-                // InitializePlayback). The device's own latency is not accessible on the
-                // WaveOut class, so we only return the buffer latency. This is a good
-                // approximation of the total output latency for hit-window shifting.
+                // The buffer is configured in InitializePlayback and is the only latency
+                // value exposed by WaveOut without measuring the device independently.
                 return (float)this.player.BufferMilliseconds;
             }
             catch
@@ -522,7 +518,7 @@ namespace ModularAudience.Audio
                 long ls = Math.Clamp(this.loopStartSamples, 0, this.rawData.LongLength - 1);
                 long le = Math.Clamp(this.loopEndSamples, ls + 1, this.rawData.LongLength);
                 long start = Math.Clamp(startSampleIndex, ls, le - 1);
-                return (ISampleProvider) new LoopingArraySampleProvider(this.rawData, this.rawSampleRate, this.rawChannels, ls, le, start);
+                return (ISampleProvider)new LoopingArraySampleProvider(this.rawData, this.rawSampleRate, this.rawChannels, ls, le, start);
             }
             else
             {
@@ -742,7 +738,7 @@ namespace ModularAudience.Audio
             }
 
             int channels = Math.Max(1, this.rawChannels);
-            return this.ClampSourceSampleIndex((long) Math.Floor(sourcePosition / channels) * channels);
+            return this.ClampSourceSampleIndex((long)Math.Floor(sourcePosition / channels) * channels);
         }
 
         private long ClampSourceSampleIndex(long sourceSampleIndex)

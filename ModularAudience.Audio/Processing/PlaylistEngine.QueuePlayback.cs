@@ -190,7 +190,7 @@ namespace ModularAudience.Audio.Processing
                         {
                             elapsed += (now - previous).TotalSeconds;
                             double t = Math.Clamp(elapsed / Math.Max(0.001, seconds), 0.0, 1.0);
-                            prepared.Audio.SetPlaybackVolume((float) (fadeIn
+                            prepared.Audio.SetPlaybackVolume((float)(fadeIn
                                 ? Math.Sin(t * Math.PI * 0.5) : Math.Cos(t * Math.PI * 0.5)));
                             if (t >= 1.0) { break; }
                         }

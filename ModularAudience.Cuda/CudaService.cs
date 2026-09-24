@@ -753,7 +753,7 @@ namespace ModularAudience.Cuda
                 return obj;
             }
 
-            int overlapSize = (int) (chunkSize * overlap);
+            int overlapSize = (int)(chunkSize * overlap);
             IntPtr result = nint.Zero;
 
             Stopwatch sw = Stopwatch.StartNew();
@@ -801,7 +801,7 @@ namespace ModularAudience.Cuda
                 return obj;
             }
 
-            int overlapSize = (int) (chunkSize * overlap);
+            int overlapSize = (int)(chunkSize * overlap);
 
             obj.IsProcessing = true;
             IntPtr result = nint.Zero;

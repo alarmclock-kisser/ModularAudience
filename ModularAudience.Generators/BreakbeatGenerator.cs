@@ -160,7 +160,7 @@ namespace ModularAudience.Generators
                 if (method != null)
                 {
                     LogCollection.Log("Using BreakbeatGenerator '" + method.Name + "'.");
-                    var task = (Task<List<bool[]>>) method.Invoke(null, [drumset, bars, density, resolution, swing, complexity, interleaved, seed])!;
+                    var task = (Task<List<bool[]>>)method.Invoke(null, [drumset, bars, density, resolution, swing, complexity, interleaved, seed])!;
                     return await task;
                 }
                 else
@@ -179,7 +179,7 @@ namespace ModularAudience.Generators
             // Per-element generation in (soft) parallel
             var tasks = elements.Select(async (elem, idx) =>
             {
-                var rnd = seed.HasValue ? new Random((seed.Value ^ idx) + (int) elem) : new Random(NextSeed() ^ ((int) elem + idx));
+                var rnd = seed.HasValue ? new Random((seed.Value ^ idx) + (int)elem) : new Random(NextSeed() ^ ((int)elem + idx));
                 var line = GenerateLineForElement(elem, totalSteps, resolution, density, swing, complexity, rnd);
                 await Task.Yield(); // make it actually async-friendly
                 return (idx, elem, line);
@@ -232,7 +232,7 @@ namespace ModularAudience.Generators
                 }
 
                 // Fallback zu Snare, falls kein guter Match gefunden wurde
-                results[i] = bestIdx >= 0 ? (DrumsetElement) bestIdx : DrumsetElement.Snare;
+                results[i] = bestIdx >= 0 ? (DrumsetElement)bestIdx : DrumsetElement.Snare;
             }
 
             return results;
@@ -271,7 +271,7 @@ namespace ModularAudience.Generators
             // 2) Ergänze per Zufall entsprechend 'density' und 'complexity'
             // Ziel: finalHits ~ density * totalSteps * typeFactor
             float typeFactor = TypeDensityFactor(elem);
-            int desiredHits = (int) Math.Round(density * totalSteps * typeFactor * complexity);
+            int desiredHits = (int)Math.Round(density * totalSteps * typeFactor * complexity);
 
             // Count current hits
             int currentHits = line.Count(x => x);
@@ -427,7 +427,7 @@ namespace ModularAudience.Generators
                 return idxFrom16;
             }
 
-            return (int) Math.Round(idxFrom16 * (toResolution / (double) fromResolution));
+            return (int)Math.Round(idxFrom16 * (toResolution / (double)fromResolution));
         }
 
         private static float TemplateUseChanceFor(DrumsetElement elem)
@@ -605,7 +605,7 @@ namespace ModularAudience.Generators
             float secondsPerStep = 60f / bpm * 4f / resolution; // 4/4-Takt
 
             // Gesamtlänge in Samples
-            int totalSamples = (int) Math.Ceiling(secondsPerStep * steps * sampleRate);
+            int totalSamples = (int)Math.Ceiling(secondsPerStep * steps * sampleRate);
 
             float[] mixBuffer = new float[totalSamples * channels];
 
@@ -643,7 +643,7 @@ namespace ModularAudience.Generators
                         swingOffset = secondsPerStep * swing;
                     }
 
-                    int stepStart = (int) ((step * secondsPerStep + swingOffset) * sampleRate);
+                    int stepStart = (int)((step * secondsPerStep + swingOffset) * sampleRate);
 
                     for (int n = 0; n < audioLen; n++)
                     {
@@ -664,7 +664,7 @@ namespace ModularAudience.Generators
                                 vol = 1.0f;
                             }
 
-                            vol = (float) Math.Clamp((double) vol, 0.0, 1.0);
+                            vol = (float)Math.Clamp((double)vol, 0.0, 1.0);
                             mixBuffer[mixPos + c] += sample * vol;
                         }
                     }
@@ -676,7 +676,7 @@ namespace ModularAudience.Generators
             float peak = 0f;
             for (int i = 0; i < mixBuffer.Length; i++)
             {
-                float v = (float) Math.Abs(mixBuffer[i]);
+                float v = (float)Math.Abs(mixBuffer[i]);
                 if (v > peak)
                 {
                     peak = v;
