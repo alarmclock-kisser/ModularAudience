@@ -244,9 +244,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_bpm.Value = editor.Bpm;
             this.numericUpDown_bars.Value = editor.Bars;
             this.numericUpDown_resolution.Value = editor.Resolution;
-            this.ShowBeatMap(editor.Pattern, this.currentPatternRowLabels, editor.Bars, editor.Resolution);
-            this.currentPatternNotes = editor.Notes.ToList();
-            this.hasEditedPattern = true;
+            this.ShowBeatMap(editor.Pattern, this.currentPatternRowLabels, editor.Bars, editor.Resolution, editor.Notes);
 
             AudioObj editedAudio = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
                 this.currentPatternNotes,
@@ -866,27 +864,44 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }).ToArray();
         }
 
-        private void ShowBeatMap(IReadOnlyList<bool[]> breakbeat, IReadOnlyList<string>? rowLabels = null, int? bars = null, int? resolution = null)
+        private void ShowBeatMap(
+            IReadOnlyList<bool[]> breakbeat,
+            IReadOnlyList<string>? rowLabels = null,
+            int? bars = null,
+            int? resolution = null,
+            IReadOnlyList<BreakbeatPatternNote>? patternNotes = null)
         {
             this.currentPattern = breakbeat.Select(row => row.ToArray()).ToList();
             this.currentPatternRowLabels = (rowLabels ?? this.GetBeatMapRowLabels()).ToArray();
             this.currentPatternBars = Math.Max(1, bars ?? this.Bars);
             this.currentPatternResolution = Math.Max(1, resolution ?? this.Resolution);
-            this.currentPatternNotes = [];
-            this.hasEditedPattern = false;
+            this.currentPatternNotes = patternNotes?.ToList() ?? [];
+            this.hasEditedPattern = patternNotes is not null;
 
             if (this.pictureBox_beatMap.Width <= 0 || this.pictureBox_beatMap.Height <= 0)
             {
                 return;
             }
 
-            Bitmap bitmap = CreateBeatMapBitmap(this.currentPattern, this.currentPatternRowLabels, this.pictureBox_beatMap.Size, this.currentPatternBars, this.currentPatternResolution);
+            Bitmap bitmap = CreateBeatMapBitmap(
+                this.currentPattern,
+                this.currentPatternRowLabels,
+                this.pictureBox_beatMap.Size,
+                this.currentPatternBars,
+                this.currentPatternResolution,
+                patternNotes);
             Image? previous = this.pictureBox_beatMap.Image;
             this.pictureBox_beatMap.Image = bitmap;
             previous?.Dispose();
         }
 
-        private static Bitmap CreateBeatMapBitmap(IReadOnlyList<bool[]> breakbeat, IReadOnlyList<string> rowLabels, Size size, int bars, int resolution)
+        private static Bitmap CreateBeatMapBitmap(
+            IReadOnlyList<bool[]> breakbeat,
+            IReadOnlyList<string> rowLabels,
+            Size size,
+            int bars,
+            int resolution,
+            IReadOnlyList<BreakbeatPatternNote>? patternNotes = null)
         {
             int width = Math.Max(1, size.Width);
             int height = Math.Max(1, size.Height);
@@ -918,6 +933,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 FormatFlags = StringFormatFlags.NoWrap
             };
             using Brush hitBrush = new SolidBrush(Color.FromArgb(60, 110, 255));
+            using Brush stretchedHitBrush = new SolidBrush(Color.FromArgb(91, 161, 211));
             using Brush emptyBrush = new SolidBrush(Color.FromArgb(232, 232, 232));
             using Brush textBrush = new SolidBrush(Color.FromArgb(70, 70, 70));
             using Pen gridPen = new(Color.FromArgb(210, 210, 210));
@@ -934,7 +950,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     RectangleF cell = new(leftMargin + (column * cellWidth), topMargin + (row * cellHeight), Math.Max(1f, cellWidth - 1f), Math.Max(1f, cellHeight - 1f));
                     graphics.FillRectangle(emptyBrush, cell);
-                    if (breakbeat[row][column])
+                    if (patternNotes is null && breakbeat[row][column])
                     {
                         graphics.FillRectangle(hitBrush, cell);
                     }
@@ -955,6 +971,37 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 else if (column < columns)
                 {
                     graphics.DrawLine(subdivisionPen, x, topMargin, x, topMargin + gridHeight);
+                }
+            }
+
+            if (patternNotes is not null)
+            {
+                double patternTicks = Math.Max(1, bars) * (double)BreakbeatGenerator_V2.PatternTicksPerBar;
+                foreach (BreakbeatPatternNote note in patternNotes)
+                {
+                    if (note.TrackIndex < 0 || note.TrackIndex >= rows || note.DurationTicks <= 0)
+                    {
+                        continue;
+                    }
+
+                    double startTick = Math.Clamp(note.StartTick, 0, patternTicks);
+                    double endTick = Math.Clamp((double)note.StartTick + note.DurationTicks, 0, patternTicks);
+                    if (endTick <= startTick)
+                    {
+                        continue;
+                    }
+
+                    float x = leftMargin + (float)(startTick / patternTicks * gridWidth);
+                    float noteWidth = (float)((endTick - startTick) / patternTicks * gridWidth);
+                    float y = topMargin + (note.TrackIndex * cellHeight);
+                    RectangleF noteBounds = new(x + 1f, y + 1f, Math.Max(1f, noteWidth - 2f), Math.Max(1f, cellHeight - 2f));
+                    graphics.FillRectangle(note.TimeStretch ? stretchedHitBrush : hitBrush, noteBounds);
+                }
+
+                for (int column = stepsPerBar; column < columns; column += stepsPerBar)
+                {
+                    float x = leftMargin + (column * cellWidth);
+                    graphics.DrawLine(barPen, x, topMargin, x, topMargin + gridHeight);
                 }
             }
 

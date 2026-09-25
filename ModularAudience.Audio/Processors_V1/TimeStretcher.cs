@@ -35,24 +35,23 @@ namespace ModularAudience.Audio.Processors_V1
                 maxWorkers = Math.Clamp(maxWorkers.Value, 1, Environment.ProcessorCount);
             }
 
-            // FIX: Offload aktivieren auch bei benutzerdefinierten Thread-Anzahlen
-            if (offload)
-            {
-                return await TimeStretchOffloadedAsync(
-                    obj,
-                    chunkSize,
-                    overlap,
-                    factor,
-                    keepData,
-                    normalize,
-                    maxWorkers.Value,
-                    progress,
-                    adjustBpm: true);
+                    if (offload)
+                    {
+                        return await TimeStretchOffloadedAsync(
+                            obj,
+                            chunkSize,
+                            overlap,
+                            factor,
+                            keepData,
+                            normalize,
+                            maxWorkers.Value,
+                            progress,
+                            adjustBpm: true);
             }
 
-            if (channeled || factor != 1.0)
+                    if (factor > 1.0)
             {
-                return await TimeStretchChanneledAsync(
+                        return await TimeStretchSlowAsync(
                     obj,
                     chunkSize,
                     overlap,
@@ -62,6 +61,19 @@ namespace ModularAudience.Audio.Processors_V1
                     maxWorkers.Value,
                     progress);
             }
+
+                    if (channeled)
+                    {
+                    return await TimeStretchChanneledAsync(
+                        obj,
+                        chunkSize,
+                        overlap,
+                        factor,
+                        keepData,
+                        normalize,
+                        maxWorkers.Value,
+                        progress);
+                    }
 
             if (maxWorkers != Environment.ProcessorCount)
             {
@@ -686,6 +698,152 @@ namespace ModularAudience.Audio.Processors_V1
         private readonly record struct ChunkResultItem(int Index, float[] Samples);
 
         private static async Task<AudioObj> TimeStretchChanneledAsync(
+            AudioObj obj,
+            int chunkSize,
+            float overlap,
+            double factor,
+            bool keepData,
+            float normalize,
+            int maxWorkers,
+            IProgress<double>? progress)
+        {
+            maxWorkers = Math.Clamp(maxWorkers, 1, Environment.ProcessorCount);
+
+            float[] backupData = obj.Data;
+            int sampleRate = obj.SampleRate;
+            int overlapSize = chunkSize > 0
+                ? (int)(chunkSize * overlap)
+                : obj.OverlapSize;
+
+            var chunkEnumerable = await obj.GetChunksAsync(chunkSize, overlap, keepData, maxWorkers).ConfigureAwait(false);
+            var chunks = chunkEnumerable as IList<float[]> ?? chunkEnumerable.ToList();
+            if (chunks.Count == 0)
+            {
+                obj.Data = backupData;
+                return obj;
+            }
+
+            var tracker = CreateTracker(progress, chunks.Count, normalize > 0);
+            tracker?.ReportWork(chunks.Count);
+
+            obj.StretchFactor = factor;
+            int pooledLength = Math.Max(1, chunks[0].Length);
+            var forwardPool = new FixedComplexPool(pooledLength);
+            var stretchPool = new FixedComplexPool(pooledLength);
+
+            int capacity = Math.Max(maxWorkers, 2);
+            var inChannel = Channel.CreateBounded<ChunkWorkItem>(new BoundedChannelOptions(capacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleWriter = true,
+                SingleReader = false
+            });
+
+            var outChannel = Channel.CreateBounded<ChunkResultItem>(new BoundedChannelOptions(capacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleWriter = false,
+                SingleReader = true
+            });
+
+            var producer = Task.Run(async () =>
+            {
+                try
+                {
+                    for (int index = 0; index < chunks.Count; index++)
+                    {
+                        await inChannel.Writer.WriteAsync(new ChunkWorkItem(index, chunks[index])).ConfigureAwait(false);
+                    }
+
+                    inChannel.Writer.TryComplete();
+                }
+                catch (Exception exception)
+                {
+                    inChannel.Writer.TryComplete(exception);
+                    throw;
+                }
+            });
+
+            var workers = new Task[maxWorkers];
+            for (int workerIndex = 0; workerIndex < maxWorkers; workerIndex++)
+            {
+                workers[workerIndex] = Task.Run(async () =>
+                {
+                    await foreach (ChunkWorkItem item in inChannel.Reader.ReadAllAsync().ConfigureAwait(false))
+                    {
+                        Complex[] fft = forwardPool.Rent();
+                        Complex[] stretched = stretchPool.Rent();
+                        try
+                        {
+                            FourierTransformForwardInto(fft, item.Samples, tracker);
+                            StretchChunkInto(fft, stretched, chunkSize, overlapSize, sampleRate, factor, tracker);
+                            float[] inverse = FourierTransformInverseCore(stretched, tracker);
+                            await outChannel.Writer.WriteAsync(new ChunkResultItem(item.Index, inverse)).ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            forwardPool.Return(fft);
+                            stretchPool.Return(stretched);
+                        }
+                    }
+                });
+            }
+
+            var completeOutput = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.WhenAll(workers).ConfigureAwait(false);
+                    outChannel.Writer.TryComplete();
+                }
+                catch (Exception exception)
+                {
+                    outChannel.Writer.TryComplete(exception);
+                    throw;
+                }
+            });
+
+            var orderedChunks = new float[chunks.Count][];
+            int consumed = 0;
+            await foreach (ChunkResultItem result in outChannel.Reader.ReadAllAsync().ConfigureAwait(false))
+            {
+                orderedChunks[result.Index] = result.Samples;
+                consumed++;
+            }
+
+            await producer.ConfigureAwait(false);
+            await completeOutput.ConfigureAwait(false);
+
+            if (consumed == 0)
+            {
+                obj.Data = backupData;
+                return obj;
+            }
+
+            await obj.AggregateStretchedChunksAsync(orderedChunks, obj.StretchFactor, maxWorkers).ConfigureAwait(false);
+            tracker?.ReportWork(chunks.Count);
+
+            if (obj.Data == null || obj.Data.LongLength <= 0)
+            {
+                obj.Data = backupData;
+                return obj;
+            }
+
+            obj.Bpm = (float)(obj.Bpm / factor);
+            obj.Length = obj.Data.LongLength;
+            obj.Duration = TimeSpan.FromSeconds(obj.Length / (double)(sampleRate * obj.Channels));
+
+            if (normalize > 0)
+            {
+                await obj.NormalizeAsync(normalize, maxWorkers).ConfigureAwait(false);
+                tracker?.ReportWork(chunks.Count);
+            }
+
+            tracker?.Complete();
+            return obj;
+        }
+
+        private static async Task<AudioObj> TimeStretchSlowAsync(
             AudioObj obj,
             int chunkSize,
             float overlap,

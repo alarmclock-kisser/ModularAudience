@@ -37,6 +37,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private decimal previousInitialBpmValue;
         private bool isUpdatingTargetBpm;
         private decimal previousTargetBpmValue;
+        private bool isUpdatingStretchFactor;
+        private decimal previousStretchFactorValue;
 
 
         private static float LastTargetBpm = 120f;
@@ -48,6 +50,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.InitializeComponent();
             this.previousInitialBpmValue = this.numericUpDown_initialBpm.Value;
             this.previousTargetBpmValue = this.numericUpDown_targetBpm.Value;
+            this.previousStretchFactorValue = this.numericUpDown_stretchFactor.Value;
             if (audios?.Any() == true)
             {
                 this.Tracks = audios.ToList();
@@ -162,7 +165,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             double factor = (double)currentValue / (double)this.numericUpDown_targetBpm.Value;
-            this.numericUpDown_stretchFactor.Value = Math.Clamp((decimal)factor, this.numericUpDown_stretchFactor.Minimum, this.numericUpDown_stretchFactor.Maximum);
+            this.SetStretchFactorFromBpm(factor);
             this.previousInitialBpmValue = this.numericUpDown_initialBpm.Value;
             LastInitialBpm = (float)this.numericUpDown_initialBpm.Value;
         }
@@ -206,14 +209,41 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             double factor = (double)this.numericUpDown_initialBpm.Value / (double)currentValue;
-            this.numericUpDown_stretchFactor.Value = Math.Clamp((decimal)factor, this.numericUpDown_stretchFactor.Minimum, this.numericUpDown_stretchFactor.Maximum);
+            this.SetStretchFactorFromBpm(factor);
             this.previousTargetBpmValue = this.numericUpDown_targetBpm.Value;
             LastTargetBpm = (float)this.numericUpDown_targetBpm.Value;
         }
 
         private void numericUpDown_stretchFactor_ValueChanged(object sender, EventArgs e)
         {
-            double targetBpm = (double)this.numericUpDown_initialBpm.Value / (double)this.numericUpDown_stretchFactor.Value;
+            if (this.isUpdatingStretchFactor)
+            {
+                return;
+            }
+
+            decimal currentValue = this.numericUpDown_stretchFactor.Value;
+            if (ModifierKeys.HasFlag(Keys.Control) && currentValue != this.previousStretchFactorValue)
+            {
+                decimal adjustedValue = currentValue > this.previousStretchFactorValue
+                    ? Math.Min(this.previousStretchFactorValue * 2, this.numericUpDown_stretchFactor.Maximum)
+                    : Math.Max(this.previousStretchFactorValue / 2, this.numericUpDown_stretchFactor.Minimum);
+
+                if (adjustedValue != currentValue)
+                {
+                    this.isUpdatingStretchFactor = true;
+                    try
+                    {
+                        this.numericUpDown_stretchFactor.Value = adjustedValue;
+                        currentValue = adjustedValue;
+                    }
+                    finally
+                    {
+                        this.isUpdatingStretchFactor = false;
+                    }
+                }
+            }
+
+            double targetBpm = (double)this.numericUpDown_initialBpm.Value / (double)currentValue;
             this.isUpdatingTargetBpm = true;
             try
             {
@@ -224,8 +254,27 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.isUpdatingTargetBpm = false;
             }
 
+            this.previousStretchFactorValue = this.numericUpDown_stretchFactor.Value;
             this.previousTargetBpmValue = this.numericUpDown_targetBpm.Value;
             LastTargetBpm = (float)this.numericUpDown_targetBpm.Value;
+        }
+
+        private void SetStretchFactorFromBpm(double factor)
+        {
+            this.isUpdatingStretchFactor = true;
+            try
+            {
+                this.numericUpDown_stretchFactor.Value = Math.Clamp(
+                    (decimal)factor,
+                    this.numericUpDown_stretchFactor.Minimum,
+                    this.numericUpDown_stretchFactor.Maximum);
+            }
+            finally
+            {
+                this.isUpdatingStretchFactor = false;
+            }
+
+            this.previousStretchFactorValue = this.numericUpDown_stretchFactor.Value;
         }
 
         private async void button_stretch_Click(object sender, EventArgs e)

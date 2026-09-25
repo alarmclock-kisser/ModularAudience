@@ -977,12 +977,18 @@ namespace ModularAudience.Generators
                 }
 
                 double noteDuration = note.DurationTicks / (double)PatternTicksPerBar * secondsPerBar;
-                double targetDuration = Math.Max(noteDuration, Math.Max(stretchSourceDuration, normalizedDuration));
-                int targetFrames = Math.Max(stretchSourceFrames, (int)Math.Ceiling(targetDuration * outputSampleRate));
+                int singleHitDurationTicks = GetMinimumNoteDurationTicks(samples, note.TrackIndex, bpm, resolution);
+                double stretchMultiple = Math.Max(1.0, note.DurationTicks / (double)Math.Max(1, singleHitDurationTicks));
+                double targetDuration = note.TimeStretch
+                    ? stretchSourceDuration * stretchMultiple
+                    : Math.Max(noteDuration, Math.Max(stretchSourceDuration, normalizedDuration));
+                int targetFrames = note.TimeStretch
+                    ? Math.Max(1, (int)Math.Ceiling(targetDuration * outputSampleRate))
+                    : Math.Max(stretchSourceFrames, (int)Math.Ceiling(targetDuration * outputSampleRate));
 
                 sourceChannels = Math.Max(1, clip.Channels);
-                float[] renderedData = note.TimeStretch && targetFrames > stretchSourceFrames
-                    ? await StretchClipAsync(clip, stretchSourceFrames, targetFrames, maxWorkers)
+                float[] renderedData = note.TimeStretch && targetFrames != stretchSourceFrames
+                    ? await StretchClipAsync(clip, stretchSourceFrames, sourceFrames, targetFrames, maxWorkers)
                     : clip.Data;
                 int clipFrames = targetFrames;
                 float[] clipData = new float[checked(clipFrames * sourceChannels)];
@@ -1061,9 +1067,14 @@ namespace ModularAudience.Generators
             return Math.Max(0, sample.Duration.TotalSeconds);
         }
 
-        private static async Task<float[]> StretchClipAsync(AudioObj clip, int sourceFrames, int targetFrames, int maxWorkers)
+        private static async Task<float[]> StretchClipAsync(
+            AudioObj clip,
+            int sourceFrames,
+            int unpaddedSourceFrames,
+            int targetFrames,
+            int maxWorkers)
         {
-            const int chunkSize = 8192;
+            const int chunkSize = 4096;
             const float overlap = 0.5f;
             double factor = targetFrames / (double)sourceFrames;
             int channelCount = Math.Max(1, clip.Channels);
@@ -1081,13 +1092,19 @@ namespace ModularAudience.Generators
                 offload: false,
                 channeled: true);
 
+            float[] exactLengthData;
             if (clip.Data.Length == targetSamples)
             {
-                return clip.Data;
+                exactLengthData = clip.Data;
+            }
+            else
+            {
+                exactLengthData = new float[targetSamples];
+                Array.Copy(clip.Data, exactLengthData, Math.Min(clip.Data.Length, targetSamples));
             }
 
-            float[] exactLengthData = new float[targetSamples];
-            Array.Copy(clip.Data, exactLengthData, Math.Min(clip.Data.Length, targetSamples));
+            int validAudioFrames = Math.Clamp((int)Math.Ceiling(unpaddedSourceFrames * factor), 0, targetFrames);
+            Array.Clear(exactLengthData, validAudioFrames * channelCount, (targetFrames - validAudioFrames) * channelCount);
             return exactLengthData;
         }
 

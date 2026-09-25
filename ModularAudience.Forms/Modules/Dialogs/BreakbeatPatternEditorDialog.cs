@@ -27,7 +27,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public IReadOnlyList<bool[]> Pattern => this.BuildPatternMatrix();
 
-        public IReadOnlyList<BreakbeatPatternNote> Notes => this.notes.ToArray();
+        public IReadOnlyList<BreakbeatPatternNote> Notes => this.GetNotesWithoutCoveredRetriggers();
 
         public decimal Bpm => this.numericUpDown_bpm.Value;
 
@@ -179,7 +179,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            this.drawing = true;
             this.drawingButton = e.Button;
             this.drawingRow = row;
             this.drawingStartColumn = column;
@@ -188,12 +187,20 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 int stepTicks = this.GetTicksPerStep();
                 int startTick = column * stepTicks;
                 int minimumDuration = BreakbeatGenerator_V2.GetMinimumNoteDurationTicks(this.samples, row, (float)this.Bpm, this.currentResolution);
-                this.notes.RemoveAll(note => note.TrackIndex == row && note.StartTick == startTick);
-                this.drawingNote = new BreakbeatPatternNote(row, startTick, minimumDuration);
+                BreakbeatPatternNote newNote = new(row, startTick, minimumDuration);
+                if (this.HasOverlappingNote(newNote))
+                {
+                    return;
+                }
+
+                this.drawing = true;
+                this.drawingNote = newNote;
                 this.notes.Add(this.drawingNote);
             }
             else
             {
+                this.drawing = true;
+                this.drawingNote = null;
                 this.DeleteNotesAt(row, this.PointToTick(e.Location));
             }
 
@@ -229,11 +236,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     DurationTicks = Math.Max(minimumDuration, draggedDuration),
                     TimeStretch = draggedDuration > minimumDuration
                 };
-                int index = this.notes.IndexOf(this.drawingNote);
+                int index = this.notes.FindIndex(note => ReferenceEquals(note, this.drawingNote));
                 if (index >= 0)
                 {
-                    this.notes[index] = updated;
-                    this.drawingNote = updated;
+                    if (!this.HasOverlappingNote(updated, this.drawingNote))
+                    {
+                        this.notes[index] = updated;
+                        this.drawingNote = updated;
+                    }
                 }
             }
 
@@ -273,6 +283,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.notes.RemoveAll(note => note.TrackIndex == row && tick >= note.StartTick && tick < note.StartTick + note.DurationTicks);
         }
 
+        private bool HasOverlappingNote(BreakbeatPatternNote candidate, BreakbeatPatternNote? ignoredNote = null)
+        {
+            long candidateEndTick = (long)candidate.StartTick + candidate.DurationTicks;
+            return this.notes.Any(note =>
+                !ReferenceEquals(note, ignoredNote)
+                && note.TrackIndex == candidate.TrackIndex
+                && candidate.StartTick < (long)note.StartTick + note.DurationTicks
+                && note.StartTick < candidateEndTick);
+        }
+
         private bool TryGetCell(Point point, out int row, out int column)
         {
             row = -1;
@@ -302,24 +322,39 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private int GetTicksPerStep() => Math.Max(1, (int)Math.Round(BreakbeatGenerator_V2.PatternTicksPerBar / (double)this.currentResolution));
 
+        private List<BreakbeatPatternNote> GetNotesWithoutCoveredRetriggers()
+        {
+            List<BreakbeatPatternNote> result = this.notes.ToList();
+            BreakbeatPatternNote[] stretchedNotes = result
+                .Where(note => note.TimeStretch)
+                .OrderBy(note => note.StartTick)
+                .ToArray();
+
+            foreach (BreakbeatPatternNote stretchedNote in stretchedNotes)
+            {
+                if (result.Any(note => ReferenceEquals(note, stretchedNote)))
+                {
+                    result = BreakbeatGenerator_V2.RemoveRetriggersCoveredByStretchedNote(result, stretchedNote);
+                }
+            }
+
+            return result;
+        }
+
         private List<bool[]> BuildPatternMatrix()
         {
             int columns = Math.Max(1, this.bars * this.currentResolution);
             var result = Enumerable.Range(0, this.samples.Count).Select(_ => new bool[columns]).ToList();
             int stepTicks = this.GetTicksPerStep();
-            foreach (BreakbeatPatternNote note in this.notes)
+            foreach (BreakbeatPatternNote note in this.GetNotesWithoutCoveredRetriggers())
             {
-                if (note.TrackIndex < 0 || note.TrackIndex >= result.Count)
+                if (note.TrackIndex < 0 || note.TrackIndex >= result.Count || note.DurationTicks <= 0)
                 {
                     continue;
                 }
 
                 int startColumn = Math.Clamp((int)Math.Round(note.StartTick / (double)stepTicks), 0, columns - 1);
-                int count = Math.Max(1, (int)Math.Ceiling(note.DurationTicks / (double)stepTicks));
-                for (int column = startColumn; column < Math.Min(columns, startColumn + count); column++)
-                {
-                    result[note.TrackIndex][column] = true;
-                }
+                result[note.TrackIndex][startColumn] = true;
             }
 
             return result;
@@ -362,7 +397,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             try
             {
                 this.previewAudio = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
-                    this.notes.ToArray(),
+                    this.Notes,
                     this.samples,
                     this.bars,
                     (float)this.numericUpDown_bpm.Value,

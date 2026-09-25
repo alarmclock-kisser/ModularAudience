@@ -63,13 +63,15 @@ namespace ModularAudience.Audio.Tests
             Assert.AreEqual(256, notes[0].DurationTicks);
         }
 
-        [TestMethod]
-        public void RemoveRetriggersCoveredByStretchedNote_RemovesOnlyHitsOnSameTrackInsideDuration()
+        [DataTestMethod]
+        [DataRow(128)]
+        [DataRow(256)]
+        public void RemoveRetriggersCoveredByStretchedNote_RemovesOnlyHitsOnSameTrackInsideDuration(int stretchedDurationTicks)
         {
             BreakbeatPatternNote earlierHit = new(TrackIndex: 0, StartTick: 0, DurationTicks: 64);
-            BreakbeatPatternNote stretchedNote = new(TrackIndex: 0, StartTick: 64, DurationTicks: 256, TimeStretch: true);
+            BreakbeatPatternNote stretchedNote = new(TrackIndex: 0, StartTick: 64, DurationTicks: stretchedDurationTicks, TimeStretch: true);
             BreakbeatPatternNote coveredHit = new(TrackIndex: 0, StartTick: 128, DurationTicks: 64);
-            BreakbeatPatternNote hitAtEnd = new(TrackIndex: 0, StartTick: 320, DurationTicks: 64);
+            BreakbeatPatternNote hitAtEnd = new(TrackIndex: 0, StartTick: 64 + stretchedDurationTicks, DurationTicks: 64);
             BreakbeatPatternNote otherTrackHit = new(TrackIndex: 1, StartTick: 128, DurationTicks: 64);
 
             List<BreakbeatPatternNote> result = BreakbeatGenerator_V2.RemoveRetriggersCoveredByStretchedNote(
@@ -84,7 +86,7 @@ namespace ModularAudience.Audio.Tests
         {
             using AudioObj sample = CreateToneSample(sampleRate: 22050, frequency: 440, durationSeconds: 0.25);
             List<AudioObj> samples = [sample];
-            BreakbeatPatternNote note = new(TrackIndex: 0, StartTick: 0, DurationTicks: 128, TimeStretch: true);
+            BreakbeatPatternNote note = new(TrackIndex: 0, StartTick: 0, DurationTicks: 512, TimeStretch: true);
 
             using AudioObj rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
                 [note],
@@ -102,12 +104,53 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
-        public async Task RenderPatternNotesAsync_StretchesBeatNormalizedSampleIncludingPaddedSilence()
+        public async Task RenderPatternNotesAsync_StretchedTransientRetainsNormalizedPeak()
+        {
+            const int sampleRate = 44100;
+            float[] transientData = new float[sampleRate / 5];
+            for (int frame = 0; frame < transientData.Length; frame++)
+            {
+                float envelope = MathF.Exp(-frame / (sampleRate * 0.015f));
+                transientData[frame] = envelope * MathF.Sin(2f * MathF.PI * 2400f * frame / sampleRate);
+            }
+
+            using AudioObj shortestSample = CreateToneSample(sampleRate, 440, 0.125);
+            using AudioObj transientSample = new()
+            {
+                Data = transientData,
+                SampleRate = sampleRate,
+                Channels = 1,
+                Duration = TimeSpan.FromSeconds(transientData.Length / (double)sampleRate),
+                Length = transientData.Length
+            };
+            BreakbeatPatternNote note = new(TrackIndex: 1, StartTick: 0, DurationTicks: 512, TimeStretch: true);
+
+            using AudioObj rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [note],
+                [shortestSample, transientSample],
+                bars: 1,
+                bpm: 60,
+                resolution: 4,
+                swing: 0);
+
+            float peak = rendered.Data.Max(Math.Abs);
+            Assert.IsTrue(peak > 0.7f, $"Expected the stretched transient to retain the normalized 0.8 peak, got {peak:F4}.");
+        }
+
+        [DataTestMethod]
+        [DataRow(512, 0.3, 0.38, 0.45, 0.49)]
+        [DataRow(1024, 0.6, 0.75, 0.9, 0.98)]
+        public async Task RenderPatternNotesAsync_StretchesBeatNormalizedSampleIncludingPaddedSilence(
+            int durationTicks,
+            double bodyStartSeconds,
+            double bodyEndSeconds,
+            double tailStartSeconds,
+            double tailEndSeconds)
         {
             using AudioObj shortestSample = CreateToneSample(sampleRate: 44100, frequency: 440, durationSeconds: 0.125);
             using AudioObj sample = CreateToneSample(sampleRate: 44100, frequency: 440, durationSeconds: 0.2);
             List<AudioObj> samples = [shortestSample, sample];
-            BreakbeatPatternNote note = new(TrackIndex: 1, StartTick: 0, DurationTicks: 128, TimeStretch: true);
+            BreakbeatPatternNote note = new(TrackIndex: 1, StartTick: 0, DurationTicks: durationTicks, TimeStretch: true);
 
             using AudioObj rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
                 [note],
@@ -117,8 +160,8 @@ namespace ModularAudience.Audio.Tests
                 resolution: 4,
                 swing: 0);
 
-            float earlyRms = MeasureRms(rendered, 0.3, 0.38);
-            float lateRms = MeasureRms(rendered, 0.45, 0.49);
+            float earlyRms = MeasureRms(rendered, bodyStartSeconds, bodyEndSeconds);
+            float lateRms = MeasureRms(rendered, tailStartSeconds, tailEndSeconds);
 
             Assert.IsTrue(earlyRms > 0.1f, $"Expected the normalized sample body to remain audible, got RMS {earlyRms:F4}.");
             Assert.IsTrue(lateRms < earlyRms * 0.1f, $"Expected padded source silence to stretch into the note tail, got RMS {lateRms:F4} versus body RMS {earlyRms:F4}.");
