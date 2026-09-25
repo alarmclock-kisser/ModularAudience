@@ -13,7 +13,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             if (disposing && this.samples is not null)
             {
-                foreach (ModularAudience.Audio.AudioObj sample in this.samples)
+                    foreach (ModularAudience.Audio.AudioObj sample in this.GetEditorSamplesForDisposal())
                 {
                     sample.Dispose();
                 }
@@ -42,6 +42,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             label_resolution = new Label();
             timer_previewCaret = new System.Windows.Forms.Timer(components);
             timer_pitchGestureRelease = new System.Windows.Forms.Timer(components);
+            timer_historyDebounce = new System.Windows.Forms.Timer(components);
             timer_pitchTooltip = new System.Windows.Forms.Timer(components);
             toolTip_pattern = new ToolTip(components);
             toolTip_pattern.InitialDelay = 360;
@@ -241,6 +242,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             timer_previewCaret.Tick += timer_previewCaret_Tick;
             timer_pitchGestureRelease.Interval = 30;
             timer_pitchGestureRelease.Tick += timer_pitchGestureRelease_Tick;
+            timer_historyDebounce.Interval = 250;
+            timer_historyDebounce.Tick += timer_historyDebounce_Tick;
             timer_pitchTooltip.Interval = 360;
             timer_pitchTooltip.Tick += timer_pitchTooltip_Tick;
             // 
@@ -283,6 +286,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Button button_save;
         private System.Windows.Forms.Timer timer_previewCaret;
         private System.Windows.Forms.Timer timer_pitchGestureRelease;
+        private System.Windows.Forms.Timer timer_historyDebounce;
         private System.Windows.Forms.Timer timer_pitchTooltip;
         private ToolTip toolTip_pattern;
     }

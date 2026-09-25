@@ -63,6 +63,27 @@ namespace ModularAudience.Audio.Tests
             Assert.AreEqual(256, notes[0].DurationTicks);
         }
 
+        [TestMethod]
+        public void ExtractPatternQuarters_ConcatenatesSelectedQuartersInPatternOrder()
+        {
+            using AudioObj source = new()
+            {
+                Name = "QuarterSections",
+                Data = Enumerable.Range(0, 32).Select(value => (float)value).ToArray(),
+                SampleRate = 4,
+                Channels = 1,
+                Length = 32,
+                Duration = TimeSpan.FromSeconds(8),
+                BitDepth = 32
+            };
+
+            using AudioObj selected = BreakbeatGenerator_V2.ExtractPatternQuarters(source, [7, 1, 4], bpm: 60);
+
+            CollectionAssert.AreEqual(
+                new[] { 4f, 5f, 6f, 7f, 16f, 17f, 18f, 19f, 28f, 29f, 30f, 31f },
+                selected.Data);
+        }
+
         [DataTestMethod]
         [DataRow(128)]
         [DataRow(256)]
@@ -276,6 +297,55 @@ namespace ModularAudience.Audio.Tests
             float originalPitch = MeasureToneAmplitude(rendered, 440, 0.05, 0.2);
             Assert.IsTrue(netPitch > originalPitch * 3f,
                 $"Expected a net -1 semitone shift, got 415 Hz amplitude {netPitch:F4} and 440 Hz amplitude {originalPitch:F4}.");
+        }
+
+        [TestMethod]
+        public async Task RenderPatternNotesAsync_TruncatedHitCutsOffAtRequestedDuration()
+        {
+            using AudioObj sample = CreateToneSample(sampleRate: 44100, frequency: 440, durationSeconds: 0.25);
+            BreakbeatPatternNote truncated = new(
+                TrackIndex: 0,
+                StartTick: 0,
+                DurationTicks: 32,
+                ManuallyResized: false,
+                OriginalDurationTicks: 64,
+                Truncated: true);
+
+            using AudioObj rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [truncated], [sample], bars: 1, bpm: 60, resolution: 4, swing: 0);
+
+            float bodyRms = MeasureRms(rendered, 0.02, 0.1);
+            float afterCutRms = MeasureRms(rendered, 0.15, 0.22);
+            Assert.IsTrue(bodyRms > 0.1f);
+            Assert.IsTrue(afterCutRms < 0.0001f, $"Expected silence after the cut, got RMS {afterCutRms:F4}.");
+        }
+
+        [DataTestMethod]
+        [DataRow(false)]
+        [DataRow(true)]
+        public async Task RenderPatternNotesAsync_HardResizedHitPadsSilenceWithoutChangingPlaybackMode(bool varispeed)
+        {
+            using AudioObj sample = CreateToneSample(sampleRate: 44100, frequency: 440, durationSeconds: 0.25);
+            BreakbeatPatternNote hardResized = new(
+                TrackIndex: 0,
+                StartTick: 0,
+                DurationTicks: 128,
+                TimeStretch: !varispeed,
+                Varispeed: varispeed,
+                ManuallyResized: true,
+                OriginalDurationTicks: 64,
+                HardResized: true);
+
+            using AudioObj rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [hardResized], [sample], bars: 1, bpm: 60, resolution: 4, swing: 0);
+
+            Assert.IsTrue(rendered.Duration.TotalSeconds > 1.2,
+                $"Expected the extended note duration to include silence, got {rendered.Duration.TotalSeconds:F3}s.");
+            float bodyRms = MeasureRms(rendered, 0.02, 0.1);
+            float afterSampleRms = MeasureRms(rendered, 0.5, 0.8);
+            Assert.IsTrue(bodyRms > 0.1f);
+            Assert.IsTrue(afterSampleRms < 0.0001f,
+                $"Expected silence after the source sample, got RMS {afterSampleRms:F4}.");
         }
 
         [TestMethod]

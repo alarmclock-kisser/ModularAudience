@@ -110,6 +110,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     editor.FormClosed -= this.BreakbeatPatternEditorDialog_FormClosed;
                     editor.SaveRequested -= this.BreakbeatPatternEditorDialog_SaveRequestedAsync;
                     editor.TrackAdded -= this.BreakbeatPatternEditorDialog_TrackAdded;
+                    editor.TrackSetRestored -= this.BreakbeatPatternEditorDialog_TrackSetRestored;
                     this.patternEditorDialog = null;
                 }
 
@@ -339,6 +340,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             editor.FormClosed += this.BreakbeatPatternEditorDialog_FormClosed;
             editor.SaveRequested += this.BreakbeatPatternEditorDialog_SaveRequestedAsync;
             editor.TrackAdded += this.BreakbeatPatternEditorDialog_TrackAdded;
+            editor.TrackSetRestored += this.BreakbeatPatternEditorDialog_TrackSetRestored;
             editor.Show();
         }
 
@@ -388,10 +390,57 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             editor.TrackAdded -= this.BreakbeatPatternEditorDialog_TrackAdded;
+            editor.TrackSetRestored -= this.BreakbeatPatternEditorDialog_TrackSetRestored;
 
             if (ReferenceEquals(this.patternEditorDialog, editor))
             {
                 this.patternEditorDialog = null;
+            }
+        }
+
+        private void BreakbeatPatternEditorDialog_TrackSetRestored(BreakbeatPatternEditorDialog editor)
+        {
+            bool previousUserInputState = this.sampleSelectionFromUserInput;
+            this.sampleSelectionFromUserInput = false;
+            try
+            {
+                AudioObj? selectedTrack = this.SelectedTrack;
+                int selectedIndex = this.listBox_samples.SelectedIndex;
+                this.AudioC.Audios.Clear();
+                foreach (AudioObj sample in editor.SourceSamples)
+                {
+                    this.AudioC.Audios.Add(sample);
+                }
+
+                foreach ((AudioObj sample, BreakbeatTrackSettings settings) in editor.GetSourceTrackSettings())
+                {
+                    this.patternTrackSettings[sample] = settings;
+                }
+
+                this.numericUpDown_bpm.Value = Math.Clamp(editor.Bpm, this.numericUpDown_bpm.Minimum, this.numericUpDown_bpm.Maximum);
+                this.numericUpDown_bars.Value = Math.Clamp(editor.Bars, (int)this.numericUpDown_bars.Minimum, (int)this.numericUpDown_bars.Maximum);
+                this.numericUpDown_resolution.Value = Math.Clamp(editor.Resolution, (int)this.numericUpDown_resolution.Minimum, (int)this.numericUpDown_resolution.Maximum);
+                this.currentPatternRowLabels = this.GetBeatMapRowLabels().ToArray();
+                this.ShowBeatMap(
+                    editor.Pattern,
+                    this.currentPatternRowLabels,
+                    editor.Bars,
+                    editor.Resolution,
+                    editor.Notes);
+
+                int restoredSelection = selectedTrack is not null
+                    ? this.AudioC.Audios.IndexOf(selectedTrack)
+                    : -1;
+                if (restoredSelection < 0 && this.AudioC.Audios.Count > 0)
+                {
+                    restoredSelection = Math.Clamp(selectedIndex, 0, this.AudioC.Audios.Count - 1);
+                }
+
+                this.listBox_samples.SelectedIndex = restoredSelection;
+            }
+            finally
+            {
+                this.sampleSelectionFromUserInput = previousUserInputState;
             }
         }
 

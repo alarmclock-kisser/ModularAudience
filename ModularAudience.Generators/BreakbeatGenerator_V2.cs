@@ -979,7 +979,7 @@ namespace ModularAudience.Generators
                     (int)Math.Ceiling(normalizedDuration * outputSampleRate));
                 double stretchSourceDuration = stretchSourceFrames / (double)outputSampleRate;
                 bool manuallyAdjusted = note.IsManuallyAdjusted;
-                if (manuallyAdjusted && stretchSourceFrames > sourceFrames)
+                if (manuallyAdjusted && !note.Truncated && stretchSourceFrames > sourceFrames)
                 {
                     float[] normalizedData = new float[checked(stretchSourceFrames * sourceChannels)];
                     Array.Copy(clip.Data, normalizedData, clip.Data.Length);
@@ -996,16 +996,23 @@ namespace ModularAudience.Generators
                 double stretchMultiple = manuallyAdjusted
                     ? note.DurationTicks / (double)Math.Max(1, originalDurationTicks)
                     : 1.0;
-                double targetDuration = manuallyAdjusted
+                double targetDuration = note.HardResized || note.Truncated
+                    ? noteDuration
+                    : manuallyAdjusted
                     ? stretchSourceDuration * stretchMultiple
                     : Math.Max(noteDuration, Math.Max(stretchSourceDuration, normalizedDuration));
-                int targetFrames = manuallyAdjusted
+                int requestedFrames = Math.Max(1, (int)Math.Ceiling(noteDuration * outputSampleRate));
+                int targetFrames = note.HardResized
+                    ? requestedFrames
+                    : note.Truncated
+                    ? Math.Clamp(requestedFrames, 1, sourceFrames)
+                    : manuallyAdjusted
                     ? Math.Max(1, (int)Math.Ceiling(targetDuration * outputSampleRate))
                     : Math.Max(stretchSourceFrames, (int)Math.Ceiling(targetDuration * outputSampleRate));
 
                 sourceChannels = Math.Max(1, clip.Channels);
                 float[] renderedData = clip.Data;
-                if (manuallyAdjusted && targetFrames != stretchSourceFrames)
+                if (manuallyAdjusted && !note.HardResized && !note.Truncated && targetFrames != stretchSourceFrames)
                 {
                     renderedData = note.Varispeed
                         ? VarispeedClip(clip, stretchSourceFrames, sourceFrames, targetFrames)
@@ -1086,27 +1093,37 @@ namespace ModularAudience.Generators
 
         public static AudioObj ExtractPatternBars(AudioObj source, IReadOnlyList<int> barIndices, float bpm)
         {
-            if (source.Data == null || source.Data.Length == 0 || source.SampleRate <= 0 || source.Channels <= 0 || barIndices.Count == 0)
+            int[] quarterIndices = barIndices
+                .SelectMany(barIndex => Enumerable.Range(barIndex * 4, 4))
+                .ToArray();
+            AudioObj selectedBars = ExtractPatternQuarters(source, quarterIndices, bpm);
+            selectedBars.Rename($"{source.Name}_SelectedBars");
+            return selectedBars;
+        }
+
+        public static AudioObj ExtractPatternQuarters(AudioObj source, IReadOnlyList<int> quarterIndices, float bpm)
+        {
+            if (source.Data == null || source.Data.Length == 0 || source.SampleRate <= 0 || source.Channels <= 0 || quarterIndices.Count == 0)
             {
-                throw new ArgumentException("A rendered source and at least one bar are required.");
+                throw new ArgumentException("A rendered source and at least one quarter section are required.");
             }
 
-            double secondsPerBar = 240.0 / Math.Max(1.0, bpm);
+            double secondsPerQuarter = 60.0 / Math.Max(1.0, bpm);
             int sourceFrames = source.Data.Length / source.Channels;
             List<(int StartFrame, int FrameCount)> ranges = [];
-            foreach (int barIndex in barIndices.Distinct().OrderBy(index => index))
+            foreach (int quarterIndex in quarterIndices.Distinct().OrderBy(index => index))
             {
-                if (barIndex < 0)
+                if (quarterIndex < 0)
                 {
                     continue;
                 }
 
                 int startFrame = Math.Clamp(
-                    (int)Math.Round(barIndex * secondsPerBar * source.SampleRate, MidpointRounding.AwayFromZero),
+                    (int)Math.Round(quarterIndex * secondsPerQuarter * source.SampleRate, MidpointRounding.AwayFromZero),
                     0,
                     sourceFrames);
                 int endFrame = Math.Clamp(
-                    (int)Math.Round((barIndex + 1) * secondsPerBar * source.SampleRate, MidpointRounding.AwayFromZero),
+                    (int)Math.Round((quarterIndex + 1) * secondsPerQuarter * source.SampleRate, MidpointRounding.AwayFromZero),
                     startFrame,
                     sourceFrames);
                 if (endFrame > startFrame)
@@ -1118,7 +1135,7 @@ namespace ModularAudience.Generators
             int outputFrames = ranges.Sum(range => range.FrameCount);
             if (outputFrames <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(barIndices), "The selected bars contain no rendered audio.");
+                throw new ArgumentOutOfRangeException(nameof(quarterIndices), "The selected quarters contain no rendered audio.");
             }
 
             float[] outputData = new float[checked(outputFrames * source.Channels)];
@@ -1136,7 +1153,7 @@ namespace ModularAudience.Generators
 
             var selectedAudio = new AudioObj
             {
-                Name = $"{source.Name}_SelectedBars",
+                Name = $"{source.Name}_SelectedQuarters",
                 Data = outputData,
                 SampleRate = source.SampleRate,
                 Channels = source.Channels,

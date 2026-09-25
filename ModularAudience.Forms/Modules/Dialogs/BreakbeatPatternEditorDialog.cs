@@ -16,9 +16,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private readonly List<BreakbeatTrackSettings> trackSettings;
         private readonly List<string> rowLabels;
         private int bars;
+        private int loopSelectionRevision;
         private readonly float swing;
         private readonly List<BreakbeatPatternNote> notes;
-        private readonly HashSet<int> selectedBars = [];
+        private readonly HashSet<int> selectedLoopSections = [];
         private readonly HashSet<BreakbeatPatternNote> selectedNotes = [];
         private readonly List<BreakbeatPatternNote> copiedNotes = [];
         private readonly List<BreakbeatPatternNote> pastePreviewNotes = [];
@@ -26,7 +27,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private int patternNotesRevision;
         private CancellationTokenSource? hearCancellationTokenSource;
         private AudioObj? previewAudio;
-        private int[] previewBarMap = [];
+        private int[] previewQuarterMap = [];
         private CancellationTokenSource? notePreviewCancellationTokenSource;
         private AudioObj? notePreviewAudio;
         private long notePreviewRequestVersion;
@@ -61,6 +62,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private bool resizingWithControl;
         private bool resizeChanged;
         private bool resizeUseVarispeed;
+        private bool resizeUseHardResize;
         private int resizeStartX;
         private Point resizeStartPoint;
         private BreakbeatPatternNote? resizeOriginalNote;
@@ -69,6 +71,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private int currentResolution = 4;
         private bool initializing = true;
         private bool saveInProgress;
+        private bool restoringHistory;
+        private PatternEditorHistoryState? lastHistoryState;
+        private readonly Stack<PatternEditorHistoryState> undoHistory = new();
+        private readonly Stack<PatternEditorHistoryState> redoHistory = new();
 
         private enum ResizeEdge
         {
@@ -77,6 +83,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
             Right,
             Move
         }
+
+        private sealed record PatternEditorHistoryState(
+            AudioObj[] Samples,
+            AudioObj[] OriginalSampleOrder,
+            AudioObj[] SourceSampleOrder,
+            bool[][] Pattern,
+            BreakbeatTrackSettings[] TrackSettings,
+            string[] RowLabels,
+            BreakbeatPatternNote[] Notes,
+            int Bars,
+            int Resolution,
+            decimal Bpm);
 
         public IReadOnlyList<bool[]> Pattern => this.BuildPatternMatrix();
 
@@ -90,8 +108,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public int Bars => this.bars;
 
+        internal IReadOnlyList<AudioObj> SourceSamples => this.sourceSampleOrder;
+
         public event Func<BreakbeatPatternEditorDialog, Task>? SaveRequested;
         internal event Action<AudioObj, int>? TrackAdded;
+        internal event Action<BreakbeatPatternEditorDialog>? TrackSetRestored;
 
         public BreakbeatPatternEditorDialog(
             IReadOnlyList<bool[]> pattern,
@@ -146,6 +167,202 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.pictureBox_pattern.Cursor = Cursors.Cross;
             this.FormClosing += this.BreakbeatPatternEditorDialog_FormClosing;
             this.MouseWheel += this.pictureBox_pattern_MouseWheel;
+            this.lastHistoryState = this.CaptureHistoryState();
+        }
+
+        private PatternEditorHistoryState CaptureHistoryState() => new(
+            this.samples.ToArray(),
+            this.originalSampleOrder.ToArray(),
+            this.sourceSampleOrder.ToArray(),
+            this.pattern.Select(row => row.ToArray()).ToArray(),
+            this.trackSettings.ToArray(),
+            this.rowLabels.ToArray(),
+            this.notes.ToArray(),
+            this.bars,
+            this.currentResolution,
+            this.numericUpDown_bpm.Value);
+
+        internal IReadOnlyList<KeyValuePair<AudioObj, BreakbeatTrackSettings>> GetSourceTrackSettings()
+        {
+            KeyValuePair<AudioObj, BreakbeatTrackSettings>[] result = new KeyValuePair<AudioObj, BreakbeatTrackSettings>[this.sourceSampleOrder.Count];
+            for (int displayIndex = 0; displayIndex < this.samples.Count; displayIndex++)
+            {
+                int sourceIndex = this.GetOriginalTrackIndex(displayIndex);
+                if (sourceIndex >= 0 && sourceIndex < result.Length)
+                {
+                    result[sourceIndex] = new KeyValuePair<AudioObj, BreakbeatTrackSettings>(
+                        this.sourceSampleOrder[sourceIndex],
+                        this.trackSettings[displayIndex]);
+                }
+            }
+
+            return result;
+        }
+
+        private static bool HistoryStatesEqual(PatternEditorHistoryState first, PatternEditorHistoryState second)
+        {
+            return ReferenceSequenceEqual(first.Samples, second.Samples)
+                && ReferenceSequenceEqual(first.OriginalSampleOrder, second.OriginalSampleOrder)
+                && ReferenceSequenceEqual(first.SourceSampleOrder, second.SourceSampleOrder)
+                && first.Pattern.Length == second.Pattern.Length
+                && first.Pattern.Zip(second.Pattern).All(pair => pair.First.SequenceEqual(pair.Second))
+                && first.TrackSettings.SequenceEqual(second.TrackSettings)
+                && first.RowLabels.SequenceEqual(second.RowLabels)
+                && first.Notes.SequenceEqual(second.Notes)
+                && first.Bars == second.Bars
+                && first.Resolution == second.Resolution
+                && first.Bpm == second.Bpm;
+        }
+
+        private static bool ReferenceSequenceEqual(IReadOnlyList<AudioObj> first, IReadOnlyList<AudioObj> second)
+        {
+            return first.Count == second.Count
+                && Enumerable.Range(0, first.Count).All(index => ReferenceEquals(first[index], second[index]));
+        }
+
+        private void CommitHistoryAction()
+        {
+            if (this.restoringHistory)
+            {
+                return;
+            }
+
+            PatternEditorHistoryState current = this.CaptureHistoryState();
+            if (this.lastHistoryState is null)
+            {
+                this.lastHistoryState = current;
+                return;
+            }
+
+            if (HistoryStatesEqual(this.lastHistoryState, current))
+            {
+                return;
+            }
+
+            this.undoHistory.Push(this.lastHistoryState);
+            this.redoHistory.Clear();
+            this.lastHistoryState = current;
+        }
+
+        private void QueueHistoryCommit()
+        {
+            if (this.restoringHistory)
+            {
+                return;
+            }
+
+            this.timer_historyDebounce.Stop();
+            this.timer_historyDebounce.Start();
+        }
+
+        private void timer_historyDebounce_Tick(object? sender, EventArgs e)
+        {
+            this.timer_historyDebounce.Stop();
+            this.CommitHistoryAction();
+        }
+
+        private void UndoEditorAction()
+        {
+            this.timer_historyDebounce.Stop();
+            this.CommitHistoryAction();
+            if (this.undoHistory.Count == 0)
+            {
+                return;
+            }
+
+            PatternEditorHistoryState current = this.CaptureHistoryState();
+            PatternEditorHistoryState previous = this.undoHistory.Pop();
+            this.redoHistory.Push(current);
+            this.RestoreHistoryState(previous);
+        }
+
+        private void RedoEditorAction()
+        {
+            this.timer_historyDebounce.Stop();
+            this.CommitHistoryAction();
+            if (this.redoHistory.Count == 0)
+            {
+                return;
+            }
+
+            PatternEditorHistoryState current = this.CaptureHistoryState();
+            PatternEditorHistoryState next = this.redoHistory.Pop();
+            this.undoHistory.Push(current);
+            this.RestoreHistoryState(next);
+        }
+
+        private void RestoreHistoryState(PatternEditorHistoryState state)
+        {
+            PatternEditorHistoryState previous = this.CaptureHistoryState();
+            bool tracksChanged = !ReferenceSequenceEqual(previous.SourceSampleOrder, state.SourceSampleOrder);
+            this.restoringHistory = true;
+            try
+            {
+                ReplaceContents(this.samples, state.Samples);
+                ReplaceContents(this.originalSampleOrder, state.OriginalSampleOrder);
+                ReplaceContents(this.sourceSampleOrder, state.SourceSampleOrder);
+                ReplaceContents(this.pattern, state.Pattern.Select(row => row.ToArray()));
+                ReplaceContents(this.trackSettings, state.TrackSettings);
+                ReplaceContents(this.rowLabels, state.RowLabels);
+                ReplaceContents(this.notes, state.Notes);
+                if (this.selectedLoopSections.RemoveWhere(section => section / 4 >= state.Bars) > 0)
+                {
+                    this.loopSelectionRevision++;
+                }
+                this.selectedNotes.Clear();
+                this.bars = state.Bars;
+                this.currentResolution = state.Resolution;
+                this.numericUpDown_bpm.Value = Math.Clamp(state.Bpm, this.numericUpDown_bpm.Minimum, this.numericUpDown_bpm.Maximum);
+                this.numericUpDown_resolution.Value = Math.Clamp(state.Resolution, (int)this.numericUpDown_resolution.Minimum, (int)this.numericUpDown_resolution.Maximum);
+            }
+            finally
+            {
+                this.restoringHistory = false;
+            }
+
+            if (this.trackSettingsBySample is not null)
+            {
+                foreach ((AudioObj sample, BreakbeatTrackSettings settings) in this.GetSourceTrackSettings())
+                {
+                    this.trackSettingsBySample[sample] = settings;
+                }
+            }
+
+            this.hoverPitchNote = null;
+            this.hoverPitchTooltipVisible = false;
+            this.timer_pitchTooltip.Stop();
+            this.toolTip_pattern.Hide(this.pictureBox_pattern);
+            this.hearCancellationTokenSource?.Cancel();
+            this.notePreviewCancellationTokenSource?.Cancel();
+            this.ConfigurePatternScrollBar();
+            this.RegisterPatternNotesChanged(previous.Notes
+                .Concat(this.notes)
+                .Select(note => (BreakbeatPatternNote?)note)
+                .ToArray());
+            this.pictureBox_pattern.Invalidate();
+            this.lastHistoryState = this.CaptureHistoryState();
+            if (tracksChanged)
+            {
+                this.TrackSetRestored?.Invoke(this);
+            }
+        }
+
+        private static void ReplaceContents<T>(List<T> target, IEnumerable<T> source)
+        {
+            target.Clear();
+            target.AddRange(source);
+        }
+
+        internal IEnumerable<AudioObj> GetEditorSamplesForDisposal()
+        {
+            HashSet<AudioObj> ownedSamples = new(ReferenceEqualityComparer.Instance);
+            ownedSamples.UnionWith(this.samples);
+            foreach (PatternEditorHistoryState state in this.undoHistory.Concat(this.redoHistory))
+            {
+                ownedSamples.UnionWith(state.Samples);
+            }
+
+            return ownedSamples;
         }
 
         private void pictureBox_pattern_Paint(object? sender, PaintEventArgs e)
@@ -186,6 +403,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             using Brush barBrush = new SolidBrush(Color.FromArgb(158, 164, 173));
             using Brush selectedBarHeaderBrush = new SolidBrush(Color.FromArgb(69, 94, 81));
             using Brush selectedBarTextBrush = new SolidBrush(Color.FromArgb(241, 255, 246));
+            using Pen quarterHeaderPen = new(Color.FromArgb(85, 123, 136, 128));
             using Pen rowPen = new(Color.FromArgb(75, 79, 87));
             using Pen stepPen = new(Color.FromArgb(62, 66, 73));
             using Pen barPen = new(Color.FromArgb(112, 119, 128), 2f);
@@ -266,15 +484,44 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 if (bar < this.bars && column < columns)
                 {
                     float barWidth = this.currentResolution * cellWidth;
-                    if (this.selectedBars.Contains(bar))
+                    int firstQuarter = bar * 4;
+                    bool allQuartersSelected = Enumerable.Range(firstQuarter, 4).All(this.selectedLoopSections.Contains);
+                    bool anyQuarterSelected = Enumerable.Range(firstQuarter, 4).Any(this.selectedLoopSections.Contains);
+                    if (allQuartersSelected)
                     {
                         RectangleF headerHighlight = new(x + 1f, 1f, Math.Max(1f, barWidth - 2f), 23f);
                         e.Graphics.FillRectangle(selectedBarHeaderBrush, headerHighlight);
                         e.Graphics.DrawRectangle(selectedBarHeaderPen, headerHighlight.X, headerHighlight.Y, headerHighlight.Width, headerHighlight.Height);
                     }
+                    else if (anyQuarterSelected)
+                    {
+                        float quarterWidth = barWidth / 4f;
+                        for (int quarter = 0; quarter < 4; quarter++)
+                        {
+                            if (this.selectedLoopSections.Contains(firstQuarter + quarter))
+                            {
+                                e.Graphics.FillRectangle(
+                                    selectedBarHeaderBrush,
+                                    x + quarter * quarterWidth + 1f,
+                                    18f,
+                                    Math.Max(1f, quarterWidth - 2f),
+                                    5f);
+                            }
+                        }
+                    }
+
+                    if (barWidth >= 16f)
+                    {
+                        float quarterWidth = barWidth / 4f;
+                        for (int quarter = 1; quarter < 4; quarter++)
+                        {
+                            float dividerX = x + quarter * quarterWidth;
+                            e.Graphics.DrawLine(quarterHeaderPen, dividerX, 18f, dividerX, 23f);
+                        }
+                    }
 
                     RectangleF barBounds = new(x + 3f, 2f, Math.Max(1f, barWidth - 6f), 20f);
-                    Brush textBrush = this.selectedBars.Contains(bar) ? selectedBarTextBrush : barBrush;
+                    Brush textBrush = anyQuarterSelected ? selectedBarTextBrush : barBrush;
                     e.Graphics.DrawString((bar + 1).ToString(), barFont, textBrush, barBounds);
                 }
             }
@@ -299,7 +546,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 float y = grid.Top + note.TrackIndex * cellHeight;
                 float inset = Math.Min(2f, Math.Min(cellWidth, cellHeight) * 0.12f);
                 RectangleF hit = new(x + inset, y + inset, Math.Max(1f, noteWidth - (2f * inset)), Math.Max(1f, cellHeight - (2f * inset)));
-                Brush noteBrush = !note.IsManuallyAdjusted
+                Brush noteBrush = !note.TimeStretch && !note.Varispeed
                     ? hitBrush
                     : note.Varispeed
                         ? note.IsShortened ? shortenedVarispeedHitBrush : varispeedHitBrush
@@ -384,14 +631,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 double secondsPerBar = 240.0 / Math.Max(1.0, (double)this.Bpm);
                 double patternDuration = this.bars * secondsPerBar;
                 double caretTime = this.previewAudio.CurrentTime.TotalSeconds;
-                if (this.previewBarMap.Length > 0)
-                {
-                    double selectedDuration = this.previewBarMap.Length * secondsPerBar;
-                    double sequenceTime = caretTime % selectedDuration;
-                    int selectedIndex = Math.Min((int)(sequenceTime / secondsPerBar), this.previewBarMap.Length - 1);
-                    double withinBar = sequenceTime - selectedIndex * secondsPerBar;
-                    caretTime = (this.previewBarMap[selectedIndex] * secondsPerBar) + withinBar;
-                }
+                caretTime = this.MapPreviewSequenceTime(caretTime, secondsPerBar);
 
                 float caretX = grid.Left + (float)Math.Clamp(caretTime / patternDuration, 0, 1) * (float)virtualGridWidth - scrollOffset;
                 using Pen caretPen = new(Color.OrangeRed, 2f);
@@ -696,11 +936,34 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             if (e.Button == MouseButtons.Left && this.TryGetHeaderBar(e.Location, out int headerBar))
             {
-                if (!this.selectedBars.Add(headerBar))
+                int firstQuarter = headerBar * 4;
+                bool allQuartersSelected = Enumerable.Range(firstQuarter, 4).All(this.selectedLoopSections.Contains);
+                for (int quarter = 0; quarter < 4; quarter++)
                 {
-                    this.selectedBars.Remove(headerBar);
+                    if (allQuartersSelected)
+                    {
+                        this.selectedLoopSections.Remove(firstQuarter + quarter);
+                    }
+                    else
+                    {
+                        this.selectedLoopSections.Add(firstQuarter + quarter);
+                    }
                 }
 
+                this.loopSelectionRevision++;
+                this.pictureBox_pattern.Invalidate();
+                return;
+            }
+
+            if (e.Button == MouseButtons.Right && this.TryGetHeaderBar(e.Location, out int quarterHeaderBar))
+            {
+                int selectedQuarter = quarterHeaderBar * 4 + this.GetHeaderQuarter(e.Location, quarterHeaderBar);
+                if (!this.selectedLoopSections.Remove(selectedQuarter))
+                {
+                    this.selectedLoopSections.Add(selectedQuarter);
+                }
+
+                this.loopSelectionRevision++;
                 this.pictureBox_pattern.Invalidate();
                 return;
             }
@@ -710,15 +973,22 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
+            bool hardResizeEdge = false;
             if (e.Button == MouseButtons.Left && (ModifierKeys & Keys.Shift) == Keys.Shift)
             {
-                this.selectedNotes.Clear();
-                this.selectingNotes = true;
-                this.selectionStartPoint = e.Location;
-                this.selectionCurrentPoint = e.Location;
-                this.pictureBox_pattern.Capture = true;
-                this.pictureBox_pattern.Invalidate();
-                return;
+                int edgeNoteIndex = this.FindNoteIndexAt(row, this.PointToTick(e.Location));
+                hardResizeEdge = edgeNoteIndex >= 0
+                    && this.GetResizeEdge(this.notes[edgeNoteIndex], e.Location) is ResizeEdge.Left or ResizeEdge.Right;
+                if (!hardResizeEdge)
+                {
+                    this.selectedNotes.Clear();
+                    this.selectingNotes = true;
+                    this.selectionStartPoint = e.Location;
+                    this.selectionCurrentPoint = e.Location;
+                    this.pictureBox_pattern.Capture = true;
+                    this.pictureBox_pattern.Invalidate();
+                    return;
+                }
             }
 
             this.selectedNotes.Clear();
@@ -743,6 +1013,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     this.resizeStartX = e.X;
                     this.resizeStartPoint = e.Location;
                     this.resizingWithControl = (ModifierKeys & Keys.Control) == Keys.Control;
+                    this.resizeUseHardResize = hardResizeEdge;
                     this.resizeChanged = false;
                     bool currentVarispeed = existingNote.IsManuallyAdjusted
                         ? existingNote.Varispeed
@@ -947,6 +1218,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void pictureBox_pattern_MouseUp(object? sender, MouseEventArgs e)
         {
+            try
+            {
+                this.pictureBox_pattern_MouseUpCore(sender, e);
+            }
+            finally
+            {
+                this.timer_historyDebounce.Stop();
+                this.CommitHistoryAction();
+            }
+        }
+
+        private void pictureBox_pattern_MouseUpCore(object? sender, MouseEventArgs e)
+        {
             if (this.rowReorderActive && e.Button == MouseButtons.Left)
             {
                 this.rowReorderPointer = e.Location;
@@ -966,6 +1250,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.selectionCurrentPoint = this.ClampToGrid(e.Location);
                 this.selectingNotes = false;
                 this.pictureBox_pattern.Capture = false;
+                if (!this.HasSelectionMoveDistance(e.Location)
+                    && this.TryGetCell(e.Location, out int row, out _)
+                    && this.FindNoteIndexAt(row, this.PointToTick(e.Location)) < 0
+                    && this.TryPlaceHardResizedGridNote(e.Location))
+                {
+                    return;
+                }
+
                 this.SelectNotesInRectangle();
                 this.pictureBox_pattern.Invalidate();
                 return;
@@ -1012,6 +1304,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.resizingWithControl = false;
             this.resizeChanged = false;
             this.resizeUseVarispeed = false;
+            this.resizeUseHardResize = false;
             this.pictureBox_pattern.Capture = false;
             this.UpdatePatternCursor(e.Location);
 
@@ -1072,6 +1365,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             this.pictureBox_pattern.Invalidate();
+            this.CommitHistoryAction();
         }
 
         private void pictureBox_pattern_DragEnter(object? sender, DragEventArgs e)
@@ -1115,6 +1409,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     this.InsertSampleTrack(draggedSample, displayIndex++, sourceIndex++);
                 }
+
+                this.CommitHistoryAction();
             }
             finally
             {
@@ -1260,6 +1556,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         internal void AppendSampleTrack(AudioObj sample)
         {
             this.InsertSampleTrack(sample, this.samples.Count, this.sourceSampleOrder.Count);
+            this.CommitHistoryAction();
         }
 
         private static AudioObj CloneSampleWithMetadata(AudioObj sample)
@@ -1548,6 +1845,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
+            if (keyData == (Keys.Control | Keys.Z))
+            {
+                this.UndoEditorAction();
+                return true;
+            }
+
+            if (keyData == (Keys.Control | Keys.Y))
+            {
+                this.RedoEditorAction();
+                return true;
+            }
+
             if (this.pictureBox_pattern.ContainsFocus)
             {
                 Keys key = keyData & Keys.KeyCode;
@@ -1559,6 +1868,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     this.selectedNotes.Clear();
                     this.RegisterPatternNotesChanged(removedNotes.Select(note => (BreakbeatPatternNote?)note).ToArray());
                     this.pictureBox_pattern.Invalidate();
+                    this.CommitHistoryAction();
                     return true;
                 }
 
@@ -1676,6 +1986,53 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 || Math.Abs(point.Y - this.resizeStartPoint.Y) >= minimumVerticalDistance;
         }
 
+        private bool HasSelectionMoveDistance(Point point)
+        {
+            Rectangle grid = this.GetGridBounds();
+            float cellWidth = (float)(grid.Width * this.horizontalZoom / Math.Max(1, this.bars * this.currentResolution));
+            float rowHeight = grid.Height / (float)Math.Max(1, this.samples.Count);
+            int minimumHorizontalDistance = Math.Max(1, (int)Math.Ceiling(cellWidth / 2f));
+            int minimumVerticalDistance = Math.Max(1, (int)Math.Ceiling(rowHeight / 2f));
+            return Math.Abs(point.X - this.selectionStartPoint.X) >= minimumHorizontalDistance
+                || Math.Abs(point.Y - this.selectionStartPoint.Y) >= minimumVerticalDistance;
+        }
+
+        private bool TryPlaceHardResizedGridNote(Point point)
+        {
+            if (!this.TryGetCell(point, out int row, out int column))
+            {
+                return false;
+            }
+
+            int stepTicks = this.GetTicksPerStep();
+            int originalDurationTicks = BreakbeatGenerator_V2.GetMinimumNoteDurationTicks(
+                this.samples,
+                row,
+                (float)this.Bpm,
+                this.currentResolution);
+            BreakbeatPatternNote note = new(
+                row,
+                column * stepTicks,
+                stepTicks,
+                OriginalDurationTicks: originalDurationTicks,
+                Truncated: stepTicks < originalDurationTicks,
+                HardResized: true);
+            if (this.HasOverlappingNote(note))
+            {
+                return false;
+            }
+
+            this.notes.Add(note);
+            this.RegisterPatternNotesChanged(null, note);
+            this.pictureBox_pattern.Invalidate();
+            if (this.checkBox_preHear.Checked && this.hearCancellationTokenSource is null)
+            {
+                _ = this.PrehearNoteAsync(note);
+            }
+
+            return true;
+        }
+
         private void pictureBox_pattern_MouseWheel(object? sender, MouseEventArgs e)
         {
             Point pointer = e.Location;
@@ -1778,6 +2135,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 handledEventArgs.Handled = handled;
             }
+
         }
 
         private void BreakbeatPatternEditorDialog_KeyUp(object? sender, KeyEventArgs e)
@@ -1791,18 +2149,32 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 this.CompleteVolumeGesture();
             }
+
+            if (!this.pitchGestureChanged && !this.volumeGestureChanged)
+            {
+                this.timer_historyDebounce.Stop();
+                this.CommitHistoryAction();
+            }
         }
 
         private void timer_pitchGestureRelease_Tick(object? sender, EventArgs e)
         {
+            bool gestureCompleted = false;
             if ((ModifierKeys & Keys.Shift) != Keys.Shift)
             {
+                gestureCompleted = this.pitchGestureChanged;
                 this.CompletePitchGesture();
             }
 
             if ((ModifierKeys & Keys.Alt) != Keys.Alt)
             {
+                gestureCompleted |= this.volumeGestureChanged;
                 this.CompleteVolumeGesture();
+            }
+
+            if (gestureCompleted)
+            {
+                this.CommitHistoryAction();
             }
         }
 
@@ -2061,15 +2433,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             bool manuallyResized = durationTicks != originalDurationTicks;
-            bool useVarispeed = manuallyResized && this.resizeUseVarispeed;
+            bool hardResized = this.resizeUseHardResize;
+            bool truncated = hardResized && durationTicks < originalDurationTicks;
+            bool useVarispeed = manuallyResized && !truncated && this.resizeUseVarispeed;
             return note with
             {
                 StartTick = startTick,
                 DurationTicks = durationTicks,
-                TimeStretch = manuallyResized && !useVarispeed,
-                Varispeed = useVarispeed,
-                ManuallyResized = manuallyResized,
-                OriginalDurationTicks = originalDurationTicks
+                TimeStretch = hardResized ? note.TimeStretch : manuallyResized && !truncated && !useVarispeed,
+                Varispeed = hardResized ? note.Varispeed : useVarispeed,
+                ManuallyResized = hardResized ? note.ManuallyResized : manuallyResized && !truncated,
+                OriginalDurationTicks = originalDurationTicks,
+                Truncated = truncated,
+                HardResized = hardResized
             };
         }
 
@@ -2128,6 +2504,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
             double virtualX = point.X - grid.Left + this.hScrollBar_pattern.Value;
             bar = Math.Clamp((int)(virtualX / (virtualGridWidth / this.bars)), 0, this.bars - 1);
             return true;
+        }
+
+        private int GetHeaderQuarter(Point point, int bar)
+        {
+            Rectangle grid = this.GetGridBounds();
+            double virtualGridWidth = grid.Width * this.horizontalZoom;
+            double virtualX = point.X - grid.Left + this.hScrollBar_pattern.Value;
+            double barWidth = virtualGridWidth / this.bars;
+            double positionWithinBar = virtualX - bar * barWidth;
+            return Math.Clamp((int)(positionWithinBar / (barWidth / 4.0)), 0, 3);
         }
 
         private int PointToColumn(Point point)
@@ -2233,7 +2619,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async Task<AudioObj> RenderHearBufferAsync(
             IReadOnlyList<BreakbeatPatternNote> patternNotes,
-            IReadOnlyList<int> selectedBars,
+            IReadOnlyList<int> selectedLoopSections,
             CancellationToken cancellationToken)
         {
             float bpm = (float)this.numericUpDown_bpm.Value;
@@ -2250,10 +2636,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             if (renderedPattern is null)
             {
-                int silentBars = selectedBars.Count > 0 ? selectedBars.Count : this.bars;
+                int silentSections = selectedLoopSections.Count > 0 ? selectedLoopSections.Count : this.bars * 4;
                 const int sampleRate = 44100;
                 const int channels = 2;
-                int frames = Math.Max(1, (int)Math.Ceiling(silentBars * 240.0 / Math.Max(1.0, bpm) * sampleRate));
+                int frames = Math.Max(1, (int)Math.Ceiling(silentSections * 60.0 / Math.Max(1.0, bpm) * sampleRate));
                 float[] silence = new float[checked(frames * channels)];
                 return new AudioObj
                 {
@@ -2268,19 +2654,52 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 };
             }
 
-            if (selectedBars.Count == 0)
+            if (selectedLoopSections.Count == 0)
             {
                 return renderedPattern;
             }
 
             try
             {
-                return BreakbeatGenerator_V2.ExtractPatternBars(renderedPattern, selectedBars, bpm);
+                return BreakbeatGenerator_V2.ExtractPatternQuarters(renderedPattern, selectedLoopSections, bpm);
             }
             finally
             {
                 renderedPattern.Dispose();
             }
+        }
+
+        private double MapPreviewSequenceTime(double sequenceTime, double secondsPerBar)
+        {
+            if (this.previewQuarterMap.Length == 0)
+            {
+                return sequenceTime;
+            }
+
+            double secondsPerQuarter = secondsPerBar / 4.0;
+            double selectedDuration = this.previewQuarterMap.Length * secondsPerQuarter;
+            double wrappedSequenceTime = sequenceTime % selectedDuration;
+            int selectedIndex = Math.Min(
+                (int)(wrappedSequenceTime / secondsPerQuarter),
+                this.previewQuarterMap.Length - 1);
+            double withinQuarter = wrappedSequenceTime - selectedIndex * secondsPerQuarter;
+            return this.previewQuarterMap[selectedIndex] * secondsPerQuarter + withinQuarter;
+        }
+
+        private static void UpdatePreviewLoopPass(AudioObj? preview, ref long previousFrame, ref long loopPass)
+        {
+            if (preview is null)
+            {
+                return;
+            }
+
+            long currentFrame = preview.Position;
+            if (currentFrame < previousFrame)
+            {
+                loopPass++;
+            }
+
+            previousFrame = currentFrame;
         }
 
         private bool IsCaretOverChangedNote()
@@ -2292,20 +2711,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             double secondsPerBar = 240.0 / Math.Max(1.0, (double)this.Bpm);
             double timelineSeconds = this.previewAudio.CurrentTime.TotalSeconds;
-            if (this.previewBarMap.Length > 0)
-            {
-                double selectedDuration = this.previewBarMap.Length * secondsPerBar;
-                double sequenceTime = timelineSeconds % selectedDuration;
-                int selectedIndex = Math.Min((int)(sequenceTime / secondsPerBar), this.previewBarMap.Length - 1);
-                timelineSeconds = this.previewBarMap[selectedIndex] * secondsPerBar
-                    + sequenceTime - selectedIndex * secondsPerBar;
-            }
+            timelineSeconds = this.MapPreviewSequenceTime(timelineSeconds, secondsPerBar);
 
             int caretTick = (int)Math.Floor(Math.Max(0, timelineSeconds) / secondsPerBar * BreakbeatGenerator_V2.PatternTicksPerBar);
             return this.pendingLivePreviewRegions.Any(region => caretTick >= region.StartTick && caretTick < region.EndTick);
         }
 
-        private void SwapLivePreviewBuffer(AudioObj replacement)
+        private void SwapLivePreviewBuffer(AudioObj replacement, bool restartAtBeginning = false)
         {
             if (this.previewAudio is null)
             {
@@ -2313,7 +2725,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             AudioObj current = this.previewAudio;
-            long samplePosition = current.Position * (long)Math.Max(1, current.Channels);
+            long samplePosition = restartAtBeginning
+                ? 0
+                : current.Position * (long)Math.Max(1, current.Channels);
             current.SwapPlaybackData(replacement.Data, replacement.SampleRate, replacement.Channels, samplePosition);
             current.Data = replacement.Data;
             current.SampleRate = replacement.SampleRate;
@@ -2344,16 +2758,26 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.button_hear.Text = "Stop";
             AudioObj? pendingLivePreview = null;
             int pendingLiveRevision = -1;
+            int pendingSelectionRevision = -1;
+            int[] pendingLoopSections = [];
+            long pendingReadyLoopPass = -1;
+            long previousLoopFrame = 0;
+            long loopPass = 0;
+            bool stopAtLoopBoundary = false;
+            int stopSelectionRevision = -1;
+            long stopReadyLoopPass = -1;
             try
             {
-                int[] selectedBarsForPreview = this.selectedBars.OrderBy(bar => bar).ToArray();
+                int[] activeLoopSections = this.selectedLoopSections.OrderBy(section => section).ToArray();
+                bool loopPlaybackActive = activeLoopSections.Length > 0;
                 int appliedNotesRevision = this.patternNotesRevision;
+                int appliedSelectionRevision = this.loopSelectionRevision;
                 BreakbeatPatternNote[] initialNotes = this.GetNotesWithoutCoveredRetriggers().ToArray();
-                this.previewAudio = await this.RenderHearBufferAsync(initialNotes, selectedBarsForPreview, cancellationTokenSource.Token);
+                this.previewAudio = await this.RenderHearBufferAsync(initialNotes, activeLoopSections, cancellationTokenSource.Token);
 
-                if (selectedBarsForPreview.Length > 0)
+                if (loopPlaybackActive)
                 {
-                    this.previewBarMap = selectedBarsForPreview;
+                    this.previewQuarterMap = activeLoopSections;
                     this.previewAudio.UpdateLoopFraction(
                         0,
                         this.previewAudio.Data.LongLength,
@@ -2363,39 +2787,86 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
                 else
                 {
-                    this.previewBarMap = [];
+                    this.previewQuarterMap = [];
                 }
 
                 this.previewAudio.SetPosition(0);
+                previousLoopFrame = this.previewAudio.Position;
 
                 this.timer_previewCaret.Start();
                 await this.previewAudio.PlayAsync(cancellationTokenSource.Token, initialVolume: 1f);
                 while (this.previewAudio.Playing && !cancellationTokenSource.IsCancellationRequested)
                 {
-                    if (pendingLivePreview is not null && pendingLiveRevision != this.patternNotesRevision)
+                    UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
+                    if (pendingLivePreview is not null
+                        && (pendingLiveRevision != this.patternNotesRevision
+                            || (loopPlaybackActive && pendingSelectionRevision != this.loopSelectionRevision)))
                     {
                         pendingLivePreview.Dispose();
                         pendingLivePreview = null;
                         pendingLiveRevision = -1;
+                        pendingSelectionRevision = -1;
+                        pendingLoopSections = [];
+                        pendingReadyLoopPass = -1;
                     }
 
-                    if (pendingLivePreview is null && this.patternNotesRevision != appliedNotesRevision)
+                    if (stopAtLoopBoundary
+                        && (stopSelectionRevision != this.loopSelectionRevision || this.selectedLoopSections.Count > 0))
                     {
-                        await Task.Delay(100, cancellationTokenSource.Token);
-                        int requestedRevision = this.patternNotesRevision;
-                        if (requestedRevision != appliedNotesRevision)
+                        stopAtLoopBoundary = false;
+                    }
+
+                    bool selectionChanged = loopPlaybackActive && this.loopSelectionRevision != appliedSelectionRevision;
+                    bool notesChanged = this.patternNotesRevision != appliedNotesRevision;
+                    if (pendingLivePreview is null && !stopAtLoopBoundary && (selectionChanged || notesChanged))
+                    {
+                        if (notesChanged && !selectionChanged)
+                        {
+                            for (int debounceMilliseconds = 0; debounceMilliseconds < 100; debounceMilliseconds += 10)
+                            {
+                                await Task.Delay(10, cancellationTokenSource.Token);
+                                UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
+                            }
+                        }
+
+                        int requestedNotesRevision = this.patternNotesRevision;
+                        int requestedSelectionRevision = loopPlaybackActive
+                            ? this.loopSelectionRevision
+                            : appliedSelectionRevision;
+                        int[] requestedLoopSections = loopPlaybackActive
+                            ? this.selectedLoopSections.OrderBy(section => section).ToArray()
+                            : activeLoopSections;
+                        if (loopPlaybackActive && requestedLoopSections.Length == 0)
+                        {
+                            stopAtLoopBoundary = true;
+                            stopSelectionRevision = requestedSelectionRevision;
+                            stopReadyLoopPass = loopPass;
+                        }
+                        else
                         {
                             BreakbeatPatternNote[] currentNotes = this.GetNotesWithoutCoveredRetriggers().ToArray();
                             try
                             {
-                                AudioObj replacement = await this.RenderHearBufferAsync(
+                                Task<AudioObj> renderTask = this.RenderHearBufferAsync(
                                     currentNotes,
-                                    selectedBarsForPreview,
+                                    requestedLoopSections,
                                     cancellationTokenSource.Token);
-                                if (requestedRevision == this.patternNotesRevision)
+                                while (!renderTask.IsCompleted)
+                                {
+                                    await Task.Delay(10);
+                                    UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
+                                }
+
+                                AudioObj replacement = await renderTask;
+                                UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
+                                if (requestedNotesRevision == this.patternNotesRevision
+                                    && (!loopPlaybackActive || requestedSelectionRevision == this.loopSelectionRevision))
                                 {
                                     pendingLivePreview = replacement;
-                                    pendingLiveRevision = requestedRevision;
+                                    pendingLiveRevision = requestedNotesRevision;
+                                    pendingSelectionRevision = requestedSelectionRevision;
+                                    pendingLoopSections = requestedLoopSections;
+                                    pendingReadyLoopPass = loopPass;
                                 }
                                 else
                                 {
@@ -2415,19 +2886,49 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         }
                     }
 
+                    if (stopAtLoopBoundary
+                        && stopSelectionRevision == this.loopSelectionRevision
+                        && loopPass > stopReadyLoopPass)
+                    {
+                        await this.previewAudio.StopAsync();
+                        break;
+                    }
+
+                    bool pendingSelectionChange = loopPlaybackActive
+                        && pendingSelectionRevision != appliedSelectionRevision;
                     if (pendingLivePreview is not null
                         && pendingLiveRevision == this.patternNotesRevision
-                        && !this.IsCaretOverChangedNote())
+                        && pendingSelectionRevision == this.loopSelectionRevision
+                        && (pendingSelectionChange
+                            ? loopPass > pendingReadyLoopPass
+                            : !this.IsCaretOverChangedNote()))
                     {
-                        this.SwapLivePreviewBuffer(pendingLivePreview);
+                        this.SwapLivePreviewBuffer(pendingLivePreview, restartAtBeginning: pendingSelectionChange);
+                        if (pendingSelectionChange)
+                        {
+                            activeLoopSections = pendingLoopSections;
+                            this.previewQuarterMap = activeLoopSections;
+                            this.previewAudio!.UpdateLoopFraction(
+                                0,
+                                this.previewAudio.Data.LongLength,
+                                this.previewAudio.Data.LongLength,
+                                loopEnabled: true,
+                                adjustPosition: false);
+                            appliedSelectionRevision = pendingSelectionRevision;
+                            previousLoopFrame = 0;
+                        }
+
                         pendingLivePreview.Dispose();
                         pendingLivePreview = null;
                         appliedNotesRevision = pendingLiveRevision;
                         pendingLiveRevision = -1;
+                        pendingSelectionRevision = -1;
+                        pendingLoopSections = [];
+                        pendingReadyLoopPass = -1;
                         this.pendingLivePreviewRegions.Clear();
                     }
 
-                    await Task.Delay(25);
+                    await Task.Delay(10);
                 }
             }
 
@@ -2454,7 +2955,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                 this.previewAudio?.Dispose();
                 this.previewAudio = null;
-                this.previewBarMap = [];
+                this.previewQuarterMap = [];
                 if (!this.IsDisposed && !this.pictureBox_pattern.IsDisposed)
                 {
                     this.pictureBox_pattern.Invalidate();
@@ -2597,18 +3098,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             private void numericUpDown_bpm_ValueChanged(object? sender, EventArgs e)
             {
-                if (this.initializing)
+                if (this.initializing || this.restoringHistory)
                 {
                     return;
                 }
 
                 this.notePreviewCancellationTokenSource?.Cancel();
                 this.pictureBox_pattern.Invalidate();
+                this.QueueHistoryCommit();
             }
 
             private void numericUpDown_resolution_ValueChanged(object? sender, EventArgs e)
             {
-                if (this.initializing)
+                if (this.initializing || this.restoringHistory)
                 {
                     return;
                 }
@@ -2626,6 +3128,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.hearCancellationTokenSource?.Cancel();
                 this.notePreviewCancellationTokenSource?.Cancel();
                 this.pictureBox_pattern.Invalidate();
+                this.QueueHistoryCommit();
             }
 
             private static int SnapResolution(int requested, int previous)
@@ -2662,6 +3165,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.bars++;
                 this.ConfigurePatternScrollBar();
                 this.pictureBox_pattern.Invalidate();
+                this.CommitHistoryAction();
             }
 
             private void button_removeBar_Click(object? sender, EventArgs e)
@@ -2672,7 +3176,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
 
                 this.bars--;
-                this.selectedBars.RemoveWhere(bar => bar >= this.bars);
+                if (this.selectedLoopSections.RemoveWhere(section => section / 4 >= this.bars) > 0)
+                {
+                    this.loopSelectionRevision++;
+                }
                 int patternEndTick = this.bars * BreakbeatGenerator_V2.PatternTicksPerBar;
                 this.notes.RemoveAll(note => note.StartTick >= patternEndTick);
                 for (int index = 0; index < this.notes.Count; index++)
@@ -2684,6 +3191,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                 this.ConfigurePatternScrollBar();
                 this.pictureBox_pattern.Invalidate();
+                this.CommitHistoryAction();
             }
 
             private async void BreakbeatPatternEditorDialog_FormClosing(object? sender, FormClosingEventArgs e)
@@ -2784,7 +3292,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             [
                 "EDIT",
                 "Click empty / drag: add hit / longer note. Click note: play. Right-click / drag: erase.",
-                "Shift-drag: select notes. Del: erase selection. Ctrl+C: copy. Ctrl+V: preview; click to place, Esc/right-click to cancel.",
+                "Shift-click empty cell: add a green hit hard-cut to one grid step. Shift-drag: select notes; Shift-drag a note edge: hard-cut its sample. Del: erase selection. Ctrl+C: copy. Ctrl+V: preview; click to place, Esc/right-click to cancel.",
+                "Ctrl+Z: undo. Ctrl+Y: redo.",
                 "Shift+wheel on a note: pitch +/-0.25 semitones (up to +/-24).",
                 "Alt+wheel on a note: volume +/-5% (0-250%); 100% is default.",
                 "Right-click a sample name: configure persistent defaults for new notes on that track.",
@@ -2800,7 +3309,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 "Ctrl+wheel: zoom at pointer. Wheel / bottom bar: horizontal scroll. Steps per bar: powers of 2, up to 256.",
                 "",
                 "BARS / PLAYBACK",
-                "Click bar numbers to toggle selection. Hear plays all once, or selected bars in order on a loop.",
+                "Left-click a bar header to toggle the whole bar. Right-click one of its four quarters to toggle that quarter. During loop playback, changes apply after the current pass.",
                 "+: add bar. -: remove last bar. Save renders and keeps the editor open; Ctrl-click Save renders and closes. Cancel discards unsaved edits."
             ]);
 
