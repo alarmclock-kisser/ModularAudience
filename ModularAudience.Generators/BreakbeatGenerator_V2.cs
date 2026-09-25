@@ -1,5 +1,6 @@
 ﻿using FuzzySharp;
 using ModularAudience.Audio;
+using ModularAudience.Audio.Processors_V1;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -1005,6 +1006,20 @@ namespace ModularAudience.Generators
                 int clipFrames = targetFrames;
                 float[] clipData = new float[checked(clipFrames * sourceChannels)];
                 Array.Copy(renderedData, clipData, Math.Min(renderedData.Length, clipData.Length));
+                if (Math.Abs(note.PitchSemitones) > 0.0001f)
+                {
+                    clip.Data = clipData;
+                    clip.Length = clipData.LongLength;
+                    clip.Duration = TimeSpan.FromSeconds(clipFrames / (double)outputSampleRate);
+                    using AudioObj pitchShiftedClip = await PitchShifter.CreatePitchShiftWithoutTimestretchAsync(
+                        clip,
+                        note.PitchSemitones);
+                    if (pitchShiftedClip.Data is { Length: > 0 } shiftedData)
+                    {
+                        clipData = shiftedData;
+                        clipFrames = shiftedData.Length / sourceChannels;
+                    }
+                }
 
                 int startFrame = Math.Max(0, (int)Math.Round(note.StartTick / (double)PatternTicksPerBar * secondsPerBar * outputSampleRate));
                 int stepIndex = (int)Math.Round(note.StartTick / (double)ticksPerStep);

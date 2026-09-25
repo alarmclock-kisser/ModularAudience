@@ -151,6 +151,28 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public async Task RenderPatternNotesAsync_CustomPitchAddsToVarispeedPitchWhileKeepingItsDuration()
+        {
+            using AudioObj sample = CreateToneSample(sampleRate: 44100, frequency: 440, durationSeconds: 0.25);
+            BreakbeatPatternNote note = new(
+                TrackIndex: 0,
+                StartTick: 0,
+                DurationTicks: 512,
+                Varispeed: true,
+                ManuallyResized: true,
+                OriginalDurationTicks: 256,
+                PitchSemitones: 12f);
+
+            using AudioObj rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [note], [sample], bars: 1, bpm: 60, resolution: 4, swing: 0);
+
+            float restoredPitch = MeasureToneAmplitude(rendered, 440, 0.05, 0.45);
+            float varispeedPitch = MeasureToneAmplitude(rendered, 220, 0.05, 0.45);
+            Assert.IsTrue(restoredPitch > varispeedPitch * 4f,
+                $"Expected the custom octave shift to add to Varispeed, got 440 Hz amplitude {restoredPitch:F4} and 220 Hz amplitude {varispeedPitch:F4}.");
+        }
+
+        [TestMethod]
         public async Task RenderPatternNotesAsync_VarispeedPreservesStereoChannelSeparation()
         {
             const int sampleRate = 44100;

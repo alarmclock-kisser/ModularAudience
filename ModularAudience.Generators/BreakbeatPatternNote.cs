@@ -7,7 +7,8 @@ namespace ModularAudience.Generators
         bool TimeStretch = false,
         bool Varispeed = false,
         bool ManuallyResized = false,
-        int OriginalDurationTicks = 0)
+        int OriginalDurationTicks = 0,
+        float PitchSemitones = 0f)
     {
         public bool IsManuallyAdjusted => this.ManuallyResized || this.TimeStretch || this.Varispeed;
 

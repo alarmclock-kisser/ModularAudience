@@ -11,6 +11,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 components.Dispose();
             }
 
+            if (disposing && this.samples is not null)
+            {
+                foreach (ModularAudience.Audio.AudioObj sample in this.samples)
+                {
+                    sample.Dispose();
+                }
+            }
+
             base.Dispose(disposing);
         }
 
@@ -33,7 +41,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             numericUpDown_resolution = new NumericUpDown();
             label_resolution = new Label();
             timer_previewCaret = new System.Windows.Forms.Timer(components);
+            timer_pitchGestureRelease = new System.Windows.Forms.Timer(components);
+            timer_pitchTooltip = new System.Windows.Forms.Timer(components);
             toolTip_pattern = new ToolTip(components);
+            toolTip_pattern.InitialDelay = 360;
             ((System.ComponentModel.ISupportInitialize)pictureBox_pattern).BeginInit();
             panel_pattern.SuspendLayout();
             panel_controls.SuspendLayout();
@@ -50,12 +61,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
             pictureBox_pattern.Size = new Size(884, 461);
             pictureBox_pattern.TabIndex = 0;
             pictureBox_pattern.TabStop = true;
-            toolTip_pattern.SetToolTip(pictureBox_pattern, "Left-click or drag to add hits. Right-click or drag to delete. Ctrl+wheel zooms; wheel scrolls when zoomed.");
             pictureBox_pattern.Paint += pictureBox_pattern_Paint;
             pictureBox_pattern.MouseDown += pictureBox_pattern_MouseDown;
             pictureBox_pattern.MouseMove += pictureBox_pattern_MouseMove;
             pictureBox_pattern.MouseUp += pictureBox_pattern_MouseUp;
             pictureBox_pattern.MouseEnter += pictureBox_pattern_MouseEnter;
+            pictureBox_pattern.MouseLeave += pictureBox_pattern_MouseLeave;
             pictureBox_pattern.MouseWheel += pictureBox_pattern_MouseWheel;
             pictureBox_pattern.Resize += pictureBox_pattern_Resize;
             //
@@ -223,6 +234,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             timer_previewCaret.Interval = 30;
             timer_previewCaret.Tick += timer_previewCaret_Tick;
+            timer_pitchGestureRelease.Interval = 30;
+            timer_pitchGestureRelease.Tick += timer_pitchGestureRelease_Tick;
+            timer_pitchTooltip.Interval = 360;
+            timer_pitchTooltip.Tick += timer_pitchTooltip_Tick;
             // 
             // BreakbeatPatternEditorDialog
             // 
@@ -262,6 +277,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Button button_help;
         private Button button_save;
         private System.Windows.Forms.Timer timer_previewCaret;
+        private System.Windows.Forms.Timer timer_pitchGestureRelease;
+        private System.Windows.Forms.Timer timer_pitchTooltip;
         private ToolTip toolTip_pattern;
     }
 }

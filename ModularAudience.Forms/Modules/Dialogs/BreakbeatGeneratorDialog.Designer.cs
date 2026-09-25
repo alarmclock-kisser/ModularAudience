@@ -353,7 +353,9 @@
             this.toolTip_beatMap.InitialDelay = 0;
             this.toolTip_beatMap.ReshowDelay = 0;
             this.toolTip_beatMap.ShowAlways = true;
-            this.toolTip_beatMap.SetToolTip(this.pictureBox_beatMap, "Double-click to open the drum roll editor.");
+            this.toolTip_beatMap.SetToolTip(this.pictureBox_beatMap, "Double-click to open the Pattern Editor.");
+            this.pictureBox_beatMap.MouseEnter += this.pictureBox_beatMap_MouseEnter;
+            this.pictureBox_beatMap.MouseLeave += this.pictureBox_beatMap_MouseLeave;
             this.pictureBox_beatMap.MouseDoubleClick += this.pictureBox_beatMap_MouseDoubleClick;
             // 
             // button_bot

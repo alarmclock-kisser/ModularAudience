@@ -112,6 +112,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.FormClosing += async (s, e) =>
             {
+                if (this.patternEditorDialog is { IsDisposed: false } editor)
+                {
+                    editor.FormClosed -= this.BreakbeatPatternEditorDialog_FormClosed;
+                    this.patternEditorDialog = null;
+                }
+
                 await this.StopBotAsync(stopPlaybackImmediately: true);
                 this.CancelAutoPlayPreview();
                 this.pictureBox_beatMap.Image?.Dispose();
@@ -190,6 +196,23 @@ namespace ModularAudience.Forms.Modules.Dialogs
             tv.Show();
         }
 
+        private void pictureBox_beatMap_MouseEnter(object? sender, EventArgs e)
+        {
+            string? text = this.toolTip_beatMap.GetToolTip(this.pictureBox_beatMap);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return;
+            }
+
+            Point cursorPosition = this.pictureBox_beatMap.PointToClient(Cursor.Position);
+            this.toolTip_beatMap.Show(text, this.pictureBox_beatMap, cursorPosition.X + 12, cursorPosition.Y + 18, 5000);
+        }
+
+        private void pictureBox_beatMap_MouseLeave(object? sender, EventArgs e)
+        {
+            this.toolTip_beatMap.Hide(this.pictureBox_beatMap);
+        }
+
         private void pictureBox_beatMap_MouseDoubleClick(object? sender, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Left || this.currentPattern.Count == 0 || this.AudioC.Audios.Count == 0)
@@ -221,7 +244,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.patternEditorDialog = editor;
             editor.FormClosed += this.BreakbeatPatternEditorDialog_FormClosed;
-            editor.Show(this);
+            editor.Show();
         }
 
         private async void BreakbeatPatternEditorDialog_FormClosed(object? sender, FormClosedEventArgs e)
@@ -244,6 +267,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_bpm.Value = editor.Bpm;
             this.numericUpDown_bars.Value = editor.Bars;
             this.numericUpDown_resolution.Value = editor.Resolution;
+            this.currentPatternRowLabels = this.GetBeatMapRowLabels().ToArray();
             this.ShowBeatMap(editor.Pattern, this.currentPatternRowLabels, editor.Bars, editor.Resolution, editor.Notes);
 
             AudioObj editedAudio = await BreakbeatGenerator_V2.RenderPatternNotesAsync(

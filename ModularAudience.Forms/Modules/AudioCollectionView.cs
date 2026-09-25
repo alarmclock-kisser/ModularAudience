@@ -255,6 +255,8 @@ namespace ModularAudience.Forms
 
         private void listBox_audios_MouseDown(object? sender, MouseEventArgs e)
         {
+            this._dragPending = false;
+
             if (e.Button == MouseButtons.Right)
             {
                 int index = this.listBox_audios.IndexFromPoint(e.Location);
