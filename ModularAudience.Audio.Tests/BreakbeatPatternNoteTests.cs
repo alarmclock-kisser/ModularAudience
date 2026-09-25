@@ -173,6 +173,30 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public async Task RenderPatternNotesAsync_AppliesPerNoteVolumePercent()
+        {
+            using AudioObj sample = CreateToneSample(sampleRate: 44100, frequency: 440, durationSeconds: 0.25);
+            BreakbeatPatternNote normalVolume = new(TrackIndex: 0, StartTick: 0, DurationTicks: 64);
+            BreakbeatPatternNote halfVolume = normalVolume with { VolumePercent = 50f };
+            BreakbeatPatternNote muted = normalVolume with { VolumePercent = 0f };
+
+            using AudioObj normalRendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [normalVolume], [sample], bars: 1, bpm: 60, resolution: 4, swing: 0);
+            using AudioObj halfRendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [halfVolume], [sample], bars: 1, bpm: 60, resolution: 4, swing: 0);
+            using AudioObj mutedRendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [muted], [sample], bars: 1, bpm: 60, resolution: 4, swing: 0);
+
+            float normalRms = MeasureRms(normalRendered, 0.02, 0.2);
+            float halfRms = MeasureRms(halfRendered, 0.02, 0.2);
+            float mutedRms = MeasureRms(mutedRendered, 0.02, 0.2);
+
+            Assert.IsTrue(normalRms > 0.1f);
+            Assert.AreEqual(normalRms * 0.5f, halfRms, 0.002f);
+            Assert.IsTrue(mutedRms < 0.0001f);
+        }
+
+        [TestMethod]
         public async Task RenderPatternNotesAsync_VarispeedPreservesStereoChannelSeparation()
         {
             const int sampleRate = 44100;

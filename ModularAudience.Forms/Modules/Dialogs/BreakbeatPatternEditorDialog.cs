@@ -3,14 +3,20 @@ using ModularAudience.Forms.Helpers;
 using ModularAudience.Generators;
 using System.Globalization;
 using System.Drawing.Drawing2D;
+using System.IO;
+using System.Text.Json;
 
 namespace ModularAudience.Forms.Modules.Dialogs
 {
     public partial class BreakbeatPatternEditorDialog : Form
     {
+        private static readonly object persistedTrackSettingsLock = new();
+        private static Dictionary<string, BreakbeatTrackSettings> persistedTrackSettings = new(StringComparer.OrdinalIgnoreCase);
+        private static bool persistedTrackSettingsLoaded;
         private readonly List<bool[]> pattern;
         private readonly List<AudioObj> samples;
         private readonly List<AudioObj> originalSampleOrder;
+        private readonly List<BreakbeatTrackSettings> trackSettings;
         private readonly string[] rowLabels;
         private int bars;
         private readonly float swing;
@@ -26,6 +32,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private int[] previewBarMap = [];
         private CancellationTokenSource? notePreviewCancellationTokenSource;
         private AudioObj? notePreviewAudio;
+        private long notePreviewRequestVersion;
         private bool drawing;
         private int drawingRow;
         private int drawingStartColumn;
@@ -43,6 +50,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private bool pastePreviewValid;
         private BreakbeatPatternNote? pitchGestureNote;
         private bool pitchGestureChanged;
+        private BreakbeatPatternNote? volumeGestureNote;
+        private bool volumeGestureChanged;
         private bool rowReorderActive;
         private int rowReorderSource = -1;
         private int rowReorderTarget = -1;
@@ -60,6 +69,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private double horizontalZoom = 1.0;
         private int currentResolution = 4;
         private bool initializing = true;
+        private bool saveInProgress;
 
         private enum ResizeEdge
         {
@@ -81,6 +91,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public int Bars => this.bars;
 
+    public event Func<BreakbeatPatternEditorDialog, Task>? SaveRequested;
+
         public BreakbeatPatternEditorDialog(
             IReadOnlyList<bool[]> pattern,
             IEnumerable<AudioObj> samples,
@@ -98,6 +110,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.pattern = pattern.Select(row => row.ToArray()).ToList();
             this.samples = samples.Select(sample => sample.Clone()).ToList();
             this.originalSampleOrder = this.samples.ToList();
+            this.trackSettings = this.samples.Select(LoadTrackSettings).ToList();
             this.rowLabels = rowLabels.ToArray();
             this.bars = Math.Max(1, bars);
             this.swing = swing;
@@ -108,7 +121,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             this.currentResolution = (int)this.numericUpDown_resolution.Value;
-            this.notes = existingNotes?.Select(note => note with
+            List<BreakbeatPatternNote> initialNotes = existingNotes?.Select(note => note with
                 {
                     OriginalDurationTicks = note.OriginalDurationTicks > 0
                         ? note.OriginalDurationTicks
@@ -118,6 +131,21 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     ManuallyResized = note.ManuallyResized || note.TimeStretch || note.Varispeed
                 }).ToList()
                 ?? BreakbeatGenerator_V2.CreatePatternNotesFromGrid(this.pattern, this.samples, Math.Max(1, resolution), (float)this.Bpm, this.currentResolution);
+            if (existingNotes is null)
+            {
+                for (int index = 0; index < initialNotes.Count; index++)
+                {
+                    BreakbeatPatternNote note = initialNotes[index];
+                    BreakbeatTrackSettings settings = this.trackSettings[note.TrackIndex];
+                    initialNotes[index] = note with
+                    {
+                        PitchSemitones = settings.DefaultPitchSemitones,
+                        VolumePercent = settings.DefaultVolumePercent
+                    };
+                }
+            }
+
+            this.notes = initialNotes;
             this.initializing = false;
             this.ConfigurePatternScrollBar();
             this.Text = "Breakbeat Pattern Editor";
@@ -171,7 +199,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
             using Pen notePen = new(Color.FromArgb(28, 30, 34));
             using Pen selectedNotePen = new(Color.FromArgb(245, 248, 255), 2f);
             using Font pitchFont = new("Segoe UI", 8f, FontStyle.Bold);
+            using Font volumeFont = new("Segoe UI", 6f, FontStyle.Bold);
             using StringFormat pitchFormat = new()
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center,
+                FormatFlags = StringFormatFlags.NoWrap
+            };
+            using StringFormat volumeFormat = new()
             {
                 Alignment = StringAlignment.Center,
                 LineAlignment = StringAlignment.Center,
@@ -179,6 +214,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             };
             using Brush pitchLabelBackground = new SolidBrush(Color.FromArgb(220, 245, 247, 248));
             using Brush pitchLabelBrush = new SolidBrush(Color.FromArgb(15, 20, 24));
+            using Brush volumeLabelBackground = new SolidBrush(Color.FromArgb(225, 18, 22, 26));
+            using Brush volumeLabelBrush = new SolidBrush(Color.FromArgb(245, 245, 247, 248));
             for (int row = 0; row < rows; row++)
             {
                 float y = grid.Top + row * cellHeight;
@@ -263,7 +300,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     e.Graphics.DrawRectangle(selectedNotePen, hit.X, hit.Y, hit.Width, hit.Height);
                 }
 
-                DrawPitchMark(e.Graphics, hit, note.PitchSemitones, pitchFont, pitchFormat, pitchLabelBackground, pitchLabelBrush);
+                DrawNoteIndicators(
+                    e.Graphics,
+                    hit,
+                    note.PitchSemitones,
+                    note.VolumePercent,
+                    pitchFont,
+                    volumeFont,
+                    pitchFormat,
+                    volumeFormat,
+                    pitchLabelBackground,
+                    pitchLabelBrush,
+                    volumeLabelBackground,
+                    volumeLabelBrush);
             }
 
             if (this.pastePreviewActive)
@@ -294,7 +343,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     RectangleF ghost = new(x + 2f, y + 2f, Math.Max(1f, noteWidth - 4f), Math.Max(1f, cellHeight - 4f));
                     e.Graphics.FillRectangle(previewBrush, ghost);
                     e.Graphics.DrawRectangle(previewPen, ghost.X, ghost.Y, ghost.Width, ghost.Height);
-                    DrawPitchMark(e.Graphics, ghost, note.PitchSemitones, pitchFont, pitchFormat, pitchLabelBackground, pitchLabelBrush);
+                    DrawNoteIndicators(
+                        e.Graphics,
+                        ghost,
+                        note.PitchSemitones,
+                        note.VolumePercent,
+                        pitchFont,
+                        volumeFont,
+                        pitchFormat,
+                        volumeFormat,
+                        pitchLabelBackground,
+                        pitchLabelBrush,
+                        volumeLabelBackground,
+                        volumeLabelBrush);
                 }
             }
 
@@ -400,6 +461,108 @@ namespace ModularAudience.Forms.Modules.Dialogs
             return (semitones < 0 ? "-" : "+") + value;
         }
 
+        private static BreakbeatTrackSettings LoadTrackSettings(AudioObj sample)
+        {
+            lock (persistedTrackSettingsLock)
+            {
+                if (!persistedTrackSettingsLoaded)
+                {
+                    string settingsPath = GetTrackSettingsFilePath();
+                    if (File.Exists(settingsPath))
+                    {
+                        try
+                        {
+                            persistedTrackSettings = JsonSerializer.Deserialize<Dictionary<string, BreakbeatTrackSettings>>(File.ReadAllText(settingsPath))
+                                ?? new Dictionary<string, BreakbeatTrackSettings>(StringComparer.OrdinalIgnoreCase);
+                        }
+                        catch (Exception ex)
+                        {
+                            LogCollection.Log("Breakbeat track settings could not be loaded.");
+                            LogCollection.Log(ex);
+                        }
+                    }
+
+                    persistedTrackSettingsLoaded = true;
+                }
+
+                return persistedTrackSettings.TryGetValue(GetTrackSettingsKey(sample), out BreakbeatTrackSettings? settings)
+                    ? NormalizeTrackSettings(settings)
+                    : new BreakbeatTrackSettings();
+            }
+        }
+
+        private static void SaveTrackSettings(AudioObj sample, BreakbeatTrackSettings settings)
+        {
+            lock (persistedTrackSettingsLock)
+            {
+                if (!persistedTrackSettingsLoaded)
+                {
+                    _ = LoadTrackSettings(sample);
+                }
+
+                Dictionary<string, BreakbeatTrackSettings> updatedSettings = new(persistedTrackSettings, StringComparer.OrdinalIgnoreCase)
+                {
+                    [GetTrackSettingsKey(sample)] = NormalizeTrackSettings(settings)
+                };
+                string settingsPath = GetTrackSettingsFilePath();
+                string? settingsDirectory = Path.GetDirectoryName(settingsPath);
+                if (!string.IsNullOrEmpty(settingsDirectory))
+                {
+                    Directory.CreateDirectory(settingsDirectory);
+                }
+
+                string temporaryPath = settingsPath + ".tmp";
+                File.WriteAllText(temporaryPath, JsonSerializer.Serialize(updatedSettings, new JsonSerializerOptions { WriteIndented = true }));
+                File.Move(temporaryPath, settingsPath, overwrite: true);
+                persistedTrackSettings = updatedSettings;
+                persistedTrackSettingsLoaded = true;
+            }
+        }
+
+        private static BreakbeatTrackSettings NormalizeTrackSettings(BreakbeatTrackSettings settings)
+        {
+            float volume = float.IsFinite(settings.DefaultVolumePercent)
+                ? Math.Clamp(settings.DefaultVolumePercent, 0f, 250f)
+                : 100f;
+            float pitch = float.IsFinite(settings.DefaultPitchSemitones)
+                ? Math.Clamp(settings.DefaultPitchSemitones, -24f, 24f)
+                : 0f;
+            BreakbeatPlaybackMode mode = Enum.IsDefined(settings.DefaultPlaybackMode)
+                ? settings.DefaultPlaybackMode
+                : BreakbeatPlaybackMode.TimeStretch;
+            return new BreakbeatTrackSettings(volume, pitch, mode);
+        }
+
+        private static string GetTrackSettingsKey(AudioObj sample)
+        {
+            if (!string.IsNullOrWhiteSpace(sample.FilePath))
+            {
+                string path = sample.FilePath.Trim();
+                try
+                {
+                    path = Path.GetFullPath(path);
+                }
+                catch
+                {
+                }
+
+                return "FILE:" + path.ToUpperInvariant();
+            }
+
+            return string.Join(
+                "|",
+                "SAMPLE",
+                sample.Name.Trim().ToUpperInvariant(),
+                sample.SampleRate.ToString(CultureInfo.InvariantCulture),
+                sample.Channels.ToString(CultureInfo.InvariantCulture),
+                sample.Data.LongLength.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static string GetTrackSettingsFilePath() => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ModularAudience",
+            "BreakbeatTrackSettings.json");
+
         private static void DrawPitchMark(
             Graphics graphics,
             RectangleF noteBounds,
@@ -415,17 +578,43 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             string label = FormatPitchSemitones(semitones);
-            SizeF labelSize = graphics.MeasureString(label, font);
-            if (noteBounds.Width >= labelSize.Width + 4f && noteBounds.Height >= labelSize.Height + 1f)
+            Font labelFont = font;
+            Font? reducedFont = null;
+            SizeF labelSize = graphics.MeasureString(label, labelFont);
+            bool fits = noteBounds.Width >= labelSize.Width + 4f && noteBounds.Height >= labelSize.Height + 1f;
+            bool hasFraction = label.Contains('¼') || label.Contains('½') || label.Contains('¾');
+            if (!fits && hasFraction)
             {
-                RectangleF labelBounds = new(
-                    noteBounds.X + (noteBounds.Width - labelSize.Width - 4f) / 2f,
-                    noteBounds.Y + (noteBounds.Height - labelSize.Height) / 2f,
-                    labelSize.Width + 4f,
-                    labelSize.Height);
-                graphics.FillRectangle(labelBackground, labelBounds);
-                graphics.DrawString(label, font, labelBrush, labelBounds, format);
-                return;
+                float widthScale = (noteBounds.Width - 4f) / labelSize.Width;
+                float heightScale = (noteBounds.Height - 1f) / labelSize.Height;
+                float scale = Math.Min(widthScale, heightScale);
+                float reducedSize = font.Size * scale;
+                if (scale > 0f && reducedSize >= 4f && reducedSize < font.Size)
+                {
+                    reducedFont = new Font(font.FontFamily, reducedSize, font.Style, font.Unit);
+                    labelFont = reducedFont;
+                    labelSize = graphics.MeasureString(label, labelFont);
+                    fits = noteBounds.Width >= labelSize.Width + 4f && noteBounds.Height >= labelSize.Height + 1f;
+                }
+            }
+
+            try
+            {
+                if (fits)
+                {
+                    RectangleF labelBounds = new(
+                        noteBounds.X + (noteBounds.Width - labelSize.Width - 4f) / 2f,
+                        noteBounds.Y + (noteBounds.Height - labelSize.Height) / 2f,
+                        labelSize.Width + 4f,
+                        labelSize.Height);
+                    graphics.FillRectangle(labelBackground, labelBounds);
+                    graphics.DrawString(label, labelFont, labelBrush, labelBounds, format);
+                    return;
+                }
+            }
+            finally
+            {
+                reducedFont?.Dispose();
             }
 
             RectangleF fadeBounds = new(
@@ -439,6 +628,65 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 Color.FromArgb(0, Color.Black),
                 LinearGradientMode.Vertical);
             graphics.FillRectangle(pitchFade, fadeBounds);
+        }
+
+        private static void DrawNoteIndicators(
+            Graphics graphics,
+            RectangleF noteBounds,
+            float pitchSemitones,
+            float volumePercent,
+            Font pitchFont,
+            Font volumeFont,
+            StringFormat pitchFormat,
+            StringFormat volumeFormat,
+            Brush pitchLabelBackground,
+            Brush pitchLabelBrush,
+            Brush volumeLabelBackground,
+            Brush volumeLabelBrush)
+        {
+            bool hasPitch = Math.Abs(pitchSemitones) >= 0.0001f;
+            bool hasAdjustedVolume = float.IsFinite(volumePercent) && Math.Abs(volumePercent - 100f) >= 0.5f;
+            if (!hasAdjustedVolume)
+            {
+                DrawPitchMark(graphics, noteBounds, pitchSemitones, pitchFont, pitchFormat, pitchLabelBackground, pitchLabelBrush);
+                return;
+            }
+
+            int roundedVolume = (int)Math.Clamp(Math.Round(volumePercent, MidpointRounding.AwayFromZero), 0, 250);
+            string volumeLabel = roundedVolume.ToString(CultureInfo.InvariantCulture) + "%";
+            SizeF volumeSize = graphics.MeasureString(volumeLabel, volumeFont);
+            if (noteBounds.Width < volumeSize.Width + 4f || noteBounds.Height < volumeSize.Height + 1f)
+            {
+                DrawPitchMark(graphics, noteBounds, pitchSemitones, pitchFont, pitchFormat, pitchLabelBackground, pitchLabelBrush);
+                return;
+            }
+
+            float volumeTop;
+            if (hasPitch)
+            {
+                float pitchAreaHeight = noteBounds.Height - volumeSize.Height - 2f;
+                if (pitchAreaHeight <= 1f)
+                {
+                    DrawPitchMark(graphics, noteBounds, pitchSemitones, pitchFont, pitchFormat, pitchLabelBackground, pitchLabelBrush);
+                    return;
+                }
+
+                RectangleF pitchArea = new(noteBounds.X, noteBounds.Y, noteBounds.Width, pitchAreaHeight);
+                DrawPitchMark(graphics, pitchArea, pitchSemitones, pitchFont, pitchFormat, pitchLabelBackground, pitchLabelBrush);
+                volumeTop = pitchArea.Bottom + 1f;
+            }
+            else
+            {
+                volumeTop = noteBounds.Y + (noteBounds.Height - volumeSize.Height) / 2f;
+            }
+
+            RectangleF volumeBounds = new(
+                noteBounds.X + (noteBounds.Width - volumeSize.Width - 4f) / 2f,
+                volumeTop,
+                volumeSize.Width + 4f,
+                volumeSize.Height);
+            graphics.FillRectangle(volumeLabelBackground, volumeBounds);
+            graphics.DrawString(volumeLabel, volumeFont, volumeLabelBrush, volumeBounds, volumeFormat);
         }
 
         private void pictureBox_pattern_MouseDown(object? sender, MouseEventArgs e)
@@ -467,6 +715,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     }
                 }
 
+                return;
+            }
+
+            if (e.Button == MouseButtons.Right && this.TryGetRowReorderSource(e.Location, out int settingsRow))
+            {
+                this.ShowTrackSettings(settingsRow);
                 return;
             }
 
@@ -532,9 +786,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     this.resizeStartPoint = e.Location;
                     this.resizingWithControl = (ModifierKeys & Keys.Control) == Keys.Control;
                     this.resizeChanged = false;
-                    this.resizeUseVarispeed = this.resizingWithControl
-                        ? !existingNote.Varispeed
-                        : existingNote.Varispeed;
+                    bool currentVarispeed = existingNote.IsManuallyAdjusted
+                        ? existingNote.Varispeed
+                        : this.trackSettings[row].DefaultPlaybackMode == BreakbeatPlaybackMode.Varispeed;
+                    this.resizeUseVarispeed = this.resizingWithControl ? !currentVarispeed : currentVarispeed;
                     this.resizeFixedTick = this.resizingEdge == ResizeEdge.Left
                         ? existingNote.StartTick + existingNote.DurationTicks
                         : existingNote.StartTick;
@@ -560,13 +815,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                 this.drawingStartColumn = Math.Max(0, startTick / stepTicks);
                 this.drawingShortTimeStretchNote = controlShortNote || initialDurationTicks < minimumDuration;
+                BreakbeatTrackSettings trackDefault = this.trackSettings[row];
+                bool useVarispeed = trackDefault.DefaultPlaybackMode == BreakbeatPlaybackMode.Varispeed;
                 BreakbeatPatternNote newNote = new(
                     row,
                     startTick,
                     initialDurationTicks,
-                    TimeStretch: this.drawingShortTimeStretchNote,
+                    TimeStretch: this.drawingShortTimeStretchNote && !useVarispeed,
+                    Varispeed: this.drawingShortTimeStretchNote && useVarispeed,
                     ManuallyResized: this.drawingShortTimeStretchNote,
-                    OriginalDurationTicks: originalDurationTicks);
+                    OriginalDurationTicks: originalDurationTicks,
+                    PitchSemitones: trackDefault.DefaultPitchSemitones,
+                    VolumePercent: trackDefault.DefaultVolumePercent);
                 if (this.HasOverlappingNote(newNote))
                 {
                     this.drawingShortTimeStretchNote = false;
@@ -831,6 +1091,36 @@ namespace ModularAudience.Forms.Modules.Dialogs
             return true;
         }
 
+        private void ShowTrackSettings(int row)
+        {
+            if (row < 0 || row >= this.samples.Count)
+            {
+                return;
+            }
+
+            string sampleName = row < this.rowLabels.Length ? this.rowLabels[row] : this.samples[row].Name;
+            using BreakbeatTrackSettingsDialog dialog = new(sampleName, this.trackSettings[row]);
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
+
+            BreakbeatTrackSettings settings = NormalizeTrackSettings(dialog.Settings);
+            this.trackSettings[row] = settings;
+            try
+            {
+                SaveTrackSettings(this.samples[row], settings);
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log("Breakbeat track settings could not be saved.");
+                LogCollection.Log(ex);
+                WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Breakbeat Track Settings", ex);
+            }
+
+            this.pictureBox_pattern.Invalidate();
+        }
+
         private int GetRowInsertionIndex(int pointerY)
         {
             Rectangle grid = this.GetGridBounds();
@@ -866,6 +1156,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.samples.RemoveAt(source);
             this.samples.Insert(destination, sample);
             MoveRow(this.pattern, source, destination);
+            MoveRow(this.trackSettings, source, destination);
             MoveRow(this.rowLabels, source, destination);
 
             int MapTrackIndex(int trackIndex)
@@ -1234,7 +1525,45 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             bool handled = false;
-            if ((ModifierKeys & Keys.Shift) == Keys.Shift && e.Delta != 0)
+            if ((ModifierKeys & Keys.Alt) == Keys.Alt && e.Delta != 0)
+            {
+                if (this.TryGetCell(pointer, out int row, out _))
+                {
+                    int noteIndex = this.FindNoteIndexAt(row, this.PointToTick(pointer));
+                    if (noteIndex >= 0)
+                    {
+                        BreakbeatPatternNote originalNote = this.notes[noteIndex];
+                        float currentVolume = float.IsFinite(originalNote.VolumePercent)
+                            ? Math.Clamp(originalNote.VolumePercent, 0f, 250f)
+                            : 100f;
+                        int wheelSteps = Math.Max(1, Math.Abs(e.Delta) / 120);
+                        float volumePercent = Math.Clamp(
+                            currentVolume + Math.Sign(e.Delta) * wheelSteps * 5f,
+                            0f,
+                            250f);
+                        if (volumePercent != originalNote.VolumePercent)
+                        {
+                            BreakbeatPatternNote updatedNote = originalNote with { VolumePercent = volumePercent };
+                            this.notes[noteIndex] = updatedNote;
+                            this.RegisterPatternNotesChanged(originalNote, updatedNote);
+                            this.volumeGestureNote = updatedNote;
+                            this.volumeGestureChanged = true;
+                            this.timer_pitchGestureRelease.Stop();
+                            this.timer_pitchGestureRelease.Start();
+                            if (this.selectedNotes.Remove(originalNote))
+                            {
+                                this.selectedNotes.Add(updatedNote);
+                            }
+
+                            this.notePreviewCancellationTokenSource?.Cancel();
+                            this.pictureBox_pattern.Invalidate();
+                        }
+                    }
+                }
+
+                handled = true;
+            }
+            else if ((ModifierKeys & Keys.Shift) == Keys.Shift && e.Delta != 0)
             {
                 if (this.TryGetCell(pointer, out int row, out _))
                 {
@@ -1297,6 +1626,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 this.CompletePitchGesture();
             }
+
+            if ((e.KeyCode is Keys.Menu or Keys.LMenu or Keys.RMenu) && (ModifierKeys & Keys.Alt) != Keys.Alt)
+            {
+                this.CompleteVolumeGesture();
+            }
         }
 
         private void timer_pitchGestureRelease_Tick(object? sender, EventArgs e)
@@ -1304,6 +1638,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             if ((ModifierKeys & Keys.Shift) != Keys.Shift)
             {
                 this.CompletePitchGesture();
+            }
+
+            if ((ModifierKeys & Keys.Alt) != Keys.Alt)
+            {
+                this.CompleteVolumeGesture();
             }
         }
 
@@ -1314,6 +1653,20 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.pitchGestureNote = null;
             this.pitchGestureChanged = false;
             if (changedNote is not null && this.checkBox_preHear.Checked && this.hearCancellationTokenSource is null)
+            {
+                _ = this.PrehearNoteAsync(changedNote);
+            }
+        }
+
+        private void CompleteVolumeGesture()
+        {
+            BreakbeatPatternNote? changedNote = this.volumeGestureChanged ? this.volumeGestureNote : null;
+            this.volumeGestureNote = null;
+            this.volumeGestureChanged = false;
+            if (changedNote is not null
+                && this.checkBox_preHear.Checked
+                && this.hearCancellationTokenSource is null
+                )
             {
                 _ = this.PrehearNoteAsync(changedNote);
             }
@@ -1810,8 +2163,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async void button_hear_Click(object? sender, EventArgs e)
         {
+            Interlocked.Increment(ref this.notePreviewRequestVersion);
             if (this.hearCancellationTokenSource is not null)
             {
+                this.notePreviewCancellationTokenSource?.Cancel();
                 this.hearCancellationTokenSource.Cancel();
                 if (this.previewAudio?.Playing == true)
                 {
@@ -1959,16 +2314,22 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async Task PrehearNoteAsync(BreakbeatPatternNote note)
         {
+            long requestVersion = Interlocked.Increment(ref this.notePreviewRequestVersion);
             await this.StopWholePatternPreviewAsync();
             await this.StopNotePreviewAsync();
+            if (requestVersion != Volatile.Read(ref this.notePreviewRequestVersion) || this.IsDisposed)
+            {
+                return;
+            }
 
             CancellationTokenSource cancellationTokenSource = new();
             this.notePreviewCancellationTokenSource = cancellationTokenSource;
+            AudioObj? notePreviewAudio = null;
             try
             {
                 int previewBars = Math.Max(1, (int)Math.Ceiling(note.DurationTicks / (double)BreakbeatGenerator_V2.PatternTicksPerBar));
                 BreakbeatPatternNote previewNote = note with { StartTick = 0 };
-                this.notePreviewAudio = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                notePreviewAudio = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
                     [previewNote],
                     this.samples,
                     previewBars,
@@ -1978,15 +2339,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     "BreakbeatNotePreview",
                     cancellationTokenSource.Token);
 
-                if (this.notePreviewAudio is null)
+                if (notePreviewAudio is null
+                    || cancellationTokenSource.IsCancellationRequested
+                    || requestVersion != Volatile.Read(ref this.notePreviewRequestVersion))
                 {
                     return;
                 }
 
-                await this.notePreviewAudio.PlayAsync(cancellationTokenSource.Token, initialVolume: 1f);
-                while (this.notePreviewAudio.Playing && !cancellationTokenSource.IsCancellationRequested)
+                this.notePreviewAudio = notePreviewAudio;
+                await notePreviewAudio.PlayAsync(cancellationTokenSource.Token, initialVolume: 1f);
+                while (notePreviewAudio.Playing && !cancellationTokenSource.IsCancellationRequested)
                 {
-                    await Task.Delay(20);
+                    await Task.Delay(20, cancellationTokenSource.Token);
                 }
             }
             catch (OperationCanceledException)
@@ -2003,19 +2367,28 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             finally
             {
-                if (this.notePreviewAudio?.Playing == true)
+                try
                 {
-                    await this.notePreviewAudio.StopAsync();
+                    if (notePreviewAudio?.Playing == true)
+                    {
+                        await notePreviewAudio.StopAsync();
+                    }
                 }
-
-                this.notePreviewAudio?.Dispose();
-                this.notePreviewAudio = null;
-                if (ReferenceEquals(this.notePreviewCancellationTokenSource, cancellationTokenSource))
+                finally
                 {
-                    this.notePreviewCancellationTokenSource = null;
-                }
+                    notePreviewAudio?.Dispose();
+                    if (ReferenceEquals(this.notePreviewAudio, notePreviewAudio))
+                    {
+                        this.notePreviewAudio = null;
+                    }
 
-                cancellationTokenSource.Dispose();
+                    if (ReferenceEquals(this.notePreviewCancellationTokenSource, cancellationTokenSource))
+                    {
+                        this.notePreviewCancellationTokenSource = null;
+                    }
+
+                    cancellationTokenSource.Dispose();
+                }
             }
         }
 
@@ -2028,9 +2401,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             cancellationTokenSource.Cancel();
-            if (this.notePreviewAudio?.Playing == true)
+            AudioObj? notePreviewAudio = this.notePreviewAudio;
+            if (notePreviewAudio?.Playing == true)
             {
-                await this.notePreviewAudio.StopAsync();
+                await notePreviewAudio.StopAsync();
             }
 
             while (ReferenceEquals(this.notePreviewCancellationTokenSource, cancellationTokenSource))
@@ -2197,10 +2571,49 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
             }
 
-        private void button_save_Click(object? sender, EventArgs e)
+        private async void button_save_Click(object? sender, EventArgs e)
         {
-            this.DialogResult = DialogResult.OK;
-            this.Close();
+            if (this.saveInProgress)
+            {
+                return;
+            }
+
+            bool closeAfterSave = (ModifierKeys & Keys.Control) == Keys.Control;
+            this.saveInProgress = true;
+            this.button_save.Enabled = false;
+            string originalText = this.button_save.Text;
+            this.button_save.Text = "Rendering...";
+            try
+            {
+                if (this.SaveRequested is Func<BreakbeatPatternEditorDialog, Task> saveRequested)
+                {
+                    await saveRequested(this);
+                }
+
+                if (closeAfterSave && !this.IsDisposed && !this.Disposing)
+                {
+                    this.DialogResult = DialogResult.OK;
+                    this.Close();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogCollection.Log("Breakbeat pattern save failed.");
+                LogCollection.Log(ex);
+                if (!this.IsDisposed && !this.Disposing)
+                {
+                    WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Breakbeat Pattern Save", ex);
+                }
+            }
+            finally
+            {
+                if (!this.IsDisposed && !this.Disposing)
+                {
+                    this.button_save.Enabled = true;
+                    this.button_save.Text = originalText;
+                    this.saveInProgress = false;
+                }
+            }
         }
 
         private void button_help_Click(object? sender, EventArgs e)
@@ -2210,7 +2623,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 "EDIT",
                 "Click empty / drag: add hit / longer note. Click note: play. Right-click / drag: erase.",
                 "Shift-drag: select notes. Del: erase selection. Ctrl+C: copy. Ctrl+V: preview; click to place, Esc/right-click to cancel.",
-                "Shift+wheel on a note: pitch +/-0.25 semitones (up to +/-24). Zero pitch shows no mark.",
+                "Shift+wheel on a note: pitch +/-0.25 semitones (up to +/-24).",
+                "Alt+wheel on a note: volume +/-5% (0-250%); 100% is default.",
+                "Right-click a sample name: configure persistent defaults for new notes on that track.",
                 "Drag a sample name left of the grid to reorder sample tracks.",
                 "Pre-hear toggles auto-preview; clicking a note always plays it.",
                 "",
@@ -2224,7 +2639,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 "",
                 "BARS / PLAYBACK",
                 "Click bar numbers to toggle selection. Hear plays all once, or selected bars in order on a loop.",
-                "+: add bar. -: remove last bar. Save keeps changes; Cancel discards them."
+                "+: add bar. -: remove last bar. Save renders and keeps the editor open; Ctrl-click Save renders and closes. Cancel discards unsaved edits."
             ]);
 
             MessageBox.Show(

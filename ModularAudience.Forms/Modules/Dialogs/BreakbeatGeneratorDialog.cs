@@ -115,6 +115,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 if (this.patternEditorDialog is { IsDisposed: false } editor)
                 {
                     editor.FormClosed -= this.BreakbeatPatternEditorDialog_FormClosed;
+                    editor.SaveRequested -= this.BreakbeatPatternEditorDialog_SaveRequestedAsync;
                     this.patternEditorDialog = null;
                 }
 
@@ -244,10 +245,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.patternEditorDialog = editor;
             editor.FormClosed += this.BreakbeatPatternEditorDialog_FormClosed;
+            editor.SaveRequested += this.BreakbeatPatternEditorDialog_SaveRequestedAsync;
             editor.Show();
         }
 
-        private async void BreakbeatPatternEditorDialog_FormClosed(object? sender, FormClosedEventArgs e)
+        private void BreakbeatPatternEditorDialog_FormClosed(object? sender, FormClosedEventArgs e)
         {
             if (sender is not BreakbeatPatternEditorDialog editor)
             {
@@ -258,8 +260,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 this.patternEditorDialog = null;
             }
+        }
 
-            if (editor.DialogResult != DialogResult.OK || this.IsDisposed || this.Disposing)
+        private async Task BreakbeatPatternEditorDialog_SaveRequestedAsync(BreakbeatPatternEditorDialog editor)
+        {
+            if (this.IsDisposed || this.Disposing)
             {
                 return;
             }

@@ -1041,6 +1041,10 @@ namespace ModularAudience.Generators
                 }
 
                 volume = Math.Clamp(volume, 0f, 1f);
+                float noteVolume = float.IsFinite(note.VolumePercent)
+                    ? Math.Clamp(note.VolumePercent, 0f, 250f) / 100f
+                    : 1f;
+                volume *= noteVolume;
                 for (int frame = 0; frame < clipFrames; frame++)
                 {
                     int mixIndex = (startFrame + frame) * outputChannels;
