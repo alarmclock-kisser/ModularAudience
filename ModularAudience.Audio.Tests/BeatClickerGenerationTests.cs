@@ -1,6 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio;
-using ModularAudience.Forms.Modules;
+using ModularAudience.Forms.Modules.BeatclickerGame;
 
 namespace ModularAudience.Audio.Tests
 {

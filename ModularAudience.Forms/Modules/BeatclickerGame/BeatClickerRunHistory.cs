@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 
-namespace ModularAudience.Forms.Modules
+namespace ModularAudience.Forms.Modules.BeatclickerGame
 {
     internal sealed class BeatClickerRunSummary
     {

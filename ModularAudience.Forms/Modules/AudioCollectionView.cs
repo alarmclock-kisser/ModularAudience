@@ -12,6 +12,7 @@ using System.Runtime;
 using System.Runtime.InteropServices;
 using NAudio.Midi;
 using ModularAudience.Audio.Midi;
+using ModularAudience.Forms.Modules.BeatclickerGame;
 
 namespace ModularAudience.Forms
 {

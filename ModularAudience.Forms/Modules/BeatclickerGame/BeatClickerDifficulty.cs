@@ -1,4 +1,4 @@
-namespace ModularAudience.Forms.Modules
+namespace ModularAudience.Forms.Modules.BeatclickerGame
 {
     /// <summary>
     /// Difficulty levels for the Beat Clicker Game. The selected level is stored in a

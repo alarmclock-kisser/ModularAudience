@@ -10,7 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace ModularAudience.Forms.Modules
+namespace ModularAudience.Forms.Modules.BeatclickerGame
 {
     /// <summary>
     /// Fullscreen beat-clicker game supporting Classic gameplay (circles, sliders, spinners)

@@ -4,7 +4,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows.Forms;
 
-namespace ModularAudience.Forms.Modules
+namespace ModularAudience.Forms.Modules.BeatclickerGame
 {
     internal static class BeatClickerSettings
     {

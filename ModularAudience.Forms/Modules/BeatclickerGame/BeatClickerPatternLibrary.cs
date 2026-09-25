@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ModularAudience.Forms.Modules
+namespace ModularAudience.Forms.Modules.BeatclickerGame
 {
     /// <summary>
     /// Procedural pattern grammar for BeatClicker Classic. The 256 logical patterns are

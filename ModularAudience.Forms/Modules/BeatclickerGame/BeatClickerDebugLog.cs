@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
-namespace ModularAudience.Forms.Modules
+namespace ModularAudience.Forms.Modules.BeatclickerGame
 {
     /// <summary>
     /// Verbose, millisecond-precise debug logger for the Beat Clicker Game. When enabled
