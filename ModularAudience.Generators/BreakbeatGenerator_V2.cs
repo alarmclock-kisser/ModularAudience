@@ -923,7 +923,8 @@ namespace ModularAudience.Generators
             int resolution,
             float swing,
             string? patternName = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            IReadOnlyList<BreakbeatTrackSettings>? trackSettings = null)
         {
             if (notes.Count == 0 || samples.Count == 0)
             {
@@ -946,6 +947,14 @@ namespace ModularAudience.Generators
                 {
                     continue;
                 }
+
+                BreakbeatTrackSettings? trackDefault = trackSettings is not null && note.TrackIndex < trackSettings.Count
+                    ? trackSettings[note.TrackIndex]
+                    : null;
+                float trackPitch = trackDefault is not null && float.IsFinite(trackDefault.DefaultPitchSemitones)
+                    ? Math.Clamp(trackDefault.DefaultPitchSemitones, -24f, 24f)
+                    : 0f;
+                float effectivePitch = note.PitchSemitones + trackPitch;
 
                 AudioObj source = samples[note.TrackIndex];
                 if (source.Data == null || source.Data.Length == 0)
@@ -1006,14 +1015,14 @@ namespace ModularAudience.Generators
                 int clipFrames = targetFrames;
                 float[] clipData = new float[checked(clipFrames * sourceChannels)];
                 Array.Copy(renderedData, clipData, Math.Min(renderedData.Length, clipData.Length));
-                if (Math.Abs(note.PitchSemitones) > 0.0001f)
+                if (Math.Abs(effectivePitch) > 0.0001f)
                 {
                     clip.Data = clipData;
                     clip.Length = clipData.LongLength;
                     clip.Duration = TimeSpan.FromSeconds(clipFrames / (double)outputSampleRate);
                     using AudioObj pitchShiftedClip = await PitchShifter.CreatePitchShiftWithoutTimestretchAsync(
                         clip,
-                        note.PitchSemitones);
+                        effectivePitch);
                     if (pitchShiftedClip.Data is { Length: > 0 } shiftedData)
                     {
                         clipData = shiftedData;
@@ -1044,7 +1053,10 @@ namespace ModularAudience.Generators
                 float noteVolume = float.IsFinite(note.VolumePercent)
                     ? Math.Clamp(note.VolumePercent, 0f, 250f) / 100f
                     : 1f;
-                volume *= noteVolume;
+                float trackVolume = trackDefault is not null && float.IsFinite(trackDefault.DefaultVolumePercent)
+                    ? Math.Clamp(trackDefault.DefaultVolumePercent, 0f, 250f) / 100f
+                    : 1f;
+                volume *= trackVolume * noteVolume;
                 for (int frame = 0; frame < clipFrames; frame++)
                 {
                     int mixIndex = (startFrame + frame) * outputChannels;

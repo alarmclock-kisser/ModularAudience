@@ -68,15 +68,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             foreach (AudioObj obj in samples)
             {
-                AudioObj workingCopy = obj.Clone();
-                workingCopy.SampleTag = obj.SampleTag;
-                workingCopy.Tag = obj.Tag;
-                foreach ((string key, string value) in obj.CustomTags.Values)
-                {
-                    workingCopy.CustomTags[key] = value;
-                }
-
-                this.AudioC.Audios.Add(workingCopy);
+                this.AudioC.Audios.Add(CloneSampleForGenerator(obj));
             }
 
             this.comboBox_drumset.DataSource = Enum.GetValues<DrumsetElement>();
@@ -129,6 +121,103 @@ namespace ModularAudience.Forms.Modules.Dialogs
             };
 
             this.ShowBeatMap(CreateEmptyPattern(this.AudioC.Audios.Count, Math.Max(1, this.Bars * this.Resolution)), this.GetBeatMapRowLabels());
+        }
+
+        private static AudioObj CloneSampleForGenerator(AudioObj sample)
+        {
+            AudioObj clone = sample.Clone();
+            clone.SampleTag = sample.SampleTag;
+            clone.Tag = sample.Tag;
+            foreach ((string key, string value) in sample.CustomTags.Values)
+            {
+                clone.CustomTags[key] = value;
+            }
+
+            return clone;
+        }
+
+        private void BreakbeatGeneratorDialog_DragEnter(object? sender, DragEventArgs e)
+        {
+            UpdateAudioDropEffect(e);
+        }
+
+        private void BreakbeatGeneratorDialog_DragOver(object? sender, DragEventArgs e)
+        {
+            UpdateAudioDropEffect(e);
+        }
+
+        private void BreakbeatGeneratorDialog_DragDrop(object? sender, DragEventArgs e)
+        {
+            if (!TryGetDraggedAudioSamples(e.Data, out AudioObj[] droppedSamples))
+            {
+                return;
+            }
+
+            foreach (AudioObj sample in droppedSamples)
+            {
+                this.AppendDroppedAudioSample(sample);
+            }
+        }
+
+        private static void UpdateAudioDropEffect(DragEventArgs e)
+        {
+            e.Effect = TryGetDraggedAudioSamples(e.Data, out _)
+                && e.AllowedEffect.HasFlag(DragDropEffects.Copy)
+                    ? DragDropEffects.Copy
+                    : DragDropEffects.None;
+        }
+
+        private static bool TryGetDraggedAudioSamples(IDataObject? data, out AudioObj[] samples)
+        {
+            if (data is not null
+                && data.GetDataPresent(typeof(AudioObj[]))
+                && data.GetData(typeof(AudioObj[])) is AudioObj[] audioArray)
+            {
+                samples = audioArray.Where(sample => sample is not null).ToArray();
+                return samples.Length > 0;
+            }
+
+            if (data is not null
+                && data.GetDataPresent(typeof(IEnumerable<AudioObj>))
+                && data.GetData(typeof(IEnumerable<AudioObj>)) is IEnumerable<AudioObj> audioEnumerable)
+            {
+                samples = audioEnumerable.Where(sample => sample is not null).ToArray();
+                return samples.Length > 0;
+            }
+
+            samples = [];
+            return false;
+        }
+
+        private void AppendDroppedAudioSample(AudioObj droppedSample)
+        {
+            if (this.patternEditorDialog is { IsDisposed: false } editor)
+            {
+                editor.AppendSampleTrack(droppedSample);
+                return;
+            }
+
+            bool previousUserInputState = this.sampleSelectionFromUserInput;
+            this.sampleSelectionFromUserInput = false;
+            try
+            {
+                this.AudioC.Audios.Add(CloneSampleForGenerator(droppedSample));
+                int patternColumns = this.currentPattern.Count > 0
+                    ? this.currentPattern[0].Length
+                    : Math.Max(1, this.currentPatternBars * this.currentPatternResolution);
+                this.currentPattern.Add(new bool[patternColumns]);
+                this.currentPatternRowLabels = this.GetBeatMapRowLabels().ToArray();
+                this.ShowBeatMap(
+                    this.currentPattern,
+                    this.currentPatternRowLabels,
+                    this.currentPatternBars,
+                    this.currentPatternResolution,
+                    this.hasEditedPattern ? this.currentPatternNotes : null);
+            }
+            finally
+            {
+                this.sampleSelectionFromUserInput = previousUserInputState;
+            }
         }
 
         private async void listBox_samples_SelectedIndexChanged(object sender, EventArgs e)
@@ -326,7 +415,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.Bpm,
                 editor.Resolution,
                 this.Swing,
-                "BreakbeatEdited");
+                "BreakbeatEdited",
+                trackSettings: this.AudioC.Audios.Select(sample =>
+                    this.patternTrackSettings.TryGetValue(sample, out BreakbeatTrackSettings? settings) && settings is not null
+                        ? settings
+                        : new BreakbeatTrackSettings()).ToArray());
 
             if (editedAudio == null || this.IsDisposed || this.Disposing)
             {

@@ -20,5 +20,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.comboBox_defaultPlaybackMode.SelectedItem is BreakbeatPlaybackMode mode
                 ? mode
                 : BreakbeatPlaybackMode.TimeStretch);
+
+        private void button_reset_Click(object? sender, EventArgs e)
+        {
+            this.numericUpDown_volume.Value = 100m;
+            this.numericUpDown_pitch.Value = 0m;
+            this.comboBox_defaultPlaybackMode.SelectedItem = BreakbeatPlaybackMode.TimeStretch;
+        }
     }
 }

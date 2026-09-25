@@ -197,6 +197,57 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public async Task RenderPatternNotesAsync_MultipliesTrackVolumeByCustomNoteVolume()
+        {
+            using AudioObj sample = CreateToneSample(sampleRate: 44100, frequency: 440, durationSeconds: 0.25);
+            int ticksPerStep = BreakbeatGenerator_V2.PatternTicksPerBar / 4;
+            BreakbeatPatternNote baseline = new(TrackIndex: 0, StartTick: 0, DurationTicks: ticksPerStep);
+            BreakbeatPatternNote custom = new(TrackIndex: 1, StartTick: ticksPerStep, DurationTicks: ticksPerStep, VolumePercent: 150f);
+
+            using AudioObj rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [baseline, custom],
+                [sample, sample],
+                bars: 1,
+                bpm: 60,
+                resolution: 4,
+                swing: 0,
+                trackSettings:
+                [
+                    new BreakbeatTrackSettings(),
+                    new BreakbeatTrackSettings(DefaultVolumePercent: 160f)
+                ]);
+
+            float baselineRms = MeasureRms(rendered, 0.05, 0.2);
+            float customRms = MeasureRms(rendered, 1.05, 1.2);
+            Assert.AreEqual(baselineRms * 2.4f, customRms, 0.01f);
+        }
+
+        [TestMethod]
+        public async Task RenderPatternNotesAsync_AddsTrackPitchToCustomNotePitch()
+        {
+            using AudioObj sample = CreateToneSample(sampleRate: 44100, frequency: 440, durationSeconds: 0.25);
+            BreakbeatPatternNote note = new(
+                TrackIndex: 0,
+                StartTick: 0,
+                DurationTicks: 64,
+                PitchSemitones: -3f);
+
+            using AudioObj rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [note],
+                [sample],
+                bars: 1,
+                bpm: 60,
+                resolution: 4,
+                swing: 0,
+                trackSettings: [new BreakbeatTrackSettings(DefaultPitchSemitones: 2f)]);
+
+            float netPitch = MeasureToneAmplitude(rendered, 415, 0.05, 0.2);
+            float originalPitch = MeasureToneAmplitude(rendered, 440, 0.05, 0.2);
+            Assert.IsTrue(netPitch > originalPitch * 3f,
+                $"Expected a net -1 semitone shift, got 415 Hz amplitude {netPitch:F4} and 440 Hz amplitude {originalPitch:F4}.");
+        }
+
+        [TestMethod]
         public async Task RenderPatternNotesAsync_VarispeedPreservesStereoChannelSeparation()
         {
             const int sampleRate = 44100;

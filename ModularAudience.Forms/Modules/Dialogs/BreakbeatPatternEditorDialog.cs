@@ -138,19 +138,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     ManuallyResized = note.ManuallyResized || note.TimeStretch || note.Varispeed
                 }).ToList()
                 ?? BreakbeatGenerator_V2.CreatePatternNotesFromGrid(this.pattern, this.samples, Math.Max(1, resolution), (float)this.Bpm, this.currentResolution);
-            if (existingNotes is null)
-            {
-                for (int index = 0; index < initialNotes.Count; index++)
-                {
-                    BreakbeatPatternNote note = initialNotes[index];
-                    BreakbeatTrackSettings settings = this.trackSettings[note.TrackIndex];
-                    initialNotes[index] = note with
-                    {
-                        PitchSemitones = settings.DefaultPitchSemitones,
-                        VolumePercent = settings.DefaultVolumePercent
-                    };
-                }
-            }
 
             this.notes = initialNotes;
             this.initializing = false;
@@ -223,29 +210,29 @@ namespace ModularAudience.Forms.Modules.Dialogs
             using Brush pitchLabelBrush = new SolidBrush(Color.FromArgb(15, 20, 24));
             using Brush volumeLabelBackground = new SolidBrush(Color.FromArgb(225, 18, 22, 26));
             using Brush volumeLabelBrush = new SolidBrush(Color.FromArgb(245, 245, 247, 248));
-            using Brush settingsSummaryBrush = new SolidBrush(Color.FromArgb(155, 165, 176));
+            using Brush trackSettingsSummaryBrush = new SolidBrush(Color.FromArgb(155, 165, 176));
             for (int row = 0; row < rows; row++)
             {
                 float y = grid.Top + row * cellHeight;
                 RectangleF labelBounds = new(8, y, Math.Max(1, grid.Left - 16), Math.Max(1f, cellHeight));
                 string label = row < this.rowLabels.Count ? this.rowLabels[row] : $"Track {row + 1}";
-                string settingsSummary = row < this.trackSettings.Count
+                string summary = row < this.trackSettings.Count
                     ? FormatTrackSettingsSummary(this.trackSettings[row])
                     : string.Empty;
-                float nameHeight = labelFont.GetHeight(e.Graphics);
-                float summaryHeight = nameHeight;
-                float combinedHeight = nameHeight + (string.IsNullOrEmpty(settingsSummary) ? 0f : summaryHeight + 1f);
-                if (string.IsNullOrEmpty(settingsSummary) || combinedHeight > cellHeight - 2f)
+                float lineHeight = labelFont.GetHeight(e.Graphics);
+                float summaryHeight = string.IsNullOrEmpty(summary) ? 0f : lineHeight + 1f;
+                float combinedHeight = lineHeight + summaryHeight;
+                if (string.IsNullOrEmpty(summary) || combinedHeight > cellHeight - 2f)
                 {
                     e.Graphics.DrawString(label, labelFont, labelBrush, labelBounds, labelFormat);
                     continue;
                 }
 
                 float textTop = y + (cellHeight - combinedHeight) / 2f;
-                RectangleF nameBounds = new(labelBounds.X, textTop, labelBounds.Width, nameHeight);
-                RectangleF summaryBounds = new(labelBounds.X, textTop + nameHeight + 1f, labelBounds.Width, summaryHeight);
+                RectangleF nameBounds = new(labelBounds.X, textTop, labelBounds.Width, lineHeight);
+                RectangleF summaryBounds = new(labelBounds.X, textTop + lineHeight + 1f, labelBounds.Width, lineHeight);
                 e.Graphics.DrawString(label, labelFont, labelBrush, nameBounds, labelFormat);
-                e.Graphics.DrawString(settingsSummary, labelFont, settingsSummaryBrush, summaryBounds, labelFormat);
+                e.Graphics.DrawString(summary, labelFont, trackSettingsSummaryBrush, summaryBounds, labelFormat);
             }
 
             GraphicsState gridState = e.Graphics.Save();
@@ -795,9 +782,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     TimeStretch: this.drawingShortTimeStretchNote && !useVarispeed,
                     Varispeed: this.drawingShortTimeStretchNote && useVarispeed,
                     ManuallyResized: this.drawingShortTimeStretchNote,
-                    OriginalDurationTicks: originalDurationTicks,
-                    PitchSemitones: trackDefault.DefaultPitchSemitones,
-                    VolumePercent: trackDefault.DefaultVolumePercent);
+                    OriginalDurationTicks: originalDurationTicks);
                 if (this.HasOverlappingNote(newNote))
                 {
                     this.drawingShortTimeStretchNote = false;
@@ -1270,6 +1255,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 .Select(note => (BreakbeatPatternNote?)note)
                 .ToArray());
             this.pictureBox_pattern.Invalidate();
+        }
+
+        internal void AppendSampleTrack(AudioObj sample)
+        {
+            this.InsertSampleTrack(sample, this.samples.Count, this.sourceSampleOrder.Count);
         }
 
         private static AudioObj CloneSampleWithMetadata(AudioObj sample)
@@ -2255,7 +2245,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.currentResolution,
                 this.swing,
                 "BreakbeatPreview",
-                cancellationToken);
+                cancellationToken,
+                trackSettings: this.trackSettings);
 
             if (renderedPattern is null)
             {
@@ -2507,7 +2498,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     this.currentResolution,
                     0f,
                     "BreakbeatNotePreview",
-                    cancellationTokenSource.Token);
+                    cancellationTokenSource.Token,
+                    trackSettings: this.trackSettings);
 
                 if (notePreviewAudio is null
                     || cancellationTokenSource.IsCancellationRequested

@@ -78,12 +78,16 @@
             // 
             // listBox_samples
             // 
+            this.listBox_samples.AllowDrop = true;
             this.listBox_samples.FormattingEnabled = true;
             this.listBox_samples.Location = new Point(12, 41);
             this.listBox_samples.Name = "listBox_samples";
             this.listBox_samples.Size = new Size(140, 244);
             this.listBox_samples.TabIndex = 0;
             this.listBox_samples.SelectedIndexChanged += this.listBox_samples_SelectedIndexChanged;
+            this.listBox_samples.DragEnter += this.BreakbeatGeneratorDialog_DragEnter;
+            this.listBox_samples.DragOver += this.BreakbeatGeneratorDialog_DragOver;
+            this.listBox_samples.DragDrop += this.BreakbeatGeneratorDialog_DragDrop;
             // 
             // comboBox_drumset
             // 
@@ -344,6 +348,7 @@
             // pictureBox_beatMap
             // 
             this.pictureBox_beatMap.BackColor = Color.White;
+            this.pictureBox_beatMap.AllowDrop = true;
             this.pictureBox_beatMap.Location = new Point(158, 12);
             this.pictureBox_beatMap.Name = "pictureBox_beatMap";
             this.pictureBox_beatMap.Size = new Size(294, 152);
@@ -357,6 +362,9 @@
             this.pictureBox_beatMap.MouseEnter += this.pictureBox_beatMap_MouseEnter;
             this.pictureBox_beatMap.MouseLeave += this.pictureBox_beatMap_MouseLeave;
             this.pictureBox_beatMap.MouseDoubleClick += this.pictureBox_beatMap_MouseDoubleClick;
+            this.pictureBox_beatMap.DragEnter += this.BreakbeatGeneratorDialog_DragEnter;
+            this.pictureBox_beatMap.DragOver += this.BreakbeatGeneratorDialog_DragOver;
+            this.pictureBox_beatMap.DragDrop += this.BreakbeatGeneratorDialog_DragDrop;
             // 
             // button_bot
             // 
@@ -432,11 +440,15 @@
             this.Controls.Add(this.checkBox_autoPlay);
             this.Controls.Add(this.comboBox_drumset);
             this.Controls.Add(this.listBox_samples);
+            this.AllowDrop = true;
             this.MaximizeBox = false;
             this.MaximumSize = new Size(480, 480);
             this.MinimumSize = new Size(480, 480);
             this.Name = "BreakbeatGeneratorDialog";
             this.Text = "Breakbeat Generator";
+            this.DragEnter += this.BreakbeatGeneratorDialog_DragEnter;
+            this.DragOver += this.BreakbeatGeneratorDialog_DragOver;
+            this.DragDrop += this.BreakbeatGeneratorDialog_DragDrop;
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_bars).EndInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_resolution).EndInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_swing).EndInit();
