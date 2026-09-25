@@ -82,6 +82,30 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public void RemoveRetriggersCoveredByStretchedNote_UsesLengthNotVarispeedMode()
+        {
+            BreakbeatPatternNote extendedVarispeed = new(
+                TrackIndex: 0,
+                StartTick: 0,
+                DurationTicks: 128,
+                Varispeed: true,
+                ManuallyResized: true,
+                OriginalDurationTicks: 64);
+            BreakbeatPatternNote coveredHit = new(TrackIndex: 0, StartTick: 64, DurationTicks: 32);
+            BreakbeatPatternNote shortenedVarispeed = extendedVarispeed with { DurationTicks = 32 };
+
+            List<BreakbeatPatternNote> extendedResult = BreakbeatGenerator_V2.RemoveRetriggersCoveredByStretchedNote(
+                [extendedVarispeed, coveredHit],
+                extendedVarispeed);
+            List<BreakbeatPatternNote> shortenedResult = BreakbeatGenerator_V2.RemoveRetriggersCoveredByStretchedNote(
+                [shortenedVarispeed, coveredHit],
+                shortenedVarispeed);
+
+            CollectionAssert.AreEqual(new[] { extendedVarispeed }, extendedResult);
+            CollectionAssert.AreEqual(new[] { shortenedVarispeed, coveredHit }, shortenedResult);
+        }
+
+        [TestMethod]
         public async Task RenderPatternNotesAsync_StretchesShortHitThroughRequestedTail()
         {
             using AudioObj sample = CreateToneSample(sampleRate: 22050, frequency: 440, durationSeconds: 0.25);
@@ -101,6 +125,90 @@ namespace ModularAudience.Audio.Tests
 
             Assert.IsTrue(peak > 0.1f, "Stretched audio should remain audible across the extended note.");
             Assert.IsTrue(lateRms > 0.01f, $"Expected audio through the stretched tail, got RMS {lateRms:F4}.");
+        }
+
+        [TestMethod]
+        public async Task RenderPatternNotesAsync_VarispeedLengtheningLowersPitchAndShorteningRaisesPitch()
+        {
+            using AudioObj sample = CreateToneSample(sampleRate: 44100, frequency: 440, durationSeconds: 0.25);
+            List<AudioObj> samples = [sample];
+            BreakbeatPatternNote lengthened = new(
+                TrackIndex: 0,
+                StartTick: 0,
+                DurationTicks: 512,
+                Varispeed: true,
+                ManuallyResized: true,
+                OriginalDurationTicks: 256);
+            BreakbeatPatternNote shortened = lengthened with { DurationTicks = 128 };
+
+            using AudioObj slowRendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [lengthened], samples, bars: 1, bpm: 60, resolution: 4, swing: 0);
+            using AudioObj fastRendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [shortened], samples, bars: 1, bpm: 60, resolution: 4, swing: 0);
+
+            Assert.IsTrue(MeasureToneAmplitude(slowRendered, 220, 0.05, 0.45) > MeasureToneAmplitude(slowRendered, 440, 0.05, 0.45) * 5f);
+            Assert.IsTrue(MeasureToneAmplitude(fastRendered, 880, 0.02, 0.11) > MeasureToneAmplitude(fastRendered, 440, 0.02, 0.11) * 5f);
+        }
+
+        [TestMethod]
+        public async Task RenderPatternNotesAsync_VarispeedPreservesStereoChannelSeparation()
+        {
+            const int sampleRate = 44100;
+            const int sourceFrames = sampleRate / 4;
+            float[] data = new float[sourceFrames * 2];
+            for (int frame = 0; frame < sourceFrames; frame++)
+            {
+                data[frame * 2] = 0.5f * MathF.Sin(2f * MathF.PI * 440f * frame / sampleRate);
+                data[frame * 2 + 1] = 0.5f * MathF.Sin(2f * MathF.PI * 880f * frame / sampleRate);
+            }
+
+            using AudioObj sample = new()
+            {
+                Data = data,
+                SampleRate = sampleRate,
+                Channels = 2,
+                Duration = TimeSpan.FromSeconds(sourceFrames / (double)sampleRate),
+                Length = data.Length
+            };
+            BreakbeatPatternNote note = new(
+                TrackIndex: 0,
+                StartTick: 0,
+                DurationTicks: 512,
+                Varispeed: true,
+                ManuallyResized: true,
+                OriginalDurationTicks: 256);
+
+            using AudioObj rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [note], [sample], bars: 1, bpm: 60, resolution: 4, swing: 0);
+
+            Assert.IsTrue(MeasureToneAmplitude(rendered, 220, 0.05, 0.45, channel: 0) > MeasureToneAmplitude(rendered, 440, 0.05, 0.45, channel: 0) * 5f);
+            Assert.IsTrue(MeasureToneAmplitude(rendered, 440, 0.05, 0.45, channel: 1) > MeasureToneAmplitude(rendered, 880, 0.05, 0.45, channel: 1) * 5f);
+        }
+
+        [TestMethod]
+        public void ExtractPatternBars_ConcatenatesOnlySelectedBarsInTimelineOrder()
+        {
+            const int sampleRate = 4;
+            const int channels = 2;
+            float[] data = Enumerable.Range(0, sampleRate * 4 * 5 * channels).Select(value => (float)value).ToArray();
+            using AudioObj source = new()
+            {
+                Data = data,
+                SampleRate = sampleRate,
+                Channels = channels,
+                Duration = TimeSpan.FromSeconds(data.Length / (double)(sampleRate * channels)),
+                Length = data.Length
+            };
+
+            using AudioObj selected = BreakbeatGenerator_V2.ExtractPatternBars(source, [4, 0, 2], bpm: 60);
+
+            float[] expected = data
+                .Take(sampleRate * 4 * channels)
+                .Concat(data.Skip(sampleRate * 4 * 2 * channels).Take(sampleRate * 4 * channels))
+                .Concat(data.Skip(sampleRate * 4 * 4 * channels).Take(sampleRate * 4 * channels))
+                .ToArray();
+            CollectionAssert.AreEqual(expected, selected.Data);
+            Assert.AreEqual(TimeSpan.FromSeconds(12), selected.Duration);
         }
 
         [TestMethod]
@@ -211,6 +319,23 @@ namespace ModularAudience.Audio.Tests
             }
 
             return (float)Math.Sqrt(sumSquares / Math.Max(1, lastFrame - firstFrame));
+        }
+
+        private static float MeasureToneAmplitude(AudioObj audio, int frequency, double startSeconds, double endSeconds, int channel = 0)
+        {
+            int firstFrame = (int)(startSeconds * audio.SampleRate);
+            int lastFrame = Math.Min((int)(endSeconds * audio.SampleRate), audio.Data.Length / audio.Channels);
+            double sineSum = 0;
+            double cosineSum = 0;
+            for (int frame = firstFrame; frame < lastFrame; frame++)
+            {
+                double phase = 2.0 * Math.PI * frequency * frame / audio.SampleRate;
+                float value = audio.Data[frame * audio.Channels + channel];
+                sineSum += value * Math.Sin(phase);
+                cosineSum += value * Math.Cos(phase);
+            }
+
+            return (float)(2.0 * Math.Sqrt(sineSum * sineSum + cosineSum * cosineSum) / Math.Max(1, lastFrame - firstFrame));
         }
     }
 }

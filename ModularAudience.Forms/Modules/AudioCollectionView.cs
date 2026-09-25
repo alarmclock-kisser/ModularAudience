@@ -716,21 +716,45 @@ namespace ModularAudience.Forms
         private async void Form_DoubleClick(object? sender, EventArgs e)
         {
             await this.CancelAutoPlayAsync();
-            // Clicked not on an item: Select all
+            this.ToggleListBoxSelectAll();
+        }
+
+        private async void listBox_audios_DoubleClick(object? sender, EventArgs e)
+        {
+            int clickedIndex = this.listBox_audios.IndexFromPoint(this.listBox_audios.PointToClient(Cursor.Position));
+            if (clickedIndex != ListBox.NoMatches)
+            {
+                this.listBox_audios.SelectedIndex = clickedIndex;
+                if (this.listBox_audios.Items[clickedIndex] is AudioObj selectedAudio)
+                {
+                    _ = new TrackView(selectedAudio, this.AudioC);
+                }
+            }
+            else
+            {
+                this.ToggleListBoxSelectAll();
+            }
+
+            await this.AudioC.StopAllAsync();
+        }
+
+        private void ToggleListBoxSelectAll()
+        {
+            bool selectAll = this.listBox_audios.Items.Count > 0
+                && this.listBox_audios.SelectedIndices.Count != this.listBox_audios.Items.Count;
             this.listBox_audios.BeginUpdate();
             try
             {
-                if (this.listBox_audios.SelectedIndices.Count == this.listBox_audios.Items.Count)
+                if (selectAll)
                 {
-                    this.listBox_audios.ClearSelected();
+                    for (int index = 0; index < this.listBox_audios.Items.Count; index++)
+                    {
+                        this.listBox_audios.SetSelected(index, true);
+                    }
                 }
                 else
                 {
                     this.listBox_audios.ClearSelected();
-                    for (int i = 0; i < this.listBox_audios.Items.Count; i++)
-                    {
-                        this.listBox_audios.SetSelected(i, true);
-                    }
                 }
             }
             finally
@@ -738,45 +762,6 @@ namespace ModularAudience.Forms
                 WindowMainStaticHelpers.UnselectAll(WindowMain.CollectionViews, this);
                 this.listBox_audios.EndUpdate();
             }
-        }
-
-        private async void listBox_audios_DoubleClick(object? sender, EventArgs e)
-        {
-            // First set really selected  item to the one under the mouse cursor
-            this.listBox_audios.SelectedIndex = this.listBox_audios.IndexFromPoint(this.listBox_audios.PointToClient(Cursor.Position));
-            AudioObj? selectedAudio = (AudioObj?)this.listBox_audios.SelectedItem;
-            if (selectedAudio != null)
-            {
-                var tv = new TrackView(selectedAudio, this.AudioC);
-
-            }
-            else
-            {
-                // Clicked not on an item: Select all
-                this.listBox_audios.BeginUpdate();
-                try
-                {
-                    if (this.listBox_audios.SelectedIndices.Count == this.listBox_audios.Items.Count)
-                    {
-                        this.listBox_audios.ClearSelected();
-                    }
-                    else
-                    {
-                        this.listBox_audios.ClearSelected();
-                        for (int i = 0; i < this.listBox_audios.Items.Count; i++)
-                        {
-                            this.listBox_audios.SetSelected(i, true);
-                        }
-                    }
-                }
-                finally
-                {
-                    WindowMainStaticHelpers.UnselectAll(WindowMain.CollectionViews, this);
-                    this.listBox_audios.EndUpdate();
-                }
-            }
-
-            await this.AudioC.StopAllAsync();
         }
 
         private void Resize_Form_CollectionChanged(object? sender, EventArgs e)

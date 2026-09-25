@@ -849,7 +849,8 @@ namespace ModularAudience.Generators
 
                     int startTick = (int)Math.Round(step * PatternTicksPerBar / (double)sourceStepsPerBar);
                     int durationSteps = Math.Max(1, (int)Math.Ceiling(minimumDurationTicks / (double)gridTicksPerStep));
-                    notes.Add(new BreakbeatPatternNote(row, startTick, durationSteps * gridTicksPerStep));
+                    int durationTicks = durationSteps * gridTicksPerStep;
+                    notes.Add(new BreakbeatPatternNote(row, startTick, durationTicks, OriginalDurationTicks: durationTicks));
                 }
             }
 
@@ -860,7 +861,7 @@ namespace ModularAudience.Generators
             IReadOnlyList<BreakbeatPatternNote> notes,
             BreakbeatPatternNote stretchedNote)
         {
-            if (!stretchedNote.TimeStretch)
+            if (!stretchedNote.IsTimeExtended)
             {
                 return notes.ToList();
             }
@@ -967,7 +968,8 @@ namespace ModularAudience.Generators
                     sourceFrames,
                     (int)Math.Ceiling(normalizedDuration * outputSampleRate));
                 double stretchSourceDuration = stretchSourceFrames / (double)outputSampleRate;
-                if (note.TimeStretch && stretchSourceFrames > sourceFrames)
+                bool manuallyAdjusted = note.IsManuallyAdjusted;
+                if (manuallyAdjusted && stretchSourceFrames > sourceFrames)
                 {
                     float[] normalizedData = new float[checked(stretchSourceFrames * sourceChannels)];
                     Array.Copy(clip.Data, normalizedData, clip.Data.Length);
@@ -978,18 +980,28 @@ namespace ModularAudience.Generators
 
                 double noteDuration = note.DurationTicks / (double)PatternTicksPerBar * secondsPerBar;
                 int singleHitDurationTicks = GetMinimumNoteDurationTicks(samples, note.TrackIndex, bpm, resolution);
-                double stretchMultiple = Math.Max(1.0, note.DurationTicks / (double)Math.Max(1, singleHitDurationTicks));
-                double targetDuration = note.TimeStretch
+                int originalDurationTicks = note.OriginalDurationTicks > 0
+                    ? note.OriginalDurationTicks
+                    : singleHitDurationTicks;
+                double stretchMultiple = manuallyAdjusted
+                    ? note.DurationTicks / (double)Math.Max(1, originalDurationTicks)
+                    : 1.0;
+                double targetDuration = manuallyAdjusted
                     ? stretchSourceDuration * stretchMultiple
                     : Math.Max(noteDuration, Math.Max(stretchSourceDuration, normalizedDuration));
-                int targetFrames = note.TimeStretch
+                int targetFrames = manuallyAdjusted
                     ? Math.Max(1, (int)Math.Ceiling(targetDuration * outputSampleRate))
                     : Math.Max(stretchSourceFrames, (int)Math.Ceiling(targetDuration * outputSampleRate));
 
                 sourceChannels = Math.Max(1, clip.Channels);
-                float[] renderedData = note.TimeStretch && targetFrames != stretchSourceFrames
-                    ? await StretchClipAsync(clip, stretchSourceFrames, sourceFrames, targetFrames, maxWorkers)
-                    : clip.Data;
+                float[] renderedData = clip.Data;
+                if (manuallyAdjusted && targetFrames != stretchSourceFrames)
+                {
+                    renderedData = note.Varispeed
+                        ? VarispeedClip(clip, stretchSourceFrames, sourceFrames, targetFrames)
+                        : await StretchClipAsync(clip, stretchSourceFrames, sourceFrames, targetFrames, maxWorkers);
+                }
+
                 int clipFrames = targetFrames;
                 float[] clipData = new float[checked(clipFrames * sourceChannels)];
                 Array.Copy(renderedData, clipData, Math.Min(renderedData.Length, clipData.Length));
@@ -1056,6 +1068,71 @@ namespace ModularAudience.Generators
             return rendered;
         }
 
+        public static AudioObj ExtractPatternBars(AudioObj source, IReadOnlyList<int> barIndices, float bpm)
+        {
+            if (source.Data == null || source.Data.Length == 0 || source.SampleRate <= 0 || source.Channels <= 0 || barIndices.Count == 0)
+            {
+                throw new ArgumentException("A rendered source and at least one bar are required.");
+            }
+
+            double secondsPerBar = 240.0 / Math.Max(1.0, bpm);
+            int sourceFrames = source.Data.Length / source.Channels;
+            List<(int StartFrame, int FrameCount)> ranges = [];
+            foreach (int barIndex in barIndices.Distinct().OrderBy(index => index))
+            {
+                if (barIndex < 0)
+                {
+                    continue;
+                }
+
+                int startFrame = Math.Clamp(
+                    (int)Math.Round(barIndex * secondsPerBar * source.SampleRate, MidpointRounding.AwayFromZero),
+                    0,
+                    sourceFrames);
+                int endFrame = Math.Clamp(
+                    (int)Math.Round((barIndex + 1) * secondsPerBar * source.SampleRate, MidpointRounding.AwayFromZero),
+                    startFrame,
+                    sourceFrames);
+                if (endFrame > startFrame)
+                {
+                    ranges.Add((startFrame, endFrame - startFrame));
+                }
+            }
+
+            int outputFrames = ranges.Sum(range => range.FrameCount);
+            if (outputFrames <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(barIndices), "The selected bars contain no rendered audio.");
+            }
+
+            float[] outputData = new float[checked(outputFrames * source.Channels)];
+            int destinationFrame = 0;
+            foreach ((int startFrame, int frameCount) in ranges)
+            {
+                Array.Copy(
+                    source.Data,
+                    startFrame * source.Channels,
+                    outputData,
+                    destinationFrame * source.Channels,
+                    frameCount * source.Channels);
+                destinationFrame += frameCount;
+            }
+
+            var selectedAudio = new AudioObj
+            {
+                Name = $"{source.Name}_SelectedBars",
+                Data = outputData,
+                SampleRate = source.SampleRate,
+                Channels = source.Channels,
+                Duration = TimeSpan.FromSeconds(outputFrames / (double)source.SampleRate),
+                Length = outputData.Length,
+                BitDepth = source.BitDepth,
+                Bpm = bpm
+            };
+            selectedAudio.Rename(selectedAudio.Name);
+            return selectedAudio;
+        }
+
         private static double GetSampleDurationSeconds(AudioObj sample)
         {
             int channels = Math.Max(1, sample.Channels);
@@ -1104,6 +1181,34 @@ namespace ModularAudience.Generators
             }
 
             int validAudioFrames = Math.Clamp((int)Math.Ceiling(unpaddedSourceFrames * factor), 0, targetFrames);
+            Array.Clear(exactLengthData, validAudioFrames * channelCount, (targetFrames - validAudioFrames) * channelCount);
+            return exactLengthData;
+        }
+
+        private static float[] VarispeedClip(
+            AudioObj clip,
+            int paddedSourceFrames,
+            int unpaddedSourceFrames,
+            int targetFrames)
+        {
+            int channelCount = Math.Max(1, clip.Channels);
+            int targetSampleCount = checked(targetFrames * channelCount);
+            float[] exactLengthData = new float[targetSampleCount];
+            for (int frame = 0; frame < targetFrames; frame++)
+            {
+                int sourceFrame = (int)Math.Min(
+                    paddedSourceFrames - 1L,
+                    (long)frame * paddedSourceFrames / targetFrames);
+                for (int channel = 0; channel < channelCount; channel++)
+                {
+                    exactLengthData[frame * channelCount + channel] = clip.Data[sourceFrame * channelCount + channel];
+                }
+            }
+
+            int validAudioFrames = Math.Clamp(
+                (int)Math.Ceiling(unpaddedSourceFrames * (targetFrames / (double)paddedSourceFrames)),
+                0,
+                targetFrames);
             Array.Clear(exactLengthData, validAudioFrames * channelCount, (targetFrames - validAudioFrames) * channelCount);
             return exactLengthData;
         }

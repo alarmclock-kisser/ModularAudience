@@ -18,9 +18,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             components = new System.ComponentModel.Container();
             pictureBox_pattern = new BufferedPictureBox();
+            panel_pattern = new Panel();
+            hScrollBar_pattern = new HScrollBar();
             panel_controls = new Panel();
             button_save = new Button();
             button_cancel = new Button();
+            button_help = new Button();
             button_removeBar = new Button();
             button_addBar = new Button();
             checkBox_preHear = new CheckBox();
@@ -32,6 +35,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             timer_previewCaret = new System.Windows.Forms.Timer(components);
             toolTip_pattern = new ToolTip(components);
             ((System.ComponentModel.ISupportInitialize)pictureBox_pattern).BeginInit();
+            panel_pattern.SuspendLayout();
             panel_controls.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_bpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_resolution).BeginInit();
@@ -45,18 +49,41 @@ namespace ModularAudience.Forms.Modules.Dialogs
             pictureBox_pattern.Name = "pictureBox_pattern";
             pictureBox_pattern.Size = new Size(884, 461);
             pictureBox_pattern.TabIndex = 0;
-            pictureBox_pattern.TabStop = false;
-            toolTip_pattern.SetToolTip(pictureBox_pattern, "Left-click or drag to add hits. Right-click or drag to delete hits.");
+            pictureBox_pattern.TabStop = true;
+            toolTip_pattern.SetToolTip(pictureBox_pattern, "Left-click or drag to add hits. Right-click or drag to delete. Ctrl+wheel zooms; wheel scrolls when zoomed.");
             pictureBox_pattern.Paint += pictureBox_pattern_Paint;
             pictureBox_pattern.MouseDown += pictureBox_pattern_MouseDown;
             pictureBox_pattern.MouseMove += pictureBox_pattern_MouseMove;
             pictureBox_pattern.MouseUp += pictureBox_pattern_MouseUp;
+            pictureBox_pattern.MouseEnter += pictureBox_pattern_MouseEnter;
+            pictureBox_pattern.MouseWheel += pictureBox_pattern_MouseWheel;
             pictureBox_pattern.Resize += pictureBox_pattern_Resize;
+            //
+            // panel_pattern
+            //
+            panel_pattern.Controls.Add(pictureBox_pattern);
+            panel_pattern.Controls.Add(hScrollBar_pattern);
+            panel_pattern.Dock = DockStyle.Fill;
+            panel_pattern.Location = new Point(0, 0);
+            panel_pattern.Name = "panel_pattern";
+            panel_pattern.Size = new Size(884, 461);
+            panel_pattern.TabIndex = 2;
+            panel_pattern.MouseWheel += pictureBox_pattern_MouseWheel;
+            //
+            // hScrollBar_pattern
+            //
+            hScrollBar_pattern.Dock = DockStyle.Bottom;
+            hScrollBar_pattern.Height = SystemInformation.HorizontalScrollBarHeight;
+            hScrollBar_pattern.Name = "hScrollBar_pattern";
+            hScrollBar_pattern.Visible = false;
+            hScrollBar_pattern.ValueChanged += hScrollBar_pattern_ValueChanged;
+            hScrollBar_pattern.MouseWheel += pictureBox_pattern_MouseWheel;
             // 
             // panel_controls
             // 
             panel_controls.Controls.Add(button_save);
             panel_controls.Controls.Add(button_cancel);
+            panel_controls.Controls.Add(button_help);
             panel_controls.Controls.Add(button_removeBar);
             panel_controls.Controls.Add(button_addBar);
             panel_controls.Controls.Add(checkBox_preHear);
@@ -81,9 +108,21 @@ namespace ModularAudience.Forms.Modules.Dialogs
             button_save.Text = "Save";
             button_save.UseVisualStyleBackColor = true;
             button_save.Click += button_save_Click;
-            // 
+            //
+            // button_help
+            //
+            button_help.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            button_help.Location = new Point(626, 14);
+            button_help.Name = "button_help";
+            button_help.Size = new Size(72, 25);
+            button_help.TabIndex = 9;
+            button_help.Text = "Help";
+            toolTip_pattern.SetToolTip(button_help, "Show pattern editor gestures and shortcuts.");
+            button_help.UseVisualStyleBackColor = true;
+            button_help.Click += button_help_Click;
+            //
             // button_cancel
-            // 
+            //
             button_cancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             button_cancel.DialogResult = DialogResult.Cancel;
             button_cancel.Location = new Point(713, 14);
@@ -163,7 +202,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // numericUpDown_resolution
             // 
             numericUpDown_resolution.Location = new Point(390, 15);
-            numericUpDown_resolution.Maximum = new decimal(new int[] { 64, 0, 0, 0 });
+            numericUpDown_resolution.Maximum = new decimal(new int[] { 256, 0, 0, 0 });
             numericUpDown_resolution.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             numericUpDown_resolution.Name = "numericUpDown_resolution";
             numericUpDown_resolution.Size = new Size(58, 23);
@@ -192,13 +231,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
             AutoScaleMode = AutoScaleMode.Font;
             CancelButton = button_cancel;
             ClientSize = new Size(884, 513);
-            Controls.Add(pictureBox_pattern);
+            Controls.Add(panel_pattern);
             Controls.Add(panel_controls);
-            MinimumSize = new Size(760, 360);
+            MinimumSize = new Size(840, 360);
             Name = "BreakbeatPatternEditorDialog";
             StartPosition = FormStartPosition.CenterParent;
             Text = "Breakbeat Pattern Editor";
             ((System.ComponentModel.ISupportInitialize)pictureBox_pattern).EndInit();
+            panel_pattern.ResumeLayout(false);
             panel_controls.ResumeLayout(false);
             panel_controls.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_bpm).EndInit();
@@ -207,6 +247,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         }
 
         private BufferedPictureBox pictureBox_pattern;
+        private Panel panel_pattern;
+        private HScrollBar hScrollBar_pattern;
         private Panel panel_controls;
         private Label label_bpm;
         private NumericUpDown numericUpDown_bpm;
@@ -217,6 +259,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Button button_addBar;
         private Button button_removeBar;
         private Button button_cancel;
+        private Button button_help;
         private Button button_save;
         private System.Windows.Forms.Timer timer_previewCaret;
         private ToolTip toolTip_pattern;
