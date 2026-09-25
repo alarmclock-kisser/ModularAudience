@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -30,12 +31,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
         internal AudioCollectionView? CollectionView { get; private set; } = null;
         private CancellationTokenSource? autoPlayCancellationTokenSource;
         private bool sampleSelectionFromUserInput;
+        private List<bool[]> currentPattern = [];
+        private string[] currentPatternRowLabels = [];
+        private int currentPatternBars = 1;
+        private int currentPatternResolution = 16;
+        private List<BreakbeatPatternNote> currentPatternNotes = [];
+        private bool hasEditedPattern;
+        private BreakbeatPatternEditorDialog? patternEditorDialog;
 
         internal AudioObj? SelectedTrack => this.listBox_samples.SelectedItem as AudioObj;
 
         private bool AutoPlayEnabled => this.checkBox_autoPlay.Checked;
         private int Bars => (int)this.numericUpDown_bars.Value;
-        private int Bpm => (int)this.numericUpDown_bpm.Value;
+        private float Bpm => (float)this.numericUpDown_bpm.Value;
         private float Density => (float)this.numericUpDown_density.Value;
         private int Resolution => (int)this.numericUpDown_resolution.Value;
         private float Swing => (float)this.numericUpDown_swing.Value;
@@ -50,7 +58,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private CancellationTokenSource? botCancellationTokenSource;
         private Task? botLoopTask;
         private AudioObj? botCurrentPlaybackAudio;
-        private readonly Lock botPlaybackGate = new();
 
 
 
@@ -60,7 +67,15 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             foreach (AudioObj obj in samples)
             {
-                this.AudioC.Audios.Add(obj.Clone());
+                AudioObj workingCopy = obj.Clone();
+                workingCopy.SampleTag = obj.SampleTag;
+                workingCopy.Tag = obj.Tag;
+                foreach ((string key, string value) in obj.CustomTags.Values)
+                {
+                    workingCopy.CustomTags[key] = value;
+                }
+
+                this.AudioC.Audios.Add(workingCopy);
             }
 
             this.comboBox_drumset.DataSource = Enum.GetValues<DrumsetElement>();
@@ -173,6 +188,89 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             var tv = new TrackView(this.SelectedTrack, this.AudioC);
             tv.Show();
+        }
+
+        private void pictureBox_beatMap_MouseDoubleClick(object? sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left || this.currentPattern.Count == 0 || this.AudioC.Audios.Count == 0)
+            {
+                return;
+            }
+
+            if (this.patternEditorDialog is { IsDisposed: false } openEditor)
+            {
+                if (openEditor.WindowState == FormWindowState.Minimized)
+                {
+                    openEditor.WindowState = FormWindowState.Normal;
+                }
+
+                openEditor.Activate();
+                return;
+            }
+
+            BreakbeatPatternEditorDialog editor = new(
+                this.currentPattern,
+                this.AudioC.Audios,
+                this.currentPatternRowLabels,
+                this.currentPatternBars,
+                this.currentPatternResolution,
+                this.Swing,
+                (decimal)this.Bpm,
+                this.hasEditedPattern ? this.currentPatternNotes : null,
+                this.hasEditedPattern ? this.currentPatternResolution : null);
+
+            this.patternEditorDialog = editor;
+            editor.FormClosed += this.BreakbeatPatternEditorDialog_FormClosed;
+            editor.Show(this);
+        }
+
+        private async void BreakbeatPatternEditorDialog_FormClosed(object? sender, FormClosedEventArgs e)
+        {
+            if (sender is not BreakbeatPatternEditorDialog editor)
+            {
+                return;
+            }
+
+            if (ReferenceEquals(this.patternEditorDialog, editor))
+            {
+                this.patternEditorDialog = null;
+            }
+
+            if (editor.DialogResult != DialogResult.OK || this.IsDisposed || this.Disposing)
+            {
+                return;
+            }
+
+            this.numericUpDown_bpm.Value = editor.Bpm;
+            this.numericUpDown_bars.Value = editor.Bars;
+            this.numericUpDown_resolution.Value = editor.Resolution;
+            this.ShowBeatMap(editor.Pattern, this.currentPatternRowLabels, editor.Bars, editor.Resolution);
+            this.currentPatternNotes = editor.Notes.ToList();
+            this.hasEditedPattern = true;
+
+            AudioObj editedAudio = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                this.currentPatternNotes,
+                this.AudioC.Audios,
+                editor.Bars,
+                this.Bpm,
+                editor.Resolution,
+                this.Swing,
+                "BreakbeatEdited");
+
+            if (editedAudio == null || this.IsDisposed || this.Disposing)
+            {
+                editedAudio?.Dispose();
+                return;
+            }
+
+            if (this.CollectionView == null || this.CollectionView.IsDisposed)
+            {
+                this.CollectionView = new AudioCollectionView([]);
+            }
+
+            this.CollectionView.AudioC.Audios.Add(editedAudio);
+            this.CollectionView.Show();
+            this.CollectionView.Rename("Break-Beat" + (this.CollectionView.AudioC.Audios.Count == 1 ? "" : "(s)") + " Generated " + this.Bpm.ToString("F1", CultureInfo.InvariantCulture) + " BPM");
         }
 
 
@@ -744,7 +842,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            this.CollectionView ??= new AudioCollectionView([]);
+            if (this.CollectionView == null || this.CollectionView.IsDisposed)
+            {
+                this.CollectionView = new AudioCollectionView([]);
+            }
+
             this.CollectionView.AudioC.Audios.Add(audioObj);
             this.CollectionView.Show();
             this.CollectionView.Rename("Break-Beat" + (this.CollectionView.AudioC.Audios.Count == 1 ? "" : "(s)") + " Generated " + this.Bpm.ToString("F1", CultureInfo.InvariantCulture) + " BPM");
@@ -764,14 +866,21 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }).ToArray();
         }
 
-        private void ShowBeatMap(IReadOnlyList<bool[]> breakbeat, IReadOnlyList<string>? rowLabels = null)
+        private void ShowBeatMap(IReadOnlyList<bool[]> breakbeat, IReadOnlyList<string>? rowLabels = null, int? bars = null, int? resolution = null)
         {
+            this.currentPattern = breakbeat.Select(row => row.ToArray()).ToList();
+            this.currentPatternRowLabels = (rowLabels ?? this.GetBeatMapRowLabels()).ToArray();
+            this.currentPatternBars = Math.Max(1, bars ?? this.Bars);
+            this.currentPatternResolution = Math.Max(1, resolution ?? this.Resolution);
+            this.currentPatternNotes = [];
+            this.hasEditedPattern = false;
+
             if (this.pictureBox_beatMap.Width <= 0 || this.pictureBox_beatMap.Height <= 0)
             {
                 return;
             }
 
-            Bitmap bitmap = CreateBeatMapBitmap(breakbeat, rowLabels ?? this.GetBeatMapRowLabels(), this.pictureBox_beatMap.Size, this.Bars, this.Resolution);
+            Bitmap bitmap = CreateBeatMapBitmap(this.currentPattern, this.currentPatternRowLabels, this.pictureBox_beatMap.Size, this.currentPatternBars, this.currentPatternResolution);
             Image? previous = this.pictureBox_beatMap.Image;
             this.pictureBox_beatMap.Image = bitmap;
             previous?.Dispose();
@@ -1993,78 +2102,33 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private async Task RunBotLoopAsync(CancellationToken cancellationToken)
         {
             int generationNumber = 1;
-            BotPreparedBreakbeat current = await this.GenerateBotPreparedBreakbeatAsync(generationNumber, cancellationToken);
-            Task<BotPreparedBreakbeat>? nextTask = this.GenerateBotPreparedBreakbeatAsync(generationNumber + 1, cancellationToken);
-            AudioObj? playbackChain = null;
-            Task? playbackTask = null;
-
-            try
+            while (!cancellationToken.IsCancellationRequested)
             {
-                while (!cancellationToken.IsCancellationRequested)
-                {
-                    int rerollInterval = await this.InvokeOnUiAsync(() => Math.Max(1, (int)this.numericUpDown_reroll.Value));
-                    bool shouldAutoExport = await this.InvokeOnUiAsync(() => this.checkBox_autoExport.Checked);
-                    bool exportThisGeneration = shouldAutoExport && generationNumber % rerollInterval == 0;
+                cancellationToken.ThrowIfCancellationRequested();
+                BotPreparedBreakbeat current = await this.GenerateBotPreparedBreakbeatAsync(generationNumber, cancellationToken);
+                int rerollInterval = await this.InvokeOnUiAsync(() => Math.Max(1, (int)this.numericUpDown_reroll.Value));
+                bool shouldAutoExport = await this.InvokeOnUiAsync(() => this.checkBox_autoExport.Checked);
+                bool exportThisGeneration = shouldAutoExport && generationNumber % rerollInterval == 0;
 
-                    await this.PresentBotPreparedBreakbeatAsync(current, exportThisGeneration, generationNumber, cancellationToken);
+                await this.PresentBotPreparedBreakbeatAsync(current, exportThisGeneration, generationNumber, cancellationToken);
 
-                    int chainRepeats = playbackChain == null ? Math.Max(1, rerollInterval) : rerollInterval;
-                    for (int pass = 0; pass < rerollInterval; pass++)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
+                this.botCurrentPlaybackAudio = current.Audio;
+                await current.Audio.PlayAsync(CancellationToken.None, initialVolume: 1.0f);
+                await this.WaitForBotPlaybackFullAsync(current.Audio, current.Duration, cancellationToken);
+                this.botCurrentPlaybackAudio = null;
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
 
-                        if (playbackChain == null)
-                        {
-                            playbackChain = this.CreateBotPlaybackChain(current, chainRepeats);
-                            this.botCurrentPlaybackAudio = playbackChain;
-                            playbackTask = playbackChain.PlayAsync(CancellationToken.None, initialVolume: 1.0f);
-                        }
-
-                        if (pass == rerollInterval - 1)
-                        {
-                            BotPreparedBreakbeat appendSource = nextTask is not null
-                                ? await nextTask
-                                : await this.GenerateBotPreparedBreakbeatAsync(generationNumber + 1, cancellationToken);
-
-                            this.AppendBotPreparedBreakbeat(playbackChain, appendSource, Math.Max(1, rerollInterval));
-                        }
-
-                        await this.WaitForBotPlaybackProgressAsync(playbackChain, current.Duration, pass + 1, cancellationToken);
-                    }
-
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    generationNumber++;
-                    current = nextTask is not null
-                        ? await nextTask
-                        : await this.GenerateBotPreparedBreakbeatAsync(generationNumber, cancellationToken);
-
-                    nextTask = this.GenerateBotPreparedBreakbeatAsync(generationNumber + 1, cancellationToken);
-                }
+                generationNumber++;
             }
-            finally
-            {
-                if (playbackTask is not null)
-                {
-                    try
-                    {
-                        await playbackTask;
-                    }
-                    catch
-                    {
-                    }
-                }
+        }
 
-                if (nextTask is not null)
-                {
-                    try
-                    {
-                        await nextTask;
-                    }
-                    catch
-                    {
-                    }
-                }
+        private async Task WaitForBotPlaybackFullAsync(AudioObj audio, TimeSpan expectedDuration, CancellationToken cancellationToken)
+        {
+            Stopwatch playbackDuration = Stopwatch.StartNew();
+            while (audio.Playing || playbackDuration.Elapsed < expectedDuration)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Delay(50, cancellationToken);
             }
         }
 
@@ -2184,74 +2248,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             LogCollection.Log($"Breakbeat bot auto exported generation #{generationNumber:D3}: {exportPath}");
-        }
-
-        private AudioObj CreateBotPlaybackChain(BotPreparedBreakbeat prepared, int repeats)
-        {
-            AudioObj chain = prepared.Audio.Clone();
-            chain.Volume = 100f;
-            chain.Name = prepared.PatternName + "_Chain";
-
-            for (int i = 1; i < Math.Max(1, repeats); i++)
-            {
-                this.AppendBotPreparedBreakbeat(chain, prepared, 1);
-            }
-
-            return chain;
-        }
-
-        private void AppendBotPreparedBreakbeat(AudioObj chain, BotPreparedBreakbeat prepared, int repeats)
-        {
-            if (chain.Data == null || prepared.Audio.Data == null)
-            {
-                return;
-            }
-
-            if (chain.SampleRate != prepared.Audio.SampleRate || chain.Channels != prepared.Audio.Channels)
-            {
-                throw new InvalidOperationException("Breakbeat bot cannot append segments with different audio formats.");
-            }
-
-            int repeatCount = Math.Max(1, repeats);
-            lock (this.botPlaybackGate)
-            {
-                int appendLength = prepared.Audio.Data.Length * repeatCount;
-                float[] chainData = chain.Data;
-                int originalLength = chainData.Length;
-                Array.Resize(ref chainData, originalLength + appendLength);
-
-                for (int i = 0; i < repeatCount; i++)
-                {
-                    Array.Copy(prepared.Audio.Data, 0, chainData, originalLength + (i * prepared.Audio.Data.Length), prepared.Audio.Data.Length);
-                }
-
-                chain.Data = chainData;
-                chain.Length = chainData.Length;
-                chain.Duration = TimeSpan.FromSeconds((double)chain.Length / (chain.SampleRate * Math.Max(1, chain.Channels)));
-                chain.BitDepth = prepared.Audio.BitDepth;
-                chain.Bpm = prepared.Audio.Bpm;
-            }
-        }
-
-        private async Task WaitForBotPlaybackProgressAsync(AudioObj chain, TimeSpan segmentDuration, int completedSegments, CancellationToken cancellationToken)
-        {
-            double targetSeconds = Math.Max(0.05, segmentDuration.TotalSeconds * completedSegments);
-
-            try
-            {
-                while (chain.Playing && chain.CurrentTime.TotalSeconds + 0.02 < targetSeconds)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    await Task.Delay(40, CancellationToken.None);
-                }
-            }
-            finally
-            {
-                if (!chain.Playing && ReferenceEquals(this.botCurrentPlaybackAudio, chain))
-                {
-                    this.botCurrentPlaybackAudio = null;
-                }
-            }
         }
 
         private Task InvokeOnUiAsync(Action action)

@@ -243,18 +243,19 @@ namespace ModularAudience.Forms
         {
             this.isPinned = this.menuToolStripItem_pinWindow.Checked;
             this.TopMost = this.isPinned;
-            this.Move += this.AudioCollectionView_Move;
-            if (this.isPinned)
-            {
-                this.Move -= this.AudioCollectionView_Move;
-            }
         }
 
         private void AudioCollectionView_Move(object? sender, EventArgs e)
         {
-            if (this.isPinned)
+            int maxHeight = this.GetAvailableWorkingAreaHeight();
+            if (this.MaximumSize.Height != maxHeight)
             {
-                return;
+                this.MaximumSize = new Size(this.MaximumSize.Width, maxHeight);
+            }
+
+            if (this.Height > maxHeight)
+            {
+                this.Height = maxHeight;
             }
         }
 

@@ -29,6 +29,7 @@
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
+            this.toolTip_beatMap = new ToolTip(this.components);
             this.listBox_samples = new ListBox();
             this.comboBox_drumset = new ComboBox();
             this.checkBox_autoPlay = new CheckBox();
@@ -348,6 +349,12 @@
             this.pictureBox_beatMap.Size = new Size(294, 152);
             this.pictureBox_beatMap.TabIndex = 25;
             this.pictureBox_beatMap.TabStop = false;
+            this.toolTip_beatMap.AutoPopDelay = 5000;
+            this.toolTip_beatMap.InitialDelay = 0;
+            this.toolTip_beatMap.ReshowDelay = 0;
+            this.toolTip_beatMap.ShowAlways = true;
+            this.toolTip_beatMap.SetToolTip(this.pictureBox_beatMap, "Double-click to open the drum roll editor.");
+            this.pictureBox_beatMap.MouseDoubleClick += this.pictureBox_beatMap_MouseDoubleClick;
             // 
             // button_bot
             // 
@@ -473,6 +480,7 @@
         private Button button_llm;
         private TextBox textBox_apiUrl;
         private PictureBox pictureBox_beatMap;
+        private ToolTip toolTip_beatMap;
         private Button button_bot;
         private Label label_info_reroll;
         private NumericUpDown numericUpDown_reroll;

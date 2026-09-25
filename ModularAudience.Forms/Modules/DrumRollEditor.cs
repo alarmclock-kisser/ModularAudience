@@ -173,7 +173,6 @@ namespace ModularAudience.Forms.Modules
         {
             AudioObj editorAudio = new()
             {
-                Id = source.Id,
                 FilePath = source.FilePath,
                 Data = source.Data,
                 SampleRate = source.SampleRate,

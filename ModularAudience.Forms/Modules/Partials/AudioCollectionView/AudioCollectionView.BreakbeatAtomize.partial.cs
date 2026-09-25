@@ -309,7 +309,7 @@ namespace ModularAudience.Forms
 
             foreach (AudioObj audio in toDelete)
             {
-                await this.AudioC.RemoveAsync(audio.Id);
+                await this.AudioC.RemoveAsync(audio);
             }
 
             this.ResetAudioListBinding();
@@ -413,6 +413,7 @@ namespace ModularAudience.Forms
 
         private async void checkBox_autoPlay_CheckedChanged(object? sender, EventArgs e)
         {
+            this.SynchronizeSharedCheckboxes(preview: false);
             if (!this.checkBox_autoPlay.Checked)
             {
                 await this.CancelAutoPlayAsync(stopCollection: true).ConfigureAwait(false);

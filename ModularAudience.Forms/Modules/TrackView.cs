@@ -95,7 +95,6 @@ namespace ModularAudience.Forms.Modules
             this.designerWaveWidth = this.pictureBox_waveform.Width;
             this.sourceAudioId = audio.Id;
             this.OriginalAudio = audio.Clone();
-            this.OriginalAudio.Id = Guid.NewGuid();
             this.Settings = new TrackViewSettings(this)
             {
                 Owner = this
@@ -775,7 +774,7 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        internal void SetVolumeSynced(int scrollbarValue, bool muted, bool broadcast = true)
+        internal void SetVolumeSynced(int scrollbarValue, bool muted, bool broadcast = true, bool syncMute = true, bool applyToAll = false)
         {
             if (this.IsDisposed)
             {
@@ -787,7 +786,7 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            bool doBroadcast = broadcast && !ModifierKeys.HasFlag(Keys.Control);
+            bool doBroadcast = broadcast && (applyToAll || !ModifierKeys.HasFlag(Keys.Control));
 
             this.suppressVolumeSync = true;
             try
@@ -798,7 +797,7 @@ namespace ModularAudience.Forms.Modules
                     this.vScrollBar_volume.Value = clamped;
                 }
 
-                if (this.checkBox_mute.Checked != muted)
+                if (syncMute && this.checkBox_mute.Checked != muted)
                 {
                     this.checkBox_mute.Checked = muted;
                 }
@@ -810,10 +809,16 @@ namespace ModularAudience.Forms.Modules
 
                 if (doBroadcast)
                 {
-                    foreach (var tv in WindowMain.SyncedTrackViews.Where(tv => tv != this && !tv.IsDisposed))
+                    IEnumerable<TrackView> targets = applyToAll
+                        ? WindowMain.TrackViews
+                        : WindowMain.SyncedTrackViews;
+                    foreach (var tv in targets.Where(tv => tv != this && !tv.IsDisposed && !tv.Disposing))
                     {
-                        // verhindere, dass Empfänger erneut broadcastet
-                        tv.SetVolumeSynced(clamped, muted, broadcast: false);
+                        tv.SetVolumeSynced(
+                            clamped,
+                            applyToAll ? tv.checkBox_mute.Checked : muted,
+                            broadcast: false,
+                            syncMute: !applyToAll);
                     }
                 }
             }
@@ -825,9 +830,10 @@ namespace ModularAudience.Forms.Modules
 
         private void vScrollBar_volume_Scroll(object? sender, ScrollEventArgs e)
         {
-            if (this.OriginalAudio.Playing || this.OriginalAudio.Paused)
+            bool applyToAll = ModifierKeys.HasFlag(Keys.Control);
+            if (this.OriginalAudio.Playing || this.OriginalAudio.Paused || applyToAll)
             {
-                this.SetVolumeSynced(this.vScrollBar_volume.Value, this.checkBox_mute.Checked);
+                this.SetVolumeSynced(this.vScrollBar_volume.Value, this.checkBox_mute.Checked, applyToAll: applyToAll);
             }
         }
 
@@ -3399,7 +3405,25 @@ namespace ModularAudience.Forms.Modules
             }
 
             long frame = sampleIndexUnderMouse / Math.Max(1, this.OriginalAudio.Channels);
+            this.JumpToFrame(frame);
 
+            if (!this.Synced)
+            {
+                return;
+            }
+
+            int sourceSampleRate = Math.Max(1, this.OriginalAudio.SampleRate);
+            foreach (TrackView trackView in WindowMain.SyncedTrackViews.Where(trackView => trackView != this && !trackView.IsDisposed && !trackView.Disposing))
+            {
+                int targetSampleRate = Math.Max(1, trackView.OriginalAudio.SampleRate);
+                long targetFrame = (long)Math.Round(frame * (double)targetSampleRate / sourceSampleRate);
+                trackView.JumpToFrame(Math.Clamp(targetFrame, 0L, Math.Max(0L, trackView.GetTotalFrames())));
+            }
+        }
+
+        private void JumpToFrame(long frame)
+        {
+            frame = Math.Clamp(frame, 0L, Math.Max(0L, this.GetTotalFrames()));
             this.OriginalAudio.SelectionStart = -1;
             this.OriginalAudio.SelectionEnd = -1;
             this.OriginalAudio.SetPosition(frame);
@@ -3411,7 +3435,6 @@ namespace ModularAudience.Forms.Modules
             desiredOffset = Math.Max(0, desiredOffset);
             this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
             this.UpdateOffsetScrollbar();
-
             this.lastClickFrame = frame;
         }
 

@@ -46,6 +46,7 @@
 			this.button_strobe = new Button();
 			this.numericUpDown_hue = new NumericUpDown();
 			this.checkBox_hue = new CheckBox();
+			this.checkBox_applyToAll = new CheckBox();
 			((System.ComponentModel.ISupportInitialize) this.numericUpDown_timeMarkers).BeginInit();
 			((System.ComponentModel.ISupportInitialize) this.numericUpDown_caretWidth).BeginInit();
 			((System.ComponentModel.ISupportInitialize) this.numericUpDown_frameRate).BeginInit();
@@ -246,6 +247,17 @@
 			this.checkBox_hue.Text = "Hue";
 			this.checkBox_hue.UseVisualStyleBackColor = true;
 			// 
+			// checkBox_applyToAll
+			//
+			this.checkBox_applyToAll.AutoSize = true;
+			this.checkBox_applyToAll.Location = new Point(230, 172);
+			this.checkBox_applyToAll.Name = "checkBox_applyToAll";
+			this.checkBox_applyToAll.Size = new Size(89, 19);
+			this.checkBox_applyToAll.TabIndex = 50;
+			this.checkBox_applyToAll.Text = "Apply to all";
+			this.checkBox_applyToAll.UseVisualStyleBackColor = true;
+			this.checkBox_applyToAll.CheckedChanged += this.checkBox_applyToAll_CheckedChanged;
+			//
 			// TrackViewSettings
 			// 
 			this.AutoScaleDimensions = new SizeF(7F, 15F);
@@ -254,6 +266,7 @@
 			this.Controls.Add(this.button_strobe);
 			this.Controls.Add(this.numericUpDown_hue);
 			this.Controls.Add(this.checkBox_hue);
+			this.Controls.Add(this.checkBox_applyToAll);
 			this.Controls.Add(this.button_colorSelection);
 			this.Controls.Add(this.button_colorCaret);
 			this.Controls.Add(this.label_info_colors);
@@ -303,5 +316,6 @@
         private Button button_strobe;
         private NumericUpDown numericUpDown_hue;
         private CheckBox checkBox_hue;
+        private CheckBox checkBox_applyToAll;
     }
 }

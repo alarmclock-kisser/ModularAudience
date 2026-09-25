@@ -12,7 +12,7 @@ namespace ModularAudience.Audio
     public partial class AudioObj
     {
         // Core identity & metadata
-        public Guid Id { get; set; } = Guid.NewGuid();
+        public readonly Guid Id = Guid.NewGuid();
         public readonly DateTime CreatedAt = DateTime.UtcNow;
         public string Name { get; set; } = string.Empty;
         public string OriginalName { get; private set; } = string.Empty;
@@ -173,7 +173,6 @@ namespace ModularAudience.Audio
         {
             return new AudioObj
             {
-                Id = this.Id,
                 Name = this.Name,
                 OriginalName = this.OriginalName,
                 FilePath = this.FilePath,
@@ -420,7 +419,6 @@ namespace ModularAudience.Audio
             this.StartingOffset = source.StartingOffset;
             this.Bpm = source.Bpm;
             this.Rename(source.OriginalName);
-            this.Id = source.Id;
 
             // Copy metrics dictionary content
             this.Metrics.Clear();

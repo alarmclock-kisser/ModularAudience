@@ -17,6 +17,10 @@ namespace ModularAudience.Forms
 {
     public partial class AudioCollectionView : Form
     {
+        private static bool? sharedAutoPlayState;
+        private static bool? sharedPreviewState;
+        private static bool synchronizingSharedCheckboxes;
+
         internal readonly AudioCollection AudioC = new();
 
         internal IEnumerable<AudioObj> SelectedAudios => this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>();
@@ -26,7 +30,10 @@ namespace ModularAudience.Forms
         private CancellationTokenSource? autoPlayCts;
         private AudioObj? autoPlayCurrent;
         private readonly SemaphoreSlim autoPlayLock = new(1, 1);
-        private bool closeCleanupStarted;
+        private volatile bool closeCleanupStarted;
+        private string? lastAppliedOrderBy;
+        private bool orderByDescending;
+        private bool suppressOrderBySelectionChanged;
         private static readonly HashSet<char> InvalidFileNameChars = [.. Path.GetInvalidFileNameChars()];
 
         public int AudioCount => this.AudioC.Audios.Count;
@@ -38,8 +45,6 @@ namespace ModularAudience.Forms
         private WaveformPreview? waveformPreviewForm;
         private bool ShowPreview => this.checkBox_preview.Checked;
 
-        private const int MaxAutoGrowHeight = 480;
-        private int _autoGrowAnchorHeight;
         private int FormListBoxClearance { get; set; } = 5;
         private int _resizeStartHeight;
         private bool _isUserResizing;
@@ -68,6 +73,8 @@ namespace ModularAudience.Forms
         public AudioCollectionView(IEnumerable<AudioObj> audios, string? title = null)
         {
             this.InitializeComponent();
+            this.checkBox_autoPlay.Checked = sharedAutoPlayState ?? this.checkBox_autoPlay.Checked;
+            this.checkBox_preview.Checked = sharedPreviewState ?? this.checkBox_preview.Checked;
             this.StartPosition = FormStartPosition.Manual;
 
             this.SetStyle(ControlStyles.ResizeRedraw | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
@@ -77,10 +84,19 @@ namespace ModularAudience.Forms
 
             this.Text = title ?? ("Audio Collection #" + (WindowMain.CollectionViews.Where(cv => !cv.IsDisposed).Count()).ToString("D2"));
 
-            foreach (AudioObj audio in audios)
+            this.AudioC.Audios.RaiseListChangedEvents = false;
+            try
             {
-                this.AudioC.Audios.Add(audio);
+                foreach (AudioObj audio in audios)
+                {
+                    this.AudioC.Audios.Add(audio);
+                }
             }
+            finally
+            {
+                this.AudioC.Audios.RaiseListChangedEvents = true;
+            }
+            this.AudioC.Audios.ResetBindings();
 
             this.listBox_audios.Items.Clear();
             this.listBox_audios.DataSource = this.AudioC.Audios;
@@ -91,6 +107,7 @@ namespace ModularAudience.Forms
 
             this.AudioC.Audios.ListChanged += this.Resize_Form_CollectionChanged;
             this.Resize += this.AudioCollectionView_Resize;
+            this.Move += this.AudioCollectionView_Move;
             this.ResizeBegin += this.AudioCollectionView_ResizeBegin;
             this.ResizeEnd += this.AudioCollectionView_ResizeEnd;
 
@@ -140,36 +157,50 @@ namespace ModularAudience.Forms
             this.AdjustLayout();
             this.Resize_Form_CollectionChanged(this, EventArgs.Empty);
             // this.UpdateWidthToFitContent();
-            this._autoGrowAnchorHeight = this.Height - this.FormListBoxClearance;
 
             this.Show();
         }
 
-        private async void AudioCollectionView_FormClosing(object? sender, FormClosingEventArgs e)
+        private void AudioCollectionView_FormClosing(object? sender, FormClosingEventArgs e)
         {
             if (this.closeCleanupStarted)
             {
                 return;
             }
 
-            e.Cancel = true;
             this.closeCleanupStarted = true;
             this.FormClosing -= this.AudioCollectionView_FormClosing;
-
-            await this.CancelAutoPlayAsync(stopCollection: true).ConfigureAwait(true);
             this.waveformPreviewTimer.Stop();
             this.waveformPreviewTimer.Dispose();
             this.waveformPreviewForm?.ClearImage();
             this.waveformPreviewForm?.Dispose();
             this.waveformPreviewForm = null;
             this.listBox_audios.DataSource = null;
-            this.AudioC.Dispose();
-            this.autoPlayLock.Dispose();
+            this.AudioC.Audios.ListChanged -= this.Resize_Form_CollectionChanged;
 
             WindowMain.CollectionViews.Remove(this);
-            this.Close();
-        }
 
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await this.CancelAutoPlayAsync(stopCollection: true).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log(ex);
+                }
+
+                try
+                {
+                    this.AudioC.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    LogCollection.Log(ex);
+                }
+            });
+        }
 
         public void listBox_audios_DrawItem(object? sender, DrawItemEventArgs e)
         {
@@ -749,8 +780,11 @@ namespace ModularAudience.Forms
 
         private void Resize_Form_CollectionChanged(object? sender, EventArgs e)
         {
-            // Maximale Höhe des Formulars (inkl. Rahmen)
-            int maxFormHeight = this.MaximumSize.Height;
+            int maxFormHeight = this.GetAvailableWorkingAreaHeight();
+            if (this.MaximumSize.Height != maxFormHeight)
+            {
+                this.MaximumSize = new Size(this.MaximumSize.Width, maxFormHeight);
+            }
 
             // Höhe der ListBox-Einträge
             int itemCount = this.listBox_audios.Items.Count;
@@ -783,24 +817,16 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            // Berechne erlaubte maximale Höhe durch Auto-Grow:
-            // Erlaubt wird: _autoGrowAnchorHeight + FormListBoxClearance + MaxAutoGrowHeight
-            // (_autoGrowAnchorHeight wurde im ctor initial gesetzt; FormListBoxClearance wird bei manuellen Resizes aktualisiert)
-            int allowedAutoHeight = this._autoGrowAnchorHeight + this.FormListBoxClearance + MaxAutoGrowHeight;
-
-            // Zielhöhe nie über allowedAutoHeight (automatisches Wachstum begrenzen),
-            // aber wir erlauben Shrink (wenn totalHeight kleiner ist).
-            int newHeight = Math.Min(totalHeight, allowedAutoHeight);
-
-            // Setze neue Höhe (mindestens MinimumSize)
-            this.Height = Math.Max(this.MinimumSize.Height, newHeight);
+            this.Height = Math.Max(this.MinimumSize.Height, Math.Min(totalHeight, maxFormHeight));
 
             // Layout ggf. anpassen
             this.AdjustLayout();
+        }
 
-            // Hinweis: Wenn die Form durch den Benutzer später manuell verändert wird,
-            // bleibt _autoGrowAnchorHeight unangetastet (die anschließenden FormListBoxClearance‑Änderungen
-            // erhöhen automatisch die erlaubte Auto‑Grow‑Grenze).
+        private int GetAvailableWorkingAreaHeight()
+        {
+            Rectangle workingArea = Screen.FromRectangle(this.Bounds).WorkingArea;
+            return Math.Max(this.MinimumSize.Height, workingArea.Bottom - this.Top);
         }
 
         private void UpdateWidthToFitContent()
@@ -1089,7 +1115,7 @@ namespace ModularAudience.Forms
 
         private async Task TriggerAutoPlayAsync(AudioObj audio, bool toggleSameTrack = false)
         {
-            if (audio == null)
+            if (audio == null || this.closeCleanupStarted)
             {
                 return;
             }
@@ -1099,6 +1125,12 @@ namespace ModularAudience.Forms
             bool disposeCts = false;
             try
             {
+                if (this.closeCleanupStarted)
+                {
+                    disposeCts = true;
+                    return;
+                }
+
                 if (toggleSameTrack)
                 {
                     bool sameTrack;
@@ -1345,6 +1377,7 @@ namespace ModularAudience.Forms
 
         private void checkBox_preview_CheckedChanged(object? sender, EventArgs e)
         {
+            this.SynchronizeSharedCheckboxes(preview: true);
             this.waveformPreviewTimer.Stop();
             this.HideWaveformPreview();
             if (!this.ShowPreview || this.waveformPreviewIndex < 0 ||
@@ -1354,6 +1387,44 @@ namespace ModularAudience.Forms
             }
 
             this.waveformPreviewTimer.Start();
+        }
+
+        private void SynchronizeSharedCheckboxes(bool preview)
+        {
+            if (synchronizingSharedCheckboxes || (Control.ModifierKeys & Keys.Control) == 0)
+            {
+                return;
+            }
+
+            bool value = preview ? this.checkBox_preview.Checked : this.checkBox_autoPlay.Checked;
+            if (preview)
+            {
+                sharedPreviewState = value;
+            }
+            else
+            {
+                sharedAutoPlayState = value;
+            }
+
+            synchronizingSharedCheckboxes = true;
+            try
+            {
+                foreach (AudioCollectionView view in WindowMain.CollectionViews.Where(view => !view.IsDisposed))
+                {
+                    if (preview)
+                    {
+                        view.checkBox_preview.Checked = value;
+                    }
+                    else
+                    {
+                        view.checkBox_autoPlay.Checked = value;
+                    }
+                }
+            }
+            finally
+            {
+                synchronizingSharedCheckboxes = false;
+            }
         }
 
         private void WaveformPreviewTimer_Tick(object? sender, EventArgs e)
@@ -1459,17 +1530,17 @@ namespace ModularAudience.Forms
             }
         }
 
-        private void toolStripComboBox_orderBy_SelectedChanged(object? sender, EventArgs e)
+        private async void toolStripComboBox_orderBy_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            this.ApplyOrderBySelection();
+            if (this.suppressOrderBySelectionChanged)
+            {
+                return;
+            }
+
+            await this.ApplyOrderBySelectionAsync();
         }
 
-        private void toolStripComboBox_orderBy_SelectedIndexChanged(object? sender, EventArgs e)
-        {
-            this.ApplyOrderBySelection();
-        }
-
-        private void ApplyOrderBySelection()
+        private async Task ApplyOrderBySelectionAsync()
         {
             string? selected = this.toolStripComboBox_orderBy.SelectedItem as string;
             if (string.IsNullOrEmpty(selected) || this.AudioCount <= 0)
@@ -1477,29 +1548,97 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            // Order by duration (shortest first)
-            if (selected == "Duration")
+            bool descending = selected == this.lastAppliedOrderBy
+                ? !this.orderByDescending
+                : selected == "BPM";
+
+            AudioObj[] snapshot = this.AudioC.Audios.ToArray();
+            this.toolStripComboBox_orderBy.Enabled = false;
+
+            try
             {
-                this.AudioC.Audios.SortInPlace(a => a.Duration);
+                AudioObj[] ordered = await Task.Run(() => SortAudioSnapshot(snapshot, selected, descending));
+                if (this.IsDisposed || this.closeCleanupStarted || !IsCurrentAudioOrder(snapshot))
+                {
+                    return;
+                }
+
+                this.listBox_audios.BeginUpdate();
+                try
+                {
+                    this.AudioC.Audios.ReplaceInPlace(ordered);
+                    if (this.AudioC.AddIndexToNames)
+                    {
+                        this.AudioC.ToggleAddIndexToNames();
+                    }
+
+                    this.lastAppliedOrderBy = selected;
+                    this.orderByDescending = descending;
+                }
+                finally
+                {
+                    this.listBox_audios.EndUpdate();
+                }
             }
-            // Order by creation date
-            else if (selected == "Created At")
+            catch (Exception ex)
             {
-                this.AudioC.Audios.SortInPlace(a => a.CreatedAt);
+                LogCollection.Log(ex);
             }
-            // Order by name (alphabetical)
-            else if (selected == "Name")
+            finally
             {
-                this.AudioC.Audios.SortInPlace(a => a.Name);
+                if (!this.IsDisposed)
+                {
+                    this.suppressOrderBySelectionChanged = true;
+                    try
+                    {
+                        this.toolStripComboBox_orderBy.SelectedIndex = -1;
+                        this.toolStripComboBox_orderBy.Text = selected + " ";
+                    }
+                    finally
+                    {
+                        this.suppressOrderBySelectionChanged = false;
+                    }
+
+                    this.toolStripComboBox_orderBy.Enabled = true;
+                }
             }
-            else if (selected == "BPM")
+        }
+
+        private static AudioObj[] SortAudioSnapshot(AudioObj[] audios, string criterion, bool descending)
+        {
+            return criterion switch
             {
-                this.AudioC.Audios.SortInPlace(a => -(a.Bpm > 0f ? a.Bpm : a.ScannedBpm));
+                "Duration" => SortAudioSnapshot(audios, audio => audio.Duration, descending),
+                "Created At" => SortAudioSnapshot(audios, audio => audio.CreatedAt, descending),
+                "Name" => SortAudioSnapshot(audios, audio => audio.Name, descending),
+                "BPM" => SortAudioSnapshot(audios, audio => audio.Bpm > 0f ? audio.Bpm : audio.ScannedBpm, descending),
+                _ => audios
+            };
+        }
+
+        private static AudioObj[] SortAudioSnapshot<TKey>(AudioObj[] audios, Func<AudioObj, TKey> keySelector, bool descending)
+        {
+            return descending
+                ? audios.OrderByDescending(keySelector).ToArray()
+                : audios.OrderBy(keySelector).ToArray();
+        }
+
+        private bool IsCurrentAudioOrder(AudioObj[] snapshot)
+        {
+            if (this.AudioC.Audios.Count != snapshot.Length)
+            {
+                return false;
             }
 
-            // Jump back to none selected and text "Order by"
-            this.toolStripComboBox_orderBy.SelectedIndex = -1;
-            this.toolStripComboBox_orderBy.Text = "Order by";
+            for (int index = 0; index < snapshot.Length; index++)
+            {
+                if (!ReferenceEquals(this.AudioC.Audios[index], snapshot[index]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private async void convertToMIDIToolStripMenuItem_Click(object sender, EventArgs e)

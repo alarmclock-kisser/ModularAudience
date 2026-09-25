@@ -6,7 +6,12 @@ namespace ModularAudience.Audio.Tests
     [TestClass]
     public sealed class LoopAtomizerTransientTests
     {
-        private static readonly LoopAtomizerSettings Settings = LoopAtomizerSettings.Default with { EnableDeduplication = false };
+        private static readonly LoopAtomizerSettings Settings = LoopAtomizerSettings.Default with
+        {
+            EnableDeduplication = false,
+            MinimumRmsLevel = 0f,
+            MinimumAtomicDurationMs = 0
+        };
 
         [TestMethod]
         [DataRow(16000, 16)]
@@ -161,6 +166,74 @@ namespace ModularAudience.Audio.Tests
             Assert.IsTrue(result.Atomics.All(atomic => atomic.Channels == 2));
         }
 
+        [TestMethod]
+        public async Task ClassifiesRepeatedLowFrequencyHitsAsKicks()
+        {
+            using AudioTestScope scope = new();
+            const int sampleRate = 16000;
+            float[] kick = AudioTestData.Hit(sampleRate, 120, 60, 45);
+            AudioObj source = scope.Create(AudioTestData.Track(sampleRate, 900,
+                (100, kick, 1f), (350, kick, 1f), (600, kick, 1f)));
+            LoopAtomizerResult result = await LoopAtomizer_V4.AtomizeAsync(source, Settings);
+            scope.Own(result.Atomics);
+            Assert.IsTrue(result.IsLikelyDrumLoop);
+            Assert.AreEqual(3, result.Atomics.Count, Describe(result.Atomics));
+            Assert.IsTrue(result.Atomics.All(atomic => atomic.SampleTag == "Kick"),
+                string.Join(", ", result.Atomics.Select(atomic => atomic.SampleTag ?? "unclassified")));
+        }
+
+        [TestMethod]
+        public async Task ClassifiesRepeatedNoisyHitsAsRims()
+        {
+            using AudioTestScope scope = new();
+            const int sampleRate = 16000;
+            float[] shaker = new float[sampleRate / 8];
+            Random random = new(119);
+            for (int frame = 0; frame < shaker.Length; frame++)
+            {
+                double attack = Math.Min(1.0, frame / (sampleRate * 0.001));
+                shaker[frame] = (float)((random.NextDouble() * 2.0 - 1.0) * 0.55 * attack *
+                    Math.Exp(-frame / (sampleRate * 0.04)));
+            }
+
+            AudioObj source = scope.Create(AudioTestData.Track(sampleRate, 900,
+                (100, shaker, 1f), (350, shaker, 1f), (600, shaker, 1f)));
+            LoopAtomizerResult result = await LoopAtomizer_V4.AtomizeAsync(source, Settings);
+            scope.Own(result.Atomics);
+            Assert.IsTrue(result.IsLikelyDrumLoop);
+            Assert.AreEqual(3, result.Atomics.Count, Describe(result.Atomics));
+            Assert.IsTrue(result.Atomics.All(atomic => atomic.SampleTag == "Rim"),
+                string.Join(", ", result.Atomics.Select(atomic => atomic.SampleTag ?? "unclassified")));
+        }
+
+        [TestMethod]
+        public async Task ClassifiesBroadbandHitsWithLowMidBodyAsSnares()
+        {
+            using AudioTestScope scope = new();
+            const int sampleRate = 16000;
+            float[] snare = new float[sampleRate / 5];
+            Random random = new(203);
+            for (int frame = 0; frame < snare.Length; frame++)
+            {
+                double time = frame / (double)sampleRate;
+                double attack = Math.Min(1.0, frame / (sampleRate * 0.001));
+                double body = 0.24 * Math.Sin(2.0 * Math.PI * 180.0 * time) * Math.Exp(-time / 0.09);
+                double wires = (random.NextDouble() * 2.0 - 1.0) * 0.48 * Math.Exp(-time / 0.06);
+                snare[frame] = (float)(attack * (body + wires));
+            }
+
+            AudioObj source = scope.Create(AudioTestData.Track(sampleRate, 900,
+                (100, snare, 1f), (350, snare, 1f), (600, snare, 1f)));
+            LoopAtomizerResult result = await LoopAtomizer_V4.AtomizeAsync(source, Settings);
+            scope.Own(result.Atomics);
+            Assert.IsTrue(result.IsLikelyDrumLoop);
+            Assert.AreEqual(3, result.Atomics.Count, Describe(result.Atomics));
+            Assert.IsTrue(result.Atomics.All(atomic => atomic.SampleTag == "Snare"),
+                string.Join(", ", result.Atomics.Select(atomic =>
+                    $"{atomic.SampleTag ?? "unclassified"} {atomic.Duration.TotalMilliseconds:F1}ms RMS=" +
+                    Math.Sqrt(atomic.Data.Average(sample => (double)sample * sample)).ToString("F4"))));
+        }
+
         private static void AssertEndsBefore(AudioObj source, AudioObj atomic, int nextStart)
         {
             int end = FindSourceStart(source, atomic) + (atomic.Data.Length / atomic.Channels);
@@ -169,9 +242,24 @@ namespace ModularAudience.Audio.Tests
 
         private static int FindSourceStart(AudioObj source, AudioObj atomic)
         {
-            int start = source.Data.AsSpan().IndexOf(atomic.Data.AsSpan());
-            Assert.IsTrue(start >= 0, "The atomic must be an unchanged, contiguous part of its source.");
-            return start / source.Channels;
+            int channels = Math.Max(1, source.Channels);
+            int frames = atomic.Data.Length / channels;
+            int fadeInFrames = Math.Min(frames / 2, Math.Max(2, atomic.SampleRate / 1000));
+            int fadeOutFrames = Math.Min(frames / 2, Math.Max(2, atomic.SampleRate / 100));
+            int unchangedFrames = Math.Max(1, frames - fadeInFrames - fadeOutFrames);
+            int compareOffset = fadeInFrames * channels;
+            int unchangedSamples = unchangedFrames * channels;
+            for (int start = 0; start <= source.Data.Length - (frames * channels); start += channels)
+            {
+                if (source.Data.AsSpan(start + compareOffset, unchangedSamples)
+                    .SequenceEqual(atomic.Data.AsSpan(compareOffset, unchangedSamples)))
+                {
+                    return start / channels;
+                }
+            }
+
+            Assert.Fail("The atomic must preserve a contiguous source prefix before its optional tail fade.");
+            return -1;
         }
 
         private static string Describe(IReadOnlyList<AudioObj> atomics) =>

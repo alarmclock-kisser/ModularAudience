@@ -41,6 +41,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private static float LastTargetBpm = 120f;
         private static float LastInitialBpm = 120f;
+        private const decimal DefaultInitialBpm = 120m;
 
         public TimeStretchDialog(TrackView? trackView = null, IEnumerable<AudioObj>? audios = null, IEnumerable<string>? filePaths = null)
         {
@@ -213,7 +214,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private void numericUpDown_stretchFactor_ValueChanged(object sender, EventArgs e)
         {
             double targetBpm = (double)this.numericUpDown_initialBpm.Value / (double)this.numericUpDown_stretchFactor.Value;
-            this.numericUpDown_targetBpm.Value = Math.Clamp((decimal)targetBpm, this.numericUpDown_targetBpm.Minimum, this.numericUpDown_targetBpm.Maximum);
+            this.isUpdatingTargetBpm = true;
+            try
+            {
+                this.numericUpDown_targetBpm.Value = Math.Clamp((decimal)targetBpm, this.numericUpDown_targetBpm.Minimum, this.numericUpDown_targetBpm.Maximum);
+            }
+            finally
+            {
+                this.isUpdatingTargetBpm = false;
+            }
+
+            this.previousTargetBpmValue = this.numericUpDown_targetBpm.Value;
+            LastTargetBpm = (float)this.numericUpDown_targetBpm.Value;
         }
 
         private async void button_stretch_Click(object sender, EventArgs e)
@@ -251,13 +263,21 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     for (int i = 0; i < this.Tracks.Count; i++)
                     {
                         this.Text = $"Time Stretch - {this.Tracks.Count} Tracks (Processing {i + 1}/{this.Tracks.Count})";
-                        this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked ? this.numericUpDown_initialBpm.Value : this.Tracks.ElementAt(i).Bpm > 0 ? (decimal)this.Tracks.ElementAt(i).Bpm : this.Tracks.ElementAt(i).ScannedBpm > 30 ? (decimal)this.Tracks.ElementAt(i).ScannedBpm : (decimal)LastInitialBpm;
-                        float originalPeak = await this.Tracks.ElementAt(i).GetPeakAmplitudeAsync((int)this.numericUpDown_threads.Value);
+                        AudioObj track = this.Tracks[i];
+                        if (!this.checkBox_fixed.Checked)
+                        {
+                            decimal initialBpm = await this.GetInitialBpmForStretchAsync(
+                                track,
+                                scanIfMissing: this.Tracks.Count > 1);
+                            this.numericUpDown_initialBpm.Value = initialBpm;
+                        }
+
+                        float originalPeak = await track.GetPeakAmplitudeAsync((int)this.numericUpDown_threads.Value);
                         await TimeStretcher.TimeStretchAllThreadsAsync(
-                                                this.Tracks.ElementAt(i),
+                                                track,
                                                 (int)this.numericUpDown_chunkSize.Value,
                                                 (float)this.numericUpDown_overlap.Value,
-                                                (double)this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double)this.numericUpDown_stretchFactor.Value : (double)this.numericUpDown_stretchFactor.Value,
+                                                (double)this.numericUpDown_stretchFactor.Value,
                                                 keepData: false,
                                                 normalize: 1.0f,
                                                 maxWorkers: (int)this.numericUpDown_threads.Value,
@@ -267,12 +287,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         if (this.checkBox_trim.Checked)
                         {
                             // Trim silence after stretching
-                            await BeatGridFinder.TrimSilenceAsync(this.Tracks.ElementAt(i));
+                            await BeatGridFinder.TrimSilenceAsync(track);
                         }
 
                         if (originalPeak > 0f)
                         {
-                            await this.Tracks.ElementAt(i).NormalizeAsync(originalPeak, (int)this.numericUpDown_threads.Value);
+                            await track.NormalizeAsync(originalPeak, (int)this.numericUpDown_threads.Value);
                         }
                     }
                     this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
@@ -295,7 +315,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                                             this.Tracks.First(),
                                             (int)this.numericUpDown_chunkSize.Value,
                                             (float)this.numericUpDown_overlap.Value,
-                                            (double)this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double)this.numericUpDown_stretchFactor.Value : (double)this.numericUpDown_stretchFactor.Value,
+                                            (double)this.numericUpDown_stretchFactor.Value,
                                             keepData: false,
                                             normalize: 0.0f,
                                             maxWorkers: (int)this.numericUpDown_threads.Value,
@@ -314,7 +334,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     }
 
                     await this.TrackView.OriginalAudio.CreateUndoStepAsync();
-                    double stretchFactor = (double)this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double)this.numericUpDown_stretchFactor.Value : (double)this.numericUpDown_stretchFactor.Value;
+                    double stretchFactor = (double)this.numericUpDown_stretchFactor.Value;
                     await this.TrackView.ApplyStretchedAudioAsync(result, stretchFactor, resumePlaybackAfterReplace);
                     this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
                     closeAfterSuccess = true;
@@ -484,12 +504,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     index = 0;
                     foreach (var t in this.Tracks)
                     {
-                        this.numericUpDown_initialBpm.Value = this.checkBox_fixed.Checked ? this.numericUpDown_initialBpm.Value : t.Bpm > 0 ? (decimal)t.Bpm : t.ScannedBpm > 30 ? (decimal)t.ScannedBpm : (decimal)LastInitialBpm;
+                        if (!this.checkBox_fixed.Checked)
+                        {
+                            this.numericUpDown_initialBpm.Value = await this.GetInitialBpmForStretchAsync(
+                                t,
+                                scanIfMissing: this.Tracks.Count > 1);
+                        }
 
                         // Process each track in-place with V2
                         await TimeStretcher_V2.Timestretch_V2Async(
                             t,
-                            (double)this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double)this.numericUpDown_stretchFactor.Value : (double)this.numericUpDown_stretchFactor.Value,
+                            (double)this.numericUpDown_stretchFactor.Value,
                             chunkSize,
                             overlap,
                             perTrackProgress,
@@ -515,7 +540,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                     await TimeStretcher_V2.Timestretch_V2Async(
                         track,
-                        (double)this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double)this.numericUpDown_stretchFactor.Value : (double)this.numericUpDown_stretchFactor.Value,
+                        (double)this.numericUpDown_stretchFactor.Value,
                         chunkSize,
                         overlap,
                         perTrackProgress,
@@ -526,7 +551,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         await track.NormalizeAsync(originalPeak, (int)this.numericUpDown_threads.Value);
                     }
 
-                    double stretchFactor = (double)this.numericUpDown_stretchFactor.Value < 0.5f ? 2 * (double)this.numericUpDown_stretchFactor.Value : (double)this.numericUpDown_stretchFactor.Value;
+                    double stretchFactor = (double)this.numericUpDown_stretchFactor.Value;
                     await this.TrackView.ApplyStretchedAudioAsync(track, stretchFactor, resumePlaybackAfterReplace);
                     this.progressBar_stretching.Value = this.progressBar_stretching.Maximum;
                     closeAfterSuccess = true;
@@ -571,13 +596,35 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private decimal GetSafeInitialBpm(AudioObj track)
         {
-            decimal bpm = track.Bpm > 0
+            decimal bpm = float.IsFinite(track.Bpm) && track.Bpm > 0
                 ? (decimal)track.Bpm
-                : track.ScannedBpm > 0
+                : float.IsFinite(track.ScannedBpm) && track.ScannedBpm > 0
                     ? (decimal)track.ScannedBpm
-                    : (decimal)LastInitialBpm;
+                    : DefaultInitialBpm;
 
             return Math.Clamp(bpm, this.numericUpDown_initialBpm.Minimum, this.numericUpDown_initialBpm.Maximum);
+        }
+
+        private async Task<decimal> GetInitialBpmForStretchAsync(AudioObj track, bool scanIfMissing)
+        {
+            float bpm = float.IsFinite(track.Bpm) && track.Bpm > 0
+                ? track.Bpm
+                : float.IsFinite(track.ScannedBpm) && track.ScannedBpm > 0
+                    ? track.ScannedBpm
+                    : 0f;
+
+            if (bpm <= 0f && scanIfMissing)
+            {
+                double scannedBpm = await BeatScanner.ScanBpmAsync(track, minBpm: 5, maxBpm: 420);
+                if (double.IsFinite(scannedBpm) && scannedBpm > 0.0)
+                {
+                    bpm = (float)scannedBpm;
+                    track.ScannedBpm = bpm;
+                }
+            }
+
+            decimal initialBpm = bpm > 0f ? (decimal)bpm : DefaultInitialBpm;
+            return Math.Clamp(initialBpm, this.numericUpDown_initialBpm.Minimum, this.numericUpDown_initialBpm.Maximum);
         }
 
         private void checkBox_channeled_CheckedChanged(object sender, EventArgs e)

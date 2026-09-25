@@ -143,6 +143,8 @@
             this.checkBox_autoPlay.TabIndex = 1;
             this.checkBox_autoPlay.Text = "Auto Play";
             this.checkBox_autoPlay.UseVisualStyleBackColor = true;
+            this.toolTip_audios.SetToolTip(this.checkBox_autoPlay,
+                "Ctrl+click to apply to all open and future collections.");
             // 
             // button_export
             // 
@@ -166,6 +168,8 @@
             this.checkBox_preview.Text = "Preview";
             this.checkBox_preview.Checked = false;
             this.checkBox_preview.UseVisualStyleBackColor = true;
+            this.toolTip_audios.SetToolTip(this.checkBox_preview,
+                "Ctrl+click to apply to all open and future collections.");
             // 
             // contextMenuStrip_audios
             // 

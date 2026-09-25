@@ -128,7 +128,12 @@ namespace ModularAudience.Audio.Processing
         }
 
 
-        public static Task AggregateStretchedChunksAsync(AudioObj audio, IEnumerable<float[]> chunks, double stretchFactor, int maxWorkers)
+        public static Task AggregateStretchedChunksAsync(
+            AudioObj audio,
+            IEnumerable<float[]> chunks,
+            double stretchFactor,
+            int maxWorkers,
+            IReadOnlyList<int>? synthesisOffsets = null)
         {
             if (chunks == null)
             {
@@ -156,7 +161,10 @@ namespace ModularAudience.Audio.Processing
                 stretchedHopSize = Math.Max(ch, (stretchedHopSize / ch) * ch);
             }
 
-            int outputLength = Math.Max(chunkSize, (chunkList.Count - 1) * stretchedHopSize + chunkSize);
+            bool useSynthesisOffsets = synthesisOffsets?.Count == chunkList.Count;
+            int outputLength = useSynthesisOffsets
+                ? Math.Max(chunkSize, checked(synthesisOffsets![^1] + chunkSize))
+                : Math.Max(chunkSize, (chunkList.Count - 1) * stretchedHopSize + chunkSize);
 
             var window = new double[chunkSize];
             for (int i = 0; i < chunkSize; i++)
@@ -172,7 +180,7 @@ namespace ModularAudience.Audio.Processing
             for (int chunkIndex = 0; chunkIndex < chunkList.Count; chunkIndex++)
             {
                 var chunk = chunkList[chunkIndex];
-                int offset = chunkIndex * stretchedHopSize;
+                int offset = useSynthesisOffsets ? synthesisOffsets![chunkIndex] : chunkIndex * stretchedHopSize;
                 int chunkUpper = Math.Min(chunkSize, chunk.Length);
 
                 for (int j = 0; j < chunkUpper; j++)

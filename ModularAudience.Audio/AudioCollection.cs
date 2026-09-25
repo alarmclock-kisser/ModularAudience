@@ -62,7 +62,10 @@ namespace ModularAudience.Audio
 
             this.Audios.ListChanged += (s, e) =>
             {
-                this.ToggleAddIndexToNames();
+                if (this.AddIndexToNames && e.ListChangedType is ListChangedType.ItemAdded or ListChangedType.ItemDeleted)
+                {
+                    this.ToggleAddIndexToNames();
+                }
             };
         }
 
@@ -123,13 +126,26 @@ namespace ModularAudience.Audio
             var audio = this[id];
             if (audio != null)
             {
-                this.Audios.Remove(audio);
-                if (dispose)
-                {
-                    await Task.Run(audio.Dispose);
-                }
+                return await this.RemoveAsync(audio, dispose).ConfigureAwait(true);
             }
-            return dispose ? null : audio;
+
+            return null;
+        }
+
+        public async Task<AudioObj?> RemoveAsync(AudioObj audio, bool dispose = true)
+        {
+            if (!this.Audios.Remove(audio))
+            {
+                return null;
+            }
+
+            if (dispose)
+            {
+                await Task.Run(audio.Dispose).ConfigureAwait(true);
+                return null;
+            }
+
+            return audio;
         }
 
         public async Task LoadResources(string? resourcesPath = null)
@@ -437,9 +453,9 @@ namespace ModularAudience.Audio
             {
                 int zeros = this.Audios.Count.ToString().Length;
                 string format = new('0', zeros);
-                foreach (var audio in this.Audios)
+                for (int index = 0; index < this.Audios.Count; index++)
                 {
-                    int index = this.Audios.IndexOf(audio) + 1;
+                    AudioObj audio = this.Audios[index];
                     audio.Name = $"{index.ToString(format)} - {audio.OriginalName}";
                 }
             }
@@ -447,7 +463,10 @@ namespace ModularAudience.Audio
             {
                 foreach (var audio in this.Audios)
                 {
-                    audio.Name = audio.OriginalName;
+                    if (!string.Equals(audio.Name, audio.OriginalName, StringComparison.Ordinal))
+                    {
+                        audio.Name = audio.OriginalName;
+                    }
                 }
             }
         }
@@ -457,17 +476,31 @@ namespace ModularAudience.Audio
 
     public static class BindingListExtensions
     {
-        public static void SortInPlace<T, TKey>(this BindingList<T> list, Func<T, TKey> keySelector)
+        public static void SortInPlace<T, TKey>(this BindingList<T> list, Func<T, TKey> keySelector, bool descending = false)
         {
-            var sorted = list.OrderBy(keySelector).ToList();
+            var sorted = descending
+                ? list.OrderByDescending(keySelector).ToList()
+                : list.OrderBy(keySelector).ToList();
 
+            list.ReplaceInPlace(sorted);
+        }
+
+        public static void ReplaceInPlace<T>(this BindingList<T> list, IReadOnlyList<T> orderedItems)
+        {
             list.RaiseListChangedEvents = false;
-            list.Clear();
-            foreach (var item in sorted)
+            try
             {
-                list.Add(item);
+                list.Clear();
+                foreach (T item in orderedItems)
+                {
+                    list.Add(item);
+                }
             }
-            list.RaiseListChangedEvents = true;
+            finally
+            {
+                list.RaiseListChangedEvents = true;
+            }
+
             list.ResetBindings();
         }
     }

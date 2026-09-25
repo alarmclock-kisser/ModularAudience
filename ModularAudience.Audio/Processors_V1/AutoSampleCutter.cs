@@ -110,7 +110,6 @@ namespace ModularAudience.Audio.Processors_V1
 
                     var part = new AudioObj
                     {
-                        Id = audio.Id,
                         Name = $"{audio.Name}_part{i + 1}_{parts}",
                         FilePath = audio.FilePath,
                         Data = newData,
@@ -155,7 +154,6 @@ namespace ModularAudience.Audio.Processors_V1
 
                 var concat = new AudioObj
                 {
-                    Id = audio.Id,
                     Name = $"{audio.Name}_x{repeatFactor:0.###}",
                     FilePath = audio.FilePath,
                     Data = newData,

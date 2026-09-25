@@ -8,15 +8,15 @@ namespace ModularAudience.Audio.Processors_V4
         private const int SpectralBins = 72;
 
         public static List<AudioObj> Deduplicate(List<AudioObj> atomics, float similarityThreshold,
-            IProgress<double>? progress, int maxVariantsPerCluster = 3)
+            IProgress<double>? progress, int maxVariantsPerCluster = 2)
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxVariantsPerCluster);
             Fingerprint[] fingerprints = new Fingerprint[atomics.Count];
-            for (int i = 0; i < atomics.Count; i++)
+            Parallel.For(0, atomics.Count, AtomizerParallelism.OptionsFor(atomics.Count), i =>
             {
                 fingerprints[i] = CreateFingerprint(atomics[i]);
                 progress?.Report(0.70 + (0.15 * (i + 1) / atomics.Count));
-            }
+            });
 
             double threshold = float.IsFinite(similarityThreshold) ? Math.Clamp(similarityThreshold, 0.90f, 0.999f) : 0.94;
             List<List<int>> clusters = CreateClusters(fingerprints, threshold);
@@ -37,18 +37,104 @@ namespace ModularAudience.Audio.Processors_V4
             return result;
         }
 
+        public static List<AudioObj> SelectDistinctRepresentatives(IReadOnlyList<AudioObj> atomics)
+        {
+            Fingerprint[] fingerprints = new Fingerprint[atomics.Count];
+            Parallel.For(0, atomics.Count, AtomizerParallelism.OptionsFor(atomics.Count), i =>
+            {
+                fingerprints[i] = CreateFingerprint(atomics[i]);
+            });
+
+            List<int> selected = [];
+            double loudestRms = fingerprints.Length == 0 ? 0.0 : fingerprints.Max(fingerprint => fingerprint.Rms);
+            double minimumRms = Math.Max(0.01, loudestRms * 0.20);
+            foreach (int candidate in Enumerable.Range(0, fingerprints.Length)
+                .OrderByDescending(index => fingerprints[index].Quality)
+                .ThenBy(index => index))
+            {
+                if (fingerprints[candidate].Rms >= minimumRms &&
+                    !selected.Any(index => AreDuplicates(fingerprints[candidate], fingerprints[index])))
+                {
+                    selected.Add(candidate);
+                }
+            }
+
+            if (selected.Count == 0 && fingerprints.Length > 0)
+            {
+                selected.Add(Enumerable.Range(0, fingerprints.Length)
+                    .OrderByDescending(index => fingerprints[index].Quality)
+                    .ThenBy(index => index)
+                    .First());
+            }
+
+            return selected.Select(index => atomics[index]).ToList();
+        }
+
         private static Fingerprint CreateFingerprint(AudioObj audio)
         {
             int frames = audio.Data.Length / audio.Channels;
             double[] spectrum = BuildSpectrum(audio, frames);
             double[] envelope = BuildEnvelope(audio, frames);
             double peak = audio.Data.Max(value => Math.Abs((double)value));
+            double totalEnergy = 0.0;
+            foreach (float sample in audio.Data)
+            {
+                totalEnergy += (double)sample * sample;
+            }
+
+            double rms = Math.Sqrt(totalEnergy / Math.Max(1, audio.Data.Length));
             int clipped = audio.Data.Count(value => Math.Abs(value) >= 0.999f);
             int active = audio.Data.Count(value => Math.Abs(value) >= peak * 0.02);
-            double quality = (0.75 + (0.25 * active / Math.Max(1, audio.Data.Length))) /
-                (1.0 + (50.0 * clipped / Math.Max(1, audio.Data.Length)));
-            return new Fingerprint(spectrum, envelope, frames / (double)audio.SampleRate,
+            double secondaryTransientPenalty = GetSecondaryTransientPenalty(audio, frames, peak);
+            double quality = ((0.75 + (0.25 * active / Math.Max(1, audio.Data.Length))) /
+                (1.0 + (50.0 * clipped / Math.Max(1, audio.Data.Length)))) /
+                (1.0 + (3.0 * secondaryTransientPenalty)) *
+                (0.70 + (0.30 * Math.Clamp(rms / 0.1, 0.0, 1.0)));
+            audio.CustomTags["AtomizeQuality"] = quality.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+            return new Fingerprint(spectrum, spectrum[..SpectralBins], envelope, rms, frames / (double)audio.SampleRate,
                 GetSpectralCentroid(spectrum, audio.SampleRate), quality);
+        }
+
+        private static double GetSecondaryTransientPenalty(AudioObj audio, int frames, double peak)
+        {
+            int windowFrames = Math.Max(1, audio.SampleRate / 100);
+            int windowCount = (frames + windowFrames - 1) / windowFrames;
+            if (windowCount < 5 || peak <= 0.0) return 0.0;
+
+            double[] levels = new double[windowCount];
+            for (int window = 0; window < windowCount; window++)
+            {
+                int start = window * windowFrames;
+                int end = Math.Min(frames, start + windowFrames);
+                double energy = 0.0;
+                for (int frame = start; frame < end; frame++)
+                {
+                    for (int channel = 0; channel < audio.Channels; channel++)
+                    {
+                        double value = audio.Data[(frame * audio.Channels) + channel];
+                        energy += value * value;
+                    }
+                }
+
+                levels[window] = Math.Sqrt(energy / Math.Max(1, (end - start) * audio.Channels));
+            }
+
+            double peakLevel = levels.Max();
+            int firstActive = Array.FindIndex(levels, level => level >= peakLevel * 0.12);
+            if (firstActive < 0) return 0.0;
+
+            double penalty = 0.0;
+            for (int window = Math.Max(firstActive + 3, 2); window < levels.Length; window++)
+            {
+                double baseline = (levels[window - 1] + levels[window - 2]) * 0.5;
+                double level = levels[window];
+                if (level >= peakLevel * 0.12 && level > baseline * 1.6)
+                {
+                    penalty += (level - baseline) / peakLevel;
+                }
+            }
+
+            return Math.Clamp(penalty, 0.0, 1.0);
         }
 
         private static double[] BuildSpectrum(AudioObj audio, int frames)
@@ -163,13 +249,14 @@ namespace ModularAudience.Audio.Processors_V4
         private static List<List<int>> CreateClusters(Fingerprint[] fingerprints, double threshold)
         {
             List<List<int>> clusters = [];
-            for (int index = 0; index < fingerprints.Length; index++)
+            foreach (int index in Enumerable.Range(0, fingerprints.Length)
+                .OrderByDescending(candidate => fingerprints[candidate].Quality)
+                .ThenBy(candidate => candidate))
             {
-                int candidate = index;
                 List<int>? cluster = clusters.FirstOrDefault(group =>
-                    group.All(member => BelongToSameFamily(fingerprints[candidate], fingerprints[member], threshold)));
-                if (cluster == null) clusters.Add([candidate]);
-                else cluster.Add(candidate);
+                    BelongToSameFamily(fingerprints[index], fingerprints[group[0]], threshold));
+                if (cluster == null) clusters.Add([index]);
+                else cluster.Add(index);
             }
 
             return clusters;
@@ -177,30 +264,26 @@ namespace ModularAudience.Audio.Processors_V4
 
         private static bool BelongToSameFamily(Fingerprint left, Fingerprint right, double threshold)
         {
-            return Ratio(left.Duration, right.Duration) >= 0.5 &&
-                Similarity(left.Spectrum, right.Spectrum) >= threshold &&
-                Similarity(left.Envelope, right.Envelope) >= 0.80;
+            return Ratio(left.Duration, right.Duration) >= 0.25 &&
+                Similarity(left.AttackSpectrum, right.AttackSpectrum) >= Math.Max(0.85, threshold - 0.08) &&
+                Similarity(left.Spectrum, right.Spectrum) >= Math.Max(0.82, threshold - 0.12) &&
+                Similarity(left.Envelope, right.Envelope) >= 0.55;
         }
 
         private static List<int> SelectVariants(List<int> cluster, Fingerprint[] fingerprints, int maxVariantsPerCluster)
         {
-            List<int> unique = [];
+            List<int> selected = [];
             foreach (int candidate in cluster.OrderByDescending(index => fingerprints[index].Quality).ThenBy(index => index))
             {
-                if (!unique.Any(index => AreDuplicates(fingerprints[candidate], fingerprints[index])))
+                if (selected.Count >= maxVariantsPerCluster)
                 {
-                    unique.Add(candidate);
+                    break;
                 }
-            }
 
-            List<int> selected = [unique[0]];
-            unique.RemoveAt(0);
-            while (selected.Count < maxVariantsPerCluster && unique.Count > 0)
-            {
-                int next = unique.OrderByDescending(candidate => selected.Min(index =>
-                    Difference(fingerprints[candidate], fingerprints[index]))).ThenBy(index => index).First();
-                selected.Add(next);
-                unique.Remove(next);
+                if (!selected.Any(index => AreDuplicates(fingerprints[candidate], fingerprints[index])))
+                {
+                    selected.Add(candidate);
+                }
             }
 
             return selected;
@@ -208,17 +291,11 @@ namespace ModularAudience.Audio.Processors_V4
 
         private static bool AreDuplicates(Fingerprint left, Fingerprint right)
         {
-            return Ratio(left.Duration, right.Duration) >= 0.94 &&
+            return Ratio(left.Duration, right.Duration) >= 0.65 &&
                 Ratio(left.Centroid, right.Centroid) >= 0.975 &&
-                Similarity(left.Spectrum, right.Spectrum) >= 0.995 &&
+                Similarity(left.AttackSpectrum, right.AttackSpectrum) >= 0.98 &&
+                Similarity(left.Spectrum, right.Spectrum) >= 0.94 &&
                 Similarity(left.Envelope, right.Envelope) >= 0.995;
-        }
-
-        private static double Difference(Fingerprint left, Fingerprint right)
-        {
-            return (1.0 - Similarity(left.Spectrum, right.Spectrum)) +
-                (0.5 * (1.0 - Similarity(left.Envelope, right.Envelope))) +
-                (0.1 * (1.0 - Ratio(left.Duration, right.Duration)));
         }
 
         private static double Ratio(double left, double right)
@@ -252,6 +329,7 @@ namespace ModularAudience.Audio.Processors_V4
             }
         }
 
-        private sealed record Fingerprint(double[] Spectrum, double[] Envelope, double Duration, double Centroid, double Quality);
+        private sealed record Fingerprint(double[] Spectrum, double[] AttackSpectrum, double[] Envelope,
+            double Rms, double Duration, double Centroid, double Quality);
     }
 }

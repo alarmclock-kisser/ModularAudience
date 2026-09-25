@@ -2,7 +2,31 @@
 {
     public partial class TrackViewSettings : Form
     {
+        private sealed class SettingsSnapshot
+        {
+            internal Color ColorWave { get; init; }
+            internal Color ColorBack { get; init; }
+            internal Color ColorCaret { get; init; }
+            internal Color ColorSelection { get; init; }
+            internal bool SmoothWaveform { get; init; }
+            internal bool DrawChannelsSeparately { get; init; }
+            internal bool ShowTimeMarkers { get; init; }
+            internal decimal TimeMarkersInterval { get; init; }
+            internal int CaretWidth { get; init; }
+            internal int CaretPosition { get; init; }
+            internal decimal FrameRate { get; init; }
+            internal bool HueEnabled { get; init; }
+            internal decimal HueValue { get; init; }
+            internal bool StrobeEnabled { get; init; }
+            internal Color HueColor { get; init; }
+            internal float StoredHueValue { get; init; }
+            internal float HueAdjustment { get; init; }
+        }
+
+        private static bool applyToAllEnabled;
+        private static SettingsSnapshot? sharedSettingsSnapshot;
         private readonly TrackView Track;
+        private bool suppressSettingsSync;
 
         internal Color ColorWave => this.button_colorWave.BackColor;
         internal Color ColorBack => this.button_colorBack.BackColor;
@@ -31,6 +55,10 @@
             this.Track = trackView;
             this.numericUpDown_frameRate.Value = (decimal)WindowsScreenHelper.GetScreenRefreshRate();
             this.InitializeHandlers();
+            if (applyToAllEnabled && sharedSettingsSnapshot != null)
+            {
+                this.ApplySnapshot(sharedSettingsSnapshot, applyToAll: true, notifyTrack: false);
+            }
             this.button_strobe.Text = "⚡";
             this.UpdateCaretPositionLabel();
             this.button_colorWave.ForeColor = this.ColorWave.GetBrightness() < 0.6f ? Color.White : Color.Black;
@@ -83,7 +111,119 @@
 
         private void NotifyTrackChanged()
         {
+            if (this.suppressSettingsSync)
+            {
+                return;
+            }
+
             this.Track.HandleSettingsChanged();
+            if (!applyToAllEnabled)
+            {
+                return;
+            }
+
+            SettingsSnapshot snapshot = this.CaptureSnapshot();
+            sharedSettingsSnapshot = snapshot;
+            foreach (TrackView trackView in WindowMain.TrackViews.Where(trackView => trackView != this.Track && !trackView.IsDisposed && !trackView.Disposing))
+            {
+                trackView.Settings.ApplySnapshot(snapshot, applyToAll: true, notifyTrack: true);
+            }
+        }
+
+        private SettingsSnapshot CaptureSnapshot() => new()
+        {
+            ColorWave = this.button_colorWave.BackColor,
+            ColorBack = this.button_colorBack.BackColor,
+            ColorCaret = this.button_colorCaret.BackColor,
+            ColorSelection = this.button_colorSelection.BackColor,
+            SmoothWaveform = this.checkBox_smoothen.Checked,
+            DrawChannelsSeparately = this.checkBox_drawEachChannel.Checked,
+            ShowTimeMarkers = this.checkBox_timeMarkers.Checked,
+            TimeMarkersInterval = this.numericUpDown_timeMarkers.Value,
+            CaretWidth = (int)this.numericUpDown_caretWidth.Value,
+            CaretPosition = this.hScrollBar_caretPosition.Value,
+            FrameRate = this.numericUpDown_frameRate.Value,
+            HueEnabled = this.checkBox_hue.Checked,
+            HueValue = this.numericUpDown_hue.Value,
+            StrobeEnabled = this.StrobeEnabled,
+            HueColor = this.HueColor,
+            StoredHueValue = this.StoredHueValue,
+            HueAdjustment = this.HueAdjustment
+        };
+
+        private void ApplySnapshot(SettingsSnapshot snapshot, bool applyToAll, bool notifyTrack)
+        {
+            this.suppressSettingsSync = true;
+            try
+            {
+                this.button_colorWave.BackColor = snapshot.ColorWave;
+                this.button_colorBack.BackColor = snapshot.ColorBack;
+                this.button_colorCaret.BackColor = snapshot.ColorCaret;
+                this.button_colorSelection.BackColor = snapshot.ColorSelection;
+                this.checkBox_smoothen.Checked = snapshot.SmoothWaveform;
+                this.checkBox_drawEachChannel.Checked = snapshot.DrawChannelsSeparately;
+                this.checkBox_timeMarkers.Checked = snapshot.ShowTimeMarkers;
+                this.numericUpDown_timeMarkers.Value = snapshot.TimeMarkersInterval;
+                this.numericUpDown_caretWidth.Value = snapshot.CaretWidth;
+                this.hScrollBar_caretPosition.Value = Math.Clamp(snapshot.CaretPosition, this.hScrollBar_caretPosition.Minimum, this.hScrollBar_caretPosition.Maximum);
+                this.numericUpDown_frameRate.Value = snapshot.FrameRate;
+                this.checkBox_hue.Checked = snapshot.HueEnabled;
+                this.numericUpDown_hue.Value = snapshot.HueValue;
+                this.StrobeEnabled = snapshot.StrobeEnabled;
+                this.HueColor = snapshot.HueColor;
+                this.StoredHueValue = snapshot.StoredHueValue;
+                this.HueAdjustment = snapshot.HueAdjustment;
+                this.numericUpDown_hue.Enabled = snapshot.HueEnabled && !snapshot.StrobeEnabled;
+                this.button_strobe.Text = snapshot.StrobeEnabled ? "☠️" : "⚡";
+                this.button_strobe.ForeColor = snapshot.StrobeEnabled ? Color.Red : Color.Black;
+                this.button_colorWave.ForeColor = snapshot.ColorWave.GetBrightness() < 0.6f ? Color.White : Color.Black;
+                this.button_colorBack.ForeColor = snapshot.ColorBack.GetBrightness() < 0.6f ? Color.White : Color.Black;
+                this.button_colorSelection.ForeColor = snapshot.ColorSelection.GetBrightness() < 0.6f ? Color.White : Color.Black;
+                this.UpdateCaretPositionLabel();
+                this.checkBox_applyToAll.Checked = applyToAll;
+            }
+            finally
+            {
+                this.suppressSettingsSync = false;
+            }
+
+            this.Track.ApplySettingsAppearance();
+            if (notifyTrack)
+            {
+                this.Track.HandleSettingsChanged();
+            }
+        }
+
+        private void checkBox_applyToAll_CheckedChanged(object? sender, EventArgs e)
+        {
+            if (this.suppressSettingsSync)
+            {
+                return;
+            }
+
+            applyToAllEnabled = this.checkBox_applyToAll.Checked;
+            if (!applyToAllEnabled)
+            {
+                foreach (TrackView trackView in WindowMain.TrackViews.Where(trackView => trackView != this.Track && !trackView.IsDisposed && !trackView.Disposing))
+                {
+                    trackView.Settings.SetApplyToAllChecked(false);
+                }
+                return;
+            }
+
+            SettingsSnapshot snapshot = this.CaptureSnapshot();
+            sharedSettingsSnapshot = snapshot;
+            foreach (TrackView trackView in WindowMain.TrackViews.Where(trackView => trackView != this.Track && !trackView.IsDisposed && !trackView.Disposing))
+            {
+                trackView.Settings.ApplySnapshot(snapshot, applyToAll: true, notifyTrack: true);
+            }
+        }
+
+        private void SetApplyToAllChecked(bool value)
+        {
+            this.suppressSettingsSync = true;
+            this.checkBox_applyToAll.Checked = value;
+            this.suppressSettingsSync = false;
         }
 
         private void UpdateCaretPositionLabel()

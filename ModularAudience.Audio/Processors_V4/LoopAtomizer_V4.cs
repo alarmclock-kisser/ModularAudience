@@ -5,8 +5,24 @@ using System.Threading.Tasks;
 
 namespace ModularAudience.Audio.Processors_V4
 {
+    internal static class AtomizerParallelism
+    {
+        public static int MaxThreads => Math.Max(1, Environment.ProcessorCount / 2);
+
+        public static ParallelOptions OptionsFor(int workItemCount) => new()
+        {
+            MaxDegreeOfParallelism = Math.Min(MaxThreads, Math.Max(1, workItemCount))
+        };
+    }
+
     public static class LoopAtomizer_V4
     {
+        public static IReadOnlyList<AudioObj> SelectDistinctRepresentatives(IReadOnlyList<AudioObj> atomics)
+        {
+            ArgumentNullException.ThrowIfNull(atomics);
+            return AtomicSampleDeduplicator.SelectDistinctRepresentatives(atomics);
+        }
+
         public static async Task<LoopAtomizerResult> AtomizeAsync(AudioObj source, LoopAtomizerSettings? settings = null, IProgress<double>? progress = null)
         {
             if (source == null)
@@ -21,13 +37,20 @@ namespace ModularAudience.Audio.Processors_V4
                     "The minimum RMS level must be finite and non-negative.");
             }
 
+            if (settings.MinimumAtomicDurationMs < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(settings.MinimumAtomicDurationMs),
+                    "The minimum atomic duration must be non-negative.");
+            }
+
             IProgress<double>? monotonicProgress = progress == null
                 ? null
                 : new MonotonicProgress(progress);
 
             monotonicProgress?.Report(0.0);
             AtomizeAnalysis analysis = await Task.Run(() => AnalyzeAtomicSegments(source, settings, monotonicProgress)).ConfigureAwait(false);
-            List<AudioObj> atomics = await CreateAtomicSamplesAsync(source, analysis, settings.MinimumRmsLevel, monotonicProgress).ConfigureAwait(false);
+            List<AudioObj> atomics = CreateAtomicSamples(source, analysis, settings.MinimumRmsLevel,
+                settings.MinimumAtomicDurationMs, monotonicProgress);
 
             // Deduplicate similar atomics if enabled
             List<AudioObj> dedupedAtomics = atomics;
@@ -41,45 +64,39 @@ namespace ModularAudience.Audio.Processors_V4
             return new LoopAtomizerResult(dedupedAtomics, analysis.IsLikelyDrumLoop);
         }
 
-        private static async Task<List<AudioObj>> CreateAtomicSamplesAsync(AudioObj source, AtomizeAnalysis analysis,
-            float minimumRmsLevel, IProgress<double>? progress)
+        private static List<AudioObj> CreateAtomicSamples(AudioObj source, AtomizeAnalysis analysis,
+            float minimumRmsLevel, int minimumAtomicDurationMs, IProgress<double>? progress)
         {
             if (analysis.Segments.Count == 0)
             {
                 return [];
             }
 
-            AudioObj working = await source.CloneAsync().ConfigureAwait(false);
-            List<AudioObj> atomics = new(analysis.Segments.Count);
+            AudioObj?[] atomics = new AudioObj?[analysis.Segments.Count];
 
             try
             {
-                int channels = Math.Max(1, working.Channels);
-                for (int i = 0; i < analysis.Segments.Count; i++)
+                Parallel.For(0, analysis.Segments.Count, AtomizerParallelism.OptionsFor(analysis.Segments.Count), i =>
                 {
                     AtomicSegment segment = analysis.Segments[i];
+                    int channels = Math.Max(1, source.Channels);
                     long startSample = (long)segment.StartFrame * channels;
                     long endSample = (long)segment.EndFrame * channels;
                     if (endSample <= startSample)
                     {
-                        continue;
+                        return;
                     }
 
-                    working.SelectionStart = startSample;
-                    working.SelectionEnd = endSample;
-                    AudioObj? atomic = await working.CloneFromSelectionAsync().ConfigureAwait(false);
+                    AudioObj atomic = CreateAtomicSlice(source, startSample, endSample, channels);
                     progress?.Report(0.45 + 0.25 * ((double)(i + 1) / analysis.Segments.Count));
-                    if (atomic == null)
-                    {
-                        continue;
-                    }
-
-                    if (!MeetsMinimumRms(atomic.Data, minimumRmsLevel))
+                    if (atomic.Duration.TotalMilliseconds < minimumAtomicDurationMs ||
+                        !MeetsMinimumRms(atomic.Data, minimumRmsLevel))
                     {
                         atomic.Dispose();
-                        continue;
+                        return;
                     }
 
+                    ApplyBoundaryFades(atomic.Data, channels, atomic.SampleRate);
                     string baseName = string.IsNullOrWhiteSpace(source.Name) ? "Audio" : source.Name.Trim();
                     string suffix = string.IsNullOrWhiteSpace(segment.Label) ? string.Empty : $"_{segment.Label}";
                     atomic.Rename($"{baseName}_Atomic{i + 1:D3}{suffix}");
@@ -87,15 +104,112 @@ namespace ModularAudience.Audio.Processors_V4
                     atomic.SampleTag = analysis.IsLikelyDrumLoop && !string.IsNullOrWhiteSpace(segment.Label) ? segment.Label : string.Empty;
                     atomic.Tag = analysis.IsLikelyDrumLoop ? segment.Label : null;
                     atomic.CustomTags["AtomizeConfidence"] = segment.Confidence.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
-                    atomics.Add(atomic);
-                }
+                    atomics[i] = atomic;
+                });
             }
-            finally
+            catch
             {
-                working.Dispose();
+                foreach (AudioObj? atomic in atomics)
+                {
+                    atomic?.Dispose();
+                }
+
+                throw;
             }
 
-            return atomics;
+            return atomics.OfType<AudioObj>().ToList();
+        }
+
+        private static AudioObj CreateAtomicSlice(AudioObj source, long startSample, long endSample, int channels)
+        {
+            long sampleCount = endSample - startSample;
+            float[] data = new float[checked((int)sampleCount)];
+            Buffer.BlockCopy(source.Data, checked((int)(startSample * sizeof(float))), data, 0,
+                checked((int)(sampleCount * sizeof(float))));
+
+            return new AudioObj
+            {
+                Name = source.Name + "_selection",
+                Data = data,
+                SampleRate = source.SampleRate,
+                Channels = source.Channels,
+                BitDepth = source.BitDepth,
+                Bpm = source.Bpm,
+                Timing = source.Timing,
+                Volume = source.Volume,
+                Length = sampleCount,
+                Duration = TimeSpan.FromSeconds((double)sampleCount / (source.SampleRate * channels))
+            };
+        }
+
+        private static void ApplyBoundaryFades(float[] samples, int channels, int sampleRate)
+        {
+            channels = Math.Max(1, channels);
+            int frames = samples.Length / channels;
+            if (frames < 2)
+            {
+                return;
+            }
+
+            double peak = 0.0;
+            double headPeak = 0.0;
+            double edgePeak = 0.0;
+            for (int frame = 0; frame < frames; frame++)
+            {
+                for (int channel = 0; channel < channels; channel++)
+                {
+                    double amplitude = Math.Abs(samples[(frame * channels) + channel]);
+                    peak = Math.Max(peak, amplitude);
+                    if (frame == 0)
+                    {
+                        headPeak = Math.Max(headPeak, amplitude);
+                    }
+
+                    if (frame == frames - 1)
+                    {
+                        edgePeak = Math.Max(edgePeak, amplitude);
+                    }
+                }
+            }
+
+            if (peak <= 0.0)
+            {
+                return;
+            }
+
+            if (headPeak > peak * 0.01)
+            {
+                int fadeInFrames = Math.Min(frames / 2, Math.Max(2, sampleRate / 1000));
+                for (int frame = 0; fadeInFrames > 1 && frame < fadeInFrames; frame++)
+                {
+                    double position = frame / (double)(fadeInFrames - 1);
+                    float gain = (float)(0.5 * (1.0 - Math.Cos(Math.PI * position)));
+                    for (int channel = 0; channel < channels; channel++)
+                    {
+                        samples[(frame * channels) + channel] *= gain;
+                    }
+                }
+            }
+
+            if (edgePeak > peak * 0.01)
+            {
+                int fadeOutFrames = Math.Min(frames / 2, Math.Max(2, sampleRate / 100));
+                int fadeStart = frames - fadeOutFrames;
+                for (int frame = fadeStart; fadeOutFrames > 1 && frame < frames; frame++)
+                {
+                    double position = (frame - fadeStart + 1.0) / fadeOutFrames;
+                    float gain = (float)(0.5 * (1.0 + Math.Cos(Math.PI * position)));
+                    for (int channel = 0; channel < channels; channel++)
+                    {
+                        samples[(frame * channels) + channel] *= gain;
+                    }
+                }
+            }
+
+            for (int channel = 0; channel < channels; channel++)
+            {
+                samples[((frames - 1) * channels) + channel] = 0f;
+            }
         }
 
         private static bool MeetsMinimumRms(float[] samples, float minimumRmsLevel)
@@ -173,7 +287,7 @@ namespace ModularAudience.Audio.Processors_V4
             int frames = data.Length / channels;
             float[] mono = new float[frames];
 
-            for (int frame = 0; frame < frames; frame++)
+            Parallel.For(0, frames, AtomizerParallelism.OptionsFor(frames), frame =>
             {
                 int offset = frame * channels;
                 float strongest = 0f;
@@ -187,7 +301,7 @@ namespace ModularAudience.Audio.Processors_V4
                 }
 
                 mono[frame] = strongest;
-            }
+            });
 
             return mono;
         }
@@ -220,21 +334,32 @@ namespace ModularAudience.Audio.Processors_V4
         {
             window = Math.Max(1, window);
             float[] envelope = new float[mono.Length];
-            double accumulator = 0.0;
-            Queue<float> queue = new(window);
+            int workerCount = Math.Min(AtomizerParallelism.MaxThreads, Math.Max(1, mono.Length));
+            int chunkSize = (mono.Length + workerCount - 1) / workerCount;
 
-            for (int i = 0; i < mono.Length; i++)
+            Parallel.For(0, workerCount, AtomizerParallelism.OptionsFor(workerCount), worker =>
             {
-                float absolute = Math.Abs(mono[i]);
-                queue.Enqueue(absolute);
-                accumulator += absolute;
-                if (queue.Count > window)
+                int chunkStart = worker * chunkSize;
+                int chunkEnd = Math.Min(mono.Length, chunkStart + chunkSize);
+                int historyStart = Math.Max(0, chunkStart - window + 1);
+                double accumulator = 0.0;
+                for (int index = historyStart; index < chunkStart; index++)
                 {
-                    accumulator -= queue.Dequeue();
+                    accumulator += Math.Abs(mono[index]);
                 }
 
-                envelope[i] = (float)(accumulator / queue.Count);
-            }
+                for (int index = chunkStart; index < chunkEnd; index++)
+                {
+                    accumulator += Math.Abs(mono[index]);
+                    int removedIndex = index - window;
+                    if (removedIndex >= historyStart)
+                    {
+                        accumulator -= Math.Abs(mono[removedIndex]);
+                    }
+
+                    envelope[index] = (float)(accumulator / Math.Min(window, index + 1));
+                }
+            });
 
             return envelope;
         }
@@ -616,26 +741,34 @@ namespace ModularAudience.Audio.Processors_V4
                     peak = Math.Max(peak, Math.Abs(mono[i]));
                 }
 
-                float threshold = Math.Max(0.00001f, Math.Min(silenceThreshold * 0.5f, peak * 0.005f));
-                int firstActive = segment.StartFrame;
-                while (firstActive < segment.EndFrame && Math.Abs(mono[firstActive]) < threshold)
+                if (peak <= 0f)
                 {
-                    firstActive++;
+                    continue;
                 }
 
-                int lastActive = segment.EndFrame - 1;
-                while (lastActive >= firstActive && Math.Abs(mono[lastActive]) < threshold)
+                int windowFrames = Math.Max(1, sampleRate / 200);
+                bool longSegment = segment.EndFrame - segment.StartFrame > sampleRate;
+                float longSegmentThreshold = longSegment ? 0.03f : 0.01f;
+                int firstActive = FindFirstActiveWindowFrame(mono, segment.StartFrame, segment.EndFrame,
+                    windowFrames, peak * longSegmentThreshold);
+
+                if (firstActive < segment.StartFrame || firstActive >= segment.EndFrame)
                 {
-                    lastActive--;
+                    continue;
                 }
+
+                int lastActive;
+                float endThreshold = peak * (longSegment ? 0.03f : 0.005f);
+                lastActive = FindLastActiveWindowFrame(mono, firstActive, segment.EndFrame,
+                    windowFrames, endThreshold);
 
                 if (lastActive < firstActive)
                 {
                     continue;
                 }
 
-                int earliestStart = Math.Max(segment.StartFrame, firstActive - attackPadding);
-                int start = Math.Clamp(SnapToZeroCrossing(mono, firstActive, attackPadding), earliestStart, firstActive);
+                int latestStart = Math.Min(segment.EndFrame - 1, firstActive + attackPadding);
+                int start = Math.Clamp(SnapToZeroCrossing(mono, firstActive, attackPadding), firstActive, latestStart);
                 int end = Math.Min(segment.EndFrame, lastActive + 1 + tailPadding);
                 end = Math.Clamp(SnapToZeroCrossing(mono, end, attackPadding), lastActive + 1, segment.EndFrame);
 
@@ -643,6 +776,68 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             return trimmed;
+        }
+
+        private static int FindFirstActiveWindowFrame(float[] mono, int start, int end, int windowFrames, float threshold)
+        {
+            int activeWindows = 0;
+            for (int windowStart = start; windowStart < end; windowStart += windowFrames)
+            {
+                int windowEnd = Math.Min(end, windowStart + windowFrames);
+                double energy = 0.0;
+                for (int frame = windowStart; frame < windowEnd; frame++)
+                {
+                    double value = mono[frame];
+                    energy += value * value;
+                }
+
+                double rms = Math.Sqrt(energy / Math.Max(1, windowEnd - windowStart));
+                if (rms >= threshold)
+                {
+                    activeWindows++;
+                    if (activeWindows >= 2)
+                    {
+                        return Math.Max(start, windowStart - windowFrames);
+                    }
+                }
+                else
+                {
+                    activeWindows = 0;
+                }
+            }
+
+            return -1;
+        }
+
+        private static int FindLastActiveWindowFrame(float[] mono, int start, int end, int windowFrames, float threshold)
+        {
+            int activeWindows = 0;
+            for (int windowEnd = end; windowEnd > start; windowEnd -= windowFrames)
+            {
+                int windowStart = Math.Max(start, windowEnd - windowFrames);
+                double energy = 0.0;
+                for (int frame = windowStart; frame < windowEnd; frame++)
+                {
+                    double value = mono[frame];
+                    energy += value * value;
+                }
+
+                double rms = Math.Sqrt(energy / Math.Max(1, windowEnd - windowStart));
+                if (rms >= threshold)
+                {
+                    activeWindows++;
+                    if (activeWindows >= 2)
+                    {
+                        return windowEnd - 1;
+                    }
+                }
+                else
+                {
+                    activeWindows = 0;
+                }
+            }
+
+            return -1;
         }
 
         private static int SnapToZeroCrossing(float[] mono, int index, int radius, bool allowForward = true)
@@ -741,15 +936,16 @@ namespace ModularAudience.Audio.Processors_V4
 
         private static List<AtomicSegment> ClassifyAtomicSegments(float[] mono, List<AtomicSegment> segments, int sampleRate)
         {
-            List<AtomicSegment> classified = new(segments.Count);
-            foreach (AtomicSegment segment in segments)
+            AtomicSegment[] classified = new AtomicSegment[segments.Count];
+            Parallel.For(0, segments.Count, AtomizerParallelism.OptionsFor(segments.Count), index =>
             {
+                AtomicSegment segment = segments[index];
                 AtomicHitFeatures features = ExtractHitFeatures(mono, segment.StartFrame, segment.EndFrame, sampleRate);
                 (string? label, double confidence) = ClassifyHit(features);
-                classified.Add(segment with { Label = label, Confidence = confidence });
-            }
+                classified[index] = segment with { Label = label, Confidence = confidence };
+            });
 
-            return classified;
+            return classified.ToList();
         }
 
         private static AtomicHitFeatures ExtractHitFeatures(float[] mono, int startFrame, int endFrame, int sampleRate)
@@ -851,7 +1047,21 @@ namespace ModularAudience.Audio.Processors_V4
                 return ("Kick", 0.90);
             }
 
-            if (features.EarlyPeakCount >= 3 && features.DurationMs >= 70 && features.DurationMs <= 300 && features.HighEnergyRatio > 0.45)
+            if (features.DurationMs >= 70 && features.DurationMs <= 320 &&
+                features.HighEnergyRatio > 0.45 && features.LowEnergyRatio is > 0.20 and < 0.65 &&
+                features.CrestFactor < 7.0)
+            {
+                return ("Snare", 0.76);
+            }
+
+            if (features.HighEnergyRatio > 0.80 && features.ZeroCrossingRate > 0.12 &&
+                features.DurationMs >= 90 && features.DurationMs <= 260 && features.TailEnergyRatio < 0.35)
+            {
+                return ("Rim", 0.76);
+            }
+
+            if (features.EarlyPeakCount >= 3 && features.DurationMs >= 70 && features.DurationMs <= 300 &&
+                features.HighEnergyRatio > 0.45 && features.TailEnergyRatio > 0.25)
             {
                 return ("Clap", 0.84);
             }
@@ -861,24 +1071,25 @@ namespace ModularAudience.Audio.Processors_V4
                 return ("Rim", 0.78);
             }
 
-            if (features.HighEnergyRatio > 0.80 && features.DurationMs < 160)
+            if (features.HighEnergyRatio > 0.80 && features.ZeroCrossingRate > 0.12 && features.DurationMs < 160)
             {
                 return ("HiHatClosed", 0.82);
             }
 
+            if (features.HighEnergyRatio > 0.72 && features.DurationMs > 550 && features.TailEnergyRatio > 0.35)
+            {
+                return ("Cymbal", 0.76);
+            }
+
+            if (features.HighEnergyRatio > 0.68 && features.DurationMs >= 220 && features.DurationMs <= 550 &&
+                features.TailEnergyRatio > 0.40)
+            {
+                return ("Cymbal", 0.73);
+            }
+
             if (features.HighEnergyRatio > 0.72 && features.DurationMs >= 160 && features.DurationMs <= 550)
             {
-                return ("HiHatOpen", 0.75);
-            }
-
-            if (features.HighEnergyRatio > 0.72 && (features.DurationMs > 550 || features.TailEnergyRatio > 0.52))
-            {
-                return ("CrashLong", 0.76);
-            }
-
-            if (features.HighEnergyRatio > 0.68 && features.DurationMs >= 220 && features.DurationMs <= 550)
-            {
-                return ("CrashShort", 0.67);
+                return ("Cymbal", 0.75);
             }
 
             if (features.LowEnergyRatio > 0.56 && features.DurationMs >= 140)
@@ -908,12 +1119,7 @@ namespace ModularAudience.Audio.Processors_V4
                     return ("Snare", 0.73);
                 }
 
-                return ("SnareRattle", 0.64);
-            }
-
-            if (features.HighEnergyRatio > 0.70 && features.EarlyPeakCount >= 4 && features.DurationMs < 260)
-            {
-                return ("Shaker", 0.58);
+                return ("HiHatClosed", 0.68);
             }
 
             return (null, 0.0);
@@ -921,14 +1127,23 @@ namespace ModularAudience.Audio.Processors_V4
 
         private sealed class MonotonicProgress(IProgress<double> target) : IProgress<double>
         {
+            private const double MinimumProgressStep = 0.01;
             private readonly object sync = new();
             private double lastProgress;
+            private bool hasReported;
 
             public void Report(double value)
             {
                 lock (this.sync)
                 {
-                    this.lastProgress = Math.Max(this.lastProgress, Math.Clamp(value, 0.0, 1.0));
+                    double nextProgress = Math.Max(this.lastProgress, Math.Clamp(value, 0.0, 1.0));
+                    if (this.hasReported && nextProgress < 1.0 && nextProgress - this.lastProgress < MinimumProgressStep)
+                    {
+                        return;
+                    }
+
+                    this.lastProgress = nextProgress;
+                    this.hasReported = true;
                     target.Report(this.lastProgress);
                 }
             }
@@ -962,11 +1177,12 @@ namespace ModularAudience.Audio.Processors_V4
         public static LoopAtomizerSettings Default { get; } = new();
         public AtomizeSensitivity Sensitivity { get; init; } = AtomizeSensitivity.Balanced;
         public int MinSliceMs { get; init; } = 80;
-        public int TailPaddingMs { get; init; } = 30;
+        public int TailPaddingMs { get; init; }
         public bool AllowSingleAtomFallback { get; init; } = true;
         public bool EnableDeduplication { get; init; } = true;
-        public int MaxVariantsPerCluster { get; init; } = 3;
-        public float MinimumRmsLevel { get; init; }
+        public int MaxVariantsPerCluster { get; init; } = 2;
+        public float MinimumRmsLevel { get; init; } = 0.003f;
+        public int MinimumAtomicDurationMs { get; init; } = 40;
         public float ClusterSimilarityThreshold { get; init; } = 0.94f;
     }
 

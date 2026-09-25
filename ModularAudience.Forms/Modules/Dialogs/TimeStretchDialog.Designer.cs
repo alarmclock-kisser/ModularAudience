@@ -63,8 +63,8 @@
             this.numericUpDown_initialBpm.DecimalPlaces = 4;
             this.numericUpDown_initialBpm.Increment = new decimal(new int[] { 5, 0, 0, 65536 });
             this.numericUpDown_initialBpm.Location = new Point(12, 112);
-            this.numericUpDown_initialBpm.Maximum = new decimal(new int[] { 360, 0, 0, 0 });
-            this.numericUpDown_initialBpm.Minimum = new decimal(new int[] { 30, 0, 0, 0 });
+            this.numericUpDown_initialBpm.Maximum = new decimal(new int[] { 420, 0, 0, 0 });
+            this.numericUpDown_initialBpm.Minimum = new decimal(new int[] { 5, 0, 0, 0 });
             this.numericUpDown_initialBpm.Name = "numericUpDown_initialBpm";
             this.numericUpDown_initialBpm.Size = new Size(70, 23);
             this.numericUpDown_initialBpm.TabIndex = 0;
@@ -94,8 +94,8 @@
             this.numericUpDown_targetBpm.DecimalPlaces = 4;
             this.numericUpDown_targetBpm.Increment = new decimal(new int[] { 5, 0, 0, 65536 });
             this.numericUpDown_targetBpm.Location = new Point(88, 112);
-            this.numericUpDown_targetBpm.Maximum = new decimal(new int[] { 360, 0, 0, 0 });
-            this.numericUpDown_targetBpm.Minimum = new decimal(new int[] { 30, 0, 0, 0 });
+            this.numericUpDown_targetBpm.Maximum = new decimal(new int[] { 420, 0, 0, 0 });
+            this.numericUpDown_targetBpm.Minimum = new decimal(new int[] { 5, 0, 0, 0 });
             this.numericUpDown_targetBpm.Name = "numericUpDown_targetBpm";
             this.numericUpDown_targetBpm.Size = new Size(70, 23);
             this.numericUpDown_targetBpm.TabIndex = 2;
@@ -116,7 +116,7 @@
             this.numericUpDown_stretchFactor.DecimalPlaces = 18;
             this.numericUpDown_stretchFactor.Increment = new decimal(new int[] { 1, 0, 0, 262144 });
             this.numericUpDown_stretchFactor.Location = new Point(164, 111);
-            this.numericUpDown_stretchFactor.Maximum = new decimal(new int[] { 10, 0, 0, 0 });
+            this.numericUpDown_stretchFactor.Maximum = new decimal(new int[] { 128, 0, 0, 0 });
             this.numericUpDown_stretchFactor.Minimum = new decimal(new int[] { 1, 0, 0, 131072 });
             this.numericUpDown_stretchFactor.Name = "numericUpDown_stretchFactor";
             this.numericUpDown_stretchFactor.Size = new Size(146, 23);

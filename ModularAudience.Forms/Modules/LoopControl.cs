@@ -2012,7 +2012,6 @@ namespace ModularAudience.Forms.Modules
             var firstAudio = trackInfos[0].audio;
             var mergedAudio = new AudioObj
             {
-                Id = Guid.NewGuid(),
                 Name = string.Empty,
                 FilePath = string.Empty,
                 Data = merged,

@@ -818,6 +818,279 @@ namespace ModularAudience.Generators
             }
         }
 
+        public const int PatternTicksPerBar = 1024;
+
+        public static List<BreakbeatPatternNote> CreatePatternNotesFromGrid(
+            IReadOnlyList<bool[]> pattern,
+            IReadOnlyList<AudioObj> samples,
+            int sourceResolution,
+            float bpm,
+            int gridResolution)
+        {
+            var notes = new List<BreakbeatPatternNote>();
+            if (pattern.Count == 0 || samples.Count == 0)
+            {
+                return notes;
+            }
+
+            double secondsPerGridStep = 240.0 / Math.Max(1.0, bpm) / Math.Max(1, gridResolution);
+            int sourceStepsPerBar = Math.Max(1, sourceResolution);
+            int gridTicksPerStep = Math.Max(1, (int)Math.Round(PatternTicksPerBar / (double)Math.Max(1, gridResolution)));
+
+            for (int row = 0; row < Math.Min(pattern.Count, samples.Count); row++)
+            {
+                int minimumDurationTicks = GetMinimumNoteDurationTicks(samples, row, bpm, gridResolution);
+                for (int step = 0; step < pattern[row].Length; step++)
+                {
+                    if (!pattern[row][step])
+                    {
+                        continue;
+                    }
+
+                    int startTick = (int)Math.Round(step * PatternTicksPerBar / (double)sourceStepsPerBar);
+                    int durationSteps = Math.Max(1, (int)Math.Ceiling(minimumDurationTicks / (double)gridTicksPerStep));
+                    notes.Add(new BreakbeatPatternNote(row, startTick, durationSteps * gridTicksPerStep));
+                }
+            }
+
+            return notes;
+        }
+
+        public static List<BreakbeatPatternNote> RemoveRetriggersCoveredByStretchedNote(
+            IReadOnlyList<BreakbeatPatternNote> notes,
+            BreakbeatPatternNote stretchedNote)
+        {
+            if (!stretchedNote.TimeStretch)
+            {
+                return notes.ToList();
+            }
+
+            long endTick = (long)stretchedNote.StartTick + stretchedNote.DurationTicks;
+            return notes
+                .Where(note => ReferenceEquals(note, stretchedNote)
+                    || note.TrackIndex != stretchedNote.TrackIndex
+                    || note.StartTick < stretchedNote.StartTick
+                    || note.StartTick >= endTick)
+                .ToList();
+        }
+
+        public static int GetMinimumNoteDurationTicks(IReadOnlyList<AudioObj> samples, int trackIndex, float bpm, int resolution)
+        {
+            if (trackIndex < 0 || trackIndex >= samples.Count)
+            {
+                return Math.Max(1, (int)Math.Ceiling(PatternTicksPerBar / (double)Math.Max(1, resolution)));
+            }
+
+            double normalizedDuration = GetNormalizedSampleDurationSeconds(samples, trackIndex);
+            double secondsPerGridStep = 240.0 / Math.Max(1.0, bpm) / Math.Max(1, resolution);
+            int steps = Math.Max(1, (int)Math.Ceiling(normalizedDuration / secondsPerGridStep - 1e-9));
+            return Math.Max(1, (int)Math.Ceiling(steps * PatternTicksPerBar / (double)Math.Max(1, resolution)));
+        }
+
+        public static double GetNormalizedSampleDurationSeconds(IReadOnlyList<AudioObj> samples, int trackIndex)
+        {
+            if (trackIndex < 0 || trackIndex >= samples.Count)
+            {
+                return 0;
+            }
+
+            double shortestDuration = double.PositiveInfinity;
+            foreach (AudioObj sample in samples)
+            {
+                double duration = GetSampleDurationSeconds(sample);
+                if (duration > 0 && double.IsFinite(duration))
+                {
+                    shortestDuration = Math.Min(shortestDuration, duration);
+                }
+            }
+
+            double sampleDuration = GetSampleDurationSeconds(samples[trackIndex]);
+            if (sampleDuration <= 0 || !double.IsFinite(sampleDuration) || !double.IsFinite(shortestDuration))
+            {
+                return Math.Max(0, sampleDuration);
+            }
+
+            return Math.Ceiling(sampleDuration / shortestDuration - 1e-9) * shortestDuration;
+        }
+
+        public static async Task<AudioObj> RenderPatternNotesAsync(
+            IReadOnlyList<BreakbeatPatternNote> notes,
+            IReadOnlyList<AudioObj> samples,
+            int bars,
+            float bpm,
+            int resolution,
+            float swing,
+            string? patternName = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (notes.Count == 0 || samples.Count == 0)
+            {
+                return null!;
+            }
+
+            const int outputSampleRate = 44100;
+            const int outputChannels = 2;
+            double secondsPerBar = 240.0 / Math.Max(1.0, bpm);
+            double secondsPerStep = secondsPerBar / Math.Max(1, resolution);
+            int initialFrames = Math.Max(1, (int)Math.Ceiling(Math.Max(1, bars) * secondsPerBar * outputSampleRate));
+            float[] mixBuffer = new float[checked(initialFrames * outputChannels)];
+            int ticksPerStep = Math.Max(1, (int)Math.Round(PatternTicksPerBar / (double)Math.Max(1, resolution)));
+            int maxWorkers = Math.Max(1, Environment.ProcessorCount / 2);
+
+            foreach (BreakbeatPatternNote note in notes)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (note.TrackIndex < 0 || note.TrackIndex >= samples.Count)
+                {
+                    continue;
+                }
+
+                AudioObj source = samples[note.TrackIndex];
+                if (source.Data == null || source.Data.Length == 0)
+                {
+                    continue;
+                }
+
+                using AudioObj clip = source.Clone();
+                await clip.ResampleAsync(outputSampleRate);
+                await clip.NormalizeAsync(0.8f);
+
+                int sourceChannels = Math.Max(1, clip.Channels);
+                int sourceFrames = clip.Data.Length / sourceChannels;
+                if (sourceFrames <= 0)
+                {
+                    continue;
+                }
+
+                double normalizedDuration = GetNormalizedSampleDurationSeconds(samples, note.TrackIndex);
+                int stretchSourceFrames = Math.Max(
+                    sourceFrames,
+                    (int)Math.Ceiling(normalizedDuration * outputSampleRate));
+                double stretchSourceDuration = stretchSourceFrames / (double)outputSampleRate;
+                if (note.TimeStretch && stretchSourceFrames > sourceFrames)
+                {
+                    float[] normalizedData = new float[checked(stretchSourceFrames * sourceChannels)];
+                    Array.Copy(clip.Data, normalizedData, clip.Data.Length);
+                    clip.Data = normalizedData;
+                    clip.Length = normalizedData.Length;
+                    clip.Duration = TimeSpan.FromSeconds(stretchSourceDuration);
+                }
+
+                double noteDuration = note.DurationTicks / (double)PatternTicksPerBar * secondsPerBar;
+                double targetDuration = Math.Max(noteDuration, Math.Max(stretchSourceDuration, normalizedDuration));
+                int targetFrames = Math.Max(stretchSourceFrames, (int)Math.Ceiling(targetDuration * outputSampleRate));
+
+                sourceChannels = Math.Max(1, clip.Channels);
+                float[] renderedData = note.TimeStretch && targetFrames > stretchSourceFrames
+                    ? await StretchClipAsync(clip, stretchSourceFrames, targetFrames, maxWorkers)
+                    : clip.Data;
+                int clipFrames = targetFrames;
+                float[] clipData = new float[checked(clipFrames * sourceChannels)];
+                Array.Copy(renderedData, clipData, Math.Min(renderedData.Length, clipData.Length));
+
+                int startFrame = Math.Max(0, (int)Math.Round(note.StartTick / (double)PatternTicksPerBar * secondsPerBar * outputSampleRate));
+                int stepIndex = (int)Math.Round(note.StartTick / (double)ticksPerStep);
+                if (swing > 0 && stepIndex % 2 == 1)
+                {
+                    startFrame += Math.Max(0, (int)Math.Round(secondsPerStep * swing * outputSampleRate));
+                }
+
+                int requiredSamples = checked((startFrame + clipFrames) * outputChannels);
+                if (requiredSamples > mixBuffer.Length)
+                {
+                    Array.Resize(ref mixBuffer, requiredSamples);
+                }
+
+                float volume = clip.Volume;
+                if (volume <= 0f || !float.IsFinite(volume))
+                {
+                    volume = 1f;
+                }
+
+                volume = Math.Clamp(volume, 0f, 1f);
+                for (int frame = 0; frame < clipFrames; frame++)
+                {
+                    int mixIndex = (startFrame + frame) * outputChannels;
+                    int sourceIndex = frame * sourceChannels;
+                    for (int channel = 0; channel < outputChannels; channel++)
+                    {
+                        mixBuffer[mixIndex + channel] += clipData[sourceIndex + (channel % sourceChannels)] * volume;
+                    }
+                }
+            }
+
+            float peak = 0f;
+            foreach (float sample in mixBuffer)
+            {
+                peak = Math.Max(peak, Math.Abs(sample));
+            }
+
+            if (peak > 0.95f)
+            {
+                float gain = 0.95f / peak;
+                for (int i = 0; i < mixBuffer.Length; i++)
+                {
+                    mixBuffer[i] *= gain;
+                }
+            }
+
+            patternName ??= "BreakbeatPattern";
+            var rendered = new AudioObj
+            {
+                Name = $"{patternName}_{DateTime.Now:yyyyMMdd_HHmmss}",
+                Data = mixBuffer,
+                SampleRate = outputSampleRate,
+                Channels = outputChannels,
+                Duration = TimeSpan.FromSeconds(mixBuffer.Length / (double)(outputSampleRate * outputChannels)),
+                Length = mixBuffer.Length,
+                BitDepth = 32,
+                Bpm = bpm
+            };
+            rendered.Rename(rendered.Name);
+            return rendered;
+        }
+
+        private static double GetSampleDurationSeconds(AudioObj sample)
+        {
+            int channels = Math.Max(1, sample.Channels);
+            if (sample.Data != null && sample.Data.Length > 0 && sample.SampleRate > 0)
+            {
+                return sample.Data.Length / (double)(channels * sample.SampleRate);
+            }
+
+            return Math.Max(0, sample.Duration.TotalSeconds);
+        }
+
+        private static async Task<float[]> StretchClipAsync(AudioObj clip, int sourceFrames, int targetFrames, int maxWorkers)
+        {
+            const int chunkSize = 8192;
+            const float overlap = 0.5f;
+            double factor = targetFrames / (double)sourceFrames;
+            int channelCount = Math.Max(1, clip.Channels);
+            int targetSamples = checked(targetFrames * channelCount);
+
+            await ModularAudience.Audio.Processors_V1.TimeStretcher.TimeStretchAllThreadsAsync(
+                clip,
+                chunkSize: chunkSize,
+                overlap: overlap,
+                factor: factor,
+                keepData: false,
+                normalize: 0f,
+                maxWorkers: maxWorkers,
+                progress: null,
+                offload: false,
+                channeled: true);
+
+            if (clip.Data.Length == targetSamples)
+            {
+                return clip.Data;
+            }
+
+            float[] exactLengthData = new float[targetSamples];
+            Array.Copy(clip.Data, exactLengthData, Math.Min(clip.Data.Length, targetSamples));
+            return exactLengthData;
+        }
+
         public static async Task<AudioObj> RenderBreakbeatAsync(List<bool[]> breakbeat, IEnumerable<AudioObj> samples, float bpm, int resolution, float swing, string? patternName = null)
         {
             if (breakbeat == null || samples == null || breakbeat.Count == 0 || !samples.Any())
