@@ -36,6 +36,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private int currentPatternBars = 1;
         private int currentPatternResolution = 16;
         private List<BreakbeatPatternNote> currentPatternNotes = [];
+        private readonly Dictionary<AudioObj, BreakbeatTrackSettings> patternTrackSettings = new(ReferenceEqualityComparer.Instance);
         private bool hasEditedPattern;
         private BreakbeatPatternEditorDialog? patternEditorDialog;
 
@@ -116,6 +117,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     editor.FormClosed -= this.BreakbeatPatternEditorDialog_FormClosed;
                     editor.SaveRequested -= this.BreakbeatPatternEditorDialog_SaveRequestedAsync;
+                    editor.TrackAdded -= this.BreakbeatPatternEditorDialog_TrackAdded;
                     this.patternEditorDialog = null;
                 }
 
@@ -241,12 +243,52 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.Swing,
                 (decimal)this.Bpm,
                 this.hasEditedPattern ? this.currentPatternNotes : null,
-                this.hasEditedPattern ? this.currentPatternResolution : null);
+                this.hasEditedPattern ? this.currentPatternResolution : null,
+                this.patternTrackSettings);
 
             this.patternEditorDialog = editor;
             editor.FormClosed += this.BreakbeatPatternEditorDialog_FormClosed;
             editor.SaveRequested += this.BreakbeatPatternEditorDialog_SaveRequestedAsync;
+            editor.TrackAdded += this.BreakbeatPatternEditorDialog_TrackAdded;
             editor.Show();
+        }
+
+        private void BreakbeatPatternEditorDialog_TrackAdded(AudioObj sample, int insertionIndex)
+        {
+            bool previousUserInputState = this.sampleSelectionFromUserInput;
+            this.sampleSelectionFromUserInput = false;
+            try
+            {
+                int targetIndex = Math.Clamp(insertionIndex, 0, this.AudioC.Audios.Count);
+                AudioObj? selectedTrack = this.SelectedTrack;
+                this.AudioC.Audios.Insert(targetIndex, sample);
+
+                int patternColumns = Math.Max(1, this.currentPatternBars * this.currentPatternResolution);
+                this.currentPattern.Insert(targetIndex, new bool[patternColumns]);
+                if (this.hasEditedPattern)
+                {
+                    this.currentPatternNotes = this.currentPatternNotes
+                        .Select(note => note.TrackIndex >= targetIndex ? note with { TrackIndex = note.TrackIndex + 1 } : note)
+                        .ToList();
+                }
+
+                this.currentPatternRowLabels = this.GetBeatMapRowLabels().ToArray();
+                this.ShowBeatMap(
+                    this.currentPattern,
+                    this.currentPatternRowLabels,
+                    this.currentPatternBars,
+                    this.currentPatternResolution,
+                    this.hasEditedPattern ? this.currentPatternNotes : null);
+
+                if (selectedTrack is not null)
+                {
+                    this.listBox_samples.SelectedIndex = this.AudioC.Audios.IndexOf(selectedTrack);
+                }
+            }
+            finally
+            {
+                this.sampleSelectionFromUserInput = previousUserInputState;
+            }
         }
 
         private void BreakbeatPatternEditorDialog_FormClosed(object? sender, FormClosedEventArgs e)
@@ -255,6 +297,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 return;
             }
+
+            editor.TrackAdded -= this.BreakbeatPatternEditorDialog_TrackAdded;
 
             if (ReferenceEquals(this.patternEditorDialog, editor))
             {

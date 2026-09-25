@@ -3,21 +3,18 @@ using ModularAudience.Forms.Helpers;
 using ModularAudience.Generators;
 using System.Globalization;
 using System.Drawing.Drawing2D;
-using System.IO;
-using System.Text.Json;
 
 namespace ModularAudience.Forms.Modules.Dialogs
 {
     public partial class BreakbeatPatternEditorDialog : Form
     {
-        private static readonly object persistedTrackSettingsLock = new();
-        private static Dictionary<string, BreakbeatTrackSettings> persistedTrackSettings = new(StringComparer.OrdinalIgnoreCase);
-        private static bool persistedTrackSettingsLoaded;
         private readonly List<bool[]> pattern;
         private readonly List<AudioObj> samples;
         private readonly List<AudioObj> originalSampleOrder;
+        private readonly List<AudioObj> sourceSampleOrder;
+        private readonly IDictionary<AudioObj, BreakbeatTrackSettings>? trackSettingsBySample;
         private readonly List<BreakbeatTrackSettings> trackSettings;
-        private readonly string[] rowLabels;
+        private readonly List<string> rowLabels;
         private int bars;
         private readonly float swing;
         private readonly List<BreakbeatPatternNote> notes;
@@ -56,6 +53,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private int rowReorderSource = -1;
         private int rowReorderTarget = -1;
         private Point rowReorderPointer;
+        private int externalTrackDropIndex = -1;
+        private bool externalTrackDragActive;
         private BreakbeatPatternNote? resizingNote;
         private ResizeEdge resizingEdge;
         private int resizeFixedTick;
@@ -91,7 +90,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public int Bars => this.bars;
 
-    public event Func<BreakbeatPatternEditorDialog, Task>? SaveRequested;
+        public event Func<BreakbeatPatternEditorDialog, Task>? SaveRequested;
+        internal event Action<AudioObj, int>? TrackAdded;
 
         public BreakbeatPatternEditorDialog(
             IReadOnlyList<bool[]> pattern,
@@ -102,16 +102,23 @@ namespace ModularAudience.Forms.Modules.Dialogs
             float swing,
             decimal bpm,
             IReadOnlyList<BreakbeatPatternNote>? existingNotes = null,
-            int? initialGridResolution = null)
+            int? initialGridResolution = null,
+            IDictionary<AudioObj, BreakbeatTrackSettings>? trackSettingsBySample = null)
         {
             this.InitializeComponent();
             this.KeyPreview = true;
             this.KeyUp += this.BreakbeatPatternEditorDialog_KeyUp;
             this.pattern = pattern.Select(row => row.ToArray()).ToList();
-            this.samples = samples.Select(sample => sample.Clone()).ToList();
+            AudioObj[] sourceSamples = samples.ToArray();
+            this.sourceSampleOrder = sourceSamples.ToList();
+            this.samples = sourceSamples.Select(sample => sample.Clone()).ToList();
             this.originalSampleOrder = this.samples.ToList();
-            this.trackSettings = this.samples.Select(LoadTrackSettings).ToList();
-            this.rowLabels = rowLabels.ToArray();
+            this.trackSettingsBySample = trackSettingsBySample;
+            this.trackSettings = sourceSamples.Select(sample =>
+                trackSettingsBySample is not null && trackSettingsBySample.TryGetValue(sample, out BreakbeatTrackSettings? settings)
+                    ? NormalizeTrackSettings(settings)
+                    : new BreakbeatTrackSettings()).ToList();
+            this.rowLabels = rowLabels.ToList();
             this.bars = Math.Max(1, bars);
             this.swing = swing;
             this.numericUpDown_bpm.Value = Math.Clamp(decimal.Round(bpm, 1), this.numericUpDown_bpm.Minimum, this.numericUpDown_bpm.Maximum);
@@ -216,12 +223,29 @@ namespace ModularAudience.Forms.Modules.Dialogs
             using Brush pitchLabelBrush = new SolidBrush(Color.FromArgb(15, 20, 24));
             using Brush volumeLabelBackground = new SolidBrush(Color.FromArgb(225, 18, 22, 26));
             using Brush volumeLabelBrush = new SolidBrush(Color.FromArgb(245, 245, 247, 248));
+            using Brush settingsSummaryBrush = new SolidBrush(Color.FromArgb(155, 165, 176));
             for (int row = 0; row < rows; row++)
             {
                 float y = grid.Top + row * cellHeight;
                 RectangleF labelBounds = new(8, y, Math.Max(1, grid.Left - 16), Math.Max(1f, cellHeight));
-                string label = row < this.rowLabels.Length ? this.rowLabels[row] : $"Track {row + 1}";
-                e.Graphics.DrawString(label, labelFont, labelBrush, labelBounds, labelFormat);
+                string label = row < this.rowLabels.Count ? this.rowLabels[row] : $"Track {row + 1}";
+                string settingsSummary = row < this.trackSettings.Count
+                    ? FormatTrackSettingsSummary(this.trackSettings[row])
+                    : string.Empty;
+                float nameHeight = labelFont.GetHeight(e.Graphics);
+                float summaryHeight = nameHeight;
+                float combinedHeight = nameHeight + (string.IsNullOrEmpty(settingsSummary) ? 0f : summaryHeight + 1f);
+                if (string.IsNullOrEmpty(settingsSummary) || combinedHeight > cellHeight - 2f)
+                {
+                    e.Graphics.DrawString(label, labelFont, labelBrush, labelBounds, labelFormat);
+                    continue;
+                }
+
+                float textTop = y + (cellHeight - combinedHeight) / 2f;
+                RectangleF nameBounds = new(labelBounds.X, textTop, labelBounds.Width, nameHeight);
+                RectangleF summaryBounds = new(labelBounds.X, textTop + nameHeight + 1f, labelBounds.Width, summaryHeight);
+                e.Graphics.DrawString(label, labelFont, labelBrush, nameBounds, labelFormat);
+                e.Graphics.DrawString(settingsSummary, labelFont, settingsSummaryBrush, summaryBounds, labelFormat);
             }
 
             GraphicsState gridState = e.Graphics.Save();
@@ -389,6 +413,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             e.Graphics.Restore(gridState);
             this.DrawRowReorderOverlay(e.Graphics, grid, cellHeight);
+            this.DrawExternalTrackDropIndicator(e.Graphics, grid, cellHeight);
         }
 
         private void DrawRowReorderOverlay(Graphics graphics, Rectangle grid, float cellHeight)
@@ -418,7 +443,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             graphics.DrawRectangle(ghostBorderPen, ghostRow.X, ghostRow.Y, ghostRow.Width, ghostRow.Height);
 
             RectangleF labelBounds = new(8f, ghostTop, Math.Max(1, grid.Left - 16), cellHeight);
-            string label = this.rowReorderSource < this.rowLabels.Length
+            string label = this.rowReorderSource < this.rowLabels.Count
                 ? this.rowLabels[this.rowReorderSource]
                 : $"Track {this.rowReorderSource + 1}";
             graphics.DrawString(label, SystemFonts.DefaultFont, ghostLabelBrush, labelBounds);
@@ -437,6 +462,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
             float insertionY = grid.Top + Math.Clamp(this.rowReorderTarget, 0, this.samples.Count) * cellHeight;
             graphics.DrawLine(insertionPen, grid.Left, insertionY, this.pictureBox_pattern.ClientSize.Width - 2, insertionY);
             graphics.Restore(state);
+        }
+
+        private void DrawExternalTrackDropIndicator(Graphics graphics, Rectangle grid, float cellHeight)
+        {
+            if (!this.externalTrackDragActive || this.externalTrackDropIndex < 0)
+            {
+                return;
+            }
+
+            float insertionY = grid.Top + Math.Clamp(this.externalTrackDropIndex, 0, this.samples.Count) * cellHeight;
+            using Pen insertionPen = new(Color.FromArgb(245, 255, 206, 86), 3f);
+            graphics.DrawLine(insertionPen, 2, insertionY, this.pictureBox_pattern.ClientSize.Width - 2, insertionY);
         }
 
         private static string FormatPitchSemitones(float semitones)
@@ -461,62 +498,26 @@ namespace ModularAudience.Forms.Modules.Dialogs
             return (semitones < 0 ? "-" : "+") + value;
         }
 
-        private static BreakbeatTrackSettings LoadTrackSettings(AudioObj sample)
+        private static string FormatTrackSettingsSummary(BreakbeatTrackSettings settings)
         {
-            lock (persistedTrackSettingsLock)
+            List<string> values = [];
+            if (Math.Abs(settings.DefaultVolumePercent - 100f) >= 0.5f)
             {
-                if (!persistedTrackSettingsLoaded)
-                {
-                    string settingsPath = GetTrackSettingsFilePath();
-                    if (File.Exists(settingsPath))
-                    {
-                        try
-                        {
-                            persistedTrackSettings = JsonSerializer.Deserialize<Dictionary<string, BreakbeatTrackSettings>>(File.ReadAllText(settingsPath))
-                                ?? new Dictionary<string, BreakbeatTrackSettings>(StringComparer.OrdinalIgnoreCase);
-                        }
-                        catch (Exception ex)
-                        {
-                            LogCollection.Log("Breakbeat track settings could not be loaded.");
-                            LogCollection.Log(ex);
-                        }
-                    }
-
-                    persistedTrackSettingsLoaded = true;
-                }
-
-                return persistedTrackSettings.TryGetValue(GetTrackSettingsKey(sample), out BreakbeatTrackSettings? settings)
-                    ? NormalizeTrackSettings(settings)
-                    : new BreakbeatTrackSettings();
+                int volume = (int)Math.Round(settings.DefaultVolumePercent, MidpointRounding.AwayFromZero);
+                values.Add(volume.ToString(CultureInfo.InvariantCulture) + "% Vol.");
             }
-        }
 
-        private static void SaveTrackSettings(AudioObj sample, BreakbeatTrackSettings settings)
-        {
-            lock (persistedTrackSettingsLock)
+            if (Math.Abs(settings.DefaultPitchSemitones) >= 0.0001f)
             {
-                if (!persistedTrackSettingsLoaded)
-                {
-                    _ = LoadTrackSettings(sample);
-                }
-
-                Dictionary<string, BreakbeatTrackSettings> updatedSettings = new(persistedTrackSettings, StringComparer.OrdinalIgnoreCase)
-                {
-                    [GetTrackSettingsKey(sample)] = NormalizeTrackSettings(settings)
-                };
-                string settingsPath = GetTrackSettingsFilePath();
-                string? settingsDirectory = Path.GetDirectoryName(settingsPath);
-                if (!string.IsNullOrEmpty(settingsDirectory))
-                {
-                    Directory.CreateDirectory(settingsDirectory);
-                }
-
-                string temporaryPath = settingsPath + ".tmp";
-                File.WriteAllText(temporaryPath, JsonSerializer.Serialize(updatedSettings, new JsonSerializerOptions { WriteIndented = true }));
-                File.Move(temporaryPath, settingsPath, overwrite: true);
-                persistedTrackSettings = updatedSettings;
-                persistedTrackSettingsLoaded = true;
+                values.Add(FormatPitchSemitones(settings.DefaultPitchSemitones));
             }
+
+            if (settings.DefaultPlaybackMode == BreakbeatPlaybackMode.Varispeed)
+            {
+                values.Add("Varispeed");
+            }
+
+            return string.Join(" • ", values);
         }
 
         private static BreakbeatTrackSettings NormalizeTrackSettings(BreakbeatTrackSettings settings)
@@ -532,36 +533,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 : BreakbeatPlaybackMode.TimeStretch;
             return new BreakbeatTrackSettings(volume, pitch, mode);
         }
-
-        private static string GetTrackSettingsKey(AudioObj sample)
-        {
-            if (!string.IsNullOrWhiteSpace(sample.FilePath))
-            {
-                string path = sample.FilePath.Trim();
-                try
-                {
-                    path = Path.GetFullPath(path);
-                }
-                catch
-                {
-                }
-
-                return "FILE:" + path.ToUpperInvariant();
-            }
-
-            return string.Join(
-                "|",
-                "SAMPLE",
-                sample.Name.Trim().ToUpperInvariant(),
-                sample.SampleRate.ToString(CultureInfo.InvariantCulture),
-                sample.Channels.ToString(CultureInfo.InvariantCulture),
-                sample.Data.LongLength.ToString(CultureInfo.InvariantCulture));
-        }
-
-        private static string GetTrackSettingsFilePath() => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ModularAudience",
-            "BreakbeatTrackSettings.json");
 
         private static void DrawPitchMark(
             Graphics graphics,
@@ -1098,7 +1069,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            string sampleName = row < this.rowLabels.Length ? this.rowLabels[row] : this.samples[row].Name;
+            string sampleName = row < this.rowLabels.Count ? this.rowLabels[row] : this.samples[row].Name;
             using BreakbeatTrackSettingsDialog dialog = new(sampleName, this.trackSettings[row]);
             if (dialog.ShowDialog(this) != DialogResult.OK)
             {
@@ -1107,18 +1078,217 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             BreakbeatTrackSettings settings = NormalizeTrackSettings(dialog.Settings);
             this.trackSettings[row] = settings;
-            try
+            int originalTrackIndex = this.GetOriginalTrackIndex(row);
+            if (this.trackSettingsBySample is not null
+                && originalTrackIndex >= 0
+                && originalTrackIndex < this.sourceSampleOrder.Count)
             {
-                SaveTrackSettings(this.samples[row], settings);
-            }
-            catch (Exception ex)
-            {
-                LogCollection.Log("Breakbeat track settings could not be saved.");
-                LogCollection.Log(ex);
-                WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Breakbeat Track Settings", ex);
+                this.trackSettingsBySample[this.sourceSampleOrder[originalTrackIndex]] = settings;
             }
 
             this.pictureBox_pattern.Invalidate();
+        }
+
+        private void pictureBox_pattern_DragEnter(object? sender, DragEventArgs e)
+        {
+            this.UpdateExternalTrackDrop(e);
+        }
+
+        private void pictureBox_pattern_DragOver(object? sender, DragEventArgs e)
+        {
+            this.UpdateExternalTrackDrop(e);
+        }
+
+        private void pictureBox_pattern_DragLeave(object? sender, EventArgs e)
+        {
+            this.ClearExternalTrackDrop();
+        }
+
+        private void pictureBox_pattern_DragDrop(object? sender, DragEventArgs e)
+        {
+            try
+            {
+                if (!TryGetDraggedSamples(e.Data, out AudioObj[] draggedSamples) || this.TrackAdded is null)
+                {
+                    return;
+                }
+
+                Point point = this.pictureBox_pattern.PointToClient(new Point(e.X, e.Y));
+                int displayIndex = this.externalTrackDropIndex >= 0
+                    ? this.externalTrackDropIndex
+                    : this.GetTrackDropInsertionIndex(point.Y);
+                displayIndex = Math.Clamp(displayIndex, 0, this.samples.Count);
+                int sourceIndex = displayIndex < this.samples.Count
+                    ? this.GetOriginalTrackIndex(displayIndex)
+                    : this.sourceSampleOrder.Count;
+                if (sourceIndex < 0)
+                {
+                    sourceIndex = this.sourceSampleOrder.Count;
+                }
+
+                foreach (AudioObj draggedSample in draggedSamples)
+                {
+                    this.InsertSampleTrack(draggedSample, displayIndex++, sourceIndex++);
+                }
+            }
+            finally
+            {
+                this.ClearExternalTrackDrop();
+            }
+        }
+
+        private void UpdateExternalTrackDrop(DragEventArgs e)
+        {
+            if (!TryGetDraggedSamples(e.Data, out _) || this.TrackAdded is null)
+            {
+                e.Effect = DragDropEffects.None;
+                this.ClearExternalTrackDrop();
+                return;
+            }
+
+            e.Effect = DragDropEffects.Copy;
+            Point point = this.pictureBox_pattern.PointToClient(new Point(e.X, e.Y));
+            int insertionIndex = this.GetTrackDropInsertionIndex(point.Y);
+            if (!this.externalTrackDragActive || insertionIndex != this.externalTrackDropIndex)
+            {
+                this.externalTrackDragActive = true;
+                this.externalTrackDropIndex = insertionIndex;
+                this.pictureBox_pattern.Invalidate();
+            }
+        }
+
+        private void ClearExternalTrackDrop()
+        {
+            if (!this.externalTrackDragActive && this.externalTrackDropIndex < 0)
+            {
+                return;
+            }
+
+            this.externalTrackDragActive = false;
+            this.externalTrackDropIndex = -1;
+            this.pictureBox_pattern.Invalidate();
+        }
+
+        private static bool TryGetDraggedSamples(IDataObject? data, out AudioObj[] samples)
+        {
+            if (data is not null
+                && data.GetDataPresent(typeof(AudioObj[]))
+                && data.GetData(typeof(AudioObj[])) is AudioObj[] audioArray)
+            {
+                samples = audioArray.Where(sample => sample is not null).ToArray();
+                return samples.Length > 0;
+            }
+
+            if (data is not null
+                && data.GetDataPresent(typeof(IEnumerable<AudioObj>))
+                && data.GetData(typeof(IEnumerable<AudioObj>)) is IEnumerable<AudioObj> audioEnumerable)
+            {
+                samples = audioEnumerable.Where(sample => sample is not null).ToArray();
+                return samples.Length > 0;
+            }
+
+            samples = [];
+            return false;
+        }
+
+        private int GetTrackDropInsertionIndex(int pointerY)
+        {
+            if (this.samples.Count == 0)
+            {
+                return 0;
+            }
+
+            Rectangle grid = this.GetGridBounds();
+            if (pointerY <= grid.Top)
+            {
+                return 0;
+            }
+
+            if (pointerY >= grid.Bottom)
+            {
+                return this.samples.Count;
+            }
+
+            float cellHeight = grid.Height / (float)this.samples.Count;
+            float rowPosition = (pointerY - grid.Top) / cellHeight;
+            int row = Math.Clamp((int)rowPosition, 0, this.samples.Count - 1);
+            return Math.Clamp(row + (rowPosition - row >= 0.5f ? 1 : 0), 0, this.samples.Count);
+        }
+
+        private void InsertSampleTrack(AudioObj draggedSample, int displayIndex, int sourceIndex)
+        {
+            AudioObj sourceSample = CloneSampleWithMetadata(draggedSample);
+            AudioObj editorSample = CloneSampleWithMetadata(sourceSample);
+            BreakbeatTrackSettings settings = new();
+            int patternColumns = this.pattern.Count > 0
+                ? this.pattern[0].Length
+                : Math.Max(1, this.bars * this.currentResolution);
+
+            this.samples.Insert(displayIndex, editorSample);
+            this.originalSampleOrder.Insert(sourceIndex, editorSample);
+            this.sourceSampleOrder.Insert(sourceIndex, sourceSample);
+            this.pattern.Insert(displayIndex, new bool[patternColumns]);
+            this.trackSettings.Insert(displayIndex, settings);
+            this.rowLabels.Insert(displayIndex, GetTrackLabel(sourceSample));
+            if (this.trackSettingsBySample is not null)
+            {
+                this.trackSettingsBySample[sourceSample] = settings;
+            }
+
+            BreakbeatPatternNote[] originalNotes = this.notes.ToArray();
+            int MapTrackIndex(int trackIndex) => trackIndex >= displayIndex ? trackIndex + 1 : trackIndex;
+            for (int index = 0; index < this.notes.Count; index++)
+            {
+                this.notes[index] = this.notes[index] with { TrackIndex = MapTrackIndex(this.notes[index].TrackIndex) };
+            }
+
+            BreakbeatPatternNote[] selectedNotes = this.selectedNotes.ToArray();
+            this.selectedNotes.Clear();
+            foreach (BreakbeatPatternNote note in selectedNotes)
+            {
+                this.selectedNotes.Add(note with { TrackIndex = MapTrackIndex(note.TrackIndex) });
+            }
+
+            for (int index = 0; index < this.copiedNotes.Count; index++)
+            {
+                this.copiedNotes[index] = this.copiedNotes[index] with { TrackIndex = MapTrackIndex(this.copiedNotes[index].TrackIndex) };
+            }
+
+            for (int index = 0; index < this.pastePreviewNotes.Count; index++)
+            {
+                this.pastePreviewNotes[index] = this.pastePreviewNotes[index] with { TrackIndex = MapTrackIndex(this.pastePreviewNotes[index].TrackIndex) };
+            }
+
+            if (this.hoverPitchNote is not null)
+            {
+                this.hoverPitchNote = this.hoverPitchNote with { TrackIndex = MapTrackIndex(this.hoverPitchNote.TrackIndex) };
+            }
+
+            this.TrackAdded?.Invoke(sourceSample, sourceIndex);
+            this.RegisterPatternNotesChanged(originalNotes
+                .Concat(this.notes)
+                .Select(note => (BreakbeatPatternNote?)note)
+                .ToArray());
+            this.pictureBox_pattern.Invalidate();
+        }
+
+        private static AudioObj CloneSampleWithMetadata(AudioObj sample)
+        {
+            AudioObj clone = sample.Clone();
+            clone.SampleTag = sample.SampleTag;
+            clone.Tag = sample.Tag;
+            foreach ((string key, string value) in sample.CustomTags.Values)
+            {
+                clone.CustomTags[key] = value;
+            }
+
+            return clone;
+        }
+
+        private static string GetTrackLabel(AudioObj sample)
+        {
+            string name = string.IsNullOrWhiteSpace(sample.Name) ? "Sample" : sample.Name.Trim();
+            return sample.Tag is DrumsetElement element ? $"{element}: {name}" : name;
         }
 
         private int GetRowInsertionIndex(int pointerY)

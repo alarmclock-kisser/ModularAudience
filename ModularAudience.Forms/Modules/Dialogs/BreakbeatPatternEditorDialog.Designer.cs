@@ -61,6 +61,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             pictureBox_pattern.Size = new Size(884, 461);
             pictureBox_pattern.TabIndex = 0;
             pictureBox_pattern.TabStop = true;
+            pictureBox_pattern.AllowDrop = true;
             pictureBox_pattern.Paint += pictureBox_pattern_Paint;
             pictureBox_pattern.MouseDown += pictureBox_pattern_MouseDown;
             pictureBox_pattern.MouseMove += pictureBox_pattern_MouseMove;
@@ -69,6 +70,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             pictureBox_pattern.MouseLeave += pictureBox_pattern_MouseLeave;
             pictureBox_pattern.MouseWheel += pictureBox_pattern_MouseWheel;
             pictureBox_pattern.Resize += pictureBox_pattern_Resize;
+            pictureBox_pattern.DragEnter += pictureBox_pattern_DragEnter;
+            pictureBox_pattern.DragOver += pictureBox_pattern_DragOver;
+            pictureBox_pattern.DragLeave += pictureBox_pattern_DragLeave;
+            pictureBox_pattern.DragDrop += pictureBox_pattern_DragDrop;
             //
             // panel_pattern
             //
