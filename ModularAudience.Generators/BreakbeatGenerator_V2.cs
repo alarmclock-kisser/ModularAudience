@@ -1068,21 +1068,6 @@ namespace ModularAudience.Generators
                 }
             }
 
-            float peak = 0f;
-            foreach (float sample in mixBuffer)
-            {
-                peak = Math.Max(peak, Math.Abs(sample));
-            }
-
-            if (peak > 0.95f)
-            {
-                float gain = 0.95f / peak;
-                for (int i = 0; i < mixBuffer.Length; i++)
-                {
-                    mixBuffer[i] *= gain;
-                }
-            }
-
             patternName ??= "BreakbeatPattern";
             var rendered = new AudioObj
             {

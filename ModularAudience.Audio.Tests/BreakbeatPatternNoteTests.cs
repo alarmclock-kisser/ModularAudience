@@ -223,6 +223,37 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public async Task RenderPatternNotesAsync_PreservesTrackAndCustomAmplificationAbove100Percent()
+        {
+            using AudioObj sample = CreateToneSample(sampleRate: 44100, frequency: 440, durationSeconds: 0.25);
+            int ticksPerStep = BreakbeatGenerator_V2.PatternTicksPerBar / 4;
+            BreakbeatPatternNote trackBoosted = new(TrackIndex: 0, StartTick: 0, DurationTicks: ticksPerStep);
+            BreakbeatPatternNote noteBoosted = new(
+                TrackIndex: 1,
+                StartTick: ticksPerStep,
+                DurationTicks: ticksPerStep,
+                VolumePercent: 250f);
+
+            using AudioObj rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [trackBoosted, noteBoosted],
+                [sample, sample],
+                bars: 1,
+                bpm: 60,
+                resolution: 4,
+                swing: 0,
+                trackSettings:
+                [
+                    new BreakbeatTrackSettings(DefaultVolumePercent: 250f),
+                    new BreakbeatTrackSettings()
+                ]);
+
+            float trackRms = MeasureRms(rendered, 0.05, 0.2);
+            float noteRms = MeasureRms(rendered, 1.05, 1.2);
+            Assert.IsTrue(trackRms > 1f, $"Expected track gain above unity, got RMS {trackRms:F4}.");
+            Assert.IsTrue(noteRms > 1f, $"Expected custom note gain above unity, got RMS {noteRms:F4}.");
+        }
+
+        [TestMethod]
         public async Task RenderPatternNotesAsync_AddsTrackPitchToCustomNotePitch()
         {
             using AudioObj sample = CreateToneSample(sampleRate: 44100, frequency: 440, durationSeconds: 0.25);
