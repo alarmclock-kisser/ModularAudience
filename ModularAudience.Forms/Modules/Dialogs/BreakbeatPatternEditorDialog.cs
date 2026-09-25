@@ -332,7 +332,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.hoverPitchTooltipVisible = false;
             this.timer_pitchTooltip.Stop();
             this.toolTip_pattern.Hide(this.pictureBox_pattern);
-            this.hearCancellationTokenSource?.Cancel();
             this.notePreviewCancellationTokenSource?.Cancel();
             this.ConfigurePatternScrollBar();
             this.RegisterPatternNotesChanged(previous.Notes
@@ -1348,8 +1347,15 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             string sampleName = row < this.rowLabels.Count ? this.rowLabels[row] : this.samples[row].Name;
-            using BreakbeatTrackSettingsDialog dialog = new(sampleName, this.trackSettings[row]);
-            if (dialog.ShowDialog(this) != DialogResult.OK)
+            using BreakbeatTrackSettingsDialog dialog = new(sampleName, this.trackSettings[row], this.samples.Count > 1);
+            DialogResult result = dialog.ShowDialog(this);
+            if (dialog.RemoveTrackRequested)
+            {
+                this.RemoveSampleTrack(row);
+                return;
+            }
+
+            if (result != DialogResult.OK)
             {
                 return;
             }
@@ -1366,6 +1372,89 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.pictureBox_pattern.Invalidate();
             this.CommitHistoryAction();
+        }
+
+        private void RemoveSampleTrack(int row)
+        {
+            if (this.samples.Count <= 1 || row < 0 || row >= this.samples.Count)
+            {
+                return;
+            }
+
+            int sourceIndex = this.GetOriginalTrackIndex(row);
+            if (sourceIndex < 0 || sourceIndex >= this.sourceSampleOrder.Count)
+            {
+                return;
+            }
+
+            AudioObj sourceSample = this.sourceSampleOrder[sourceIndex];
+            BreakbeatPatternNote[] originalNotes = this.notes.ToArray();
+            this.notes.RemoveAll(note => note.TrackIndex == row);
+            for (int index = 0; index < this.notes.Count; index++)
+            {
+                if (this.notes[index].TrackIndex > row)
+                {
+                    this.notes[index] = this.notes[index] with { TrackIndex = this.notes[index].TrackIndex - 1 };
+                }
+            }
+
+            BreakbeatPatternNote MapRemainingNote(BreakbeatPatternNote note) =>
+                note.TrackIndex > row ? note with { TrackIndex = note.TrackIndex - 1 } : note;
+
+            BreakbeatPatternNote[] remainingSelectedNotes = this.selectedNotes
+                .Where(note => note.TrackIndex != row)
+                .Select(MapRemainingNote)
+                .ToArray();
+            this.selectedNotes.Clear();
+            foreach (BreakbeatPatternNote note in remainingSelectedNotes)
+            {
+                this.selectedNotes.Add(note);
+            }
+
+            RemoveAndRemapTrackNotes(this.copiedNotes, row, MapRemainingNote);
+            RemoveAndRemapTrackNotes(this.pastePreviewNotes, row, MapRemainingNote);
+            if (this.hoverPitchNote?.TrackIndex == row)
+            {
+                this.hoverPitchNote = null;
+            }
+            else if (this.hoverPitchNote is not null)
+            {
+                this.hoverPitchNote = MapRemainingNote(this.hoverPitchNote);
+            }
+
+            this.samples.RemoveAt(row);
+            this.originalSampleOrder.RemoveAt(sourceIndex);
+            this.sourceSampleOrder.RemoveAt(sourceIndex);
+            this.pattern.RemoveAt(row);
+            this.trackSettings.RemoveAt(row);
+            this.rowLabels.RemoveAt(row);
+            this.trackSettingsBySample?.Remove(sourceSample);
+            this.TrackSetRestored?.Invoke(this);
+            this.RegisterPatternNotesChanged(originalNotes
+                .Concat(this.notes)
+                .Select(note => (BreakbeatPatternNote?)note)
+                .ToArray());
+            this.ConfigurePatternScrollBar();
+            this.pictureBox_pattern.Invalidate();
+            this.CommitHistoryAction();
+        }
+
+        private static void RemoveAndRemapTrackNotes(
+            List<BreakbeatPatternNote> notes,
+            int removedTrack,
+            Func<BreakbeatPatternNote, BreakbeatPatternNote> mapRemainingNote)
+        {
+            for (int index = notes.Count - 1; index >= 0; index--)
+            {
+                if (notes[index].TrackIndex == removedTrack)
+                {
+                    notes.RemoveAt(index);
+                }
+                else
+                {
+                    notes[index] = mapRemainingNote(notes[index]);
+                }
+            }
         }
 
         private void pictureBox_pattern_DragEnter(object? sender, DragEventArgs e)

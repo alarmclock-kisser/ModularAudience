@@ -23,15 +23,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_pitch = new NumericUpDown();
             this.label_defaultPlaybackMode = new Label();
             this.comboBox_defaultPlaybackMode = new ComboBox();
+            this.button_removeTrack = new Button();
             this.button_reset = new Button();
             this.button_apply = new Button();
             this.button_cancel = new Button();
             ((System.ComponentModel.ISupportInitialize)this.numericUpDown_volume).BeginInit();
             ((System.ComponentModel.ISupportInitialize)this.numericUpDown_pitch).BeginInit();
             this.SuspendLayout();
-            // 
+            //
             // label_defaults
-            // 
+            //
             this.label_defaults.AutoSize = true;
             this.label_defaults.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             this.label_defaults.Location = new Point(16, 16);
@@ -100,19 +101,31 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_reset
             //
             this.button_reset.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            this.button_reset.Location = new Point(12, 165);
+            this.button_reset.Location = new Point(112, 165);
             this.button_reset.Name = "button_reset";
-            this.button_reset.Size = new Size(120, 25);
+            this.button_reset.Size = new Size(64, 25);
             this.button_reset.TabIndex = 7;
             this.button_reset.Text = "Reset";
             this.button_reset.UseVisualStyleBackColor = true;
             this.button_reset.Click += this.button_reset_Click;
-            // 
+            //
+            // button_removeTrack
+            //
+            this.button_removeTrack.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            this.button_removeTrack.ForeColor = Color.Firebrick;
+            this.button_removeTrack.Location = new Point(12, 165);
+            this.button_removeTrack.Name = "button_removeTrack";
+            this.button_removeTrack.Size = new Size(94, 25);
+            this.button_removeTrack.TabIndex = 10;
+            this.button_removeTrack.Text = "Remove Track";
+            this.button_removeTrack.UseVisualStyleBackColor = true;
+            this.button_removeTrack.Click += this.button_removeTrack_Click;
+            //
             // button_apply
             //
             this.button_apply.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             this.button_apply.DialogResult = DialogResult.OK;
-            this.button_apply.Location = new Point(166, 165);
+            this.button_apply.Location = new Point(192, 165);
             this.button_apply.Name = "button_apply";
             this.button_apply.Size = new Size(75, 25);
             this.button_apply.TabIndex = 8;
@@ -123,7 +136,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             this.button_cancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             this.button_cancel.DialogResult = DialogResult.Cancel;
-            this.button_cancel.Location = new Point(247, 165);
+            this.button_cancel.Location = new Point(273, 165);
             this.button_cancel.Name = "button_cancel";
             this.button_cancel.Size = new Size(75, 25);
             this.button_cancel.TabIndex = 9;
@@ -134,9 +147,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             this.AcceptButton = this.button_apply;
             this.CancelButton = this.button_cancel;
-            this.ClientSize = new Size(340, 206);
+            this.ClientSize = new Size(360, 206);
             this.Controls.Add(this.button_cancel);
             this.Controls.Add(this.button_apply);
+            this.Controls.Add(this.button_removeTrack);
             this.Controls.Add(this.button_reset);
             this.Controls.Add(this.comboBox_defaultPlaybackMode);
             this.Controls.Add(this.label_defaultPlaybackMode);
@@ -165,6 +179,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private NumericUpDown numericUpDown_pitch;
         private Label label_defaultPlaybackMode;
         private ComboBox comboBox_defaultPlaybackMode;
+        private Button button_removeTrack;
         private Button button_reset;
         private Button button_apply;
         private Button button_cancel;
