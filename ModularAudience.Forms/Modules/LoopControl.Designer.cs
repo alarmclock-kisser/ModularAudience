@@ -291,7 +291,7 @@
             Controls.Add(button_copy);
             Controls.Add(panel_buttons);
             MaximizeBox = false;
-            MaximumSize = new Size(500, 226);
+            MaximumSize = new Size(500, 500);
             MinimizeBox = false;
             MinimumSize = new Size(500, 226);
             Name = "LoopControl";

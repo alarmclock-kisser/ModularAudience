@@ -254,6 +254,16 @@ namespace ModularAudience.Forms
                 return;
             }
 
+            // Skip while the user is dragging the main window: repositioning every
+            // collection view on each LocationChanged tick floods the UI thread
+            // with LocationChanged events (TrackView.PositionSettingsWindow etc.)
+            // and freezes waveform rendering. The views are repositioned once
+            // when the drag ends (MouseUp) or on SizeChanged.
+            if (this._isMouseDownForPosition)
+            {
+                return;
+            }
+
             Point basePoint = new(this.Location.X, this.Location.Y + this.Height + CollectionBaseMargin);
             for (int i = 0; i < CollectionViews.Count; i++)
             {

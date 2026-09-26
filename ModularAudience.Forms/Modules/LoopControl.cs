@@ -265,10 +265,28 @@ namespace ModularAudience.Forms.Modules
             this.numericUpDown_jump.Click += this.numericUpDown_jump_Click;
             this.domainUpDown_multiplier.Click += this.domainUpDown_multiplier_Click;
 
+            // Grow the list box with the form so extra rows are visible without scrolling
+            this.Resize += this.LoopControl_Resize;
+
             this.RefreshPlaylistTargets();
 
             this.UpdateLoopButtonsState();
 
+        }
+
+        private void LoopControl_Resize(object? sender, EventArgs e)
+        {
+            if (this.checkedListBox_playlistTracks == null || this.checkedListBox_playlistTracks.IsDisposed)
+            {
+                return;
+            }
+
+            // The list box top is at y=102; leave 12px bottom margin
+            int newHeight = Math.Max(72, this.ClientSize.Height - 102 - 12);
+            if (this.checkedListBox_playlistTracks.Height != newHeight)
+            {
+                this.checkedListBox_playlistTracks.Height = newHeight;
+            }
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -441,10 +459,48 @@ namespace ModularAudience.Forms.Modules
             bool hasPlaylistEntries = activePlaylistAudios.Count > 0;
             this.button_playlistAllOn.Enabled = hasPlaylistEntries;
             this.button_playlistAllOff.Enabled = hasPlaylistEntries;
+            this.AdjustFormHeightForTrackCount(activePlaylistAudios.Count);
 
             if (this.Visible)
             {
                 this.UpdateLoopButtonsState();
+            }
+        }
+
+        /// <summary>
+        /// Grows the form and list box vertically so that more than 4 track
+        /// entries are visible without scrolling. Shrinks back to the default
+        /// height when 4 or fewer entries are listed.
+        /// </summary>
+        private void AdjustFormHeightForTrackCount(int trackCount)
+        {
+            const int defaultVisibleRows = 4;
+            const int maxVisibleRows = 12;
+
+            int rowsToShow = Math.Clamp(trackCount, 0, maxVisibleRows);
+            if (rowsToShow <= defaultVisibleRows)
+            {
+                // Reset to the designer default size
+                if (this.Height != this.MinimumSize.Height)
+                {
+                    this.Height = this.MinimumSize.Height;
+                }
+                return;
+            }
+
+            int rowHeight = this.checkedListBox_playlistTracks.ItemHeight;
+            if (rowHeight <= 0)
+            {
+                rowHeight = 17;
+            }
+
+            int extraRows = rowsToShow - defaultVisibleRows;
+            int extraHeight = extraRows * rowHeight;
+            int targetHeight = this.MinimumSize.Height + extraHeight;
+
+            if (this.Height != targetHeight)
+            {
+                this.Height = targetHeight;
             }
         }
 

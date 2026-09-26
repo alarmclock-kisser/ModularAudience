@@ -1,0 +1,25 @@
+  Wiederherzustellende Projekte werden ermittelt...
+  "c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Audio\ModularAudience.Audio.csproj" wiederhergestellt (in 529 ms.).
+  "c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Cuda\ModularAudience.Cuda.csproj" wiederhergestellt (in 529 ms.).
+  "c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Generators\ModularAudience.Generators.csproj" wiederhergestellt (in 529 ms.).
+  "c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Onnx\ModularAudience.Onnx.csproj" wiederhergestellt (in 529 ms.).
+  "c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.MidiController\ModularAudience.MidiController.csproj" wiederhergestellt (in 529 ms.).
+  "c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Llama\ModularAudience.Llama.csproj" wiederhergestellt (in 529 ms.).
+  "c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\BenchmarkSuite1\BenchmarkSuite1.csproj" wiederhergestellt (in 543 ms.).
+  "c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Forms\ModularAudience.Forms.csproj" wiederhergestellt (in 529 ms.).
+  "c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Audio.Tests\ModularAudience.Audio.Tests.csproj" wiederhergestellt (in 529 ms.).
+  ModularAudience.Audio -> c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Audio\bin\Debug\net10.0-windows\ModularAudience.Audio.dll
+  ModularAudience.MidiController -> c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.MidiController\bin\Debug\net10.0-windows\ModularAudience.MidiController.dll
+  ModularAudience.Generators -> c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Generators\bin\Debug\net10.0-windows\ModularAudience.Generators.dll
+  ModularAudience.Llama -> c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Llama\bin\Debug\net10.0-windows\ModularAudience.Llama.dll
+  ModularAudience.Cuda -> c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Cuda\bin\Debug\net10.0-windows\ModularAudience.Cuda.dll
+  BenchmarkSuite1 -> c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\BenchmarkSuite1\bin\Debug\net10.0-windows\BenchmarkSuite1.dll
+  ModularAudience.Onnx -> c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Onnx\bin\Debug\net10.0-windows\ModularAudience.Onnx.dll
+  ModularAudience.Forms -> c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Forms\bin\Debug\net10.0-windows\ModularAudience.Forms.dll
+  ModularAudience.Audio.Tests -> c:\Users\op\source\repos\alarmclock-kisser\ModularAudience\ModularAudience.Audio.Tests\bin\Debug\net10.0-windows\ModularAudience.Audio.Tests.dll
+
+Der Buildvorgang wurde erfolgreich ausgeführt.
+    0 Warnung(en)
+    0 Fehler
+
+Verstrichene Zeit 00:00:02.95

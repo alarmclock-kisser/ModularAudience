@@ -309,6 +309,8 @@ namespace ModularAudience.Forms
                 {
                     this._isMouseDownForPosition = false;
                     WindowsScreenHelper.SaveFormPosition(this);
+                    // Reposition collection views once after the drag ends
+                    this.PositionCollectionViews();
                 }
             }
             catch { }
