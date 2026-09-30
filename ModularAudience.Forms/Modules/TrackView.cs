@@ -7,6 +7,7 @@ using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio.Processors_V3;
 using ModularAudience.Audio.Processors_V4;
 using ModularAudience.Forms.Controls;
+using ModularAudience.Forms.Modules.Dialogs;
 using ModularAudience.Forms.Helpers;
 using System.ComponentModel;
 using System.Media;
@@ -3139,12 +3140,17 @@ namespace ModularAudience.Forms.Modules
         private void ShowTrackRenameDialog()
         {
             string current = this.OriginalAudio.Name;
-            // Microsoft.VisualBasic.Interaction.InputBox wird bereits im Projekt genutzt
-            string input = Microsoft.VisualBasic.Interaction.InputBox("Enter new name for this track:", "Rename Track", current);
-            if (!string.IsNullOrWhiteSpace(input) && input != current)
+            using (var dialog = new TrackRenameDialog(current))
             {
-                this.Text = "#" + this.TrackViewId.ToString("D2") + " - " + input;
-                this.OriginalAudio.Rename(input);
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    string input = dialog.InputText;
+                    if (!string.IsNullOrWhiteSpace(input) && input != current)
+                    {
+                        this.Text = "#" + this.TrackViewId.ToString("D2") + " - " + input;
+                        this.OriginalAudio.Rename(input);
+                    }
+                }
             }
         }
 
