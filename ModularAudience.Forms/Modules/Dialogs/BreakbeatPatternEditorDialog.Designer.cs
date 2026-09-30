@@ -32,6 +32,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             button_save = new Button();
             button_cancel = new Button();
             button_help = new Button();
+            button_settings = new Button();
             button_removeBar = new Button();
             button_addBar = new Button();
             checkBox_preHear = new CheckBox();
@@ -101,6 +102,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Controls.Add(button_save);
             panel_controls.Controls.Add(button_cancel);
             panel_controls.Controls.Add(button_help);
+            panel_controls.Controls.Add(button_settings);
             panel_controls.Controls.Add(button_removeBar);
             panel_controls.Controls.Add(button_addBar);
             panel_controls.Controls.Add(checkBox_preHear);
@@ -125,11 +127,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             button_save.Text = "Save";
             button_save.UseVisualStyleBackColor = true;
             button_save.Click += button_save_Click;
-            //
-            // button_help
-            //
+//
+// button_help
+//
             button_help.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_help.Location = new Point(626, 14);
+            button_help.Location = new Point(594, 14);
             button_help.Name = "button_help";
             button_help.Size = new Size(72, 25);
             button_help.TabIndex = 9;
@@ -138,19 +140,20 @@ namespace ModularAudience.Forms.Modules.Dialogs
             button_help.UseVisualStyleBackColor = true;
             button_help.Click += button_help_Click;
             //
-            // button_cancel
+            // button_settings
             //
-            button_cancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_cancel.DialogResult = DialogResult.Cancel;
-            button_cancel.Location = new Point(713, 14);
-            button_cancel.Name = "button_cancel";
-            button_cancel.Size = new Size(75, 25);
-            button_cancel.TabIndex = 3;
-            button_cancel.Text = "Cancel";
-            button_cancel.UseVisualStyleBackColor = true;
-            // 
+            button_settings.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            button_settings.Location = new Point(458, 14);
+            button_settings.Name = "button_settings";
+            button_settings.Size = new Size(72, 25);
+            button_settings.TabIndex = 10;
+            button_settings.Text = "⚙ Controls";
+            toolTip_pattern.SetToolTip(button_settings, "Open control configuration (key bindings, mouse actions).");
+            button_settings.UseVisualStyleBackColor = true;
+            button_settings.Click += button_settings_Click;
+            //
             // button_removeBar
-            // 
+            //
             button_removeBar.Location = new Point(494, 14);
             button_removeBar.Name = "button_removeBar";
             button_removeBar.Size = new Size(26, 25);
@@ -283,6 +286,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Button button_removeBar;
         private Button button_cancel;
         private Button button_help;
+        private Button button_settings;
         private Button button_save;
         private System.Windows.Forms.Timer timer_previewCaret;
         private System.Windows.Forms.Timer timer_pitchGestureRelease;

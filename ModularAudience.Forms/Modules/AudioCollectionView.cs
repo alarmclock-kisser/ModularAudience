@@ -83,6 +83,16 @@ namespace ModularAudience.Forms
             this.checkBox_preview.Checked = sharedPreviewState ?? this.checkBox_preview.Checked;
             this.StartPosition = FormStartPosition.Manual;
 
+            // Ensure arrow keys reach the ListBox even when form has focus
+            this.KeyPreview = true;
+            this.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Up || e.KeyCode == Keys.Down)
+                {
+                    this.listBox_audios.Focus();
+                }
+            };
+
             this.SetStyle(ControlStyles.ResizeRedraw | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
             this.UpdateStyles();
 
@@ -152,6 +162,7 @@ namespace ModularAudience.Forms
             this.listBox_audios.MouseMove += this.ListBox_audios_MouseMove_WaveformPreview;
             this.listBox_audios.MouseHover += this.ListBox_audios_MouseHover_WaveformPreview;
             this.listBox_audios.MouseLeave += this.ListBox_audios_MouseLeave_WaveformPreview;
+            this.listBox_audios.MouseEnter += (s, e) => this.listBox_audios.Focus();
 
             // Set minimum and maximum sizes
             this.MinimumSize = new Size(200, 100);
@@ -276,6 +287,7 @@ namespace ModularAudience.Forms
                     {
                         this.listBox_audios.SelectedIndex = index;
                     }
+                    this.listBox_audios.Focus();
                     this.UpdateContextMenuState();
                     this.contextMenuShowLocation = e.Location;
                     this.contextMenuStrip_audios.Show(this.listBox_audios, e.Location);
@@ -302,6 +314,7 @@ namespace ModularAudience.Forms
                     {
                         this.listBox_audios.SelectedIndex = index;
                     }
+                    this.listBox_audios.Focus();
                     // mark drag as pending and store start point
                     this._dragPending = true;
                     this._dragStartPoint = e.Location;
@@ -317,6 +330,7 @@ namespace ModularAudience.Forms
                 && this._clickedAudio != null)
             {
                 this.RestoreListBoxSelection([this._clickedAudio]);
+                this.listBox_audios.Focus();
             }
 
             this._dragPending = false;

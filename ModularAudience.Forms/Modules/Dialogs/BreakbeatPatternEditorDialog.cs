@@ -1,5 +1,6 @@
 using ModularAudience.Audio;
 using ModularAudience.Forms.Helpers;
+using ModularAudience.Forms.ControlsConfig;
 using ModularAudience.Generators;
 using System.Globalization;
 using System.Drawing.Drawing2D;
@@ -8,6 +9,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 {
     public partial class BreakbeatPatternEditorDialog : Form
     {
+        private readonly ControlsSettingsManager _controlsManager = new();
         private readonly List<bool[]> pattern;
         private readonly List<AudioObj> samples;
         private readonly List<AudioObj> originalSampleOrder;
@@ -169,45 +171,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.ConfigurePatternScrollBar();
             this.Text = "Breakbeat Pattern Editor";
             this.pictureBox_pattern.Cursor = Cursors.Cross;
-            this.deleteCursor = CreateDeleteCursor();
+            // Use standard cursor for delete mode (no custom pink eraser)
+            this.deleteCursor = Cursors.Cross;
             this.FormClosing += this.BreakbeatPatternEditorDialog_FormClosing;
-            this.MouseWheel += this.pictureBox_pattern_MouseWheel;
+this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.lastHistoryState = this.CaptureHistoryState();
-        }
-
-        private static Cursor CreateDeleteCursor()
-        {
-            // Erstelle einen eigenen Löschen-Cursor (Radiergummi-ähnlich)
-            Bitmap bitmap = new(32, 32);
-            using (Graphics g = Graphics.FromImage(bitmap))
-            {
-                g.Clear(Color.Transparent);
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                // Radiergummi-Körper
-                using Brush eraserBrush = new SolidBrush(Color.FromArgb(255, 220, 80, 80));
-                g.FillRoundedRectangle(eraserBrush, 4, 8, 20, 18, 4);
-                // Radiergummi-Spitze
-                using Brush tipBrush = new SolidBrush(Color.FromArgb(255, 255, 180, 180));
-                g.FillRoundedRectangle(tipBrush, 6, 6, 16, 8, 3);
-                // Linie für "Löschen"
-                using Pen linePen = new Pen(Color.White, 2f);
-                g.DrawLine(linePen, 10, 14, 22, 14);
-                g.DrawLine(linePen, 10, 18, 22, 18);
-                // Hotspot bei der Spitze
-            }
-            return new Cursor(bitmap.GetHicon());
-        }
-
-        // Extension für RoundedRectangle
-        private static void FillRoundedRectangle(this Graphics graphics, Brush brush, int x, int y, int width, int height, int radius)
-        {
-            using GraphicsPath path = new();
-            path.AddArc(x, y, radius * 2, radius * 2, 180, 90);
-            path.AddArc(x + width - radius * 2, y, radius * 2, radius * 2, 270, 90);
-            path.AddArc(x + width - radius * 2, y + height - radius * 2, radius * 2, radius * 2, 0, 90);
-            path.AddArc(x, y + height - radius * 2, radius * 2, radius * 2, 90, 90);
-            path.CloseFigure();
-            graphics.FillPath(brush, path);
         }
 
         private PatternEditorHistoryState CaptureHistoryState() => new(
@@ -747,19 +715,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void DrawDeleteOverlay(Graphics graphics, Rectangle grid, float cellHeight)
         {
-            if (!this.rightClickDeleteActive)
-            {
-                return;
-            }
-
-            // Rotes X als visuelles Feedback für Löschmodus
-            using Brush redBrush = new SolidBrush(Color.FromArgb(200, 255, 60, 60));
-            using Pen redPen = new(Color.FromArgb(255, 255, 60, 60), 2f);
-            float x = grid.Left + (float)(grid.Width / 2.0);
-            float y = grid.Top + (float)(grid.Height / 2.0);
-            float size = Math.Min(grid.Width, grid.Height) * 0.08f;
-            graphics.DrawLine(redPen, x - size, y - size, x + size, y + size);
-            graphics.DrawLine(redPen, x + size, y - size, x - size, y + size);
         }
 
         private static string FormatPitchSemitones(float semitones)
@@ -2078,7 +2033,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             this.CancelPastePreview();
-            if (this.checkBox_preHear.Checked && placedNotes.Count > 0 && this.hearCancellationTokenSource is null)
+            if (this.checkBox_preHear.Checked && placedNotes.Count == 1 && this.hearCancellationTokenSource is null)
             {
                 _ = this.PrehearNoteAsync(placedNotes[0]);
             }
@@ -3331,76 +3286,142 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         break;
                     }
 
-                    // Responsive Deselection:
-                    // 1) Wenn Caret in abgewähltem Bereich (der noch im Buffer ist) → zum nächsten angewählten springen
-                    // 2) Wenn ein Bereich abgewählt wurde, der im Buffer ist, aber der Caret ihn noch nicht erreicht hat
-                    //    → diesen Bereich im Loop überspringen (Position anpassen)
-                    if (loopPlaybackActive && this.selectedLoopSections.Count > 0)
+                    // RESPONSIVE LOOP SECTION CHANGES:
+                    // When selection changes, immediately trigger re-render and swap ASAP
+                    if (selectionChanged || notesChanged)
                     {
-                        int currentQuarter = this.GetCurrentLoopQuarter();
+                        // Update previewQuarterMap IMMEDIATELY to reflect current selection
                         int[] currentSections = this.selectedLoopSections.OrderBy(s => s).ToArray();
                         int[] bufferSections = activeLoopSections;
+                        this.previewQuarterMap = currentSections;
 
-                        // Find sections that are in the buffer but no longer selected (deselected but still playing)
+                        // IMMEDIATE POSITION JUMP for deselected sections:
+                        // Find sections that are in the buffer but no longer selected
                         int[] deselectedInBuffer = bufferSections
                             .Where(q => !this.selectedLoopSections.Contains(q))
                             .ToArray();
 
-                        // 1) Caret in a deselected section that's still in buffer → jump to next selected
-                        if (deselectedInBuffer.Contains(currentQuarter))
+                        if (deselectedInBuffer.Length > 0 && loopPlaybackActive && this.previewAudio is not null)
                         {
-                            int nextQuarter = currentSections
-                                .Where(q => q > currentQuarter)
-                                .FirstOrDefault();
-                            if (nextQuarter == 0)
+                            int currentQuarter = this.GetCurrentLoopQuarter();
+                            
+                            // 1) Caret currently in a deselected section → jump to next selected NOW
+                            if (deselectedInBuffer.Contains(currentQuarter))
                             {
-                                nextQuarter = currentSections.FirstOrDefault();
-                            }
-
-                            if (nextQuarter > 0)
-                            {
-                                double secondsPerBar = 240.0 / Math.Max(1.0, (double)this.Bpm);
-                                double secondsPerQuarter = secondsPerBar / 4.0;
-                                int nextIndex = Array.IndexOf(currentSections, nextQuarter);
-                                double targetTime = nextIndex * secondsPerQuarter;
-                                this.previewAudio.SetPosition((long)(targetTime * this.previewAudio.SampleRate));
-                                this.previewQuarterMap = currentSections;
-                                pendingLivePreview?.Dispose();
-                                pendingLivePreview = null;
-                            }
-                        }
-                        // 2) Deselected sections ahead of caret (in buffer but not selected) → skip them
-                        else if (deselectedInBuffer.Length > 0)
-                        {
-                            int nextDeselectedAhead = deselectedInBuffer
-                                .Where(q => q > currentQuarter)
-                                .FirstOrDefault();
-                            if (nextDeselectedAhead > 0)
-                            {
-                                // Find the next selected section after the deselected one
-                                int nextSelected = currentSections
-                                    .Where(q => q > nextDeselectedAhead)
+                                int nextQuarter = currentSections
+                                    .Where(q => q > currentQuarter)
                                     .FirstOrDefault();
-                                if (nextSelected == 0)
+                                if (nextQuarter == 0)
                                 {
-                                    nextSelected = currentSections.FirstOrDefault();
+                                    nextQuarter = currentSections.FirstOrDefault();
                                 }
-
-                                if (nextSelected > 0)
+                                if (nextQuarter > 0)
                                 {
                                     double secondsPerBar = 240.0 / Math.Max(1.0, (double)this.Bpm);
                                     double secondsPerQuarter = secondsPerBar / 4.0;
-                                    int nextIndex = Array.IndexOf(currentSections, nextSelected);
+                                    int nextIndex = Array.IndexOf(currentSections, nextQuarter);
                                     double targetTime = nextIndex * secondsPerQuarter;
                                     this.previewAudio.SetPosition((long)(targetTime * this.previewAudio.SampleRate));
-                                    this.previewQuarterMap = currentSections;
-                                    pendingLivePreview?.Dispose();
-                                    pendingLivePreview = null;
+                                }
+                            }
+                            // 2) Deselected sections ahead of caret → skip them immediately
+                            else
+                            {
+                                int nextDeselectedAhead = deselectedInBuffer
+                                    .Where(q => q > currentQuarter)
+                                    .FirstOrDefault();
+                                if (nextDeselectedAhead > 0)
+                                {
+                                    int nextSelected = currentSections
+                                        .Where(q => q > nextDeselectedAhead)
+                                        .FirstOrDefault();
+                                    if (nextSelected == 0)
+                                    {
+                                        nextSelected = currentSections.FirstOrDefault();
+                                    }
+                                    if (nextSelected > 0)
+                                    {
+                                        double secondsPerBar = 240.0 / Math.Max(1.0, (double)this.Bpm);
+                                        double secondsPerQuarter = secondsPerBar / 4.0;
+                                        int nextIndex = Array.IndexOf(currentSections, nextSelected);
+                                        double targetTime = nextIndex * secondsPerQuarter;
+                                        this.previewAudio.SetPosition((long)(targetTime * this.previewAudio.SampleRate));
+                                    }
+                                }
+                            }
+                        }
+
+                        if (pendingLivePreview is null && !stopAtLoopBoundary)
+                        {
+                            if (notesChanged && !selectionChanged)
+                            {
+                                for (int debounceMilliseconds = 0; debounceMilliseconds < 100; debounceMilliseconds += 10)
+                                {
+                                    await Task.Delay(10, cancellationTokenSource.Token);
+                                    UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
+                                }
+                            }
+
+                            int requestedNotesRevision = this.patternNotesRevision;
+                            int requestedSelectionRevision = loopPlaybackActive
+                                ? this.loopSelectionRevision
+                                : appliedSelectionRevision;
+                            int[] requestedLoopSections = loopPlaybackActive
+                                ? currentSections
+                                : activeLoopSections;
+
+                            if (loopPlaybackActive && requestedLoopSections.Length == 0)
+                            {
+                                stopAtLoopBoundary = true;
+                                stopSelectionRevision = requestedSelectionRevision;
+                                stopReadyLoopPass = loopPass;
+                            }
+                            else
+                            {
+                                BreakbeatPatternNote[] currentNotes = this.GetNotesWithoutCoveredRetriggers().ToArray();
+                                try
+                                {
+                                    Task<AudioObj> renderTask = this.RenderHearBufferAsync(
+                                        currentNotes,
+                                        requestedLoopSections,
+                                        cancellationTokenSource.Token);
+                                    while (!renderTask.IsCompleted)
+                                    {
+                                        await Task.Delay(10);
+                                        UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
+                                    }
+
+                                    AudioObj replacement = await renderTask;
+                                    UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
+                                    if (requestedNotesRevision == this.patternNotesRevision
+                                        && (!loopPlaybackActive || requestedSelectionRevision == this.loopSelectionRevision))
+                                    {
+                                        pendingLivePreview = replacement;
+                                        pendingLiveRevision = requestedNotesRevision;
+                                        pendingSelectionRevision = requestedSelectionRevision;
+                                        pendingLoopSections = requestedLoopSections;
+                                        pendingReadyLoopPass = loopPass;
+                                    }
+                                    else
+                                    {
+                                        replacement.Dispose();
+                                    }
+                                }
+                                catch (OperationCanceledException)
+                                {
+                                    throw;
+                                }
+                                catch (Exception ex)
+                                {
+                                    LogCollection.Log("Live breakbeat preview update failed.");
+                                    LogCollection.Log(ex);
+                                    await Task.Delay(250, cancellationTokenSource.Token);
                                 }
                             }
                         }
                     }
 
+                    // Swap to new buffer IMMEDIATELY when ready (don't wait for loop boundary)
                     bool pendingSelectionChange = loopPlaybackActive
                         && pendingSelectionRevision != appliedSelectionRevision;
                     if (pendingLivePreview is not null
@@ -3613,6 +3634,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.notePreviewCancellationTokenSource?.Cancel();
                 this.pictureBox_pattern.Invalidate();
                 this.QueueHistoryCommit();
+
+                // Live BPM change during hear playback - trigger re-render with new BPM
+                if (this.hearCancellationTokenSource is not null)
+                {
+                    this.patternNotesRevision++; // Force re-render on next loop iteration
+                }
             }
 
             private void numericUpDown_resolution_ValueChanged(object? sender, EventArgs e)
@@ -3828,6 +3855,29 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 "Breakbeat Pattern Editor Help",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
+        }
+
+        private void button_settings_Click(object? sender, EventArgs e)
+        {
+            using var dialog = new ControlsConfigDialog(_controlsManager);
+            dialog.ShowDialog(this);
+        }
+    }
+}
+
+namespace ModularAudience.Forms.Modules.Dialogs
+{
+    internal static class GraphicsHelper
+    {
+        public static void FillRoundedRectangle(Graphics graphics, Brush brush, int x, int y, int width, int height, int radius)
+        {
+            using GraphicsPath path = new();
+            path.AddArc(x, y, radius * 2, radius * 2, 180, 90);
+            path.AddArc(x + width - radius * 2, y, radius * 2, radius * 2, 270, 90);
+            path.AddArc(x + width - radius * 2, y + height - radius * 2, radius * 2, radius * 2, 0, 90);
+            path.AddArc(x, y + height - radius * 2, radius * 2, radius * 2, 90, 90);
+            path.CloseFigure();
+            graphics.FillPath(brush, path);
         }
     }
 }
