@@ -14,11 +14,19 @@ namespace ModularAudience.Forms
     {
         private PlaylistStretchSettings? _importStretchSettings;
 
+        private ToolTip? _logToolTip;
+        private ContextMenuStrip? _logContextMenu;
+        private int _logSelectionAnchor = -1;
+        private int _logDragEndIndex = -1;
+        private bool _logShiftDragging;
+        private Font? _logListFont;
+
         private void Register_ListBox_Log()
         {
             this.listBox_log.Items.Clear();
-            this.listBox_log.DataSource = LogCollection.Logs;
+            this.listBox_log.DataSource = LogManager.Logs;
             this.listBox_log.HorizontalScrollbar = true;
+
             // Enable double buffering to reduce white/blank flicker when scrolling or updating
             try
             {
@@ -27,97 +35,388 @@ namespace ModularAudience.Forms
             }
             catch { }
 
-            // Subscribe to posted log events and add to the BindingList on the UI thread.
-            // Ensure we don't double-subscribe by removing previous handler if present.
+            // Compact font & fixed item height.
+            // IntegralHeight must be false, otherwise WinForms shrinks/grows the whole control
+            // to fit a whole number of rows whenever ItemHeight changes (e.g. Ctrl+Wheel).
+            this.listBox_log.IntegralHeight = false;
+            _logListFont = new Font("Consolas", 8f, FontStyle.Regular);
+            this.listBox_log.Font = _logListFont;
+            this.listBox_log.ItemHeight = 16;
+            this.listBox_log.DrawMode = DrawMode.OwnerDrawFixed;
+            // MultiExtended is the only mode that allows SetSelected() and gives us the
+            // native click / ctrl+click / shift+click behaviour we build upon.
+            this.listBox_log.SelectionMode = SelectionMode.MultiExtended;
+
+            // We own the rendering, so no system blue highlight is drawn.
+            this.listBox_log.DrawItem += ListBox_Log_DrawItem;
+
+            // Re-render when the bound collection changed.
+            LogManager.Logs.ListChanged += (_, __) =>
+            {
+                try { this.listBox_log.Invalidate(); } catch { }
+            };
+
+            // Keep view pinned to the newest entry unless the user scrolled away.
+            LogManager.Logs.ListChanged += (_, __) =>
+            {
+                try
+                {
+                    if (LogManager.AutoScroll && LogManager.Logs.Count > 0)
+                    {
+                        this.listBox_log.TopIndex = LogManager.Logs.Count - 1;
+                    }
+                }
+                catch { }
+            };
+
+            Register_ListBox_Log_ToolTip();
+            Register_ListBox_Log_Selection();
+            Register_ListBox_Log_ContextMenu();
+        }
+
+        private void ListBox_Log_DrawItem(object? sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0 || e.Index >= LogManager.Logs.Count)
+            {
+                return;
+            }
+
+            Color background = this.listBox_log.BackColor;
+            Color foreground = this.listBox_log.ForeColor;
+            bool selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+
+            if (selected)
+            {
+                background = Color.FromArgb(38, 62, 58);
+                foreground = Color.FromArgb(220, 245, 235);
+            }
+            else if ((e.State & DrawItemState.ComboBoxEdit) != 0)
+            {
+                return;
+            }
+
+            using (Brush backgroundBrush = new SolidBrush(background))
+            {
+                e.Graphics.FillRectangle(backgroundBrush, e.Bounds);
+            }
+
+            string text = LogManager.Logs[e.Index];
+            const int textPadding = 2;
+
+            using (Brush textBrush = new SolidBrush(foreground))
+            {
+                TextRenderer.DrawText(
+                    e.Graphics,
+                    text,
+                    this.listBox_log.Font,
+                    new Rectangle(e.Bounds.Left + textPadding, e.Bounds.Top, e.Bounds.Width - textPadding, e.Bounds.Height),
+                    foreground,
+                    TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            }
+        }
+
+        private void Register_ListBox_Log_ToolTip()
+        {
+            _logToolTip = new ToolTip
+            {
+                AutoPopDelay = 30000,
+                InitialDelay = 300,
+                ReshowDelay = 100,
+                ShowAlways = true,
+                UseAnimation = false,
+                UseFading = false
+            };
+
+            this.listBox_log.MouseMove += (_, e) =>
+            {
+                int index = this.listBox_log.IndexFromPoint(e.Location);
+                if (index < 0 || index >= LogManager.Logs.Count)
+                {
+                    return;
+                }
+
+                string fullText = LogManager.Logs[index];
+                if (!string.IsNullOrEmpty(fullText) && _logToolTip!.GetToolTip(this.listBox_log) != fullText)
+                {
+                    _logToolTip.SetToolTip(this.listBox_log, fullText);
+                }
+            };
+        }
+
+        /// <summary>Resolves a y coordinate to a row index, clamping into the valid range when over empty space.</summary>
+        private int GetLogIndexFromPoint(int y)
+        {
+            int count = LogManager.Logs.Count;
+            if (count == 0)
+            {
+                return -1;
+            }
+
+            int index = this.listBox_log.IndexFromPoint(new Point(0, y));
+            if (index >= 0)
+            {
+                return Math.Min(index, count - 1);
+            }
+
+            // Clicked in the empty area below the last item: select the last row.
+            return count - 1;
+        }
+
+        private void SetLogSelectedRange(int start, int end)
+        {
+            int count = LogManager.Logs.Count;
+            if (count == 0 || start < 0 || end < 0)
+            {
+                return;
+            }
+
+            int min = Math.Clamp(Math.Min(start, end), 0, count - 1);
+            int max = Math.Clamp(Math.Max(start, end), 0, count - 1);
+
+            this.listBox_log.BeginUpdate();
             try
             {
-                if (Instance?._logPostedWithTimestampHandler != null)
+                for (int i = 0; i < count; i++)
                 {
-                    try { LogCollection.NewLogPostedWithTimestamp -= Instance._logPostedWithTimestampHandler; } catch { }
-                    Instance._logPostedWithTimestampHandler = null;
+                    this.listBox_log.SetSelected(i, i >= min && i <= max);
                 }
             }
-            catch { }
-
-            Instance?._logPostedWithTimestampHandler = (ts, full) =>
+            finally
             {
-                WindowMainStaticHelpers.InvokeIfRequired(Instance, () =>
-                {
-                    try
-                    {
-                        // Insert chronologically based on timestamp (ascending). If same timestamp, append.
-                        int insertAt = LogCollection.Logs.Count;
-                        for (int i = 0; i < LogCollection.Logs.Count; i++)
-                        {
-                            string item = LogCollection.Logs[i];
-                            try
-                            {
-                                int a = item.IndexOf('[');
-                                int b = item.IndexOf(']');
-                                if (a >= 0 && b > a)
-                                {
-                                    string inner = item.Substring(a + 1, b - a - 1);
-                                    if (DateTime.TryParseExact(inner, LogCollection.TimeFormat, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime parsed))
-                                    {
-                                        if (ts < parsed)
-                                        {
-                                            insertAt = i;
-                                            break;
-                                        }
-                                    }
+                this.listBox_log.EndUpdate();
+            }
+        }
 
-                                }
-                            }
-                            catch { }
-                        }
-
-                        // Avoid inserting exact duplicate if already present at or adjacent to insert position
-                        bool duplicate = false;
-                        try
-                        {
-                            if (insertAt < LogCollection.Logs.Count && LogCollection.Logs[insertAt] == full)
-                            {
-                                duplicate = true;
-                            }
-
-                            if (insertAt - 1 >= 0 && LogCollection.Logs[insertAt - 1] == full)
-                            {
-                                duplicate = true;
-                            }
-                        }
-                        catch { }
-
-                        if (!duplicate)
-                        {
-                            LogCollection.Logs.Insert(insertAt, full);
-                        }
-
-                        // Trim FIFO
-                        while (LogCollection.Logs.Count > LogCollection.MaxLogCount)
-                        {
-                            try { LogCollection.Logs.RemoveAt(0); } catch { break; }
-                        }
-
-                        if (LogCollection.AutoScroll)
-                        {
-                            try { this.listBox_log.TopIndex = LogCollection.Logs.Count - 1; } catch { }
-                        }
-                    }
-                    catch { }
-                });
-            };
-
-            try { LogCollection.NewLogPostedWithTimestamp += Instance?._logPostedWithTimestampHandler; } catch { }
-
-            // NOTE: Do not subscribe to NewLogPosted as we handle chronological insertion via NewLogPostedWithTimestamp.
-
-            this.listBox_log.DoubleClick += (s, e) =>
+        private void SelectLogSingle(int index, bool toggle)
+        {
+            if (index < 0 || index >= LogManager.Logs.Count)
             {
-                if (this.listBox_log.SelectedItem is string selectedLog)
+                return;
+            }
+
+            if (toggle)
+            {
+                this.listBox_log.SetSelected(index, !this.listBox_log.GetSelected(index));
+            }
+            else
+            {
+                this.listBox_log.SelectedIndices.Clear();
+                this.listBox_log.SetSelected(index, true);
+            }
+
+            _logSelectionAnchor = index;
+        }
+
+        private void Register_ListBox_Log_Selection()
+        {
+            // SelectionMode.MultiExtended already implements plain click, ctrl+click toggle and
+            // shift+click range selection natively - and it is the only mode where SetSelected()
+            // is allowed. So we must NOT redo those gestures here, otherwise every gesture is
+            // applied twice (which made ctrl+click cancel itself out).
+            //
+            // We only add what the native control cannot do:
+            //   * live shift+drag range selection
+            //   * shift+drag / click that starts in the empty area below the last row
+
+            this.listBox_log.SelectedIndexChanged += (_, __) =>
+            {
+                if (!_logShiftDragging)
                 {
-                    Clipboard.SetText(selectedLog);
+                    _logSelectionAnchor = this.listBox_log.SelectedIndex;
                 }
             };
+
+            this.listBox_log.MouseDown += (_, e) =>
+            {
+                this.listBox_log.Focus();
+
+                if (e.Button != MouseButtons.Left)
+                {
+                    return;
+                }
+
+                if ((ModifierKeys & Keys.Shift) != Keys.Shift)
+                {
+                    return;
+                }
+
+                // Shift gesture: take over so we can extend the range while dragging.
+                if (_logSelectionAnchor < 0)
+                {
+                    _logSelectionAnchor = this.listBox_log.SelectedIndex;
+                }
+                if (_logSelectionAnchor < 0)
+                {
+                    _logSelectionAnchor = GetLogIndexFromPoint(e.Y);
+                }
+
+                _logShiftDragging = true;
+                _logDragEndIndex = GetLogIndexFromPoint(e.Y);
+                this.listBox_log.Capture = true;
+
+                if (_logDragEndIndex >= 0)
+                {
+                    SetLogSelectedRange(_logSelectionAnchor, _logDragEndIndex);
+                }
+            };
+
+            this.listBox_log.MouseMove += (_, e) =>
+            {
+                if (!_logShiftDragging || (e.Button & MouseButtons.Left) != MouseButtons.Left)
+                {
+                    return;
+                }
+
+                if (_logSelectionAnchor < 0)
+                {
+                    return;
+                }
+
+                int index = GetLogIndexFromPoint(e.Y);
+                if (index >= 0)
+                {
+                    _logDragEndIndex = index;
+                    SetLogSelectedRange(_logSelectionAnchor, index);
+                }
+            };
+
+            this.listBox_log.MouseUp += (_, e) =>
+            {
+                if (e.Button != MouseButtons.Left)
+                {
+                    return;
+                }
+
+                if (_logShiftDragging && _logSelectionAnchor >= 0 && _logDragEndIndex >= 0)
+                {
+                    // Re-apply once more: when the drag began in the empty area the native
+                    // handler cleared the selection after our MouseDown ran.
+                    SetLogSelectedRange(_logSelectionAnchor, _logDragEndIndex);
+                }
+
+                EndLogRangeDrag();
+            };
+
+            // If the mouse is released outside the list (or the control loses the mouse /
+            // focus) MouseUp never arrives - make sure the drag state can never get stuck,
+            // otherwise a later gesture would be treated as a shift+drag.
+            this.listBox_log.MouseCaptureChanged += (_, _) =>
+            {
+                if (!this.listBox_log.Capture)
+                {
+                    EndLogRangeDrag();
+                }
+            };
+            this.listBox_log.LostFocus += (_, __) => EndLogRangeDrag();
+
+            // Ctrl + mouse wheel over the list rescales the font (and item height),
+            // without changing the size of the control itself.
+            this.listBox_log.MouseWheel += (_, e) =>
+            {
+                if ((ModifierKeys & Keys.Control) != Keys.Control)
+                {
+                    return;
+                }
+
+                float currentSize = _logListFont?.Size ?? 8f;
+                float newSize = Math.Clamp(currentSize + Math.Sign(e.Delta), 6f, 20f);
+                if (Math.Abs(newSize - currentSize) < 0.01f)
+                {
+                    return;
+                }
+
+                ApplyLogListFontSize(newSize);
+            };
+        }
+
+        private void EndLogRangeDrag()
+        {
+            _logShiftDragging = false;
+            _logDragEndIndex = -1;
+            if (this.listBox_log.Capture)
+            {
+                this.listBox_log.Capture = false;
+            }
+        }
+
+        private void ApplyLogListFontSize(float size)
+        {
+            System.Drawing.Font previousFont = _logListFont ?? this.listBox_log.Font;
+            System.Drawing.Font newFont = new(previousFont.FontFamily, size, previousFont.Style);
+
+            // IntegralHeight must stay false, otherwise the control itself resizes to fit
+            // a whole number of rows. Remember and restore the bounds regardless.
+            bool keepIntegralHeight = this.listBox_log.IntegralHeight;
+            Size keepSize = this.listBox_log.Size;
+
+            _logListFont = newFont;
+            this.listBox_log.IntegralHeight = false;
+            this.listBox_log.Font = newFont;
+            this.listBox_log.ItemHeight = Math.Max(10, (int)Math.Round(size * 1.7f));
+            this.listBox_log.IntegralHeight = keepIntegralHeight;
+            this.listBox_log.Size = keepSize;
+            this.listBox_log.Invalidate();
+
+            previousFont.Dispose();
+        }
+
+        private void Register_ListBox_Log_ContextMenu()
+        {
+            _logContextMenu = new ContextMenuStrip();
+
+            ToolStripMenuItem copyItem = new("Copy Log Line(s)");
+            copyItem.Click += (_, __) =>
+            {
+                var lines = this.listBox_log.SelectedIndices
+                    .Cast<int>()
+                    .Where(i => i >= 0 && i < LogManager.Logs.Count)
+                    .Select(i => LogManager.Logs[i])
+                    .ToList();
+
+                if (lines.Count == 0)
+                {
+                    return;
+                }
+
+                try { Clipboard.SetText(string.Join(Environment.NewLine, lines)); } catch { }
+            };
+            _logContextMenu.Items.Add(copyItem);
+
+            _logContextMenu.Items.Add(new ToolStripSeparator());
+
+            ToolStripMenuItem clearItem = new("Clear Logs")
+            {
+                ForeColor = Color.Firebrick
+            };
+            clearItem.Click += (_, __) =>
+            {
+                _logSelectionAnchor = -1;
+                LogManager.ClearLogs();
+            };
+            _logContextMenu.Items.Add(clearItem);
+
+            _logContextMenu.Opening += (_, e) =>
+            {
+                // Select the row under the cursor so the menu acts on it.
+                Point client = this.listBox_log.PointToClient(Cursor.Position);
+                int index = GetLogIndexFromPoint(client.Y);
+
+                if (index >= 0 && !this.listBox_log.GetSelected(index))
+                {
+                    _logSelectionAnchor = index;
+                    SelectLogSingle(index, toggle: false);
+                }
+
+                copyItem.Enabled = this.listBox_log.SelectedIndices.Count > 0;
+                clearItem.Enabled = LogManager.Logs.Count > 0;
+
+                if (!copyItem.Enabled)
+                {
+                    e.Cancel = true;
+                }
+            };
+
+            this.listBox_log.ContextMenuStrip = _logContextMenu;
         }
 
         private async void button_import_Click(object sender, EventArgs e)
@@ -148,7 +447,7 @@ namespace ModularAudience.Forms
                 }
                 catch (Exception ex)
                 {
-                    LogCollection.Log($"Failed to scan resources at '{folderBrowserDialog.SelectedPath}': {ex.Message}");
+                    LogManager.Log($"Failed to scan resources at '{folderBrowserDialog.SelectedPath}': {ex.Message}");
                     return;
                 }
             }
@@ -157,7 +456,7 @@ namespace ModularAudience.Forms
                 string? resourceFile = this.TryGetRandomResourceFile();
                 if (resourceFile == null)
                 {
-                    LogCollection.Log("No resource audio files found for import.");
+                    LogManager.Log("No resource audio files found for import.");
                     return;
                 }
 
@@ -170,7 +469,7 @@ namespace ModularAudience.Forms
                 if (ModifierKeys.HasFlag(Keys.Control))
                 {
                     initialDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
-                    LogCollection.Log("Import: Using Resources folder as initial directory.");
+                    LogManager.Log("Import: Using Resources folder as initial directory.");
                 }
 
                 using OpenFileDialog openFileDialog = new()
@@ -210,7 +509,7 @@ namespace ModularAudience.Forms
                 }
                 catch (Exception ex)
                 {
-                    LogCollection.Log($"MIDI import failed for '{midiFile}': {ex}");
+                    LogManager.Log($"MIDI import failed for '{midiFile}': {ex}");
                     ShowErrorWithCopyButton(this, "MIDI import failed", ex);
                 }
             }
@@ -222,7 +521,7 @@ namespace ModularAudience.Forms
                     ImageObj? imageObj = await ImageObj.LoadAsync(pdfFile);
                     if (imageObj == null)
                     {
-                        LogCollection.Log($"PDF import failed for '{pdfFile}': Unable to load PDF as image.");
+                        LogManager.Log($"PDF import failed for '{pdfFile}': Unable to load PDF as image.");
                         continue;
                     }
 
@@ -232,14 +531,14 @@ namespace ModularAudience.Forms
                     OmrObj? omr = await ImageToOmrObjParser.ParseAsync(imageObj);
                     if (omr == null)
                     {
-                        LogCollection.Log($"PDF import failed for '{pdfFile}': Unable to parse OMR from image.");
+                        LogManager.Log($"PDF import failed for '{pdfFile}': Unable to parse OMR from image.");
                         continue;
                     }
 
                     var midiData = OmrToMidiObjConverter.Convert(omr);
                     if (midiData == null)
                     {
-                        LogCollection.Log($"PDF import failed for '{pdfFile}': Unable to generate MIDI from OMR.");
+                        LogManager.Log($"PDF import failed for '{pdfFile}': Unable to generate MIDI from OMR.");
                         continue;
                     }
 
@@ -248,7 +547,7 @@ namespace ModularAudience.Forms
                 }
                 catch (Exception ex)
                 {
-                    LogCollection.Log($"PDF import failed for '{pdfFile}': {ex}");
+                    LogManager.Log($"PDF import failed for '{pdfFile}': {ex}");
                     ShowErrorWithCopyButton(this, "PDF import failed", ex);
                 }
             }
@@ -314,7 +613,7 @@ namespace ModularAudience.Forms
 
             if (randomAudio == null)
             {
-                LogCollection.Log("Random import: No audio files shorter than 12 minutes found.");
+                LogManager.Log("Random import: No audio files shorter than 12 minutes found.");
                 return;
             }
 
@@ -337,7 +636,7 @@ namespace ModularAudience.Forms
             int num = WindowMain.GetCollectionNumber(targetView);
             targetView.AudioC.Audios.Add(randomAudio);
             WindowMain.AudioCollectionTags[randomAudio.Id] = num;
-            LogCollection.Log($"{randomAudio.Name} imported into existing collection.");
+            LogManager.Log($"{randomAudio.Name} imported into existing collection.");
             targetView.Show();
 
             if (this._importStretchSettings != null)
@@ -358,7 +657,7 @@ namespace ModularAudience.Forms
                 this.timeStretchImportedToToolStripMenuItem.Checked = false;
                 this._playlistStretchSettings = null;
                 this.timeStretchImportedToToolStripMenuItem.Text = "⏱ Timestretch each...";
-                LogCollection.Log("Playlist auto-timestretch disabled.");
+                LogManager.Log("Playlist auto-timestretch disabled.");
                 return;
             }
 
@@ -378,7 +677,7 @@ namespace ModularAudience.Forms
             this.timeStretchImportedToToolStripMenuItem.Checked = true;
             string method = dlg.ConfirmedUsedV2 ? "V2" : "V1";
             this.timeStretchImportedToToolStripMenuItem.Text = $"⏱ Timestretch each [{this._importStretchSettings.TargetBpm:F0} BPM, {method}]";
-            LogCollection.Log($"Playlist auto-timestretch enabled: target {this._importStretchSettings.TargetBpm:F0} BPM via Stretch {method}.");
+            LogManager.Log($"Playlist auto-timestretch enabled: target {this._importStretchSettings.TargetBpm:F0} BPM via Stretch {method}.");
         }
 
         private string? TryGetRandomResourceFile()
@@ -410,7 +709,7 @@ namespace ModularAudience.Forms
         {
             if (e.Data == null || !e.Data.GetDataPresent(DataFormats.FileDrop))
             {
-                LogCollection.Log("DragDrop: no FileDrop data.");
+                LogManager.Log("DragDrop: no FileDrop data.");
                 return;
             }
 
@@ -421,7 +720,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"DragDrop: failed to read dropped data: {ex.Message}");
+                LogManager.Log($"DragDrop: failed to read dropped data: {ex.Message}");
                 return;
             }
 
@@ -443,14 +742,14 @@ namespace ModularAudience.Forms
                 }
                 catch (Exception ex)
                 {
-                    LogCollection.Log($"DragDrop: error scanning '{path}': {ex.Message}");
+                    LogManager.Log($"DragDrop: error scanning '{path}': {ex.Message}");
                 }
             }
 
             var validPaths = collectedPaths.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             if (validPaths.Count == 0)
             {
-                LogCollection.Log("DragDrop: No allowed audio files found in drop.");
+                LogManager.Log("DragDrop: No allowed audio files found in drop.");
                 return;
             }
 
@@ -481,7 +780,7 @@ namespace ModularAudience.Forms
 
             foreach (var audio in importedAudios)
             {
-                LogCollection.Log(fromResources ? $"{audio.Name} imported from resources." : $"{audio.Name} imported.");
+                LogManager.Log(fromResources ? $"{audio.Name} imported from resources." : $"{audio.Name} imported.");
             }
 
             this.PlaceImportedAudios(pairs, importedAudios);

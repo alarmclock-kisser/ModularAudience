@@ -1,4 +1,4 @@
-using ModularAudience.Audio.Processors_V1;
+﻿using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio;
 using ModularAudience.Audio.Processors_V3;
@@ -16,7 +16,7 @@ namespace ModularAudience.Forms
 
             if (audio == null)
             {
-                LogCollection.Log("No audio selected for BPM scanning.");
+                LogManager.Log("No audio selected for BPM scanning.");
                 return;
             }
 
@@ -31,7 +31,7 @@ namespace ModularAudience.Forms
 
             if (audio == null)
             {
-                LogCollection.Log("No audio selected for BPM scanning.");
+                LogManager.Log("No audio selected for BPM scanning.");
                 return;
             }
 
@@ -46,7 +46,7 @@ namespace ModularAudience.Forms
 
             if (audio == null)
             {
-                LogCollection.Log("No audio selected for BPM scanning.");
+                LogManager.Log("No audio selected for BPM scanning.");
                 return;
             }
 
@@ -181,7 +181,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Recording button error: {ex.Message}");
+                LogManager.Log($"Recording button error: {ex.Message}");
                 try { this.recordingTimer?.Stop(); this.recordingTimer?.Dispose(); } catch { }
                 this.recordingTimer = null;
                 this.button_record.ForeColor = Color.Black;
@@ -227,7 +227,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Recording pre-roll error: {ex.Message}");
+                LogManager.Log($"Recording pre-roll error: {ex.Message}");
                 try { this.recordingTimer?.Stop(); this.recordingTimer?.Dispose(); } catch { }
                 this.recordingTimer = null;
                 this.button_record.ForeColor = Color.Black;
@@ -379,14 +379,14 @@ namespace ModularAudience.Forms
                         string timePrefix;
                         try
                         {
-                            timePrefix = "[" + timestamp.ToString(LogCollection.TimeFormat) + "]";
+                            timePrefix = "[" + timestamp.ToString(LogManager.Logger.Settings.LogTimestampFormat) + "]";
                         }
                         catch
                         {
                             timePrefix = string.Empty;
                         }
                         string prompt = $"Enter comment to add to log at {timePrefix}";
-                        // Provide history from LogCollection.Logs (newest first)
+                        // Provide history from LogManager.Logs (newest first)
                         // Provide only user comment history (newest first)
                         List<string> history;
                         try { history = CommentHistory.ToList(); } catch { history = []; }
@@ -408,7 +408,7 @@ namespace ModularAudience.Forms
                                     string input = dlg.ResultText?.Trim() ?? string.Empty;
                                     if (!string.IsNullOrWhiteSpace(input))
                                     {
-                                        LogCollection.PostComment(timestamp, input);
+                                        LogManager.AddComment(timestamp, null, input);
                                         try { CommentHistory.Insert(0, input); } catch { }
                                         try { CommentDraft = string.Empty; } catch { }
                                     }
@@ -474,7 +474,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"CapsLock reset during shutdown failed: {ex.Message}");
+                LogManager.Log($"CapsLock reset during shutdown failed: {ex.Message}");
             }
         }
 
@@ -489,17 +489,17 @@ namespace ModularAudience.Forms
 
             if (playingTracks.Count < 2)
             {
-                LogCollection.Log("SYNCER : ON (no-op, need >=2 playing tracks)");
+                LogManager.Log("SYNCER : ON (no-op, need >=2 playing tracks)");
                 ResetCapsLockState();
                 return;
             }
 
-            LogCollection.Log($"SYNCER : tracks => {string.Join(" | ", playingTracks.Select(a => $"{a.Name}<{a.Id.ToString("N")[..6]}>"))}");
+            LogManager.Log($"SYNCER : tracks => {string.Join(" | ", playingTracks.Select(a => $"{a.Name}<{a.Id.ToString("N")[..6]}>"))}");
 
             this._syncerCts = new CancellationTokenSource();
             this._syncer = new NudgingPlaybackSyncer(playingTracks, this._syncerCts.Token, checkInterval: 0.1, maxNudgeFactor: 0.05);
             this._nudgingActive = true;
-            LogCollection.Log($"SYNCER : ON ({playingTracks.Count} tracks)");
+            LogManager.Log($"SYNCER : ON ({playingTracks.Count} tracks)");
         }
 
         private void StopSyncer()
@@ -510,7 +510,7 @@ namespace ModularAudience.Forms
             this._syncer = null;
             if (this._nudgingActive)
             {
-                LogCollection.Log("SYNCER : OFF");
+                LogManager.Log("SYNCER : OFF");
             }
             this._nudgingActive = false;
         }
@@ -536,16 +536,16 @@ namespace ModularAudience.Forms
 
             if (playingTracks.Count < 2)
             {
-                LogCollection.Log("SYNCER (pause) : ON (no-op, need >=2 playing tracks)");
+                LogManager.Log("SYNCER (pause) : ON (no-op, need >=2 playing tracks)");
                 return;
             }
 
-            LogCollection.Log($"SYNCER (pause) : tracks => {string.Join(" | ", playingTracks.Select(a => $"{a.Name}<{a.Id.ToString("N")[..6]}>"))}");
+            LogManager.Log($"SYNCER (pause) : tracks => {string.Join(" | ", playingTracks.Select(a => $"{a.Name}<{a.Id.ToString("N")[..6]}>"))}");
 
             this._pausingCts = new CancellationTokenSource();
             this._pausingSyncer = new PausingPlaybackSyncer(playingTracks, this._pausingCts.Token, frequency: 0.1, grain: 10);
             this._pausingActive = true;
-            LogCollection.Log($"SYNCER (pause) : ON ({playingTracks.Count} tracks)");
+            LogManager.Log($"SYNCER (pause) : ON ({playingTracks.Count} tracks)");
         }
 
         private void StopPausingSyncer()
@@ -556,7 +556,7 @@ namespace ModularAudience.Forms
             this._pausingSyncer = null;
             if (this._pausingActive)
             {
-                LogCollection.Log("SYNCER (pause) : OFF");
+                LogManager.Log("SYNCER (pause) : OFF");
             }
             this._pausingActive = false;
         }
@@ -577,3 +577,5 @@ namespace ModularAudience.Forms
         }
     }
 }
+
+

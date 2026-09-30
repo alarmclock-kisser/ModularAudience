@@ -1,13 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows.Forms;
-using ModularAudience.Forms.ControlsConfig;
 
 namespace ModularAudience.Forms.ControlsConfig
 {
+    /// <summary>
+    /// Owns the persisted control scheme. The file lives in
+    /// %appdata%\ModularAudience\BreakbeatPatternEditor\controls-config.json
+    /// and is the single source of truth for the Breakbeat Pattern Editor bindings.
+    /// </summary>
     public sealed class ControlsSettingsManager
     {
         private static readonly JsonSerializerOptions JsonOptions = new()
@@ -18,8 +23,8 @@ namespace ModularAudience.Forms.ControlsConfig
         };
 
         private readonly string _settingsPath;
-        private ControlScheme _currentScheme;
         private readonly object _lock = new();
+        private ControlScheme _currentScheme;
 
         public ControlsSettingsManager()
         {
@@ -27,7 +32,11 @@ namespace ModularAudience.Forms.ControlsConfig
             string dir = Path.Combine(appData, "ModularAudience", "BreakbeatPatternEditor");
             Directory.CreateDirectory(dir);
             _settingsPath = Path.Combine(dir, "controls-config.json");
+            _currentScheme = LoadOrCreateDefault();
         }
+
+        /// <summary>Absolute path of the persisted settings file (shown in the dialog).</summary>
+        public string SettingsPath => _settingsPath;
 
         public ControlScheme CurrentScheme
         {
@@ -35,8 +44,6 @@ namespace ModularAudience.Forms.ControlsConfig
             {
                 lock (_lock)
                 {
-                    if (_currentScheme == null)
-                        _currentScheme = LoadOrCreateDefault();
                     return _currentScheme;
                 }
             }
@@ -46,175 +53,252 @@ namespace ModularAudience.Forms.ControlsConfig
 
         private ControlScheme LoadOrCreateDefault()
         {
-            if (File.Exists(_settingsPath))
+            if (!File.Exists(_settingsPath))
             {
-                try
+                return DefaultControlScheme.Create();
+            }
+
+            try
+            {
+                string json = File.ReadAllText(_settingsPath);
+                var scheme = JsonSerializer.Deserialize<ControlScheme>(json, JsonOptions);
+                if (scheme?.Bindings is { Count: > 0 })
                 {
-                    string json = File.ReadAllText(_settingsPath);
-                    var scheme = JsonSerializer.Deserialize<ControlScheme>(json, JsonOptions);
-                    if (scheme != null)
-                    {
-                        scheme.RebuildIndex();
-                        MergeWithDefaults(scheme);
-                        return scheme;
-                    }
-                }
-                catch
-                {
-                    // Ignore corrupt settings, fall back to defaults
+                    scheme.RebuildIndex();
+                    MergeWithDefaults(scheme);
+                    return scheme;
                 }
             }
+            catch (Exception ex)
+            {
+                // Keep the broken file around for inspection, then fall back to defaults.
+                TryBackupCorruptFile();
+                System.Diagnostics.Debug.WriteLine($"ControlsConfig: could not read settings ({ex.Message}); using defaults.");
+            }
+
             return DefaultControlScheme.Create();
         }
 
-        private void MergeWithDefaults(ControlScheme loaded)
+        private void TryBackupCorruptFile()
+        {
+            try
+            {
+                File.Copy(_settingsPath, _settingsPath + ".corrupt", overwrite: true);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Keeps user customisations but refreshes metadata (names, scopes, hardcoded flags,
+        /// sort order) and appends actions that were added since the file was written.
+        /// </summary>
+        private static void MergeWithDefaults(ControlScheme loaded)
         {
             var defaults = DefaultControlScheme.Create();
-            var loadedIds = new HashSet<string>(loaded.Bindings.ConvertAll(b => b.ActionId));
+            var known = new HashSet<string>(loaded.Bindings.Select(b => b.ActionId), StringComparer.Ordinal);
 
             foreach (var def in defaults.Bindings)
             {
-                if (!loadedIds.Contains(def.ActionId))
+                if (!known.Add(def.ActionId))
                 {
-                    loaded.Bindings.Add(def.Clone());
+                    continue;
                 }
-                else
-                {
-                    var existing = loaded.BindingsById[def.ActionId];
-                    existing.IsHardcoded = def.IsHardcoded;
-                    existing.AllowRemapping = def.AllowRemapping;
-                    existing.ValidScopes = def.ValidScopes;
-                }
+
+                loaded.Bindings.Add(def.Clone());
             }
 
-            loaded.Bindings.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
+            foreach (var def in defaults.Bindings)
+            {
+                var existing = loaded.Bindings.FirstOrDefault(b => b.ActionId == def.ActionId);
+                if (existing == null)
+                {
+                    continue;
+                }
+
+                // Presentation/metadata always comes from the code, never from the file.
+                existing.DisplayName = def.DisplayName;
+                existing.Description = def.Description;
+                existing.Category = def.Category;
+                existing.ValidScopes = def.ValidScopes;
+                existing.IsHardcoded = def.IsHardcoded;
+                existing.AllowRemapping = def.AllowRemapping;
+                existing.Implemented = def.Implemented;
+                existing.SortOrder = def.SortOrder;
+            }
+
+            loaded.Bindings.Sort(CompareBindings);
             loaded.RebuildIndex();
         }
 
-        public void Save()
+        private static int CompareBindings(ControlBinding a, ControlBinding b)
         {
-            lock (_lock)
+            int byCategory = a.Category.CompareTo(b.Category);
+            if (byCategory != 0)
             {
-                if (_currentScheme == null) return;
-                _currentScheme.Bindings.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
-                string json = JsonSerializer.Serialize(_currentScheme, JsonOptions);
-                File.WriteAllText(_settingsPath, json);
+                return byCategory;
             }
+
+            int byOrder = a.SortOrder.CompareTo(b.SortOrder);
+            return byOrder != 0 ? byOrder : string.CompareOrdinal(a.ActionId, b.ActionId);
         }
 
-        public bool TryUpdateBinding(string actionId, ControlBinding newBinding, out List<ControlBinding> conflicts)
+        /// <summary>
+        /// Applies a complete scheme atomically.
+        /// Duplicate gestures are resolved deterministically: the action the user just edited
+        /// keeps the gesture and the previous owner is unbound. Without a preference the action
+        /// further down the display order wins. Every action that lost its binding is reported.
+        /// </summary>
+        public IReadOnlyList<ControlBinding> Apply(ControlScheme scheme, IReadOnlyCollection<string>? preferredActionIds = null)
         {
+            List<ControlBinding> unbound = new();
+            HashSet<string> preferred = preferredActionIds != null
+                ? new HashSet<string>(preferredActionIds, StringComparer.Ordinal)
+                : [];
+
             lock (_lock)
             {
-                if (!_currentScheme.BindingsById.TryGetValue(actionId, out var existing))
+                var defaults = DefaultControlScheme.Create();
+
+                foreach (var def in defaults.Bindings)
                 {
-                    conflicts = new List<ControlBinding>();
-                    return false;
+                    if (!scheme.Bindings.Any(b => b.ActionId == def.ActionId))
+                    {
+                        scheme.Bindings.Add(def.Clone());
+                    }
                 }
 
-                if (existing.IsHardcoded && !existing.AllowRemapping)
+                // Read-only actions always fall back to their built-in gesture.
+                foreach (var def in defaults.Bindings)
                 {
-                    conflicts = new List<ControlBinding>();
-                    return false;
+                    if (!def.IsHardcoded || def.AllowRemapping)
+                    {
+                        continue;
+                    }
+
+                    var target = scheme.Bindings.First(b => b.ActionId == def.ActionId);
+                    target.ClearBindings();
+                    target.PrimaryInput = def.PrimaryInput;
+                    target.PrimaryKey = def.PrimaryKey;
+                    target.PrimaryModifiers = def.PrimaryModifiers;
+                    target.PrimaryMouseAction = def.PrimaryMouseAction;
+                    target.SecondaryInput = def.SecondaryInput;
+                    target.SecondaryKey = def.SecondaryKey;
+                    target.SecondaryModifiers = def.SecondaryModifiers;
+                    target.SecondaryMouseAction = def.SecondaryMouseAction;
                 }
 
-                var testScheme = _currentScheme.Clone();
-                var testBinding = testScheme.BindingsById[actionId];
-                CopyBindingData(newBinding, testBinding);
-                testScheme.RebuildIndex();
+                scheme.Bindings.Sort(CompareBindings);
+                scheme.RebuildIndex();
 
-                conflicts = testScheme.GetConflicts(testBinding);
-
-                if (conflicts.Count > 0)
+                // Two passes: detect every clash against a clean scheme, then unbind the loser.
+                for (int i = 0; i < scheme.Bindings.Count; i++)
                 {
-                    return false;
+                    var current = scheme.Bindings[i];
+                    for (int j = 0; j < i; j++)
+                    {
+                        var earlier = scheme.Bindings[j];
+                        if (!current.ConflictsWith(earlier))
+                        {
+                            continue;
+                        }
+
+                        // Decide which of the two keeps the gesture: the one the user just
+                        // touched, otherwise the later one in display order (== current).
+                        bool currentWins = !preferred.Contains(earlier.ActionId)
+                                           || (preferred.Contains(current.ActionId) && preferred.Count == 1);
+                        if (preferred.Count > 1)
+                        {
+                            currentWins = preferred.Contains(current.ActionId);
+                        }
+
+                        ControlBinding winner = currentWins ? current : earlier;
+                        ControlBinding loser = currentWins ? earlier : current;
+
+                        UnbindSlot(loser, winner);
+                        if (!unbound.Contains(loser))
+                        {
+                            unbound.Add(loser);
+                        }
+                    }
                 }
 
-                CopyBindingData(newBinding, existing);
+                _currentScheme = scheme;
                 _currentScheme.RebuildIndex();
-                Save();
-                SchemeChanged?.Invoke(_currentScheme);
-                return true;
+                SaveCore();
             }
+
+            SchemeChanged?.Invoke(CurrentScheme);
+            return unbound;
         }
 
-        public void ForceUpdateBinding(string actionId, ControlBinding newBinding, List<ControlBinding> clearedConflicts)
+        /// <summary>Strips whichever slot of <paramref name="loser"/> clashes with <paramref name="winner"/>.</summary>
+        private static void UnbindSlot(ControlBinding loser, ControlBinding winner)
         {
-            lock (_lock)
+            if (GesturesMatch(winner.PrimaryInput, winner.PrimaryKey, winner.PrimaryModifiers, winner.PrimaryMouseAction,
+                              loser.PrimaryInput, loser.PrimaryKey, loser.PrimaryModifiers, loser.PrimaryMouseAction))
             {
-                if (!_currentScheme.BindingsById.TryGetValue(actionId, out var existing)) return;
-
-                foreach (var conflict in clearedConflicts)
-                {
-                    ClearBinding(conflict.ActionId);
-                }
-
-                CopyBindingData(newBinding, existing);
-                _currentScheme.RebuildIndex();
-                Save();
-                SchemeChanged?.Invoke(_currentScheme);
+                loser.PrimaryInput = InputType.None;
+                loser.PrimaryKey = Keys.None;
+                loser.PrimaryModifiers = ModifierKey.None;
+                loser.PrimaryMouseAction = MouseAction.Click;
             }
-        }
-
-        private void ClearBinding(string actionId)
-        {
-            if (_currentScheme.BindingsById.TryGetValue(actionId, out var binding))
+            else
             {
-                binding.PrimaryInput = InputType.None;
-                binding.PrimaryKey = Keys.None;
-                binding.PrimaryModifiers = ModifierKey.None;
-                binding.PrimaryMouseAction = MouseAction.Click;
-                binding.SecondaryInput = InputType.None;
-                binding.SecondaryKey = Keys.None;
-                binding.SecondaryModifiers = ModifierKey.None;
-                binding.SecondaryMouseAction = MouseAction.Click;
+                loser.SecondaryInput = InputType.None;
+                loser.SecondaryKey = Keys.None;
+                loser.SecondaryModifiers = ModifierKey.None;
+                loser.SecondaryMouseAction = MouseAction.Click;
             }
         }
 
-        private static void CopyBindingData(ControlBinding from, ControlBinding to)
+        private static bool GesturesMatch(InputType aInput, Keys aKey, ModifierKey aMods, MouseAction aMouse,
+                                          InputType bInput, Keys bKey, ModifierKey bMods, MouseAction bMouse)
         {
-            to.PrimaryInput = from.PrimaryInput;
-            to.PrimaryKey = from.PrimaryKey;
-            to.PrimaryModifiers = from.PrimaryModifiers;
-            to.PrimaryMouseAction = from.PrimaryMouseAction;
-            to.SecondaryInput = from.SecondaryInput;
-            to.SecondaryKey = from.SecondaryKey;
-            to.SecondaryModifiers = from.SecondaryModifiers;
-            to.SecondaryMouseAction = from.SecondaryMouseAction;
+            if (aInput == InputType.None || bInput == InputType.None || aInput != bInput || aMods != bMods)
+            {
+                return false;
+            }
+
+            return aInput switch
+            {
+                InputType.Key or InputType.KeyCombo => aKey == bKey,
+                InputType.MouseWheel => aMouse == bMouse,
+                _ => aMouse == bMouse
+            };
         }
 
         public void ResetToDefaults()
         {
-            lock (_lock)
-            {
-                _currentScheme = DefaultControlScheme.Create();
-                Save();
-                SchemeChanged?.Invoke(_currentScheme);
-            }
+            Apply(DefaultControlScheme.Create());
         }
 
-        public ControlScheme Clone()
+        public ControlScheme CreateWorkingCopy()
         {
             lock (_lock)
             {
-                var clone = new ControlScheme { Name = _currentScheme.Name };
-                foreach (var b in _currentScheme.Bindings)
-                    clone.Bindings.Add(b.Clone());
-                clone.RebuildIndex();
-                return clone;
+                return _currentScheme.Clone();
             }
         }
-    }
 
-    public static class ControlSchemeExtensions
-    {
-        public static ControlScheme Clone(this ControlScheme scheme)
+        private void SaveCore()
         {
-            var clone = new ControlScheme { Name = scheme.Name };
-            foreach (var b in scheme.Bindings)
-                clone.Bindings.Add(b.Clone());
-            clone.RebuildIndex();
-            return clone;
+            try
+            {
+                _currentScheme.Bindings.Sort(CompareBindings);
+                _currentScheme.RebuildIndex();
+
+                string json = JsonSerializer.Serialize(_currentScheme, JsonOptions);
+
+                // Write to a temp file first so a crash can never leave a half-written config.
+                string tempPath = _settingsPath + ".tmp";
+                File.WriteAllText(tempPath, json);
+                File.Copy(tempPath, _settingsPath, overwrite: true);
+                File.Delete(tempPath);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ControlsConfig: could not save settings: {ex.Message}");
+            }
         }
     }
 }

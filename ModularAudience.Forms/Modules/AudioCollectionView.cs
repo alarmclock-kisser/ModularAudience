@@ -206,7 +206,7 @@ namespace ModularAudience.Forms
                 }
                 catch (Exception ex)
                 {
-                    LogCollection.Log(ex);
+                    LogManager.Log(ex);
                 }
 
                 try
@@ -215,7 +215,7 @@ namespace ModularAudience.Forms
                 }
                 catch (Exception ex)
                 {
-                    LogCollection.Log(ex);
+                    LogManager.Log(ex);
                 }
             });
         }
@@ -646,14 +646,14 @@ namespace ModularAudience.Forms
                 }
                 catch (Exception ex)
                 {
-                    LogCollection.Log($"DragDrop ACV: error scanning '{path}': {ex.Message}");
+                    LogManager.Log($"DragDrop ACV: error scanning '{path}': {ex.Message}");
                 }
             }
 
             var validPaths = collectedPaths.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             if (validPaths.Count == 0)
             {
-                LogCollection.Log("DragDrop ACV: No allowed audio files found in drop.");
+                LogManager.Log("DragDrop ACV: No allowed audio files found in drop.");
                 return;
             }
 
@@ -672,12 +672,12 @@ namespace ModularAudience.Forms
                     this.AudioC.Audios.Add(audio);
                     WindowMain.AudioCollectionTags[audio.Id] = collectionNumber;
                     WindowMain.Instance.AudioC.Audios.Remove(audio);
-                    LogCollection.Log($"{audio.Name} imported into {this.Text}.");
+                    LogManager.Log($"{audio.Name} imported into {this.Text}.");
                 }
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"DragDrop ACV import failed: {ex.Message}");
+                LogManager.Log($"DragDrop ACV import failed: {ex.Message}");
             }
         }
 
@@ -980,7 +980,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"AudioCollectionView selection info update failed: {ex.Message}"); } catch { }
+                try { LogManager.Log($"AudioCollectionView selection info update failed: {ex.Message}"); } catch { }
             }
         }
 
@@ -1659,7 +1659,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                LogCollection.Log(ex);
+                LogManager.Log(ex);
             }
             finally
             {
@@ -1765,7 +1765,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"MIDI conversion failed: {ex}");
+                LogManager.Log($"MIDI conversion failed: {ex}");
                 progressDialog.Close();
                 ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI conversion failed", ex);
             }
@@ -1790,3 +1790,4 @@ namespace ModularAudience.Forms
         }
     }
 }
+

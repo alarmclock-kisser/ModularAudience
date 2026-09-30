@@ -1,4 +1,4 @@
-using ModularAudience.Audio;
+﻿using ModularAudience.Audio;
 using ModularAudience.Generators;
 using ModularAudience.Forms.Helpers;
 using System;
@@ -185,7 +185,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Neural beat playback failed: {ex}");
+                LogManager.Log($"Neural beat playback failed: {ex}");
                 this.label_status.Text = "Playback failed. See log for details.";
             }
             finally

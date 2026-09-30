@@ -1,4 +1,4 @@
-using ModularAudience.Audio;
+﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Processing;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
@@ -271,7 +271,7 @@ namespace ModularAudience.Forms.Modules
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"DrumRollEditor ListChanged error: {ex.Message}"); } catch { }
+                try { LogManager.Log($"DrumRollEditor ListChanged error: {ex.Message}"); } catch { }
             }
         }
 
@@ -297,7 +297,7 @@ namespace ModularAudience.Forms.Modules
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"DrumRollEditor Shown error: {ex.Message}"); } catch { }
+                try { LogManager.Log($"DrumRollEditor Shown error: {ex.Message}"); } catch { }
                 try { this.Close(); } catch { }
             }
         }
@@ -324,7 +324,7 @@ namespace ModularAudience.Forms.Modules
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"DrumRollEditor HitsChanged error: {ex.Message}"); } catch { }
+                try { LogManager.Log($"DrumRollEditor HitsChanged error: {ex.Message}"); } catch { }
             }
         }
 
@@ -348,7 +348,7 @@ namespace ModularAudience.Forms.Modules
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"DrumRollEditor BarsChanged error: {ex}"); } catch { }
+                try { LogManager.Log($"DrumRollEditor BarsChanged error: {ex}"); } catch { }
             }
         }
 
@@ -727,7 +727,7 @@ namespace ModularAudience.Forms.Modules
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-            // R / Ctrl+R -> Randomize (interleaved when Ctrl gedrückt)
+            // R / Ctrl+R -> Randomize (interleaved when Ctrl gedrÃ¼ckt)
             if (keyData == Keys.R || keyData == (Keys.Control | Keys.R))
             {
                 try
@@ -814,7 +814,7 @@ namespace ModularAudience.Forms.Modules
 
         private async Task SchedulerLoop(CancellationToken cancellationToken)
         {
-            // Start etwas in der Zukunft, damit wir Lookahead nutzen können
+            // Start etwas in der Zukunft, damit wir Lookahead nutzen kÃ¶nnen
             DateTimeOffset nextScheduledTime = DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(SchedulingLookaheadMs);
             int stepIndex = 0;
 
@@ -889,7 +889,7 @@ namespace ModularAudience.Forms.Modules
                             catch { }
                         }, cancellationToken);
 
-                        // Schritt vorwärts: Intervall aus aktuellen Scheduler-Werten berechnen
+                        // Schritt vorwÃ¤rts: Intervall aus aktuellen Scheduler-Werten berechnen
                         TimeSpan interval = ComputeIntervalFromValues(
                             bpmNow,
                             hitsPerBarNow);
@@ -897,7 +897,7 @@ namespace ModularAudience.Forms.Modules
                         nextScheduledTime += interval;
                         stepIndex++;
 
-                        // Reroll-Logik: wenn RerollInterval > 0, zählen wir abgeschlossene Pattern-Zyklen
+                        // Reroll-Logik: wenn RerollInterval > 0, zÃ¤hlen wir abgeschlossene Pattern-Zyklen
                         try
                         {
                             int hitsForCycle = totalStepsNow;
@@ -916,7 +916,7 @@ namespace ModularAudience.Forms.Modules
 
                                     if (this.RerollCountdown <= 0)
                                     {
-                                        // Execute reroll on UI thread (RandomizeAllPanels verändert UI)
+                                        // Execute reroll on UI thread (RandomizeAllPanels verÃ¤ndert UI)
                                         try
                                         {
                                             if (this.IsHandleCreated && !this.IsDisposed)
@@ -925,7 +925,7 @@ namespace ModularAudience.Forms.Modules
                                                 {
                                                     try
                                                     {
-                                                        // Führe Randomize aus, nutze aktuellen InterleavedRandom-Status
+                                                        // FÃ¼hre Randomize aus, nutze aktuellen InterleavedRandom-Status
                                                         this.RandomizeAllPanels(this.InterleavedRandom);
                                                     }
                                                     catch { }
@@ -950,7 +950,7 @@ namespace ModularAudience.Forms.Modules
                     }
                 }
 
-                // kurze Pause, responsive zu Änderungen
+                // kurze Pause, responsive zu Ã„nderungen
                 try
                 {
                     await Task.Delay(Math.Max(5, SchedulingLookaheadMs / 4), cancellationToken).ConfigureAwait(false);
@@ -1089,9 +1089,9 @@ namespace ModularAudience.Forms.Modules
 
             this.isPlaying = true;
             this.currentStep = 0;
-            this.button_playback.Text = "■";
+            this.button_playback.Text = "â– ";
 
-            // initiale Scheduler-Werte von UI übernehmen (auf UI-Thread)
+            // initiale Scheduler-Werte von UI Ã¼bernehmen (auf UI-Thread)
             this.schedulerBpm = this.Bpm;
             this.schedulerHits = this.Hits;
             this.schedulerBars = this.Bars;
@@ -1130,7 +1130,7 @@ namespace ModularAudience.Forms.Modules
             }
 
             this.isPlaying = false;
-            this.button_playback.Text = "▶";
+            this.button_playback.Text = "â–¶";
 
             // Cancel scheduler and wait
             try
@@ -1194,7 +1194,7 @@ namespace ModularAudience.Forms.Modules
                 try { this.waveOut?.Stop(); } catch { }
             }
 
-            // Reroll-Countdown zurücksetzen, damit beim nächsten Start neu initialisiert wird
+            // Reroll-Countdown zurÃ¼cksetzen, damit beim nÃ¤chsten Start neu initialisiert wird
             try
             {
                 this.RerollCountdown = -1;
@@ -1222,7 +1222,7 @@ namespace ModularAudience.Forms.Modules
                 hits = Math.Max(1, hits);
             }
 
-            // Button-Zustände und Audiodaten als Snapshots erfassen, um Cross-Thread-Access zu vermeiden
+            // Button-ZustÃ¤nde und Audiodaten als Snapshots erfassen, um Cross-Thread-Access zu vermeiden
             var patternStates = this.CapturePatternButtonStates(); // List<List<bool>> - UI-thread
             bool interleavedPlayback = this.InterleavedPlaybackEnabled;
             var audioSnapshots = new List<(float[] Data, int Channels, int SampleRate)>();
@@ -1256,7 +1256,7 @@ namespace ModularAudience.Forms.Modules
                 totalSamples = 1;
             }
 
-            // Heavy CPU-Arbeit auf ThreadPool ausführen
+            // Heavy CPU-Arbeit auf ThreadPool ausfÃ¼hren
             var mixBuffer = await Task.Run(() =>
             {
                 var mix = new float[totalSamples * channels];
@@ -1322,7 +1322,7 @@ namespace ModularAudience.Forms.Modules
                 return mix;
             }).ConfigureAwait(false);
 
-            // Ergebnis-Objekt erstellen (leichtgewichtiger UI-unabhängiger Schritt)
+            // Ergebnis-Objekt erstellen (leichtgewichtiger UI-unabhÃ¤ngiger Schritt)
             var result = new AudioObj
             {
                 Data = mixBuffer,
@@ -1837,7 +1837,7 @@ namespace ModularAudience.Forms.Modules
                     {
                         TextRenderer.DrawText(
                             e.Graphics,
-                            row.IsLocked ? "🔒" : "🔓",
+                            row.IsLocked ? "ðŸ”’" : "ðŸ”“",
                             this.Font,
                             lockRect,
                             row.IsLocked ? Color.Firebrick : Color.DimGray,
@@ -1891,7 +1891,7 @@ namespace ModularAudience.Forms.Modules
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"DrumRollEditor Paint error: {ex.Message}"); } catch { }
+                try { LogManager.Log($"DrumRollEditor Paint error: {ex.Message}"); } catch { }
             }
         }
 
@@ -2068,7 +2068,7 @@ namespace ModularAudience.Forms.Modules
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"DrumRollEditor launchpad playback failed for '{audio.Name}': {ex.Message}"); } catch { }
+                try { LogManager.Log($"DrumRollEditor launchpad playback failed for '{audio.Name}': {ex.Message}"); } catch { }
             }
             finally
             {
@@ -2092,7 +2092,7 @@ namespace ModularAudience.Forms.Modules
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"DrumRollEditor Resize error: {ex.Message}"); } catch { }
+                try { LogManager.Log($"DrumRollEditor Resize error: {ex.Message}"); } catch { }
             }
         }
 
@@ -2111,13 +2111,14 @@ namespace ModularAudience.Forms.Modules
 
         private void Bpm_ValueChanged(object? sender, EventArgs e)
         {
-            // live übernehmen: sichere Kopie aktualisieren (ValueChanged läuft auf UI-Thread)
+            // live Ã¼bernehmen: sichere Kopie aktualisieren (ValueChanged lÃ¤uft auf UI-Thread)
             try
             {
                 this.schedulerBpm = this.Bpm;
             }
             catch { }
-            // keine weitere Aktion nötig: Scheduler liest schedulerBpm regelmäßig
+            // keine weitere Aktion nÃ¶tig: Scheduler liest schedulerBpm regelmÃ¤ÃŸig
         }
     }
 }
+

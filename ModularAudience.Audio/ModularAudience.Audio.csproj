@@ -119,4 +119,8 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ModularAudience.Shared\ModularAudience.Shared.csproj" />
+  </ItemGroup>
+
 </Project>

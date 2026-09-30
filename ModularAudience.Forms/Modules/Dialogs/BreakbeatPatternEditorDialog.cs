@@ -1,4 +1,4 @@
-using ModularAudience.Audio;
+﻿using ModularAudience.Audio;
 using ModularAudience.Forms.Helpers;
 using ModularAudience.Forms.ControlsConfig;
 using ModularAudience.Generators;
@@ -10,6 +10,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
     public partial class BreakbeatPatternEditorDialog : Form
     {
         private readonly ControlsSettingsManager _controlsManager = new();
+        private ControlActionResolver _controlActions = null!;
+        private readonly ControlActionResolver _defaultControlActions = new(DefaultControlScheme.Create());
         private readonly List<bool[]> pattern;
         private readonly List<AudioObj> samples;
         private readonly List<AudioObj> originalSampleOrder;
@@ -134,6 +136,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             this.InitializeComponent();
             this.KeyPreview = true;
+            this._controlActions = new ControlActionResolver(this._controlsManager.CurrentScheme);
+            this._controlsManager.SchemeChanged += _ => this._controlActions = new ControlActionResolver(_);
             this.KeyUp += this.BreakbeatPatternEditorDialog_KeyUp;
             this.pattern = pattern.Select(row => row.ToArray()).ToList();
             AudioObj[] sourceSamples = samples.ToArray();
@@ -176,6 +180,166 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.FormClosing += this.BreakbeatPatternEditorDialog_FormClosing;
 this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.lastHistoryState = this.CaptureHistoryState();
+        }
+
+        /// <summary>
+        /// Paste-preview placement/cancel, resolved through the control scheme.
+        /// Returns false when the user kept the default gestures, so the caller keeps its
+        /// original hard-coded behaviour.
+        /// </summary>
+        private bool TryHandleRemappedPastePreview(MouseEventArgs e)
+        {
+            if (e.Button is not (MouseButtons.Left or MouseButtons.Right))
+            {
+                return false;
+            }
+
+            if (this.IsRemapped("Clipboard.PlacePaste")
+                && this._controlActions.GestureMatches("Clipboard.PlacePaste", BindingScope.PastePreview, e.Button, MouseAction.Click)
+                && this.TryGetCell(e.Location, out _, out _))
+            {
+                this.UpdatePastePreview(e.Location);
+                if (this.pastePreviewValid)
+                {
+                    this.PlacePastePreview();
+                }
+                return true;
+            }
+
+            if (this.IsRemapped("Clipboard.CancelPaste")
+                && this._controlActions.GestureMatches("Clipboard.CancelPaste", BindingScope.PastePreview, e.Button, MouseAction.Click))
+            {
+                this.CancelPastePreview();
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Track-header and loop-header gestures, resolved through the control scheme.
+        /// Returns false when the corresponding action still uses its default gesture, so the
+        /// caller falls through to the original hard-coded handling.
+        /// </summary>
+        private bool TryHandleRemappedHeaderGesture(MouseEventArgs e)
+        {
+            if (e.Button is not (MouseButtons.Left or MouseButtons.Right or MouseButtons.Middle))
+            {
+                return false;
+            }
+
+            // Track header: settings (click) / reorder (drag)
+            if (this.TryGetRowReorderSource(e.Location, out int trackRow))
+            {
+                if (this.IsRemapped("Track.Settings")
+                    && this._controlActions.GestureMatches("Track.Settings", BindingScope.TrackHeader, e.Button, MouseAction.Click))
+                {
+                    this.ShowTrackSettings(trackRow);
+                    return true;
+                }
+
+                if (this.IsRemapped("Track.Reorder")
+                    && this._controlActions.GestureMatches("Track.Reorder", BindingScope.TrackHeader, e.Button, MouseAction.Drag))
+                {
+                    this.BeginRowReorder(trackRow, e.Location);
+                    return true;
+                }
+            }
+
+            // Loop header: whole bar toggle (click) / single quarter toggle (click)
+            if (this.TryGetHeaderBar(e.Location, out int barIndex))
+            {
+                if (this.IsRemapped("Loop.ToggleBar")
+                    && this._controlActions.GestureMatches("Loop.ToggleBar", BindingScope.BarHeader, e.Button, MouseAction.Click))
+                {
+                    this.ToggleLoopBar(barIndex);
+                    return true;
+                }
+
+                if (this.IsRemapped("Loop.ToggleQuarter")
+                    && this._controlActions.GestureMatches("Loop.ToggleQuarter", BindingScope.BarHeader, e.Button, MouseAction.Click))
+                {
+                    this.ToggleLoopQuarter(e.Location, barIndex);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// True when the user gave this action a gesture that differs from the built-in default.
+        /// While everything is at its default this returns false, which keeps the editor's
+        /// original hard-coded input handling authoritative (zero behaviour change).
+        /// </summary>
+        private bool IsRemapped(string actionId)
+        {
+            ControlBinding? current = this._controlActions.Find(actionId);
+            ControlBinding? fallback = this._defaultControlActions.Find(actionId);
+            if (current == null || fallback == null)
+            {
+                return false;
+            }
+
+            return !SameGesture(current.PrimaryInput, current.PrimaryKey, current.PrimaryModifiers, current.PrimaryMouseAction,
+                                fallback.PrimaryInput, fallback.PrimaryKey, fallback.PrimaryModifiers, fallback.PrimaryMouseAction)
+                || !SameGesture(current.SecondaryInput, current.SecondaryKey, current.SecondaryModifiers, current.SecondaryMouseAction,
+                                fallback.SecondaryInput, fallback.SecondaryKey, fallback.SecondaryModifiers, fallback.SecondaryMouseAction);
+        }
+
+        private static bool SameGesture(InputType aInput, Keys aKey, ModifierKey aMods, MouseAction aAction,
+                                       InputType bInput, Keys bKey, ModifierKey bMods, MouseAction bAction)
+        {
+            return aInput == bInput
+                   && aMods == bMods
+                   && aAction == bAction
+                   && (aInput is not (InputType.Key or InputType.KeyCombo) || aKey == bKey);
+        }
+
+        private void BeginRowReorder(int row, Point location)
+        {
+            this.rowReorderActive = true;
+            this.rowReorderSource = row;
+            this.rowReorderTarget = row;
+            this.rowReorderPointer = location;
+            this.deadGroupNotes.Clear();
+            this.pictureBox_pattern.Capture = true;
+            this.pictureBox_pattern.Cursor = Cursors.SizeAll;
+            this.pictureBox_pattern.Invalidate();
+        }
+
+        private void ToggleLoopBar(int barIndex)
+        {
+            int firstQuarter = barIndex * 4;
+            bool allQuartersSelected = Enumerable.Range(firstQuarter, 4).All(this.selectedLoopSections.Contains);
+            for (int quarter = 0; quarter < 4; quarter++)
+            {
+                if (allQuartersSelected)
+                {
+                    this.selectedLoopSections.Remove(firstQuarter + quarter);
+                }
+                else
+                {
+                    this.selectedLoopSections.Add(firstQuarter + quarter);
+                }
+            }
+
+            this.loopSelectionRevision++;
+            this.deadGroupNotes.Clear();
+            this.pictureBox_pattern.Invalidate();
+        }
+
+        private void ToggleLoopQuarter(Point location, int barIndex)
+        {
+            int quarter = barIndex * 4 + this.GetHeaderQuarter(location, barIndex);
+            if (!this.selectedLoopSections.Remove(quarter))
+            {
+                this.selectedLoopSections.Add(quarter);
+            }
+
+            this.loopSelectionRevision++;
+            this.deadGroupNotes.Clear();
+            this.pictureBox_pattern.Invalidate();
         }
 
         private PatternEditorHistoryState CaptureHistoryState() => new(
@@ -583,7 +747,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
             if (this.pastePreviewActive)
             {
-                // Lila wenn gültig, rot wenn Überlappung mit existierenden Noten
+                // Lila wenn gÃ¼ltig, rot wenn Ãœberlappung mit existierenden Noten
                 Color previewColor = this.pastePreviewValid
                     ? Color.FromArgb(120, 105, 196, 255)
                     : Color.FromArgb(130, 255, 105, 105);
@@ -728,9 +892,9 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             int wholeSemitones = quarterSteps / 4;
             string fraction = (quarterSteps % 4) switch
             {
-                1 => "¼",
-                2 => "½",
-                3 => "¾",
+                1 => "Â¼",
+                2 => "Â½",
+                3 => "Â¾",
                 _ => string.Empty
             };
             string value = wholeSemitones > 0
@@ -758,7 +922,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 values.Add("Varispeed");
             }
 
-            return string.Join(" • ", values);
+            return string.Join(" â€¢ ", values);
         }
 
         private static BreakbeatTrackSettings NormalizeTrackSettings(BreakbeatTrackSettings settings)
@@ -915,6 +1079,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
             if (this.pastePreviewActive)
             {
+                if (this.TryHandleRemappedPastePreview(e))
+                {
+                    return;
+                }
+
                 if (e.Button == MouseButtons.Right)
                 {
                     this.CancelPastePreview();
@@ -932,6 +1101,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 return;
             }
 
+            if (this.TryHandleRemappedHeaderGesture(e))
+            {
+                return;
+            }
+
             if (e.Button == MouseButtons.Right && this.TryGetRowReorderSource(e.Location, out int settingsRow))
             {
                 this.ShowTrackSettings(settingsRow);
@@ -941,50 +1115,19 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
             if (e.Button == MouseButtons.Left && this.TryGetRowReorderSource(e.Location, out int rowToReorder))
             {
-                this.rowReorderActive = true;
-                this.rowReorderSource = rowToReorder;
-                this.rowReorderTarget = rowToReorder;
-                this.rowReorderPointer = e.Location;
-                this.deadGroupNotes.Clear();
-                this.pictureBox_pattern.Capture = true;
-                this.pictureBox_pattern.Cursor = Cursors.SizeAll;
-                this.pictureBox_pattern.Invalidate();
+                this.BeginRowReorder(rowToReorder, e.Location);
                 return;
             }
 
             if (e.Button == MouseButtons.Left && this.TryGetHeaderBar(e.Location, out int headerBar))
             {
-                int firstQuarter = headerBar * 4;
-                bool allQuartersSelected = Enumerable.Range(firstQuarter, 4).All(this.selectedLoopSections.Contains);
-                for (int quarter = 0; quarter < 4; quarter++)
-                {
-                    if (allQuartersSelected)
-                    {
-                        this.selectedLoopSections.Remove(firstQuarter + quarter);
-                    }
-                    else
-                    {
-                        this.selectedLoopSections.Add(firstQuarter + quarter);
-                    }
-                }
-
-                this.loopSelectionRevision++;
-                this.deadGroupNotes.Clear();
-                this.pictureBox_pattern.Invalidate();
+                this.ToggleLoopBar(headerBar);
                 return;
             }
 
             if (e.Button == MouseButtons.Right && this.TryGetHeaderBar(e.Location, out int quarterHeaderBar))
             {
-                int selectedQuarter = quarterHeaderBar * 4 + this.GetHeaderQuarter(e.Location, quarterHeaderBar);
-                if (!this.selectedLoopSections.Remove(selectedQuarter))
-                {
-                    this.selectedLoopSections.Add(selectedQuarter);
-                }
-
-                this.loopSelectionRevision++;
-                this.deadGroupNotes.Clear();
-                this.pictureBox_pattern.Invalidate();
+                this.ToggleLoopQuarter(e.Location, quarterHeaderBar);
                 return;
             }
 
@@ -1208,7 +1351,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             {
                 if (this.rightClickDeleteActive)
                 {
-                    // Wenn Maus das Grid verlässt, Löschmodus beenden
+                    // Wenn Maus das Grid verlÃ¤sst, LÃ¶schmodus beenden
                     if (!this.TryGetCell(e.Location, out _, out _))
                     {
                         this.rightClickDeleteActive = false;
@@ -1969,13 +2112,13 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             int patternEndTick = this.bars * BreakbeatGenerator_V2.PatternTicksPerBar;
-            // Mindestens eine Note muss mit ihrem Start (Fuß) auf dem gültigen Grid landen
+            // Mindestens eine Note muss mit ihrem Start (FuÃŸ) auf dem gÃ¼ltigen Grid landen
             bool atLeastOneFootOnGrid = this.pastePreviewNotes.Any(note =>
                 note.TrackIndex >= 0
                 && note.TrackIndex < this.samples.Count
                 && note.StartTick >= 0
                 && note.StartTick < patternEndTick);
-            // Keine interne Überlappung
+            // Keine interne Ãœberlappung
             bool noInternalOverlap = true;
             for (int first = 0; noInternalOverlap && first < this.pastePreviewNotes.Count; first++)
             {
@@ -1988,14 +2131,14 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     }
                 }
             }
-            // Überlappung mit existierenden Noten → ungültig (rot) - nur für Noten, die auf dem Grid landen
+            // Ãœberlappung mit existierenden Noten â†’ ungÃ¼ltig (rot) - nur fÃ¼r Noten, die auf dem Grid landen
             bool hasOverlap = this.pastePreviewNotes
                 .Where(note => note.TrackIndex >= 0
                     && note.TrackIndex < this.samples.Count
                     && note.StartTick < patternEndTick
                     && (long)note.StartTick + note.DurationTicks > 0)
                 .Any(note => this.HasOverlappingNote(note));
-            // Gültig wenn mindestens ein Fuß auf Grid, keine interne Überlappung, keine Überlappung mit existierenden
+            // GÃ¼ltig wenn mindestens ein FuÃŸ auf Grid, keine interne Ãœberlappung, keine Ãœberlappung mit existierenden
             this.pastePreviewValid = atLeastOneFootOnGrid && noInternalOverlap && !hasOverlap;
         }
 
@@ -2049,54 +2192,120 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-            if (keyData == (Keys.Control | Keys.Z))
+            // Scope order mirrors the original hard-coded behaviour: a small set of actions works
+            // no matter which control has focus, everything else only while the grid has focus.
+            if (this.TryRunBoundAction(keyData, focusOnly: false, out bool consumed))
             {
-                this.UndoEditorAction();
-                return true;
-            }
-
-            if (keyData == (Keys.Control | Keys.Y))
-            {
-                this.RedoEditorAction();
-                return true;
+                return consumed;
             }
 
             if (this.pictureBox_pattern.ContainsFocus)
             {
-                Keys key = keyData & Keys.KeyCode;
-                Keys modifiers = keyData & Keys.Modifiers;
-                if (key == Keys.Delete && modifiers == Keys.None && this.selectedNotes.Count > 0)
+                if (this.pastePreviewActive && this.TryRunBoundAction(keyData, focusOnly: true, out consumed))
                 {
-                    BreakbeatPatternNote[] removedNotes = this.selectedNotes.ToArray();
-                    this.notes.RemoveAll(this.selectedNotes.Contains);
-                    this.selectedNotes.Clear();
-                    this.deadGroupNotes.Clear();
-                    this.RegisterPatternNotesChanged(removedNotes.Select(note => (BreakbeatPatternNote?)note).ToArray());
-                    this.pictureBox_pattern.Invalidate();
-                    this.CommitHistoryAction();
-                    return true;
+                    return consumed;
                 }
 
-                if (modifiers == Keys.Control && key == Keys.C && this.selectedNotes.Count > 0)
+                if (this.TryRunBoundAction(keyData, focusOnly: true, out consumed))
                 {
-                    this.CopySelectedNotes();
-                    return true;
-                }
-
-                if (modifiers == Keys.Control && key == Keys.V && this.copiedNotes.Count > 0)
-                {
-                    this.StartPastePreview();
-                    return true;
-                }
-
-                if (key == Keys.Escape && modifiers == Keys.None && this.pastePreviewActive)
-                {
-                    this.CancelPastePreview();
-                    return true;
+                    return consumed;
                 }
             }
 
             return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        /// <summary>
+        /// Maps a key press onto its bound action via the control scheme and executes it.
+        /// Returns false when the key is not bound to anything this editor implements.
+        /// </summary>
+        private bool TryRunBoundAction(Keys keyData, bool focusOnly, out bool consumed)
+        {
+            consumed = false;
+
+            foreach (BindingScope scope in focusOnly
+                         ? new[] { BindingScope.PastePreview, BindingScope.Grid, BindingScope.Note, BindingScope.Global }
+                         : new[] { BindingScope.Global })
+            {
+                string? actionId = this._controlActions.ResolveKey(scope, keyData);
+                if (actionId == null)
+                {
+                    continue;
+                }
+
+                if (actionId is not ("Edit.Undo" or "Edit.Redo") && focusOnly == false)
+                {
+                    // Only undo/redo were reachable without grid focus in the original editor.
+                    return false;
+                }
+
+                consumed = true;
+
+                switch (actionId)
+                {
+                    case "Edit.Undo":
+                        this.UndoEditorAction();
+                        return true;
+
+                    case "Edit.Redo":
+                        this.RedoEditorAction();
+                        return true;
+
+                    case "Clipboard.Copy":
+                        if (this.selectedNotes.Count > 0)
+                        {
+                            this.CopySelectedNotes();
+                        }
+                        return true;
+
+                    case "Clipboard.PastePreview":
+                        if (this.copiedNotes.Count > 0)
+                        {
+                            this.StartPastePreview();
+                        }
+                        return true;
+
+                    case "Clipboard.CancelPaste":
+                        if (this.pastePreviewActive)
+                        {
+                            this.CancelPastePreview();
+                        }
+                        return true;
+
+                    case "Select.Delete":
+                    case "Select.DeleteAlt":
+                        if (this.selectedNotes.Count > 0)
+                        {
+                            BreakbeatPatternNote[] removed = this.selectedNotes.ToArray();
+                            this.notes.RemoveAll(this.selectedNotes.Contains);
+                            this.selectedNotes.Clear();
+                            this.deadGroupNotes.Clear();
+                            this.RegisterPatternNotesChanged(removed.Select(note => (BreakbeatPatternNote?)note).ToArray());
+                            this.pictureBox_pattern.Invalidate();
+                            this.CommitHistoryAction();
+                        }
+                        return true;
+
+                    case "Playback.HearToggle":
+                        this.button_hear_Click(this, EventArgs.Empty);
+                        return true;
+
+                    case "Loop.AddBar":
+                        this.button_addBar_Click(this, EventArgs.Empty);
+                        return true;
+
+                    case "Loop.RemoveBar":
+                        this.button_removeBar_Click(this, EventArgs.Empty);
+                        return true;
+
+                    default:
+                        // Bound in the scheme but not implemented in the editor yet:
+                        // fall through so the key keeps its default behaviour.
+                        return false;
+                }
+            }
+
+            return false;
         }
 
         private void DeleteNotesAt(int row, int tick)
@@ -3270,14 +3479,14 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                             }
                             catch (Exception ex)
                             {
-                                LogCollection.Log("Live breakbeat preview update failed.");
-                                LogCollection.Log(ex);
+                                LogManager.Log("Live breakbeat preview update failed.");
+                                LogManager.Log(ex);
                                 await Task.Delay(250, cancellationTokenSource.Token);
                             }
                         }
                     }
 
-                    // Stoppen nur wenn alle Bereiche abgewählt (nichts mehr zu loopen)
+                    // Stoppen nur wenn alle Bereiche abgewÃ¤hlt (nichts mehr zu loopen)
                     if (stopAtLoopBoundary
                         && stopSelectionRevision == this.loopSelectionRevision
                         && loopPass > stopReadyLoopPass)
@@ -3305,7 +3514,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                         {
                             int currentQuarter = this.GetCurrentLoopQuarter();
                             
-                            // 1) Caret currently in a deselected section → jump to next selected NOW
+                            // 1) Caret currently in a deselected section â†’ jump to next selected NOW
                             if (deselectedInBuffer.Contains(currentQuarter))
                             {
                                 int nextQuarter = currentSections
@@ -3324,7 +3533,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                                     this.previewAudio.SetPosition((long)(targetTime * this.previewAudio.SampleRate));
                                 }
                             }
-                            // 2) Deselected sections ahead of caret → skip them immediately
+                            // 2) Deselected sections ahead of caret â†’ skip them immediately
                             else
                             {
                                 int nextDeselectedAhead = deselectedInBuffer
@@ -3413,8 +3622,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                                 }
                                 catch (Exception ex)
                                 {
-                                    LogCollection.Log("Live breakbeat preview update failed.");
-                                    LogCollection.Log(ex);
+                                    LogManager.Log("Live breakbeat preview update failed.");
+                                    LogManager.Log(ex);
                                     await Task.Delay(250, cancellationTokenSource.Token);
                                 }
                             }
@@ -3465,8 +3674,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
             catch (Exception ex)
             {
-                LogCollection.Log("Breakbeat pattern preview failed.");
-                LogCollection.Log(ex);
+                LogManager.Log("Breakbeat pattern preview failed.");
+                LogManager.Log(ex);
                 if (!this.IsDisposed)
                 {
                     WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Breakbeat Pattern Preview", ex);
@@ -3549,8 +3758,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
             catch (Exception ex)
             {
-                LogCollection.Log("Breakbeat note preview failed.");
-                LogCollection.Log(ex);
+                LogManager.Log("Breakbeat note preview failed.");
+                LogManager.Log(ex);
                 if (!this.IsDisposed)
                 {
                     WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Breakbeat Note Preview", ex);
@@ -3804,8 +4013,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
             catch (Exception ex)
             {
-                LogCollection.Log("Breakbeat pattern save failed.");
-                LogCollection.Log(ex);
+                LogManager.Log("Breakbeat pattern save failed.");
+                LogManager.Log(ex);
                 if (!this.IsDisposed && !this.Disposing)
                 {
                     WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Breakbeat Pattern Save", ex);
@@ -3859,7 +4068,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void button_settings_Click(object? sender, EventArgs e)
         {
-            using var dialog = new ControlsConfigDialog(_controlsManager);
+            using ControlsConfigDialog dialog = new(_controlsManager);
             dialog.ShowDialog(this);
         }
     }

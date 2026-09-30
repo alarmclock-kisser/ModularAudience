@@ -102,7 +102,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"PianoRollEditor Shown error: {ex.Message}"); } catch { }
+                try { LogManager.Log($"PianoRollEditor Shown error: {ex.Message}"); } catch { }
                 try { this.Close(); } catch { }
             }
         }
@@ -132,7 +132,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"PianoRollEditor ListChanged error: {ex.Message}"); } catch { }
+                try { LogManager.Log($"PianoRollEditor ListChanged error: {ex.Message}"); } catch { }
             }
         }
 
@@ -406,7 +406,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"PianoRollEditor layout error: {ex.Message}"); } catch { }
+                try { LogManager.Log($"PianoRollEditor layout error: {ex.Message}"); } catch { }
             }
         }
 
@@ -587,7 +587,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"PianoRollEditor Paint error: {ex.Message}"); } catch { }
+                try { LogManager.Log($"PianoRollEditor Paint error: {ex.Message}"); } catch { }
             }
         }
 
@@ -870,7 +870,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"PianoRollEditor playback failed for '{audio.Name}': {ex.Message}"); } catch { }
+                try { LogManager.Log($"PianoRollEditor playback failed for '{audio.Name}': {ex.Message}"); } catch { }
             }
         }
 
@@ -890,7 +890,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"PianoRollEditor Resize error: {ex.Message}"); } catch { }
+                try { LogManager.Log($"PianoRollEditor Resize error: {ex.Message}"); } catch { }
             }
         }
 
@@ -920,3 +920,4 @@ namespace ModularAudience.Forms.Modules.Dialogs
         }
     }
 }
+

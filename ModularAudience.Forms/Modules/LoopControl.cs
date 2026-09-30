@@ -716,7 +716,7 @@ namespace ModularAudience.Forms.Modules
             }
             catch (Exception ex)
             {
-                LogCollection.Log(ex);
+                LogManager.Log(ex);
             }
             finally
             {
@@ -1031,7 +1031,7 @@ namespace ModularAudience.Forms.Modules
             }
             catch (Exception ex)
             {
-                LogCollection.Log(ex);
+                LogManager.Log(ex);
             }
         }
 
@@ -2276,7 +2276,7 @@ namespace ModularAudience.Forms.Modules
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Drop timing calculation failed: {ex.Message}");
+                LogManager.Log($"Drop timing calculation failed: {ex.Message}");
                 timings = new Dictionary<Guid, int>();
             }
 
@@ -2285,7 +2285,7 @@ namespace ModularAudience.Forms.Modules
             {
                 foreach (var kv in timings)
                 {
-                    LogCollection.Log($"Drop timing: audio={kv.Key} offsetSamples={kv.Value}");
+                    LogManager.Log($"Drop timing: audio={kv.Key} offsetSamples={kv.Value}");
                 }
             }
             catch { }
@@ -2307,9 +2307,10 @@ namespace ModularAudience.Forms.Modules
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Failed to start PausingPlaybackSyncer: {ex.Message}");
+                LogManager.Log($"Failed to start PausingPlaybackSyncer: {ex.Message}");
             }
 
         }
     }
 }
+

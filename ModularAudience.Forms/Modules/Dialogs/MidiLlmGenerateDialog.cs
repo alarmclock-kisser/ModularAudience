@@ -61,7 +61,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"LLM connect test failed: {ex}");
+                LogManager.Log($"LLM connect test failed: {ex}");
                 this.label_status.Text = "Connection failed.";
                 this.ShowCopyableMessageBox("LLM Connection Error", ex.Message);
             }
@@ -108,7 +108,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 string systemPrompt = this.BuildSystemPrompt(bpm, bars, ticksPerQuarterNote);
                 string llmUserPrompt = this.BuildUserPrompt(userPrompt, bpm, bars, ticksPerQuarterNote);
 
-                LogCollection.Log("Generating MIDI via LLM.");
+                LogManager.Log("Generating MIDI via LLM.");
                 llmContent = await this.RequestMidiFromLlmAsync(systemPrompt, llmUserPrompt);
                 LogMultiline("LLM raw response", llmContent);
 
@@ -118,7 +118,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     midiDto = MidiDto.ParseBestEffort(llmContent, out bool repaired);
                     if (repaired)
                     {
-                        LogCollection.Log("LLM MIDI JSON was repaired before parsing.");
+                        LogManager.Log("LLM MIDI JSON was repaired before parsing.");
                     }
                 }
                 catch (Exception ex)
@@ -136,7 +136,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.label_status.Text = noteCount > 0
                     ? $"Generated {noteCount} note(s) across {this.GeneratedMidiFileData.Tracks.Count} track(s)."
                     : "Generation finished but no notes were produced.";
-                LogCollection.Log("LLM MIDI generation finished.");
+                LogManager.Log("LLM MIDI generation finished.");
             }
             catch (TaskCanceledException ex)
             {
@@ -147,7 +147,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"LLM MIDI generation failed: {ex}");
+                LogManager.Log($"LLM MIDI generation failed: {ex}");
                 this.label_status.Text = "Generation failed.";
                 string errorMessage = "LLM MIDI generation failed." + Environment.NewLine + Environment.NewLine + ex.Message;
                 if (!string.IsNullOrWhiteSpace(llmContent))
@@ -211,7 +211,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"MIDI export failed: {ex}");
+                LogManager.Log($"MIDI export failed: {ex}");
                 ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI export failed", ex);
             }
             finally
@@ -251,8 +251,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             using HttpClient httpClient = CreateLlmHttpClient();
             httpClient.Timeout = Timeout.InfiniteTimeSpan;
 
-            LogCollection.Log($"LLM chat endpoint: {this.chatCompletionsUri}");
-            LogCollection.Log($"LLM model: {this.connectedModel}");
+            LogManager.Log($"LLM chat endpoint: {this.chatCompletionsUri}");
+            LogManager.Log($"LLM model: {this.connectedModel}");
 
             object[] messages =
             [
@@ -279,7 +279,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (HttpRequestException)
             {
-                LogCollection.Log("LLM endpoint rejected response_format=json_object. Retrying without response_format.");
+                LogManager.Log("LLM endpoint rejected response_format=json_object. Retrying without response_format.");
                 payload.Remove("response_format");
                 return await SendChatCompletionRequestAsync(httpClient, this.chatCompletionsUri, payload, requestCts.Token);
             }
@@ -292,7 +292,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private static async Task<string> SendChatCompletionRequestAsync(HttpClient httpClient, Uri endpoint, Dictionary<string, object?> payload, CancellationToken cancellationToken)
         {
             string jsonPayload = JsonSerializer.Serialize(payload);
-            LogCollection.Log($"LLM POST {endpoint}");
+            LogManager.Log($"LLM POST {endpoint}");
             using HttpRequestMessage request = new(HttpMethod.Post, endpoint)
             {
                 Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json")
@@ -321,7 +321,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 try
                 {
-                    LogCollection.Log($"LLM connect test: GET {modelsUri}");
+                    LogManager.Log($"LLM connect test: GET {modelsUri}");
                     using HttpResponseMessage response = await httpClient.GetAsync(modelsUri, cancellationToken);
                     string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
                     if (!response.IsSuccessStatusCode)
@@ -339,7 +339,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                                 string? modelId = idElement.GetString();
                                 if (!string.IsNullOrWhiteSpace(modelId))
                                 {
-                                    LogCollection.Log($"LLM connect test OK: {modelsUri}");
+                                    LogManager.Log($"LLM connect test OK: {modelsUri}");
                                     return (modelsUri, modelId);
                                 }
                             }
@@ -356,7 +356,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     string error = $"LLM connect test failed for {modelsUri}: {ex.Message}";
                     errors.Add(error);
-                    LogCollection.Log(error);
+                    LogManager.Log(error);
                 }
             }
 
@@ -574,15 +574,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
             string[] lines = content.Replace("\r\n", "\n").Split('\n');
             if (lines.Length == 0)
             {
-                LogCollection.Log(title);
+                LogManager.Log(title);
                 return;
             }
 
-            LogCollection.Log(title + ":");
+            LogManager.Log(title + ":");
             foreach (string line in lines)
             {
-                LogCollection.Log("  " + line);
+                LogManager.Log("  " + line);
             }
         }
     }
 }
+

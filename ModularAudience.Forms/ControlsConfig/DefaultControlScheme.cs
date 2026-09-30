@@ -14,6 +14,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.Draw",
+                Implemented = false,
                 DisplayName = "Note zeichnen",
                 Description = "Leere Zelle: Note setzen. Drag horizontal = Länge bestimmen.",
                 Category = ActionCategory.NoteEditing,
@@ -26,6 +27,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.DrawShort",
+                Implemented = false,
                 DisplayName = "Kurze Note (1 Step)",
                 Description = "Leere Zelle: Note mit fixer Länge von 1 Step setzen.",
                 Category = ActionCategory.NoteEditing,
@@ -39,10 +41,11 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.Move",
+                Implemented = false,
                 DisplayName = "Note verschieben",
                 Description = "Bestehende Note an der Mitte packen und ziehen (horizontal + vertikal).",
                 Category = ActionCategory.NoteEditing,
-                ValidScopes = BindingScope.Note,
+                ValidScopes = BindingScope.Note | BindingScope.NoteBody,
                 PrimaryInput = InputType.MouseLeft,
                 PrimaryMouseAction = MouseAction.Drag,
                 SortOrder = 12
@@ -51,10 +54,11 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.Resize",
+                Implemented = false,
                 DisplayName = "Note resizen (Kante)",
                 Description = "Note am linken/rechten Drittel packen und ziehen zum Verändern der Länge.",
                 Category = ActionCategory.NoteEditing,
-                ValidScopes = BindingScope.Note,
+                ValidScopes = BindingScope.Note | BindingScope.NoteEdge,
                 PrimaryInput = InputType.MouseLeft,
                 PrimaryMouseAction = MouseAction.Drag,
                 SortOrder = 13
@@ -78,6 +82,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.HardResize",
+                Implemented = false,
                 DisplayName = "Hard Resize (Sample Cut)",
                 Description = "Note auf exakt 1 Step schneiden (Sample wird gehardcut).",
                 Category = ActionCategory.NoteEditing,
@@ -91,6 +96,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.Delete",
+                Implemented = false,
                 DisplayName = "Note löschen (Einzeln)",
                 Description = "Rechtsklick auf Note löscht diese einzelne Note.",
                 Category = ActionCategory.NoteEditing,
@@ -103,6 +109,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.EraseDrag",
+                Implemented = false,
                 DisplayName = "Radierer-Modus (Ziehen)",
                 Description = "RMB gedrückt halten + ziehen: Alle berührten Noten werden gelöscht (Custom Radiergummi-Cursor).",
                 Category = ActionCategory.NoteEditing,
@@ -118,6 +125,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Select.Rectangle",
+                Implemented = false,
                 DisplayName = "Rechteckselektion",
                 Description = "Shift + LMB auf leerer Zelle + ziehen: Mehrfachauswahl per Rechteck.",
                 Category = ActionCategory.Selection,
@@ -131,6 +139,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Select.GroupResize",
+                Implemented = false,
                 DisplayName = "Gruppen-Resize",
                 Description = "Shift + Kante ziehen: Alle markierten Noten ändern dieselbe Kante um denselben Delta.",
                 Category = ActionCategory.Selection,
@@ -144,6 +153,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Select.CloneDrag",
+                Implemented = false,
                 DisplayName = "Selektion klonen (Drag)",
                 Description = "Alt + LMB auf markierter Note + ziehen: Kopie der Selektion erstellen.",
                 Category = ActionCategory.Selection,
@@ -235,6 +245,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "View.Zoom",
+                Implemented = false,
                 DisplayName = "Horizontal zoomen",
                 Description = "Strg + Mausrad: Zoom am Mauszeiger (1× … 512×).",
                 Category = ActionCategory.View,
@@ -250,6 +261,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "View.ScrollHorizontal",
+                Implemented = false,
                 DisplayName = "Horizontal scrollen",
                 Description = "Mausrad (bei Zoom > 1×): Horizontal scrollen.",
                 Category = ActionCategory.View,
@@ -264,6 +276,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "View.ScrollBar",
+                Implemented = false,
                 DisplayName = "Scrollbalken",
                 Description = "Untere Scrollbar ziehen für horizontale Navigation.",
                 Category = ActionCategory.View,
@@ -289,6 +302,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Playback.PrehearNote",
+                Implemented = false,
                 DisplayName = "Note vorhören (Click)",
                 Description = "Klick auf Note spielt diese sofort (unabhängig von Pre-Hear Setting).",
                 Category = ActionCategory.Playback,
@@ -303,6 +317,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Playback.PrehearToggle",
+                Implemented = false,
                 DisplayName = "Auto-Prehear toggeln",
                 Description = "Checkbox 'Pre-Hear': Nach Platzieren/Ändern automatisch Note vorhören.",
                 Category = ActionCategory.Playback,
@@ -391,6 +406,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Track.AddExternal",
+                Implemented = false,
                 DisplayName = "Externen Track hinzufügen (Drop)",
                 Description = "Samples aus Explorer/anderer Quelle auf Grid ziehen → Track wird an Mausposition eingefügt.",
                 Category = ActionCategory.TrackManagement,
@@ -433,6 +449,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Param.PitchWheel",
+                Implemented = false,
                 DisplayName = "Pitch per Mausrad",
                 Description = "Shift + Mausrad über Note/Selektion: Pitch ±¼ Semitone (bis ±24).",
                 Category = ActionCategory.NoteEditing,
@@ -448,6 +465,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Param.VolumeWheel",
+                Implemented = false,
                 DisplayName = "Volume per Mausrad",
                 Description = "Alt + Mausrad über Note/Selektion: Volume ±5% (0–250%).",
                 Category = ActionCategory.NoteEditing,
@@ -464,6 +482,7 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Settings.OpenConfig",
+                Implemented = false,
                 DisplayName = "Steuerungskonfiguration öffnen",
                 Description = "Zahnrad-Symbol klicken: Öffnet dieses Konfigurationsmenü.",
                 Category = ActionCategory.Settings,

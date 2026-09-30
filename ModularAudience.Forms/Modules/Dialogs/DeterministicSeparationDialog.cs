@@ -1,4 +1,4 @@
-using ModularAudience.Audio;
+﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Processors_V4;
 using ModularAudience.Forms.Helpers;
 using System;
@@ -44,7 +44,7 @@ namespace ModularAudience.Forms
         {
             string displayName = string.IsNullOrWhiteSpace(name) ? "Untitled" : name;
             this.label_source.Text = FormattableString.Invariant(
-                $"Source: {displayName} • {sampleRate:N0} Hz • {channels} channel(s) • {sampleCount:N0} interleaved samples");
+                $"Source: {displayName} â€¢ {sampleRate:N0} Hz â€¢ {channels} channel(s) â€¢ {sampleCount:N0} interleaved samples");
             this.toolTip_settings.SetToolTip(this.label_source, this.label_source.Text);
         }
 
@@ -471,20 +471,20 @@ namespace ModularAudience.Forms
             double elapsed = (DateTime.Now - this.operationStart.Value).TotalSeconds;
             if (fraction <= 0)
             {
-                this.label_eta.Text = FormattableString.Invariant($"Elapsed: {this.FormatElapsed(elapsed)} · ETA: --:--");
+                this.label_eta.Text = FormattableString.Invariant($"Elapsed: {this.FormatElapsed(elapsed)} Â· ETA: --:--");
                 return;
             }
             double elapsedFraction = fraction - (this.lastFraction ?? 0);
             if (elapsedFraction <= 0)
             {
-                this.label_eta.Text = FormattableString.Invariant($"Elapsed: {this.FormatElapsed(elapsed)} · ETA: --:--");
+                this.label_eta.Text = FormattableString.Invariant($"Elapsed: {this.FormatElapsed(elapsed)} Â· ETA: --:--");
                 return;
             }
             double elapsedPerFraction = elapsed / fraction;
             double etaSeconds = Math.Max(elapsed, elapsedPerFraction);
             this.lastFraction = fraction;
             this.lastElapsedSeconds = elapsed;
-            this.label_eta.Text = FormattableString.Invariant($"Elapsed: {this.FormatElapsed(elapsed)} · ETA: {this.FormatElapsed(etaSeconds)}");
+            this.label_eta.Text = FormattableString.Invariant($"Elapsed: {this.FormatElapsed(elapsed)} Â· ETA: {this.FormatElapsed(etaSeconds)}");
         }
 
         private string FormatElapsed(double totalSeconds)
@@ -531,7 +531,7 @@ namespace ModularAudience.Forms
                 this.dataGridView_sources.Rows[index].Tag = descriptor.Id;
             }
 
-            this.label_summary.Text = $"Acoustic groups: {detected.Sources.Count} • Estimated effective signal rank: {detected.EstimatedSignalRank} • Neither is an instrument count";
+            this.label_summary.Text = $"Acoustic groups: {detected.Sources.Count} â€¢ Estimated effective signal rank: {detected.EstimatedSignalRank} â€¢ Neither is an instrument count";
             this.textBox_warnings.Lines = [AnalysisNotice, .. detected.Warnings];
             this.UpdateOutputEstimate();
         }
@@ -668,7 +668,7 @@ namespace ModularAudience.Forms
 
         private void ReportError(string title, Exception ex)
         {
-            LogCollection.Log($"{title}: {ex}");
+            LogManager.Log($"{title}: {ex}");
             if (!this.CanUseUi) return;
             this.label_status.Text = $"{title}. See the error details.";
             WindowMainStaticHelpers.ShowErrorWithCopyButton(this, title, ex);
@@ -783,3 +783,4 @@ namespace ModularAudience.Forms
         }
     }
 }
+

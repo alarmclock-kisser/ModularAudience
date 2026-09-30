@@ -1,4 +1,4 @@
-using ModularAudience.Audio;
+﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Processing;
 using ModularAudience.Forms.Controls;
 using System.Globalization;
@@ -93,7 +93,7 @@ namespace ModularAudience.Forms.Modules
             }
             catch (Exception ex)
             {
-                LogCollection.Log(ex);
+                LogManager.Log(ex);
             }
         }
 
@@ -195,3 +195,4 @@ namespace ModularAudience.Forms.Modules
         }
     }
 }
+

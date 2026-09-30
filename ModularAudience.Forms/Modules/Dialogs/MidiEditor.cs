@@ -1,4 +1,4 @@
-using ModularAudience.Audio;
+﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Midi;
 using ModularAudience.Generators;
 using ModularAudience.Forms.Helpers;
@@ -712,7 +712,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
                 catch (Exception ex)
                 {
-                    LogCollection.Log($"MIDI import failed: {ex}");
+                    LogManager.Log($"MIDI import failed: {ex}");
                     ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI import failed", ex);
                 }
             }

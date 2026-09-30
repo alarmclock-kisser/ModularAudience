@@ -147,14 +147,14 @@ namespace ModularAudience.Forms.Modules
         {
             if (!this._cuda.Initialized)
             {
-                LogCollection.Log("CUDA device is not initialized");
+                LogManager.Log("CUDA device is not initialized");
                 return;
             }
 
             var result = await this._cuda.MoveAudioAsync(audio, this._chunkSize, this._overlap, copyOnly);
             if (result.Pointer == IntPtr.Zero)
             {
-                LogCollection.Log("Failed to push AudioObj to CUDA device.");
+                LogManager.Log("Failed to push AudioObj to CUDA device.");
             }
 
             this.ListBox_FillPointers();
@@ -182,24 +182,24 @@ namespace ModularAudience.Forms.Modules
         {
             if (!this._cuda.Initialized)
             {
-                LogCollection.Log("CUDA device is not initialized");
+                LogManager.Log("CUDA device is not initialized");
                 return;
             }
             if (audio == null)
             {
-                LogCollection.Log("AudioObj is null.");
+                LogManager.Log("AudioObj is null.");
                 return;
             }
             if (audio.Pointer == IntPtr.Zero)
             {
-                LogCollection.Log("AudioObj is not on CUDA device.");
+                LogManager.Log("AudioObj is not on CUDA device.");
                 return;
             }
 
             var result = await this._cuda.MoveAudioAsync(audio, this._chunkSize, this._overlap, false);
             if (result.Data == null || result.Data.Length == 0)
             {
-                LogCollection.Log("Failed to pull AudioObj from CUDA device.");
+                LogManager.Log("Failed to pull AudioObj from CUDA device.");
             }
 
             this.AudioC.Audios.Remove(audio);
@@ -673,3 +673,4 @@ namespace ModularAudience.Forms.Modules
         }
     }
 }
+

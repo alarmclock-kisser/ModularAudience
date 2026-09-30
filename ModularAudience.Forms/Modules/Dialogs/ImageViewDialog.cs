@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Drawing.Imaging;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
@@ -106,7 +106,7 @@ public partial class ImageViewDialog : Form
         }
         catch (Exception ex)
         {
-            LogCollection.Log(ex);
+            LogManager.Log(ex);
             this.ShowErrorDialog("MIDI generation failed", ex.Message);
         }
         finally
@@ -178,7 +178,7 @@ public partial class ImageViewDialog : Form
 
         using HttpResponseMessage response = await HttpClient.SendAsync(request);
         string responseBody = await response.Content.ReadAsStringAsync();
-        LogCollection.Log($"Image-to-MIDI LLM response: {responseBody}");
+        LogManager.Log($"Image-to-MIDI LLM response: {responseBody}");
         if (!response.IsSuccessStatusCode)
         {
             throw new HttpRequestException($"The API returned HTTP {(int)response.StatusCode}: {responseBody}");
@@ -191,7 +191,7 @@ public partial class ImageViewDialog : Form
         MidiDto dto = MidiDto.ParseBestEffort(contentText, out bool repaired);
         if (repaired)
         {
-            LogCollection.Log("The LLM MIDI JSON required best-effort repair before parsing.");
+            LogManager.Log("The LLM MIDI JSON required best-effort repair before parsing.");
         }
 
         return dto;

@@ -1,4 +1,4 @@
-using ModularAudience.Audio;
+﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Processors_V4;
 using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Forms.Modules.Dialogs;
@@ -33,11 +33,11 @@ namespace ModularAudience.Forms
                 var slicesView = new AudioCollectionView(slices);
                 string baseName = string.IsNullOrWhiteSpace(source.Name) ? "Audio" : source.Name.Trim();
                 slicesView.Rename($"{baseName}_Split{partCount:D2}");
-                LogCollection.Log($"Split '{source.Name}' into {slices.Count} equal parts.");
+                LogManager.Log($"Split '{source.Name}' into {slices.Count} equal parts.");
             }
             catch (Exception ex)
             {
-                LogCollection.Log(ex);
+                LogManager.Log(ex);
                 MessageBox.Show(this, "Split failed: " + ex.Message, "Split Into Equal Parts", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
@@ -94,12 +94,12 @@ namespace ModularAudience.Forms
 
                 if (!string.IsNullOrWhiteSpace(result.LogMessage))
                 {
-                    LogCollection.Log(result.LogMessage);
+                    LogManager.Log(result.LogMessage);
                 }
             }
             catch (Exception ex)
             {
-                LogCollection.Log(ex);
+                LogManager.Log(ex);
                 MessageBox.Show(this, "Generate Breakbeat failed: " + ex.Message, "Generate Breakbeat", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
@@ -214,17 +214,17 @@ namespace ModularAudience.Forms
                     string summary = result.SummaryLog ?? string.Empty;
                     if (!string.IsNullOrWhiteSpace(summary))
                     {
-                        LogCollection.Log("Atomize classified hits: " + summary);
+                        LogManager.Log("Atomize classified hits: " + summary);
                     }
                 }
                 else
                 {
-                    LogCollection.Log($"Atomize extracted {atomics.Count} atomic sample(s) from '{source.Name}'.");
+                    LogManager.Log($"Atomize extracted {atomics.Count} atomic sample(s) from '{source.Name}'.");
                 }
             }
             catch (Exception ex)
             {
-                LogCollection.Log(ex);
+                LogManager.Log(ex);
                 MessageBox.Show(this, "Atomize failed: " + ex.Message, "Atomize", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
@@ -421,3 +421,4 @@ namespace ModularAudience.Forms
         }
     }
 }
+

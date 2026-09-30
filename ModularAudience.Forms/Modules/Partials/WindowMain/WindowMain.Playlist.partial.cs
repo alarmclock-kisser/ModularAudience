@@ -1,4 +1,4 @@
-using ModularAudience.Audio;
+﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Processing;
 using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio.Processors_V2;
@@ -15,12 +15,12 @@ namespace ModularAudience.Forms
 {
     public partial class WindowMain
     {
-        // ── Engine + timer ─────────────────────────────────────────────────────
+        // â”€â”€ Engine + timer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private PlaylistEngine _playlist = new();
         private System.Windows.Forms.Timer? _playlistTimer;
         private bool _playlistAutoEnqueueRightClickHandled;
 
-        // Metadata cache: path → (duration, bpm, channels, sampleRate, bitDepth)
+        // Metadata cache: path â†’ (duration, bpm, channels, sampleRate, bitDepth)
         private readonly Dictionary<string, (TimeSpan Duration, float Bpm, int Channels, int SampleRate, int BitDepth)>
             _playlistMetaCache = [];
 
@@ -34,7 +34,7 @@ namespace ModularAudience.Forms
         // Until then the label shows the build timestamp and is not overwritten by the timer.
         private bool _playlistActivityStarted;
 
-        // ── Recording Track-Log ────────────────────────────────────────────────
+        // â”€â”€ Recording Track-Log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private sealed class TrackLogEntry
         {
             public TimeSpan Start { get; init; }
@@ -76,7 +76,7 @@ namespace ModularAudience.Forms
         private HashSet<string> _preRecordingActivePaths = new(StringComparer.OrdinalIgnoreCase);
         private static readonly TimeSpan PreRecordingTrackLogDuration = TimeSpan.FromMinutes(5);
 
-        // ── Initializer (called from constructor) ──────────────────────────────
+        // â”€â”€ Initializer (called from constructor) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private void InitPlaylist()
         {
             this._playlist.CountdownEnabledProvider = () => PlaylistCountdownEnabled;
@@ -136,7 +136,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Playlist random selection failed: {ex.Message}");
+                LogManager.Log($"Playlist random selection failed: {ex.Message}");
                 return null;
             }
         }
@@ -188,7 +188,7 @@ namespace ModularAudience.Forms
 
                 // CRITICAL: The two tracks involved in the crossfade MUST NOT be handed to the
                 // PausingPlaybackSyncer. The syncer works by briefly pausing tracks to nudge
-                // their beat phase – pausing the just-started incoming track would cause the
+                // their beat phase â€“ pausing the just-started incoming track would cause the
                 // fade-in volume ramp (which runs on wall-clock time) to advance while audio
                 // is silent, producing the long, quiet ramp the user reported.
                 // We only sync OTHER tracks (e.g. open TrackView audios) against the incoming
@@ -205,7 +205,7 @@ namespace ModularAudience.Forms
 
                 if (externalPlayingTracks.Count == 0 || nextTrack == null)
                 {
-                    // Nothing to sync against – skip silently. The crossfade itself proceeds untouched.
+                    // Nothing to sync against â€“ skip silently. The crossfade itself proceeds untouched.
                     return;
                 }
 
@@ -216,11 +216,11 @@ namespace ModularAudience.Forms
 
                 // IMPORTANT: pass the incoming track only so it can be used as master reference.
                 // PausingPlaybackSyncer will only pulse-pause slaves (the external tracks),
-                // never the master with highest volume – but to be safe we keep nextTrack
+                // never the master with highest volume â€“ but to be safe we keep nextTrack
                 // boosted: it is the freshly-started fade-in target, dropping its volume
                 // momentarily would be inaudible at the start of the fade and acceptable.
                 var syncer = new PausingPlaybackSyncer(syncSet, syncWindow.Token, frequency: 0.05, grain: 12);
-                LogCollection.Log($"Playlist crossfade: {syncDurationMs} ms beat sync window started (slaves={externalPlayingTracks.Count}).");
+                LogManager.Log($"Playlist crossfade: {syncDurationMs} ms beat sync window started (slaves={externalPlayingTracks.Count}).");
 
                 try
                 {
@@ -232,11 +232,11 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Playlist crossfade sync failed: {ex.Message}");
+                LogManager.Log($"Playlist crossfade sync failed: {ex.Message}");
             }
         }
 
-        // ── OFD / button_playlist_Click ────────────────────────────────────────
+        // â”€â”€ OFD / button_playlist_Click â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private void button_playlist_Click(object sender, EventArgs e)
         {
             bool ctrlHeld = (ModifierKeys & Keys.Control) == Keys.Control;
@@ -259,7 +259,7 @@ namespace ModularAudience.Forms
 
             if (ctrlHeld)
             {
-                // Normal RAM-import into a new bag — reuse existing import path
+                // Normal RAM-import into a new bag â€” reuse existing import path
                 _ = Task.Run(async () =>
                 {
                     await WindowMainStaticHelpers.InvokeIfRequiredAsync(Instance,
@@ -272,7 +272,7 @@ namespace ModularAudience.Forms
                 int added = this._playlist.EnqueueLast(ofd.FileNames.Where(path =>
                     !string.IsNullOrWhiteSpace(path) && AllowedImportExtensions.Contains(Path.GetExtension(path))));
 
-                LogCollection.Log($"Playlist: {added} file(s) enqueued " +
+                LogManager.Log($"Playlist: {added} file(s) enqueued " +
                                   $"({this._playlist.GetQueueSnapshot().FilePaths.Count} total).");
                 this.UpdatePlaylistUI();
             }
@@ -314,7 +314,7 @@ namespace ModularAudience.Forms
             return false;
         }
 
-        // ── Right-click context menu handlers ──────────────────────────────────
+        // â”€â”€ Right-click context menu handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private void playlistMenu_PlayPause_Click(object sender, EventArgs e)
         {
             this._playlistActivityStarted = true;
@@ -329,7 +329,7 @@ namespace ModularAudience.Forms
         private void playlistMenu_Shuffle_Click(object sender, EventArgs e)
         {
             this._playlist.Shuffle();
-            LogCollection.Log("Playlist shuffled.");
+            LogManager.Log("Playlist shuffled.");
             this.UpdatePlaylistUI();
         }
 
@@ -337,7 +337,7 @@ namespace ModularAudience.Forms
         {
             this._playlist.Clear();
             this._playlistMetaCache.Clear();
-            LogCollection.Log("Playlist cleared.");
+            LogManager.Log("Playlist cleared.");
             // Force immediate UI update on UI thread; a second update fires via TrackChanged event
             WindowMainStaticHelpers.InvokeIfRequired(Instance, this.UpdatePlaylistUI);
         }
@@ -349,7 +349,7 @@ namespace ModularAudience.Forms
                 if (sender is ToolStripMenuItem it)
                 {
                     PlaylistCountdownEnabled = it.Checked;
-                    LogCollection.Log($"Playlist countdown {(it.Checked ? "enabled" : "disabled")}. ");
+                    LogManager.Log($"Playlist countdown {(it.Checked ? "enabled" : "disabled")}. ");
                 }
             }
             catch { }
@@ -382,7 +382,7 @@ namespace ModularAudience.Forms
             }
 
             int added = this._playlist.EnqueueNext(validPaths);
-            LogCollection.Log($"Playlist: {added} file(s) added next.");
+            LogManager.Log($"Playlist: {added} file(s) added next.");
             this.UpdatePlaylistUI();
         }
 
@@ -412,7 +412,7 @@ namespace ModularAudience.Forms
                     }
                     int added = this._playlist.EnqueueNext(selectedPaths);
                     this._playlist.NotifyInsertedNext(selectedPaths[0]);
-                    LogCollection.Log($"Playlist: {added} selected file(s) added next.");
+                    LogManager.Log($"Playlist: {added} selected file(s) added next.");
                     this.UpdatePlaylistUI();
                     return;
                 }
@@ -421,14 +421,14 @@ namespace ModularAudience.Forms
                     promoted = this.AutoEnqueueRandomPreparedNext();
                 }
 
-                LogCollection.Log(promoted
+                LogManager.Log(promoted
                     ? "Playlist: auto-enqueued one prepared track."
                     : "Auto enqueue one: no eligible prepared non-active track; queue unchanged.");
                 this.UpdatePlaylistUI();
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Auto enqueue one failed: {ex.Message}");
+                LogManager.Log($"Auto enqueue one failed: {ex.Message}");
             }
         }
 
@@ -502,7 +502,7 @@ namespace ModularAudience.Forms
             }
 
             int added = this._playlist.EnqueueLast(validPaths);
-            LogCollection.Log($"Playlist: {added} file(s) enqueued last.");
+            LogManager.Log($"Playlist: {added} file(s) enqueued last.");
             this.UpdatePlaylistUI();
         }
 
@@ -513,8 +513,8 @@ namespace ModularAudience.Forms
             {
                 this.toolStripMenuItem_timestretchEach.Checked = false;
                 this._playlistStretchSettings = null;
-                this.toolStripMenuItem_timestretchEach.Text = "⏱ Timestretch each...";
-                LogCollection.Log("Playlist auto-timestretch disabled.");
+                this.toolStripMenuItem_timestretchEach.Text = "â± Timestretch each...";
+                LogManager.Log("Playlist auto-timestretch disabled.");
                 return;
             }
 
@@ -532,8 +532,8 @@ namespace ModularAudience.Forms
             this._playlistStretchSettings = dlg.ConfirmedSettings;
             this.toolStripMenuItem_timestretchEach.Checked = true;
             string method = dlg.ConfirmedUsedV2 ? "V2" : "V1";
-            this.toolStripMenuItem_timestretchEach.Text = $"⏱ Timestretch each [{this._playlistStretchSettings.TargetBpm:F0} BPM, {method}]";
-            LogCollection.Log($"Playlist auto-timestretch enabled: target {this._playlistStretchSettings.TargetBpm:F0} BPM via Stretch {method}.");
+            this.toolStripMenuItem_timestretchEach.Text = $"â± Timestretch each [{this._playlistStretchSettings.TargetBpm:F0} BPM, {method}]";
+            LogManager.Log($"Playlist auto-timestretch enabled: target {this._playlistStretchSettings.TargetBpm:F0} BPM via Stretch {method}.");
         }
 
         /// <summary>
@@ -638,7 +638,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Playlist stretch error for '{Path.GetFileName(path)}': {ex.Message}");
+                LogManager.Log($"Playlist stretch error for '{Path.GetFileName(path)}': {ex.Message}");
                 return null;
             }
             finally
@@ -648,7 +648,7 @@ namespace ModularAudience.Forms
             }
         }
 
-        // ── Tooltip (MouseHover) ───────────────────────────────────────────────
+        // â”€â”€ Tooltip (MouseHover) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private void button_playlist_MouseHover(object sender, EventArgs e)
         {
             PlaylistQueueSnapshot snapshot = this._playlist.GetQueueSnapshot();
@@ -676,7 +676,7 @@ namespace ModularAudience.Forms
                 string name = Path.GetFileNameWithoutExtension(path);
                 if (name.Length > 32)
                 {
-                    name = name[..29] + "…";
+                    name = name[..29] + "â€¦";
                 }
 
                 var meta = this.GetOrFetchMeta(path);
@@ -690,13 +690,13 @@ namespace ModularAudience.Forms
 
             if (paths.Count > 30)
             {
-                sb.AppendLine($"… and {paths.Count - 30} more.");
+                sb.AppendLine($"â€¦ and {paths.Count - 30} more.");
             }
 
             this.toolTip_playlist.SetToolTip(this.button_playlist, sb.ToString().TrimEnd());
         }
 
-        // ── Label + button text update ─────────────────────────────────────────
+        // â”€â”€ Label + button text update â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private void UpdatePlaylistUI()
         {
             if (Instance == null || Instance.IsDisposed)
@@ -713,7 +713,7 @@ namespace ModularAudience.Forms
                 }
 
                 PlaylistQueueSnapshot snapshot = this._playlist.GetQueueSnapshot();
-                this.button_playlist.Text = snapshot.IsPaused ? "|| List" : "▶ List";
+                this.button_playlist.Text = snapshot.IsPaused ? "|| List" : "â–¶ List";
 
                 // Preserve the build timestamp until the user actually interacts with the playlist.
                 // The timer ticks every second, so without this guard the label would be
@@ -727,7 +727,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Playlist UI update failed: {ex.Message}");
+                LogManager.Log($"Playlist UI update failed: {ex.Message}");
             }
         }
 
@@ -738,7 +738,7 @@ namespace ModularAudience.Forms
 
             if (snapshot.IsPlaying && !snapshot.IsPaused && !string.IsNullOrWhiteSpace(current))
             {
-                return $"▶ {current}";
+                return $"â–¶ {current}";
             }
 
             if (snapshot.IsPaused && !string.IsNullOrWhiteSpace(current))
@@ -758,7 +758,7 @@ namespace ModularAudience.Forms
             }
 
             PlaylistQueueSnapshot snapshot = this._playlist.GetQueueSnapshot();
-            this.button_playlist.Text = snapshot.IsPaused ? "|| List" : "▶ List";
+            this.button_playlist.Text = snapshot.IsPaused ? "|| List" : "â–¶ List";
         }
 
         private void UpdatePlaylistHoverTitle()
@@ -785,29 +785,29 @@ namespace ModularAudience.Forms
         {
             if (this._isPreprocessingTrack)
             {
-                return "⏳ Time-Stretching next track...";
+                return "â³ Time-Stretching next track...";
             }
 
             if (!snapshot.IsPlaying && !snapshot.IsPaused && snapshot.CurrentPath == null)
             {
                 if (snapshot.FilePaths.Count > 0)
                 {
-                    return $"▶ List ready — {snapshot.FilePaths.Count} track(s) enqueued.";
+                    return $"â–¶ List ready â€” {snapshot.FilePaths.Count} track(s) enqueued.";
                 }
 
                 return "No track currently enqueued in playlist.";
             }
 
-            string stateIcon = snapshot.IsPaused ? "||" : "▶";
+            string stateIcon = snapshot.IsPaused ? "||" : "â–¶";
             TimeSpan pos = snapshot.CurrentPosition;
             TimeSpan dur = snapshot.CurrentDuration;
             string posStr = $"{(int)pos.TotalMinutes:D2}:{pos.Seconds:D2}";
             string durStr = $"{(int)dur.TotalMinutes:D2}:{dur.Seconds:D2}";
 
-            string name = GetCurrentPlaylistTrackName(snapshot) ?? "–";
+            string name = GetCurrentPlaylistTrackName(snapshot) ?? "â€“";
             if (name.Length > 96)
             {
-                name = name[..63] + "…";
+                name = name[..63] + "â€¦";
             }
 
             // Prefer the engine-reported current BPM (already adjusted for any applied stretch).
@@ -841,7 +841,7 @@ namespace ModularAudience.Forms
                 return null;
             }
 
-            string name = Path.GetFileNameWithoutExtension(path) ?? "–";
+            string name = Path.GetFileNameWithoutExtension(path) ?? "â€“";
             // Remove generated suffixes after a double-underscore and common _stretched_ markers
             if (name.Contains("__"))
             {
@@ -874,7 +874,7 @@ namespace ModularAudience.Forms
             return bpm > 0 ? $"{name} [{bpm:F0} BPM]" : name;
         }
 
-        // ── Metadata cache ─────────────────────────────────────────────────────
+        // â”€â”€ Metadata cache â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private (TimeSpan Duration, float Bpm, int Channels, int SampleRate, int BitDepth) GetOrFetchMeta(string path)
         {
             if (!this._playlistMetaCache.TryGetValue(path, out var meta))
@@ -885,14 +885,14 @@ namespace ModularAudience.Forms
             return meta;
         }
 
-        // ── Cleanup (called from FormClosing) ──────────────────────────────────
+        // â”€â”€ Cleanup (called from FormClosing) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private void DisposePlaylist()
         {
             try { this._playlistTimer?.Stop(); this._playlistTimer?.Dispose(); this._playlistTimer = null; } catch { }
             try { this._playlist.Dispose(); } catch { }
         }
 
-        // ── Recording Track-Log ────────────────────────────────────────────────
+        // â”€â”€ Recording Track-Log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Called when a recording starts. Binds the log file path to the recording file.
@@ -1198,3 +1198,4 @@ namespace ModularAudience.Forms
         }
     }
 }
+

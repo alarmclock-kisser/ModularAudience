@@ -1,4 +1,4 @@
-using ModularAudience.Audio;
+﻿using ModularAudience.Audio;
 using ModularAudience.Forms.Helpers;
 using ModularAudience.Forms.Modules;
 using ModularAudience.Forms.Modules.Dialogs;
@@ -482,7 +482,7 @@ namespace ModularAudience.Forms
                 }
                 catch (Exception ex)
                 {
-                    try { LogCollection.Log($"DrumRoll UI dispatch error: {ex}"); } catch { }
+                    try { LogManager.Log($"DrumRoll UI dispatch error: {ex}"); } catch { }
                 }
 
                 return;
@@ -496,7 +496,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"DrumRoll button error: {ex}"); } catch { }
+                try { LogManager.Log($"DrumRoll button error: {ex}"); } catch { }
                 try { editor?.Dispose(); } catch { }
                 MessageBox.Show(ex.ToString(), "Drum Roll Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
@@ -511,7 +511,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"PianoRoll button error: {ex.Message}"); } catch { }
+                try { LogManager.Log($"PianoRoll button error: {ex.Message}"); } catch { }
                 MessageBox.Show(ex.Message, "Piano Roll Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -532,7 +532,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                LogCollection.Log(ex);
+                LogManager.Log(ex);
                 ShowErrorWithCopyButton(this, "Loop Control Error", ex);
             }
         }
@@ -594,9 +594,10 @@ namespace ModularAudience.Forms
         {
             if (ModifierKeys.HasFlag(Keys.Control))
             {
-                string allLogs = string.Join(Environment.NewLine, LogCollection.Logs);
+                string allLogs = string.Join(Environment.NewLine, LogManager.Logs);
                 Clipboard.SetText(allLogs);
             }
         }
     }
 }
+

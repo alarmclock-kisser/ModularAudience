@@ -1,4 +1,4 @@
-using ModularAudience.Audio;
+﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Midi;
 using ModularAudience.Audio.Omr;
 using System.Drawing.Drawing2D;
@@ -282,7 +282,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                LogCollection.Log($"MIDI preview failed: {ex}");
+                LogManager.Log($"MIDI preview failed: {ex}");
                 ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI preview failed", ex);
                 this.ResetPreviewState();
             }
@@ -324,7 +324,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"MIDI render failed: {ex}");
+                LogManager.Log($"MIDI render failed: {ex}");
                 ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI rendering failed", ex);
             }
             finally
@@ -434,7 +434,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
                 catch (Exception ex)
                 {
-                    LogCollection.Log($"MIDI export failed: {ex}");
+                    LogManager.Log($"MIDI export failed: {ex}");
                     ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI export failed", ex);
                 }
                 finally
@@ -497,7 +497,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
                 catch (Exception ex)
                 {
-                    LogCollection.Log($"MIDI import failed: {ex}");
+                    LogManager.Log($"MIDI import failed: {ex}");
                     ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI import failed", ex);
                 }
                 finally

@@ -1,4 +1,4 @@
-using ModularAudience.Audio;
+﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Processing;
 using ModularAudience.Audio.Processors_V4;
 using ModularAudience.Forms.Modules.Dialogs;
@@ -87,13 +87,13 @@ namespace ModularAudience.Forms.Modules
 
                     if (result.IsLikelyDrumLoop && !string.IsNullOrWhiteSpace(result.SummaryLog))
                     {
-                        LogCollection.Log($"Atomize created {atomicGroups.Count} typed collection(s): " +
+                        LogManager.Log($"Atomize created {atomicGroups.Count} typed collection(s): " +
                             string.Join(", ", atomicGroups.Select(group => $"{group.Type}={group.Atomics.Count}")) +
                             ". Classified hits: " + result.SummaryLog);
                     }
                     else
                     {
-                        LogCollection.Log($"TrackView atomize extracted {atomics.Count} atomic sample(s) into " +
+                        LogManager.Log($"TrackView atomize extracted {atomics.Count} atomic sample(s) into " +
                             $"{atomicGroups.Count} collection(s) from '{this.OriginalAudio.Name}'.");
                     }
                 }
@@ -106,11 +106,11 @@ namespace ModularAudience.Forms.Modules
             }
             catch (OperationCanceledException)
             {
-                LogCollection.Log("Atomize cancelled.");
+                LogManager.Log("Atomize cancelled.");
             }
             catch (Exception ex)
             {
-                LogCollection.Log(ex);
+                LogManager.Log(ex);
                 MessageBox.Show(this, "Atomize failed: " + ex.Message, "Atomize", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
@@ -212,3 +212,4 @@ namespace ModularAudience.Forms.Modules
 
     }
 }
+

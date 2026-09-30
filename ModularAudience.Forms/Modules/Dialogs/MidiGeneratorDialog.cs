@@ -1,4 +1,4 @@
-using ModularAudience.Audio;
+﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Midi;
 using ModularAudience.Generators;
 using ModularAudience.Forms.Helpers;
@@ -141,7 +141,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"MIDI generation failed: {ex}");
+                LogManager.Log($"MIDI generation failed: {ex}");
                 this.label_status.Text = "Generation failed.";
                 ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI generation failed", ex);
             }

@@ -526,12 +526,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
                 else
                 {
-                    LogCollection.Log($"AudioObj '{this.AudioC.Audios[i].Name}' does not have a DrumsetElement mapping. Using 'Snare'.");
+                    LogManager.Log($"AudioObj '{this.AudioC.Audios[i].Name}' does not have a DrumsetElement mapping. Using 'Snare'.");
                     mappedDrumset[i] = DrumsetElement.Snare;
                 }
             }
 
-            LogCollection.Log("Generating Break-Beat with seed: " + this.Seed);
+            LogManager.Log("Generating Break-Beat with seed: " + this.Seed);
 
             List<bool[]> breakbeat = await BreakbeatGenerator_V2.GenerateBreakPatternAsync(
                 drumset: mappedDrumset,
@@ -610,7 +610,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             if (this.AudioC.Audios.Count == 0)
             {
-                LogCollection.Log("LLM Break-Beat generation skipped because no samples are loaded.");
+                LogManager.Log("LLM Break-Beat generation skipped because no samples are loaded.");
                 return;
             }
 
@@ -631,7 +631,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 string systemPrompt = this.BuildLlmSystemPrompt();
                 string llmUserPrompt = this.BuildLlmUserPrompt(drumkit, userPrompt);
 
-                LogCollection.Log("Generating Break-Beat via LLM.");
+                LogManager.Log("Generating Break-Beat via LLM.");
 
                 llmContent = await this.RequestBreakbeatFromLlmAsync(apiUrl, systemPrompt, llmUserPrompt);
                 LogMultiline("LLM raw response", llmContent);
@@ -657,7 +657,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
 
                 await this.RenderAndShowBreakbeatAsync(breakbeat, parsed.PatternName, drumkit.Select(x => x.Name).ToArray());
-                LogCollection.Log("LLM Break-Beat generation finished.");
+                LogManager.Log("LLM Break-Beat generation finished.");
             }
             catch (TaskCanceledException ex)
             {
@@ -667,7 +667,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log(ex);
+                LogManager.Log(ex);
                 string errorMessage = "LLM generation failed." + Environment.NewLine + Environment.NewLine + ex.Message;
                 if (!string.IsNullOrWhiteSpace(llmContent))
                 {
@@ -692,7 +692,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             try
             {
-                LogCollection.Log($"AutoPlay preview: {track.Name}");
+                LogManager.Log($"AutoPlay preview: {track.Name}");
                 await track.PlayAsync(cancellationTokenSource.Token);
             }
             catch (OperationCanceledException)
@@ -700,8 +700,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"AutoPlay preview failed for '{track.Name}'.");
-                LogCollection.Log(ex);
+                LogManager.Log($"AutoPlay preview failed for '{track.Name}'.");
+                LogManager.Log(ex);
             }
             finally
             {
@@ -883,8 +883,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             (Uri modelsUri, string model) = await DiscoverWorkingModelAsync(httpClient, apiUrl, discoveryCancellationTokenSource.Token);
             Uri chatCompletionsUri = ReplaceEndpoint(modelsUri, "chat/completions");
 
-            LogCollection.Log($"LLM chat endpoint: {chatCompletionsUri}");
-            LogCollection.Log($"LLM model: {model}");
+            LogManager.Log($"LLM chat endpoint: {chatCompletionsUri}");
+            LogManager.Log($"LLM model: {model}");
 
             object[] messages =
             [
@@ -912,7 +912,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (HttpRequestException)
             {
-                LogCollection.Log("LLM endpoint rejected response_format=json_object. Retrying without response_format.");
+                LogManager.Log("LLM endpoint rejected response_format=json_object. Retrying without response_format.");
                 payload.Remove("response_format");
                 return await SendChatCompletionRequestAsync(httpClient, chatCompletionsUri, payload, requestCancellationTokenSource.Token);
             }
@@ -925,7 +925,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private static async Task<string> SendChatCompletionRequestAsync(HttpClient httpClient, Uri endpoint, Dictionary<string, object?> payload, CancellationToken cancellationToken)
         {
             string jsonPayload = JsonSerializer.Serialize(payload);
-            LogCollection.Log($"LLM POST {endpoint}");
+            LogManager.Log($"LLM POST {endpoint}");
             using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
             {
                 Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json")
@@ -954,7 +954,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 try
                 {
-                    LogCollection.Log($"LLM connect test: GET {modelsUri}");
+                    LogManager.Log($"LLM connect test: GET {modelsUri}");
                     using HttpResponseMessage response = await httpClient.GetAsync(modelsUri, cancellationToken);
                     string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
                     if (!response.IsSuccessStatusCode)
@@ -972,7 +972,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                                 string? modelId = idElement.GetString();
                                 if (!string.IsNullOrWhiteSpace(modelId))
                                 {
-                                    LogCollection.Log($"LLM connect test OK: {modelsUri}");
+                                    LogManager.Log($"LLM connect test OK: {modelsUri}");
                                     return (modelsUri, modelId);
                                 }
                             }
@@ -989,7 +989,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     string error = $"LLM connect test failed for {modelsUri}: {ex.Message}";
                     errors.Add(error);
-                    LogCollection.Log(error);
+                    LogManager.Log(error);
                 }
             }
 
@@ -1051,7 +1051,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             var audioObj = await BreakbeatGenerator_V2.RenderBreakbeatAsync(breakbeat, this.AudioC.Audios, this.Bpm, this.Resolution, this.Swing, patternName);
             if (audioObj == null)
             {
-                LogCollection.Log("Failed to generate breakbeat audio.");
+                LogManager.Log("Failed to generate breakbeat audio.");
                 return;
             }
 
@@ -1448,14 +1448,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
             string[] lines = content.Replace("\r\n", "\n").Split('\n');
             if (lines.Length == 0)
             {
-                LogCollection.Log(title);
+                LogManager.Log(title);
                 return;
             }
 
-            LogCollection.Log(title + ":");
+            LogManager.Log(title + ":");
             foreach (string line in lines)
             {
-                LogCollection.Log("  " + line);
+                LogManager.Log("  " + line);
             }
         }
 
@@ -2252,7 +2252,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             if (this.AudioC.Audios.Count == 0)
             {
-                LogCollection.Log("Breakbeat bot skipped because no samples are loaded.");
+                LogManager.Log("Breakbeat bot skipped because no samples are loaded.");
                 return;
             }
 
@@ -2260,7 +2260,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.BotActivated = true;
             this.UpdateBotButtonState();
-            LogCollection.Log("Breakbeat bot started.");
+            LogManager.Log("Breakbeat bot started.");
 
             var cancellationTokenSource = new CancellationTokenSource();
             this.botCancellationTokenSource = cancellationTokenSource;
@@ -2293,7 +2293,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
                 catch (Exception ex)
                 {
-                    LogCollection.Log($"Breakbeat bot stop failed: {ex.Message}");
+                    LogManager.Log($"Breakbeat bot stop failed: {ex.Message}");
                 }
             }
 
@@ -2324,8 +2324,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (Exception ex)
             {
-                LogCollection.Log("Breakbeat bot failed.");
-                LogCollection.Log(ex);
+                LogManager.Log("Breakbeat bot failed.");
+                LogManager.Log(ex);
 
                 if (!this.IsDisposed)
                 {
@@ -2357,7 +2357,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     await this.InvokeOnUiAsync(() => this.UpdateBotButtonState());
                 }
 
-                LogCollection.Log("Breakbeat bot stopped.");
+                LogManager.Log("Breakbeat bot stopped.");
             }
         }
 
@@ -2505,11 +2505,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             if (string.IsNullOrWhiteSpace(exportPath))
             {
-                LogCollection.Log($"Breakbeat bot auto export failed for generation #{generationNumber:D3}.");
+                LogManager.Log($"Breakbeat bot auto export failed for generation #{generationNumber:D3}.");
                 return;
             }
 
-            LogCollection.Log($"Breakbeat bot auto exported generation #{generationNumber:D3}: {exportPath}");
+            LogManager.Log($"Breakbeat bot auto exported generation #{generationNumber:D3}: {exportPath}");
         }
 
         private Task InvokeOnUiAsync(Action action)
@@ -2598,3 +2598,4 @@ namespace ModularAudience.Forms.Modules.Dialogs
         }
     }
 }
+

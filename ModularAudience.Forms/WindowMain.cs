@@ -1,4 +1,4 @@
-using ModularAudience.Audio;
+﻿using ModularAudience.Audio;
 using ModularAudience.Forms.Modules;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -9,6 +9,7 @@ using ModularAudience.Forms.Helpers;
 using ModularAudience.Forms.Modules.Dialogs;
 using ModularAudience.MidiController;
 using ModularAudience.MidiController.Models;
+using ModularAudience.Shared;
 
 namespace ModularAudience.Forms
 {
@@ -96,9 +97,6 @@ namespace ModularAudience.Forms
         private DateTime _infoCtrlToStopAppeared = DateTime.MinValue;
         // Track mouse-driven move so we save on mouse up instead of polling
         private bool _isMouseDownForPosition = false;
-        // Keep reference to log event handler to avoid duplicate subscriptions
-        private Action<DateTime, string>? _logPostedWithTimestampHandler = null;
-
         // Copy + Paste AudioObj
         internal static AudioObj? ClipboardAudioObj = null;
 
@@ -131,7 +129,7 @@ namespace ModularAudience.Forms
         public static int CrossSyncDurationMs = 500;
         private System.Windows.Forms.Timer? _positionSaveTimer;
 
-        public WindowMain()
+        public WindowMain(RollingFileMemoryLogger logger, IServiceProvider serviceProvider)
         {
             Instance = this;
             this.InitializeComponent();
@@ -143,6 +141,10 @@ namespace ModularAudience.Forms
             {
                 this.Location = WindowsScreenHelper.GetCornerPosition(this, false, true, CurrentScreenId);
             }
+
+            // Set UI context on logger now that SynchronizationContext is available
+            // (LogManager.Initialize forwards it to the logger and syncs the UI list)
+            LogManager.Initialize(SynchronizationContext.Current!);
 
             // Shift + LeftClick on the form background should bring all open forms of this app to the front
             this.MouseDown += this.WindowMain_MouseDown_BringAllToFront;
@@ -199,9 +201,17 @@ namespace ModularAudience.Forms
         {
             try
             {
-                // Compose full log as newline-joined string from LogCollection.Logs
+                // Always copy the complete log, regardless of the current list selection.
                 string all = string.Empty;
-                try { all = string.Join(Environment.NewLine, LogCollection.Logs.ToArray()); } catch { all = string.Empty; }
+                try
+                {
+                    all = string.Join(Environment.NewLine, LogManager.GetLogLines());
+                }
+                catch
+                {
+                    all = string.Join(Environment.NewLine, LogManager.Logs);
+                }
+
                 if (!string.IsNullOrEmpty(all))
                 {
                     try
@@ -407,7 +417,7 @@ namespace ModularAudience.Forms
                 }
                 catch (Exception ex)
                 {
-                    LogCollection.Log($"Recording finalization during app close failed: {ex}");
+                    LogManager.Log($"Recording finalization during app close failed: {ex}");
                 }
                 finally
                 {
@@ -460,7 +470,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                LogCollection.Log($"Recording capture shutdown failed: {ex}");
+                LogManager.Log($"Recording capture shutdown failed: {ex}");
             }
 
             // Close child windows quickly on UI thread where necessary (best-effort, non-blocking)
@@ -557,7 +567,7 @@ namespace ModularAudience.Forms
                 }
                 catch { }
 
-                // Do not block the UI shutdown long — attempt to clear audio collection but with a short timeout.
+                // Do not block the UI shutdown long â€” attempt to clear audio collection but with a short timeout.
                 try
                 {
                     var clearTask = this.AudioC.ClearAsync();
@@ -576,7 +586,7 @@ namespace ModularAudience.Forms
             }
             catch (Exception ex)
             {
-                try { LogCollection.Log($"CleanupAsync: Exception during cleanup: {ex.Message}"); } catch { }
+                try { LogManager.Log($"CleanupAsync: Exception during cleanup: {ex.Message}"); } catch { }
             }
             finally
             {
@@ -650,7 +660,7 @@ namespace ModularAudience.Forms
             if (int.TryParse(input, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int result))
             {
                 CrossSyncDurationMs = Math.Clamp(result, 0, 60_000);
-                LogCollection.Log($"Cross sync duration set to {CrossSyncDurationMs} ms.");
+                LogManager.Log($"Cross sync duration set to {CrossSyncDurationMs} ms.");
             }
         }
 
@@ -708,10 +718,10 @@ namespace ModularAudience.Forms
         private ToolTip limiterToolTip = new();
         private void vScrollBar_masterLimiter_Scroll(object sender, ScrollEventArgs e)
         {
-            // Dein bestehender Code fürs Audio-Backend
+            // Dein bestehender Code fÃ¼rs Audio-Backend
             AudioPlaybackService.SetMasterLimiter(this.MasterLimiter);
 
-            // Prüfen, ob der User die Maustaste/den Thumb losgelassen hat
+            // PrÃ¼fen, ob der User die Maustaste/den Thumb losgelassen hat
             if (e.Type == ScrollEventType.EndScroll)
             {
                 // Losgelassen -> Tooltip sofort ausblenden
@@ -719,9 +729,9 @@ namespace ModularAudience.Forms
             }
             else
             {
-                // Während des Scrollens/Haltens -> Tooltip updaten und an der Maus positionieren
+                // WÃ¤hrend des Scrollens/Haltens -> Tooltip updaten und an der Maus positionieren
 
-                // Tipp: Häng direkt deine Einheit dran (z.B. dB oder %), das liest sich im UI besser
+                // Tipp: HÃ¤ng direkt deine Einheit dran (z.B. dB oder %), das liest sich im UI besser
                 string hintText = $"Limiter: {this.MasterLimiter} dB";
 
                 // Position berechnen, damit der Tooltip genau neben dem Thumb an der Maus schwebt
@@ -755,6 +765,7 @@ namespace ModularAudience.Forms
         }
     }
 }
+
 
 
 

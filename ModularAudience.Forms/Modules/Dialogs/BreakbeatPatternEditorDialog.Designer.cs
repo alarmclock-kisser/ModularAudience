@@ -30,7 +30,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             hScrollBar_pattern = new HScrollBar();
             panel_controls = new Panel();
             button_save = new Button();
-            button_cancel = new Button();
             button_help = new Button();
             button_settings = new Button();
             button_removeBar = new Button();
@@ -100,7 +99,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // panel_controls
             // 
             panel_controls.Controls.Add(button_save);
-            panel_controls.Controls.Add(button_cancel);
             panel_controls.Controls.Add(button_help);
             panel_controls.Controls.Add(button_settings);
             panel_controls.Controls.Add(button_removeBar);
@@ -131,7 +129,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 // button_help
 //
             button_help.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_help.Location = new Point(594, 14);
+            button_help.Location = new Point(712, 14);
             button_help.Name = "button_help";
             button_help.Size = new Size(72, 25);
             button_help.TabIndex = 9;
@@ -142,8 +140,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             // button_settings
             //
+            // Right-hand cluster: [+/-] stay next to "Steps / bar"; the gear groups with Help/Save.
+            //   addBar 462..488 | removeBar 494..520 | settings 632..704 | help 712..784 | save 797..872
             button_settings.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_settings.Location = new Point(458, 14);
+            button_settings.Location = new Point(632, 14);
             button_settings.Name = "button_settings";
             button_settings.Size = new Size(72, 25);
             button_settings.TabIndex = 10;
@@ -255,11 +255,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
             AcceptButton = button_save;
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            CancelButton = button_cancel;
             ClientSize = new Size(884, 513);
             Controls.Add(panel_pattern);
             Controls.Add(panel_controls);
-            MinimumSize = new Size(840, 360);
+            // The right-hand button cluster is anchored to the right edge, so the window must
+            // never be narrower than its design width or it would slide over the BPM controls.
+            MinimumSize = new Size(884, 360);
             Name = "BreakbeatPatternEditorDialog";
             StartPosition = FormStartPosition.CenterParent;
             Text = "Breakbeat Pattern Editor";
@@ -284,7 +285,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private CheckBox checkBox_preHear;
         private Button button_addBar;
         private Button button_removeBar;
-        private Button button_cancel;
         private Button button_help;
         private Button button_settings;
         private Button button_save;
