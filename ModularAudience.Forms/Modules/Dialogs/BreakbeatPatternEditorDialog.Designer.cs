@@ -32,6 +32,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             button_save = new Button();
             button_help = new Button();
             button_settings = new Button();
+            button_generate = new Button();
             button_removeBar = new Button();
             button_addBar = new Button();
             checkBox_preHear = new CheckBox();
@@ -41,6 +42,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             numericUpDown_resolution = new NumericUpDown();
             label_resolution = new Label();
             timer_previewCaret = new System.Windows.Forms.Timer(components);
+            timer_pasteHold = new System.Windows.Forms.Timer(components);
             timer_pitchGestureRelease = new System.Windows.Forms.Timer(components);
             timer_historyDebounce = new System.Windows.Forms.Timer(components);
             timer_pitchTooltip = new System.Windows.Forms.Timer(components);
@@ -65,6 +67,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             pictureBox_pattern.AllowDrop = true;
             pictureBox_pattern.Paint += pictureBox_pattern_Paint;
             pictureBox_pattern.MouseDown += pictureBox_pattern_MouseDown;
+            pictureBox_pattern.MouseDoubleClick += pictureBox_pattern_MouseDoubleClick;
             pictureBox_pattern.MouseMove += pictureBox_pattern_MouseMove;
             pictureBox_pattern.MouseUp += pictureBox_pattern_MouseUp;
             pictureBox_pattern.MouseEnter += pictureBox_pattern_MouseEnter;
@@ -101,6 +104,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Controls.Add(button_save);
             panel_controls.Controls.Add(button_help);
             panel_controls.Controls.Add(button_settings);
+            panel_controls.Controls.Add(button_generate);
             panel_controls.Controls.Add(button_removeBar);
             panel_controls.Controls.Add(button_addBar);
             panel_controls.Controls.Add(checkBox_preHear);
@@ -151,6 +155,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
             toolTip_pattern.SetToolTip(button_settings, "Open control configuration (key bindings, mouse actions).");
             button_settings.UseVisualStyleBackColor = true;
             button_settings.Click += button_settings_Click;
+            //
+            // button_generate
+            //
+            button_generate.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            button_generate.Location = new Point(540, 14);
+            button_generate.Name = "button_generate";
+            button_generate.Size = new Size(84, 25);
+            button_generate.TabIndex = 11;
+            button_generate.Text = "Generate";
+            toolTip_pattern.SetToolTip(button_generate, "Generate random notes inside a dragged rectangle (Ctrl+click skips the options dialog).");
+            button_generate.UseVisualStyleBackColor = true;
+            button_generate.Click += button_generate_Click;
             //
             // button_removeBar
             //
@@ -243,6 +259,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             timer_previewCaret.Interval = 30;
             timer_previewCaret.Tick += timer_previewCaret_Tick;
+            timer_pasteHold.Interval = 250;
+            timer_pasteHold.Tick += timer_pasteHold_Tick;
             timer_pitchGestureRelease.Interval = 30;
             timer_pitchGestureRelease.Tick += timer_pitchGestureRelease_Tick;
             timer_historyDebounce.Interval = 250;
@@ -287,8 +305,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Button button_removeBar;
         private Button button_help;
         private Button button_settings;
+        private Button button_generate;
         private Button button_save;
         private System.Windows.Forms.Timer timer_previewCaret;
+        private System.Windows.Forms.Timer timer_pasteHold;
         private System.Windows.Forms.Timer timer_pitchGestureRelease;
         private System.Windows.Forms.Timer timer_historyDebounce;
         private System.Windows.Forms.Timer timer_pitchTooltip;

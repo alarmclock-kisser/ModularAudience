@@ -31,6 +31,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public bool RemoveTrackRequested { get; private set; }
 
+        public bool CloneTrackRequested { get; private set; }
+
+        private void button_cloneTrack_Click(object? sender, EventArgs e)
+        {
+            this.CloneTrackRequested = true;
+            this.DialogResult = DialogResult.Ignore;
+        }
+
         private void button_removeTrack_Click(object? sender, EventArgs e)
         {
             DialogResult confirmation = MessageBox.Show(

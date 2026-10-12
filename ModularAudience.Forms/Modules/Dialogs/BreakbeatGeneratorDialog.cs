@@ -470,6 +470,27 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         ? settings
                         : new BreakbeatTrackSettings()).ToArray());
 
+            // Ctrl+Save mit markierten Takt(teil)en: nur die markierten Quarters
+            // lückenlos aneinandergereiht als AudioObj in die Collection
+            // (nicht zusammenhängende Markierungen werden übersprungen).
+            // Ohne Markierung oder ohne Ctrl: alles wie bisher.
+            if (editedAudio != null
+                && editor.CloseAfterSaveRequested
+                && editor.SelectedLoopSections is { Length: > 0 } markedQuarters)
+            {
+                try
+                {
+                    AudioObj excerpt = BreakbeatGenerator_V2.ExtractPatternQuarters(editedAudio, markedQuarters, this.Bpm);
+                    editedAudio.Dispose();
+                    editedAudio = excerpt;
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Log("Breakbeat marked-quarters excerpt failed, saving full pattern instead.");
+                    LogManager.Log(ex);
+                }
+            }
+
             if (editedAudio == null || this.IsDisposed || this.Disposing)
             {
                 editedAudio?.Dispose();

@@ -247,6 +247,7 @@ namespace ModularAudience.Audio.Processors_V1
                                 progress?.Report(overall);
                             }
                         }));
+                        stretchedData = MatchPeakLevel(sample.Data, stretchedData);
                     }
 
                     // build result clone and set data
@@ -326,6 +327,7 @@ namespace ModularAudience.Audio.Processors_V1
                     // map second half of progress (0.0..1.0) to 0.5..1.0 portion
                     progress?.Report(Math.Clamp(0.5 + p * 0.5, 0.0, 1.0));
                 }));
+                stretchedData = MatchPeakLevel(sample.Data, stretchedData);
             }
 
             // build result clone and set data
@@ -526,6 +528,53 @@ namespace ModularAudience.Audio.Processors_V1
         }
 
         // Phase vocoder time-stretch: operates on interleaved float[] data
+        private static float[] MatchPeakLevel(float[]? reference, float[] output)
+        {
+            if (reference == null || reference.Length == 0 || output.Length == 0)
+            {
+                return output;
+            }
+
+            float refPeak = 0f;
+            for (int i = 0; i < reference.Length; i++)
+            {
+                float abs = Math.Abs(reference[i]);
+                if (abs > refPeak)
+                {
+                    refPeak = abs;
+                }
+            }
+
+            float outPeak = 0f;
+            for (int i = 0; i < output.Length; i++)
+            {
+                float abs = Math.Abs(output[i]);
+                if (abs > outPeak)
+                {
+                    outPeak = abs;
+                }
+            }
+
+            // Leise/stitlle Inputs nicht hochziehen, kaputte (clipped) nicht weiter boosten.
+            if (refPeak < 1e-6f || outPeak < 1e-6f)
+            {
+                return output;
+            }
+
+            float gain = Math.Clamp(refPeak / outPeak, 0.25f, 8f);
+            if (Math.Abs(gain - 1f) < 0.001f)
+            {
+                return output;
+            }
+
+            for (int i = 0; i < output.Length; i++)
+            {
+                output[i] = Math.Clamp(output[i] * gain, -1f, 1f);
+            }
+
+            return output;
+        }
+
         private static float[] PhaseVocoderTimeStretch(float[] data, int channels, int inputFrames, int targetFrames, IProgress<double>? progress = null)
         {
             if (channels <= 0)

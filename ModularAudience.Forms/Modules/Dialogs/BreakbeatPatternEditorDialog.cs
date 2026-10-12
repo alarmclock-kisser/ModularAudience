@@ -26,12 +26,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private readonly HashSet<int> selectedLoopSections = [];
         private readonly HashSet<BreakbeatPatternNote> selectedNotes = [];
         private readonly List<BreakbeatPatternNote> copiedNotes = [];
+        private readonly List<BreakbeatClipboardEntry> clipboardHistory = [];
+        private const int MaxClipboardHistoryEntries = 50;
+        private bool pasteHoldTracking;
+        private Keys pasteHoldKeyCode = Keys.None;
         private readonly List<BreakbeatPatternNote> pastePreviewNotes = [];
         private readonly List<(int StartTick, int EndTick)> pendingLivePreviewRegions = [];
         private int patternNotesRevision;
         private CancellationTokenSource? hearCancellationTokenSource;
         private AudioObj? previewAudio;
         private int[] previewQuarterMap = [];
+        private volatile float hearLiveBpm = 120f;
+        private float hearBaseBpm = 120f;
+        private float hearLiveVarispeedFactor = 1f;
         private CancellationTokenSource? notePreviewCancellationTokenSource;
         private AudioObj? notePreviewAudio;
         private long notePreviewRequestVersion;
@@ -44,6 +51,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private bool selectingNotes;
         private Point selectionStartPoint;
         private Point selectionCurrentPoint;
+        private bool generatingRect;
+        private bool generateDragging;
+        private Point generateStartPoint;
+        private Point generateCurrentPoint;
+        private BreakbeatGenerateOptions? generateOptions;
         private Point lastPatternPointer;
         private bool hasPatternPointer;
         private BreakbeatPatternNote? hoverPitchNote;
@@ -115,6 +127,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public int Resolution => this.currentResolution;
 
         public int Bars => this.bars;
+
+        public int[] SelectedLoopSections => this.selectedLoopSections.OrderBy(section => section).ToArray();
+
+        public bool HasLoopSelection => this.selectedLoopSections.Count > 0;
+
+        /// <summary>
+        /// True wenn der letzte Save-Klick mit gedrücktem Ctrl erfolgte
+        /// (rendert + schließt; mit Loop-Auswahl nur markierte Taktteile).
+        /// </summary>
+        public bool CloseAfterSaveRequested { get; private set; }
 
         internal IReadOnlyList<AudioObj> SourceSamples => this.sourceSampleOrder;
 
@@ -799,6 +821,19 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 e.Graphics.DrawRectangle(selectionPen, selection);
             }
 
+            if (this.generateDragging)
+            {
+                int left = Math.Min(this.generateStartPoint.X, this.generateCurrentPoint.X);
+                int top = Math.Min(this.generateStartPoint.Y, this.generateCurrentPoint.Y);
+                int right = Math.Max(this.generateStartPoint.X, this.generateCurrentPoint.X);
+                int bottom = Math.Max(this.generateStartPoint.Y, this.generateCurrentPoint.Y);
+                Rectangle generateRect = Rectangle.FromLTRB(left, top, Math.Max(left + 1, right), Math.Max(top + 1, bottom));
+                using Brush generateBrush = new SolidBrush(Color.FromArgb(35, 120, 255, 150));
+                using Pen generatePen = new(Color.FromArgb(210, 130, 255, 150)) { DashStyle = DashStyle.Dash };
+                e.Graphics.FillRectangle(generateBrush, generateRect);
+                e.Graphics.DrawRectangle(generatePen, generateRect);
+            }
+
             if (this.previewAudio is not null && this.previewAudio.PlayerPlaying)
             {
                 double secondsPerBar = 240.0 / Math.Max(1.0, (double)this.Bpm);
@@ -1077,6 +1112,25 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.lastPatternPointer = e.Location;
             this.hasPatternPointer = true;
 
+            if (this.generatingRect)
+            {
+                if (e.Button == MouseButtons.Right)
+                {
+                    this.CancelGenerateMode();
+                }
+                else if (e.Button == MouseButtons.Left && this.TryGetCell(e.Location, out _, out _))
+                {
+                    this.generateDragging = true;
+                    this.generateStartPoint = this.ClampToGrid(e.Location);
+                    this.generateCurrentPoint = this.generateStartPoint;
+                    this.pictureBox_pattern.Capture = true;
+                    this.pictureBox_pattern.Invalidate();
+                }
+
+                this.deadGroupNotes.Clear();
+                return;
+            }
+
             if (this.pastePreviewActive)
             {
                 if (this.TryHandleRemappedPastePreview(e))
@@ -1242,6 +1296,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     return;
                 }
 
+                // Neue Note gesetzt: alte Mehrfachauswahl aufheben.
+                this.selectedNotes.Clear();
                 this.drawing = true;
                 this.drawingNote = newNote;
                 this.notes.Add(this.drawingNote);
@@ -1347,6 +1403,13 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 return;
             }
 
+            if (this.generateDragging)
+            {
+                this.generateCurrentPoint = this.ClampToGrid(e.Location);
+                this.pictureBox_pattern.Invalidate();
+                return;
+            }
+
             if (!this.drawing)
             {
                 if (this.rightClickDeleteActive)
@@ -1445,6 +1508,20 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 this.deadGroupNotes.Clear();
                 this.pictureBox_pattern.Capture = false;
                 this.UpdatePatternCursor(e.Location);
+                this.pictureBox_pattern.Invalidate();
+                return;
+            }
+
+            this.deadGroupNotes.Clear();
+            if (this.generateDragging && e.Button == MouseButtons.Left)
+            {
+                this.generateCurrentPoint = this.ClampToGrid(e.Location);
+                this.generateDragging = false;
+                this.pictureBox_pattern.Capture = false;
+                this.GenerateRandomPatternInRect();
+                this.generatingRect = false;
+                this.generateOptions = null;
+                this.pictureBox_pattern.Cursor = Cursors.Cross;
                 this.pictureBox_pattern.Invalidate();
                 return;
             }
@@ -1571,6 +1648,65 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             return true;
         }
 
+        private void pictureBox_pattern_MouseDoubleClick(object? sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left)
+            {
+                return;
+            }
+
+            if (!this.TryGetRowReorderSource(e.Location, out int row))
+            {
+                return;
+            }
+
+            // Einen ggf. durch den Doppelklick gestarteten Row-Reorder abbrechen,
+            // damit das Rename nicht sofort wieder verworfen wird.
+            if (this.rowReorderActive)
+            {
+                this.rowReorderActive = false;
+                this.rowReorderSource = -1;
+                this.rowReorderTarget = -1;
+                this.pictureBox_pattern.Capture = false;
+                this.pictureBox_pattern.Cursor = Cursors.Cross;
+            }
+
+            this.ShowTrackRename(row);
+        }
+
+        private void ShowTrackRename(int row)
+        {
+            if (row < 0 || row >= this.samples.Count)
+            {
+                return;
+            }
+
+            string currentName = row < this.rowLabels.Count && !string.IsNullOrWhiteSpace(this.rowLabels[row])
+                ? this.rowLabels[row]
+                : this.samples[row].Name;
+            using TrackRenameDialog dialog = new(currentName);
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
+
+            string newName = dialog.InputText?.Trim() ?? string.Empty;
+            if (newName.Length == 0 || newName == currentName)
+            {
+                return;
+            }
+
+            while (this.rowLabels.Count <= row)
+            {
+                this.rowLabels.Add($"Track {this.rowLabels.Count + 1}");
+            }
+
+            this.rowLabels[row] = newName;
+            this.deadGroupNotes.Clear();
+            this.pictureBox_pattern.Invalidate();
+            this.CommitHistoryAction();
+        }
+
         private void ShowTrackSettings(int row)
         {
             if (row < 0 || row >= this.samples.Count)
@@ -1581,6 +1717,12 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             string sampleName = row < this.rowLabels.Count ? this.rowLabels[row] : this.samples[row].Name;
             using BreakbeatTrackSettingsDialog dialog = new(sampleName, this.trackSettings[row], this.samples.Count > 1);
             DialogResult result = dialog.ShowDialog(this);
+            if (dialog.CloneTrackRequested)
+            {
+                this.CloneSampleTrack(row);
+                return;
+            }
+
             if (dialog.RemoveTrackRequested)
             {
                 this.RemoveSampleTrack(row);
@@ -1664,6 +1806,101 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.rowLabels.RemoveAt(row);
             this.trackSettingsBySample?.Remove(sourceSample);
             this.TrackSetRestored?.Invoke(this);
+            this.RegisterPatternNotesChanged(originalNotes
+                .Concat(this.notes)
+                .Select(note => (BreakbeatPatternNote?)note)
+                .ToArray());
+            this.ConfigurePatternScrollBar();
+            this.pictureBox_pattern.Invalidate();
+            this.CommitHistoryAction();
+        }
+
+        private void CloneSampleTrack(int row)
+        {
+            if (row < 0 || row >= this.samples.Count)
+            {
+                return;
+            }
+
+            int sourceIndex = this.GetOriginalTrackIndex(row);
+            if (sourceIndex < 0 || sourceIndex >= this.sourceSampleOrder.Count)
+            {
+                return;
+            }
+
+            AudioObj sourceOriginal = this.sourceSampleOrder[sourceIndex];
+            AudioObj newSourceSample = CloneSampleWithMetadata(sourceOriginal);
+            AudioObj newEditorSample = CloneSampleWithMetadata(newSourceSample);
+            BreakbeatTrackSettings clonedSettings = this.trackSettings[row];
+            string clonedLabel = (row < this.rowLabels.Count ? this.rowLabels[row] : this.samples[row].Name) + " (Copy)";
+            int displayIndex = row + 1;
+            int newSourceIndex = sourceIndex + 1;
+            int patternColumns = this.pattern.Count > 0
+                ? this.pattern[row].Length
+                : Math.Max(1, this.bars * this.currentResolution);
+
+            BreakbeatPatternNote[] originalNotes = this.notes.ToArray();
+            int MapTrackIndex(int trackIndex) => trackIndex >= displayIndex ? trackIndex + 1 : trackIndex;
+            for (int index = 0; index < this.notes.Count; index++)
+            {
+                this.notes[index] = this.notes[index] with { TrackIndex = MapTrackIndex(this.notes[index].TrackIndex) };
+            }
+
+            BreakbeatPatternNote[] shiftedSelected = this.selectedNotes.ToArray();
+            this.selectedNotes.Clear();
+            foreach (BreakbeatPatternNote note in shiftedSelected)
+            {
+                this.selectedNotes.Add(note with { TrackIndex = MapTrackIndex(note.TrackIndex) });
+            }
+
+            for (int index = 0; index < this.copiedNotes.Count; index++)
+            {
+                this.copiedNotes[index] = this.copiedNotes[index] with { TrackIndex = MapTrackIndex(this.copiedNotes[index].TrackIndex) };
+            }
+
+            for (int index = 0; index < this.pastePreviewNotes.Count; index++)
+            {
+                this.pastePreviewNotes[index] = this.pastePreviewNotes[index] with { TrackIndex = MapTrackIndex(this.pastePreviewNotes[index].TrackIndex) };
+            }
+
+            if (this.hoverPitchNote is not null)
+            {
+                this.hoverPitchNote = this.hoverPitchNote with { TrackIndex = MapTrackIndex(this.hoverPitchNote.TrackIndex) };
+            }
+
+            this.samples.Insert(displayIndex, newEditorSample);
+            this.originalSampleOrder.Insert(newSourceIndex, newEditorSample);
+            this.sourceSampleOrder.Insert(newSourceIndex, newSourceSample);
+            bool[] clonedPatternRow;
+            try
+            {
+                clonedPatternRow = (bool[])this.pattern[row].Clone();
+            }
+            catch
+            {
+                clonedPatternRow = new bool[patternColumns];
+            }
+
+            this.pattern.Insert(displayIndex, clonedPatternRow);
+            this.trackSettings.Insert(displayIndex, clonedSettings);
+            this.rowLabels.Insert(displayIndex, clonedLabel);
+            if (this.trackSettingsBySample is not null)
+            {
+                this.trackSettingsBySample[newSourceSample] = clonedSettings;
+            }
+
+            List<BreakbeatPatternNote> duplicatedNotes = [];
+            foreach (BreakbeatPatternNote note in originalNotes)
+            {
+                if (note.TrackIndex == row)
+                {
+                    duplicatedNotes.Add(note with { TrackIndex = displayIndex });
+                }
+            }
+
+            this.notes.AddRange(duplicatedNotes);
+            this.deadGroupNotes.Clear();
+            this.TrackAdded?.Invoke(newSourceSample, newSourceIndex);
             this.RegisterPatternNotesChanged(originalNotes
                 .Concat(this.notes)
                 .Select(note => (BreakbeatPatternNote?)note)
@@ -2062,6 +2299,276 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
         }
 
+        private sealed record GenerateMotifEntry(int ColumnOffset, int LengthSteps, float PitchSemitones, float VolumePercent);
+
+        private void GenerateRandomPatternInRect()
+        {
+            if (this.generateOptions is not BreakbeatGenerateOptions options || this.samples.Count == 0)
+            {
+                return;
+            }
+
+            Rectangle grid = this.GetGridBounds();
+            int top = Math.Clamp(Math.Min(this.generateStartPoint.Y, this.generateCurrentPoint.Y), grid.Top, grid.Bottom - 1);
+            int bottom = Math.Clamp(Math.Max(this.generateStartPoint.Y, this.generateCurrentPoint.Y), grid.Top, grid.Bottom - 1);
+            int left = Math.Clamp(Math.Min(this.generateStartPoint.X, this.generateCurrentPoint.X), grid.Left, grid.Right - 1);
+            int right = Math.Clamp(Math.Max(this.generateStartPoint.X, this.generateCurrentPoint.X), grid.Left, grid.Right - 1);
+            float cellHeight = grid.Height / (float)this.samples.Count;
+            int rowStart = Math.Clamp((int)((top - grid.Top) / cellHeight), 0, this.samples.Count - 1);
+            int rowEnd = Math.Clamp((int)((bottom - grid.Top) / cellHeight), 0, this.samples.Count - 1);
+            int totalColumns = Math.Max(1, this.bars * this.currentResolution);
+            int colStart = Math.Clamp(this.PointToColumn(new Point(left, grid.Top)), 0, totalColumns - 1);
+            int colEnd = Math.Clamp(this.PointToColumn(new Point(right, grid.Top)), 0, totalColumns - 1);
+
+            Random rand = options.Seed == 0 ? new Random() : new Random(options.Seed);
+            List<BreakbeatPatternNote> placed = [];
+
+            for (int row = rowStart; row <= rowEnd; row++)
+            {
+                int minimumDuration = BreakbeatGenerator_V2.GetMinimumNoteDurationTicks(
+                    this.samples, row, (float)this.Bpm, this.currentResolution);
+                int segmentLength = Math.Max(1, options.MotifLengthSteps);
+                int segmentCount = (colEnd - colStart + segmentLength) / segmentLength;
+                List<GenerateMotifEntry> motif = [];
+
+                for (int segment = 0; segment < segmentCount; segment++)
+                {
+                    int segmentBase = colStart + segment * segmentLength;
+                    int segmentLast = Math.Min(segmentBase + segmentLength - 1, colEnd);
+                    bool repeatMotif = segment > 0
+                        && motif.Count > 0
+                        && rand.Next(100) < options.MotifRepeatPercent;
+
+                    if (repeatMotif)
+                    {
+                        foreach (GenerateMotifEntry entry in motif)
+                        {
+                            int column = segmentBase + entry.ColumnOffset;
+                            if (column > segmentLast)
+                            {
+                                continue;
+                            }
+
+                            this.TryPlaceGeneratedNote(row, column, entry.LengthSteps, entry.PitchSemitones,
+                                entry.VolumePercent, minimumDuration, options, placed);
+                        }
+
+                        continue;
+                    }
+
+                    List<GenerateMotifEntry> segmentMotif = [];
+                    for (int column = segmentBase; column <= segmentLast; column++)
+                    {
+                        int startTick = column * this.GetTicksPerStep();
+                        if (this.FindNoteIndexAt(row, startTick) >= 0)
+                        {
+                            continue;
+                        }
+
+                        // Density ist das Master-Gate: erwarteter Anteil belegter
+                        // Kandidatenzellen. Amen wirkt nur noch als Offbeat-Bias
+                        // (sonst füllt ein hoher Amen-Faktor das Grid trotz
+                        // niedriger Density).
+                        if (rand.Next(100) >= options.DensityPercent)
+                        {
+                            continue;
+                        }
+
+                        bool offbeat = (column % 2) == 1;
+                        if (!offbeat && rand.Next(100) < options.AmenFactorPercent)
+                        {
+                            continue;
+                        }
+
+                        int minLengthSteps = Math.Clamp(options.MinNoteLengthSteps, 1, 16);
+                        int maxLengthSteps = Math.Max(minLengthSteps, options.MaxNoteLengthSteps);
+                        int lengthSteps = minLengthSteps + rand.Next(maxLengthSteps - minLengthSteps + 1);
+                        float pitch = this.RollGeneratePitch(rand, options);
+                        float volume = this.RollGenerateVolume(rand, options);
+                        if (this.TryPlaceGeneratedNote(row, column, lengthSteps, pitch, volume,
+                            minimumDuration, options, placed) && segment == 0)
+                        {
+                            segmentMotif.Add(new GenerateMotifEntry(column - segmentBase, lengthSteps, pitch, volume));
+                        }
+                    }
+
+                    if (segment == 0)
+                    {
+                        motif.AddRange(segmentMotif);
+                    }
+                }
+            }
+
+            if (placed.Count > 0)
+            {
+                this.RegisterPatternNotesChanged(placed.Select(note => (BreakbeatPatternNote?)note).ToArray());
+                this.selectedNotes.Clear();
+                foreach (BreakbeatPatternNote note in placed)
+                {
+                    this.selectedNotes.Add(note);
+                }
+
+                if (this.checkBox_preHear.Checked && placed.Count == 1 && this.hearCancellationTokenSource is null)
+                {
+                    _ = this.PrehearNoteAsync(placed[0]);
+                }
+            }
+        }
+
+        private bool TryPlaceGeneratedNote(
+            int row,
+            int column,
+            int lengthSteps,
+            float pitchSemitones,
+            float volumePercent,
+            int minimumDurationTicks,
+            BreakbeatGenerateOptions options,
+            List<BreakbeatPatternNote> placed)
+        {
+            int stepTicks = this.GetTicksPerStep();
+            int patternEndTick = this.bars * BreakbeatGenerator_V2.PatternTicksPerBar;
+            int startTick = column * stepTicks;
+            int remainingTicks = patternEndTick - startTick;
+            if (remainingTicks < stepTicks || startTick < 0 || startTick >= patternEndTick)
+            {
+                return false;
+            }
+
+            if (this.FindNoteIndexAt(row, startTick) >= 0)
+            {
+                return false;
+            }
+
+            int targetTicks = Math.Min(Math.Max(1, lengthSteps) * stepTicks, remainingTicks);
+            BreakbeatPatternNote candidate = this.BuildGeneratedNote(
+                row, startTick, targetTicks,
+                minimumDurationTicks, remainingTicks, pitchSemitones, volumePercent, options);
+            if (this.HasOverlappingNote(candidate))
+            {
+                return false;
+            }
+
+            this.notes.Add(candidate);
+            placed.Add(candidate);
+            return true;
+        }
+
+        private BreakbeatPatternNote BuildGeneratedNote(
+            int row,
+            int startTick,
+            int targetTicks,
+            int minimumDurationTicks,
+            int remainingTicks,
+            float pitchSemitones,
+            float volumePercent,
+            BreakbeatGenerateOptions options)
+        {
+            int stepTicks = this.GetTicksPerStep();
+            bool trackPrefersVarispeed = row < this.trackSettings.Count
+                && this.trackSettings[row].DefaultPlaybackMode == BreakbeatPlaybackMode.Varispeed;
+
+            if (targetTicks < minimumDurationTicks)
+            {
+                if (options.AllowTruncated)
+                {
+                    return new BreakbeatPatternNote(
+                        row, startTick, Math.Max(stepTicks, targetTicks),
+                        OriginalDurationTicks: minimumDurationTicks,
+                        PitchSemitones: pitchSemitones,
+                        VolumePercent: volumePercent,
+                        Truncated: true,
+                        HardResized: true);
+                }
+
+                if (options.AllowTimeStretch && (!trackPrefersVarispeed || !options.AllowVarispeed))
+                {
+                    return new BreakbeatPatternNote(
+                        row, startTick, targetTicks,
+                        TimeStretch: true,
+                        ManuallyResized: true,
+                        OriginalDurationTicks: minimumDurationTicks,
+                        PitchSemitones: pitchSemitones,
+                        VolumePercent: volumePercent);
+                }
+
+                if (options.AllowVarispeed)
+                {
+                    return new BreakbeatPatternNote(
+                        row, startTick, targetTicks,
+                        Varispeed: true,
+                        ManuallyResized: true,
+                        OriginalDurationTicks: minimumDurationTicks,
+                        PitchSemitones: pitchSemitones,
+                        VolumePercent: volumePercent);
+                }
+
+                return new BreakbeatPatternNote(
+                    row, startTick, Math.Min(minimumDurationTicks, remainingTicks),
+                    PitchSemitones: pitchSemitones,
+                    VolumePercent: volumePercent);
+            }
+
+            if (targetTicks > minimumDurationTicks)
+            {
+                if (options.AllowTimeStretch && (!trackPrefersVarispeed || !options.AllowVarispeed))
+                {
+                    return new BreakbeatPatternNote(
+                        row, startTick, targetTicks,
+                        TimeStretch: true,
+                        ManuallyResized: true,
+                        OriginalDurationTicks: minimumDurationTicks,
+                        PitchSemitones: pitchSemitones,
+                        VolumePercent: volumePercent);
+                }
+
+                if (options.AllowVarispeed)
+                {
+                    return new BreakbeatPatternNote(
+                        row, startTick, targetTicks,
+                        Varispeed: true,
+                        ManuallyResized: true,
+                        OriginalDurationTicks: minimumDurationTicks,
+                        PitchSemitones: pitchSemitones,
+                        VolumePercent: volumePercent);
+                }
+
+                return new BreakbeatPatternNote(
+                    row, startTick, Math.Min(minimumDurationTicks, remainingTicks),
+                    PitchSemitones: pitchSemitones,
+                    VolumePercent: volumePercent);
+            }
+
+            return new BreakbeatPatternNote(
+                row, startTick, Math.Min(minimumDurationTicks, remainingTicks),
+                PitchSemitones: pitchSemitones,
+                VolumePercent: volumePercent);
+        }
+
+        private float RollGeneratePitch(Random rand, BreakbeatGenerateOptions options)
+        {
+            if (!options.AllowPitchedNotes || options.PitchRangeSemitones <= 0f
+                || rand.Next(100) >= options.PitchChancePercent)
+            {
+                return 0f;
+            }
+
+            int quarterRange = Math.Max(0, (int)Math.Round(options.PitchRangeSemitones * 4f));
+            int quarterSteps = quarterRange > 0 ? rand.Next(-quarterRange, quarterRange + 1) : 0;
+            return Math.Clamp(quarterSteps, -96, 96) / 4f;
+        }
+
+        private float RollGenerateVolume(Random rand, BreakbeatGenerateOptions options)
+        {
+            float min = Math.Min(options.VolumeMinPercent, options.VolumeMaxPercent);
+            float max = Math.Max(options.VolumeMinPercent, options.VolumeMaxPercent);
+            if (max <= min)
+            {
+                return Math.Clamp(min, 0f, 250f);
+            }
+
+            return Math.Clamp((float)(min + rand.NextDouble() * (max - min)), 0f, 250f);
+        }
+
         private void CopySelectedNotes()
         {
             if (this.selectedNotes.Count == 0)
@@ -2071,6 +2578,26 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
             this.copiedNotes.Clear();
             this.copiedNotes.AddRange(this.notes.Where(this.selectedNotes.Contains));
+            if (this.copiedNotes.Count == 0)
+            {
+                return;
+            }
+
+            // Historische Ablage: identische Kopie ans Top ziehen statt doppelt.
+            List<BreakbeatPatternNote> snapshot = this.copiedNotes.ToList();
+            for (int index = this.clipboardHistory.Count - 1; index >= 0; index--)
+            {
+                if (this.clipboardHistory[index].Notes.SequenceEqual(snapshot))
+                {
+                    this.clipboardHistory.RemoveAt(index);
+                }
+            }
+
+            this.clipboardHistory.Insert(0, new BreakbeatClipboardEntry(snapshot, DateTime.Now));
+            while (this.clipboardHistory.Count > MaxClipboardHistoryEntries)
+            {
+                this.clipboardHistory.RemoveAt(this.clipboardHistory.Count - 1);
+            }
         }
 
         private void StartPastePreview()
@@ -2190,8 +2717,75 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.pictureBox_pattern.Invalidate();
         }
 
+        private void timer_pasteHold_Tick(object? sender, EventArgs e)
+        {
+            this.timer_pasteHold.Stop();
+            if (!this.pasteHoldTracking)
+            {
+                return;
+            }
+
+            // Lang gehalten (>250 ms): historische Clipboard-Ablage.
+            this.pasteHoldTracking = false;
+            this.pasteHoldKeyCode = Keys.None;
+            if (this.clipboardHistory.Count == 0)
+            {
+                if (this.copiedNotes.Count > 0)
+                {
+                    this.StartPastePreview();
+                }
+
+                return;
+            }
+
+            this.ShowClipboardHistory();
+        }
+
+        private void ShowClipboardHistory()
+        {
+            using BreakbeatClipboardHistoryDialog dialog = new(this.clipboardHistory);
+            try
+            {
+                Point cursor = Cursor.Position;
+                Rectangle workArea = Screen.GetWorkingArea(this);
+                dialog.StartPosition = FormStartPosition.Manual;
+                dialog.Location = new Point(
+                    Math.Clamp(cursor.X - 60, workArea.Left, Math.Max(workArea.Left, workArea.Right - dialog.Width)),
+                    Math.Clamp(cursor.Y - 60, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - dialog.Height)));
+            }
+            catch
+            {
+            }
+
+            if (dialog.ShowDialog(this) != DialogResult.OK || dialog.SelectedEntry is not BreakbeatClipboardEntry chosen)
+            {
+                return;
+            }
+
+            // Übernommener Eintrag ans Top vorziehen: nächstes kurzes Ctrl+V fügt ihn ein.
+            this.clipboardHistory.Remove(chosen);
+            this.clipboardHistory.Insert(0, chosen);
+            this.copiedNotes.Clear();
+            this.copiedNotes.AddRange(chosen.Notes);
+            this.StartPastePreview();
+        }
+
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
+            if (keyData == Keys.Escape && (this.generatingRect || this.generateDragging))
+            {
+                this.CancelGenerateMode();
+                return true;
+            }
+
+            if (keyData == Keys.Escape && this.pasteHoldTracking)
+            {
+                this.pasteHoldTracking = false;
+                this.pasteHoldKeyCode = Keys.None;
+                this.timer_pasteHold.Stop();
+                return true;
+            }
+
             // Scope order mirrors the original hard-coded behaviour: a small set of actions works
             // no matter which control has focus, everything else only while the grid has focus.
             if (this.TryRunBoundAction(keyData, focusOnly: false, out bool consumed))
@@ -2259,10 +2853,17 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                         return true;
 
                     case "Clipboard.PastePreview":
-                        if (this.copiedNotes.Count > 0)
+                        // Kurz (<250 ms): normale Paste-Preview bei KeyUp.
+                        // Lang gehalten (>250 ms): historische Clipboard-Ablage.
+                        // Repeats beim Halten nur konsumieren, Timer nicht neu starten.
+                        if (!this.pasteHoldTracking && !this.pastePreviewActive)
                         {
-                            this.StartPastePreview();
+                            this.pasteHoldTracking = true;
+                            this.pasteHoldKeyCode = keyData & Keys.KeyCode;
+                            this.timer_pasteHold.Stop();
+                            this.timer_pasteHold.Start();
                         }
+
                         return true;
 
                     case "Clipboard.CancelPaste":
@@ -2502,48 +3103,61 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 int pitchDelta = Math.Sign(e.Delta) * wheelSteps;
                 List<BreakbeatPatternNote> changedNotes = [];
 
-                if (this.selectedNotes.Count > 0)
+                // Note unter dem Cursor bestimmen (wie beim Alt+Wheel für Volume).
+                int hoveredIndex = -1;
+                if (this.TryGetCell(pointer, out int hoverRow, out _))
                 {
-                    foreach (BreakbeatPatternNote originalNote in this.selectedNotes)
-                    {
-                        int noteIndex = this.notes.FindIndex(note => ReferenceEquals(note, originalNote));
-                        if (noteIndex < 0)
-                        {
-                            continue;
-                        }
+                    hoveredIndex = this.FindNoteIndexAt(hoverRow, this.PointToTick(pointer));
+                }
 
-                        int quarterSteps = (int)Math.Round(originalNote.PitchSemitones * 4f) + pitchDelta;
-                        BreakbeatPatternNote updatedNote = originalNote with
+                bool hoveredIsSelected = hoveredIndex >= 0 && this.selectedNotes.Contains(this.notes[hoveredIndex]);
+                List<int> targetIndices = [];
+                if (hoveredIndex >= 0 && !hoveredIsSelected)
+                {
+                    // Hover über nicht-selektierter Note: nur diese pitchen
+                    // (konsistent zum Alt+Wheel-Volume-Verhalten).
+                    targetIndices.Add(hoveredIndex);
+                }
+                else if (this.selectedNotes.Count > 0)
+                {
+                    // Gesamte Auswahl pitchen. Wertbasierter Lookup statt
+                    // ReferenceEquals: nach Track-Insert/Clone/Reorder/Remove enthält
+                    // das Set wertegleiche Kopien, keine Referenzen aus this.notes.
+                    // Über Snapshot iterieren: Set wird unten modifiziert.
+                    foreach (BreakbeatPatternNote selected in this.selectedNotes.ToArray())
+                    {
+                        int noteIndex = this.notes.FindIndex(note => note.Equals(selected));
+                        if (noteIndex >= 0 && !targetIndices.Contains(noteIndex))
                         {
-                            PitchSemitones = Math.Clamp(quarterSteps, -96, 96) / 4f
-                        };
-                        if (updatedNote.PitchSemitones != originalNote.PitchSemitones)
-                        {
-                            this.notes[noteIndex] = updatedNote;
-                            changedNotes.Add(updatedNote);
-                            this.selectedNotes.Remove(originalNote);
-                            this.selectedNotes.Add(updatedNote);
+                            targetIndices.Add(noteIndex);
                         }
                     }
                 }
-                else
+                else if (hoveredIndex >= 0)
                 {
-                    if (this.TryGetCell(pointer, out int row, out _))
+                    targetIndices.Add(hoveredIndex);
+                }
+
+                foreach (int noteIndex in targetIndices)
+                {
+                    if (noteIndex < 0 || noteIndex >= this.notes.Count)
                     {
-                        int noteIndex = this.FindNoteIndexAt(row, this.PointToTick(pointer));
-                        if (noteIndex >= 0)
+                        continue;
+                    }
+
+                    BreakbeatPatternNote originalNote = this.notes[noteIndex];
+                    int quarterSteps = (int)Math.Round(originalNote.PitchSemitones * 4f) + pitchDelta;
+                    BreakbeatPatternNote updatedNote = originalNote with
+                    {
+                        PitchSemitones = Math.Clamp(quarterSteps, -96, 96) / 4f
+                    };
+                    if (updatedNote.PitchSemitones != originalNote.PitchSemitones)
+                    {
+                        this.notes[noteIndex] = updatedNote;
+                        changedNotes.Add(updatedNote);
+                        if (this.selectedNotes.Remove(originalNote))
                         {
-                            BreakbeatPatternNote originalNote = this.notes[noteIndex];
-                            int quarterSteps = (int)Math.Round(originalNote.PitchSemitones * 4f) + pitchDelta;
-                            BreakbeatPatternNote updatedNote = originalNote with
-                            {
-                                PitchSemitones = Math.Clamp(quarterSteps, -96, 96) / 4f
-                            };
-                            if (updatedNote.PitchSemitones != originalNote.PitchSemitones)
-                            {
-                                this.notes[noteIndex] = updatedNote;
-                                changedNotes.Add(updatedNote);
-                            }
+                            this.selectedNotes.Add(updatedNote);
                         }
                     }
                 }
@@ -2585,6 +3199,18 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void BreakbeatPatternEditorDialog_KeyUp(object? sender, KeyEventArgs e)
         {
+            if (this.pasteHoldTracking && e.KeyCode == this.pasteHoldKeyCode)
+            {
+                // Kurz gedrückt: normale Paste-Preview wie bisher.
+                this.pasteHoldTracking = false;
+                this.pasteHoldKeyCode = Keys.None;
+                this.timer_pasteHold.Stop();
+                if (this.copiedNotes.Count > 0)
+                {
+                    this.StartPastePreview();
+                }
+            }
+
             if (IsShiftKey(e.KeyCode) && (ModifierKeys & Keys.Shift) != Keys.Shift)
             {
                 this.CompletePitchGesture();
@@ -2809,12 +3435,19 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             {
                 if (this.resizeChanged && this.resizeOriginalNote is not null)
                 {
+                    BreakbeatPatternNote currentPrimary = this.resizingNote;
                     int originalIndex = this.notes.FindIndex(note => ReferenceEquals(note, this.resizingNote));
                     if (originalIndex >= 0)
                     {
                         this.notes[originalIndex] = this.resizeOriginalNote;
                     }
 
+                    if (this.selectedNotes.Remove(currentPrimary))
+                    {
+                        this.selectedNotes.Add(this.resizeOriginalNote);
+                    }
+
+                    this.RestoreGroupNotesToOriginals();
                     this.resizingNote = this.resizeOriginalNote;
                 }
 
@@ -2826,16 +3459,42 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 ? this.MoveNoteToPoint(this.resizeOriginalNote, point)
                 : this.ResizeNoteToPoint(this.resizingNote, point);
             int index = this.notes.FindIndex(note => ReferenceEquals(note, this.resizingNote));
-            if (index >= 0 && !this.HasOverlappingNote(updated, this.resizingNote))
+            bool isGroupMove = this.resizingEdge == ResizeEdge.Move && this.resizeGroupOriginals.Count > 0;
+            bool primaryBlocked;
+            if (isGroupMove)
             {
+                primaryBlocked = this.HasOverlappingNoteExcludingIndices(updated, new HashSet<int>(this.resizeGroupOriginals.Keys));
+            }
+            else
+            {
+                primaryBlocked = this.HasOverlappingNote(updated, this.resizingNote);
+            }
+
+            if (index >= 0 && !primaryBlocked)
+            {
+                BreakbeatPatternNote previousNote = this.resizingNote;
                 this.notes[index] = updated;
                 this.resizingNote = updated;
                 this.resizeChanged = updated != this.resizeOriginalNote;
+                if (this.selectedNotes.Remove(previousNote))
+                {
+                    this.selectedNotes.Add(updated);
+                }
+                else if (this.resizeChanged && this.selectedNotes.Count > 1 && this.resizingEdge == ResizeEdge.Move)
+                {
+                    // Primary was part of the multiselection (value equality may differ after first move):
+                    // ensure the new value is tracked.
+                    this.selectedNotes.Add(updated);
+                }
             }
 
             if (this.selectedNotes.Count > 1 && this.resizingEdge is ResizeEdge.Left or ResizeEdge.Right)
             {
                 this.UpdateGroupResizedNotes(point);
+            }
+            else if (this.selectedNotes.Count > 0 && this.resizingEdge == ResizeEdge.Move)
+            {
+                this.UpdateGroupMovedNotes();
             }
         }
 
@@ -3049,6 +3708,125 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 && note.StartTick < candidateEndTick);
         }
 
+        private bool HasOverlappingNoteExcludingIndices(BreakbeatPatternNote candidate, HashSet<int> excludedIndices)
+        {
+            long candidateEndTick = (long)candidate.StartTick + candidate.DurationTicks;
+            for (int index = 0; index < this.notes.Count; index++)
+            {
+                if (excludedIndices.Contains(index))
+                {
+                    continue;
+                }
+
+                BreakbeatPatternNote note = this.notes[index];
+                if (note.TrackIndex == candidate.TrackIndex
+                    && candidate.StartTick < (long)note.StartTick + note.DurationTicks
+                    && note.StartTick < candidateEndTick)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void UpdateGroupMovedNotes()
+        {
+            if (this.resizeGroupOriginals.Count == 0 || this.resizingNote is null || this.resizeOriginalNote is null)
+            {
+                return;
+            }
+
+            int tickDelta = this.resizingNote.StartTick - this.resizeOriginalNote.StartTick;
+            int trackDelta = this.resizingNote.TrackIndex - this.resizeOriginalNote.TrackIndex;
+            HashSet<int> movingIndices = new(this.resizeGroupOriginals.Keys);
+            int patternEndTick = this.bars * BreakbeatGenerator_V2.PatternTicksPerBar;
+            var notesToModify = new List<(int Index, BreakbeatPatternNote Updated)>();
+
+            foreach (var kvp in this.resizeGroupOriginals)
+            {
+                int noteIndex = kvp.Key;
+                BreakbeatPatternNote originalNote = kvp.Value;
+                if (noteIndex < 0 || noteIndex >= this.notes.Count)
+                {
+                    continue;
+                }
+
+                if (ReferenceEquals(originalNote, this.resizeOriginalNote))
+                {
+                    continue;
+                }
+
+                int maximumStartTick = Math.Max(0, patternEndTick - originalNote.DurationTicks);
+                int newStartTick = Math.Clamp(originalNote.StartTick + tickDelta, 0, maximumStartTick);
+                int newTrackIndex = Math.Clamp(originalNote.TrackIndex + trackDelta, 0, this.samples.Count - 1);
+                BreakbeatPatternNote updatedNote = originalNote with
+                {
+                    StartTick = newStartTick,
+                    TrackIndex = newTrackIndex
+                };
+
+                BreakbeatPatternNote currentNote = this.notes[noteIndex];
+                if (updatedNote == currentNote)
+                {
+                    continue;
+                }
+
+                if (!this.HasOverlappingNoteExcludingIndices(updatedNote, movingIndices))
+                {
+                    notesToModify.Add((noteIndex, updatedNote));
+                }
+            }
+
+            foreach (var (noteIndex, updatedNote) in notesToModify)
+            {
+                if (noteIndex >= 0 && noteIndex < this.notes.Count)
+                {
+                    BreakbeatPatternNote oldNote = this.notes[noteIndex];
+                    this.notes[noteIndex] = updatedNote;
+                    this.selectedNotes.Remove(oldNote);
+                    this.selectedNotes.Add(updatedNote);
+                }
+            }
+
+            if (notesToModify.Count > 0)
+            {
+                this.resizeChanged = true;
+                this.RegisterPatternNotesChanged(notesToModify.Select(n => n.Updated).Select(note => (BreakbeatPatternNote?)note).ToArray());
+            }
+        }
+
+        private void RestoreGroupNotesToOriginals()
+        {
+            if (this.resizeGroupOriginals.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var kvp in this.resizeGroupOriginals)
+            {
+                int noteIndex = kvp.Key;
+                BreakbeatPatternNote originalNote = kvp.Value;
+                if (noteIndex < 0 || noteIndex >= this.notes.Count)
+                {
+                    continue;
+                }
+
+                if (ReferenceEquals(originalNote, this.resizeOriginalNote))
+                {
+                    continue;
+                }
+
+                BreakbeatPatternNote currentNote = this.notes[noteIndex];
+                if (currentNote != originalNote)
+                {
+                    this.notes[noteIndex] = originalNote;
+                    this.selectedNotes.Remove(currentNote);
+                    this.selectedNotes.Add(originalNote);
+                }
+            }
+        }
+
         private bool TryGetCell(Point point, out int row, out int column)
         {
             row = -1;
@@ -3200,7 +3978,15 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             IReadOnlyList<int> selectedLoopSections,
             CancellationToken cancellationToken)
         {
-            float bpm = (float)this.numericUpDown_bpm.Value;
+            return await this.RenderHearBufferAsync(patternNotes, selectedLoopSections, (float)this.hearLiveBpm, cancellationToken);
+        }
+
+        private async Task<AudioObj> RenderHearBufferAsync(
+            IReadOnlyList<BreakbeatPatternNote> patternNotes,
+            IReadOnlyList<int> selectedLoopSections,
+            float bpm,
+            CancellationToken cancellationToken)
+        {
             AudioObj? renderedPattern = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
                 patternNotes,
                 this.samples,
@@ -3319,21 +4105,230 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void SwapLivePreviewBuffer(AudioObj replacement, bool restartAtBeginning = false)
         {
+            this.SwapLivePreviewBuffer(replacement, [], [], restartAtBeginning);
+        }
+
+        private void SwapLivePreviewBuffer(
+            AudioObj replacement,
+            int[] oldLoopSections,
+            int[] newLoopSections,
+            bool restartAtBeginning = false)
+        {
             if (this.previewAudio is null)
             {
                 return;
             }
 
             AudioObj current = this.previewAudio;
-            long samplePosition = restartAtBeginning
-                ? 0
-                : current.Position * (long)Math.Max(1, current.Channels);
+            long samplePosition;
+            if (restartAtBeginning)
+            {
+                samplePosition = 0;
+            }
+            else if (oldLoopSections.Length > 0 && newLoopSections.Length > 0)
+            {
+                samplePosition = this.MapLoopSwapSamplePosition(current, replacement, oldLoopSections, newLoopSections);
+            }
+            else
+            {
+                // Fraction-preserving swap: keeps the musical position stable when the
+                // buffer length changed (e.g. BPM change re-render).
+                int channels = Math.Max(1, current.Channels);
+                long oldTotalFrames = Math.Max(1, current.Data.LongLength / channels);
+                long newTotalFrames = Math.Max(1, replacement.Data.LongLength / Math.Max(1, replacement.Channels));
+                double fraction = Math.Clamp((double)current.Position / oldTotalFrames, 0.0, 1.0);
+                samplePosition = (long)Math.Round(fraction * newTotalFrames) * Math.Max(1, replacement.Channels);
+            }
+
             current.SwapPlaybackData(replacement.Data, replacement.SampleRate, replacement.Channels, samplePosition);
             current.Data = replacement.Data;
             current.SampleRate = replacement.SampleRate;
             current.Channels = replacement.Channels;
             current.Length = replacement.Length;
             current.Duration = replacement.Duration;
+        }
+
+        private long MapLoopSwapSamplePosition(
+            AudioObj current,
+            AudioObj replacement,
+            int[] oldLoopSections,
+            int[] newLoopSections)
+        {
+            int currentChannels = Math.Max(1, current.Channels);
+            int replacementChannels = Math.Max(1, replacement.Channels);
+            long oldTotalFrames = Math.Max(1, current.Data.LongLength / currentChannels);
+            long newTotalFrames = Math.Max(1, replacement.Data.LongLength / replacementChannels);
+            long oldPosFrames = Math.Clamp(current.Position, 0, oldTotalFrames);
+            int oldCount = Math.Max(1, oldLoopSections.Length);
+            int newCount = Math.Max(1, newLoopSections.Length);
+            long oldQuarterFrames = Math.Max(1, oldTotalFrames / oldCount);
+            long newQuarterFrames = Math.Max(1, newTotalFrames / newCount);
+            int oldIndex = Math.Clamp((int)(oldPosFrames / oldQuarterFrames), 0, oldLoopSections.Length - 1);
+            int oldTimelineQuarter = oldLoopSections[oldIndex];
+            double offsetFraction = Math.Clamp(
+                (double)(oldPosFrames - (long)oldIndex * oldQuarterFrames) / oldQuarterFrames,
+                0.0,
+                1.0);
+            int newIndex = Array.IndexOf(newLoopSections, oldTimelineQuarter);
+            long newPosFrames;
+            if (newIndex >= 0)
+            {
+                newPosFrames = (long)newIndex * newQuarterFrames + (long)Math.Round(offsetFraction * newQuarterFrames);
+            }
+            else
+            {
+                // Caret was in a now-deselected quarter: continue at the next selected
+                // quarter (circular timeline order) so removed material stops at once.
+                int nextQuarter = newLoopSections
+                    .Where(q => q > oldTimelineQuarter)
+                    .DefaultIfEmpty(newLoopSections.FirstOrDefault())
+                    .First();
+                int nextIndex = Math.Max(0, Array.IndexOf(newLoopSections, nextQuarter));
+                newPosFrames = (long)nextIndex * newQuarterFrames;
+            }
+
+            newPosFrames = Math.Clamp(newPosFrames, 0, Math.Max(0, newTotalFrames - 1));
+            return newPosFrames * replacementChannels;
+        }
+
+        private int[] GetLoopSectionsSnapshot()
+        {
+            if (this.InvokeRequired && !this.IsDisposed)
+            {
+                try
+                {
+                    return (int[])this.Invoke(() => this.selectedLoopSections.OrderBy(section => section).ToArray());
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
+
+            try
+            {
+                return this.selectedLoopSections.OrderBy(section => section).ToArray();
+            }
+            catch (InvalidOperationException)
+            {
+                // HashSet was modified on the UI thread while enumerating: retry once.
+                return this.selectedLoopSections.OrderBy(section => section).ToArray();
+            }
+        }
+
+        private void TrySkipDeselectedQuartersImmediately(int[] activeLoopSections, int[] currentSections)
+        {
+            if (this.previewAudio is null || activeLoopSections.Length == 0 || currentSections.Length == 0)
+            {
+                return;
+            }
+
+            // NOTE: previewQuarterMap always describes the ACTIVE (currently playing)
+            // buffer. Do NOT overwrite it with the new selection before swapping.
+            int channels = Math.Max(1, this.previewAudio.Channels);
+            long totalFrames = Math.Max(1, this.previewAudio.Data.LongLength / channels);
+            long posFrames = Math.Clamp(this.previewAudio.Position, 0, totalFrames);
+            long quarterFrames = Math.Max(1, totalFrames / Math.Max(1, activeLoopSections.Length));
+            int oldIndex = Math.Clamp((int)(posFrames / quarterFrames), 0, activeLoopSections.Length - 1);
+            int currentTimelineQuarter = activeLoopSections[oldIndex];
+            HashSet<int> stillSelected = new(currentSections);
+
+            if (!stillSelected.Contains(currentTimelineQuarter))
+            {
+                // Caret inside a deselected quarter: jump NOW to the next quarter that
+                // exists in BOTH the old buffer and the new selection (else loop start).
+                int nextTimeline = -1;
+                foreach (int candidate in activeLoopSections
+                             .Concat(activeLoopSections)
+                             .SkipWhile(q => q != currentTimelineQuarter)
+                             .Skip(1))
+                {
+                    if (stillSelected.Contains(candidate))
+                    {
+                        nextTimeline = candidate;
+                        break;
+                    }
+                }
+
+                long targetFrames = 0;
+                if (nextTimeline >= 0)
+                {
+                    int targetOldIndex = Array.IndexOf(activeLoopSections, nextTimeline);
+                    if (targetOldIndex >= 0)
+                    {
+                        targetFrames = (long)targetOldIndex * quarterFrames;
+                    }
+                }
+
+                try
+                {
+                    this.previewAudio.SetPosition(targetFrames);
+                }
+                catch
+                {
+                }
+
+                return;
+            }
+
+            // Caret in a selected quarter, but deselected quarters ahead in the OLD
+            // buffer would still play: skip over consecutive deselected quarters.
+            int lookIndex = oldIndex + 1;
+            bool foundGap = false;
+            while (lookIndex < activeLoopSections.Length && !stillSelected.Contains(activeLoopSections[lookIndex]))
+            {
+                foundGap = true;
+                lookIndex++;
+            }
+
+            if (foundGap)
+            {
+                long targetFrames = lookIndex < activeLoopSections.Length
+                    ? (long)lookIndex * quarterFrames
+                    : 0;
+                try
+                {
+                    // Only jump forward over the gap; wrap to 0 when the gap reaches
+                    // the end of the old buffer (loop restarts earlier).
+                    if (targetFrames > posFrames || targetFrames == 0)
+                    {
+                        this.previewAudio.SetPosition(targetFrames);
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private void TryApplyLiveBpmVarispeed(float currentBpm)
+        {
+            if (this.previewAudio is null || !this.previewAudio.PlayerPlaying)
+            {
+                return;
+            }
+
+            if (this.hearBaseBpm <= 0.01f || currentBpm <= 0.01f)
+            {
+                return;
+            }
+
+            float factor = Math.Clamp(currentBpm / this.hearBaseBpm, 0.1f, 4f);
+            if (Math.Abs(factor - this.hearLiveVarispeedFactor) < 0.001f)
+            {
+                return;
+            }
+
+            this.hearLiveVarispeedFactor = factor;
+            try
+            {
+                _ = this.previewAudio.AdjustSampleRate(factor);
+            }
+            catch
+            {
+            }
         }
 
         private async void button_hear_Click(object? sender, EventArgs e)
@@ -3359,8 +4354,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             AudioObj? pendingLivePreview = null;
             int pendingLiveRevision = -1;
             int pendingSelectionRevision = -1;
+            float pendingBpm = 0f;
             int[] pendingLoopSections = [];
-            long pendingReadyLoopPass = -1;
             long previousLoopFrame = 0;
             long loopPass = 0;
             bool stopAtLoopBoundary = false;
@@ -3368,14 +4363,17 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             long stopReadyLoopPass = -1;
             try
             {
-                int[] activeLoopSections = this.selectedLoopSections.OrderBy(section => section).ToArray();
-                bool loopPlaybackActive = activeLoopSections.Length > 0;
+                this.hearLiveBpm = (float)this.numericUpDown_bpm.Value;
+                this.hearBaseBpm = this.hearLiveBpm;
+                this.hearLiveVarispeedFactor = 1f;
+                int[] activeLoopSections = this.GetLoopSectionsSnapshot();
                 int appliedNotesRevision = this.patternNotesRevision;
                 int appliedSelectionRevision = this.loopSelectionRevision;
+                float appliedBpm = this.hearLiveBpm;
                 BreakbeatPatternNote[] initialNotes = this.GetNotesWithoutCoveredRetriggers().ToArray();
-                this.previewAudio = await this.RenderHearBufferAsync(initialNotes, activeLoopSections, cancellationTokenSource.Token);
+                this.previewAudio = await this.RenderHearBufferAsync(initialNotes, activeLoopSections, appliedBpm, cancellationTokenSource.Token);
 
-                if (loopPlaybackActive)
+                if (activeLoopSections.Length > 0)
                 {
                     this.previewQuarterMap = activeLoopSections;
                     this.previewAudio.UpdateLoopFraction(
@@ -3400,14 +4398,15 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
                     if (pendingLivePreview is not null
                         && (pendingLiveRevision != this.patternNotesRevision
-                            || (loopPlaybackActive && pendingSelectionRevision != this.loopSelectionRevision)))
+                            || pendingSelectionRevision != this.loopSelectionRevision
+                            || Math.Abs(pendingBpm - this.hearLiveBpm) > 0.001f))
                     {
                         pendingLivePreview.Dispose();
                         pendingLivePreview = null;
                         pendingLiveRevision = -1;
                         pendingSelectionRevision = -1;
+                        pendingBpm = 0f;
                         pendingLoopSections = [];
-                        pendingReadyLoopPass = -1;
                     }
 
                     if (stopAtLoopBoundary
@@ -3416,9 +4415,23 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                         stopAtLoopBoundary = false;
                     }
 
-                    bool selectionChanged = loopPlaybackActive && this.loopSelectionRevision != appliedSelectionRevision;
+                    int[] currentLoopSections = this.GetLoopSectionsSnapshot();
+                    float currentBpm = this.hearLiveBpm;
+                    bool selectionChanged = !currentLoopSections.SequenceEqual(activeLoopSections);
                     bool notesChanged = this.patternNotesRevision != appliedNotesRevision;
-                    if (pendingLivePreview is null && !stopAtLoopBoundary && (selectionChanged || notesChanged))
+                    bool bpmChanged = Math.Abs(currentBpm - appliedBpm) > 0.001f;
+                    if (bpmChanged)
+                    {
+                        this.TryApplyLiveBpmVarispeed(currentBpm);
+                    }
+
+                    if (selectionChanged && activeLoopSections.Length > 0 && currentLoopSections.Length > 0)
+                    {
+                        // Sofort-Skip: bereits weggetoggelte Taktteile nicht noch einmal durchziehen.
+                        this.TrySkipDeselectedQuartersImmediately(activeLoopSections, currentLoopSections);
+                    }
+
+                    if (pendingLivePreview is null && !stopAtLoopBoundary && (selectionChanged || notesChanged || bpmChanged))
                     {
                         if (notesChanged && !selectionChanged)
                         {
@@ -3430,13 +4443,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                         }
 
                         int requestedNotesRevision = this.patternNotesRevision;
-                        int requestedSelectionRevision = loopPlaybackActive
-                            ? this.loopSelectionRevision
-                            : appliedSelectionRevision;
-                        int[] requestedLoopSections = loopPlaybackActive
-                            ? this.selectedLoopSections.OrderBy(section => section).ToArray()
-                            : activeLoopSections;
-                        if (loopPlaybackActive && requestedLoopSections.Length == 0)
+                        int requestedSelectionRevision = this.loopSelectionRevision;
+                        int[] requestedLoopSections = currentLoopSections;
+                        float requestedBpm = currentBpm;
+                        if (activeLoopSections.Length > 0 && requestedLoopSections.Length == 0)
                         {
                             stopAtLoopBoundary = true;
                             stopSelectionRevision = requestedSelectionRevision;
@@ -3450,23 +4460,42 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                                 Task<AudioObj> renderTask = this.RenderHearBufferAsync(
                                     currentNotes,
                                     requestedLoopSections,
+                                    requestedBpm,
                                     cancellationTokenSource.Token);
                                 while (!renderTask.IsCompleted)
                                 {
                                     await Task.Delay(10);
                                     UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
+                                    float liveBpmDuringRender = this.hearLiveBpm;
+                                    if (liveBpmDuringRender != requestedBpm)
+                                    {
+                                        this.TryApplyLiveBpmVarispeed(liveBpmDuringRender);
+                                    }
                                 }
 
                                 AudioObj replacement = await renderTask;
                                 UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
                                 if (requestedNotesRevision == this.patternNotesRevision
-                                    && (!loopPlaybackActive || requestedSelectionRevision == this.loopSelectionRevision))
+                                    && requestedSelectionRevision == this.loopSelectionRevision
+                                    && Math.Abs(requestedBpm - this.hearLiveBpm) < 0.5f)
                                 {
                                     pendingLivePreview = replacement;
                                     pendingLiveRevision = requestedNotesRevision;
                                     pendingSelectionRevision = requestedSelectionRevision;
+                                    pendingBpm = requestedBpm;
                                     pendingLoopSections = requestedLoopSections;
-                                    pendingReadyLoopPass = loopPass;
+                                }
+                                else if (Math.Abs(requestedBpm - this.hearLiveBpm) >= 0.5f
+                                    && requestedNotesRevision == this.patternNotesRevision
+                                    && requestedSelectionRevision == this.loopSelectionRevision)
+                                {
+                                    // BPM wurde während des Renderns weiter gedreht: trotzdem
+                                    // übernehmen (fließend), statt zu verwerfen.
+                                    pendingLivePreview = replacement;
+                                    pendingLiveRevision = requestedNotesRevision;
+                                    pendingSelectionRevision = requestedSelectionRevision;
+                                    pendingBpm = requestedBpm;
+                                    pendingLoopSections = requestedLoopSections;
                                 }
                                 else
                                 {
@@ -3495,155 +4524,22 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                         break;
                     }
 
-                    // RESPONSIVE LOOP SECTION CHANGES:
-                    // When selection changes, immediately trigger re-render and swap ASAP
-                    if (selectionChanged || notesChanged)
-                    {
-                        // Update previewQuarterMap IMMEDIATELY to reflect current selection
-                        int[] currentSections = this.selectedLoopSections.OrderBy(s => s).ToArray();
-                        int[] bufferSections = activeLoopSections;
-                        this.previewQuarterMap = currentSections;
-
-                        // IMMEDIATE POSITION JUMP for deselected sections:
-                        // Find sections that are in the buffer but no longer selected
-                        int[] deselectedInBuffer = bufferSections
-                            .Where(q => !this.selectedLoopSections.Contains(q))
-                            .ToArray();
-
-                        if (deselectedInBuffer.Length > 0 && loopPlaybackActive && this.previewAudio is not null)
-                        {
-                            int currentQuarter = this.GetCurrentLoopQuarter();
-                            
-                            // 1) Caret currently in a deselected section â†’ jump to next selected NOW
-                            if (deselectedInBuffer.Contains(currentQuarter))
-                            {
-                                int nextQuarter = currentSections
-                                    .Where(q => q > currentQuarter)
-                                    .FirstOrDefault();
-                                if (nextQuarter == 0)
-                                {
-                                    nextQuarter = currentSections.FirstOrDefault();
-                                }
-                                if (nextQuarter > 0)
-                                {
-                                    double secondsPerBar = 240.0 / Math.Max(1.0, (double)this.Bpm);
-                                    double secondsPerQuarter = secondsPerBar / 4.0;
-                                    int nextIndex = Array.IndexOf(currentSections, nextQuarter);
-                                    double targetTime = nextIndex * secondsPerQuarter;
-                                    this.previewAudio.SetPosition((long)(targetTime * this.previewAudio.SampleRate));
-                                }
-                            }
-                            // 2) Deselected sections ahead of caret â†’ skip them immediately
-                            else
-                            {
-                                int nextDeselectedAhead = deselectedInBuffer
-                                    .Where(q => q > currentQuarter)
-                                    .FirstOrDefault();
-                                if (nextDeselectedAhead > 0)
-                                {
-                                    int nextSelected = currentSections
-                                        .Where(q => q > nextDeselectedAhead)
-                                        .FirstOrDefault();
-                                    if (nextSelected == 0)
-                                    {
-                                        nextSelected = currentSections.FirstOrDefault();
-                                    }
-                                    if (nextSelected > 0)
-                                    {
-                                        double secondsPerBar = 240.0 / Math.Max(1.0, (double)this.Bpm);
-                                        double secondsPerQuarter = secondsPerBar / 4.0;
-                                        int nextIndex = Array.IndexOf(currentSections, nextSelected);
-                                        double targetTime = nextIndex * secondsPerQuarter;
-                                        this.previewAudio.SetPosition((long)(targetTime * this.previewAudio.SampleRate));
-                                    }
-                                }
-                            }
-                        }
-
-                        if (pendingLivePreview is null && !stopAtLoopBoundary)
-                        {
-                            if (notesChanged && !selectionChanged)
-                            {
-                                for (int debounceMilliseconds = 0; debounceMilliseconds < 100; debounceMilliseconds += 10)
-                                {
-                                    await Task.Delay(10, cancellationTokenSource.Token);
-                                    UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
-                                }
-                            }
-
-                            int requestedNotesRevision = this.patternNotesRevision;
-                            int requestedSelectionRevision = loopPlaybackActive
-                                ? this.loopSelectionRevision
-                                : appliedSelectionRevision;
-                            int[] requestedLoopSections = loopPlaybackActive
-                                ? currentSections
-                                : activeLoopSections;
-
-                            if (loopPlaybackActive && requestedLoopSections.Length == 0)
-                            {
-                                stopAtLoopBoundary = true;
-                                stopSelectionRevision = requestedSelectionRevision;
-                                stopReadyLoopPass = loopPass;
-                            }
-                            else
-                            {
-                                BreakbeatPatternNote[] currentNotes = this.GetNotesWithoutCoveredRetriggers().ToArray();
-                                try
-                                {
-                                    Task<AudioObj> renderTask = this.RenderHearBufferAsync(
-                                        currentNotes,
-                                        requestedLoopSections,
-                                        cancellationTokenSource.Token);
-                                    while (!renderTask.IsCompleted)
-                                    {
-                                        await Task.Delay(10);
-                                        UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
-                                    }
-
-                                    AudioObj replacement = await renderTask;
-                                    UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
-                                    if (requestedNotesRevision == this.patternNotesRevision
-                                        && (!loopPlaybackActive || requestedSelectionRevision == this.loopSelectionRevision))
-                                    {
-                                        pendingLivePreview = replacement;
-                                        pendingLiveRevision = requestedNotesRevision;
-                                        pendingSelectionRevision = requestedSelectionRevision;
-                                        pendingLoopSections = requestedLoopSections;
-                                        pendingReadyLoopPass = loopPass;
-                                    }
-                                    else
-                                    {
-                                        replacement.Dispose();
-                                    }
-                                }
-                                catch (OperationCanceledException)
-                                {
-                                    throw;
-                                }
-                                catch (Exception ex)
-                                {
-                                    LogManager.Log("Live breakbeat preview update failed.");
-                                    LogManager.Log(ex);
-                                    await Task.Delay(250, cancellationTokenSource.Token);
-                                }
-                            }
-                        }
-                    }
-
-                    // Swap to new buffer IMMEDIATELY when ready (don't wait for loop boundary)
-                    bool pendingSelectionChange = loopPlaybackActive
-                        && pendingSelectionRevision != appliedSelectionRevision;
+                    // Swap SOFORT sobald der neue Buffer fertig ist (kein Abwarten des
+                    // Loopendes, kein stumpfes Durchziehen bereits abgewählter Teile).
+                    // Noten- wie Loopänderungen werden dadurch bereits im laufenden
+                    // Durchgang hörbar, sobald sie hinter der Caretposition liegen.
                     if (pendingLivePreview is not null
                         && pendingLiveRevision == this.patternNotesRevision
-                        && pendingSelectionRevision == this.loopSelectionRevision
-                        && (pendingSelectionChange
-                            ? loopPass > pendingReadyLoopPass
-                            : !this.IsCaretOverChangedNote()))
+                        && pendingSelectionRevision == this.loopSelectionRevision)
                     {
-                        this.SwapLivePreviewBuffer(pendingLivePreview, restartAtBeginning: pendingSelectionChange);
-                        if (pendingSelectionChange)
+                        bool selectionSwap = !pendingLoopSections.SequenceEqual(activeLoopSections);
+                        bool bpmSwap = Math.Abs(pendingBpm - appliedBpm) > 0.001f;
+                        int[] swapOldSections = activeLoopSections;
+                        int[] swapNewSections = pendingLoopSections;
+                        this.SwapLivePreviewBuffer(pendingLivePreview, swapOldSections, swapNewSections, restartAtBeginning: false);
+                        activeLoopSections = pendingLoopSections;
+                        if (activeLoopSections.Length > 0)
                         {
-                            activeLoopSections = pendingLoopSections;
                             this.previewQuarterMap = activeLoopSections;
                             this.previewAudio!.UpdateLoopFraction(
                                 0,
@@ -3651,18 +4547,39 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                                 this.previewAudio.Data.LongLength,
                                 loopEnabled: true,
                                 adjustPosition: false);
-                            appliedSelectionRevision = pendingSelectionRevision;
-                            previousLoopFrame = 0;
                         }
+                        else
+                        {
+                            this.previewQuarterMap = [];
+                        }
+
+                        if (bpmSwap)
+                        {
+                            appliedBpm = pendingBpm;
+                            this.hearBaseBpm = pendingBpm;
+                            this.hearLiveVarispeedFactor = 1f;
+                            try
+                            {
+                                await this.previewAudio!.AdjustSampleRate(1f);
+                            }
+                            catch
+                            {
+                            }
+                        }
+
+                        appliedSelectionRevision = pendingSelectionRevision;
+                        previousLoopFrame = this.previewAudio!.Position;
+                        UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
 
                         pendingLivePreview.Dispose();
                         pendingLivePreview = null;
                         appliedNotesRevision = pendingLiveRevision;
                         pendingLiveRevision = -1;
                         pendingSelectionRevision = -1;
+                        pendingBpm = 0f;
                         pendingLoopSections = [];
-                        pendingReadyLoopPass = -1;
                         this.pendingLivePreviewRegions.Clear();
+                        _ = selectionSwap;
                     }
 
                     await Task.Delay(10);
@@ -3835,6 +4752,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
             private void numericUpDown_bpm_ValueChanged(object? sender, EventArgs e)
             {
+                this.hearLiveBpm = (float)this.numericUpDown_bpm.Value;
                 if (this.initializing || this.restoringHistory)
                 {
                     return;
@@ -3844,7 +4762,9 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 this.pictureBox_pattern.Invalidate();
                 this.QueueHistoryCommit();
 
-                // Live BPM change during hear playback - trigger re-render with new BPM
+                // Live BPM change during hear playback - trigger re-render with new BPM.
+                // The hear loop additionally applies an immediate varispeed factor for
+                // fluid on-the-fly feedback (see button_hear_Click).
                 if (this.hearCancellationTokenSource is not null)
                 {
                     this.patternNotesRevision++; // Force re-render on next loop iteration
@@ -3994,6 +4914,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             bool closeAfterSave = (ModifierKeys & Keys.Control) == Keys.Control;
+            this.CloseAfterSaveRequested = closeAfterSave;
             this.saveInProgress = true;
             this.button_save.Enabled = false;
             string originalText = this.button_save.Text;
@@ -4037,11 +4958,12 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             [
                 "EDIT",
                 "Click empty / drag: add hit / longer note. Click note: play. Right-click / drag: erase.",
-                "Shift-click empty cell: add a green hit hard-cut to one grid step. Shift-drag: select notes; Shift-drag a note edge: hard-cut its sample. Del: erase selection. Ctrl+C: copy. Ctrl+V: preview; click to place, Esc/right-click to cancel.",
+                "Shift-click empty cell: add a green hit hard-cut to one grid step. Shift-drag: select notes; Shift-drag a note edge: hard-cut its sample. Del: erase selection. Ctrl+C: copy (keeps 50-entry history, re-copied moves back to top). Ctrl+V (tap): preview top entry; click to place, Esc/right-click to cancel. Ctrl+V (hold >250ms): clipboard history with thumbnails; Up/Down to cycle, Enter/click takes one for insertion and pulls it to top.",
                 "Ctrl+Z: undo. Ctrl+Y: redo.",
-                "Shift+wheel on a note: pitch +/-0.25 semitones (up to +/-24).",
+                "Shift+wheel on a note: pitch +/-0.25 semitones (up to +/-24); hovers a selected note with an active multiselection to pitch the whole selection.",
                 "Alt+wheel on a note: volume +/-5% (0-250%); 100% is default.",
-                "Right-click a sample name: configure persistent defaults for new notes on that track.",
+                "Right-click a sample name: configure persistent defaults for new notes on that track. Double-click a sample name: rename the track.",
+                "Generate: pick randomization options, then drag a rectangle over empty cells to fill it with random notes (Ctrl+click skips the dialog; right-click/Esc cancels).",
                 "Drag a sample name left of the grid to reorder sample tracks.",
                 "Pre-hear toggles auto-preview; clicking a note always plays it.",
                 "",
@@ -4054,8 +4976,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 "Ctrl+wheel: zoom at pointer. Wheel / bottom bar: horizontal scroll. Steps per bar: powers of 2, up to 256.",
                 "",
                 "BARS / PLAYBACK",
-                "Left-click a bar header to toggle the whole bar. Right-click one of its four quarters to toggle that quarter. During loop playback, changes apply after the current pass.",
-                "+: add bar. -: remove last bar. Save renders and keeps the editor open; Ctrl-click Save renders and closes. Cancel discards unsaved edits."
+                "Left-click a bar header to toggle the whole bar. Right-click one of its four quarters to toggle that quarter. During loop playback, loop/note/BPM changes apply immediately in the running pass.",
+                "+: add bar. -: remove last bar. Save renders and keeps the editor open; Ctrl-click Save renders and closes (with loop-marked quarters: only those, gaplessly concatenated). Cancel discards unsaved edits."
             ]);
 
             MessageBox.Show(
@@ -4070,6 +4992,52 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
         {
             using ControlsConfigDialog dialog = new(_controlsManager);
             dialog.ShowDialog(this);
+        }
+
+        private void button_generate_Click(object? sender, EventArgs e)
+        {
+            if (this.generatingRect || this.generateDragging)
+            {
+                this.CancelGenerateMode();
+                return;
+            }
+
+            bool ctrlHeld = (ModifierKeys & Keys.Control) == Keys.Control;
+            BreakbeatGenerateOptions options = BreakbeatPatternGenerateSettings.Load();
+            if (!ctrlHeld)
+            {
+                using BreakbeatPatternGenerateDialog dialog = new(options);
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                options = dialog.Options;
+                BreakbeatPatternGenerateSettings.Save(options);
+            }
+
+            this.CancelPastePreview();
+            this.generateOptions = BreakbeatPatternGenerateSettings.Normalize(options.Clone());
+            this.generatingRect = true;
+            this.generateDragging = false;
+            this.pictureBox_pattern.Cursor = Cursors.Cross;
+            this.pictureBox_pattern.Focus();
+            this.pictureBox_pattern.Invalidate();
+        }
+
+        private void CancelGenerateMode()
+        {
+            if (!this.generatingRect && !this.generateDragging)
+            {
+                return;
+            }
+
+            this.generatingRect = false;
+            this.generateDragging = false;
+            this.generateOptions = null;
+            this.pictureBox_pattern.Capture = false;
+            this.pictureBox_pattern.Cursor = Cursors.Cross;
+            this.pictureBox_pattern.Invalidate();
         }
     }
 }

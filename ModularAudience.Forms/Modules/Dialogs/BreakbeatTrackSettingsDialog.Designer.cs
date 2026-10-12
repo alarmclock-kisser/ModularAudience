@@ -24,6 +24,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.label_defaultPlaybackMode = new Label();
             this.comboBox_defaultPlaybackMode = new ComboBox();
             this.button_removeTrack = new Button();
+            this.button_cloneTrack = new Button();
             this.button_reset = new Button();
             this.button_apply = new Button();
             this.button_cancel = new Button();
@@ -97,17 +98,28 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.comboBox_defaultPlaybackMode.Name = "comboBox_defaultPlaybackMode";
             this.comboBox_defaultPlaybackMode.Size = new Size(132, 23);
             this.comboBox_defaultPlaybackMode.TabIndex = 6;
-            // 
+            //
             // button_reset
             //
             this.button_reset.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            this.button_reset.Location = new Point(112, 165);
+            this.button_reset.Location = new Point(192, 165);
             this.button_reset.Name = "button_reset";
             this.button_reset.Size = new Size(64, 25);
             this.button_reset.TabIndex = 7;
             this.button_reset.Text = "Reset";
             this.button_reset.UseVisualStyleBackColor = true;
             this.button_reset.Click += this.button_reset_Click;
+            //
+            // button_cloneTrack
+            //
+            this.button_cloneTrack.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            this.button_cloneTrack.Location = new Point(112, 165);
+            this.button_cloneTrack.Name = "button_cloneTrack";
+            this.button_cloneTrack.Size = new Size(74, 25);
+            this.button_cloneTrack.TabIndex = 11;
+            this.button_cloneTrack.Text = "Clone";
+            this.button_cloneTrack.UseVisualStyleBackColor = true;
+            this.button_cloneTrack.Click += this.button_cloneTrack_Click;
             //
             // button_removeTrack
             //
@@ -125,7 +137,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             this.button_apply.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             this.button_apply.DialogResult = DialogResult.OK;
-            this.button_apply.Location = new Point(192, 165);
+            this.button_apply.Location = new Point(272, 165);
             this.button_apply.Name = "button_apply";
             this.button_apply.Size = new Size(75, 25);
             this.button_apply.TabIndex = 8;
@@ -136,7 +148,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             this.button_cancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             this.button_cancel.DialogResult = DialogResult.Cancel;
-            this.button_cancel.Location = new Point(273, 165);
+            this.button_cancel.Location = new Point(353, 165);
             this.button_cancel.Name = "button_cancel";
             this.button_cancel.Size = new Size(75, 25);
             this.button_cancel.TabIndex = 9;
@@ -147,9 +159,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             this.AcceptButton = this.button_apply;
             this.CancelButton = this.button_cancel;
-            this.ClientSize = new Size(360, 206);
+            this.ClientSize = new Size(440, 206);
             this.Controls.Add(this.button_cancel);
             this.Controls.Add(this.button_apply);
+            this.Controls.Add(this.button_cloneTrack);
             this.Controls.Add(this.button_removeTrack);
             this.Controls.Add(this.button_reset);
             this.Controls.Add(this.comboBox_defaultPlaybackMode);
@@ -180,6 +193,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Label label_defaultPlaybackMode;
         private ComboBox comboBox_defaultPlaybackMode;
         private Button button_removeTrack;
+        private Button button_cloneTrack;
         private Button button_reset;
         private Button button_apply;
         private Button button_cancel;

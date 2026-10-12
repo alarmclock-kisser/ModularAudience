@@ -72,6 +72,18 @@ namespace ModularAudience.Forms.Modules
         private int mouseDownX;
         private bool mouseOverWave;
         private int mouseX;
+        private const int SelectionEdgeHitPx = 6;
+        private bool resizingSelection;
+        private long resizeSelectionFixedFrame;
+
+        private enum SelectionEdge
+        {
+            None,
+            Start,
+            End
+        }
+
+        private SelectionEdge resizingSelectionEdge = SelectionEdge.None;
 
         private bool loopEnabled;
         private int loopDenominator;
@@ -264,7 +276,11 @@ namespace ModularAudience.Forms.Modules
             this.pictureBox_waveform.MouseUp += this.Wave_MouseUp;
             this.pictureBox_waveform.MouseWheel += this.Wave_MouseWheel;
             this.pictureBox_waveform.MouseEnter += (_, __) => this.mouseOverWave = true;
-            this.pictureBox_waveform.MouseLeave += (_, __) => this.mouseOverWave = false;
+            this.pictureBox_waveform.MouseLeave += (_, __) =>
+            {
+                this.mouseOverWave = false;
+                this.pictureBox_waveform.Cursor = Cursors.Default;
+            };
 
             this.button_loop.MouseDown += (_, e) => this.ToggleLoop(e);
         }
@@ -1126,18 +1142,33 @@ namespace ModularAudience.Forms.Modules
             {
                 this.dragSelecting = false;
                 this.pendingSelect = false;
-                return;
-            }
-
-            if (this.OriginalAudio.Playing)
-            {
-                this.dragSelecting = false;
-                this.pendingSelect = false;
+                this.resizingSelection = false;
+                this.resizingSelectionEdge = SelectionEdge.None;
                 return;
             }
 
             if (e.Button == MouseButtons.Left)
             {
+                // Kanten-Resize einer bestehenden Auswahl (geht auch während Playback).
+                SelectionEdge edge = this.GetSelectionEdgeAt(e.X);
+                if (edge != SelectionEdge.None)
+                {
+                    int channels = Math.Max(1, this.OriginalAudio.Channels);
+                    long selStart = this.OriginalAudio.SelectionStart / channels;
+                    long selEnd = this.OriginalAudio.SelectionEnd / channels;
+                    this.resizeSelectionFixedFrame = edge == SelectionEdge.Start ? selEnd : selStart;
+                    this.resizingSelectionEdge = edge;
+                    this.resizingSelection = true;
+                    this.pendingSelect = false;
+                    this.dragSelecting = false;
+                    this.mouseDownX = e.X;
+                    this.selectStartFrame = selStart;
+                    this.selectEndFrame = selEnd;
+                    this.pictureBox_waveform.Capture = true;
+                    this.pictureBox_waveform.Cursor = Cursors.SizeWE;
+                    return;
+                }
+
                 long frame = this.MapPixelToFrameInView(e.X);
 
                 // Clamp frame to valid range [0, totalFrames]
@@ -1153,12 +1184,70 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
+        /// <summary>
+        /// Liefert Start/End-Kante einer bestehenden Auswahl am Maus-X,
+        /// sonst None. Nur wenn die Kante im sichtbaren Bereich liegt.
+        /// </summary>
+        private SelectionEdge GetSelectionEdgeAt(int x)
+        {
+            if (!this.HasValidSelection())
+            {
+                return SelectionEdge.None;
+            }
+
+            int channels = Math.Max(1, this.OriginalAudio.Channels);
+            long selStart = this.OriginalAudio.SelectionStart / channels;
+            long selEnd = this.OriginalAudio.SelectionEnd / channels;
+            int width = Math.Max(1, this.pictureBox_waveform.Width);
+            int xStart = this.FrameToPixel(selStart);
+            int xEnd = this.FrameToPixel(selEnd);
+            bool startVisible = xStart >= 0 && xStart <= width;
+            bool endVisible = xEnd >= 0 && xEnd <= width;
+            bool nearStart = startVisible && Math.Abs(x - xStart) <= SelectionEdgeHitPx;
+            bool nearEnd = endVisible && Math.Abs(x - xEnd) <= SelectionEdgeHitPx;
+            if (nearStart && nearEnd)
+            {
+                return Math.Abs(x - xStart) <= Math.Abs(x - xEnd) ? SelectionEdge.Start : SelectionEdge.End;
+            }
+
+            if (nearStart)
+            {
+                return SelectionEdge.Start;
+            }
+
+            if (nearEnd)
+            {
+                return SelectionEdge.End;
+            }
+
+            return SelectionEdge.None;
+        }
+
         private void Wave_MouseMove(object? sender, MouseEventArgs e)
         {
             this.mouseX = e.X;
 
             // 1. Erlaube Dragging auch während Playing
             // (if (this.OriginalAudio.Playing) return;  <-- DAS ENTFERNEN
+
+            if (this.resizingSelection)
+            {
+                long frame = Math.Clamp(this.MapPixelToFrameInView(e.X), 0L, Math.Max(0L, this.GetTotalFrames()));
+                if (this.resizingSelectionEdge == SelectionEdge.Start)
+                {
+                    this.selectStartFrame = Math.Min(frame, this.resizeSelectionFixedFrame);
+                    this.selectEndFrame = this.resizeSelectionFixedFrame;
+                }
+                else
+                {
+                    this.selectStartFrame = this.resizeSelectionFixedFrame;
+                    this.selectEndFrame = Math.Max(frame, this.resizeSelectionFixedFrame);
+                }
+
+                this.UpdateSelection();
+                this.pictureBox_waveform.Invalidate();
+                return;
+            }
 
             if (this.pendingSelect && !this.dragSelecting)
             {
@@ -1195,6 +1284,14 @@ namespace ModularAudience.Forms.Modules
 
                 this.pictureBox_waveform.Invalidate();
             }
+
+            if (!this.pendingSelect && !this.dragSelecting && !this.resizingSelection)
+            {
+                // Hover über Auswahlkante -> Resize-Cursor (auch während Playback).
+                this.pictureBox_waveform.Cursor = this.GetSelectionEdgeAt(e.X) != SelectionEdge.None
+                    ? Cursors.SizeWE
+                    : Cursors.Default;
+            }
         }
 
         private void Wave_MouseUp(object? sender, MouseEventArgs e)
@@ -1204,29 +1301,49 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
-            if (this.OriginalAudio.Playing)
+            if (this.resizingSelection)
             {
-                this.pendingSelect = false;
-                this.dragSelecting = false;
+                this.UpdateSelection();
+                this.resizingSelection = false;
+                this.resizingSelectionEdge = SelectionEdge.None;
+                this.pictureBox_waveform.Capture = false;
+                this.pictureBox_waveform.Cursor = Cursors.Default;
+                this.pictureBox_waveform.Invalidate();
+                _ = this.RefreshWaveformAsync();
                 return;
             }
 
             if (!this.dragSelecting && this.pendingSelect)
             {
-                long frame = this.MapPixelToFrameInView(e.X);
-                this.OriginalAudio.SelectionStart = -1;
-                this.OriginalAudio.SelectionEnd = -1;
-                this.OriginalAudio.SetPosition(frame);
-                int channels = Math.Max(1, this.OriginalAudio.Channels);
-                this.OriginalAudio.StartingOffset = frame * channels;
-                long desiredOffset = frame - this.GetCaretAnchorFrame();
-                desiredOffset = Math.Max(0, desiredOffset);
-                this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
-                this.UpdateOffsetScrollbar();
+                if (this.OriginalAudio.Playing)
+                {
+                    // Klick während Playback: Auswahl nur entfernen,
+                    // Wiedergabeposition unangetastet lassen.
+                    this.selectStartFrame = -1;
+                    this.selectEndFrame = -1;
+                    this.OriginalAudio.SelectionStart = -1;
+                    this.OriginalAudio.SelectionEnd = -1;
+                    this.RecalculateLoopFraction();
+                    this.ApplyLoopFractionToAudio();
+                    this.pictureBox_waveform.Invalidate();
+                }
+                else
+                {
+                    long frame = this.MapPixelToFrameInView(e.X);
+                    this.OriginalAudio.SelectionStart = -1;
+                    this.OriginalAudio.SelectionEnd = -1;
+                    this.OriginalAudio.SetPosition(frame);
+                    int channels = Math.Max(1, this.OriginalAudio.Channels);
+                    this.OriginalAudio.StartingOffset = frame * channels;
+                    long desiredOffset = frame - this.GetCaretAnchorFrame();
+                    desiredOffset = Math.Max(0, desiredOffset);
+                    this.offsetFrames = Math.Min(this.GetMaxOffsetFrames(), desiredOffset);
+                    this.UpdateOffsetScrollbar();
 
-                // EINZELKLICK: Muss die Wellenform neu rendern, da der Scroll-Offset sich geändert hat.
-                this.OriginalAudio.UpdateLoopFraction(0, 0, 0, false, false);
-                _ = this.RefreshWaveformAsync();
+                    // EINZELKLICK: Muss die Wellenform neu rendern, da der Scroll-Offset sich geändert hat.
+                    this.OriginalAudio.UpdateLoopFraction(0, 0, 0, false, false);
+                    _ = this.RefreshWaveformAsync();
+                }
             }
             else if (this.dragSelecting)
             {
@@ -2117,6 +2234,8 @@ namespace ModularAudience.Forms.Modules
             this.OriginalAudio.SelectionEnd = -1;
             this.pendingSelect = false;
             this.dragSelecting = false;
+            this.resizingSelection = false;
+            this.resizingSelectionEdge = SelectionEdge.None;
         }
 
         private bool HasValidSelection()
