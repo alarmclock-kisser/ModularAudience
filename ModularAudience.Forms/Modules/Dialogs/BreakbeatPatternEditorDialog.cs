@@ -1763,6 +1763,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             AudioObj sourceSample = this.sourceSampleOrder[sourceIndex];
+            PatternEditorHistoryState preRemovalState = this.CaptureHistoryState();
             BreakbeatPatternNote[] originalNotes = this.notes.ToArray();
             this.notes.RemoveAll(note => note.TrackIndex == row);
             for (int index = 0; index < this.notes.Count; index++)
@@ -1812,7 +1813,9 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 .ToArray());
             this.ConfigurePatternScrollBar();
             this.pictureBox_pattern.Invalidate();
-            this.CommitHistoryAction();
+            this.undoHistory.Push(preRemovalState);
+            this.redoHistory.Clear();
+            this.lastHistoryState = this.CaptureHistoryState();
         }
 
         private void CloneSampleTrack(int row)
@@ -2443,7 +2446,17 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             BreakbeatPatternNote candidate = this.BuildGeneratedNote(
                 row, startTick, targetTicks,
                 minimumDurationTicks, remainingTicks, pitchSemitones, volumePercent, options);
-            if (this.HasOverlappingNote(candidate))
+            if (options.Interleaved)
+            {
+                long candidateEndTick = (long)candidate.StartTick + candidate.DurationTicks;
+                if (this.notes.Any(note =>
+                        candidate.StartTick < (long)note.StartTick + note.DurationTicks
+                        && note.StartTick < candidateEndTick))
+                {
+                    return false;
+                }
+            }
+            else if (this.HasOverlappingNote(candidate))
             {
                 return false;
             }

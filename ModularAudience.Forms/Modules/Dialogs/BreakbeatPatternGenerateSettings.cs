@@ -26,6 +26,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public bool AllowTimeStretch { get; set; } = BreakbeatPatternGenerateSettings.DefaultAllowTimeStretch;
         public bool AllowVarispeed { get; set; } = BreakbeatPatternGenerateSettings.DefaultAllowVarispeed;
         public bool AllowTruncated { get; set; } = BreakbeatPatternGenerateSettings.DefaultAllowTruncated;
+        public bool Interleaved { get; set; } = BreakbeatPatternGenerateSettings.DefaultInterleaved;
         public int Seed { get; set; } = BreakbeatPatternGenerateSettings.DefaultSeed;
 
         public BreakbeatGenerateOptions Clone() => (BreakbeatGenerateOptions)this.MemberwiseClone();
@@ -47,6 +48,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public const bool DefaultAllowTimeStretch = false;
         public const bool DefaultAllowVarispeed = false;
         public const bool DefaultAllowTruncated = false;
+        public const bool DefaultInterleaved = false;
         public const int DefaultSeed = 0;
 
         private static readonly object Sync = new();

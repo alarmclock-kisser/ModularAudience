@@ -26,6 +26,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private readonly CheckBox check_timeStretch = new();
         private readonly CheckBox check_varispeed = new();
         private readonly CheckBox check_truncated = new();
+        private readonly CheckBox check_interleaved = new();
 
         public BreakbeatPatternGenerateDialog(BreakbeatGenerateOptions options)
         {
@@ -116,6 +117,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
             stretchFlow.Controls.Add(this.check_varispeed);
             stretchFlow.Controls.Add(this.check_truncated);
             stretchFlow.Controls.Add(this.check_pitched);
+            this.check_interleaved.Text = "Interleaved (only one track sounds at a time)";
+            this.check_interleaved.AutoSize = true;
+            this.check_interleaved.Checked = options.Interleaved;
+            this.toolTip.SetToolTip(this.check_interleaved,
+                "On: generated notes never overlap in time across tracks.");
+            stretchFlow.Controls.Add(this.check_interleaved);
             stretchGroup.Controls.Add(stretchFlow);
             this.Controls.Add(stretchGroup);
             stretchGroup.BringToFront();
@@ -160,6 +167,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.check_timeStretch.Checked = options.AllowTimeStretch;
             this.check_varispeed.Checked = options.AllowVarispeed;
             this.check_truncated.Checked = options.AllowTruncated;
+            this.check_interleaved.Checked = options.Interleaved;
         }
 
         public BreakbeatGenerateOptions Options => BreakbeatPatternGenerateSettings.Normalize(new BreakbeatGenerateOptions
@@ -178,6 +186,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             AllowTimeStretch = this.check_timeStretch.Checked,
             AllowVarispeed = this.check_varispeed.Checked,
             AllowTruncated = this.check_truncated.Checked,
+            Interleaved = this.check_interleaved.Checked,
             Seed = (int)this.numeric_seed.Value
         });
     }
