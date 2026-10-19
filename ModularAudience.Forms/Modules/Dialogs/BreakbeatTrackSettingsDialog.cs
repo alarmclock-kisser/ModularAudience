@@ -41,18 +41,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void button_removeTrack_Click(object? sender, EventArgs e)
         {
-            DialogResult confirmation = MessageBox.Show(
-                this,
-                "Remove this track and all of its notes from the pattern? This can be undone with Ctrl+Z.",
-                "Remove Track",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning,
-                MessageBoxDefaultButton.Button2);
-            if (confirmation == DialogResult.Yes)
-            {
-                this.RemoveTrackRequested = true;
-                this.DialogResult = DialogResult.Ignore;
-            }
+            this.RemoveTrackRequested = true;
+            this.DialogResult = DialogResult.Ignore;
         }
     }
 }

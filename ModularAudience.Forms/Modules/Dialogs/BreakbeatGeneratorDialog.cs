@@ -475,7 +475,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // (nicht zusammenhängende Markierungen werden übersprungen).
             // Ohne Markierung oder ohne Ctrl: alles wie bisher.
             if (editedAudio != null
-                && editor.CloseAfterSaveRequested
+                && editor.SaveMarkedQuartersRequested
                 && editor.SelectedLoopSections is { Length: > 0 } markedQuarters)
             {
                 try

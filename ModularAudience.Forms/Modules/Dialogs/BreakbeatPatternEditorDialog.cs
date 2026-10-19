@@ -134,9 +134,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         /// <summary>
         /// True wenn der letzte Save-Klick mit gedrücktem Ctrl erfolgte
-        /// (rendert + schließt; mit Loop-Auswahl nur markierte Taktteile).
+        /// (mit Loop-Auswahl werden nur die markierten Taktteile gerendert).
+        /// Der Dialog bleibt dabei geöffnet.
         /// </summary>
-        public bool CloseAfterSaveRequested { get; private set; }
+        public bool SaveMarkedQuartersRequested { get; private set; }
 
         internal IReadOnlyList<AudioObj> SourceSamples => this.sourceSampleOrder;
 
@@ -561,6 +562,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void pictureBox_pattern_Paint(object? sender, PaintEventArgs e)
         {
+            this.UpdateRemixButtonState();
             e.Graphics.SmoothingMode = SmoothingMode.None;
             e.Graphics.Clear(Color.FromArgb(28, 30, 34));
 
@@ -2596,7 +2598,15 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 return;
             }
 
-            // Historische Ablage: identische Kopie ans Top ziehen statt doppelt.
+            this.StoreCopiedNotesInHistory();
+        }
+
+        /// <summary>
+        /// Legt den aktuellen copiedNotes-Inhalt in der Historic-Ablage ab:
+        /// identische Kopie ans Top ziehen statt doppelt.
+        /// </summary>
+        private void StoreCopiedNotesInHistory()
+        {
             List<BreakbeatPatternNote> snapshot = this.copiedNotes.ToList();
             for (int index = this.clipboardHistory.Count - 1; index >= 0; index--)
             {
@@ -3967,6 +3977,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
         private void RegisterPatternNotesChanged(params BreakbeatPatternNote?[] changedNotes)
         {
             this.patternNotesRevision++;
+            this.UpdateRemixButtonState();
             if (this.hearCancellationTokenSource is null)
             {
                 this.pendingLivePreviewRegions.Clear();
@@ -4926,8 +4937,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 return;
             }
 
-            bool closeAfterSave = (ModifierKeys & Keys.Control) == Keys.Control;
-            this.CloseAfterSaveRequested = closeAfterSave;
+            bool saveMarkedQuarters = (ModifierKeys & Keys.Control) == Keys.Control;
+            this.SaveMarkedQuartersRequested = saveMarkedQuarters;
             this.saveInProgress = true;
             this.button_save.Enabled = false;
             string originalText = this.button_save.Text;
@@ -4937,12 +4948,6 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 if (this.SaveRequested is Func<BreakbeatPatternEditorDialog, Task> saveRequested)
                 {
                     await saveRequested(this);
-                }
-
-                if (closeAfterSave && !this.IsDisposed && !this.Disposing)
-                {
-                    this.DialogResult = DialogResult.OK;
-                    this.Close();
                 }
             }
             catch (Exception ex)
@@ -4977,6 +4982,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 "Alt+wheel on a note: volume +/-5% (0-250%); 100% is default.",
                 "Right-click a sample name: configure persistent defaults for new notes on that track. Double-click a sample name: rename the track.",
                 "Generate: pick randomization options, then drag a rectangle over empty cells to fill it with random notes (Ctrl+click skips the dialog; right-click/Esc cancels).",
+                "Remix: with 2+ selected notes it derives a variation from the selection (pattern detection/reuse, mirror, halves swap, rotate, lane shift, humanize, ghosts, rolls, merge, thin-out, track shuffle, pitch/volume). Ctrl+click applies the persisted settings immediately; the dialog's bottom checkbox toggles between replacing the selection and copying the remix to the clipboard.",
                 "Drag a sample name left of the grid to reorder sample tracks.",
                 "Pre-hear toggles auto-preview; clicking a note always plays it.",
                 "",
@@ -4990,7 +4996,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 "",
                 "BARS / PLAYBACK",
                 "Left-click a bar header to toggle the whole bar. Right-click one of its four quarters to toggle that quarter. During loop playback, loop/note/BPM changes apply immediately in the running pass.",
-                "+: add bar. -: remove last bar. Save renders and keeps the editor open; Ctrl-click Save renders and closes (with loop-marked quarters: only those, gaplessly concatenated). Cancel discards unsaved edits."
+                "+: add bar. -: remove last bar. Save renders and keeps the editor open; Ctrl-click Save keeps it open too and renders only the loop-marked quarters (gaplessly concatenated). Cancel discards unsaved edits."
             ]);
 
             MessageBox.Show(
@@ -5051,6 +5057,846 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.pictureBox_pattern.Capture = false;
             this.pictureBox_pattern.Cursor = Cursors.Cross;
             this.pictureBox_pattern.Invalidate();
+        }
+
+        // ------------------------------------------------------------------
+        // REMIX: leitet aus der aktuellen Mehrfachauswahl eine Variation ab.
+        // ------------------------------------------------------------------
+
+        private void button_remix_Click(object? sender, EventArgs e)
+        {
+            if (this.selectedNotes.Count < 2)
+            {
+                return;
+            }
+
+            this.CancelPastePreview();
+            bool ctrlHeld = (ModifierKeys & Keys.Control) == Keys.Control;
+            BreakbeatRemixOptions options = BreakbeatPatternRemixSettings.Load();
+            if (!ctrlHeld)
+            {
+                using BreakbeatPatternRemixDialog dialog = new(options);
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                options = dialog.Options;
+                BreakbeatPatternRemixSettings.Save(options);
+            }
+
+            this.ApplyRemix(options);
+        }
+
+        /// <summary>
+        /// Remix ist nur bei echter Mehrfachauswahl (2+ Noten) sinnvoll.
+        /// Wird bei jeder Auswahl- und Notenänderung aktualisiert.
+        /// </summary>
+        private void UpdateRemixButtonState()
+        {
+            if (this.IsDisposed || this.Disposing)
+            {
+                return;
+            }
+
+            bool enabled = this.selectedNotes.Count >= 2;
+            if (this.button_remix.Enabled != enabled)
+            {
+                this.button_remix.Enabled = enabled;
+            }
+        }
+
+        private sealed record RemixRun(
+            BreakbeatRemixOptions Options,
+            Random Rand,
+            int TicksPerStep,
+            int PatternEndTick,
+            int TrackCount,
+            int MinRow,
+            int MaxRow,
+            int RegionStartTick,
+            int RegionEndTick,
+            int TotalColumns)
+        {
+            public int RegionStartCol => Math.Clamp(
+                this.RegionStartTick / Math.Max(1, this.TicksPerStep),
+                0,
+                Math.Max(0, this.TotalColumns - 1));
+
+            public int RegionEndCol => Math.Clamp(
+                Math.Max(this.RegionStartTick, this.RegionEndTick - 1) / Math.Max(1, this.TicksPerStep),
+                0,
+                Math.Max(0, this.TotalColumns - 1));
+
+            public int RegionSpanSteps => Math.Max(1, this.RegionEndCol - this.RegionStartCol + 1);
+
+            /// <summary>
+            /// Zufalls-Gate mit Variation als Master: jede Operation nutzt
+            /// ihren eigenen Prozentwert, skaliert über die Variation.
+            /// </summary>
+            public bool Roll(int percent)
+            {
+                int scaled = Math.Clamp(percent, 0, 100) * Math.Clamp(this.Options.VariationPercent, 0, 100) / 100;
+                return scaled > 0 && this.Rand.Next(100) < scaled;
+            }
+        }
+
+        private void ApplyRemix(BreakbeatRemixOptions rawOptions)
+        {
+            BreakbeatRemixOptions options = BreakbeatPatternRemixSettings.Normalize(rawOptions.Clone());
+            List<BreakbeatPatternNote> selection = this.notes
+                .Where(this.selectedNotes.Contains)
+                .OrderBy(note => note.TrackIndex)
+                .ThenBy(note => note.StartTick)
+                .ToList();
+            if (selection.Count < 2 || this.samples.Count == 0)
+            {
+                return;
+            }
+
+            List<BreakbeatPatternNote> outside = this.notes
+                .Where(note => !this.selectedNotes.Contains(note))
+                .ToList();
+            Random rand = options.Seed == 0 ? new Random() : new Random(options.Seed);
+            int ticksPerStep = this.GetTicksPerStep();
+            int patternEndTick = Math.Max(1, this.bars * BreakbeatGenerator_V2.PatternTicksPerBar);
+            int minRow = selection.Min(note => note.TrackIndex);
+            int maxRow = selection.Max(note => note.TrackIndex);
+            int regionStartTick = selection.Min(note => Math.Max(0, note.StartTick));
+            int regionEndTick = selection.Max(note => (int)Math.Min(int.MaxValue, (long)note.StartTick + note.DurationTicks));
+            int totalColumns = Math.Max(1, this.bars * this.currentResolution);
+            RemixRun run = new(
+                options, rand, ticksPerStep, patternEndTick, this.samples.Count,
+                minRow, maxRow, regionStartTick, regionEndTick, totalColumns);
+
+            List<BreakbeatPatternNote> work = new(selection);
+            this.RemixPatternReuse(work, outside, run);
+            this.RemixRegionTransforms(work, outside, run);
+            this.RemixPerNoteTransforms(work, outside, run);
+
+            List<BreakbeatPatternNote> remixed = work
+                .OrderBy(note => note.TrackIndex)
+                .ThenBy(note => note.StartTick)
+                .ToList();
+            if (remixed.Count == 0)
+            {
+                return;
+            }
+
+            if (options.CopyToClipboard)
+            {
+                this.copiedNotes.Clear();
+                this.copiedNotes.AddRange(remixed);
+                this.StoreCopiedNotesInHistory();
+                this.toolTip_pattern.Show("Remix copied to clipboard.", this.button_remix, 0, this.button_remix.Height, 2200);
+                return;
+            }
+
+            BreakbeatPatternNote[] before = this.notes.ToArray();
+            this.notes.RemoveAll(note => this.selectedNotes.Contains(note));
+            this.notes.AddRange(remixed);
+            this.selectedNotes.Clear();
+            foreach (BreakbeatPatternNote note in remixed)
+            {
+                this.selectedNotes.Add(note);
+            }
+
+            this.RegisterPatternNotesChanged(before.Concat(remixed).Select(note => (BreakbeatPatternNote?)note).ToArray());
+            this.pictureBox_pattern.Invalidate();
+            this.CommitHistoryAction();
+            this.toolTip_pattern.Show($"Remix applied ({remixed.Count} notes).", this.button_remix, 0, this.button_remix.Height, 2200);
+        }
+
+        private bool RemixCandidateFits(
+            RemixRun run,
+            BreakbeatPatternNote candidate,
+            IReadOnlyList<BreakbeatPatternNote> outside,
+            IReadOnlyList<BreakbeatPatternNote> work)
+        {
+            if (candidate.TrackIndex < 0 || candidate.TrackIndex >= run.TrackCount
+                || candidate.StartTick < 0 || candidate.DurationTicks <= 0
+                || (long)candidate.StartTick + candidate.DurationTicks > run.PatternEndTick)
+            {
+                return false;
+            }
+
+            foreach (BreakbeatPatternNote note in outside)
+            {
+                if (RemixNotesOverlap(candidate, note))
+                {
+                    return false;
+                }
+            }
+
+            foreach (BreakbeatPatternNote note in work)
+            {
+                if (RemixNotesOverlap(candidate, note))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool RemixNotesOverlap(BreakbeatPatternNote first, BreakbeatPatternNote second)
+        {
+            return first.TrackIndex == second.TrackIndex
+                && first.StartTick < (long)second.StartTick + second.DurationTicks
+                && second.StartTick < (long)first.StartTick + first.DurationTicks;
+        }
+
+        private bool RemixAllFit(
+            IEnumerable<BreakbeatPatternNote> candidates,
+            IReadOnlyList<BreakbeatPatternNote> outside,
+            RemixRun run,
+            out List<BreakbeatPatternNote> accepted)
+        {
+            accepted = [];
+            foreach (BreakbeatPatternNote candidate in candidates)
+            {
+                if (!this.RemixCandidateFits(run, candidate, outside, accepted))
+                {
+                    return false;
+                }
+
+                accepted.Add(candidate);
+            }
+
+            return accepted.Count > 0;
+        }
+
+        /// <summary>
+        /// Schreibt eine transformierte Lane zurück: nur wenn die komplette
+        /// Kombination passt (sonst bleibt die Lane möglichst unverändert).
+        /// </summary>
+        private void RemixApplyLaneCandidates(
+            List<BreakbeatPatternNote> work,
+            IReadOnlyList<BreakbeatPatternNote> outside,
+            RemixRun run,
+            List<BreakbeatPatternNote> candidates,
+            List<BreakbeatPatternNote> originals)
+        {
+            if (candidates.Count > 0
+                && this.RemixAllFit(candidates.OrderBy(note => note.StartTick), outside, run, out List<BreakbeatPatternNote> accepted))
+            {
+                work.AddRange(accepted);
+                return;
+            }
+
+            foreach (BreakbeatPatternNote original in originals.OrderBy(note => note.StartTick))
+            {
+                if (this.RemixCandidateFits(run, original, outside, work))
+                {
+                    work.Add(original);
+                }
+            }
+        }
+
+        private string BuildRemixSignature(
+            IReadOnlyList<BreakbeatPatternNote> lane,
+            int startCol,
+            int length,
+            int ticksPerStep)
+        {
+            char[] signature = new char[length];
+            bool anyHit = false;
+            for (int index = 0; index < length; index++)
+            {
+                int column = startCol + index;
+                bool hit = false;
+                foreach (BreakbeatPatternNote note in lane)
+                {
+                    if (note.StartTick / Math.Max(1, ticksPerStep) == column)
+                    {
+                        hit = true;
+                        break;
+                    }
+                }
+
+                signature[index] = hit ? '1' : '0';
+                anyHit |= hit;
+            }
+
+            return anyHit ? new string(signature) : string.Empty;
+        }
+
+        /// <summary>
+        /// Sucht das häufigste wiederkehrende Sub-Pattern der Lane im
+        /// Auswahlbereich (Fensterlänge zwischen Min und Max).
+        /// </summary>
+        private (string Signature, int StartCol, int Length)? FindRepeatedRemixPattern(
+            IReadOnlyList<BreakbeatPatternNote> lane,
+            RemixRun run)
+        {
+            int minLength = Math.Clamp(run.Options.MinPatternLengthSteps, 1, 64);
+            int maxLength = Math.Clamp(run.Options.MaxPatternLengthSteps, minLength, 64);
+            int requiredRepeats = Math.Clamp(run.Options.MinPatternRepeats, 2, 16);
+            string? bestSignature = null;
+            int bestStartCol = -1;
+            int bestLength = 0;
+            int bestCount = 0;
+
+            for (int length = minLength; length <= Math.Min(maxLength, run.RegionSpanSteps); length++)
+            {
+                Dictionary<string, (int Count, int FirstCol)> counts = new();
+                for (int col = run.RegionStartCol; col + length - 1 <= run.RegionEndCol; col++)
+                {
+                    string signature = this.BuildRemixSignature(lane, col, length, run.TicksPerStep);
+                    if (signature.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    if (counts.TryGetValue(signature, out (int Count, int FirstCol) entry))
+                    {
+                        counts[signature] = (entry.Count + 1, entry.FirstCol);
+                    }
+                    else
+                    {
+                        counts[signature] = (1, col);
+                    }
+                }
+
+                foreach (KeyValuePair<string, (int Count, int FirstCol)> pair in counts)
+                {
+                    if (pair.Value.Count < requiredRepeats)
+                    {
+                        continue;
+                    }
+
+                    if (pair.Value.Count > bestCount || (pair.Value.Count == bestCount && length > bestLength))
+                    {
+                        bestSignature = pair.Key;
+                        bestStartCol = pair.Value.FirstCol;
+                        bestLength = length;
+                        bestCount = pair.Value.Count;
+                    }
+                }
+            }
+
+            return bestSignature is null ? null : (bestSignature, bestStartCol, bestLength);
+        }
+
+        /// <summary>
+        /// Kombinatorik: übernimmt das erste Vorkommen des erkannten Musters
+        /// auf alle weiteren Vorkommen in derselben Lane.
+        /// </summary>
+        private void RemixPatternReuse(
+            List<BreakbeatPatternNote> work,
+            IReadOnlyList<BreakbeatPatternNote> outside,
+            RemixRun run)
+        {
+            if (!run.Roll(run.Options.PatternReusePercent))
+            {
+                return;
+            }
+
+            for (int row = run.MinRow; row <= run.MaxRow; row++)
+            {
+                List<BreakbeatPatternNote> lane = work
+                    .Where(note => note.TrackIndex == row)
+                    .OrderBy(note => note.StartTick)
+                    .ToList();
+                if (lane.Count < 2)
+                {
+                    continue;
+                }
+
+                if (this.FindRepeatedRemixPattern(lane, run) is not { } detected)
+                {
+                    continue;
+                }
+
+                work.RemoveAll(note => note.TrackIndex == row);
+                List<BreakbeatPatternNote> originalLane = new(lane);
+                int windowStart = detected.StartCol * run.TicksPerStep;
+                int windowEnd = windowStart + detected.Length * run.TicksPerStep;
+                List<BreakbeatPatternNote> template = lane
+                    .Where(note => note.StartTick >= windowStart && note.StartTick < windowEnd)
+                    .Select(note => note with { StartTick = note.StartTick - windowStart })
+                    .ToList();
+
+                for (int col = run.RegionStartCol; col + detected.Length - 1 <= run.RegionEndCol; col++)
+                {
+                    if (col == detected.StartCol
+                        || this.BuildRemixSignature(lane, col, detected.Length, run.TicksPerStep) != detected.Signature)
+                    {
+                        continue;
+                    }
+
+                    int occurrenceStart = col * run.TicksPerStep;
+                    int occurrenceEnd = occurrenceStart + detected.Length * run.TicksPerStep;
+                    lane.RemoveAll(note => note.StartTick >= occurrenceStart && note.StartTick < occurrenceEnd);
+                    foreach (BreakbeatPatternNote templateNote in template)
+                    {
+                        lane.Add(templateNote with { StartTick = occurrenceStart + templateNote.StartTick });
+                    }
+                }
+
+                this.RemixApplyLaneCandidates(work, outside, run, lane, originalLane);
+            }
+        }
+
+        private List<BreakbeatPatternNote> RotateRemixCandidates(
+            IReadOnlyList<BreakbeatPatternNote> lane,
+            RemixRun run,
+            int steps)
+        {
+            int span = run.RegionSpanSteps;
+            int normalized = ((steps % span) + span) % span;
+            List<BreakbeatPatternNote> rotated = new(lane.Count);
+            foreach (BreakbeatPatternNote note in lane)
+            {
+                int offset = (int)Math.Round(note.StartTick / (double)run.TicksPerStep) - run.RegionStartCol;
+                int wrapped = ((offset + normalized) % span + span) % span;
+                rotated.Add(note with { StartTick = (run.RegionStartCol + wrapped) * run.TicksPerStep });
+            }
+
+            return rotated;
+        }
+
+        /// <summary>
+        /// Strukturelle Lane-Operationen: Mirror, Halves-Swap, Rotation und
+        /// Lane-Shift. Jede Chance gilt pro Lane.
+        /// </summary>
+        private void RemixRegionTransforms(
+            List<BreakbeatPatternNote> work,
+            IReadOnlyList<BreakbeatPatternNote> outside,
+            RemixRun run)
+        {
+            for (int row = run.MinRow; row <= run.MaxRow; row++)
+            {
+                List<BreakbeatPatternNote> lane = work
+                    .Where(note => note.TrackIndex == row)
+                    .OrderBy(note => note.StartTick)
+                    .ToList();
+                if (lane.Count == 0)
+                {
+                    continue;
+                }
+
+                List<BreakbeatPatternNote> candidates = [.. lane];
+                bool changed = false;
+
+                if (run.Roll(run.Options.MirrorPercent))
+                {
+                    candidates = candidates
+                        .Select(note => note with
+                        {
+                            StartTick = run.RegionStartTick + run.RegionEndTick - (note.StartTick + note.DurationTicks)
+                        })
+                        .ToList();
+                    changed = true;
+                }
+
+                if (run.Roll(run.Options.SwapHalvesPercent))
+                {
+                    int halfSteps = Math.Max(1, run.RegionSpanSteps / 2);
+                    candidates = this.RotateRemixCandidates(candidates, run, halfSteps);
+                    changed = true;
+                }
+
+                if (run.Roll(run.Options.RotateChancePercent))
+                {
+                    int steps = run.Rand.Next(1, Math.Max(2, Math.Clamp(run.Options.RotateSteps, 1, 16) + 1));
+                    if (run.Rand.Next(2) == 0)
+                    {
+                        steps = -steps;
+                    }
+
+                    candidates = this.RotateRemixCandidates(candidates, run, steps);
+                    changed = true;
+                }
+
+                if (run.Roll(run.Options.LaneShiftChancePercent))
+                {
+                    int steps = run.Rand.Next(1, Math.Max(2, Math.Clamp(run.Options.LaneShiftSteps, 1, 16) + 1));
+                    if (run.Rand.Next(2) == 0)
+                    {
+                        steps = -steps;
+                    }
+
+                    List<BreakbeatPatternNote> shifted = candidates
+                        .Select(note => note with { StartTick = note.StartTick + steps * run.TicksPerStep })
+                        .ToList();
+                    if (this.RemixAllFit(shifted, outside, run, out List<BreakbeatPatternNote> acceptedShift))
+                    {
+                        candidates = acceptedShift;
+                        changed = true;
+                    }
+                }
+
+                if (!changed)
+                {
+                    continue;
+                }
+
+                work.RemoveAll(note => note.TrackIndex == row);
+                this.RemixApplyLaneCandidates(work, outside, run, candidates, lane);
+            }
+        }
+
+        private void RemixPerNoteTransforms(
+            List<BreakbeatPatternNote> work,
+            IReadOnlyList<BreakbeatPatternNote> outside,
+            RemixRun run)
+        {
+            this.RemixThinOut(work, run);
+            this.RemixMerge(work, outside, run);
+            this.RemixRoll(work, outside, run);
+            this.RemixGhost(work, outside, run);
+            this.RemixTrackShuffle(work, outside, run);
+            this.RemixHumanize(work, outside, run);
+            this.RemixPitchAndVolume(work, run);
+            this.RemixNoteKinds(work, run);
+        }
+
+        private void RemixThinOut(List<BreakbeatPatternNote> work, RemixRun run)
+        {
+            List<BreakbeatPatternNote> snapshot = this.RemixSelectedLaneNotes(work, run);
+            foreach (BreakbeatPatternNote note in snapshot.OrderBy(_ => run.Rand.Next()))
+            {
+                if (!run.Roll(run.Options.ThinChancePercent))
+                {
+                    continue;
+                }
+
+                int laneCount = work.Count(other => other.TrackIndex == note.TrackIndex);
+                if (laneCount <= 1)
+                {
+                    continue;
+                }
+
+                work.Remove(note);
+            }
+        }
+
+        private void RemixMerge(
+            List<BreakbeatPatternNote> work,
+            IReadOnlyList<BreakbeatPatternNote> outside,
+            RemixRun run)
+        {
+            int maxGapTicks = Math.Clamp(run.Options.MergeGapSteps, 0, 16) * run.TicksPerStep;
+            for (int row = run.MinRow; row <= run.MaxRow; row++)
+            {
+                List<BreakbeatPatternNote> lane = work
+                    .Where(note => note.TrackIndex == row)
+                    .OrderBy(note => note.StartTick)
+                    .ToList();
+                if (lane.Count < 2)
+                {
+                    continue;
+                }
+
+                work.RemoveAll(note => note.TrackIndex == row);
+                List<BreakbeatPatternNote> merged = new(lane.Count);
+                int index = 0;
+                while (index < lane.Count)
+                {
+                    if (index == lane.Count - 1)
+                    {
+                        merged.Add(lane[index]);
+                        break;
+                    }
+
+                    BreakbeatPatternNote first = lane[index];
+                    BreakbeatPatternNote second = lane[index + 1];
+                    long gap = second.StartTick - ((long)first.StartTick + first.DurationTicks);
+                    if (gap >= 0 && gap <= maxGapTicks && run.Roll(run.Options.MergeChancePercent))
+                    {
+                        int duration = (int)Math.Min(int.MaxValue, (long)second.StartTick + second.DurationTicks - first.StartTick);
+                        merged.Add(first with
+                        {
+                            DurationTicks = duration,
+                            TimeStretch = false,
+                            Varispeed = false,
+                            ManuallyResized = false,
+                            HardResized = false,
+                            Truncated = false,
+                            OriginalDurationTicks = 0
+                        });
+                        index += 2;
+                        continue;
+                    }
+
+                    merged.Add(first);
+                    index++;
+                }
+
+                this.RemixApplyLaneCandidates(work, outside, run, merged, lane);
+            }
+        }
+
+        private void RemixRoll(
+            List<BreakbeatPatternNote> work,
+            IReadOnlyList<BreakbeatPatternNote> outside,
+            RemixRun run)
+        {
+            List<BreakbeatPatternNote> snapshot = this.RemixSelectedLaneNotes(work, run);
+            foreach (BreakbeatPatternNote note in snapshot)
+            {
+                if (!run.Roll(run.Options.RollChancePercent) || note.DurationTicks < 2)
+                {
+                    continue;
+                }
+
+                int minimumDuration = BreakbeatGenerator_V2.GetMinimumNoteDurationTicks(
+                    this.samples, note.TrackIndex, (float)this.Bpm, this.currentResolution);
+                int maxParts = Math.Clamp(run.Options.RollPartsMax, 2, 16);
+                int parts = Math.Clamp(note.DurationTicks / Math.Max(1, minimumDuration * 2), 2, maxParts);
+                if (parts < 2)
+                {
+                    continue;
+                }
+
+                int partDuration = Math.Max(1, note.DurationTicks / parts);
+                List<BreakbeatPatternNote> rolled = new(parts);
+                for (int part = 0; part < parts; part++)
+                {
+                    int start = note.StartTick + part * partDuration;
+                    int duration = part == parts - 1 ? note.DurationTicks - part * partDuration : partDuration;
+                    if (duration <= 0)
+                    {
+                        continue;
+                    }
+
+                    rolled.Add(duration >= minimumDuration
+                        ? new BreakbeatPatternNote(
+                            note.TrackIndex, start, duration,
+                            PitchSemitones: note.PitchSemitones,
+                            VolumePercent: note.VolumePercent)
+                        : new BreakbeatPatternNote(
+                            note.TrackIndex, start, duration,
+                            Truncated: true,
+                            HardResized: true,
+                            OriginalDurationTicks: minimumDuration,
+                            PitchSemitones: note.PitchSemitones,
+                            VolumePercent: note.VolumePercent));
+                }
+
+                if (rolled.Count < 2)
+                {
+                    continue;
+                }
+
+                int noteIndex = work.IndexOf(note);
+                if (noteIndex < 0)
+                {
+                    continue;
+                }
+
+                work.RemoveAt(noteIndex);
+                if (this.RemixAllFit(rolled, outside, run, out List<BreakbeatPatternNote> accepted))
+                {
+                    work.AddRange(accepted);
+                }
+                else
+                {
+                    work.Insert(noteIndex, note);
+                }
+            }
+        }
+
+        private void RemixGhost(
+            List<BreakbeatPatternNote> work,
+            IReadOnlyList<BreakbeatPatternNote> outside,
+            RemixRun run)
+        {
+            List<BreakbeatPatternNote> snapshot = this.RemixSelectedLaneNotes(work, run);
+            foreach (BreakbeatPatternNote note in snapshot)
+            {
+                if (!run.Roll(run.Options.GhostChancePercent))
+                {
+                    continue;
+                }
+
+                int start = run.Rand.Next(2) == 0
+                    ? note.StartTick + note.DurationTicks
+                    : note.StartTick - run.TicksPerStep;
+                BreakbeatPatternNote ghost = note with
+                {
+                    StartTick = start,
+                    VolumePercent = Math.Clamp(
+                        note.VolumePercent * Math.Clamp(run.Options.GhostVolumePercent, 0, 250) / 100f,
+                        0f,
+                        250f),
+                    TimeStretch = false,
+                    Varispeed = false,
+                    ManuallyResized = false,
+                    HardResized = false,
+                    Truncated = false,
+                    OriginalDurationTicks = 0
+                };
+                if (this.RemixCandidateFits(run, ghost, outside, work))
+                {
+                    work.Add(ghost);
+                }
+            }
+        }
+
+        private void RemixTrackShuffle(
+            List<BreakbeatPatternNote> work,
+            IReadOnlyList<BreakbeatPatternNote> outside,
+            RemixRun run)
+        {
+            List<BreakbeatPatternNote> snapshot = this.RemixSelectedLaneNotes(work, run);
+            foreach (BreakbeatPatternNote note in snapshot)
+            {
+                if (!run.Roll(run.Options.TrackShufflePercent))
+                {
+                    continue;
+                }
+
+                int targetRow = run.Rand.Next(run.MinRow, run.MaxRow + 1);
+                if (targetRow == note.TrackIndex)
+                {
+                    continue;
+                }
+
+                int index = work.IndexOf(note);
+                if (index < 0)
+                {
+                    continue;
+                }
+
+                BreakbeatPatternNote moved = note with { TrackIndex = targetRow };
+                work.RemoveAt(index);
+                if (this.RemixCandidateFits(run, moved, outside, work))
+                {
+                    work.Insert(index, moved);
+                }
+                else
+                {
+                    work.Insert(index, note);
+                }
+            }
+        }
+
+        private void RemixHumanize(
+            List<BreakbeatPatternNote> work,
+            IReadOnlyList<BreakbeatPatternNote> outside,
+            RemixRun run)
+        {
+            int amount = Math.Clamp(run.Options.HumanizeAmountPercent, 0, 100);
+            int maxDelta = Math.Max(1, run.TicksPerStep * amount / 100);
+            List<BreakbeatPatternNote> snapshot = this.RemixSelectedLaneNotes(work, run);
+            foreach (BreakbeatPatternNote note in snapshot)
+            {
+                if (amount <= 0 || !run.Roll(run.Options.HumanizeChancePercent))
+                {
+                    continue;
+                }
+
+                int delta = run.Rand.Next(-maxDelta, maxDelta + 1);
+                if (delta == 0)
+                {
+                    continue;
+                }
+
+                int index = work.IndexOf(note);
+                if (index < 0)
+                {
+                    continue;
+                }
+
+                BreakbeatPatternNote shifted = note with { StartTick = Math.Max(0, note.StartTick + delta) };
+                if (shifted == note)
+                {
+                    continue;
+                }
+
+                work.RemoveAt(index);
+                if (this.RemixCandidateFits(run, shifted, outside, work))
+                {
+                    work.Insert(index, shifted);
+                }
+                else
+                {
+                    work.Insert(index, note);
+                }
+            }
+        }
+
+        private void RemixPitchAndVolume(List<BreakbeatPatternNote> work, RemixRun run)
+        {
+            for (int index = 0; index < work.Count; index++)
+            {
+                BreakbeatPatternNote note = work[index];
+                if (note.TrackIndex < run.MinRow || note.TrackIndex > run.MaxRow)
+                {
+                    continue;
+                }
+
+                BreakbeatPatternNote updated = note;
+                if (run.Options.PitchRangeSemitones > 0f && run.Roll(run.Options.PitchChancePercent))
+                {
+                    int quarterRange = Math.Max(0, (int)Math.Round(run.Options.PitchRangeSemitones * 4f));
+                    if (quarterRange > 0)
+                    {
+                        int quarterSteps = run.Rand.Next(-quarterRange, quarterRange + 1);
+                        if (quarterSteps != 0)
+                        {
+                            updated = updated with
+                            {
+                                PitchSemitones = Math.Clamp(updated.PitchSemitones + quarterSteps / 4f, -24f, 24f)
+                            };
+                        }
+                    }
+                }
+
+                if (run.Options.VolumeRangePercent > 0f && run.Roll(run.Options.VolumeChancePercent))
+                {
+                    float delta = (float)(run.Rand.NextDouble() * 2.0 - 1.0) * run.Options.VolumeRangePercent;
+                    if (Math.Abs(delta) > 0.01f)
+                    {
+                        updated = updated with
+                        {
+                            VolumePercent = Math.Clamp(updated.VolumePercent + delta, 0f, 250f)
+                        };
+                    }
+                }
+
+                if (updated != note)
+                {
+                    work[index] = updated;
+                }
+            }
+        }
+
+        private void RemixNoteKinds(List<BreakbeatPatternNote> work, RemixRun run)
+        {
+            if (!run.Options.AllowNoteKindChange)
+            {
+                return;
+            }
+
+            for (int index = 0; index < work.Count; index++)
+            {
+                BreakbeatPatternNote note = work[index];
+                if (note.TrackIndex < run.MinRow || note.TrackIndex > run.MaxRow || !run.Roll(50))
+                {
+                    continue;
+                }
+
+                bool makeVarispeed = !note.Varispeed;
+                work[index] = note with
+                {
+                    TimeStretch = !makeVarispeed,
+                    Varispeed = makeVarispeed,
+                    ManuallyResized = true,
+                    OriginalDurationTicks = note.OriginalDurationTicks > 0 ? note.OriginalDurationTicks : note.DurationTicks
+                };
+            }
+        }
+
+        private List<BreakbeatPatternNote> RemixSelectedLaneNotes(
+            List<BreakbeatPatternNote> work,
+            RemixRun run)
+        {
+            return work
+                .Where(note => note.TrackIndex >= run.MinRow && note.TrackIndex <= run.MaxRow)
+                .ToList();
         }
     }
 }
