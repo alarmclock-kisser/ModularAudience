@@ -664,7 +664,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
                 catch (Exception ex)
                 {
-                    string parseError = "LLM-Antwort konnte nicht als Beat-JSON geparst werden." + Environment.NewLine + Environment.NewLine + ex.Message + Environment.NewLine + Environment.NewLine + "Raw response:" + Environment.NewLine + llmContent;
+                    string parseError = "The LLM response could not be parsed as beat JSON." + Environment.NewLine + Environment.NewLine + ex.Message + Environment.NewLine + Environment.NewLine + "Raw response:" + Environment.NewLine + llmContent;
                     LogMultiline("LLM JSON parse error", parseError);
                     this.ShowCopyableMessageBox("LLM JSON Parse Error", parseError);
                     return;

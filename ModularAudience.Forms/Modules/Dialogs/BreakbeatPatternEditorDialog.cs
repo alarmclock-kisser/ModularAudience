@@ -48,6 +48,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private MouseButtons drawingButton;
         private BreakbeatPatternNote? drawingNote;
         private bool drawingShortTimeStretchNote;
+        private bool drawingForceTimeStretch;
+        private bool drawingForceVarispeed;
+        private bool drawingForceTruncated;
         private bool selectingNotes;
         private Point selectionStartPoint;
         private Point selectionCurrentPoint;
@@ -929,9 +932,9 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             int wholeSemitones = quarterSteps / 4;
             string fraction = (quarterSteps % 4) switch
             {
-                1 => "Â¼",
-                2 => "Â½",
-                3 => "Â¾",
+                1 => "¼",
+                2 => "½",
+                3 => "¾",
                 _ => string.Empty
             };
             string value = wholeSemitones > 0
@@ -959,7 +962,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 values.Add("Varispeed");
             }
 
-            return string.Join(" â€¢ ", values);
+            return string.Join(" • ", values);
         }
 
         private static BreakbeatTrackSettings NormalizeTrackSettings(BreakbeatTrackSettings settings)
@@ -1195,11 +1198,15 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
             bool hardResizeEdge = false;
             bool shiftDown = (ModifierKeys & Keys.Shift) == Keys.Shift;
-            if (e.Button == MouseButtons.Left && shiftDown)
+            bool selectionGesture = shiftDown || this._controlActions.Resolve(BindingScope.Grid, e.Button, MouseAction.Drag) == "Select.Rectangle";
+            string? noteGestureAction = this._controlActions.Resolve(BindingScope.Note, e.Button, MouseAction.Drag);
+            bool hardResizeGesture = noteGestureAction == "Note.HardResize";
+            if (e.Button == MouseButtons.Left && (selectionGesture || hardResizeGesture))
             {
                 int edgeNoteIndex = this.FindNoteIndexAt(row, this.PointToTick(e.Location));
                 hardResizeEdge = edgeNoteIndex >= 0
-                    && this.GetResizeEdge(this.notes[edgeNoteIndex], e.Location) is ResizeEdge.Left or ResizeEdge.Right;
+                    && this.GetResizeEdge(this.notes[edgeNoteIndex], e.Location) is ResizeEdge.Left or ResizeEdge.Right
+                    && (shiftDown || hardResizeGesture);
                 if (!hardResizeEdge)
                 {
                     this.selectedNotes.Clear();
@@ -1211,6 +1218,28 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     this.pictureBox_pattern.Invalidate();
                     return;
                 }
+            }
+
+            string? gridClickAction = this._controlActions.Resolve(BindingScope.Grid, e.Button, MouseAction.Click);
+            string? gridDragAction = this._controlActions.Resolve(BindingScope.Grid, e.Button, MouseAction.Drag);
+            string? noteClickActionForDelete = this._controlActions.Resolve(BindingScope.Note, e.Button, MouseAction.Click);
+            string? noteDragActionForDelete = this._controlActions.Resolve(BindingScope.Note, e.Button, MouseAction.Drag);
+            bool remappedDelete = gridClickAction is "Note.Delete" or "Note.EraseDrag"
+                || gridDragAction is "Note.Delete" or "Note.EraseDrag"
+                || noteClickActionForDelete is "Note.Delete" or "Note.EraseDrag"
+                || noteDragActionForDelete is "Note.Delete" or "Note.EraseDrag";
+            if (remappedDelete)
+            {
+                this.drawingButton = e.Button;
+                this.drawingRow = row;
+                this.drawingStartColumn = column;
+                this.rightClickDeleteActive = true;
+                this.pictureBox_pattern.Cursor = this.deleteCursor ?? Cursors.No;
+                this.DeleteNotesAt(row, this.PointToTick(e.Location));
+                this.deadGroupNotes.Clear();
+                this.pictureBox_pattern.Capture = true;
+                this.pictureBox_pattern.Invalidate();
+                return;
             }
 
             this.drawingButton = e.Button;
@@ -1233,7 +1262,9 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     this.resizeOriginalNote = existingNote;
                     this.resizeStartX = e.X;
                     this.resizeStartPoint = e.Location;
-                    this.resizingWithControl = (ModifierKeys & Keys.Control) == Keys.Control;
+                    this.resizingWithControl = (ModifierKeys & Keys.Control) == Keys.Control
+                        || noteGestureAction == "Note.ResizeToggleMode"
+                        || noteGestureAction == "Note.HardResize";
                     this.resizeUseHardResize = hardResizeEdge;
                     this.resizeChanged = false;
                     this.deadGroupNotes.Clear();
@@ -1267,7 +1298,48 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 int stepTicks = this.GetTicksPerStep();
                 int startTick = column * stepTicks;
                 int minimumDuration = BreakbeatGenerator_V2.GetMinimumNoteDurationTicks(this.samples, row, (float)this.Bpm, this.currentResolution);
-                bool controlShortNote = (ModifierKeys & Keys.Control) == Keys.Control;
+                string? drawAction = this._controlActions.Resolve(BindingScope.Grid, e.Button, MouseAction.Drag);
+                if (drawAction is null)
+                {
+                    drawAction = this._controlActions.Resolve(BindingScope.Grid, e.Button, MouseAction.Click);
+                }
+
+                bool controlShortNote;
+                this.drawingForceTimeStretch = false;
+                this.drawingForceVarispeed = false;
+                this.drawingForceTruncated = false;
+                if (drawAction == "Note.DrawTimeStretch")
+                {
+                    controlShortNote = true;
+                    this.drawingForceTimeStretch = true;
+                }
+                else if (drawAction == "Note.DrawVarispeed")
+                {
+                    controlShortNote = true;
+                    this.drawingForceVarispeed = true;
+                }
+                else if (drawAction == "Note.DrawTruncated")
+                {
+                    controlShortNote = true;
+                    this.drawingForceTruncated = true;
+                }
+                else if (drawAction == "Note.DrawShort")
+                {
+                    controlShortNote = true;
+                }
+                else if (drawAction == "Note.Draw" || drawAction is null)
+                {
+                    // Fall back to legacy modifier behaviour when no remapped draw action matched.
+                    controlShortNote = (ModifierKeys & Keys.Control) == Keys.Control;
+                    if (controlShortNote)
+                    {
+                        // Preserve old Ctrl+click stretch-note behaviour.
+                    }
+                }
+                else
+                {
+                    controlShortNote = false;
+                }
                 int originalDurationTicks = controlShortNote
                     ? Math.Max(minimumDuration, stepTicks * 2)
                     : minimumDuration;
@@ -1282,18 +1354,24 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 this.drawingStartColumn = Math.Max(0, startTick / stepTicks);
                 this.drawingShortTimeStretchNote = controlShortNote || initialDurationTicks < minimumDuration;
                 BreakbeatTrackSettings trackDefault = this.trackSettings[row];
-                bool useVarispeed = trackDefault.DefaultPlaybackMode == BreakbeatPlaybackMode.Varispeed;
+                bool useVarispeed = this.drawingForceVarispeed
+                    || (!this.drawingForceTimeStretch && !this.drawingForceTruncated && trackDefault.DefaultPlaybackMode == BreakbeatPlaybackMode.Varispeed);
+                bool isStretchNote = this.drawingShortTimeStretchNote || this.drawingForceTimeStretch || this.drawingForceVarispeed;
                 BreakbeatPatternNote newNote = new(
                     row,
                     startTick,
                     initialDurationTicks,
-                    TimeStretch: this.drawingShortTimeStretchNote && !useVarispeed,
-                    Varispeed: this.drawingShortTimeStretchNote && useVarispeed,
-                    ManuallyResized: this.drawingShortTimeStretchNote,
+                    TimeStretch: isStretchNote && !useVarispeed && !this.drawingForceTruncated,
+                    Varispeed: isStretchNote && useVarispeed && !this.drawingForceTruncated,
+                    Truncated: this.drawingForceTruncated && this.drawingShortTimeStretchNote,
+                    ManuallyResized: isStretchNote || this.drawingForceTruncated,
                     OriginalDurationTicks: originalDurationTicks);
                 if (this.HasOverlappingNote(newNote))
                 {
                     this.drawingShortTimeStretchNote = false;
+                    this.drawingForceTimeStretch = false;
+                    this.drawingForceVarispeed = false;
+                    this.drawingForceTruncated = false;
                     this.deadGroupNotes.Clear();
                     return;
                 }
@@ -1461,13 +1539,17 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     ? draggedDuration
                     : Math.Max(minimumDuration, draggedDuration);
                 bool manuallyResized = durationTicks != originalDurationTicks;
+                bool forceVarispeed = this.drawingForceVarispeed;
+                bool forceTimeStretch = this.drawingForceTimeStretch;
+                bool forceTruncated = this.drawingForceTruncated;
                 BreakbeatPatternNote updated = this.drawingNote with
                 {
                     StartTick = firstColumn * stepTicks,
                     DurationTicks = durationTicks,
-                    TimeStretch = manuallyResized,
-                    Varispeed = false,
-                    ManuallyResized = manuallyResized,
+                    TimeStretch = forceTruncated ? false : (forceTimeStretch || (this.drawingShortTimeStretchNote && !forceVarispeed && manuallyResized)),
+                    Varispeed = forceTruncated ? false : (forceVarispeed || (this.drawingShortTimeStretchNote && forceVarispeed)),
+                    Truncated = forceTruncated && durationTicks < minimumDuration,
+                    ManuallyResized = this.drawingShortTimeStretchNote || forceTimeStretch || forceVarispeed || forceTruncated,
                     OriginalDurationTicks = originalDurationTicks
                 };
                 int index = this.notes.FindIndex(note => ReferenceEquals(note, this.drawingNote));
@@ -1601,6 +1683,9 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.deadGroupNotes.Clear();
             this.drawingNote = null;
             this.drawingShortTimeStretchNote = false;
+            this.drawingForceTimeStretch = false;
+            this.drawingForceVarispeed = false;
+            this.drawingForceTruncated = false;
             this.resizingNote = null;
             this.resizeOriginalNote = null;
             this.resizeGroupOriginals.Clear();
@@ -3082,7 +3167,13 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             bool handled = false;
-            if ((ModifierKeys & Keys.Alt) == Keys.Alt && e.Delta != 0)
+            MouseAction wheelAction = e.Delta < 0 ? MouseAction.WheelDown : MouseAction.WheelUp;
+            ModifierKey wheelMods = ControlActionResolver.CurrentModifiers();
+            string? wheelResolved = this._controlActions.Resolve(BindingScope.Note, InputType.MouseWheel, Keys.None, wheelMods, wheelAction)
+                ?? this._controlActions.Resolve(BindingScope.Global, InputType.MouseWheel, Keys.None, wheelMods, wheelAction);
+            bool volumeWheel = (ModifierKeys & Keys.Alt) == Keys.Alt || wheelResolved == "Param.VolumeWheel";
+            bool pitchWheel = (ModifierKeys & Keys.Shift) == Keys.Shift || wheelResolved == "Param.PitchWheel";
+            if (volumeWheel && e.Delta != 0)
             {
                 if (this.TryGetCell(pointer, out int row, out _))
                 {
@@ -3120,7 +3211,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
                 handled = true;
             }
-            else if ((ModifierKeys & Keys.Shift) == Keys.Shift && e.Delta != 0)
+            else if (pitchWheel && e.Delta != 0)
             {
                 int wheelSteps = Math.Max(1, Math.Abs(e.Delta) / 120);
                 int pitchDelta = Math.Sign(e.Delta) * wheelSteps;

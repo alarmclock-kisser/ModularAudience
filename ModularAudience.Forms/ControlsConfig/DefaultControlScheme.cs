@@ -14,9 +14,9 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.Draw",
-                Implemented = false,
-                DisplayName = "Note zeichnen",
-                Description = "Leere Zelle: Note setzen. Drag horizontal = Länge bestimmen.",
+                Implemented = true,
+                DisplayName = "Draw note",
+                Description = "Empty cell: create a note. Drag horizontally to set its length.",
                 Category = ActionCategory.NoteEditing,
                 ValidScopes = BindingScope.Grid,
                 PrimaryInput = InputType.MouseLeft,
@@ -27,9 +27,9 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.DrawShort",
-                Implemented = false,
-                DisplayName = "Kurze Note (1 Step)",
-                Description = "Leere Zelle: Note mit fixer Länge von 1 Step setzen.",
+                Implemented = true,
+                DisplayName = "Short note (1 step)",
+                Description = "Empty cell: create a note with a fixed length of 1 step (stretch type follows the track default).",
                 Category = ActionCategory.NoteEditing,
                 ValidScopes = BindingScope.Grid,
                 PrimaryInput = InputType.MouseLeft,
@@ -40,10 +40,49 @@ namespace ModularAudience.Forms.ControlsConfig
 
             scheme.Bindings.Add(new ControlBinding
             {
+                ActionId = "Note.DrawTimeStretch",
+                Implemented = true,
+                DisplayName = "Set note as TimeStretch",
+                Description = "Empty cell: create a TimeStretch note (pitch stays the same).",
+                Category = ActionCategory.NoteEditing,
+                ValidScopes = BindingScope.Grid,
+                PrimaryInput = InputType.None,
+                PrimaryMouseAction = MouseAction.Click,
+                SortOrder = 11
+            });
+
+            scheme.Bindings.Add(new ControlBinding
+            {
+                ActionId = "Note.DrawVarispeed",
+                Implemented = true,
+                DisplayName = "Set note as Varispeed",
+                Description = "Empty cell: create a Varispeed note (pitch changes).",
+                Category = ActionCategory.NoteEditing,
+                ValidScopes = BindingScope.Grid,
+                PrimaryInput = InputType.None,
+                PrimaryMouseAction = MouseAction.Click,
+                SortOrder = 11
+            });
+
+            scheme.Bindings.Add(new ControlBinding
+            {
+                ActionId = "Note.DrawTruncated",
+                Implemented = true,
+                DisplayName = "Set note as Truncated",
+                Description = "Empty cell: create a truncated (hard-cut) note.",
+                Category = ActionCategory.NoteEditing,
+                ValidScopes = BindingScope.Grid,
+                PrimaryInput = InputType.None,
+                PrimaryMouseAction = MouseAction.Click,
+                SortOrder = 11
+            });
+
+            scheme.Bindings.Add(new ControlBinding
+            {
                 ActionId = "Note.Move",
-                Implemented = false,
-                DisplayName = "Note verschieben",
-                Description = "Bestehende Note an der Mitte packen und ziehen (horizontal + vertikal).",
+                Implemented = true,
+                DisplayName = "Move note",
+                Description = "Grab the note in the middle and drag to move it (horizontally and vertically).",
                 Category = ActionCategory.NoteEditing,
                 ValidScopes = BindingScope.Note | BindingScope.NoteBody,
                 PrimaryInput = InputType.MouseLeft,
@@ -54,9 +93,9 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.Resize",
-                Implemented = false,
-                DisplayName = "Note resizen (Kante)",
-                Description = "Note am linken/rechten Drittel packen und ziehen zum Verändern der Länge.",
+                Implemented = true,
+                DisplayName = "Resize note (Edge)",
+                Description = "Drag the left or right third of a note to change its length.",
                 Category = ActionCategory.NoteEditing,
                 ValidScopes = BindingScope.Note | BindingScope.NoteEdge,
                 PrimaryInput = InputType.MouseLeft,
@@ -67,24 +106,25 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.ResizeToggleMode",
-                DisplayName = "Resizen + Mode Toggle",
-                Description = "Beim Resizen mit Ctrl: Beim Loslassen ohne Bewegung TimeStretch ↔ Varispeed toggeln.",
+                Implemented = true,
+                DisplayName = "Resize + mode toggle",
+                Description = "Hold Ctrl while resizing and release without moving to toggle between TimeStretch and Varispeed.",
                 Category = ActionCategory.NoteEditing,
                 ValidScopes = BindingScope.Note,
                 PrimaryInput = InputType.MouseLeft,
                 PrimaryModifiers = ModifierKey.Control,
                 PrimaryMouseAction = MouseAction.Drag,
                 IsHardcoded = true,
-                AllowRemapping = false,
+                AllowRemapping = true,
                 SortOrder = 14
             });
 
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.HardResize",
-                Implemented = false,
+                Implemented = true,
                 DisplayName = "Hard Resize (Sample Cut)",
-                Description = "Note auf exakt 1 Step schneiden (Sample wird gehardcut).",
+                Description = "Cut the note to exactly 1 step and harden the sample.",
                 Category = ActionCategory.NoteEditing,
                 ValidScopes = BindingScope.Grid | BindingScope.Note,
                 PrimaryInput = InputType.MouseLeft,
@@ -96,9 +136,9 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.Delete",
-                Implemented = false,
-                DisplayName = "Note löschen (Einzeln)",
-                Description = "Rechtsklick auf Note löscht diese einzelne Note.",
+                Implemented = true,
+                DisplayName = "Delete note (single)",
+                Description = "Right-click a note to delete it.",
                 Category = ActionCategory.NoteEditing,
                 ValidScopes = BindingScope.Note,
                 PrimaryInput = InputType.MouseRight,
@@ -109,15 +149,15 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Note.EraseDrag",
-                Implemented = false,
-                DisplayName = "Radierer-Modus (Ziehen)",
-                Description = "RMB gedrückt halten + ziehen: Alle berührten Noten werden gelöscht (Custom Radiergummi-Cursor).",
+                Implemented = true,
+                DisplayName = "Eraser Mode (Drag)",
+                Description = "Hold and drag the right mouse button to delete every note you touch (custom eraser cursor).",
                 Category = ActionCategory.NoteEditing,
                 ValidScopes = BindingScope.Grid | BindingScope.Note,
                 PrimaryInput = InputType.MouseRight,
                 PrimaryMouseAction = MouseAction.Drag,
                 IsHardcoded = true,
-                AllowRemapping = false,
+                AllowRemapping = true,
                 SortOrder = 17
             });
 
@@ -125,9 +165,9 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Select.Rectangle",
-                Implemented = false,
-                DisplayName = "Rechteckselektion",
-                Description = "Shift + LMB auf leerer Zelle + ziehen: Mehrfachauswahl per Rechteck.",
+                Implemented = true,
+                DisplayName = "Rectangle Selection",
+                Description = "Shift + drag on an empty cell: select notes with a rectangle.",
                 Category = ActionCategory.Selection,
                 ValidScopes = BindingScope.Grid,
                 PrimaryInput = InputType.MouseLeft,
@@ -139,9 +179,9 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Select.GroupResize",
-                Implemented = false,
-                DisplayName = "Gruppen-Resize",
-                Description = "Shift + Kante ziehen: Alle markierten Noten ändern dieselbe Kante um denselben Delta.",
+                Implemented = true,
+                DisplayName = "Group Resize",
+                Description = "Shift + drag a note edge: resize all selected notes by the same amount.",
                 Category = ActionCategory.Selection,
                 ValidScopes = BindingScope.Note,
                 PrimaryInput = InputType.MouseLeft,
@@ -153,9 +193,9 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Select.CloneDrag",
-                Implemented = false,
-                DisplayName = "Selektion klonen (Drag)",
-                Description = "Alt + LMB auf markierter Note + ziehen: Kopie der Selektion erstellen.",
+                Implemented = true,
+                DisplayName = "Clone selection (drag)",
+                Description = "Alt + drag a selected note: create a copy of the selection.",
                 Category = ActionCategory.Selection,
                 ValidScopes = BindingScope.Note,
                 PrimaryInput = InputType.MouseLeft,
@@ -167,8 +207,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Select.Delete",
-                DisplayName = "Selektion löschen",
-                Description = "Entf / Backspace: Alle markierten Noten löschen.",
+                DisplayName = "Delete selection",
+                Description = "Delete / Backspace: delete all selected notes.",
                 Category = ActionCategory.Selection,
                 ValidScopes = BindingScope.Global,
                 PrimaryInput = InputType.Key,
@@ -179,8 +219,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Select.DeleteAlt",
-                DisplayName = "Selektion löschen (Backspace)",
-                Description = "Backspace: Alternative zum Löschen der Selektion.",
+                DisplayName = "Delete selection (Backspace)",
+                Description = "Backspace: alternative key for deleting the selection.",
                 Category = ActionCategory.Selection,
                 ValidScopes = BindingScope.Global,
                 PrimaryInput = InputType.Key,
@@ -192,8 +232,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Clipboard.Copy",
-                DisplayName = "Kopieren",
-                Description = "Markierte Noten in Zwischenablage kopieren.",
+                DisplayName = "Copy",
+                Description = "Copy selected notes to clipboard.",
                 Category = ActionCategory.Clipboard,
                 ValidScopes = BindingScope.Global,
                 PrimaryInput = InputType.KeyCombo,
@@ -205,8 +245,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Clipboard.PastePreview",
-                DisplayName = "Einfügen (Preview)",
-                Description = "Paste-Preview starten: Ghost-Struktur folgt Maus. LMB = platzieren, RMB/Esc = abbrechen.",
+                DisplayName = "Paste (preview)",
+                Description = "Start paste preview: the copied notes follow the mouse. LMB places them, RMB/Esc cancels.",
                 Category = ActionCategory.Clipboard,
                 ValidScopes = BindingScope.Global,
                 PrimaryInput = InputType.KeyCombo,
@@ -218,8 +258,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Clipboard.CancelPaste",
-                DisplayName = "Paste-Preview abbrechen",
-                Description = "Aktive Paste-Preview abbrechen.",
+                DisplayName = "Cancel Paste Preview",
+                Description = "Cancel active paste preview.",
                 Category = ActionCategory.Clipboard,
                 ValidScopes = BindingScope.PastePreview,
                 PrimaryInput = InputType.Key,
@@ -232,8 +272,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Clipboard.PlacePaste",
-                DisplayName = "Paste-Preview platzieren",
-                Description = "Ghost-Struktur an aktueller Mausposition platzieren (nur Noten mit Start auf Grid).",
+                DisplayName = "Place Paste Preview",
+                Description = "Place the paste preview at the current mouse position (only notes starting on the grid).",
                 Category = ActionCategory.Clipboard,
                 ValidScopes = BindingScope.PastePreview,
                 PrimaryInput = InputType.MouseLeft,
@@ -245,44 +285,44 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "View.Zoom",
-                Implemented = false,
-                DisplayName = "Horizontal zoomen",
-                Description = "Strg + Mausrad: Zoom am Mauszeiger (1× … 512×).",
+                Implemented = true,
+                DisplayName = "Zoom (horizontal)",
+                Description = "Ctrl + mouse wheel: zoom around the mouse pointer (1×–512×).",
                 Category = ActionCategory.View,
                 ValidScopes = BindingScope.Global,
                 PrimaryInput = InputType.MouseWheel,
                 PrimaryModifiers = ModifierKey.Control,
                 PrimaryMouseAction = MouseAction.WheelUp,
                 IsHardcoded = true,
-                AllowRemapping = false,
+                AllowRemapping = true,
                 SortOrder = 40
             });
 
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "View.ScrollHorizontal",
-                Implemented = false,
-                DisplayName = "Horizontal scrollen",
-                Description = "Mausrad (bei Zoom > 1×): Horizontal scrollen.",
+                Implemented = true,
+                DisplayName = "Horizontal Scroll",
+                Description = "Mouse wheel (when zoomed in): scroll horizontally.",
                 Category = ActionCategory.View,
                 ValidScopes = BindingScope.Global,
                 PrimaryInput = InputType.MouseWheel,
                 PrimaryMouseAction = MouseAction.WheelUp,
                 IsHardcoded = true,
-                AllowRemapping = false,
+                AllowRemapping = true,
                 SortOrder = 41
             });
 
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "View.ScrollBar",
-                Implemented = false,
-                DisplayName = "Scrollbalken",
-                Description = "Untere Scrollbar ziehen für horizontale Navigation.",
+                Implemented = true,
+                DisplayName = "Scroll bar",
+                Description = "Drag the bottom scroll bar to scroll horizontally.",
                 Category = ActionCategory.View,
                 ValidScopes = BindingScope.Global,
                 IsHardcoded = true,
-                AllowRemapping = false,
+                AllowRemapping = true,
                 SortOrder = 42
             });
 
@@ -290,8 +330,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Playback.HearToggle",
-                DisplayName = "Hear Wiedergabe Start/Stop",
-                Description = "Loop-Wiedergabe der markierten Quarters starten/stoppen.",
+                DisplayName = "Hear start/stop",
+                Description = "Start or stop loop playback of the marked quarters.",
                 Category = ActionCategory.Playback,
                 ValidScopes = BindingScope.Global,
                 PrimaryInput = InputType.Key,
@@ -302,28 +342,28 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Playback.PrehearNote",
-                Implemented = false,
-                DisplayName = "Note vorhören (Click)",
-                Description = "Klick auf Note spielt diese sofort (unabhängig von Pre-Hear Setting).",
+                Implemented = true,
+                DisplayName = "Prehear note (click)",
+                Description = "Click a note to play it immediately (regardless of the Pre-hear setting).",
                 Category = ActionCategory.Playback,
                 ValidScopes = BindingScope.Note,
                 PrimaryInput = InputType.MouseLeft,
                 PrimaryMouseAction = MouseAction.Click,
                 IsHardcoded = true,
-                AllowRemapping = false,
+                AllowRemapping = true,
                 SortOrder = 51
             });
 
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Playback.PrehearToggle",
-                Implemented = false,
-                DisplayName = "Auto-Prehear toggeln",
-                Description = "Checkbox 'Pre-Hear': Nach Platzieren/Ändern automatisch Note vorhören.",
+                Implemented = true,
+                DisplayName = "Auto prehear toggle",
+                Description = "Pre-hear checkbox: automatically preview a note after placing or changing it.",
                 Category = ActionCategory.Playback,
                 ValidScopes = BindingScope.Global,
                 IsHardcoded = true,
-                AllowRemapping = false,
+                AllowRemapping = true,
                 SortOrder = 52
             });
 
@@ -331,8 +371,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Loop.ToggleBar",
-                DisplayName = "Ganzen Takt toggeln",
-                Description = "LMB auf Takt-Header: Alle 4 Quarters des Takts an/abwählen.",
+                DisplayName = "Toggle whole bar",
+                Description = "LMB on a bar header: select/deselect all four quarters of the bar.",
                 Category = ActionCategory.LoopControl,
                 ValidScopes = BindingScope.BarHeader,
                 PrimaryInput = InputType.MouseLeft,
@@ -343,8 +383,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Loop.ToggleQuarter",
-                DisplayName = "Einzelnes Viertel toggeln",
-                Description = "RMB auf Takt-Header: Einzelnes Quarter an/abwählen.",
+                DisplayName = "Toggle single quarter",
+                Description = "RMB on a bar header: select/deselect a single quarter.",
                 Category = ActionCategory.LoopControl,
                 ValidScopes = BindingScope.BarHeader,
                 PrimaryInput = InputType.MouseRight,
@@ -355,8 +395,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Loop.AddBar",
-                DisplayName = "Takt hinzufügen",
-                Description = "Plus-Taste: Einen Takt anhängen (max 64).",
+                DisplayName = "Add bar",
+                Description = "Plus button or + key: append a bar (max 64).",
                 Category = ActionCategory.LoopControl,
                 ValidScopes = BindingScope.Global,
                 PrimaryInput = InputType.Key,
@@ -367,8 +407,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Loop.RemoveBar",
-                DisplayName = "Letzten Takt entfernen",
-                Description = "Minus-Taste: Letzten Takt entfernen (min 1).",
+                DisplayName = "Remove last bar",
+                Description = "Minus button or - key: remove the last bar.",
                 Category = ActionCategory.LoopControl,
                 ValidScopes = BindingScope.Global,
                 PrimaryInput = InputType.Key,
@@ -380,8 +420,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Track.Reorder",
-                DisplayName = "Track verschieben (Reorder)",
-                Description = "Track-Name links mit LMB draggen: Ghost-Row folgt Maus, Einfügeline zeigt Target.",
+                DisplayName = "Move track (reorder)",
+                Description = "Drag a track name on the left with LMB: a ghost row follows the mouse and an insertion line shows the target.",
                 Category = ActionCategory.TrackManagement,
                 ValidScopes = BindingScope.TrackHeader,
                 PrimaryInput = InputType.MouseLeft,
@@ -392,8 +432,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Track.Settings",
-                DisplayName = "Track-Einstellungen",
-                Description = "Doppelklick auf Track-Name oder RMB → Kontextmenü: Defaults für Volume, Pitch, PlaybackMode setzen.",
+                DisplayName = "Track settings",
+                Description = "Double-click a track name or right-click → context menu: set defaults for volume, pitch and resize mode.",
                 Category = ActionCategory.TrackManagement,
                 ValidScopes = BindingScope.TrackHeader,
                 PrimaryInput = InputType.MouseLeft,
@@ -406,15 +446,15 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Track.AddExternal",
-                Implemented = false,
-                DisplayName = "Externen Track hinzufügen (Drop)",
-                Description = "Samples aus Explorer/anderer Quelle auf Grid ziehen → Track wird an Mausposition eingefügt.",
+                Implemented = true,
+                DisplayName = "Add external track (drop)",
+                Description = "Drag samples from Explorer or another source onto the grid: a track is inserted at the mouse position.",
                 Category = ActionCategory.TrackManagement,
                 ValidScopes = BindingScope.Global,
                 PrimaryInput = InputType.MouseLeft,
                 PrimaryMouseAction = MouseAction.Drag,
                 IsHardcoded = true,
-                AllowRemapping = false,
+                AllowRemapping = true,
                 SortOrder = 72
             });
 
@@ -422,8 +462,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Edit.Undo",
-                DisplayName = "Rückgängig",
-                Description = "Letzte Aktion rückgängig machen.",
+                DisplayName = "Undo",
+                Description = "Undo the last action.",
                 Category = ActionCategory.NoteEditing,
                 ValidScopes = BindingScope.Global,
                 PrimaryInput = InputType.KeyCombo,
@@ -435,8 +475,8 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Edit.Redo",
-                DisplayName = "Wiederholen",
-                Description = "Rückgängig gemachte Aktion wiederholen.",
+                DisplayName = "Redo",
+                Description = "Redo the last undone action.",
                 Category = ActionCategory.NoteEditing,
                 ValidScopes = BindingScope.Global,
                 PrimaryInput = InputType.KeyCombo,
@@ -449,9 +489,9 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Param.PitchWheel",
-                Implemented = false,
-                DisplayName = "Pitch per Mausrad",
-                Description = "Shift + Mausrad über Note/Selektion: Pitch ±¼ Semitone (bis ±24).",
+                Implemented = true,
+                DisplayName = "Pitch by mouse wheel",
+                Description = "Shift + mouse wheel over note/selection: Pitch ±¼ semitone (up to ±24).",
                 Category = ActionCategory.NoteEditing,
                 ValidScopes = BindingScope.Note | BindingScope.Global,
                 PrimaryInput = InputType.MouseWheel,
@@ -465,9 +505,9 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Param.VolumeWheel",
-                Implemented = false,
-                DisplayName = "Volume per Mausrad",
-                Description = "Alt + Mausrad über Note/Selektion: Volume ±5% (0–250%).",
+                Implemented = true,
+                DisplayName = "Volume by mouse wheel",
+                Description = "Alt + mouse wheel over note/selection: volume ±5% (0–250%).",
                 Category = ActionCategory.NoteEditing,
                 ValidScopes = BindingScope.Note | BindingScope.Global,
                 PrimaryInput = InputType.MouseWheel,
@@ -482,15 +522,15 @@ namespace ModularAudience.Forms.ControlsConfig
             scheme.Bindings.Add(new ControlBinding
             {
                 ActionId = "Settings.OpenConfig",
-                Implemented = false,
-                DisplayName = "Steuerungskonfiguration öffnen",
-                Description = "Zahnrad-Symbol klicken: Öffnet dieses Konfigurationsmenü.",
+                Implemented = true,
+                DisplayName = "Open Control Configuration",
+                Description = "Click gear icon: Opens this configuration menu.",
                 Category = ActionCategory.Settings,
                 ValidScopes = BindingScope.Global,
                 PrimaryInput = InputType.MouseLeft,
                 PrimaryMouseAction = MouseAction.Click,
                 IsHardcoded = true,
-                AllowRemapping = false,
+                AllowRemapping = true,
                 SortOrder = 100
             });
 

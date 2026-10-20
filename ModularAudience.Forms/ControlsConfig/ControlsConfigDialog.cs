@@ -90,7 +90,7 @@ namespace ModularAudience.Forms.ControlsConfig
 
         private void BuildLayout()
         {
-            Text = "Steuerung konfigurieren – Breakbeat Pattern Editor";
+            Text = "Configure Controls – Breakbeat Pattern Editor";
             StartPosition = FormStartPosition.CenterParent;
             BackColor = Background;
             ForeColor = TextMain;
@@ -121,7 +121,7 @@ namespace ModularAudience.Forms.ControlsConfig
                 BackColor = Surface,
                 ForeColor = TextMain,
                 BorderStyle = BorderStyle.FixedSingle,
-                PlaceholderText = "Aktionen filtern …"
+                PlaceholderText = "Filter actions …"
             };
             _searchBox.TextChanged += (_, _) => PopulateTree();
             Label searchLabel = new()
@@ -177,15 +177,15 @@ namespace ModularAudience.Forms.ControlsConfig
             };
             root.Controls.Add(_statusLabel, 0, 2);
 
-            _saveButton = FlatButton("Speichern & schließen", 170, Color.FromArgb(35, 80, 62), Accent, Color.White);
+            _saveButton = FlatButton("Save & Close", 170, Color.FromArgb(35, 80, 62), Accent, Color.White);
             _saveButton.Anchor = AnchorStyles.Right;
             _saveButton.Click += (_, _) => SaveAndClose();
 
-            _cancelButton = FlatButton("Abbrechen", 110, SurfaceAlt, SurfaceAlt, TextMain);
+            _cancelButton = FlatButton("Cancel", 110, SurfaceAlt, SurfaceAlt, TextMain);
             _cancelButton.Anchor = AnchorStyles.Right;
             _cancelButton.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
 
-            _resetAllButton = FlatButton("Alles zurücksetzen", 150, SurfaceAlt, SurfaceAlt, TextMain);
+            _resetAllButton = FlatButton("Reset all", 150, SurfaceAlt, SurfaceAlt, TextMain);
             _resetAllButton.Anchor = AnchorStyles.Right;
             _resetAllButton.Click += (_, _) => ResetAll();
 
@@ -358,15 +358,15 @@ namespace ModularAudience.Forms.ControlsConfig
 
         private static string GetCategoryName(ActionCategory category) => category switch
         {
-            ActionCategory.NoteEditing => "Noten bearbeiten",
-            ActionCategory.Selection => "Selektion",
-            ActionCategory.Clipboard => "Zwischenablage",
+            ActionCategory.NoteEditing => "Note editing",
+            ActionCategory.Selection => "Selection",
+            ActionCategory.Clipboard => "Clipboard",
             ActionCategory.Navigation => "Navigation",
-            ActionCategory.View => "Ansicht",
-            ActionCategory.Playback => "Wiedergabe",
-            ActionCategory.LoopControl => "Loop-Bereiche",
-            ActionCategory.TrackManagement => "Tracks",
-            ActionCategory.Settings => "Einstellungen",
+            ActionCategory.View => "View",
+            ActionCategory.Playback => "Playback",
+            ActionCategory.LoopControl => "Loop control",
+            ActionCategory.TrackManagement => "Track management",
+            ActionCategory.Settings => "Settings",
             _ => category.ToString()
         };
 
@@ -421,7 +421,7 @@ namespace ModularAudience.Forms.ControlsConfig
                 {
                     Dock = DockStyle.Top,
                     Height = 60,
-                    Text = "Wähle links eine Aktion, um ihre Belegung zu ändern.",
+                    Text = "Select an action on the left to change its assignment.",
                     ForeColor = TextDim,
                     TextAlign = ContentAlignment.TopLeft
                 };
@@ -471,12 +471,12 @@ namespace ModularAudience.Forms.ControlsConfig
             AddRow(Gap(), 10);
 
             // ---- primary slot
-            AddRow(SlotHeader("Primäre Belegung"), 20);
+            AddRow(SlotHeader("Primary binding"), 20);
             AddRow(BuildSlotRow(binding, Slot.Primary, readOnly), 34);
             AddRow(new Label
             {
-                Text = "Taste, Maustaste (LMB/RMB/MMB), Doppelklick, Drag oder Mausrad aufnehmen – " +
-                       "Modifier (Ctrl/Shift/Alt/Win) werden automatisch mit erfasst.",
+                Text = "Record a key, mouse button (LMB/RMB/MMB), double-click, drag or mouse wheel – " +
+                       "modifiers (Ctrl/Shift/Alt/Win) are captured automatically.",
                 Font = UiFont(8f),
                 ForeColor = Color.FromArgb(118, 126, 138),
                 Dock = DockStyle.Fill,
@@ -485,7 +485,7 @@ namespace ModularAudience.Forms.ControlsConfig
             AddRow(Gap(), 12);
 
             // ---- alternative slot
-            AddRow(SlotHeader("Alternative Belegung (optional)"), 20);
+            AddRow(SlotHeader("Alternative binding (optional)"), 20);
             AddRow(BuildSlotRow(binding, Slot.Secondary, readOnly), 34);
             AddRow(Gap(), 12);
 
@@ -494,8 +494,8 @@ namespace ModularAudience.Forms.ControlsConfig
                 AddRow(new Label
                 {
                     Text = locked
-                        ? "🔒 Diese Aktion ist fest verdrahtet und lässt sich nicht ändern."
-                        : "⚠ Diese Aktion wertet der Editor noch fest verdrahtet aus – eine Änderung hätte noch keine Wirkung.",
+                        ? "🔒 This action is hardwired and cannot be changed."
+                        : "⚠ This action is still hardwired in the editor – changing it has no effect yet.",
                     Font = UiFont(8.5f),
                     ForeColor = locked ? Locked : Warn,
                     Dock = DockStyle.Fill,
@@ -503,7 +503,7 @@ namespace ModularAudience.Forms.ControlsConfig
                 }, 34);
             }
 
-            Button resetThis = FlatButton("Standardbelegung wiederherstellen", 210, SurfaceAlt, SurfaceAlt, TextMain);
+            Button resetThis = FlatButton("Restore default binding", 210, SurfaceAlt, SurfaceAlt, TextMain);
             resetThis.Enabled = !locked;
             resetThis.Click += (_, _) => ResetThisAction();
             Panel resetHost = new() { Dock = DockStyle.Fill, BackColor = Background };
@@ -566,7 +566,7 @@ namespace ModularAudience.Forms.ControlsConfig
                 _valueLabelSecondary = value;
             }
 
-            Button record = FlatButton("Aufnehmen …", 130, Color.FromArgb(40, 74, 60), Accent, Color.White);
+            Button record = FlatButton("Record …", 130, Color.FromArgb(40, 74, 60), Accent, Color.White);
             record.Dock = DockStyle.Fill;
             record.Margin = new Padding(0, 0, 6, 0);
             record.Enabled = !readOnly;
@@ -580,7 +580,7 @@ namespace ModularAudience.Forms.ControlsConfig
                 _recordButtonSecondary = record;
             }
 
-            Button clear = FlatButton("Entfernen", 96, Color.FromArgb(70, 40, 40), Color.FromArgb(150, 60, 60), Danger);
+            Button clear = FlatButton("Remove", 96, Color.FromArgb(70, 40, 40), Color.FromArgb(150, 60, 60), Danger);
             clear.Dock = DockStyle.Fill;
             clear.Margin = new Padding(0, 0, 6, 0);
             clear.Click += (_, _) => ClearSlot(slot);
@@ -683,8 +683,8 @@ namespace ModularAudience.Forms.ControlsConfig
                 ForeColor = Warn,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Padding = new Padding(10, 0, 10, 0),
-                Text = "⚠ Doppelbelegung mit: " + string.Join(", ", conflicts.Select(c => c.DisplayName))
-                       + " – beim Speichern bleibt die zuletzt gelistete Aktion übrig."
+                Text = "⚠ Conflict with: " + string.Join(", ", conflicts.Select(c => c.DisplayName))
+                       + " – when saving, the last action listed remains."
             };
             _detailHost.Controls.Add(_conflictBanner);
             _conflictBanner.BringToFront();
@@ -697,8 +697,8 @@ namespace ModularAudience.Forms.ControlsConfig
             int conflicting = _workingScheme.GetAllConflicts().Count;
 
             _statusLabel.Text = conflicting > 0
-                ? $"{total} Aktionen · {unbound} ohne Primärbelegung · ⚠ {conflicting} mit Doppelbelegung"
-                : $"{total} Aktionen · {unbound} ohne Primärbelegung";
+                ? $"{total} actions · {unbound} unbound · ⚠ {conflicting} conflicts"
+                : $"{total} actions · {unbound} unbound";
 
             _statusLabel.ForeColor = conflicting > 0 ? Warn : TextDim;
         }
@@ -758,9 +758,9 @@ namespace ModularAudience.Forms.ControlsConfig
         private void ResetAll()
         {
             if (MessageBox.Show(this,
-                    "Wirklich alle Belegungen auf die Standardwerte zurücksetzen?\n" +
-                    "Das wird erst nach 'Speichern & schließen' übernommen.",
-                    "Alles zurücksetzen", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                    "Do you really want to reset all bindings to their default values?\n" +
+                    "This is only applied after 'Save & Close'.",
+                    "Reset all", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
             {
                 return;
             }
@@ -795,11 +795,11 @@ namespace ModularAudience.Forms.ControlsConfig
             Button? button = slot == Slot.Primary ? _recordButtonPrimary : _recordButtonSecondary;
             if (button != null)
             {
-                button.Text = "… Esc abbrechen";
+                button.Text = "… Esc to cancel";
                 button.BackColor = Color.FromArgb(90, 130, 60);
             }
 
-            _statusLabel.Text = "Aufnahme läuft: Taste / Maustaste / Mausrad / Doppelklick / Drag drücken. Esc bricht ab.";
+            _statusLabel.Text = "Recording: press a key, mouse button, mouse wheel, double-click or drag. Esc cancels.";
             _statusLabel.ForeColor = Accent;
 
             // A message filter is required so we also see mouse input that happens anywhere
@@ -825,7 +825,7 @@ namespace ModularAudience.Forms.ControlsConfig
                 }
 
                 bool primary = ReferenceEquals(button, _recordButtonPrimary);
-                button.Text = "Aufnehmen …";
+                button.Text = "Record …";
                 button.BackColor = primary ? Color.FromArgb(40, 74, 60) : SurfaceAlt;
             }
         }
@@ -993,9 +993,9 @@ namespace ModularAudience.Forms.ControlsConfig
             if (unbound.Count > 0)
             {
                 MessageBox.Show(this,
-                    "Folgende Aktionen haben ihre Belegung verloren, weil sie doppelt vergeben war:\n\n"
+                    "The following actions lost their binding because it was assigned twice:\n\n"
                     + string.Join("\n", unbound.Select(b => "  • " + b.DisplayName)),
-                    "Doppelbelegung aufgelöst", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    "Conflicts resolved", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
 
             DialogResult = DialogResult.OK;
