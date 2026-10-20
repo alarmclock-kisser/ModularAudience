@@ -1,15 +1,12 @@
 ﻿using System.Drawing;
 using System.Drawing.Imaging;
 using System.Net.Http.Headers;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using ModularAudience.Audio;
 using ModularAudience.Audio.Midi;
 using ModularAudience.Audio.Omr;
 using ModularAudience.Llama.Dtos;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace ModularAudience.Forms.Modules.Dialogs;
 
@@ -57,32 +54,9 @@ public partial class ImageViewDialog : Form
         previousFrame?.Dispose();
     }
 
-    private static Bitmap CreateBitmap(SixLabors.ImageSharp.Image<Rgba32> frame)
+    private static Bitmap CreateBitmap(Bitmap frame)
     {
-        byte[] pixels = new byte[frame.Width * frame.Height * 4];
-        frame.CopyPixelDataTo(pixels);
-
-        for (int offset = 0; offset < pixels.Length; offset += 4)
-        {
-            (pixels[offset], pixels[offset + 2]) = (pixels[offset + 2], pixels[offset]);
-        }
-
-        var bitmap = new Bitmap(frame.Width, frame.Height, PixelFormat.Format32bppArgb);
-        BitmapData bitmapData = bitmap.LockBits(
-            new Rectangle(0, 0, bitmap.Width, bitmap.Height),
-            ImageLockMode.WriteOnly,
-            PixelFormat.Format32bppArgb);
-
-        try
-        {
-            Marshal.Copy(pixels, 0, bitmapData.Scan0, pixels.Length);
-        }
-        finally
-        {
-            bitmap.UnlockBits(bitmapData);
-        }
-
-        return bitmap;
+        return frame.Clone(new Rectangle(0, 0, frame.Width, frame.Height), PixelFormat.Format32bppArgb);
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
@@ -134,7 +108,7 @@ public partial class ImageViewDialog : Form
         object[] imageParts = this.imageObj.Frames.Select((frame, index) =>
         {
             using var stream = new MemoryStream();
-            frame.Save(stream, new PngEncoder());
+            frame.Save(stream, ImageFormat.Png);
             string imageDataUrl = $"data:image/png;base64,{Convert.ToBase64String(stream.ToArray())}";
             return (object)new
             {

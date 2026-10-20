@@ -6,6 +6,7 @@ using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio.Processors_V3;
 using ModularAudience.Forms.Helpers;
+using ModularAudience.Forms.Hotkeys;
 using ModularAudience.Forms.Modules.Dialogs;
 using ModularAudience.MidiController;
 using ModularAudience.MidiController.Models;
@@ -173,6 +174,7 @@ namespace ModularAudience.Forms
             AudioRecorder.RecordingStopped += this.OnAudioRecorderStopped;
             _ = AudioRecorder.StartRollingBufferAsync();
 
+            HotkeyManager.Initialize();
             this._keyFilter = new GlobalKeyMessageFilter();
             this._keyFilter.KeyChanged += this.GlobalKeyChanged;
             Application.AddMessageFilter(this._keyFilter);
@@ -432,6 +434,7 @@ namespace ModularAudience.Forms
             this.StopPausingSyncer();
             ResetCapsLockState();
             this.DisposePlaylist();
+            HotkeyManager.Shutdown();
             if (this._keyFilter != null)
             {
                 try { Application.RemoveMessageFilter(this._keyFilter); } catch { }
@@ -746,6 +749,13 @@ namespace ModularAudience.Forms
 
         private void button_controller_Click(object sender, EventArgs e)
         {
+            bool ctrlPressed = (Control.ModifierKeys & Keys.Control) == Keys.Control;
+            if (!ctrlPressed)
+            {
+                HotkeyConfigWindow.ShowWindow(this);
+                return;
+            }
+
             this._midiService ??= new MidiControllerService();
             this._midiMapper ??= new MidiCommandMapper();
 

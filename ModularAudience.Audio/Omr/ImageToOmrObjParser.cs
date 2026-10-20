@@ -1,6 +1,6 @@
-﻿using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
+﻿using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 
 namespace ModularAudience.Audio.Omr
 {
@@ -55,7 +55,7 @@ namespace ModularAudience.Audio.Omr
             return Task.FromResult(result);
         }
 
-        private static List<DetectedLine> FindHorizontalLines(SixLabors.ImageSharp.Image<Rgba32> frame, CancellationToken ct)
+        private static List<DetectedLine> FindHorizontalLines(Bitmap frame, CancellationToken ct)
         {
             const byte darkPixelThreshold = 160;
             const float minimumCoverage = 0.30f;
@@ -64,45 +64,72 @@ namespace ModularAudience.Audio.Omr
             float coverageSum = 0;
             int runLength = 0;
 
-            frame.ProcessPixelRows(accessor =>
+            ProcessRows(frame, (y, row) =>
             {
-                for (int y = 0; y < frame.Height; y++)
+                ct.ThrowIfCancellationRequested();
+                int darkPixels = 0;
+
+                for (int offset = 0; offset < row.Length; offset += 4)
                 {
-                    ct.ThrowIfCancellationRequested();
-                    Span<Rgba32> row = accessor.GetRowSpan(y);
-                    int darkPixels = 0;
-
-                    foreach (Rgba32 pixel in row)
+                    int luminance = (row[offset + 2] * 299 + row[offset + 1] * 587 + row[offset] * 114) / 1000;
+                    if (row[offset + 3] > 0 && luminance <= darkPixelThreshold)
                     {
-                        int luminance = (pixel.R * 299 + pixel.G * 587 + pixel.B * 114) / 1000;
-                        if (pixel.A > 0 && luminance <= darkPixelThreshold)
-                        {
-                            darkPixels++;
-                        }
+                        darkPixels++;
                     }
-
-                    float coverage = darkPixels / (float)frame.Width;
-                    if (coverage >= minimumCoverage)
-                    {
-                        if (runStart < 0)
-                        {
-                            runStart = y;
-                        }
-
-                        coverageSum += coverage;
-                        runLength++;
-                        continue;
-                    }
-
-                    AddLineFromRun(lines, runStart, runLength, coverageSum);
-                    runStart = -1;
-                    coverageSum = 0;
-                    runLength = 0;
                 }
+
+                float coverage = darkPixels / (float)frame.Width;
+                if (coverage >= minimumCoverage)
+                {
+                    if (runStart < 0)
+                    {
+                        runStart = y;
+                    }
+
+                    coverageSum += coverage;
+                    runLength++;
+                    return;
+                }
+
+                AddLineFromRun(lines, runStart, runLength, coverageSum);
+                runStart = -1;
+                coverageSum = 0;
+                runLength = 0;
             });
 
             AddLineFromRun(lines, runStart, runLength, coverageSum);
             return lines;
+        }
+
+        private static void ProcessRows(Bitmap bitmap, Action<int, byte[]> action)
+        {
+            BitmapData data = bitmap.LockBits(
+                new Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                ImageLockMode.ReadOnly,
+                PixelFormat.Format32bppArgb);
+
+            try
+            {
+                int rowBytes = bitmap.Width * 4;
+                byte[] row = new byte[rowBytes];
+
+                for (int y = 0; y < bitmap.Height; y++)
+                {
+                    Marshal.Copy(GetRowPointer(data, y), row, 0, rowBytes);
+                    action(y, row);
+                }
+            }
+            finally
+            {
+                bitmap.UnlockBits(data);
+            }
+        }
+
+        private static IntPtr GetRowPointer(BitmapData data, int y)
+        {
+            return data.Stride >= 0
+                ? IntPtr.Add(data.Scan0, y * data.Stride)
+                : IntPtr.Add(data.Scan0, (data.Height - 1 - y) * data.Stride);
         }
 
         private static void AddLineFromRun(List<DetectedLine> lines, int runStart, int runLength, float coverageSum)
@@ -189,7 +216,7 @@ namespace ModularAudience.Audio.Omr
             return new OmrRect(0, Math.Max(0, top - verticalMargin), pageWidth, bottom - top + verticalMargin * 2 + 1);
         }
 
-        private static List<StaffSystemSegment> CropStaffSystems(Image<Rgba32> frame, IReadOnlyList<OmrStaffSystem> systems)
+        private static List<StaffSystemSegment> CropStaffSystems(Bitmap frame, IReadOnlyList<OmrStaffSystem> systems)
         {
             var segments = new List<StaffSystemSegment>(systems.Count);
 
@@ -201,13 +228,13 @@ namespace ModularAudience.Audio.Omr
                 int width = Math.Min(bounds.Width, frame.Width - x);
                 int height = Math.Min(bounds.Height, frame.Height - y);
                 var crop = new Rectangle(x, y, width, height);
-                segments.Add(new StaffSystemSegment(systemIndex, bounds, frame.Clone(context => context.Crop(crop))));
+                segments.Add(new StaffSystemSegment(systemIndex, bounds, frame.Clone(crop, PixelFormat.Format32bppArgb)));
             }
 
             return segments;
         }
 
-        private static void AnalyzeMeasures(Image<Rgba32> frame, IReadOnlyList<OmrStaffSystem> systems, CancellationToken ct)
+        private static void AnalyzeMeasures(Bitmap frame, IReadOnlyList<OmrStaffSystem> systems, CancellationToken ct)
         {
             var segments = CropStaffSystems(frame, systems);
             try
@@ -270,22 +297,29 @@ namespace ModularAudience.Audio.Omr
                 return new SegmentAnalysis([], []);
             }
 
-            segment.Image.ProcessPixelRows(accessor =>
+            var staffRows = new bool[segment.Image.Height];
+            foreach (var range in staffRanges)
             {
-                foreach (var range in staffRanges)
+                for (int y = range.Top; y <= range.Bottom; y++)
                 {
-                    for (int y = range.Top; y <= range.Bottom; y++)
+                    staffRows[y] = true;
+                }
+            }
+
+            ProcessRows(segment.Image, (y, row) =>
+            {
+                if (!staffRows[y])
+                {
+                    return;
+                }
+
+                for (int x = 0; x < segment.Image.Width; x++)
+                {
+                    int offset = x * 4;
+                    int luminance = (row[offset + 2] * 299 + row[offset + 1] * 587 + row[offset] * 114) / 1000;
+                    if (row[offset + 3] > 0 && luminance <= 160)
                     {
-                        Span<Rgba32> row = accessor.GetRowSpan(y);
-                        for (int x = 0; x < row.Length; x++)
-                        {
-                            Rgba32 pixel = row[x];
-                            int luminance = (pixel.R * 299 + pixel.G * 587 + pixel.B * 114) / 1000;
-                            if (pixel.A > 0 && luminance <= 160)
-                            {
-                                columnCoverage[x]++;
-                            }
-                        }
+                        columnCoverage[x]++;
                     }
                 }
             });
@@ -328,22 +362,19 @@ namespace ModularAudience.Audio.Omr
                 .Where(y => y >= 0 && y < height)
                 .ToHashSet();
 
-            segment.Image.ProcessPixelRows(accessor =>
+            ProcessRows(segment.Image, (y, row) =>
             {
-                for (int y = 0; y < height; y++)
+                if (staffLineRows.Contains(y))
                 {
-                    if (staffLineRows.Contains(y))
-                    {
-                        continue;
-                    }
+                    return;
+                }
 
-                    Span<Rgba32> row = accessor.GetRowSpan(y);
-                    for (int x = 0; x < width; x++)
-                    {
-                        Rgba32 pixel = row[x];
-                        int luminance = (pixel.R * 299 + pixel.G * 587 + pixel.B * 114) / 1000;
-                        ink[y * width + x] = pixel.A > 0 && luminance <= 128;
-                    }
+                int rowOffset = y * width;
+                for (int x = 0; x < width; x++)
+                {
+                    int offset = x * 4;
+                    int luminance = (row[offset + 2] * 299 + row[offset + 1] * 587 + row[offset] * 114) / 1000;
+                    ink[rowOffset + x] = row[offset + 3] > 0 && luminance <= 128;
                 }
             });
 
@@ -547,7 +578,7 @@ namespace ModularAudience.Audio.Omr
         private readonly record struct DetectedLine(int Y, int Thickness, float Coverage);
         private readonly record struct DetectedStaff(int[] Lines, int Spacing);
         private sealed record SegmentAnalysis(List<OmrMeasure> Measures, List<OmrNoteEvent> NoteCandidates);
-        private sealed record StaffSystemSegment(int SystemIndex, OmrRect Bounds, Image<Rgba32> Image) : IDisposable
+        private sealed record StaffSystemSegment(int SystemIndex, OmrRect Bounds, Bitmap Image) : IDisposable
         {
             public void Dispose() => this.Image.Dispose();
         }

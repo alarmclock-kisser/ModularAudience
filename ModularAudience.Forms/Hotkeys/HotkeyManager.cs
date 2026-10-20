@@ -1,0 +1,989 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Windows.Forms;
+
+namespace ModularAudience.Forms.Hotkeys
+{
+    public sealed class HotkeyManager
+    {
+        private enum CaptureStage
+        {
+            Idle,
+            AwaitingHotkey,
+            AwaitingAction
+        }
+
+        private sealed class PendingMouseAction
+        {
+            public Control Control { get; init; } = null!;
+            public Form Owner { get; init; } = null!;
+            public HotkeyMouseGesture Gesture { get; init; }
+            public HotkeyModifiers Modifiers { get; init; }
+            public Point ScreenPoint { get; init; }
+            public DateTime CapturedUtc { get; init; }
+        }
+
+        private readonly HotkeySettingsManager _settings;
+        private readonly KeyboardDeviceTracker _deviceTracker;
+        private readonly KeyboardMessageFilter _keyboardFilter;
+        private readonly MouseMessageFilter _mouseFilter;
+        private readonly System.Windows.Forms.Timer _holdTimer;
+        private readonly System.Windows.Forms.Timer _mouseCaptureTimer;
+        private readonly HashSet<Keys> _pressedKeys = [];
+
+        private CaptureStage _stage;
+        private Keys _capturedKey = Keys.None;
+        private HotkeyModifiers _capturedModifiers = HotkeyModifiers.None;
+        private string _pendingKeyboardHardwareId = string.Empty;
+        private string _pendingKeyboardDisplayName = string.Empty;
+        private HotkeyBinding? _reRegisterBinding;
+
+        private PendingMouseAction? _pendingMouseAction;
+
+        private HotkeyBinding? _holdBinding;
+        private Keys _holdKey;
+        private HotkeyModifiers _holdAdditionalModifiers;
+        private DateTime _holdStartedUtc;
+        private bool _holdActionExecuted;
+
+        public static HotkeyManager? Instance { get; private set; }
+
+        public event Action? Changed;
+
+        public event Action? KeyboardsChanged;
+
+        public string StatusText { get; private set; } = "No hotkey is being registered.";
+
+        public bool IsCapturing => this._stage != CaptureStage.Idle;
+
+        public string SettingsPath => this._settings.SettingsPath;
+
+        private HotkeyManager()
+        {
+            this._settings = new HotkeySettingsManager();
+            this._deviceTracker = new KeyboardDeviceTracker();
+            this._deviceTracker.KeyboardsChanged += this.DeviceTracker_KeyboardsChanged;
+            this._keyboardFilter = new KeyboardMessageFilter(this);
+            this._mouseFilter = new MouseMessageFilter(this);
+
+            this._holdTimer = new System.Windows.Forms.Timer { Interval = 25 };
+            this._holdTimer.Tick += this.HoldTimer_Tick;
+
+            this._mouseCaptureTimer = new System.Windows.Forms.Timer
+            {
+                Interval = SystemInformation.DoubleClickTime + 75
+            };
+            this._mouseCaptureTimer.Tick += this.MouseCaptureTimer_Tick;
+        }
+
+        public static HotkeyManager Initialize()
+        {
+            if (Instance != null)
+            {
+                return Instance;
+            }
+
+            HotkeyManager manager = new();
+            Instance = manager;
+            Application.AddMessageFilter(manager._keyboardFilter);
+            Application.AddMessageFilter(manager._mouseFilter);
+            return manager;
+        }
+
+        public static void Shutdown()
+        {
+            HotkeyManager? manager = Instance;
+            if (manager == null)
+            {
+                return;
+            }
+
+            Instance = null;
+            try { manager._holdTimer.Stop(); manager._holdTimer.Dispose(); } catch { }
+            try { manager._mouseCaptureTimer.Stop(); manager._mouseCaptureTimer.Dispose(); } catch { }
+            try { Application.RemoveMessageFilter(manager._keyboardFilter); } catch { }
+            try { Application.RemoveMessageFilter(manager._mouseFilter); } catch { }
+            try { manager._deviceTracker.KeyboardsChanged -= manager.DeviceTracker_KeyboardsChanged; } catch { }
+            try { manager._deviceTracker.Dispose(); } catch { }
+        }
+
+        public IReadOnlyList<HotkeyBinding> GetBindings()
+        {
+            return this._settings.Snapshot();
+        }
+
+        public IReadOnlyList<HotkeyBinding> GetBindingsForScope(string? hardwareId)
+        {
+            return this._settings.GetBindingsForScope(hardwareId);
+        }
+
+        public IReadOnlyList<HotkeyKeyboardProfile> GetKeyboardProfiles()
+        {
+            Dictionary<string, HotkeyKeyboardProfile> profiles =
+                new(StringComparer.OrdinalIgnoreCase);
+
+            foreach (HotkeyKeyboardProfile profile in this._settings.GetProfiles())
+            {
+                profiles[profile.HardwareId] = profile;
+            }
+
+            foreach (HotkeyKeyboardProfile connected in this._deviceTracker.GetConnectedKeyboards())
+            {
+                if (profiles.TryGetValue(connected.HardwareId, out HotkeyKeyboardProfile? existing))
+                {
+                    existing.DisplayName = connected.DisplayName;
+                    existing.IsConnected = true;
+                }
+                else
+                {
+                    profiles[connected.HardwareId] = connected;
+                }
+            }
+
+            return profiles.Values
+                .OrderByDescending(profile => profile.IsConnected)
+                .ThenBy(profile => profile.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(profile => profile.HardwareId, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        public int CopyKeyboardProfile(
+            HotkeyKeyboardProfile source,
+            HotkeyKeyboardProfile destination)
+        {
+            if (source == null || destination == null
+                || string.IsNullOrWhiteSpace(source.HardwareId)
+                || string.IsNullOrWhiteSpace(destination.HardwareId))
+            {
+                return 0;
+            }
+
+            int copied = this._settings.CopyProfile(
+                source.HardwareId,
+                source.DisplayName,
+                destination.HardwareId,
+                destination.DisplayName);
+
+            if (copied > 0)
+            {
+                this.SetStatus(
+                    $"Copied {copied} hotkey(s) from \"{source.DisplayName}\" to \"{destination.DisplayName}\".");
+            }
+
+            return copied;
+        }
+
+        public int RemoveKeyboardProfile(HotkeyKeyboardProfile profile)
+        {
+            if (profile == null || string.IsNullOrWhiteSpace(profile.HardwareId))
+            {
+                return 0;
+            }
+
+            int removed = this._settings.RemoveProfile(profile.HardwareId);
+            if (removed > 0)
+            {
+                this.SetStatus(
+                    $"Removed {removed} hotkey(s) for \"{profile.DisplayName}\".");
+            }
+
+            return removed;
+        }
+
+        public void BeginRegisterNew(string? hardwareId = null, string? displayName = null)
+        {
+            this.CancelPendingMouseAction();
+            this._deviceTracker.ClearPendingKeyEvents();
+            this._reRegisterBinding = null;
+            this._capturedKey = Keys.None;
+            this._capturedModifiers = HotkeyModifiers.None;
+            this._pendingKeyboardHardwareId = HotkeyKeyboardIds.Normalize(hardwareId);
+            this._pendingKeyboardDisplayName = displayName ?? string.Empty;
+            this._stage = CaptureStage.AwaitingHotkey;
+
+            string scope = this._pendingKeyboardHardwareId.Length == 0
+                ? "all keyboards"
+                : string.IsNullOrWhiteSpace(displayName)
+                    ? HotkeyKeyboardIds.GetShortDisplay(this._pendingKeyboardHardwareId)
+                    : displayName;
+            this.SetStatus($"Press the new hotkey combination for {scope} (Esc to cancel)...");
+        }
+
+        public void BeginReRegister(HotkeyBinding binding)
+        {
+            if (binding == null)
+            {
+                return;
+            }
+
+            this.CancelPendingMouseAction();
+            this._deviceTracker.ClearPendingKeyEvents();
+            this._reRegisterBinding = binding;
+            this._capturedKey = Keys.None;
+            this._capturedModifiers = HotkeyModifiers.None;
+            this._pendingKeyboardHardwareId = string.Empty;
+            this._pendingKeyboardDisplayName = string.Empty;
+            this._stage = CaptureStage.AwaitingHotkey;
+            this.SetStatus($"Press a new hotkey for \"{binding.ActionName}\" (Esc to cancel)...");
+        }
+
+        public void CancelCapture()
+        {
+            bool wasCapturing = this._stage != CaptureStage.Idle;
+            this._stage = CaptureStage.Idle;
+            this._reRegisterBinding = null;
+            this._pendingKeyboardHardwareId = string.Empty;
+            this._pendingKeyboardDisplayName = string.Empty;
+            this._deviceTracker.ClearPendingKeyEvents();
+            this.CancelPendingMouseAction();
+
+            if (wasCapturing)
+            {
+                this.SetStatus("Hotkey registration canceled.");
+            }
+        }
+
+        public void RemoveBinding(string id)
+        {
+            HotkeyBinding? binding = this._settings.Find(id);
+            if (binding == null)
+            {
+                return;
+            }
+
+            this._settings.Remove(id);
+            this.SetStatus($"Removed hotkey for \"{binding.ActionName}\".");
+        }
+
+        public void UpdateHoldThreshold(string id, int holdThresholdMs)
+        {
+            HotkeyBinding? binding = this._settings.Find(id);
+            if (binding == null || binding.HoldThresholdMs == holdThresholdMs)
+            {
+                return;
+            }
+
+            this._settings.UpdateHoldThreshold(id, holdThresholdMs);
+            this.SetStatus(
+                $"Hold threshold for \"{binding.ActionName}\" set to " +
+                $"{binding.HoldThresholdMs} ms.");
+        }
+
+        public void UpdateInvertWhileHeld(string id, bool invertWhileHeld)
+        {
+            HotkeyBinding? binding = this._settings.Find(id);
+            if (binding == null || binding.InvertWhileHeld == invertWhileHeld)
+            {
+                return;
+            }
+
+            this._settings.UpdateInvertWhileHeld(id, invertWhileHeld);
+            string state = invertWhileHeld ? "enabled" : "disabled";
+            this.SetStatus($"Hold inversion for \"{binding.ActionName}\" {state}.");
+        }
+
+        private bool HandleKeyDown(Keys key)
+        {
+            key &= Keys.KeyCode;
+            if (key == Keys.None)
+            {
+                return false;
+            }
+
+            if (this._stage == CaptureStage.AwaitingHotkey)
+            {
+                if (key == Keys.Escape)
+                {
+                    this.CancelCapture();
+                    return true;
+                }
+
+                if (IsModifierKey(key))
+                {
+                    return false;
+                }
+
+                this._deviceTracker.TakeKeyboardId(key);
+                HotkeyModifiers modifiers = HotkeyActionResolver.GetCurrentModifiers();
+                this._capturedKey = key;
+                this._capturedModifiers = modifiers;
+
+                if (this._reRegisterBinding != null)
+                {
+                    HotkeyBinding reRegister = this._reRegisterBinding;
+                    this._settings.UpdateHotkey(reRegister.Id, key, modifiers);
+                    this._stage = CaptureStage.Idle;
+                    this._reRegisterBinding = null;
+                    this.SetStatus($"Updated hotkey for \"{reRegister.ActionName}\" to {HotkeyFormatter.FormatCombo(key, modifiers)}.");
+                    return true;
+                }
+
+                this._stage = CaptureStage.AwaitingAction;
+                this.SetStatus(
+                    $"Captured {HotkeyFormatter.FormatCombo(key, modifiers)}. " +
+                    "Now click the action control, numeric up/down arrow, or context menu item you want to bind.");
+                return true;
+            }
+
+            if (this._stage == CaptureStage.AwaitingAction)
+            {
+                if (key == Keys.Escape)
+                {
+                    this.CancelCapture();
+                    return true;
+                }
+
+                return false;
+            }
+
+            this.PrunePressedKeys();
+
+            string? hardwareId = this._deviceTracker.TakeKeyboardId(key);
+            HotkeyModifiers currentModifiers = HotkeyActionResolver.GetCurrentModifiers();
+            HotkeyBinding? binding = this._settings.FindBinding(
+                key,
+                currentModifiers,
+                hardwareId,
+                out HotkeyModifiers additionalModifiers);
+
+            if (binding == null)
+            {
+                return false;
+            }
+
+            if (this._pressedKeys.Contains(key))
+            {
+                return true;
+            }
+
+            this._pressedKeys.Add(key);
+            this.StartHold(binding, key, additionalModifiers);
+            return true;
+        }
+
+        private bool HandleKeyUp(Keys key)
+        {
+            key &= Keys.KeyCode;
+            this._pressedKeys.Remove(key);
+            return false;
+        }
+
+        private void StartHold(
+            HotkeyBinding binding,
+            Keys key,
+            HotkeyModifiers additionalModifiers)
+        {
+            this.ReleaseActiveHold(executeRelease: true);
+
+            this._holdBinding = binding;
+            this._holdKey = key & Keys.KeyCode;
+            this._holdAdditionalModifiers = additionalModifiers;
+            this._holdStartedUtc = DateTime.UtcNow;
+            this._holdActionExecuted = ExecuteBinding(binding, additionalModifiers);
+            this._holdTimer.Start();
+        }
+
+        private void HoldTimer_Tick(object? sender, EventArgs e)
+        {
+            this.PrunePressedKeys();
+
+            HotkeyBinding? binding = this._holdBinding;
+            if (binding == null)
+            {
+                this._holdTimer.Stop();
+                return;
+            }
+
+            if (HotkeyActionResolver.IsKeyPhysicallyDown(this._holdKey))
+            {
+                return;
+            }
+
+            this._holdBinding = null;
+            this._holdTimer.Stop();
+
+            double heldMs = (DateTime.UtcNow - this._holdStartedUtc).TotalMilliseconds;
+            if (this._holdActionExecuted && ShouldExecuteToggleRelease(binding, heldMs))
+            {
+                ExecuteBinding(binding, this._holdAdditionalModifiers);
+            }
+
+            this._holdActionExecuted = false;
+            this._holdAdditionalModifiers = HotkeyModifiers.None;
+        }
+
+        private static bool ShouldExecuteToggleRelease(HotkeyBinding binding, double heldMs)
+        {
+            if (!binding.ToggleOnRelease || heldMs < binding.HoldThresholdMs)
+            {
+                return false;
+            }
+
+            return binding.InvertWhileHeld
+                || HotkeyActionResolver.GetToggleState(binding.Target) == true;
+        }
+
+        private void ReleaseActiveHold(bool executeRelease)
+        {
+            HotkeyBinding? binding = this._holdBinding;
+            if (binding == null)
+            {
+                return;
+            }
+
+            this._holdBinding = null;
+            this._holdTimer.Stop();
+
+            double heldMs = (DateTime.UtcNow - this._holdStartedUtc).TotalMilliseconds;
+            if (executeRelease
+                && this._holdActionExecuted
+                && ShouldExecuteToggleRelease(binding, heldMs))
+            {
+                ExecuteBinding(binding, this._holdAdditionalModifiers);
+            }
+
+            this._holdActionExecuted = false;
+            this._holdAdditionalModifiers = HotkeyModifiers.None;
+        }
+
+        private static bool ExecuteBinding(
+            HotkeyBinding binding,
+            HotkeyModifiers additionalModifiers)
+        {
+            IHotkeyAction action = HotkeyActionCatalog.Create(binding.Target);
+            if (action is IModifierAwareHotkeyAction modifierAware)
+            {
+                return modifierAware.Execute(additionalModifiers);
+            }
+
+            return action.Execute();
+        }
+
+        private void PrunePressedKeys()
+        {
+            if (this._pressedKeys.Count == 0)
+            {
+                return;
+            }
+
+            this._pressedKeys.RemoveWhere(key => !HotkeyActionResolver.IsKeyPhysicallyDown(key));
+        }
+
+        private bool HandleMouseMessage(ref Message message)
+        {
+            if (this._stage != CaptureStage.AwaitingAction)
+            {
+                return false;
+            }
+
+            const int WM_LBUTTONDOWN = 0x0201;
+            const int WM_LBUTTONDBLCLK = 0x0203;
+            const int WM_RBUTTONDOWN = 0x0204;
+            const int WM_MBUTTONDOWN = 0x0207;
+
+            bool isLeftDown = message.Msg == WM_LBUTTONDOWN;
+            bool isDoubleClick = message.Msg == WM_LBUTTONDBLCLK;
+            bool isRightDown = message.Msg == WM_RBUTTONDOWN;
+            bool isMiddleDown = message.Msg == WM_MBUTTONDOWN;
+
+            if (!isLeftDown && !isDoubleClick && !isRightDown && !isMiddleDown)
+            {
+                return false;
+            }
+
+            Point screenPoint = GetMessageScreenPoint();
+            ToolStripItem? menuItem = HotkeyActionResolver.GetContextMenuItemAt(screenPoint);
+
+            if (this._pendingMouseAction?.Gesture == HotkeyMouseGesture.RightClick)
+            {
+                if (menuItem != null)
+                {
+                    if ((isLeftDown || isDoubleClick)
+                        && HotkeyActionResolver.IsSelectableContextMenuItem(menuItem))
+                    {
+                        this.CompleteContextMenuItemCapture(this._pendingMouseAction, menuItem);
+                    }
+
+                    return false;
+                }
+
+                if (!isRightDown)
+                {
+                    this.FinalizePendingRightClick();
+                    return false;
+                }
+
+                this.FinalizePendingRightClick();
+            }
+
+            if (menuItem != null)
+            {
+                return false;
+            }
+
+            if (isLeftDown
+                && HotkeyActionResolver.TryGetNumericUpDownChange(
+                    screenPoint,
+                    out NumericUpDown? numericUpDown,
+                    out bool increment)
+                && numericUpDown != null)
+            {
+                Form? numericOwner = numericUpDown.FindForm();
+                if (numericOwner != null && numericOwner is not HotkeyConfigWindow)
+                {
+                    HotkeyModifiers numericModifiers = HotkeyActionResolver.GetCurrentModifiers();
+                    this.CompleteNumericUpDownCapture(
+                        numericUpDown,
+                        numericOwner,
+                        increment,
+                        numericModifiers);
+                    return false;
+                }
+            }
+
+            Control? control = GetControlAt(screenPoint);
+            if (control == null)
+            {
+                return false;
+            }
+
+            Form? owner = control.FindForm();
+            if (owner == null || owner is HotkeyConfigWindow)
+            {
+                return false;
+            }
+
+            HotkeyModifiers actionModifiers = HotkeyActionResolver.GetCurrentModifiers();
+
+            if (isDoubleClick)
+            {
+                this.CancelPendingMouseAction();
+                this.CompleteActionCapture(
+                    control,
+                    owner,
+                    HotkeyMouseGesture.LeftDoubleClick,
+                    actionModifiers,
+                    screenPoint);
+                return false;
+            }
+
+            if (isLeftDown)
+            {
+                if (this._pendingMouseAction != null)
+                {
+                    bool sameControl = ReferenceEquals(this._pendingMouseAction.Control, control);
+                    bool withinDoubleClick = (DateTime.UtcNow - this._pendingMouseAction.CapturedUtc).TotalMilliseconds
+                        <= SystemInformation.DoubleClickTime;
+
+                    if (sameControl && withinDoubleClick)
+                    {
+                        this.CancelPendingMouseAction();
+                        this.CompleteActionCapture(
+                            control,
+                            owner,
+                            HotkeyMouseGesture.LeftDoubleClick,
+                            actionModifiers,
+                            screenPoint);
+                        return false;
+                    }
+
+                    this.FinalizePendingMouseAction();
+                }
+
+                this._pendingMouseAction = new PendingMouseAction
+                {
+                    Control = control,
+                    Owner = owner,
+                    Gesture = HotkeyMouseGesture.LeftClick,
+                    Modifiers = actionModifiers,
+                    ScreenPoint = screenPoint,
+                    CapturedUtc = DateTime.UtcNow
+                };
+                this._mouseCaptureTimer.Start();
+                return false;
+            }
+
+            this.CancelPendingMouseAction();
+
+            if (isRightDown)
+            {
+                this._pendingMouseAction = new PendingMouseAction
+                {
+                    Control = control,
+                    Owner = owner,
+                    Gesture = HotkeyMouseGesture.RightClick,
+                    Modifiers = actionModifiers,
+                    ScreenPoint = screenPoint,
+                    CapturedUtc = DateTime.UtcNow
+                };
+                this.SetStatus(
+                    "Captured right-click. Select a context menu item, or click elsewhere " +
+                    "to bind opening the context menu.");
+                return false;
+            }
+
+            this.CompleteActionCapture(
+                control,
+                owner,
+                HotkeyMouseGesture.MiddleClick,
+                actionModifiers,
+                screenPoint);
+            return false;
+        }
+
+        private void MouseCaptureTimer_Tick(object? sender, EventArgs e)
+        {
+            this.FinalizePendingMouseAction();
+        }
+
+        private void FinalizePendingMouseAction()
+        {
+            PendingMouseAction? pending = this._pendingMouseAction;
+            if (pending == null)
+            {
+                this._mouseCaptureTimer.Stop();
+                return;
+            }
+
+            this._pendingMouseAction = null;
+            this._mouseCaptureTimer.Stop();
+
+            this.CompleteActionCapture(
+                pending.Control,
+                pending.Owner,
+                pending.Gesture,
+                pending.Modifiers,
+                pending.ScreenPoint);
+        }
+
+        private void FinalizePendingRightClick()
+        {
+            PendingMouseAction? pending = this._pendingMouseAction;
+            if (pending == null || pending.Gesture != HotkeyMouseGesture.RightClick)
+            {
+                return;
+            }
+
+            this._pendingMouseAction = null;
+            this.CompleteActionCapture(
+                pending.Control,
+                pending.Owner,
+                pending.Gesture,
+                pending.Modifiers,
+                pending.ScreenPoint);
+        }
+
+        private void CancelPendingMouseAction()
+        {
+            this._pendingMouseAction = null;
+            try { this._mouseCaptureTimer.Stop(); } catch (ObjectDisposedException) { }
+        }
+
+        private void CompleteContextMenuItemCapture(
+            PendingMouseAction pending,
+            ToolStripItem item)
+        {
+            if (this._stage != CaptureStage.AwaitingAction)
+            {
+                return;
+            }
+
+            Keys hotkey = this._capturedKey;
+            HotkeyModifiers hotkeyModifiers = this._capturedModifiers;
+            string keyboardHardwareId = this._pendingKeyboardHardwareId;
+            string keyboardDisplayName = this._pendingKeyboardDisplayName;
+            this._stage = CaptureStage.Idle;
+            this._capturedKey = Keys.None;
+            this._capturedModifiers = HotkeyModifiers.None;
+            this._pendingKeyboardHardwareId = string.Empty;
+            this._pendingKeyboardDisplayName = string.Empty;
+            this.CancelPendingMouseAction();
+
+            try
+            {
+                HotkeyActionTarget target = HotkeyActionResolver.BuildContextMenuItemTarget(
+                    pending.Control,
+                    pending.Owner,
+                    item,
+                    pending.Modifiers,
+                    pending.ScreenPoint);
+
+                string actionName = this.MakeUniqueActionName(
+                    HotkeyActionResolver.BuildContextMenuItemActionName(pending.Owner, item));
+
+                HotkeyBinding binding = new()
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ActionName = actionName,
+                    Key = hotkey,
+                    Modifiers = hotkeyModifiers,
+                    KeyboardHardwareId = keyboardHardwareId,
+                    KeyboardDisplayName = keyboardDisplayName,
+                    Target = target,
+                    ToggleOnRelease = false
+                };
+
+                this._settings.AddOrReplace(binding);
+                this.SetStatus(
+                    $"Registered {binding.GetHotkeyDisplay()} -> {binding.ActionName} " +
+                    $"(context menu item) for {binding.GetKeyboardDisplay()}.");
+            }
+            catch (Exception ex)
+            {
+                this.SetStatus("Could not register this context menu item.");
+                System.Diagnostics.Debug.WriteLine($"Hotkeys: context menu capture failed: {ex.Message}");
+            }
+        }
+
+        private void CompleteNumericUpDownCapture(
+            NumericUpDown numericUpDown,
+            Form owner,
+            bool increment,
+            HotkeyModifiers actionModifiers)
+        {
+            if (this._stage != CaptureStage.AwaitingAction)
+            {
+                return;
+            }
+
+            Keys hotkey = this._capturedKey;
+            HotkeyModifiers hotkeyModifiers = this._capturedModifiers;
+            string keyboardHardwareId = this._pendingKeyboardHardwareId;
+            string keyboardDisplayName = this._pendingKeyboardDisplayName;
+            this._stage = CaptureStage.Idle;
+            this._capturedKey = Keys.None;
+            this._capturedModifiers = HotkeyModifiers.None;
+            this._pendingKeyboardHardwareId = string.Empty;
+            this._pendingKeyboardDisplayName = string.Empty;
+            this.CancelPendingMouseAction();
+
+            try
+            {
+                HotkeyActionTarget target = HotkeyActionResolver.BuildNumericUpDownTarget(
+                    numericUpDown,
+                    owner,
+                    increment,
+                    actionModifiers);
+
+                string actionName = this.MakeUniqueActionName(
+                    HotkeyActionResolver.BuildNumericUpDownActionName(owner, numericUpDown, increment));
+
+                HotkeyBinding binding = new()
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ActionName = actionName,
+                    Key = hotkey,
+                    Modifiers = hotkeyModifiers,
+                    KeyboardHardwareId = keyboardHardwareId,
+                    KeyboardDisplayName = keyboardDisplayName,
+                    Target = target,
+                    ToggleOnRelease = false
+                };
+
+                this._settings.AddOrReplace(binding);
+                this.SetStatus(
+                    $"Registered {binding.GetHotkeyDisplay()} -> {binding.ActionName} " +
+                    $"({binding.GetGestureDisplay()}) for {binding.GetKeyboardDisplay()}.");
+            }
+            catch (Exception ex)
+            {
+                this.SetStatus("Could not register this numeric up/down action.");
+                System.Diagnostics.Debug.WriteLine($"Hotkeys: numeric up/down capture failed: {ex.Message}");
+            }
+        }
+
+        private void CompleteActionCapture(
+            Control control,
+            Form owner,
+            HotkeyMouseGesture gesture,
+            HotkeyModifiers actionModifiers,
+            Point screenPoint)
+        {
+            if (this._stage != CaptureStage.AwaitingAction)
+            {
+                return;
+            }
+
+            Keys hotkey = this._capturedKey;
+            HotkeyModifiers hotkeyModifiers = this._capturedModifiers;
+            string keyboardHardwareId = this._pendingKeyboardHardwareId;
+            string keyboardDisplayName = this._pendingKeyboardDisplayName;
+            this._stage = CaptureStage.Idle;
+            this._capturedKey = Keys.None;
+            this._capturedModifiers = HotkeyModifiers.None;
+            this._pendingKeyboardHardwareId = string.Empty;
+            this._pendingKeyboardDisplayName = string.Empty;
+            this.CancelPendingMouseAction();
+
+            try
+            {
+                HotkeyActionTarget target = HotkeyActionResolver.BuildTarget(
+                    control,
+                    owner,
+                    gesture,
+                    actionModifiers,
+                    screenPoint);
+
+                string actionName = this.MakeUniqueActionName(
+                    HotkeyActionResolver.BuildActionName(owner, control, gesture, actionModifiers));
+
+                HotkeyBinding binding = new()
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ActionName = actionName,
+                    Key = hotkey,
+                    Modifiers = hotkeyModifiers,
+                    KeyboardHardwareId = keyboardHardwareId,
+                    KeyboardDisplayName = keyboardDisplayName,
+                    Target = target,
+                    ToggleOnRelease = HotkeyActionResolver.IsToggleAction(control)
+                };
+
+                this._settings.AddOrReplace(binding);
+                this.SetStatus(
+                    $"Registered {binding.GetHotkeyDisplay()} -> {binding.ActionName} " +
+                    $"({binding.GetGestureDisplay()}) for {binding.GetKeyboardDisplay()}.");
+            }
+            catch (Exception ex)
+            {
+                this.SetStatus("Could not register this action.");
+                System.Diagnostics.Debug.WriteLine($"Hotkeys: capture failed: {ex.Message}");
+            }
+        }
+
+        private string MakeUniqueActionName(string actionName)
+        {
+            HashSet<string> existing = this._settings.Snapshot()
+                .Select(binding => binding.ActionName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            if (!existing.Contains(actionName))
+            {
+                return actionName;
+            }
+
+            for (int suffix = 2; ; suffix++)
+            {
+                string candidate = $"{actionName} ({suffix})";
+                if (!existing.Contains(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        private void DeviceTracker_KeyboardsChanged()
+        {
+            this.KeyboardsChanged?.Invoke();
+        }
+
+        private void SetStatus(string status)
+        {
+            this.StatusText = status;
+            this.Changed?.Invoke();
+        }
+
+        private static bool IsModifierKey(Keys key)
+        {
+            return key is Keys.ShiftKey or Keys.LShiftKey or Keys.RShiftKey
+                or Keys.ControlKey or Keys.LControlKey or Keys.RControlKey
+                or Keys.Menu or Keys.LMenu or Keys.RMenu
+                or Keys.LWin or Keys.RWin;
+        }
+
+        private static Point GetMessageScreenPoint()
+        {
+            uint packed = GetMessagePos();
+            int x = unchecked((short)(packed & 0xFFFF));
+            int y = unchecked((short)((packed >> 16) & 0xFFFF));
+            return new Point(x, y);
+        }
+
+        private static Control? GetControlAt(Point screenPoint)
+        {
+            POINT point = new() { X = screenPoint.X, Y = screenPoint.Y };
+            IntPtr handle = WindowFromPoint(point);
+            if (handle == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            Control? control = Control.FromChildHandle(handle);
+            while (control != null
+                && control is not Form
+                && string.IsNullOrEmpty(control.Name)
+                && control.Tag == null
+                && control is not Button
+                && control is not CheckBox
+                && control is not RadioButton)
+            {
+                control = control.Parent;
+            }
+
+            return control;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
+        {
+            public int X;
+            public int Y;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPoint(POINT point);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetMessagePos();
+
+        private sealed class KeyboardMessageFilter : IMessageFilter
+        {
+            private readonly HotkeyManager _manager;
+
+            public KeyboardMessageFilter(HotkeyManager manager)
+            {
+                this._manager = manager;
+            }
+
+            public bool PreFilterMessage(ref Message message)
+            {
+                const int WM_KEYDOWN = 0x0100;
+                const int WM_KEYUP = 0x0101;
+                const int WM_SYSKEYDOWN = 0x0104;
+                const int WM_SYSKEYUP = 0x0105;
+
+                Keys key = (Keys)((int)message.WParam & 0xFFFF);
+
+                if (message.Msg == WM_KEYDOWN || message.Msg == WM_SYSKEYDOWN)
+                {
+                    return this._manager.HandleKeyDown(key);
+                }
+
+                if (message.Msg == WM_KEYUP || message.Msg == WM_SYSKEYUP)
+                {
+                    this._manager.HandleKeyUp(key);
+                }
+
+                return false;
+            }
+        }
+
+        private sealed class MouseMessageFilter : IMessageFilter
+        {
+            private readonly HotkeyManager _manager;
+
+            public MouseMessageFilter(HotkeyManager manager)
+            {
+                this._manager = manager;
+            }
+
+            public bool PreFilterMessage(ref Message message)
+            {
+                return this._manager.HandleMouseMessage(ref message);
+            }
+        }
+    }
+}

@@ -1,14 +1,15 @@
 ﻿using System;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 
 namespace ModularAudience.Audio.Omr
 {
     public class ImageObj : IDisposable
     {
-        public Image<Rgba32>[] Frames { get; private set; } = [];
-        public Image<Rgba32> this[int index] => this.Frames[index];
-        public Image<Rgba32>? Img => this.Frames.FirstOrDefault();
+        public Bitmap[] Frames { get; private set; } = [];
+        public Bitmap this[int index] => this.Frames[index];
+        public Bitmap? Img => this.Frames.FirstOrDefault();
 
         public int[] Widths => this.Frames.Select(frame => frame.Width).ToArray();
         public int[] Heights => this.Frames.Select(frame => frame.Height).ToArray();
@@ -18,7 +19,7 @@ namespace ModularAudience.Audio.Omr
         public int FrameCount => this.Frames.Length;
 
 
-        private ImageObj(Image<Rgba32>[] frames)
+        private ImageObj(Bitmap[] frames)
         {
             this.Frames = frames ?? throw new ArgumentNullException(nameof(frames));
         }
@@ -34,7 +35,7 @@ namespace ModularAudience.Audio.Omr
                 throw new FileNotFoundException($"File not found: {filePath}", filePath);
             }
 
-            string[] supportedExtensions = [".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp", ".pdf"];
+            string[] supportedExtensions = [".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".pdf"];
             string ext = Path.GetExtension(filePath);
             if (!supportedExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
             {
@@ -61,15 +62,27 @@ namespace ModularAudience.Audio.Omr
                         UseTiling: false,
                         DpiRelativeToBounds: false,
                         Grayscale: false);
-                    var frames = new List<Image<Rgba32>>(pageCount);
+                    var frames = new List<Bitmap>(pageCount);
 
-                    for (int i = 0; i < pageCount; i++)
+                    try
                     {
-                        ct.ThrowIfCancellationRequested();
-                        using var pngStream = new MemoryStream();
-                        PDFtoImage.Conversion.SavePng(pngStream, pdfBytes, new Index(i), options: renderOptions);
-                        pngStream.Position = 0;
-                        frames.Add(await Image.LoadAsync<Rgba32>(pngStream, ct));
+                        for (int i = 0; i < pageCount; i++)
+                        {
+                            ct.ThrowIfCancellationRequested();
+                            using var pngStream = new MemoryStream();
+                            PDFtoImage.Conversion.SavePng(pngStream, pdfBytes, new Index(i), options: renderOptions);
+                            pngStream.Position = 0;
+                            frames.Add(LoadBitmap(pngStream));
+                        }
+                    }
+                    catch
+                    {
+                        foreach (Bitmap frame in frames)
+                        {
+                            frame.Dispose();
+                        }
+
+                        throw;
                     }
 
                     return new ImageObj(frames.ToArray());
@@ -77,7 +90,8 @@ namespace ModularAudience.Audio.Omr
                 else
                 {
                     // Load image file
-                    var image = await Image.LoadAsync<Rgba32>(filePath, ct);
+                    ct.ThrowIfCancellationRequested();
+                    Bitmap image = await Task.Run(() => LoadBitmap(filePath), ct);
                     return new ImageObj([image]);
                 }
             }
@@ -87,6 +101,33 @@ namespace ModularAudience.Audio.Omr
                 return null;
             }
 
+        }
+
+        private static Bitmap LoadBitmap(string filePath)
+        {
+            using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return LoadBitmap(stream);
+        }
+
+        private static Bitmap LoadBitmap(Stream stream)
+        {
+            using Image source = Image.FromStream(stream, useEmbeddedColorManagement: false, validateImageData: false);
+            var bitmap = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
+
+            using (Graphics graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.CompositingMode = CompositingMode.SourceCopy;
+                graphics.DrawImage(
+                    source,
+                    new Rectangle(0, 0, source.Width, source.Height),
+                    0,
+                    0,
+                    source.Width,
+                    source.Height,
+                    GraphicsUnit.Pixel);
+            }
+
+            return bitmap;
         }
 
         public void Dispose()
