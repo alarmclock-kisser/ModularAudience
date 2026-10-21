@@ -84,7 +84,7 @@ namespace ModularAudience.Audio.Tests
                 selected.Data);
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(128)]
         [DataRow(256)]
         public void RemoveRetriggersCoveredByStretchedNote_RemovesOnlyHitsOnSameTrackInsideDuration(int stretchedDurationTicks)
@@ -320,7 +320,7 @@ namespace ModularAudience.Audio.Tests
             Assert.IsTrue(afterCutRms < 0.0001f, $"Expected silence after the cut, got RMS {afterCutRms:F4}.");
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(false)]
         [DataRow(true)]
         public async Task RenderPatternNotesAsync_HardResizedHitPadsSilenceWithoutChangingPlaybackMode(bool varispeed)
@@ -443,7 +443,7 @@ namespace ModularAudience.Audio.Tests
             Assert.IsTrue(peak > 0.7f, $"Expected the stretched transient to retain the normalized 0.8 peak, got {peak:F4}.");
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(512, 0.3, 0.38, 0.45, 0.49)]
         [DataRow(1024, 0.6, 0.75, 0.9, 0.98)]
         public async Task RenderPatternNotesAsync_StretchesBeatNormalizedSampleIncludingPaddedSilence(

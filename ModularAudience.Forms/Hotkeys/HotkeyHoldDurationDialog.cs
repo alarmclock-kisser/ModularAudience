@@ -37,7 +37,7 @@ namespace ModularAudience.Forms.Hotkeys
             this._numericDuration = new NumericUpDown
             {
                 DecimalPlaces = 0,
-                Increment = 50,
+                Increment = 10,
                 Location = new Point(12, 82),
                 Maximum = HotkeyDefaults.MaxHoldThresholdMs,
                 Minimum = HotkeyDefaults.MinHoldThresholdMs,

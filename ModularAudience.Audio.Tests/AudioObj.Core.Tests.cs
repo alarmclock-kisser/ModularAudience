@@ -7,7 +7,7 @@ using ModularAudience.Audio;
 namespace ModularAudience.Audio.Tests
 {
     [TestClass]
-    internal sealed class AudioObjCoreTests
+    public sealed class AudioObjCoreTests
     {
         [TestMethod]
         public void Test_AudioObj_Initialization()
@@ -16,13 +16,14 @@ namespace ModularAudience.Audio.Tests
             {
                 var audio = scope.Create(new float[] { 0.1f, 0.2f, 0.3f }, 44100, 1);
 
-                Assert.IsNotNull(audio.Id);
                 Assert.AreNotEqual(Guid.Empty, audio.Id);
                 Assert.AreEqual(44100, audio.SampleRate);
                 Assert.AreEqual(1, audio.Channels);
                 Assert.AreEqual(3, audio.Length);
                 Assert.AreEqual(3, audio.Data.Length);
-                Assert.AreEqual(1.0f, audio.Volume);
+
+                // The volume is stored in percent.
+                Assert.AreEqual(100f, audio.Volume);
             }
         }
 
@@ -37,7 +38,8 @@ namespace ModularAudience.Audio.Tests
 
                 var clone = original.Clone();
 
-                Assert.AreEqual(original.Id, clone.Id);
+                // A clone is a new audio object and therefore has its own id.
+                Assert.AreNotEqual(original.Id, clone.Id);
                 Assert.AreEqual(original.Name, clone.Name);
                 Assert.AreEqual(original.Volume, clone.Volume);
                 Assert.AreEqual(original.SampleRate, clone.SampleRate);
@@ -90,9 +92,11 @@ namespace ModularAudience.Audio.Tests
                 audio["TestMetric"] = 42.0;
                 audio["testmetric"] = 10.0; // Case insensitivity check
 
-                Assert.AreEqual(42.0, audio["TestMetric"]);
+                // The metric keys are compared case insensitively, so the second
+                // assignment overwrites the first one.
+                Assert.AreEqual(10.0, audio["TestMetric"]);
                 Assert.AreEqual(10.0, audio["testmetric"]);
-                Assert.AreEqual(42.0, audio["TESTMETRIC"]);
+                Assert.AreEqual(10.0, audio["TESTMETRIC"]);
 
                 Assert.AreEqual(0.0, audio["NonExistent"]);
             }
@@ -108,7 +112,7 @@ namespace ModularAudience.Audio.Tests
                 original.Volume = 1.0f;
 
                 var replacement = scope.Create(new float[] { 0.3f, 0.4f, 0.5f }, 44100, 1);
-                replacement.Name = "Replacement";
+                replacement.Rename("Replacement");
                 replacement.Volume = 0.5f;
 
                 original.ReplaceWith(replacement);
@@ -133,13 +137,14 @@ namespace ModularAudience.Audio.Tests
 
                 // Original: [0.1, 0.1, 0.1, 0.1]
                 // Clip: [0.9, 0.9]
-                // Expected: [0.1, 0.9, 0.9, 0.1, 0.1]
-                Assert.AreEqual(5, audio.Data.Length);
+                // Expected: [0.1, 0.9, 0.9, 0.1, 0.1, 0.1]
+                Assert.AreEqual(6, audio.Data.Length);
                 Assert.AreEqual(0.1f, audio.Data[0]);
                 Assert.AreEqual(0.9f, audio.Data[1]);
                 Assert.AreEqual(0.9f, audio.Data[2]);
                 Assert.AreEqual(0.1f, audio.Data[3]);
                 Assert.AreEqual(0.1f, audio.Data[4]);
+                Assert.AreEqual(0.1f, audio.Data[5]);
             }
         }
     }

@@ -10,6 +10,17 @@ namespace ModularAudience.Forms.Hotkeys
         public const int HoldThresholdMs = 250;
         public const int MinHoldThresholdMs = 50;
         public const int MaxHoldThresholdMs = 10000;
+        public const int DefaultScrollTickPercent = 10;
+        public const int MinScrollTickDistance = 1;
+        public const int MaxScrollTickDistance = 100000;
+
+        /// <summary>
+        /// Rate units that one wheel notch changes when a varispeed hotkey is used.
+        /// The rate scale is logarithmic, so 25 units are roughly three percent.
+        /// </summary>
+        public const int LoopRateUnitsPerWheelTick = 25;
+        public const int MinLoopRateUnitsPerWheelTick = 1;
+        public const int MaxLoopRateUnitsPerWheelTick = 1000;
     }
 
     [Flags]
@@ -66,6 +77,18 @@ namespace ModularAudience.Forms.Hotkeys
             if (this.Target.ActionKind == HotkeyActionKinds.NumericUpDown)
             {
                 return this.Target.NumericUpDownIncrement ? "Increment" : "Decrement";
+            }
+
+            if (this.Target.ActionKind == HotkeyActionKinds.ScrollBar)
+            {
+                return "Mouse wheel";
+            }
+
+            if (this.Target.ActionKind == HotkeyActionKinds.LoopTrackRate)
+            {
+                return this.Target.LoopRateShiftAll
+                    ? "Varispeed wheel (all tracks)"
+                    : "Varispeed wheel";
             }
 
             return HotkeyFormatter.FormatGesture(this.Target.Gesture, this.Target.ActionModifiers);
@@ -136,6 +159,16 @@ namespace ModularAudience.Forms.Hotkeys
         public HotkeyModifiers ActionModifiers { get; set; } = HotkeyModifiers.None;
         public float RelativeX { get; set; } = 0.5f;
         public float RelativeY { get; set; } = 0.5f;
+        public int ScrollTickDistance { get; set; }
+        public int LoopControlTrackIndex { get; set; } = -1;
+        public int LoopRateUnitsPerWheelTick { get; set; }
+
+        /// <summary>
+        /// Legacy field of older varispeed hotkeys. It is only used as a fallback
+        /// as long as the hotkey was not registered again with a track index.
+        /// </summary>
+        public string LoopControlAudioId { get; set; } = string.Empty;
+        public bool LoopRateShiftAll { get; set; }
     }
 
     public sealed class HotkeyControlPathSegment
@@ -157,15 +190,83 @@ namespace ModularAudience.Forms.Hotkeys
 
     public sealed class HotkeySettingsFile
     {
-        public int Version { get; set; } = 2;
+        public int Version { get; set; } = 3;
         public List<HotkeyBinding> Bindings { get; set; } = [];
+        public HotkeyCombo PausingSyncerHotkey { get; set; } = new() { Key = Keys.ShiftKey, Modifiers = HotkeyModifiers.None };
+        public HotkeyCombo NudgingSyncerHotkey { get; set; } = new() { Key = Keys.CapsLock, Modifiers = HotkeyModifiers.None };
+    }
+
+    public sealed class HotkeyCombo
+    {
+        public Keys Key { get; set; } = Keys.None;
+        public HotkeyModifiers Modifiers { get; set; } = HotkeyModifiers.None;
+
+        public bool IsEmpty => (this.Key & Keys.KeyCode) == Keys.None;
+
+        public string GetDisplay()
+        {
+            if (this.IsEmpty)
+            {
+                return "None";
+            }
+            return HotkeyFormatter.FormatCombo(this.Key, this.Modifiers);
+        }
     }
 
     public static class HotkeyFormatter
     {
-        public static string FormatKey(Keys key)
+        /// <summary>
+        /// Maps the left/right variants of the modifier keys onto a single canonical key,
+        /// so that a hotkey stored as "Shift" also matches the physical left/right shift key.
+        /// </summary>
+        public static Keys NormalizeKey(Keys key)
         {
             key &= Keys.KeyCode;
+            if (key is Keys.LShiftKey or Keys.RShiftKey)
+            {
+                return Keys.ShiftKey;
+            }
+            if (key is Keys.LControlKey or Keys.RControlKey)
+            {
+                return Keys.ControlKey;
+            }
+            if (key is Keys.LMenu or Keys.RMenu)
+            {
+                return Keys.Menu;
+            }
+            return key;
+        }
+
+        /// <summary>
+        /// Returns the modifier that is inherently part of the given key. A hotkey that consists
+        /// of a modifier key (e.g. "Shift") must not be compared against the currently pressed
+        /// modifiers, because that modifier is necessarily held down while the key is pressed.
+        /// </summary>
+        public static HotkeyModifiers GetInherentModifier(Keys key)
+        {
+            key &= Keys.KeyCode;
+            if (key is Keys.ShiftKey or Keys.LShiftKey or Keys.RShiftKey)
+            {
+                return HotkeyModifiers.Shift;
+            }
+            if (key is Keys.ControlKey or Keys.LControlKey or Keys.RControlKey)
+            {
+                return HotkeyModifiers.Control;
+            }
+            if (key is Keys.Menu or Keys.LMenu or Keys.RMenu)
+            {
+                return HotkeyModifiers.Alt;
+            }
+            if (key is Keys.LWin or Keys.RWin)
+            {
+                return HotkeyModifiers.Win;
+            }
+            return HotkeyModifiers.None;
+        }
+
+        public static string FormatKey(Keys key)
+        {
+            key = NormalizeKey(key);
             if (key == Keys.None)
             {
                 return "-";
@@ -183,6 +284,12 @@ namespace ModularAudience.Forms.Hotkeys
 
             return key switch
             {
+                Keys.ShiftKey => "Shift",
+                Keys.ControlKey => "Ctrl",
+                Keys.Menu => "Alt",
+                Keys.LWin => "Win",
+                Keys.RWin => "Win",
+                Keys.CapsLock => "Caps",
                 Keys.Oemtilde => "`",
                 Keys.OemMinus => "-",
                 Keys.Oemplus => "+",

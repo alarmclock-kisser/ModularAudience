@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using ModularAudience.Forms.Modules;
 
 namespace ModularAudience.Forms.Hotkeys
 {
@@ -14,6 +15,13 @@ namespace ModularAudience.Forms.Hotkeys
             Idle,
             AwaitingHotkey,
             AwaitingAction
+        }
+
+        private enum SyncerHotkeyCaptureMode
+        {
+            None,
+            PausingSyncer,
+            NudgingSyncer
         }
 
         private sealed class PendingMouseAction
@@ -30,9 +38,12 @@ namespace ModularAudience.Forms.Hotkeys
         private readonly KeyboardDeviceTracker _deviceTracker;
         private readonly KeyboardMessageFilter _keyboardFilter;
         private readonly MouseMessageFilter _mouseFilter;
+        private readonly LowLevelMouseProc _mouseHookProc;
         private readonly System.Windows.Forms.Timer _holdTimer;
         private readonly System.Windows.Forms.Timer _mouseCaptureTimer;
         private readonly HashSet<Keys> _pressedKeys = [];
+        private readonly Dictionary<Keys, HotkeyBinding> _activeWheelBindings = [];
+        private readonly Dictionary<Keys, string> _keyHardwareIds = [];
 
         private CaptureStage _stage;
         private Keys _capturedKey = Keys.None;
@@ -40,6 +51,10 @@ namespace ModularAudience.Forms.Hotkeys
         private string _pendingKeyboardHardwareId = string.Empty;
         private string _pendingKeyboardDisplayName = string.Empty;
         private HotkeyBinding? _reRegisterBinding;
+        private SyncerHotkeyCaptureMode _syncerCaptureMode = SyncerHotkeyCaptureMode.None;
+        private Keys _pendingSyncerModifierKey = Keys.None;
+        private HotkeyModifiers _pendingSyncerModifiers = HotkeyModifiers.None;
+        private Keys _pendingHotkeyModifierKey = Keys.None;
 
         private PendingMouseAction? _pendingMouseAction;
 
@@ -49,6 +64,8 @@ namespace ModularAudience.Forms.Hotkeys
         private DateTime _holdStartedUtc;
         private bool _holdActionExecuted;
 
+        private IntPtr _mouseHookHandle = IntPtr.Zero;
+
         public static HotkeyManager? Instance { get; private set; }
 
         public event Action? Changed;
@@ -57,7 +74,15 @@ namespace ModularAudience.Forms.Hotkeys
 
         public string StatusText { get; private set; } = "No hotkey is being registered.";
 
+        public HotkeyCombo PausingSyncerHotkey => this._settings.PausingSyncerHotkey;
+
+        public HotkeyCombo NudgingSyncerHotkey => this._settings.NudgingSyncerHotkey;
+
         public bool IsCapturing => this._stage != CaptureStage.Idle;
+
+        public bool IsAwaitingAction => this._stage == CaptureStage.AwaitingAction;
+
+        public bool IsSyncerCaptureActive => this._syncerCaptureMode != SyncerHotkeyCaptureMode.None;
 
         public string SettingsPath => this._settings.SettingsPath;
 
@@ -68,6 +93,8 @@ namespace ModularAudience.Forms.Hotkeys
             this._deviceTracker.KeyboardsChanged += this.DeviceTracker_KeyboardsChanged;
             this._keyboardFilter = new KeyboardMessageFilter(this);
             this._mouseFilter = new MouseMessageFilter(this);
+            this._mouseHookProc = this.MouseHookCallback;
+            this.InstallMouseHook();
 
             this._holdTimer = new System.Windows.Forms.Timer { Interval = 25 };
             this._holdTimer.Tick += this.HoldTimer_Tick;
@@ -106,6 +133,7 @@ namespace ModularAudience.Forms.Hotkeys
             try { manager._mouseCaptureTimer.Stop(); manager._mouseCaptureTimer.Dispose(); } catch { }
             try { Application.RemoveMessageFilter(manager._keyboardFilter); } catch { }
             try { Application.RemoveMessageFilter(manager._mouseFilter); } catch { }
+            try { manager.RemoveMouseHook(); } catch { }
             try { manager._deviceTracker.KeyboardsChanged -= manager.DeviceTracker_KeyboardsChanged; } catch { }
             try { manager._deviceTracker.Dispose(); } catch { }
         }
@@ -200,8 +228,24 @@ namespace ModularAudience.Forms.Hotkeys
             this._reRegisterBinding = null;
             this._capturedKey = Keys.None;
             this._capturedModifiers = HotkeyModifiers.None;
+            this._pendingHotkeyModifierKey = Keys.None;
             this._pendingKeyboardHardwareId = HotkeyKeyboardIds.Normalize(hardwareId);
             this._pendingKeyboardDisplayName = displayName ?? string.Empty;
+
+            // Check if this is a syncer hotkey capture
+            if (string.Equals(displayName, "Pausing Syncer", StringComparison.OrdinalIgnoreCase))
+            {
+                this._syncerCaptureMode = SyncerHotkeyCaptureMode.PausingSyncer;
+            }
+            else if (string.Equals(displayName, "Nudging Syncer", StringComparison.OrdinalIgnoreCase))
+            {
+                this._syncerCaptureMode = SyncerHotkeyCaptureMode.NudgingSyncer;
+            }
+            else
+            {
+                this._syncerCaptureMode = SyncerHotkeyCaptureMode.None;
+            }
+
             this._stage = CaptureStage.AwaitingHotkey;
 
             string scope = this._pendingKeyboardHardwareId.Length == 0
@@ -209,7 +253,7 @@ namespace ModularAudience.Forms.Hotkeys
                 : string.IsNullOrWhiteSpace(displayName)
                     ? HotkeyKeyboardIds.GetShortDisplay(this._pendingKeyboardHardwareId)
                     : displayName;
-            this.SetStatus($"Press the new hotkey combination for {scope} (Esc to cancel)...");
+            this.SetStatus($"Press the new hotkey for {scope} (a single modifier like Ctrl is allowed, Esc to cancel)...");
         }
 
         public void BeginReRegister(HotkeyBinding binding)
@@ -224,10 +268,11 @@ namespace ModularAudience.Forms.Hotkeys
             this._reRegisterBinding = binding;
             this._capturedKey = Keys.None;
             this._capturedModifiers = HotkeyModifiers.None;
+            this._pendingHotkeyModifierKey = Keys.None;
             this._pendingKeyboardHardwareId = string.Empty;
             this._pendingKeyboardDisplayName = string.Empty;
             this._stage = CaptureStage.AwaitingHotkey;
-            this.SetStatus($"Press a new hotkey for \"{binding.ActionName}\" (Esc to cancel)...");
+            this.SetStatus($"Press a new hotkey for \"{binding.ActionName}\" (a single modifier is allowed, Esc to cancel)...");
         }
 
         public void CancelCapture()
@@ -235,6 +280,10 @@ namespace ModularAudience.Forms.Hotkeys
             bool wasCapturing = this._stage != CaptureStage.Idle;
             this._stage = CaptureStage.Idle;
             this._reRegisterBinding = null;
+            this._syncerCaptureMode = SyncerHotkeyCaptureMode.None;
+            this._pendingSyncerModifierKey = Keys.None;
+            this._pendingSyncerModifiers = HotkeyModifiers.None;
+            this._pendingHotkeyModifierKey = Keys.None;
             this._pendingKeyboardHardwareId = string.Empty;
             this._pendingKeyboardDisplayName = string.Empty;
             this._deviceTracker.ClearPendingKeyEvents();
@@ -285,9 +334,114 @@ namespace ModularAudience.Forms.Hotkeys
             this.SetStatus($"Hold inversion for \"{binding.ActionName}\" {state}.");
         }
 
+        public void UpdateScrollTickDistance(string id, int scrollTickDistance)
+        {
+            HotkeyBinding? binding = this._settings.Find(id);
+            if (binding == null || binding.Target.ScrollTickDistance == scrollTickDistance)
+            {
+                return;
+            }
+
+            this._settings.UpdateScrollTickDistance(id, scrollTickDistance);
+            this.SetStatus(
+                $"Mouse-wheel tick distance for \"{binding.ActionName}\" set to " +
+                $"{binding.Target.ScrollTickDistance} units.");
+        }
+
+        public void UpdateLoopRateUnitsPerWheelTick(string id, int unitsPerWheelTick)
+        {
+            HotkeyBinding? binding = this._settings.Find(id);
+            if (binding == null || binding.Target.LoopRateUnitsPerWheelTick == unitsPerWheelTick)
+            {
+                return;
+            }
+
+            this._settings.UpdateLoopRateUnitsPerWheelTick(id, unitsPerWheelTick);
+            this.SetStatus(
+                $"Varispeed step for \"{binding.ActionName}\" set to " +
+                $"{unitsPerWheelTick} units per wheel tick.");
+        }
+
+        public void UpdatePausingSyncerHotkey(Keys key, HotkeyModifiers modifiers)        {
+            this._settings.PausingSyncerHotkey = new HotkeyCombo { Key = key, Modifiers = modifiers };
+            this.SetStatus($"Pausing Syncer hotkey set to {HotkeyFormatter.FormatCombo(key, modifiers)}.");
+        }
+
+        public void UpdateNudgingSyncerHotkey(Keys key, HotkeyModifiers modifiers)
+        {
+            this._settings.NudgingSyncerHotkey = new HotkeyCombo { Key = key, Modifiers = modifiers };
+            this.SetStatus($"Nudging Syncer hotkey set to {HotkeyFormatter.FormatCombo(key, modifiers)}.");
+        }
+
+        /// <summary>
+        /// Captures a key press for one of the syncer hotkeys. Modifier keys are not committed
+        /// immediately, but on their key release, so that combinations consisting of several
+        /// modifiers (e.g. "Ctrl + Shift") can be captured independently of the press order.
+        /// </summary>
+        private bool HandleSyncerHotkeyKeyDown(Keys key)
+        {
+            if (IsModifierKey(key))
+            {
+                this._pendingSyncerModifierKey = HotkeyFormatter.NormalizeKey(key);
+                this._pendingSyncerModifiers = HotkeyActionResolver.GetCurrentModifiers()
+                    & ~HotkeyFormatter.GetInherentModifier(key);
+                return false;
+            }
+
+            this._pendingSyncerModifierKey = Keys.None;
+            this.CompleteSyncerHotkeyCapture(
+                key,
+                HotkeyActionResolver.GetCurrentModifiers() & ~HotkeyFormatter.GetInherentModifier(key));
+            return true;
+        }
+
+        private bool HandleSyncerHotkeyKeyUp(Keys key)
+        {
+            if (this._pendingSyncerModifierKey == Keys.None)
+            {
+                return false;
+            }
+
+            if (HotkeyFormatter.NormalizeKey(key) != this._pendingSyncerModifierKey)
+            {
+                return false;
+            }
+
+            Keys capturedKey = this._pendingSyncerModifierKey;
+            HotkeyModifiers capturedModifiers = this._pendingSyncerModifiers;
+            this._pendingSyncerModifierKey = Keys.None;
+            this.CompleteSyncerHotkeyCapture(capturedKey, capturedModifiers);
+            return true;
+        }
+
+        private void CompleteSyncerHotkeyCapture(Keys key, HotkeyModifiers modifiers)
+        {
+            SyncerHotkeyCaptureMode mode = this._syncerCaptureMode;
+
+            // Reset the capture state before persisting, because persisting raises the
+            // "Changed" event and the config window resets its buttons when the capture ended.
+            this._stage = CaptureStage.Idle;
+            this._syncerCaptureMode = SyncerHotkeyCaptureMode.None;
+            this._pendingSyncerModifierKey = Keys.None;
+            this._pendingSyncerModifiers = HotkeyModifiers.None;
+            this._pendingHotkeyModifierKey = Keys.None;
+            this._pendingKeyboardHardwareId = string.Empty;
+            this._pendingKeyboardDisplayName = string.Empty;
+
+            switch (mode)
+            {
+                case SyncerHotkeyCaptureMode.PausingSyncer:
+                    this.UpdatePausingSyncerHotkey(key, modifiers);
+                    break;
+                case SyncerHotkeyCaptureMode.NudgingSyncer:
+                    this.UpdateNudgingSyncerHotkey(key, modifiers);
+                    break;
+            }
+        }
+
         private bool HandleKeyDown(Keys key)
         {
-            key &= Keys.KeyCode;
+            key = HotkeyFormatter.NormalizeKey(key);
             if (key == Keys.None)
             {
                 return false;
@@ -301,12 +455,22 @@ namespace ModularAudience.Forms.Hotkeys
                     return true;
                 }
 
+                if (this._syncerCaptureMode != SyncerHotkeyCaptureMode.None)
+                {
+                    return this.HandleSyncerHotkeyKeyDown(key);
+                }
+
                 if (IsModifierKey(key))
                 {
+                    // Remember the modifier but wait for its release, so that a single
+                    // modifier (e.g. Ctrl) can be registered on its own. As soon as another
+                    // key is pressed, the combination is captured instead.
+                    this._pendingHotkeyModifierKey = HotkeyFormatter.NormalizeKey(key);
                     return false;
                 }
 
                 this._deviceTracker.TakeKeyboardId(key);
+                this._pendingHotkeyModifierKey = Keys.None;
                 HotkeyModifiers modifiers = HotkeyActionResolver.GetCurrentModifiers();
                 this._capturedKey = key;
                 this._capturedModifiers = modifiers;
@@ -342,7 +506,15 @@ namespace ModularAudience.Forms.Hotkeys
             this.PrunePressedKeys();
 
             string? hardwareId = this._deviceTracker.TakeKeyboardId(key);
-            HotkeyModifiers currentModifiers = HotkeyActionResolver.GetCurrentModifiers();
+            if (!string.IsNullOrEmpty(hardwareId))
+            {
+                // Remember which keyboard produced the key, so that the wheel hotkeys
+                // can respect the keyboard scope of their binding.
+                this._keyHardwareIds[key] = hardwareId;
+            }
+
+            HotkeyModifiers currentModifiers = HotkeyActionResolver.GetCurrentModifiers()
+                & ~HotkeyFormatter.GetInherentModifier(key);
             HotkeyBinding? binding = this._settings.FindBinding(
                 key,
                 currentModifiers,
@@ -360,15 +532,74 @@ namespace ModularAudience.Forms.Hotkeys
             }
 
             this._pressedKeys.Add(key);
+            if (IsWheelActionKind(binding.Target.ActionKind))
+            {
+                // Scrollbar and varispeed bindings only react to the mouse wheel
+                // while the key is held.
+                this._activeWheelBindings[key] = binding;
+                return true;
+            }
+
             this.StartHold(binding, key, additionalModifiers);
             return true;
         }
 
         private bool HandleKeyUp(Keys key)
         {
-            key &= Keys.KeyCode;
+            key = HotkeyFormatter.NormalizeKey(key);
             this._pressedKeys.Remove(key);
+            this._activeWheelBindings.Remove(key);
+
+            if (this._stage == CaptureStage.AwaitingHotkey
+                && this._syncerCaptureMode != SyncerHotkeyCaptureMode.None)
+            {
+                return this.HandleSyncerHotkeyKeyUp(key);
+            }
+
+            if (this._stage == CaptureStage.AwaitingHotkey
+                && this._pendingHotkeyModifierKey != Keys.None)
+            {
+                return this.HandleLoneModifierKeyUp(key);
+            }
+
             return false;
+        }
+
+        private bool HandleLoneModifierKeyUp(Keys key)
+        {
+            if (HotkeyFormatter.NormalizeKey(key) != this._pendingHotkeyModifierKey)
+            {
+                return false;
+            }
+
+            Keys capturedKey = this._pendingHotkeyModifierKey;
+            this._pendingHotkeyModifierKey = Keys.None;
+            this.CompleteLoneModifierHotkeyCapture(capturedKey);
+            return true;
+        }
+
+        private void CompleteLoneModifierHotkeyCapture(Keys key)
+        {
+            HotkeyModifiers modifiers = HotkeyModifiers.None;
+
+            if (this._reRegisterBinding != null)
+            {
+                HotkeyBinding reRegister = this._reRegisterBinding;
+                this._settings.UpdateHotkey(reRegister.Id, key, modifiers);
+                this._stage = CaptureStage.Idle;
+                this._reRegisterBinding = null;
+                this.SetStatus(
+                    $"Updated hotkey for \"{reRegister.ActionName}\" to " +
+                    $"{HotkeyFormatter.FormatCombo(key, modifiers)}.");
+                return;
+            }
+
+            this._capturedKey = key;
+            this._capturedModifiers = modifiers;
+            this._stage = CaptureStage.AwaitingAction;
+            this.SetStatus(
+                $"Captured {HotkeyFormatter.FormatCombo(key, modifiers)}. " +
+                "Now click the action control, numeric up/down arrow, or context menu item you want to bind.");
         }
 
         private void StartHold(
@@ -382,7 +613,20 @@ namespace ModularAudience.Forms.Hotkeys
             this._holdKey = key & Keys.KeyCode;
             this._holdAdditionalModifiers = additionalModifiers;
             this._holdStartedUtc = DateTime.UtcNow;
-            this._holdActionExecuted = ExecuteBinding(binding, additionalModifiers);
+
+            if (IsMomentaryHold(binding))
+            {
+                // Invert unchecked: a short tap toggles the action exactly once, a long
+                // hold turns the action on while it is held and off again on release.
+                // The action is not executed here, so a tap can never turn it on and
+                // immediately off again.
+                this._holdActionExecuted = false;
+            }
+            else
+            {
+                this._holdActionExecuted = ExecuteBinding(binding, additionalModifiers);
+            }
+
             this._holdTimer.Start();
         }
 
@@ -399,6 +643,7 @@ namespace ModularAudience.Forms.Hotkeys
 
             if (HotkeyActionResolver.IsKeyPhysicallyDown(this._holdKey))
             {
+                this.EngageMomentaryHold(binding);
                 return;
             }
 
@@ -406,24 +651,10 @@ namespace ModularAudience.Forms.Hotkeys
             this._holdTimer.Stop();
 
             double heldMs = (DateTime.UtcNow - this._holdStartedUtc).TotalMilliseconds;
-            if (this._holdActionExecuted && ShouldExecuteToggleRelease(binding, heldMs))
-            {
-                ExecuteBinding(binding, this._holdAdditionalModifiers);
-            }
+            this.ExecuteHoldRelease(binding, heldMs);
 
             this._holdActionExecuted = false;
             this._holdAdditionalModifiers = HotkeyModifiers.None;
-        }
-
-        private static bool ShouldExecuteToggleRelease(HotkeyBinding binding, double heldMs)
-        {
-            if (!binding.ToggleOnRelease || heldMs < binding.HoldThresholdMs)
-            {
-                return false;
-            }
-
-            return binding.InvertWhileHeld
-                || HotkeyActionResolver.GetToggleState(binding.Target) == true;
         }
 
         private void ReleaseActiveHold(bool executeRelease)
@@ -438,15 +669,71 @@ namespace ModularAudience.Forms.Hotkeys
             this._holdTimer.Stop();
 
             double heldMs = (DateTime.UtcNow - this._holdStartedUtc).TotalMilliseconds;
-            if (executeRelease
-                && this._holdActionExecuted
-                && ShouldExecuteToggleRelease(binding, heldMs))
+            if (executeRelease)
             {
-                ExecuteBinding(binding, this._holdAdditionalModifiers);
+                this.ExecuteHoldRelease(binding, heldMs);
             }
 
             this._holdActionExecuted = false;
             this._holdAdditionalModifiers = HotkeyModifiers.None;
+        }
+
+        private static bool IsMomentaryHold(HotkeyBinding binding)
+        {
+            return binding.ToggleOnRelease && !binding.InvertWhileHeld;
+        }
+
+        private void EngageMomentaryHold(HotkeyBinding binding)
+        {
+            if (!IsMomentaryHold(binding) || this._holdActionExecuted)
+            {
+                return;
+            }
+
+            double heldMs = (DateTime.UtcNow - this._holdStartedUtc).TotalMilliseconds;
+            if (heldMs < binding.HoldThresholdMs)
+            {
+                return;
+            }
+
+            // The hold threshold was reached: the action stays on until release.
+            this._holdActionExecuted = true;
+            if (HotkeyActionResolver.GetToggleState(binding.Target) != true)
+            {
+                ExecuteBinding(binding, this._holdAdditionalModifiers);
+            }
+        }
+
+        private void ExecuteHoldRelease(HotkeyBinding binding, double heldMs)
+        {
+            if (IsMomentaryHold(binding))
+            {
+                // If the release arrives before the hold timer noticed the threshold,
+                // make sure the action was turned on before switching it off again.
+                if (!this._holdActionExecuted
+                    && heldMs >= binding.HoldThresholdMs
+                    && HotkeyActionResolver.GetToggleState(binding.Target) != true)
+                {
+                    ExecuteBinding(binding, this._holdAdditionalModifiers);
+                }
+
+                // A tap toggles once; a long hold is switched off again on release.
+                ExecuteBinding(binding, this._holdAdditionalModifiers);
+                return;
+            }
+
+            if (this._holdActionExecuted && ShouldExecuteToggleRelease(binding, heldMs))
+            {
+                ExecuteBinding(binding, this._holdAdditionalModifiers);
+            }
+        }
+
+        private static bool ShouldExecuteToggleRelease(HotkeyBinding binding, double heldMs)
+        {
+            // Inverted mode: only a hold past the debounce delay toggles the action again.
+            return binding.ToggleOnRelease
+                && binding.InvertWhileHeld
+                && heldMs >= binding.HoldThresholdMs;
         }
 
         private static bool ExecuteBinding(
@@ -466,14 +753,125 @@ namespace ModularAudience.Forms.Hotkeys
         {
             if (this._pressedKeys.Count == 0)
             {
+                if (this._activeWheelBindings.Count > 0)
+                {
+                    this._activeWheelBindings.Clear();
+                }
                 return;
             }
 
             this._pressedKeys.RemoveWhere(key => !HotkeyActionResolver.IsKeyPhysicallyDown(key));
+            if (this._activeWheelBindings.Count > 0)
+            {
+                foreach (Keys key in this._activeWheelBindings.Keys
+                    .Where(key => !this._pressedKeys.Contains(key))
+                    .ToArray())
+                {
+                    this._activeWheelBindings.Remove(key);
+                }
+            }
+        }
+
+        private static bool IsWheelActionKind(string actionKind)
+        {
+            return string.Equals(
+                    actionKind,
+                    HotkeyActionKinds.ScrollBar,
+                    StringComparison.OrdinalIgnoreCase)
+                || string.Equals(
+                    actionKind,
+                    HotkeyActionKinds.LoopTrackRate,
+                    StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Runs the wheel hotkeys whose key is currently held down. The key state is read
+        /// directly from the operating system, so the gesture also works when the window
+        /// that received the key press was not the focused window.
+        /// </summary>
+        private bool TryHandleWheel(int delta, bool horizontalWheel)
+        {
+            if (delta == 0)
+            {
+                return false;
+            }
+
+            HotkeyModifiers currentModifiers = HotkeyActionResolver.GetCurrentModifiers();
+
+            foreach (HotkeyBinding binding in this._settings.Snapshot())
+            {
+                if (!IsWheelActionKind(binding.Target.ActionKind))
+                {
+                    continue;
+                }
+
+                Keys bindingKey = binding.Key & Keys.KeyCode;
+                if (bindingKey == Keys.None
+                    || !HotkeyActionResolver.IsKeyPhysicallyDown(bindingKey))
+                {
+                    continue;
+                }
+
+                if (!binding.IsUniversal
+                    && this._keyHardwareIds.TryGetValue(bindingKey, out string? pressedDevice)
+                    && !HotkeyKeyboardIds.Same(pressedDevice, binding.KeyboardHardwareId))
+                {
+                    // The key was pressed on a different keyboard than the one the
+                    // hotkey is bound to.
+                    continue;
+                }
+
+                if ((binding.Modifiers & ~currentModifiers) != 0)
+                {
+                    continue;
+                }
+
+                int effectiveDelta = binding.InvertWhileHeld ? -delta : delta;
+                bool handled = string.Equals(
+                    binding.Target.ActionKind,
+                    HotkeyActionKinds.ScrollBar,
+                    StringComparison.OrdinalIgnoreCase)
+                    ? HotkeyActionResolver.ExecuteScrollBar(
+                        binding.Target,
+                        effectiveDelta,
+                        horizontalWheel)
+                    : HotkeyActionResolver.ExecuteLoopRate(
+                        binding.Target,
+                        effectiveDelta,
+                        horizontalWheel);
+
+                if (handled)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool HandleWheelMessage(bool horizontalWheel, IntPtr wParam)
+        {
+            int delta = unchecked((short)((long)wParam >> 16));
+            if (delta == 0)
+            {
+                return false;
+            }
+
+            return this.TryHandleWheel(delta, horizontalWheel);
         }
 
         private bool HandleMouseMessage(ref Message message)
         {
+            const int WM_MOUSEWHEEL = 0x020A;
+            const int WM_MOUSEHWHEEL = 0x020E;
+
+            if (message.Msg == WM_MOUSEWHEEL || message.Msg == WM_MOUSEHWHEEL)
+            {
+                return this.HandleWheelMessage(
+                    message.Msg == WM_MOUSEHWHEEL,
+                    message.WParam);
+            }
+
             if (this._stage != CaptureStage.AwaitingAction)
             {
                 return false;
@@ -527,19 +925,31 @@ namespace ModularAudience.Forms.Hotkeys
             if (isLeftDown
                 && HotkeyActionResolver.TryGetNumericUpDownChange(
                     screenPoint,
-                    out NumericUpDown? numericUpDown,
+                    out UpDownBase? upDown,
                     out bool increment)
-                && numericUpDown != null)
+                && upDown != null)
             {
-                Form? numericOwner = numericUpDown.FindForm();
+                Form? numericOwner = upDown.FindForm();
                 if (numericOwner != null && numericOwner is not HotkeyConfigWindow)
                 {
                     HotkeyModifiers numericModifiers = HotkeyActionResolver.GetCurrentModifiers();
                     this.CompleteNumericUpDownCapture(
-                        numericUpDown,
+                        upDown,
                         numericOwner,
                         increment,
                         numericModifiers);
+                    return false;
+                }
+            }
+
+            if (isLeftDown
+                && HotkeyActionResolver.TryGetScrollBar(screenPoint, out ScrollBar? scrollBar)
+                && scrollBar != null)
+            {
+                Form? scrollOwner = scrollBar.FindForm();
+                if (scrollOwner != null && scrollOwner is not HotkeyConfigWindow)
+                {
+                    this.CompleteScrollBarCapture(scrollBar, scrollOwner);
                     return false;
                 }
             }
@@ -549,7 +959,6 @@ namespace ModularAudience.Forms.Hotkeys
             {
                 return false;
             }
-
             Form? owner = control.FindForm();
             if (owner == null || owner is HotkeyConfigWindow)
             {
@@ -636,6 +1045,21 @@ namespace ModularAudience.Forms.Hotkeys
 
         private void MouseCaptureTimer_Tick(object? sender, EventArgs e)
         {
+            PendingMouseAction? pending = this._pendingMouseAction;
+            if (pending != null)
+            {
+                Size dragSize = SystemInformation.DragSize;
+                Point current = Cursor.Position;
+                if (Math.Abs(current.X - pending.ScreenPoint.X) > dragSize.Width / 2
+                    || Math.Abs(current.Y - pending.ScreenPoint.Y) > dragSize.Height / 2)
+                {
+                    // The user dragged instead of clicking. Let the drag gesture capture
+                    // itself (for example the Loop Control varispeed drag).
+                    this.CancelPendingMouseAction();
+                    return;
+                }
+            }
+
             this.FinalizePendingMouseAction();
         }
 
@@ -739,7 +1163,7 @@ namespace ModularAudience.Forms.Hotkeys
         }
 
         private void CompleteNumericUpDownCapture(
-            NumericUpDown numericUpDown,
+            UpDownBase upDown,
             Form owner,
             bool increment,
             HotkeyModifiers actionModifiers)
@@ -763,13 +1187,13 @@ namespace ModularAudience.Forms.Hotkeys
             try
             {
                 HotkeyActionTarget target = HotkeyActionResolver.BuildNumericUpDownTarget(
-                    numericUpDown,
+                    upDown,
                     owner,
                     increment,
                     actionModifiers);
 
                 string actionName = this.MakeUniqueActionName(
-                    HotkeyActionResolver.BuildNumericUpDownActionName(owner, numericUpDown, increment));
+                    HotkeyActionResolver.BuildNumericUpDownActionName(owner, upDown, increment));
 
                 HotkeyBinding binding = new()
                 {
@@ -792,6 +1216,121 @@ namespace ModularAudience.Forms.Hotkeys
             {
                 this.SetStatus("Could not register this numeric up/down action.");
                 System.Diagnostics.Debug.WriteLine($"Hotkeys: numeric up/down capture failed: {ex.Message}");
+            }
+        }
+
+        public bool TryCaptureLoopRateAction(LoopControl loopControl, int rowIndex, bool shiftAll)
+        {
+            if (this._stage != CaptureStage.AwaitingAction)
+            {
+                return false;
+            }
+
+            if (rowIndex < 0)
+            {
+                return false;
+            }
+
+            Keys hotkey = this._capturedKey;
+            HotkeyModifiers hotkeyModifiers = this._capturedModifiers;
+            string keyboardHardwareId = this._pendingKeyboardHardwareId;
+            string keyboardDisplayName = this._pendingKeyboardDisplayName;
+            this._stage = CaptureStage.Idle;
+            this._capturedKey = Keys.None;
+            this._capturedModifiers = HotkeyModifiers.None;
+            this._pendingKeyboardHardwareId = string.Empty;
+            this._pendingKeyboardDisplayName = string.Empty;
+            this.CancelPendingMouseAction();
+
+            try
+            {
+                HotkeyActionTarget target = HotkeyActionResolver.BuildLoopRateTarget(
+                    loopControl,
+                    rowIndex,
+                    shiftAll);
+
+                string actionName = this.MakeUniqueActionName(
+                    HotkeyActionResolver.BuildLoopRateActionName(
+                        loopControl,
+                        rowIndex,
+                        shiftAll));
+
+                HotkeyBinding binding = new()
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ActionName = actionName,
+                    Key = hotkey,
+                    Modifiers = hotkeyModifiers,
+                    KeyboardHardwareId = keyboardHardwareId,
+                    KeyboardDisplayName = keyboardDisplayName,
+                    Target = target,
+                    ToggleOnRelease = false,
+                    InvertWhileHeld = false
+                };
+
+                this._settings.AddOrReplace(binding);
+                this.SetStatus(
+                    $"Registered {binding.GetHotkeyDisplay()} -> {binding.ActionName}. " +
+                    "Hold it and turn the mouse wheel to change the varispeed.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                this.SetStatus("Could not register this varispeed action.");
+                System.Diagnostics.Debug.WriteLine($"Hotkeys: varispeed capture failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        private void CompleteScrollBarCapture(ScrollBar scrollBar, Form owner)
+        {
+            if (this._stage != CaptureStage.AwaitingAction)
+            {
+                return;
+            }
+
+            Keys hotkey = this._capturedKey;
+            HotkeyModifiers hotkeyModifiers = this._capturedModifiers;
+            string keyboardHardwareId = this._pendingKeyboardHardwareId;
+            string keyboardDisplayName = this._pendingKeyboardDisplayName;
+            this._stage = CaptureStage.Idle;
+            this._capturedKey = Keys.None;
+            this._capturedModifiers = HotkeyModifiers.None;
+            this._pendingKeyboardHardwareId = string.Empty;
+            this._pendingKeyboardDisplayName = string.Empty;
+            this.CancelPendingMouseAction();
+
+            try
+            {
+                HotkeyActionTarget target = HotkeyActionResolver.BuildScrollBarTarget(
+                    scrollBar,
+                    owner);
+
+                string actionName = this.MakeUniqueActionName(
+                    HotkeyActionResolver.BuildScrollBarActionName(owner, scrollBar));
+
+                HotkeyBinding binding = new()
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ActionName = actionName,
+                    Key = hotkey,
+                    Modifiers = hotkeyModifiers,
+                    KeyboardHardwareId = keyboardHardwareId,
+                    KeyboardDisplayName = keyboardDisplayName,
+                    Target = target,
+                    ToggleOnRelease = false,
+                    InvertWhileHeld = false
+                };
+
+                this._settings.AddOrReplace(binding);
+                this.SetStatus(
+                    $"Registered {binding.GetHotkeyDisplay()} -> {binding.ActionName}. " +
+                    $"Hold it and turn the mouse wheel to scroll ({target.ScrollTickDistance} units per notch).");
+            }
+            catch (Exception ex)
+            {
+                this.SetStatus("Could not register this scrollbar action.");
+                System.Diagnostics.Debug.WriteLine($"Hotkeys: scrollbar capture failed: {ex.Message}");
             }
         }
 
@@ -933,6 +1472,10 @@ namespace ModularAudience.Forms.Hotkeys
             public int Y;
         }
 
+        private const int WhMouseLowLevel = 14;
+        private const int WmMouseWheel = 0x020A;
+        private const int WmMouseHWheel = 0x020E;
+
         [DllImport("user32.dll")]
         private static extern IntPtr WindowFromPoint(POINT point);
 
@@ -985,5 +1528,106 @@ namespace ModularAudience.Forms.Hotkeys
                 return this._manager.HandleMouseMessage(ref message);
             }
         }
+
+        private void InstallMouseHook()
+        {
+            try
+            {
+                this._mouseHookHandle = SetWindowsHookEx(
+                    WhMouseLowLevel,
+                    this._mouseHookProc,
+                    GetModuleHandle(null),
+                    0);
+            }
+            catch (Exception ex)
+            {
+                this._mouseHookHandle = IntPtr.Zero;
+                System.Diagnostics.Debug.WriteLine(
+                    $"Hotkeys: mouse hook could not be installed: {ex.Message}");
+            }
+        }
+
+        private void RemoveMouseHook()
+        {
+            if (this._mouseHookHandle == IntPtr.Zero)
+            {
+                return;
+            }
+
+            try
+            {
+                UnhookWindowsHookEx(this._mouseHookHandle);
+            }
+            catch
+            {
+            }
+
+            this._mouseHookHandle = IntPtr.Zero;
+        }
+
+        /// <summary>
+        /// Low level mouse hook. It catches the mouse wheel no matter which window is
+        /// focused, so that the wheel hotkeys also work while another program is active.
+        /// </summary>
+        private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+        {
+            if (nCode >= 0)
+            {
+                int message = wParam.ToInt32();
+                if (message == WmMouseWheel || message == WmMouseHWheel)
+                {
+                    try
+                    {
+                        MSLLHOOKSTRUCT hook = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                        int delta = unchecked((short)(hook.mouseData >> 16));
+                        if (delta != 0 && this.TryHandleWheel(delta, message == WmMouseHWheel))
+                        {
+                            // The wheel was used by a hotkey, so it must not scroll
+                            // the window below the mouse pointer.
+                            return 1;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"Hotkeys: wheel hotkey failed: {ex.Message}");
+                    }
+                }
+            }
+
+            return CallNextHookEx(this._mouseHookHandle, nCode, wParam, lParam);
+        }
+
+        private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MSLLHOOKSTRUCT
+        {
+            public POINT pt;
+            public uint mouseData;
+            public uint flags;
+            public uint time;
+            public UIntPtr dwExtraInfo;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetWindowsHookEx(
+            int idHook,
+            LowLevelMouseProc lpfn,
+            IntPtr hMod,
+            uint dwThreadId);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr CallNextHookEx(
+            IntPtr hhk,
+            int nCode,
+            IntPtr wParam,
+            IntPtr lParam);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr GetModuleHandle(string? lpModuleName);
     }
 }

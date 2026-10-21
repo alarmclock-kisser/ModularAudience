@@ -8,7 +8,7 @@ namespace ModularAudience.Audio.Tests
     [TestClass]
     public sealed class PlaybackRateSettingTests
     {
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(-500, 0.5f)]
         [DataRow(0, 1f)]
         [DataRow(161, 1.25f)]

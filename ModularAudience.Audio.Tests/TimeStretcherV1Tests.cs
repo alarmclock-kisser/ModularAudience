@@ -32,7 +32,7 @@ namespace ModularAudience.Audio.Tests
             Assert.AreEqual(0.75f, audio.Data.Max(Math.Abs), 0.0001f);
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(2.0, 1024)]
         [DataRow(2.0, 2048)]
         [DataRow(2.0, 4096)]
@@ -152,7 +152,7 @@ namespace ModularAudience.Audio.Tests
             Assert.IsTrue(minimumTailWindowRms > 0.2f, $"The stretched tone fades into a low-energy break near the clip end: minimum tail window RMS {minimumTailWindowRms:F4}.");
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(0.5, 4096)]
         [DataRow(0.5, 8192)]
         [DataRow(0.25, 4096)]

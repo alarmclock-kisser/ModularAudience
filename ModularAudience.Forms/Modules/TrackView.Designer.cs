@@ -1,5 +1,8 @@
 ﻿namespace ModularAudience.Forms.Modules
 {
+    // The designer file assigns the fields in InitializeComponent, the compiler cannot see it.
+#pragma warning disable CS0649
+
     partial class TrackView
     {
         /// <summary>
@@ -28,432 +31,419 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
-            this.button_loop = new Button();
-            this.button_playback = new Button();
-            this.button_pause = new Button();
-            this.pictureBox_waveform = new PictureBox();
-            this.contextMenu_waveform = new ContextMenuStrip(this.components);
-            this.menuItem_copySelection = new ToolStripMenuItem();
-            this.menuItem_splitEqualParts = new ToolStripMenuItem();
-            this.menuItem_splitEqualParts2 = new ToolStripMenuItem();
-            this.menuItem_splitEqualParts4 = new ToolStripMenuItem();
-            this.menuItem_splitEqualParts8 = new ToolStripMenuItem();
-            this.menuItem_splitEqualParts16 = new ToolStripMenuItem();
-            this.menuItem_splitEqualParts32 = new ToolStripMenuItem();
-            this.menuItem_removeSelection = new ToolStripMenuItem();
-            this.menuItem_normalizeSelection = new ToolStripMenuItem();
-            this.menuItem_fadeIn = new ToolStripMenuItem();
-            this.menuItem_fadeOut = new ToolStripMenuItem();
-            this.menuItem_atomize = new ToolStripMenuItem();
-            this.trimSilenceToolStripMenuItem = new ToolStripMenuItem();
-            this.drawBeatGridToolStripMenuItem = new ToolStripMenuItem();
-            this.beatGridV1ToolStripMenuItem = new ToolStripMenuItem();
-            this.beatGridV2ToolStripMenuItem = new ToolStripMenuItem();
-            this.beatGridV3ToolStripMenuItem = new ToolStripMenuItem();
-            this.beatGridAnalogToolStripMenuItem = new ToolStripMenuItem();
-            this.vScrollBar_volume = new VScrollBar();
-            this.hScrollBar_offset = new HScrollBar();
-            this.label_volume = new Label();
-            this.textBox_time = new TextBox();
-            this.checkBox_settings = new CheckBox();
-            this.button_apply = new Button();
-            this.checkBox_sync = new CheckBox();
-            this.checkBox_mute = new CheckBox();
-            this.checkBox_solo = new CheckBox();
-            this.hScrollBar_rate = new ModularAudience.Forms.Controls.LiveRateScrollBar();
-            this.contextMenu_rate = new ContextMenuStrip(this.components);
-            this.menuItem_rateJumpHere = new ToolStripMenuItem();
-            this.menuItem_rateResetCenter = new ToolStripMenuItem();
-            this.label_info_rate = new Label();
-            this.toolStripMenuItem_jumpHere = new ToolStripMenuItem();
-            this.toolTip_trackView = new ToolTip(this.components);
-            this.toolTip_trackView.AutoPopDelay = 10000;
-            this.toolTip_trackView.InitialDelay = 500;
-            this.toolTip_trackView.ReshowDelay = 100;
-            this.toolTip_trackView.ShowAlways = true;
-            this.toolTip_trackView.IsBalloon = false;
-            ((System.ComponentModel.ISupportInitialize) this.pictureBox_waveform).BeginInit();
-            this.contextMenu_waveform.SuspendLayout();
-            this.contextMenu_rate.SuspendLayout();
-            this.SuspendLayout();
+            components = new System.ComponentModel.Container();
+            button_loop = new Button();
+            button_playback = new Button();
+            button_pause = new Button();
+            pictureBox_waveform = new PictureBox();
+            contextMenu_waveform = new ContextMenuStrip(components);
+            toolStripMenuItem_jumpHere = new ToolStripMenuItem();
+            menuItem_copySelection = new ToolStripMenuItem();
+            menuItem_splitEqualParts = new ToolStripMenuItem();
+            menuItem_splitEqualParts2 = new ToolStripMenuItem();
+            menuItem_splitEqualParts4 = new ToolStripMenuItem();
+            menuItem_splitEqualParts8 = new ToolStripMenuItem();
+            menuItem_splitEqualParts16 = new ToolStripMenuItem();
+            menuItem_splitEqualParts32 = new ToolStripMenuItem();
+            menuItem_atomize = new ToolStripMenuItem();
+            menuItem_removeSelection = new ToolStripMenuItem();
+            menuItem_normalizeSelection = new ToolStripMenuItem();
+            menuItem_fadeIn = new ToolStripMenuItem();
+            menuItem_fadeOut = new ToolStripMenuItem();
+            trimSilenceToolStripMenuItem = new ToolStripMenuItem();
+            drawBeatGridToolStripMenuItem = new ToolStripMenuItem();
+            beatGridV1ToolStripMenuItem = new ToolStripMenuItem();
+            beatGridV2ToolStripMenuItem = new ToolStripMenuItem();
+            beatGridV3ToolStripMenuItem = new ToolStripMenuItem();
+            beatGridAnalogToolStripMenuItem = new ToolStripMenuItem();
+            vScrollBar_volume = new VScrollBar();
+            hScrollBar_offset = new HScrollBar();
+            label_volume = new Label();
+            textBox_time = new TextBox();
+            checkBox_settings = new CheckBox();
+            button_apply = new Button();
+            checkBox_sync = new CheckBox();
+            checkBox_mute = new CheckBox();
+            checkBox_solo = new CheckBox();
+            contextMenu_rate = new ContextMenuStrip(components);
+            menuItem_rateJumpHere = new ToolStripMenuItem();
+            menuItem_rateResetCenter = new ToolStripMenuItem();
+            label_info_rate = new Label();
+            toolTip_trackView = new ToolTip(components);
+            ((System.ComponentModel.ISupportInitialize)pictureBox_waveform).BeginInit();
+            contextMenu_waveform.SuspendLayout();
+            contextMenu_rate.SuspendLayout();
+            SuspendLayout();
             // 
             // button_loop
             // 
-            this.button_loop.Font = new Font("Segoe UI Symbol", 9F, FontStyle.Bold, GraphicsUnit.Point,  0);
-            this.button_loop.Location = new Point(71, 8);
-            this.button_loop.Margin = new Padding(2);
-            this.button_loop.Name = "button_loop";
-            this.button_loop.Size = new Size(23, 23);
-            this.button_loop.TabIndex = 6;
-            this.button_loop.TabStop = false;
-            this.button_loop.Text = "↺";
-            this.button_loop.UseVisualStyleBackColor = true;
-            this.toolTip_trackView.SetToolTip(this.button_loop, "Loop toggle.\nNormal click: enable loop.\nClick again: cycle forward.\nCtrl+click: disable loop.\nShift+click: cycle backward.");
+            button_loop.Font = new Font("Segoe UI Symbol", 9F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            button_loop.Location = new Point(71, 8);
+            button_loop.Margin = new Padding(2);
+            button_loop.Name = "button_loop";
+            button_loop.Size = new Size(23, 23);
+            button_loop.TabIndex = 6;
+            button_loop.TabStop = false;
+            button_loop.Text = "↺";
+            toolTip_trackView.SetToolTip(button_loop, "Loop toggle.\nNormal click: enable loop.\nClick again: cycle forward.\nCtrl+click: disable loop.\nShift+click: cycle backward.");
+            button_loop.UseVisualStyleBackColor = true;
             // 
             // button_playback
             // 
-            this.button_playback.Location = new Point(10, 8);
-            this.button_playback.Margin = new Padding(2);
-            this.button_playback.Name = "button_playback";
-            this.button_playback.Size = new Size(23, 23);
-            this.button_playback.TabIndex = 4;
-            this.button_playback.TabStop = false;
-            this.button_playback.Tag = "■";
-            this.button_playback.Text = "▶";
-            this.button_playback.UseVisualStyleBackColor = true;
-            this.button_playback.Click += this.button_playback_Click;
-            this.toolTip_trackView.SetToolTip(this.button_playback, "Play/Stop.\nCtrl+click: toggle all TrackViews.");
+            button_playback.Location = new Point(10, 8);
+            button_playback.Margin = new Padding(2);
+            button_playback.Name = "button_playback";
+            button_playback.Size = new Size(23, 23);
+            button_playback.TabIndex = 4;
+            button_playback.TabStop = false;
+            button_playback.Tag = "■";
+            button_playback.Text = "▶";
+            toolTip_trackView.SetToolTip(button_playback, "Play/Stop.\nCtrl+click: toggle all TrackViews.");
+            button_playback.UseVisualStyleBackColor = true;
+            button_playback.Click += button_playback_Click;
             // 
             // button_pause
             // 
-            this.button_pause.Font = new Font("Bahnschrift", 9F, FontStyle.Regular, GraphicsUnit.Point,  0);
-            this.button_pause.Location = new Point(40, 8);
-            this.button_pause.Margin = new Padding(2);
-            this.button_pause.Name = "button_pause";
-            this.button_pause.Size = new Size(23, 23);
-            this.button_pause.TabIndex = 5;
-            this.button_pause.TabStop = false;
-            this.button_pause.Text = "||";
-            this.button_pause.UseVisualStyleBackColor = true;
-            this.button_pause.Click += this.button_pause_Click;
-            this.toolTip_trackView.SetToolTip(this.button_pause, "Pause/Resume.\nCtrl+click: toggle all TrackViews.");
+            button_pause.Font = new Font("Bahnschrift", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            button_pause.Location = new Point(40, 8);
+            button_pause.Margin = new Padding(2);
+            button_pause.Name = "button_pause";
+            button_pause.Size = new Size(23, 23);
+            button_pause.TabIndex = 5;
+            button_pause.TabStop = false;
+            button_pause.Text = "||";
+            toolTip_trackView.SetToolTip(button_pause, "Pause/Resume.\nCtrl+click: toggle all TrackViews.");
+            button_pause.UseVisualStyleBackColor = true;
+            button_pause.Click += button_pause_Click;
             // 
             // pictureBox_waveform
             // 
-            this.pictureBox_waveform.BackColor = Color.White;
-            this.pictureBox_waveform.BorderStyle = BorderStyle.Fixed3D;
-            this.pictureBox_waveform.ContextMenuStrip = this.contextMenu_waveform;
-            this.pictureBox_waveform.Location = new Point(135, 12);
-            this.pictureBox_waveform.Name = "pictureBox_waveform";
-            this.pictureBox_waveform.Size = new Size(917, 160);
-            this.pictureBox_waveform.TabIndex = 7;
-            this.pictureBox_waveform.TabStop = false;
-            this.toolTip_trackView.SetToolTip(this.pictureBox_waveform, "Right-click for more actions...");
+            pictureBox_waveform.BackColor = Color.White;
+            pictureBox_waveform.BorderStyle = BorderStyle.Fixed3D;
+            pictureBox_waveform.ContextMenuStrip = contextMenu_waveform;
+            pictureBox_waveform.Location = new Point(135, 12);
+            pictureBox_waveform.Name = "pictureBox_waveform";
+            pictureBox_waveform.Size = new Size(917, 160);
+            pictureBox_waveform.TabIndex = 7;
+            pictureBox_waveform.TabStop = false;
+            toolTip_trackView.SetToolTip(pictureBox_waveform, "Right-click for more actions...");
             // 
             // contextMenu_waveform
             // 
-            this.contextMenu_waveform.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_jumpHere, this.menuItem_copySelection, this.menuItem_splitEqualParts, this.menuItem_atomize, this.menuItem_removeSelection, this.menuItem_normalizeSelection, this.menuItem_fadeIn, this.menuItem_fadeOut, this.trimSilenceToolStripMenuItem, this.drawBeatGridToolStripMenuItem });
-            this.contextMenu_waveform.Name = "contextMenu_waveform";
-            this.contextMenu_waveform.Size = new Size(183, 224);
-            this.contextMenu_waveform.Opening += this.contextMenu_waveform_Opening;
-            // 
-            // menuItem_copySelection
-            // 
-            this.menuItem_copySelection.Name = "menuItem_copySelection";
-            this.menuItem_copySelection.Size = new Size(182, 22);
-            this.menuItem_copySelection.Text = "Copy Selection";
-            this.menuItem_copySelection.Click += this.menuItem_copySelection_Click;
-            // 
-            // menuItem_splitEqualParts
-            // 
-            this.menuItem_splitEqualParts.DropDownItems.AddRange(new ToolStripItem[] { this.menuItem_splitEqualParts2, this.menuItem_splitEqualParts4, this.menuItem_splitEqualParts8, this.menuItem_splitEqualParts16, this.menuItem_splitEqualParts32 });
-            this.menuItem_splitEqualParts.Name = "menuItem_splitEqualParts";
-            this.menuItem_splitEqualParts.Size = new Size(182, 22);
-            this.menuItem_splitEqualParts.Text = "Split Into Equal Parts";
-            // 
-            // menuItem_atomize
-            // 
-            this.menuItem_atomize.Name = "menuItem_atomize";
-            this.menuItem_atomize.Size = new Size(182, 22);
-            this.menuItem_atomize.Text = "Atomize";
-            this.menuItem_atomize.Click += this.menuItem_atomize_Click;
-            // 
-            // menuItem_splitEqualParts2
-            // 
-            this.menuItem_splitEqualParts2.Name = "menuItem_splitEqualParts2";
-            this.menuItem_splitEqualParts2.Size = new Size(180, 22);
-            this.menuItem_splitEqualParts2.Text = "2";
-            this.menuItem_splitEqualParts2.Click += this.menuItem_splitEqualParts2_Click;
-            // 
-            // menuItem_splitEqualParts4
-            // 
-            this.menuItem_splitEqualParts4.Name = "menuItem_splitEqualParts4";
-            this.menuItem_splitEqualParts4.Size = new Size(180, 22);
-            this.menuItem_splitEqualParts4.Text = "4";
-            this.menuItem_splitEqualParts4.Click += this.menuItem_splitEqualParts4_Click;
-            // 
-            // menuItem_splitEqualParts8
-            // 
-            this.menuItem_splitEqualParts8.Name = "menuItem_splitEqualParts8";
-            this.menuItem_splitEqualParts8.Size = new Size(180, 22);
-            this.menuItem_splitEqualParts8.Text = "8";
-            this.menuItem_splitEqualParts8.Click += this.menuItem_splitEqualParts8_Click;
-            // 
-            // menuItem_splitEqualParts16
-            // 
-            this.menuItem_splitEqualParts16.Name = "menuItem_splitEqualParts16";
-            this.menuItem_splitEqualParts16.Size = new Size(180, 22);
-            this.menuItem_splitEqualParts16.Text = "16";
-            this.menuItem_splitEqualParts16.Click += this.menuItem_splitEqualParts16_Click;
-            // 
-            // menuItem_splitEqualParts32
-            // 
-            this.menuItem_splitEqualParts32.Name = "menuItem_splitEqualParts32";
-            this.menuItem_splitEqualParts32.Size = new Size(180, 22);
-            this.menuItem_splitEqualParts32.Text = "32";
-            this.menuItem_splitEqualParts32.Click += this.menuItem_splitEqualParts32_Click;
-            // 
-            // menuItem_removeSelection
-            // 
-            this.menuItem_removeSelection.Name = "menuItem_removeSelection";
-            this.menuItem_removeSelection.Size = new Size(182, 22);
-            this.menuItem_removeSelection.Text = "Remove Selection";
-            this.menuItem_removeSelection.Click += this.menuItem_removeSelection_Click;
-            // 
-            // menuItem_normalizeSelection
-            // 
-            this.menuItem_normalizeSelection.Name = "menuItem_normalizeSelection";
-            this.menuItem_normalizeSelection.Size = new Size(182, 22);
-            this.menuItem_normalizeSelection.Text = "Normalize...";
-            this.menuItem_normalizeSelection.Click += this.menuItem_normalizeSelection_Click;
-            // 
-            // menuItem_fadeIn
-            // 
-            this.menuItem_fadeIn.Name = "menuItem_fadeIn";
-            this.menuItem_fadeIn.Size = new Size(182, 22);
-            this.menuItem_fadeIn.Text = "Fade In...";
-            this.menuItem_fadeIn.Click += this.menuItem_fadeIn_Click;
-            // 
-            // menuItem_fadeOut
-            // 
-            this.menuItem_fadeOut.Name = "menuItem_fadeOut";
-            this.menuItem_fadeOut.Size = new Size(182, 22);
-            this.menuItem_fadeOut.Text = "Fade Out...";
-            this.menuItem_fadeOut.Click += this.menuItem_fadeOut_Click;
-            // 
-            // trimSilenceToolStripMenuItem
-            // 
-            this.trimSilenceToolStripMenuItem.Name = "trimSilenceToolStripMenuItem";
-            this.trimSilenceToolStripMenuItem.Size = new Size(182, 22);
-            this.trimSilenceToolStripMenuItem.Text = "Trim Silence...";
-            this.trimSilenceToolStripMenuItem.Click += this.menuItem_trimSilence_Click;
-            // 
-            // drawBeatGridToolStripMenuItem
-            // 
-            this.drawBeatGridToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { this.beatGridV1ToolStripMenuItem, this.beatGridV2ToolStripMenuItem, this.beatGridV3ToolStripMenuItem, this.beatGridAnalogToolStripMenuItem });
-            this.drawBeatGridToolStripMenuItem.Name = "drawBeatGridToolStripMenuItem";
-            this.drawBeatGridToolStripMenuItem.Size = new Size(182, 22);
-            this.drawBeatGridToolStripMenuItem.Text = "Draw Beat-Grid";
-            // 
-            // beatGridV1ToolStripMenuItem
-            // 
-            this.beatGridV1ToolStripMenuItem.CheckOnClick = true;
-            this.beatGridV1ToolStripMenuItem.Name = "beatGridV1ToolStripMenuItem";
-            this.beatGridV1ToolStripMenuItem.Size = new Size(121, 22);
-            this.beatGridV1ToolStripMenuItem.Text = "Version 1";
-            this.beatGridV1ToolStripMenuItem.Click += this.beatgridV1ToolStripMenuItem_Click;
-            // 
-            // beatGridV2ToolStripMenuItem
-            // 
-            this.beatGridV2ToolStripMenuItem.CheckOnClick = true;
-            this.beatGridV2ToolStripMenuItem.Name = "beatGridV2ToolStripMenuItem";
-            this.beatGridV2ToolStripMenuItem.Size = new Size(121, 22);
-            this.beatGridV2ToolStripMenuItem.Text = "Version 2";
-            this.beatGridV2ToolStripMenuItem.Click += this.beatGridV2ToolStripMenuItem_Click;
-            // beatGridV3ToolStripMenuItem
-            //
-            this.beatGridV3ToolStripMenuItem.CheckOnClick = true;
-            this.beatGridV3ToolStripMenuItem.Name = "beatGridV3ToolStripMenuItem";
-            this.beatGridV3ToolStripMenuItem.Size = new Size(121, 22);
-            this.beatGridV3ToolStripMenuItem.Text = "Version 3";
-            this.beatGridV3ToolStripMenuItem.Click += this.beatGridV3ToolStripMenuItem_Click;
-            // 
-            // beatGridAnalogToolStripMenuItem
-            // 
-            this.beatGridAnalogToolStripMenuItem.CheckOnClick = true;
-            this.beatGridAnalogToolStripMenuItem.Name = "beatGridAnalogToolStripMenuItem";
-            this.beatGridAnalogToolStripMenuItem.Size = new Size(121, 22);
-            this.beatGridAnalogToolStripMenuItem.Text = "Version analog";
-            this.beatGridAnalogToolStripMenuItem.Click += this.beatGridAnalogToolStripMenuItem_Click;
-            // 
-            // vScrollBar_volume
-            // 
-            this.vScrollBar_volume.LargeChange = 1;
-            this.vScrollBar_volume.Location = new Point(115, 12);
-            this.vScrollBar_volume.Maximum = 1000;
-            this.vScrollBar_volume.Name = "vScrollBar_volume";
-            this.vScrollBar_volume.Size = new Size(17, 160);
-            this.vScrollBar_volume.TabIndex = 8;
-            this.vScrollBar_volume.Scroll += this.vScrollBar_volume_Scroll;
-            // 
-            // hScrollBar_offset
-            // 
-            this.hScrollBar_offset.Location = new Point(135, 175);
-            this.hScrollBar_offset.Name = "hScrollBar_offset";
-            this.hScrollBar_offset.Size = new Size(916, 17);
-            this.hScrollBar_offset.TabIndex = 9;
-            this.hScrollBar_offset.Scroll += this.hScrollBar_offset_Scroll;
-            // 
-            // label_volume
-            // 
-            this.label_volume.AutoSize = true;
-            this.label_volume.Location = new Point(88, 175);
-            this.label_volume.Name = "label_volume";
-            this.label_volume.Size = new Size(44, 15);
-            this.label_volume.TabIndex = 10;
-            this.label_volume.Text = "100.0%";
-            // 
-            // textBox_time
-            // 
-            this.textBox_time.Location = new Point(10, 142);
-            this.textBox_time.MaxLength = 32;
-            this.textBox_time.Name = "textBox_time";
-            this.textBox_time.PlaceholderText = "0:00:00.000";
-            this.textBox_time.ReadOnly = true;
-            this.textBox_time.Size = new Size(82, 23);
-            this.textBox_time.TabIndex = 11;
-            this.textBox_time.TabStop = false;
-            // 
-            // checkBox_settings
-            // 
-            this.checkBox_settings.AutoSize = true;
-            this.checkBox_settings.Location = new Point(10, 120);
-            this.checkBox_settings.Margin = new Padding(3, 0, 3, 0);
-            this.checkBox_settings.Name = "checkBox_settings";
-            this.checkBox_settings.Size = new Size(68, 19);
-            this.checkBox_settings.TabIndex = 12;
-            this.checkBox_settings.Text = "Settings";
-            this.checkBox_settings.UseVisualStyleBackColor = true;
-            this.checkBox_settings.CheckedChanged += this.checkBox_settings_CheckedChanged;
-            // 
-            // button_apply
-            // 
-            this.button_apply.BackColor = SystemColors.Info;
-            this.button_apply.Font = new Font("Bahnschrift Light SemiCondensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
-            this.button_apply.Location = new Point(10, 169);
-            this.button_apply.Margin = new Padding(1);
-            this.button_apply.Name = "button_apply";
-            this.button_apply.Size = new Size(82, 23);
-            this.button_apply.TabIndex = 13;
-            this.button_apply.Text = "Apply Changes";
-            this.button_apply.UseVisualStyleBackColor = false;
-            this.button_apply.Click += this.button_apply_Click;
-            // 
-            // checkBox_sync
-            // 
-            this.checkBox_sync.AutoSize = true;
-            this.checkBox_sync.Font = new Font("Bahnschrift SemiCondensed", 9F, FontStyle.Regular, GraphicsUnit.Point,  0);
-            this.checkBox_sync.Location = new Point(10, 36);
-            this.checkBox_sync.Name = "checkBox_sync";
-            this.checkBox_sync.Size = new Size(94, 18);
-            this.checkBox_sync.TabIndex = 14;
-            this.checkBox_sync.Text = "Sync Playback";
-            this.checkBox_sync.UseVisualStyleBackColor = true;
-            this.checkBox_sync.CheckedChanged += this.checkBox_sync_CheckedChanged;
-            this.toolTip_trackView.SetToolTip(this.checkBox_sync, "Sync Playback.\nCtrl+click: toggle all TrackViews (if on, unchecks all; if off, checks all).");
-            // 
-            // checkBox_mute
-            // 
-            this.checkBox_mute.AutoSize = true;
-            this.checkBox_mute.Font = new Font("Segoe UI Semilight", 8.25F);
-            this.checkBox_mute.Location = new Point(10, 57);
-            this.checkBox_mute.Margin = new Padding(0);
-            this.checkBox_mute.Name = "checkBox_mute";
-            this.checkBox_mute.Size = new Size(51, 17);
-            this.checkBox_mute.TabIndex = 15;
-            this.checkBox_mute.TabStop = false;
-            this.checkBox_mute.Text = "Mute";
-            this.checkBox_mute.UseVisualStyleBackColor = true;
-            this.checkBox_mute.CheckedChanged += this.checkBox_mute_CheckedChanged;
-            // 
-            // checkBox_solo
-            // 
-            this.checkBox_solo.AutoSize = true;
-            this.checkBox_solo.Font = new Font("Segoe UI Semilight", 8.25F);
-            this.checkBox_solo.Location = new Point(61, 57);
-            this.checkBox_solo.Margin = new Padding(0);
-            this.checkBox_solo.Name = "checkBox_solo";
-            this.checkBox_solo.Size = new Size(46, 17);
-            this.checkBox_solo.TabIndex = 16;
-            this.checkBox_solo.TabStop = false;
-            this.checkBox_solo.Text = "Solo";
-            this.checkBox_solo.UseVisualStyleBackColor = true;
-            this.checkBox_solo.CheckedChanged += this.checkBox_solo_CheckedChanged;
-            // 
-            // hScrollBar_rate
-            // 
-            this.hScrollBar_rate.ContextMenuStrip = this.contextMenu_rate;
-            this.hScrollBar_rate.Location = new Point(2, 103);
-            this.hScrollBar_rate.Maximum = 100;
-            this.hScrollBar_rate.Minimum = -100;
-            this.hScrollBar_rate.Name = "hScrollBar_rate";
-            this.hScrollBar_rate.Size = new Size(113, 17);
-            this.hScrollBar_rate.TabIndex = 17;
-            this.hScrollBar_rate.MouseDown += this.hScrollBar_rate_MouseDown;
-            this.hScrollBar_rate.Scroll += this.hScrollBar_rate_Scroll;
-            this.hScrollBar_rate.ValueChanged += this.hScrollBar_rate_ValueChanged;
-            this.toolTip_trackView.SetToolTip(this.hScrollBar_rate, "Playback rate (varispeed).\nCtrl+click: change rate on all TrackViews.\nRight-click: context menu (jump here, reset center).");
-            // 
-            // contextMenu_rate
-            // 
-            this.contextMenu_rate.Items.AddRange(new ToolStripItem[] { this.menuItem_rateJumpHere, this.menuItem_rateResetCenter });
-            this.contextMenu_rate.Name = "contextMenu_rate";
-            this.contextMenu_rate.Size = new Size(155, 48);
-            this.contextMenu_rate.Opening += this.contextMenu_rate_Opening;
-            // 
-            // menuItem_rateJumpHere
-            // 
-            this.menuItem_rateJumpHere.Name = "menuItem_rateJumpHere";
-            this.menuItem_rateJumpHere.Size = new Size(154, 22);
-            this.menuItem_rateJumpHere.Text = "Jump here";
-            this.menuItem_rateJumpHere.Click += this.menuItem_rateJumpHere_Click;
-            // 
-            // menuItem_rateResetCenter
-            // 
-            this.menuItem_rateResetCenter.Name = "menuItem_rateResetCenter";
-            this.menuItem_rateResetCenter.Size = new Size(154, 22);
-            this.menuItem_rateResetCenter.Text = "Center/Reset Rate";
-            this.menuItem_rateResetCenter.Click += this.menuItem_rateResetCenter_Click;
-            // 
-            // label_info_rate
-            // 
-            this.label_info_rate.AutoSize = true;
-            this.label_info_rate.Font = new Font("Segoe UI Semilight", 8.25F, FontStyle.Regular, GraphicsUnit.Point,  0);
-            this.label_info_rate.Location = new Point(10, 88);
-            this.label_info_rate.Name = "label_info_rate";
-            this.label_info_rate.Size = new Size(66, 13);
-            this.label_info_rate.TabIndex = 18;
-            this.label_info_rate.Text = "Rate: 100.0%";
+            contextMenu_waveform.Items.AddRange(new ToolStripItem[] { toolStripMenuItem_jumpHere, menuItem_copySelection, menuItem_splitEqualParts, menuItem_atomize, menuItem_removeSelection, menuItem_normalizeSelection, menuItem_fadeIn, menuItem_fadeOut, trimSilenceToolStripMenuItem, drawBeatGridToolStripMenuItem });
+            contextMenu_waveform.Name = "contextMenu_waveform";
+            contextMenu_waveform.Size = new Size(183, 224);
+            contextMenu_waveform.Opening += contextMenu_waveform_Opening;
             // 
             // toolStripMenuItem_jumpHere
             // 
-            this.toolStripMenuItem_jumpHere.Name = "toolStripMenuItem_jumpHere";
-            this.toolStripMenuItem_jumpHere.Size = new Size(182, 22);
-            this.toolStripMenuItem_jumpHere.Text = "Jump to [-:--:--.---]";
-            this.toolStripMenuItem_jumpHere.Click += this.toolStripMenuItem_jumpHere_Click;
+            toolStripMenuItem_jumpHere.Name = "toolStripMenuItem_jumpHere";
+            toolStripMenuItem_jumpHere.Size = new Size(182, 22);
+            toolStripMenuItem_jumpHere.Text = "Jump to [-:--:--.---]";
+            toolStripMenuItem_jumpHere.Click += toolStripMenuItem_jumpHere_Click;
+            // 
+            // menuItem_copySelection
+            // 
+            menuItem_copySelection.Name = "menuItem_copySelection";
+            menuItem_copySelection.Size = new Size(182, 22);
+            menuItem_copySelection.Text = "Copy Selection";
+            menuItem_copySelection.Click += menuItem_copySelection_Click;
+            // 
+            // menuItem_splitEqualParts
+            // 
+            menuItem_splitEqualParts.DropDownItems.AddRange(new ToolStripItem[] { menuItem_splitEqualParts2, menuItem_splitEqualParts4, menuItem_splitEqualParts8, menuItem_splitEqualParts16, menuItem_splitEqualParts32 });
+            menuItem_splitEqualParts.Name = "menuItem_splitEqualParts";
+            menuItem_splitEqualParts.Size = new Size(182, 22);
+            menuItem_splitEqualParts.Text = "Split Into Equal Parts";
+            // 
+            // menuItem_splitEqualParts2
+            // 
+            menuItem_splitEqualParts2.Name = "menuItem_splitEqualParts2";
+            menuItem_splitEqualParts2.Size = new Size(86, 22);
+            menuItem_splitEqualParts2.Text = "2";
+            menuItem_splitEqualParts2.Click += menuItem_splitEqualParts2_Click;
+            // 
+            // menuItem_splitEqualParts4
+            // 
+            menuItem_splitEqualParts4.Name = "menuItem_splitEqualParts4";
+            menuItem_splitEqualParts4.Size = new Size(86, 22);
+            menuItem_splitEqualParts4.Text = "4";
+            menuItem_splitEqualParts4.Click += menuItem_splitEqualParts4_Click;
+            // 
+            // menuItem_splitEqualParts8
+            // 
+            menuItem_splitEqualParts8.Name = "menuItem_splitEqualParts8";
+            menuItem_splitEqualParts8.Size = new Size(86, 22);
+            menuItem_splitEqualParts8.Text = "8";
+            menuItem_splitEqualParts8.Click += menuItem_splitEqualParts8_Click;
+            // 
+            // menuItem_splitEqualParts16
+            // 
+            menuItem_splitEqualParts16.Name = "menuItem_splitEqualParts16";
+            menuItem_splitEqualParts16.Size = new Size(86, 22);
+            menuItem_splitEqualParts16.Text = "16";
+            menuItem_splitEqualParts16.Click += menuItem_splitEqualParts16_Click;
+            // 
+            // menuItem_splitEqualParts32
+            // 
+            menuItem_splitEqualParts32.Name = "menuItem_splitEqualParts32";
+            menuItem_splitEqualParts32.Size = new Size(86, 22);
+            menuItem_splitEqualParts32.Text = "32";
+            menuItem_splitEqualParts32.Click += menuItem_splitEqualParts32_Click;
+            // 
+            // menuItem_atomize
+            // 
+            menuItem_atomize.Name = "menuItem_atomize";
+            menuItem_atomize.Size = new Size(182, 22);
+            menuItem_atomize.Text = "Atomize";
+            menuItem_atomize.Click += menuItem_atomize_Click;
+            // 
+            // menuItem_removeSelection
+            // 
+            menuItem_removeSelection.Name = "menuItem_removeSelection";
+            menuItem_removeSelection.Size = new Size(182, 22);
+            menuItem_removeSelection.Text = "Remove Selection";
+            menuItem_removeSelection.Click += menuItem_removeSelection_Click;
+            // 
+            // menuItem_normalizeSelection
+            // 
+            menuItem_normalizeSelection.Name = "menuItem_normalizeSelection";
+            menuItem_normalizeSelection.Size = new Size(182, 22);
+            menuItem_normalizeSelection.Text = "Normalize...";
+            menuItem_normalizeSelection.Click += menuItem_normalizeSelection_Click;
+            // 
+            // menuItem_fadeIn
+            // 
+            menuItem_fadeIn.Name = "menuItem_fadeIn";
+            menuItem_fadeIn.Size = new Size(182, 22);
+            menuItem_fadeIn.Text = "Fade In...";
+            menuItem_fadeIn.Click += menuItem_fadeIn_Click;
+            // 
+            // menuItem_fadeOut
+            // 
+            menuItem_fadeOut.Name = "menuItem_fadeOut";
+            menuItem_fadeOut.Size = new Size(182, 22);
+            menuItem_fadeOut.Text = "Fade Out...";
+            menuItem_fadeOut.Click += menuItem_fadeOut_Click;
+            // 
+            // trimSilenceToolStripMenuItem
+            // 
+            trimSilenceToolStripMenuItem.Name = "trimSilenceToolStripMenuItem";
+            trimSilenceToolStripMenuItem.Size = new Size(182, 22);
+            trimSilenceToolStripMenuItem.Text = "Trim Silence...";
+            trimSilenceToolStripMenuItem.Click += menuItem_trimSilence_Click;
+            // 
+            // drawBeatGridToolStripMenuItem
+            // 
+            drawBeatGridToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { beatGridV1ToolStripMenuItem, beatGridV2ToolStripMenuItem, beatGridV3ToolStripMenuItem, beatGridAnalogToolStripMenuItem });
+            drawBeatGridToolStripMenuItem.Name = "drawBeatGridToolStripMenuItem";
+            drawBeatGridToolStripMenuItem.Size = new Size(182, 22);
+            drawBeatGridToolStripMenuItem.Text = "Draw Beat-Grid";
+            // 
+            // beatGridV1ToolStripMenuItem
+            // 
+            beatGridV1ToolStripMenuItem.CheckOnClick = true;
+            beatGridV1ToolStripMenuItem.Name = "beatGridV1ToolStripMenuItem";
+            beatGridV1ToolStripMenuItem.Size = new Size(151, 22);
+            beatGridV1ToolStripMenuItem.Text = "Version 1";
+            beatGridV1ToolStripMenuItem.Click += beatgridV1ToolStripMenuItem_Click;
+            // 
+            // beatGridV2ToolStripMenuItem
+            // 
+            beatGridV2ToolStripMenuItem.CheckOnClick = true;
+            beatGridV2ToolStripMenuItem.Name = "beatGridV2ToolStripMenuItem";
+            beatGridV2ToolStripMenuItem.Size = new Size(151, 22);
+            beatGridV2ToolStripMenuItem.Text = "Version 2";
+            beatGridV2ToolStripMenuItem.Click += beatGridV2ToolStripMenuItem_Click;
+            // 
+            // beatGridV3ToolStripMenuItem
+            // 
+            beatGridV3ToolStripMenuItem.CheckOnClick = true;
+            beatGridV3ToolStripMenuItem.Name = "beatGridV3ToolStripMenuItem";
+            beatGridV3ToolStripMenuItem.Size = new Size(151, 22);
+            beatGridV3ToolStripMenuItem.Text = "Version 3";
+            beatGridV3ToolStripMenuItem.Click += beatGridV3ToolStripMenuItem_Click;
+            // 
+            // beatGridAnalogToolStripMenuItem
+            // 
+            beatGridAnalogToolStripMenuItem.CheckOnClick = true;
+            beatGridAnalogToolStripMenuItem.Name = "beatGridAnalogToolStripMenuItem";
+            beatGridAnalogToolStripMenuItem.Size = new Size(151, 22);
+            beatGridAnalogToolStripMenuItem.Text = "Version analog";
+            beatGridAnalogToolStripMenuItem.Click += beatGridAnalogToolStripMenuItem_Click;
+            // 
+            // vScrollBar_volume
+            // 
+            vScrollBar_volume.LargeChange = 1;
+            vScrollBar_volume.Location = new Point(115, 12);
+            vScrollBar_volume.Maximum = 1000;
+            vScrollBar_volume.Name = "vScrollBar_volume";
+            vScrollBar_volume.Size = new Size(17, 160);
+            vScrollBar_volume.TabIndex = 8;
+            vScrollBar_volume.Scroll += vScrollBar_volume_Scroll;
+            // 
+            // hScrollBar_offset
+            // 
+            hScrollBar_offset.Location = new Point(135, 175);
+            hScrollBar_offset.Name = "hScrollBar_offset";
+            hScrollBar_offset.Size = new Size(916, 17);
+            hScrollBar_offset.TabIndex = 9;
+            hScrollBar_offset.Scroll += hScrollBar_offset_Scroll;
+            // 
+            // label_volume
+            // 
+            label_volume.AutoSize = true;
+            label_volume.Location = new Point(88, 175);
+            label_volume.Name = "label_volume";
+            label_volume.Size = new Size(44, 15);
+            label_volume.TabIndex = 10;
+            label_volume.Text = "100.0%";
+            // 
+            // textBox_time
+            // 
+            textBox_time.Location = new Point(10, 142);
+            textBox_time.MaxLength = 32;
+            textBox_time.Name = "textBox_time";
+            textBox_time.PlaceholderText = "0:00:00.000";
+            textBox_time.ReadOnly = true;
+            textBox_time.Size = new Size(82, 23);
+            textBox_time.TabIndex = 11;
+            textBox_time.TabStop = false;
+            // 
+            // checkBox_settings
+            // 
+            checkBox_settings.AutoSize = true;
+            checkBox_settings.Location = new Point(10, 120);
+            checkBox_settings.Margin = new Padding(3, 0, 3, 0);
+            checkBox_settings.Name = "checkBox_settings";
+            checkBox_settings.Size = new Size(68, 19);
+            checkBox_settings.TabIndex = 12;
+            checkBox_settings.Text = "Settings";
+            checkBox_settings.UseVisualStyleBackColor = true;
+            checkBox_settings.CheckedChanged += checkBox_settings_CheckedChanged;
+            // 
+            // button_apply
+            // 
+            button_apply.BackColor = SystemColors.Info;
+            button_apply.Font = new Font("Bahnschrift Light SemiCondensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            button_apply.Location = new Point(10, 169);
+            button_apply.Margin = new Padding(1);
+            button_apply.Name = "button_apply";
+            button_apply.Size = new Size(82, 23);
+            button_apply.TabIndex = 13;
+            button_apply.Text = "Apply Changes";
+            button_apply.UseVisualStyleBackColor = false;
+            button_apply.Click += button_apply_Click;
+            // 
+            // checkBox_sync
+            // 
+            checkBox_sync.AutoSize = true;
+            checkBox_sync.Font = new Font("Bahnschrift SemiCondensed", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            checkBox_sync.Location = new Point(10, 36);
+            checkBox_sync.Name = "checkBox_sync";
+            checkBox_sync.Size = new Size(94, 18);
+            checkBox_sync.TabIndex = 14;
+            checkBox_sync.Text = "Sync Playback";
+            toolTip_trackView.SetToolTip(checkBox_sync, "Sync Playback.\nCtrl+click: toggle all TrackViews (if on, unchecks all; if off, checks all).");
+            checkBox_sync.UseVisualStyleBackColor = true;
+            checkBox_sync.CheckedChanged += checkBox_sync_CheckedChanged;
+            // 
+            // checkBox_mute
+            // 
+            checkBox_mute.AutoSize = true;
+            checkBox_mute.Font = new Font("Segoe UI Semilight", 8.25F);
+            checkBox_mute.Location = new Point(10, 57);
+            checkBox_mute.Margin = new Padding(0);
+            checkBox_mute.Name = "checkBox_mute";
+            checkBox_mute.Size = new Size(51, 17);
+            checkBox_mute.TabIndex = 15;
+            checkBox_mute.TabStop = false;
+            checkBox_mute.Text = "Mute";
+            checkBox_mute.UseVisualStyleBackColor = true;
+            checkBox_mute.CheckedChanged += checkBox_mute_CheckedChanged;
+            // 
+            // checkBox_solo
+            // 
+            checkBox_solo.AutoSize = true;
+            checkBox_solo.Font = new Font("Segoe UI Semilight", 8.25F);
+            checkBox_solo.Location = new Point(61, 57);
+            checkBox_solo.Margin = new Padding(0);
+            checkBox_solo.Name = "checkBox_solo";
+            checkBox_solo.Size = new Size(46, 17);
+            checkBox_solo.TabIndex = 16;
+            checkBox_solo.TabStop = false;
+            checkBox_solo.Text = "Solo";
+            checkBox_solo.UseVisualStyleBackColor = true;
+            checkBox_solo.CheckedChanged += checkBox_solo_CheckedChanged;
+            // 
+            // contextMenu_rate
+            // 
+            contextMenu_rate.Items.AddRange(new ToolStripItem[] { menuItem_rateJumpHere, menuItem_rateResetCenter });
+            contextMenu_rate.Name = "contextMenu_rate";
+            contextMenu_rate.Size = new Size(169, 48);
+            contextMenu_rate.Opening += contextMenu_rate_Opening;
+            // 
+            // menuItem_rateJumpHere
+            // 
+            menuItem_rateJumpHere.Name = "menuItem_rateJumpHere";
+            menuItem_rateJumpHere.Size = new Size(168, 22);
+            menuItem_rateJumpHere.Text = "Jump here";
+            menuItem_rateJumpHere.Click += menuItem_rateJumpHere_Click;
+            // 
+            // menuItem_rateResetCenter
+            // 
+            menuItem_rateResetCenter.Name = "menuItem_rateResetCenter";
+            menuItem_rateResetCenter.Size = new Size(168, 22);
+            menuItem_rateResetCenter.Text = "Center/Reset Rate";
+            menuItem_rateResetCenter.Click += menuItem_rateResetCenter_Click;
+            // 
+            // label_info_rate
+            // 
+            label_info_rate.AutoSize = true;
+            label_info_rate.Font = new Font("Segoe UI Semilight", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            label_info_rate.Location = new Point(10, 88);
+            label_info_rate.Name = "label_info_rate";
+            label_info_rate.Size = new Size(66, 13);
+            label_info_rate.TabIndex = 18;
+            label_info_rate.Text = "Rate: 100.0%";
+            // 
+            // toolTip_trackView
+            // 
+            toolTip_trackView.AutoPopDelay = 10000;
+            toolTip_trackView.InitialDelay = 500;
+            toolTip_trackView.ReshowDelay = 100;
+            toolTip_trackView.ShowAlways = true;
             // 
             // TrackView
             // 
-            this.AutoScaleDimensions = new SizeF(7F, 15F);
-            this.AutoScaleMode = AutoScaleMode.Font;
-            this.BackColor = SystemColors.ControlLight;
-            this.ClientSize = new Size(1064, 197);
-            this.Controls.Add(this.label_info_rate);
-            this.Controls.Add(this.hScrollBar_rate);
-            this.Controls.Add(this.checkBox_solo);
-            this.Controls.Add(this.checkBox_mute);
-            this.Controls.Add(this.checkBox_sync);
-            this.Controls.Add(this.button_apply);
-            this.Controls.Add(this.checkBox_settings);
-            this.Controls.Add(this.textBox_time);
-            this.Controls.Add(this.label_volume);
-            this.Controls.Add(this.hScrollBar_offset);
-            this.Controls.Add(this.vScrollBar_volume);
-            this.Controls.Add(this.pictureBox_waveform);
-            this.Controls.Add(this.button_loop);
-            this.Controls.Add(this.button_playback);
-            this.Controls.Add(this.button_pause);
-            this.MaximizeBox = false;
-            this.MaximumSize = new Size(8192, 236);
-            this.MinimumSize = new Size(400, 236);
-            this.Name = "TrackView";
-            this.Text = "#00 - No Track Loaded";
-            ((System.ComponentModel.ISupportInitialize) this.pictureBox_waveform).EndInit();
-            this.contextMenu_waveform.ResumeLayout(false);
-            this.contextMenu_rate.ResumeLayout(false);
-            this.ResumeLayout(false);
-            this.PerformLayout();
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            BackColor = SystemColors.ControlLight;
+            ClientSize = new Size(1064, 197);
+            Controls.Add(label_info_rate);
+            Controls.Add(checkBox_solo);
+            Controls.Add(checkBox_mute);
+            Controls.Add(checkBox_sync);
+            Controls.Add(button_apply);
+            Controls.Add(checkBox_settings);
+            Controls.Add(textBox_time);
+            Controls.Add(label_volume);
+            Controls.Add(hScrollBar_offset);
+            Controls.Add(vScrollBar_volume);
+            Controls.Add(pictureBox_waveform);
+            Controls.Add(button_loop);
+            Controls.Add(button_playback);
+            Controls.Add(button_pause);
+            MaximizeBox = false;
+            MaximumSize = new Size(8192, 236);
+            MinimumSize = new Size(400, 236);
+            Name = "TrackView";
+            Text = "#00 - No Track Loaded";
+            ((System.ComponentModel.ISupportInitialize)pictureBox_waveform).EndInit();
+            contextMenu_waveform.ResumeLayout(false);
+            contextMenu_rate.ResumeLayout(false);
+            ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion

@@ -1,5 +1,8 @@
 namespace ModularAudience.Forms.Modules.Dialogs;
 
+// The designer file assigns the fields in InitializeComponent, the compiler cannot see it.
+#pragma warning disable CS0649
+
 partial class ImageViewDialog
 {
     private System.ComponentModel.IContainer components;

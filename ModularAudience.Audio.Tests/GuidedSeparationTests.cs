@@ -211,7 +211,7 @@ namespace ModularAudience.Audio.Tests
                 EnsembleMode = InstrumentEnsembleMode.ProfilesOnly,
                 InstrumentProfiles = []
             };
-            Assert.ThrowsException<ArgumentException>(() => { _ = DeterministicSeparationProcessor.AnalyzeAsync(source, bad); });
+            Assert.Throws<ArgumentException>(() => { _ = DeterministicSeparationProcessor.AnalyzeAsync(source, bad); });
         }
 
         /// <summary>
@@ -228,7 +228,7 @@ namespace ModularAudience.Audio.Tests
                 EnsembleMode = InstrumentEnsembleMode.ProfilesOnly,
                 InstrumentProfiles = [InstrumentProfileId.SynthBass, InstrumentProfileId.Drums, InstrumentProfileId.Vocals, InstrumentProfileId.Piano]
             };
-            Assert.ThrowsException<ArgumentException>(() => { _ = DeterministicSeparationProcessor.AnalyzeAsync(source, bad); });
+            Assert.Throws<ArgumentException>(() => { _ = DeterministicSeparationProcessor.AnalyzeAsync(source, bad); });
         }
 
         // --- Helpers ---

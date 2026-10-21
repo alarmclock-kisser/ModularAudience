@@ -443,8 +443,9 @@ namespace ModularAudience.Shared
             // instead of the defaults that were assigned in the constructor.
             this.Settings = options;
 
-            string originalTimestampFormat = options.LogTimestampFormat;
-            options.LogTimestampFormat = options.LogTimestampFormat.VerifyFormatString(out string? timestampFormatError);
+            string? originalTimestampFormat = options.LogTimestampFormat;
+            options.LogTimestampFormat = (options.LogTimestampFormat ?? "HH:mm:ss.fff")
+                .VerifyFormatString(out string? timestampFormatError);
             if (!string.IsNullOrEmpty(timestampFormatError))
             {
                 this.LogWarning($"Invalid TimestampFormat '{originalTimestampFormat}'. Reverting to default format 'HH:mm:ss.fff'. Error: {timestampFormatError}");

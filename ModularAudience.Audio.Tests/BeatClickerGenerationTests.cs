@@ -72,7 +72,7 @@ namespace ModularAudience.Audio.Tests
             // This is a code inspection test: the generation sets Number = 0 for spinners.
             // We verify the DrawObjectNumber method skips Number <= 0.
             // (The actual generation is tested via the integration test below.)
-            Assert.IsTrue(true, "Spinner Number=0 is enforced in GenerateBeatCatchClassicBeatmap");
+            Assert.Inconclusive("Spinner Number=0 is enforced in GenerateBeatCatchClassicBeatmap");
         }
 
         [TestMethod]
@@ -116,7 +116,7 @@ namespace ModularAudience.Audio.Tests
             // For this test, we verify that the Random() constructor (no seed) is used
             // by checking that the code doesn't reference a fixed seed.
             // This is a structural test — the actual randomness is verified by playtesting.
-            Assert.IsTrue(true, "No fixed seed: new Random() is used in GenerateBeatCatchClassicBeatmap");
+            Assert.Inconclusive("No fixed seed: new Random() is used in GenerateBeatCatchClassicBeatmap");
         }
 
         [TestMethod]
@@ -290,7 +290,7 @@ namespace ModularAudience.Audio.Tests
             // Verify that the auto-miss logic is capped at 1 per tick.
             // This is a structural test: the GameTimer_Tick uses an if-block (not a while-loop)
             // for auto-miss, so only one element can be missed per 16ms tick.
-            Assert.IsTrue(true, "Auto-miss is capped at 1 per tick (if-block, not while-loop)");
+            Assert.Inconclusive("Auto-miss is capped at 1 per tick (if-block, not while-loop)");
         }
     }
 }

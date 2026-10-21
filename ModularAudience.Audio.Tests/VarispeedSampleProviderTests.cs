@@ -40,7 +40,7 @@ namespace ModularAudience.Audio.Tests
             Assert.AreEqual(480d, provider.GetSourceFramePosition(480), 0.00001);
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(44100)]
         [DataRow(96000)]
         public void MapsDifferentDeviceSampleRatesInSourceFrames(int outputRate)
@@ -149,8 +149,8 @@ namespace ModularAudience.Audio.Tests
             provider.SetTargetRate(-1f);
             provider.Read(new float[960]);
             Assert.AreEqual(0.01, provider.CurrentRate, 0.00001);
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => provider.SetTargetRate(float.NaN));
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => provider.SetTargetRate(float.PositiveInfinity));
+            Assert.Throws<ArgumentOutOfRangeException>(() => provider.SetTargetRate(float.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(() => provider.SetTargetRate(float.PositiveInfinity));
         }
 
         [TestMethod]

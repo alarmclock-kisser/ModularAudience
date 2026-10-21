@@ -8,6 +8,8 @@ namespace ModularAudience.Forms.Hotkeys
         public const string ControlGesture = "control-gesture";
         public const string ContextMenuItem = "context-menu-item";
         public const string NumericUpDown = "numeric-updown";
+        public const string ScrollBar = "scrollbar";
+        public const string LoopTrackRate = "loop-track-rate";
     }
 
     public interface IHotkeyAction
@@ -77,6 +79,42 @@ namespace ModularAudience.Forms.Hotkeys
         }
     }
 
+    public sealed class ScrollBarHotkeyAction : IHotkeyAction
+    {
+        private readonly HotkeyActionTarget _target;
+
+        public ScrollBarHotkeyAction(HotkeyActionTarget target)
+        {
+            this._target = target;
+        }
+
+        public string Id => HotkeyActionKinds.ScrollBar;
+
+        public bool Execute()
+        {
+            // Scrollbar bindings are driven by the mouse wheel while the hotkey is held.
+            return HotkeyActionResolver.ExecuteScrollBar(this._target, 120);
+        }
+    }
+
+    public sealed class LoopTrackRateHotkeyAction : IHotkeyAction
+    {
+        private readonly HotkeyActionTarget _target;
+
+        public LoopTrackRateHotkeyAction(HotkeyActionTarget target)
+        {
+            this._target = target;
+        }
+
+        public string Id => HotkeyActionKinds.LoopTrackRate;
+
+        public bool Execute()
+        {
+            // Varispeed drags are driven by horizontal mouse movement while the key is held.
+            return false;
+        }
+    }
+
     public static class HotkeyActionCatalog
     {
         private static readonly object Sync = new();
@@ -85,7 +123,9 @@ namespace ModularAudience.Forms.Hotkeys
             {
                 [HotkeyActionKinds.ControlGesture] = target => new ControlGestureHotkeyAction(target),
                 [HotkeyActionKinds.ContextMenuItem] = target => new ContextMenuItemHotkeyAction(target),
-                [HotkeyActionKinds.NumericUpDown] = target => new NumericUpDownHotkeyAction(target)
+                [HotkeyActionKinds.NumericUpDown] = target => new NumericUpDownHotkeyAction(target),
+                [HotkeyActionKinds.ScrollBar] = target => new ScrollBarHotkeyAction(target),
+                [HotkeyActionKinds.LoopTrackRate] = target => new LoopTrackRateHotkeyAction(target)
             };
 
         public static void Register(string id, Func<HotkeyActionTarget, IHotkeyAction> factory)

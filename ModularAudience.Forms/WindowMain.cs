@@ -26,6 +26,33 @@ namespace ModularAudience.Forms
         internal static DeveloperFunctions? DeveloperFunctionsWindow = null;
         internal static CudaFunctions? CudaFunctionsWindow = null;
 
+        /// <summary>
+        /// Returns the Loop Control window and creates it when it does not exist yet.
+        /// Hotkeys that point to the Loop Control use this, so that they also work
+        /// while the window is closed.
+        /// </summary>
+        internal static LoopControl? EnsureLoopControlWindow(bool show)
+        {
+            if (LoopControlWindow == null || LoopControlWindow.IsDisposed)
+            {
+                LoopControlWindow = new LoopControl();
+            }
+
+            if (show && LoopControlWindow != null && !LoopControlWindow.IsDisposed)
+            {
+                if (!LoopControlWindow.Visible)
+                {
+                    LoopControlWindow.Show();
+                }
+
+                LoopControlWindow.WindowState = FormWindowState.Normal;
+                LoopControlWindow.BringToFront();
+                LoopControlWindow.Activate();
+            }
+
+            return LoopControlWindow;
+        }
+
         internal static bool IsMouseOverLoopControl
         {
             get
@@ -52,7 +79,7 @@ namespace ModularAudience.Forms
         private PausingPlaybackSyncer? _pausingSyncer;
         private bool _nudgingActive;
         private bool _pausingActive;
-        private bool _shiftPressed;
+        private bool _pausingHotkeyPressed;
         private GlobalKeyMessageFilter? _keyFilter;
         private MidiControllerService? _midiService;
         private MidiCommandMapper? _midiMapper;
@@ -116,7 +143,7 @@ namespace ModularAudience.Forms
 
         internal void SuppressPausingSyncerForLoopControl()
         {
-            this._shiftPressed = false;
+            this._pausingHotkeyPressed = false;
             if (this._pausingActive)
             {
                 this.StopPausingSyncer();

@@ -520,15 +520,7 @@ namespace ModularAudience.Forms
         {
             try
             {
-                if (LoopControlWindow == null || LoopControlWindow.IsDisposed)
-                {
-                    LoopControlWindow = new LoopControl();
-                }
-
-                LoopControlWindow.Show();
-                LoopControlWindow.WindowState = FormWindowState.Normal;
-                LoopControlWindow.BringToFront();
-                LoopControlWindow.Activate();
+                EnsureLoopControlWindow(show: true);
             }
             catch (Exception ex)
             {

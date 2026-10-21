@@ -3,6 +3,7 @@ using ModularAudience.Audio.Processors_V2;
 using ModularAudience.Audio;
 using ModularAudience.Audio.Processors_V3;
 using ModularAudience.Forms.Helpers;
+using ModularAudience.Forms.Hotkeys;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 
@@ -310,56 +311,35 @@ namespace ModularAudience.Forms
 
         private void GlobalKeyChanged(Keys key, bool isDown)
         {
-            if (key == Keys.CapsLock)
-            {
-                if (!isDown)
-                {
-                    bool capsOn = IsKeyLocked(Keys.CapsLock);
-                    if (capsOn)
-                    {
-                        this.StartSyncer();
-                    }
-                    else
-                    {
-                        this.StopSyncer();
-                    }
-                }
+            HotkeyManager? manager = HotkeyManager.Instance;
+            HotkeyCombo pausingHotkey = manager?.PausingSyncerHotkey ?? new HotkeyCombo { Key = Keys.ShiftKey, Modifiers = HotkeyModifiers.None };
+            HotkeyCombo nudgingHotkey = manager?.NudgingSyncerHotkey ?? new HotkeyCombo { Key = Keys.CapsLock, Modifiers = HotkeyModifiers.None };
 
-                return;
+            // The nudging syncer is a toggle: pressing the hotkey switches it on, pressing it
+            // again switches it off. The pausing syncer is a hold: it stays active for as long
+            // as the hotkey is held down.
+            //
+            // On key up only the key itself is compared, because the modifiers may already have
+            // been released. Otherwise a hold would never be terminated.
+            bool isNudgingKey = isDown
+                ? MatchesHotkey(key, nudgingHotkey)
+                : MatchesHotkeyKey(key, nudgingHotkey);
+            bool isPausingKey = isDown
+                ? MatchesHotkey(key, pausingHotkey)
+                : MatchesHotkeyKey(key, pausingHotkey);
+
+            if (isNudgingKey)
+            {
+                this.HandleNudgingSyncerHotkey(key, isDown);
             }
-
-            if (key == Keys.ShiftKey || key == Keys.LShiftKey || key == Keys.RShiftKey)
+            else if (isPausingKey)
             {
-                // Do not react to Shift while comment dialog is open to avoid accidental pausing
-                if (Instance != null && Instance.IsCommentDialogOpen)
-                {
-                    return;
-                }
-
-                if (isDown && IsMouseOverLoopControl)
-                {
-                    this.SuppressPausingSyncerForLoopControl();
-                    return;
-                }
-
-                if (isDown)
-                {
-                    if (!this._shiftPressed)
-                    {
-                        this._shiftPressed = true;
-                        this.StartPausingSyncer();
-                    }
-                }
-                else if (this._shiftPressed)
-                {
-                    this._shiftPressed = false;
-                    this.StopPausingSyncer();
-                }
+                this.HandlePausingSyncerHotkey(key, isDown, pausingHotkey);
             }
 
             // Alt + C => prompt for a log comment. Both left and right Alt should work.
             // If Right-Alt was held, pause playback (using pausing syncer) while the dialog is shown.
-            if (key == Keys.C && isDown)
+            if (!isPausingKey && key == Keys.C && isDown)
             {
                 if ((ModifierKeys & Keys.Alt) == Keys.Alt)
                 {
@@ -483,6 +463,21 @@ namespace ModularAudience.Forms
             }
         }
 
+        /// <summary>
+        /// CapsLock is only reset when it is actually the hotkey of the nudging syncer. Otherwise
+        /// the caps lock state of the user would be changed behind their back.
+        /// </summary>
+        private void ResetCapsLockStateIfNudgingHotkey()
+        {
+            HotkeyCombo nudgingHotkey = HotkeyManager.Instance?.NudgingSyncerHotkey
+                ?? new HotkeyCombo { Key = Keys.CapsLock, Modifiers = HotkeyModifiers.None };
+
+            if (HotkeyFormatter.NormalizeKey(nudgingHotkey.Key) == Keys.CapsLock)
+            {
+                ResetCapsLockState();
+            }
+        }
+
         private void StartSyncer()
         {
             try { this._syncerCts?.Cancel(); } catch { }
@@ -495,7 +490,7 @@ namespace ModularAudience.Forms
             if (playingTracks.Count < 2)
             {
                 LogManager.Log("SYNCER : ON (no-op, need >=2 playing tracks)");
-                ResetCapsLockState();
+                this.ResetCapsLockStateIfNudgingHotkey();
                 return;
             }
 
@@ -579,6 +574,120 @@ namespace ModularAudience.Forms
                 .Where(audio => audio != null && (audio.PlayerPlaying || (includePaused && audio.Paused)))
                 .DistinctBy(audio => audio.Id)
                 .ToList();
+        }
+
+        private static bool MatchesHotkey(Keys key, HotkeyCombo combo)
+        {
+            if (combo.IsEmpty)
+            {
+                return false;
+            }
+
+            if (!MatchesHotkeyKey(key, combo))
+            {
+                return false;
+            }
+
+            HotkeyModifiers currentModifiers = HotkeyActionResolver.GetCurrentModifiers();
+
+            // A hotkey that consists of a modifier key (e.g. "Shift") is necessarily held down
+            // while the key is pressed, so that modifier must not be part of the comparison.
+            currentModifiers &= ~HotkeyFormatter.GetInherentModifier(combo.Key);
+
+            return currentModifiers == combo.Modifiers;
+        }
+
+        private static bool MatchesHotkeyKey(Keys key, HotkeyCombo combo)
+        {
+            if (combo.IsEmpty)
+            {
+                return false;
+            }
+
+            return HotkeyFormatter.NormalizeKey(key) == HotkeyFormatter.NormalizeKey(combo.Key);
+        }
+
+        /// <summary>
+        /// The nudging syncer is a toggle: pressing the hotkey switches it on, pressing it
+        /// again switches it off. The default hotkey is CapsLock, which is a lock key, so the
+        /// lock state decides whether the syncer ends up running. Every other key toggles
+        /// directly on the key down.
+        /// </summary>
+        private void HandleNudgingSyncerHotkey(Keys key, bool isDown)
+        {
+            if (HotkeyFormatter.NormalizeKey(key) == Keys.CapsLock)
+            {
+                // The lock state is only final once the key is released.
+                if (isDown)
+                {
+                    return;
+                }
+
+                if (IsKeyLocked(Keys.CapsLock))
+                {
+                    this.StartSyncer();
+                }
+                else
+                {
+                    this.StopSyncer();
+                }
+
+                return;
+            }
+
+            if (!isDown)
+            {
+                return;
+            }
+
+            if (this._nudgingActive)
+            {
+                this.StopSyncer();
+            }
+            else
+            {
+                this.StartSyncer();
+            }
+        }
+
+        /// <summary>
+        /// The pausing syncer is a hold: it is started when the hotkey is pressed and stopped
+        /// as soon as the hotkey is released again.
+        /// </summary>
+        private void HandlePausingSyncerHotkey(Keys key, bool isDown, HotkeyCombo combo)
+        {
+            if (!isDown)
+            {
+                // The release must always be processed, otherwise the syncer would stay
+                // active when the hotkey is released while the comment dialog is open.
+                if (this._pausingHotkeyPressed)
+                {
+                    this._pausingHotkeyPressed = false;
+                    this.StopPausingSyncer();
+                }
+
+                return;
+            }
+
+            // Do not react while the comment dialog is open to avoid accidental pausing
+            if (Instance != null && Instance.IsCommentDialogOpen)
+            {
+                return;
+            }
+
+            // Shift+click on the loop control must not start the pausing syncer.
+            bool usesShift = HotkeyFormatter.GetInherentModifier(combo.Key) == HotkeyModifiers.Shift;
+            if (usesShift && IsMouseOverLoopControl)
+            {
+                this.SuppressPausingSyncerForLoopControl();
+                return;
+            }
+
+            if (!this._pausingHotkeyPressed)
+            {
+                this._pausingHotkeyPressed = true;
+                this.StartPausingSyncer();
+            }
         }
     }
 }

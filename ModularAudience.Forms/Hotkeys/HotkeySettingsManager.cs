@@ -17,22 +17,65 @@ namespace ModularAudience.Forms.Hotkeys
             Converters = { new JsonStringEnumConverter() }
         };
 
-        private readonly string _settingsPath;
+        private readonly string _fallbackSettingsPath;
+        private string _settingsPath;
         private readonly object _lock = new();
         private List<HotkeyBinding> _bindings = [];
+        private HotkeyCombo _pausingSyncerHotkey = new() { Key = Keys.ShiftKey, Modifiers = HotkeyModifiers.None };
+        private HotkeyCombo _nudgingSyncerHotkey = new() { Key = Keys.CapsLock, Modifiers = HotkeyModifiers.None };
 
         public HotkeySettingsManager()
         {
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string dir = Path.Combine(appData, "ModularAudience", "Hotkeys");
-            Directory.CreateDirectory(dir);
-            this._settingsPath = Path.Combine(dir, "hotkeys.json");
+            this._fallbackSettingsPath = Path.Combine(
+                AppContext.BaseDirectory,
+                "hotkeys.json");
+            this._settingsPath = ResolveSettingsPath(this._fallbackSettingsPath);
             this._bindings = this.LoadCore();
         }
 
         public string SettingsPath => this._settingsPath;
 
         public event Action? Changed;
+
+        public HotkeyCombo PausingSyncerHotkey
+        {
+            get
+            {
+                lock (this._lock)
+                {
+                    return this._pausingSyncerHotkey;
+                }
+            }
+            set
+            {
+                lock (this._lock)
+                {
+                    this._pausingSyncerHotkey = value ?? new HotkeyCombo { Key = Keys.ShiftKey, Modifiers = HotkeyModifiers.None };
+                    this.SaveCore();
+                }
+                this.Changed?.Invoke();
+            }
+        }
+
+        public HotkeyCombo NudgingSyncerHotkey
+        {
+            get
+            {
+                lock (this._lock)
+                {
+                    return this._nudgingSyncerHotkey;
+                }
+            }
+            set
+            {
+                lock (this._lock)
+                {
+                    this._nudgingSyncerHotkey = value ?? new HotkeyCombo { Key = Keys.CapsLock, Modifiers = HotkeyModifiers.None };
+                    this.SaveCore();
+                }
+                this.Changed?.Invoke();
+            }
+        }
 
         public IReadOnlyList<HotkeyBinding> Snapshot()
         {
@@ -290,13 +333,62 @@ namespace ModularAudience.Forms.Hotkeys
             }
         }
 
+        public void UpdateScrollTickDistance(string id, int scrollTickDistance)
+        {
+            bool updated = false;
+            lock (this._lock)
+            {
+                HotkeyBinding? binding = this._bindings.FirstOrDefault(b => b.Id == id);
+                if (binding == null)
+                {
+                    return;
+                }
+
+                binding.Target.ScrollTickDistance = Math.Clamp(
+                    scrollTickDistance,
+                    HotkeyDefaults.MinScrollTickDistance,
+                    HotkeyDefaults.MaxScrollTickDistance);
+                this.SaveCore();
+                updated = true;
+            }
+
+            if (updated)
+            {
+                this.Changed?.Invoke();
+            }
+        }
+
+        public void UpdateLoopRateUnitsPerWheelTick(string id, int unitsPerWheelTick)
+        {
+            bool updated = false;
+            lock (this._lock)
+            {
+                HotkeyBinding? binding = this._bindings.FirstOrDefault(b => b.Id == id);
+                if (binding == null)
+                {
+                    return;
+                }
+
+                binding.Target.LoopRateUnitsPerWheelTick = Math.Clamp(
+                    unitsPerWheelTick,
+                    HotkeyDefaults.MinLoopRateUnitsPerWheelTick,
+                    HotkeyDefaults.MaxLoopRateUnitsPerWheelTick);
+                this.SaveCore();
+                updated = true;
+            }
+
+            if (updated)
+            {
+                this.Changed?.Invoke();
+            }
+        }
+
         public int CopyProfile(
             string sourceHardwareId,
             string sourceDisplayName,
             string destinationHardwareId,
             string destinationDisplayName)
-        {
-            string source = HotkeyKeyboardIds.Normalize(sourceHardwareId);
+        {            string source = HotkeyKeyboardIds.Normalize(sourceHardwareId);
             string destination = HotkeyKeyboardIds.Normalize(destinationHardwareId);
             if (source.Length == 0 || destination.Length == 0 || source == destination)
             {
@@ -408,7 +500,12 @@ namespace ModularAudience.Forms.Hotkeys
                     Gesture = source.Target.Gesture,
                     ActionModifiers = source.Target.ActionModifiers,
                     RelativeX = source.Target.RelativeX,
-                    RelativeY = source.Target.RelativeY
+                    RelativeY = source.Target.RelativeY,
+                    ScrollTickDistance = source.Target.ScrollTickDistance,
+                    LoopControlTrackIndex = source.Target.LoopControlTrackIndex,
+                    LoopRateUnitsPerWheelTick = source.Target.LoopRateUnitsPerWheelTick,
+                    LoopControlAudioId = source.Target.LoopControlAudioId,
+                    LoopRateShiftAll = source.Target.LoopRateShiftAll
                 }
             };
         }
@@ -445,6 +542,15 @@ namespace ModularAudience.Forms.Hotkeys
                 if (file?.Bindings == null)
                 {
                     return [];
+                }
+
+                if (file.PausingSyncerHotkey != null)
+                {
+                    this._pausingSyncerHotkey = file.PausingSyncerHotkey;
+                }
+                if (file.NudgingSyncerHotkey != null)
+                {
+                    this._nudgingSyncerHotkey = file.NudgingSyncerHotkey;
                 }
 
                 foreach (HotkeyBinding binding in file.Bindings)
@@ -495,19 +601,113 @@ namespace ModularAudience.Forms.Hotkeys
 
         private void SaveCore()
         {
+            HotkeySettingsFile file = new()
+            {
+                Bindings = this._bindings,
+                PausingSyncerHotkey = this._pausingSyncerHotkey,
+                NudgingSyncerHotkey = this._nudgingSyncerHotkey
+            };
+            string json;
             try
             {
-                HotkeySettingsFile file = new() { Bindings = this._bindings };
-                string json = JsonSerializer.Serialize(file, JsonOptions);
-
-                string tempPath = this._settingsPath + ".tmp";
-                File.WriteAllText(tempPath, json);
-                File.Copy(tempPath, this._settingsPath, overwrite: true);
-                File.Delete(tempPath);
+                json = JsonSerializer.Serialize(file, JsonOptions);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Hotkeys: could not save settings: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine(
+                    $"Hotkeys: could not serialize settings: {ex.Message}");
+                return;
+            }
+
+            if (TryWriteSettings(this._settingsPath, json))
+            {
+                return;
+            }
+
+            if (!string.Equals(this._settingsPath, this._fallbackSettingsPath, StringComparison.OrdinalIgnoreCase)
+                && TryWriteSettings(this._fallbackSettingsPath, json))
+            {
+                this._settingsPath = this._fallbackSettingsPath;
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine(
+                $"Hotkeys: could not save settings to '{this._settingsPath}'.");
+        }
+
+        private static bool TryWriteSettings(string path, string json)
+        {
+            try
+            {
+                string? directory = Path.GetDirectoryName(path);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                string tempPath = path + ".tmp";
+                File.WriteAllText(tempPath, json);
+                File.Move(tempPath, path, overwrite: true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"Hotkeys: could not write settings to '{path}': {ex.Message}");
+                return false;
+            }
+        }
+
+        private static string ResolveSettingsPath(string fallbackPath)
+        {
+            string appData = string.Empty;
+            try
+            {
+                appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            }
+            catch
+            {
+            }
+
+            if (!string.IsNullOrWhiteSpace(appData))
+            {
+                string directory = Path.Combine(appData, "ModularAudience", "Hotkeys");
+                string path = Path.Combine(directory, "hotkeys.json");
+
+                // A portable fallback file takes precedence while no roaming file exists.
+                if (File.Exists(fallbackPath) && !File.Exists(path))
+                {
+                    return fallbackPath;
+                }
+
+                // Keep using an existing settings file even if the writability probe fails,
+                // so the user does not silently lose their configuration.
+                if (File.Exists(path) || CanWriteTo(directory))
+                {
+                    return path;
+                }
+            }
+
+            return fallbackPath;
+        }
+
+        private static bool CanWriteTo(string directory)
+        {
+            try
+            {
+                Directory.CreateDirectory(directory);
+                string probePath = Path.Combine(directory, ".write-probe");
+                using (FileStream stream = new(probePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    stream.WriteByte(0);
+                }
+
+                File.Delete(probePath);
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
     }

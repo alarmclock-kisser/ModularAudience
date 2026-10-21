@@ -1,6 +1,7 @@
 ﻿using ModularAudience.Audio;
 using ModularAudience.Audio.Processing;
 using ModularAudience.Forms.Controls;
+using ModularAudience.Forms.Hotkeys;
 using System.Globalization;
 
 namespace ModularAudience.Forms.Modules
@@ -47,8 +48,41 @@ namespace ModularAudience.Forms.Modules
 
         private async void checkedListBox_playlistTracks_RatePositionChanged(object? sender, PlaylistTrackRateChangedEventArgs e)
         {
+            if (HotkeyManager.Instance is HotkeyManager manager
+                && manager.TryCaptureLoopRateAction(this, e.RowIndex, e.ShiftAll))
+            {
+                return;
+            }
+
             await this.ApplyPlaylistRateAsync(e.RowIndex, e.Position,
                 reset: e.Position == 0, resetAll: e.ResetAll, shiftAll: e.ShiftAll);
+        }
+
+        internal int GetPlaylistTrackIndexByAudioId(Guid audioId)
+        {
+            for (int index = 0; index < this.checkedListBox_playlistTracks.Items.Count; index++)
+            {
+                if (this.checkedListBox_playlistTracks.Items[index] is PlaylistTargetItem item
+                    && item.Audio.Id == audioId)
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+
+        internal bool NudgePlaylistRateByUnits(int rowIndex, int positionUnits, bool shiftAll)
+        {
+            if (rowIndex < 0
+                || rowIndex >= this.checkedListBox_playlistTracks.Items.Count
+                || positionUnits == 0)
+            {
+                return false;
+            }
+
+            _ = this.ApplyPlaylistRateAsync(rowIndex, positionUnits, shiftAll: shiftAll);
+            return true;
         }
 
         private async void toolStripMenuItem_resetPlaylistRate_Click(object? sender, EventArgs e)

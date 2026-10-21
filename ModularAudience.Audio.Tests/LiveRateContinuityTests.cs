@@ -11,7 +11,7 @@ namespace ModularAudience.Audio.Tests
         private const int Channels = 2;
         public TestContext TestContext { get; set; } = null!;
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(5)]
         [DataRow(20)]
         [DataRow(40)]

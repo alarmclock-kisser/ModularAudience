@@ -6,7 +6,7 @@ namespace ModularAudience.Audio.Tests
     [TestClass]
     public sealed class VarispeedSignalTests
     {
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(0.5f, 48000)]
         [DataRow(1f, 48000)]
         [DataRow(2f, 48000)]

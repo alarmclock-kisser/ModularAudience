@@ -240,7 +240,7 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            string preset = this.comboBox_presets.SelectedItem as string;
+            string? preset = this.comboBox_presets.SelectedItem as string;
             if (preset == null) return;
             this.ApplyPreset(preset);
             this.label_hopSizeValue.Text = $"{(int)this.comboBox_windowSize.SelectedItem! / 4} samples (fixed)";
@@ -526,8 +526,14 @@ namespace ModularAudience.Forms
             {
                 object? pitch = double.IsFinite(descriptor.FundamentalHz) && descriptor.FundamentalHz > 0
                     ? descriptor.FundamentalHz : null;
-                int index = this.dataGridView_sources.Rows.Add(true, descriptor.Name, descriptor.Character,
-                    descriptor.Confidence, descriptor.EnergyFraction, pitch, descriptor.Pan);
+                int index = this.dataGridView_sources.Rows.Add(
+                    true,
+                    descriptor.Name,
+                    descriptor.Character,
+                    descriptor.Confidence,
+                    descriptor.EnergyFraction,
+                    pitch ?? DBNull.Value,
+                    descriptor.Pan);
                 this.dataGridView_sources.Rows[index].Tag = descriptor.Id;
             }
 

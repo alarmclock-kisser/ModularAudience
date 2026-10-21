@@ -606,8 +606,11 @@ namespace ModularAudience.Forms
                 }
                 else
                 {
-                    this.AudioC.Audios.Remove(audio);
-                    audio?.Dispose();
+                    if (audio != null)
+                    {
+                        this.AudioC.Audios.Remove(audio);
+                        audio.Dispose();
+                    }
                 }
             }
 

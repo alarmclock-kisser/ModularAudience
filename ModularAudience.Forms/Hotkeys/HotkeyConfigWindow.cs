@@ -24,8 +24,19 @@ namespace ModularAudience.Forms.Hotkeys
         private readonly Label _labelKeyboardDetails;
         private readonly Label _labelStatus;
         private readonly Label _labelHint;
+        private readonly Button _buttonPausingSyncerHotkey;
+        private readonly Button _buttonNudgingSyncerHotkey;
+        private readonly Label _labelPausingSyncerHotkey;
+        private readonly Label _labelNudgingSyncerHotkey;
         private bool _updatingKeyboardProfiles;
         private bool _refreshingBindings;
+        private bool _capturingPausingSyncer;
+        private bool _capturingNudgingSyncer;
+        private readonly System.Windows.Forms.Timer _registerBlinkTimer;
+        private bool _registerBlinkOn;
+
+        private static readonly Color RegisterActiveBackColor = Color.FromArgb(255, 153, 153);
+        private static readonly Color RegisterBlinkBackColor = Color.FromArgb(255, 226, 226);
 
         private HotkeyConfigWindow(HotkeyManager manager)
         {
@@ -34,8 +45,8 @@ namespace ModularAudience.Forms.Hotkeys
             this.Text = "Control - Hotkeys";
             this.Name = "HotkeyConfigWindow";
             this.StartPosition = FormStartPosition.CenterParent;
-            this.ClientSize = new Size(920, 500);
-            this.MinimumSize = new Size(820, 410);
+            this.ClientSize = new Size(920, 560);
+            this.MinimumSize = new Size(820, 470);
             this.ShowInTaskbar = false;
             this.MinimizeBox = false;
             this.FormBorderStyle = FormBorderStyle.Sizable;
@@ -87,13 +98,15 @@ namespace ModularAudience.Forms.Hotkeys
 
             DataGridViewCheckBoxColumn invertColumn = new()
             {
-                HeaderText = "Invert",
-                Width = 55,
+                HeaderText = "Invertible",
+                Width = 65,
                 SortMode = DataGridViewColumnSortMode.NotSortable,
                 ReadOnly = false,
                 ThreeState = false,
-                ToolTipText = "When checked, holding past the debounce delay toggles the action again on release. " +
-                    "When unchecked, a long hold releases the action in the off state."
+                ToolTipText = "For buttons: when checked, holding past the debounce delay toggles the action " +
+                    "again on release; when unchecked, a short tap toggles the action and holding turns it " +
+                    "on while held and off on release. For scrollbars: when checked, the mouse-wheel " +
+                    "direction is reversed."
             };
 
             DataGridViewButtonColumn holdColumn = new()
@@ -101,10 +114,10 @@ namespace ModularAudience.Forms.Hotkeys
                 HeaderText = string.Empty,
                 Width = 42,
                 Text = "⏱",
-                UseColumnTextForButtonValue = true,
+                UseColumnTextForButtonValue = false,
                 FlatStyle = FlatStyle.Flat,
                 SortMode = DataGridViewColumnSortMode.NotSortable,
-                ToolTipText = "Set hold duration (debounce) in milliseconds.",
+                ToolTipText = "Set hold duration (debounce), or the mouse-wheel tick distance for scrollbars.",
                 ReadOnly = true
             };
             holdColumn.DefaultCellStyle.Font = new Font("Segoe UI Symbol", this.Font.Size);
@@ -201,11 +214,12 @@ namespace ModularAudience.Forms.Hotkeys
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 3
+                RowCount = 4
             };
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48f));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112f));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 124f));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 80f));
 
             Panel bottomPanel = new()
             {
@@ -218,7 +232,8 @@ namespace ModularAudience.Forms.Hotkeys
                 Location = new Point(12, 10),
                 Size = new Size(150, 32),
                 Text = "Register Hotkey",
-                UseVisualStyleBackColor = true
+                UseVisualStyleBackColor = false,
+                BackColor = SystemColors.Control
             };
             this._buttonRegister.Click += this.ButtonRegister_Click;
 
@@ -226,10 +241,12 @@ namespace ModularAudience.Forms.Hotkeys
             {
                 AutoSize = false,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-                Location = new Point(174, 8),
-                Size = new Size(730, 38),
-                Text = "Click Register Hotkey, press the key combination, then click the action control, " +
-                       "numeric up/down arrow, or context menu item. Esc cancels. The stopwatch button sets each hotkey's hold/debounce duration."
+                Location = new Point(174, 4),
+                Size = new Size(722, 62),
+                TextAlign = ContentAlignment.TopLeft,
+                Text = "Click Register Hotkey, press the key combination (a single modifier such as Ctrl also works), " +
+                       "then click the action control, numeric up/down arrow, or context menu item. Esc cancels. " +
+                       "The stopwatch button sets each hotkey's hold/debounce duration."
             };
 
             this._labelStatus = new Label
@@ -238,8 +255,8 @@ namespace ModularAudience.Forms.Hotkeys
                 AutoSize = false,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BorderStyle = BorderStyle.FixedSingle,
-                Location = new Point(12, 56),
-                Size = new Size(882, 30),
+                Location = new Point(12, 72),
+                Size = new Size(896, 30),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Padding = new Padding(6, 0, 6, 0)
             };
@@ -248,9 +265,68 @@ namespace ModularAudience.Forms.Hotkeys
             bottomPanel.Controls.Add(this._labelHint);
             bottomPanel.Controls.Add(this._labelStatus);
 
+            Panel syncerPanel = new()
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(12, 4, 12, 4)
+            };
+
+            Label syncerLabel = new()
+            {
+                AutoSize = true,
+                Location = new Point(12, 8),
+                Text = "Syncer Hotkeys (global, not per-keyboard):",
+                Font = new Font(this.Font, FontStyle.Bold)
+            };
+
+            this._buttonPausingSyncerHotkey = new Button
+            {
+                Location = new Point(12, 34),
+                Size = new Size(180, 28),
+                Text = "Set Pausing Syncer Hotkey",
+                UseVisualStyleBackColor = true
+            };
+            this._buttonPausingSyncerHotkey.Click += this.ButtonPausingSyncerHotkey_Click;
+
+            this._labelPausingSyncerHotkey = new Label
+            {
+                AutoSize = false,
+                Location = new Point(200, 34),
+                Size = new Size(250, 28),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BorderStyle = BorderStyle.FixedSingle,
+                Padding = new Padding(6, 0, 6, 0)
+            };
+
+            this._buttonNudgingSyncerHotkey = new Button
+            {
+                Location = new Point(460, 34),
+                Size = new Size(180, 28),
+                Text = "Set Nudging Syncer Hotkey",
+                UseVisualStyleBackColor = true
+            };
+            this._buttonNudgingSyncerHotkey.Click += this.ButtonNudgingSyncerHotkey_Click;
+
+            this._labelNudgingSyncerHotkey = new Label
+            {
+                AutoSize = false,
+                Location = new Point(650, 34),
+                Size = new Size(250, 28),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BorderStyle = BorderStyle.FixedSingle,
+                Padding = new Padding(6, 0, 6, 0)
+            };
+
+            syncerPanel.Controls.Add(syncerLabel);
+            syncerPanel.Controls.Add(this._buttonPausingSyncerHotkey);
+            syncerPanel.Controls.Add(this._labelPausingSyncerHotkey);
+            syncerPanel.Controls.Add(this._buttonNudgingSyncerHotkey);
+            syncerPanel.Controls.Add(this._labelNudgingSyncerHotkey);
+
             root.Controls.Add(keyboardPanel, 0, 0);
             root.Controls.Add(this._grid, 0, 1);
             root.Controls.Add(bottomPanel, 0, 2);
+            root.Controls.Add(syncerPanel, 0, 3);
 
             this.Controls.Add(root);
 
@@ -259,9 +335,14 @@ namespace ModularAudience.Forms.Hotkeys
             this.FormClosing += this.HotkeyConfigWindow_FormClosing;
             this.FormClosed += this.HotkeyConfigWindow_FormClosed;
 
+            this._registerBlinkTimer = new System.Windows.Forms.Timer { Interval = 450 };
+            this._registerBlinkTimer.Tick += this.RegisterBlinkTimer_Tick;
+
             this.RefreshKeyboardProfiles();
             this.RefreshBindings();
             this.UpdateKeyboardScope();
+            this.UpdateSyncerHotkeyLabels();
+            this.UpdateRegisterButtonState();
         }
 
         public static HotkeyConfigWindow ShowWindow(IWin32Window? owner)
@@ -294,10 +375,30 @@ namespace ModularAudience.Forms.Hotkeys
 
         private void Manager_Changed()
         {
+            bool wasCapturing = this._manager.IsCapturing;
+            bool wasCapturingPausing = this._capturingPausingSyncer;
+            bool wasCapturingNudging = this._capturingNudgingSyncer;
+
             this.RefreshKeyboardProfiles();
             this.RefreshBindings();
             this.UpdateStatus();
+            this.UpdateRegisterButtonState();
             this.UpdateKeyboardScope();
+            this.UpdateSyncerHotkeyLabels();
+
+            if (!wasCapturing)
+            {
+                if (wasCapturingPausing)
+                {
+                    this._capturingPausingSyncer = false;
+                    this._buttonPausingSyncerHotkey.Text = "Set Pausing Syncer Hotkey";
+                }
+                if (wasCapturingNudging)
+                {
+                    this._capturingNudgingSyncer = false;
+                    this._buttonNudgingSyncerHotkey.Text = "Set Nudging Syncer Hotkey";
+                }
+            }
         }
 
         private void Manager_KeyboardsChanged()
@@ -402,29 +503,71 @@ namespace ModularAudience.Forms.Hotkeys
                 selectedId = this._grid.SelectedRows[0].Tag as string;
             }
 
+            // Keep the scroll position of the list, so that changing a checkbox or
+            // deleting a row does not jump back to the top.
+            int firstVisibleRow = this._grid.FirstDisplayedScrollingRowIndex;
+
             this._refreshingBindings = true;
             try
             {
                 this._grid.Rows.Clear();
                 foreach (HotkeyBinding binding in this._manager.GetBindingsForScope(this.SelectedScope.HardwareId))
                 {
+                    bool isScrollBar = string.Equals(
+                        binding.Target.ActionKind,
+                        HotkeyActionKinds.ScrollBar,
+                        StringComparison.OrdinalIgnoreCase);
+                    bool isLoopRate = string.Equals(
+                        binding.Target.ActionKind,
+                        HotkeyActionKinds.LoopTrackRate,
+                        StringComparison.OrdinalIgnoreCase);
+                    string holdGlyph = isScrollBar
+                        ? GetScrollBarGlyph(binding)
+                        : isLoopRate
+                            ? "⇅"
+                            : "⏱";
+
                     int index = this._grid.Rows.Add(
                         binding.ActionName,
                         binding.GetHotkeyDisplay(),
                         "Re-register",
                         binding.InvertWhileHeld,
-                        "⏱",
+                        holdGlyph,
                         "X");
 
                     this._grid.Rows[index].Tag = binding.Id;
                     this._grid.Rows[index].Cells[1].ToolTipText =
                         $"{binding.GetKeyboardDisplay()} - {binding.GetGestureDisplay()}";
-                    this._grid.Rows[index].Cells[InvertColumnIndex].ToolTipText =
-                        binding.InvertWhileHeld
-                            ? "Hold past the debounce delay to toggle again on release."
-                            : "A long hold releases the action in the off state.";
-                    this._grid.Rows[index].Cells[HoldColumnIndex].ToolTipText =
-                        $"Hold duration: {binding.HoldThresholdMs} ms";
+                    this._grid.Rows[index].Cells[InvertColumnIndex].ToolTipText = isScrollBar
+                        ? "When checked, the mouse-wheel direction is reversed."
+                        : isLoopRate
+                            ? "When checked, the mouse-wheel direction is reversed."
+                            : binding.InvertWhileHeld
+                                ? "Hold past the debounce delay to toggle again on release."
+                                : "Tap toggles; hold switches on while held and off on release.";
+
+                    if (isScrollBar)
+                    {
+                        this._grid.Rows[index].Cells[HoldColumnIndex].ToolTipText =
+                            "Mouse-wheel tick distance: " +
+                            (binding.Target.ScrollTickDistance > 0
+                                ? $"{binding.Target.ScrollTickDistance} units"
+                                : $"{HotkeyDefaults.DefaultScrollTickPercent}% of the range") +
+                            ". Click to change.";
+                    }
+                    else if (isLoopRate)
+                    {
+                        int units = binding.Target.LoopRateUnitsPerWheelTick > 0
+                            ? binding.Target.LoopRateUnitsPerWheelTick
+                            : HotkeyDefaults.LoopRateUnitsPerWheelTick;
+                        this._grid.Rows[index].Cells[HoldColumnIndex].ToolTipText =
+                            $"Varispeed per wheel tick: {units} units. Click to change.";
+                    }
+                    else
+                    {
+                        this._grid.Rows[index].Cells[HoldColumnIndex].ToolTipText =
+                            $"Hold duration: {binding.HoldThresholdMs} ms";
+                    }
 
                     if (selectedId != null && string.Equals(selectedId, binding.Id, StringComparison.Ordinal))
                     {
@@ -435,6 +578,26 @@ namespace ModularAudience.Forms.Hotkeys
             finally
             {
                 this._refreshingBindings = false;
+            }
+
+            this.RestoreScrollPosition(firstVisibleRow);
+        }
+
+        private void RestoreScrollPosition(int firstVisibleRow)
+        {
+            if (firstVisibleRow < 0 || this._grid.Rows.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                this._grid.FirstDisplayedScrollingRowIndex = Math.Min(
+                    firstVisibleRow,
+                    this._grid.Rows.Count - 1);
+            }
+            catch (InvalidOperationException)
+            {
             }
         }
 
@@ -451,11 +614,16 @@ namespace ModularAudience.Forms.Hotkeys
                 ? "Hotkeys apply to every keyboard."
                 : scope.HardwareId;
             this._labelHint.Text = scope.IsUniversal
-                ? "Click Register Hotkey, press the key combination, then click the action control, " +
-                  "numeric up/down arrow, or context menu item. Esc cancels. The stopwatch button sets each hotkey's hold/debounce duration."
+                ? "Click Register Hotkey, press the key combination (a single modifier such as Ctrl also works), " +
+                  "then click the action control, numeric up/down arrow, scrollbar, a LoopControl track entry " +
+                  "(varispeed), or context menu item. Esc cancels. " +
+                  "The stopwatch button sets each hotkey's " +
+                  "hold/debounce duration; for scrollbar hotkeys it sets the mouse-wheel tick distance."
                 : $"New hotkeys are assigned to \"{scope.DisplayName}\". Click Register Hotkey, " +
-                  "press the key combination, then click the action control, numeric up/down arrow, " +
-                  "or context menu item. The stopwatch button sets each hotkey's hold/debounce duration.";
+                  "press the key combination (a single modifier also works), then click the action control, " +
+                  "numeric up/down arrow, scrollbar, a LoopControl track entry (varispeed), or context menu item. " +
+                  "The stopwatch button sets each hotkey's hold/debounce duration; for scrollbar hotkeys it sets " +
+                  "the mouse-wheel tick distance.";
         }
 
         private void UpdateStatus()
@@ -464,12 +632,51 @@ namespace ModularAudience.Forms.Hotkeys
             this._labelStatus.ForeColor = this._manager.IsCapturing ? Color.DarkBlue : SystemColors.ControlText;
         }
 
+        private void UpdateRegisterButtonState()
+        {
+            bool capturing = this._manager.IsCapturing && !this._manager.IsSyncerCaptureActive;
+            bool awaitingAction = capturing && this._manager.IsAwaitingAction;
+
+            if (capturing && awaitingAction)
+            {
+                if (!this._registerBlinkTimer.Enabled)
+                {
+                    this._registerBlinkOn = true;
+                    this._buttonRegister.BackColor = RegisterActiveBackColor;
+                    this._registerBlinkTimer.Start();
+                }
+
+                return;
+            }
+
+            this._registerBlinkTimer.Stop();
+            this._registerBlinkOn = false;
+            this._buttonRegister.BackColor = capturing
+                ? RegisterActiveBackColor
+                : SystemColors.Control;
+        }
+
+        private void RegisterBlinkTimer_Tick(object? sender, EventArgs e)
+        {
+            if (!this._manager.IsCapturing || !this._manager.IsAwaitingAction)
+            {
+                this.UpdateRegisterButtonState();
+                return;
+            }
+
+            this._registerBlinkOn = !this._registerBlinkOn;
+            this._buttonRegister.BackColor = this._registerBlinkOn
+                ? RegisterActiveBackColor
+                : RegisterBlinkBackColor;
+        }
+
         private void ButtonRegister_Click(object? sender, EventArgs e)
         {
             KeyboardScopeItem scope = this.SelectedScope;
             this._manager.BeginRegisterNew(
                 scope.IsUniversal ? null : scope.HardwareId,
                 scope.Profile?.DisplayName);
+            this.UpdateRegisterButtonState();
         }
 
         private void ButtonCopy_Click(object? sender, EventArgs e)
@@ -549,6 +756,59 @@ namespace ModularAudience.Forms.Hotkeys
             }
         }
 
+        private static bool IsScrollBarBinding(HotkeyBinding binding)
+        {
+            return string.Equals(
+                binding.Target.ActionKind,
+                HotkeyActionKinds.ScrollBar,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsLoopRateBinding(HotkeyBinding binding)
+        {
+            return string.Equals(
+                binding.Target.ActionKind,
+                HotkeyActionKinds.LoopTrackRate,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string GetScrollBarGlyph(HotkeyBinding binding)
+        {
+            bool horizontal = binding.Target.ControlPath.Count > 0
+                && binding.Target.ControlPath[^1].TypeName
+                    .Contains("HScrollBar", StringComparison.Ordinal);
+            return horizontal ? "↔" : "↕";
+        }
+
+        private void ShowScrollDistanceDialog(HotkeyBinding binding)
+        {
+            int range = 0;
+            int defaultDistance = HotkeyDefaults.MinScrollTickDistance;
+            bool horizontal = GetScrollBarGlyph(binding) == "↔";
+
+            if (HotkeyActionResolver.TryResolveScrollBar(binding.Target, out ScrollBar? scrollBar)
+                && scrollBar != null)
+            {
+                range = Math.Max(1, scrollBar.Maximum - scrollBar.Minimum);
+                defaultDistance = HotkeyActionResolver.ComputeDefaultScrollTickDistance(scrollBar);
+                horizontal = scrollBar is HScrollBar;
+            }
+
+            int current = binding.Target.ScrollTickDistance > 0
+                ? binding.Target.ScrollTickDistance
+                : defaultDistance;
+
+            using HotkeyScrollDistanceDialog dialog = new(
+                binding.ActionName,
+                current,
+                range,
+                horizontal);
+            if (dialog.ShowDialog(this) == DialogResult.OK)
+            {
+                this._manager.UpdateScrollTickDistance(binding.Id, dialog.TickDistance);
+            }
+        }
+
         private void Grid_CellContentClick(object? sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0)
@@ -575,12 +835,31 @@ namespace ModularAudience.Forms.Hotkeys
             }
             else if (e.ColumnIndex == HoldColumnIndex)
             {
-                using HotkeyHoldDurationDialog dialog = new(
-                    binding.ActionName,
-                    binding.HoldThresholdMs);
-                if (dialog.ShowDialog(this) == DialogResult.OK)
+                if (IsScrollBarBinding(binding))
                 {
-                    this._manager.UpdateHoldThreshold(id, dialog.HoldThresholdMs);
+                    this.ShowScrollDistanceDialog(binding);
+                }
+                else if (IsLoopRateBinding(binding))
+                {
+                    using HotkeyVarispeedStepDialog dialog = new(
+                        binding.ActionName,
+                        binding.Target.LoopRateUnitsPerWheelTick > 0
+                            ? binding.Target.LoopRateUnitsPerWheelTick
+                            : HotkeyDefaults.LoopRateUnitsPerWheelTick);
+                    if (dialog.ShowDialog(this) == DialogResult.OK)
+                    {
+                        this._manager.UpdateLoopRateUnitsPerWheelTick(id, dialog.UnitsPerWheelTick);
+                    }
+                }
+                else
+                {
+                    using HotkeyHoldDurationDialog dialog = new(
+                        binding.ActionName,
+                        binding.HoldThresholdMs);
+                    if (dialog.ShowDialog(this) == DialogResult.OK)
+                    {
+                        this._manager.UpdateHoldThreshold(id, dialog.HoldThresholdMs);
+                    }
                 }
             }
             else if (e.ColumnIndex == DeleteColumnIndex)
@@ -646,12 +925,60 @@ namespace ModularAudience.Forms.Hotkeys
 
         private void HotkeyConfigWindow_FormClosed(object? sender, FormClosedEventArgs e)
         {
+            this._registerBlinkTimer.Stop();
+            this._registerBlinkTimer.Tick -= this.RegisterBlinkTimer_Tick;
+            this._registerBlinkTimer.Dispose();
             this._manager.Changed -= this.Manager_Changed;
             this._manager.KeyboardsChanged -= this.Manager_KeyboardsChanged;
             if (ReferenceEquals(_openWindow, this))
             {
                 _openWindow = null;
             }
+        }
+
+        private void ButtonPausingSyncerHotkey_Click(object? sender, EventArgs e)
+        {
+            if (this._capturingPausingSyncer)
+            {
+                this._manager.CancelCapture();
+                this._capturingPausingSyncer = false;
+                this._buttonPausingSyncerHotkey.Text = "Set Pausing Syncer Hotkey";
+                this.UpdateSyncerHotkeyLabels();
+                return;
+            }
+
+            this._capturingPausingSyncer = true;
+            this._capturingNudgingSyncer = false;
+            this._buttonPausingSyncerHotkey.Text = "Press key combination... (Esc to cancel)";
+            this._buttonNudgingSyncerHotkey.Text = "Set Nudging Syncer Hotkey";
+            this._manager.BeginRegisterNew(null, "Pausing Syncer");
+        }
+
+        private void ButtonNudgingSyncerHotkey_Click(object? sender, EventArgs e)
+        {
+            if (this._capturingNudgingSyncer)
+            {
+                this._manager.CancelCapture();
+                this._capturingNudgingSyncer = false;
+                this._buttonNudgingSyncerHotkey.Text = "Set Nudging Syncer Hotkey";
+                this.UpdateSyncerHotkeyLabels();
+                return;
+            }
+
+            this._capturingNudgingSyncer = true;
+            this._capturingPausingSyncer = false;
+            this._buttonNudgingSyncerHotkey.Text = "Press key combination... (Esc to cancel)";
+            this._buttonPausingSyncerHotkey.Text = "Set Pausing Syncer Hotkey";
+            this._manager.BeginRegisterNew(null, "Nudging Syncer");
+        }
+
+        private void UpdateSyncerHotkeyLabels()
+        {
+            HotkeyCombo pausing = this._manager.PausingSyncerHotkey;
+            HotkeyCombo nudging = this._manager.NudgingSyncerHotkey;
+
+            this._labelPausingSyncerHotkey.Text = pausing.IsEmpty ? "Not set" : pausing.GetDisplay();
+            this._labelNudgingSyncerHotkey.Text = nudging.IsEmpty ? "Not set" : nudging.GetDisplay();
         }
 
         private sealed class KeyboardScopeItem

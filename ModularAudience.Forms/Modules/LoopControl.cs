@@ -343,6 +343,14 @@ namespace ModularAudience.Forms.Modules
 
         private static string BuildPlaylistDisplayText(AudioObj audio)
         {
+            string name = GetPlaylistAudioDisplayName(audio);
+            string state = audio.PlayerPlaying ? "▶" : audio.Paused ? "||" : "■";
+            string shortId = audio.Id.ToString("N")[..6];
+            return $"{state} {name} · {BuildPlaylistRateText(audio)} {shortId}";
+        }
+
+        private static string GetPlaylistAudioDisplayName(AudioObj audio)
+        {
             string rawName = !string.IsNullOrWhiteSpace(audio.OriginalName)
                 ? audio.OriginalName
                 : !string.IsNullOrWhiteSpace(audio.Name)
@@ -364,13 +372,11 @@ namespace ModularAudience.Forms.Modules
             {
                 name = name.Split(["_stretched_"], StringSplitOptions.RemoveEmptyEntries)[0].Trim();
             }
-            string state = audio.PlayerPlaying ? "▶" : audio.Paused ? "||" : "■";
-            string shortId = audio.Id.ToString("N")[..6];
             if (name.Length > 45)
             {
                 name = name[..45] + "...";
             }
-            return $"{state} {name} · {BuildPlaylistRateText(audio)} {shortId}";
+            return name;
         }
 
         private void RefreshPlaylistTargets()

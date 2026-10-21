@@ -6,7 +6,7 @@ namespace ModularAudience.Audio.Tests
     [TestClass]
     public sealed class AdvancedSeparationCoreTests
     {
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(12)]
         [DataRow(24)]
         [DataRow(36)]
@@ -92,8 +92,8 @@ namespace ModularAudience.Audio.Tests
         {
             using CancellationTokenSource cancellation = new();
             cancellation.Cancel();
-            Assert.ThrowsException<OperationCanceledException>(() => ConstantQTransform.Create(8000, 12, 220, cancellation.Token));
-            Assert.ThrowsException<OperationCanceledException>(() =>
+            Assert.Throws<OperationCanceledException>(() => ConstantQTransform.Create(8000, 12, 220, cancellation.Token));
+            Assert.Throws<OperationCanceledException>(() =>
                 PyinPitchTracker.Track(new float[100], 8000, 128, 100, 500, 1, cancellation.Token));
         }
 
@@ -123,7 +123,7 @@ namespace ModularAudience.Audio.Tests
             AudioObj source = scope.Create(new float[8000], 8000); // mono
             DeterministicSeparationSettings settings = new() { UseIlrma = true };
             // ILRMA requires stereo; the processor must reject mono at runtime.
-            var ex = Assert.ThrowsException<ArgumentException>(() =>
+            var ex = Assert.Throws<ArgumentException>(() =>
                 { _ = DeterministicSeparationProcessor.AnalyzeAsync(source, settings).GetAwaiter().GetResult(); });
             Assert.IsTrue(ex.Message.Contains("stereo") || ex.Message.Contains("channel"), "ILRMA must reject mono input.");
         }

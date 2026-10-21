@@ -2788,6 +2788,16 @@ namespace ModularAudience.Forms.Modules
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
+            if (keyData == Keys.Up || keyData == Keys.Down || keyData == Keys.Left || keyData == Keys.Right)
+            {
+                // The arrow keys must not move the focus to the scroll bars of the track
+                // view, because that would change the volume or the playback rate.
+                if (this.ActiveControl is not TextBoxBase)
+                {
+                    return true;
+                }
+            }
+
             if (keyData == Keys.Tab)
             {
                 // Nur sichtbare und nicht-disponierte TrackViews berücksichtigen

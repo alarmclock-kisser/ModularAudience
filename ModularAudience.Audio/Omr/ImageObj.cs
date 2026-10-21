@@ -35,7 +35,7 @@ namespace ModularAudience.Audio.Omr
                 throw new FileNotFoundException($"File not found: {filePath}", filePath);
             }
 
-            string[] supportedExtensions = [".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".pdf"];
+            string[] supportedExtensions = [".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff"];
             string ext = Path.GetExtension(filePath);
             if (!supportedExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
             {
@@ -44,56 +44,9 @@ namespace ModularAudience.Audio.Omr
 
             try
             {
-                if (ext.Equals(".pdf", StringComparison.OrdinalIgnoreCase))
-                {
-                    byte[] pdfBytes = await File.ReadAllBytesAsync(filePath, ct);
-                    int pageCount = PDFtoImage.Conversion.GetPageCount(pdfBytes, password: null);
-                    var renderOptions = new PDFtoImage.RenderOptions(
-                        Dpi: 300,
-                        Width: null,
-                        Height: null,
-                        WithAnnotations: true,
-                        WithFormFill: false,
-                        WithAspectRatio: false,
-                        Rotation: default,
-                        AntiAliasing: default,
-                        BackgroundColor: null,
-                        Bounds: null,
-                        UseTiling: false,
-                        DpiRelativeToBounds: false,
-                        Grayscale: false);
-                    var frames = new List<Bitmap>(pageCount);
-
-                    try
-                    {
-                        for (int i = 0; i < pageCount; i++)
-                        {
-                            ct.ThrowIfCancellationRequested();
-                            using var pngStream = new MemoryStream();
-                            PDFtoImage.Conversion.SavePng(pngStream, pdfBytes, new Index(i), options: renderOptions);
-                            pngStream.Position = 0;
-                            frames.Add(LoadBitmap(pngStream));
-                        }
-                    }
-                    catch
-                    {
-                        foreach (Bitmap frame in frames)
-                        {
-                            frame.Dispose();
-                        }
-
-                        throw;
-                    }
-
-                    return new ImageObj(frames.ToArray());
-                }
-                else
-                {
-                    // Load image file
-                    ct.ThrowIfCancellationRequested();
-                    Bitmap image = await Task.Run(() => LoadBitmap(filePath), ct);
-                    return new ImageObj([image]);
-                }
+                ct.ThrowIfCancellationRequested();
+                Bitmap image = await Task.Run(() => LoadBitmap(filePath), ct);
+                return new ImageObj([image]);
             }
             catch (Exception ex)
             {

@@ -11,7 +11,7 @@ namespace ModularAudience.Audio.Tests
     [DoNotParallelize]
     public sealed class LiveRateScrollBarTests
     {
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(-450, -1)]
         [DataRow(-450, 1)]
         [DataRow(0, -1)]
@@ -49,7 +49,7 @@ namespace ModularAudience.Audio.Tests
             }
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(-1)]
         [DataRow(1)]
         public void StepSizeIncreasesMonotonicallyWithDistance(int direction)
@@ -65,7 +65,7 @@ namespace ModularAudience.Audio.Tests
             }
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(-500)]
         [DataRow(0)]
         [DataRow(500)]
@@ -78,7 +78,7 @@ namespace ModularAudience.Audio.Tests
             }
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(19, false)]
         [DataRow(20, true)]
         [DataRow(193, true)]
@@ -92,7 +92,7 @@ namespace ModularAudience.Audio.Tests
             Assert.AreEqual(expected, GeometryAt(0).IsTrackClick(mouseX));
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(0, -500)]
         [DataRow(399, 500)]
         public void FollowingContinuesAcrossArrowRegionsToTheLimit(int mouseX, int expected)
@@ -108,7 +108,7 @@ namespace ModularAudience.Audio.Tests
             Assert.AreEqual(expected, GetNextValue(current, -500, 500, mouseX, GeometryAt(current)));
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(113, 40)]
         [DataRow(113, 73)]
         [DataRow(400, 100)]

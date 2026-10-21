@@ -198,7 +198,7 @@ namespace ModularAudience.Forms.Hotkeys
                     }
                 }
 
-                key &= Keys.KeyCode;
+                key = HotkeyFormatter.NormalizeKey(key);
                 if (key == Keys.None)
                 {
                     return;

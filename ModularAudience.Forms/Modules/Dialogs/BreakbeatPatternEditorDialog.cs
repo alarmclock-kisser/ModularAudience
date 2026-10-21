@@ -3623,15 +3623,22 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             int patternEndTick = this.bars * BreakbeatGenerator_V2.PatternTicksPerBar;
 
             // Calculate tickDelta from the resizing note's actual edge movement
+            BreakbeatPatternNote? resizingNote = this.resizingNote;
+            BreakbeatPatternNote? resizeOriginalNote = this.resizeOriginalNote;
+            if (resizingNote == null || resizeOriginalNote == null)
+            {
+                return;
+            }
+
             int tickDelta;
             if (this.resizingEdge == ResizeEdge.Left)
             {
-                tickDelta = this.resizingNote.StartTick - this.resizeOriginalNote.StartTick;
+                tickDelta = resizingNote.StartTick - resizeOriginalNote.StartTick;
             }
             else
             {
-                tickDelta = (this.resizingNote.StartTick + this.resizingNote.DurationTicks)
-                    - (this.resizeOriginalNote.StartTick + this.resizeOriginalNote.DurationTicks);
+                tickDelta = (resizingNote.StartTick + resizingNote.DurationTicks)
+                    - (resizeOriginalNote.StartTick + resizeOriginalNote.DurationTicks);
             }
 
             this.deadGroupNotes.Clear();

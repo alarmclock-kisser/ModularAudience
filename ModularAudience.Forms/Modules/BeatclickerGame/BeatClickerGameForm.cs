@@ -271,7 +271,7 @@ namespace ModularAudience.Forms.Modules.BeatclickerGame
 
             this.FormBorderStyle = FormBorderStyle.None;
             this.StartPosition = FormStartPosition.Manual;
-            this.Bounds = Screen.PrimaryScreen.Bounds;
+            this.Bounds = Screen.PrimaryScreen?.Bounds ?? SystemInformation.VirtualScreen;
             this.BackColor = Color.Black;
             this.ShowInTaskbar = false;
             this.TopMost = false;
@@ -564,7 +564,7 @@ namespace ModularAudience.Forms.Modules.BeatclickerGame
             _minimizedWindows.Clear();
             _previousWindowStates.Clear();
 
-            Rectangle screenBounds = Screen.PrimaryScreen.Bounds;
+            Rectangle screenBounds = Screen.PrimaryScreen?.Bounds ?? SystemInformation.VirtualScreen;
 
             EnumWindows((hWnd, _) =>
             {
@@ -644,8 +644,8 @@ namespace ModularAudience.Forms.Modules.BeatclickerGame
         private void GenerateBeatCatchClassicBeatmap()
         {
             float beatInterval = 60f / _bpm;
-            int screenW = Screen.PrimaryScreen.Bounds.Width;
-            int screenH = Screen.PrimaryScreen.Bounds.Height;
+            int screenW = (Screen.PrimaryScreen?.Bounds ?? SystemInformation.VirtualScreen).Width;
+            int screenH = (Screen.PrimaryScreen?.Bounds ?? SystemInformation.VirtualScreen).Height;
             int margin = 150;
 
             // Difficulty parameters
@@ -4691,8 +4691,8 @@ namespace ModularAudience.Forms.Modules.BeatclickerGame
         private int GetTaskbarHeight()
         {
             // Get the work area (screen minus taskbar) and compare to full screen bounds
-            Rectangle workArea = Screen.PrimaryScreen.WorkingArea;
-            Rectangle screenBounds = Screen.PrimaryScreen.Bounds;
+            Rectangle workArea = Screen.PrimaryScreen?.WorkingArea ?? SystemInformation.VirtualScreen;
+            Rectangle screenBounds = Screen.PrimaryScreen?.Bounds ?? SystemInformation.VirtualScreen;
             // The taskbar height is the difference between the full screen height and the work area height
             int taskbarHeight = screenBounds.Height - workArea.Height;
             return Math.Max(0, taskbarHeight);

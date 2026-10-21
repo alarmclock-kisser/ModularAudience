@@ -19,9 +19,6 @@ public sealed class MidiControllerService : IDisposable
     /// <summary>Raised when a sysex message is received (non-UI thread).</summary>
     public event EventHandler<byte[]>? SysexReceived;
 
-    /// <summary>Raised when a MIDI device is plugged in or removed.</summary>
-    public event EventHandler<MidiDevice>? DeviceChanged;
-
     /// <summary>Currently open input device, if any.</summary>
     public MidiDevice? InputDevice { get; private set; }
 

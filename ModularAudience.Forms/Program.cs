@@ -62,6 +62,10 @@ namespace ModularAudience.Forms
             Application.ApplicationExit += (_, __) => SaveSessionLog();
             AppDomain.CurrentDomain.ProcessExit += (_, __) => SaveSessionLog();
 
+            // No automatic tab order in the windows, so that the arrow keys and the tab
+            // key do not change the focus to a button or a scroll bar.
+            TabNavigationDisabler.Install();
+
             Application.Run(new WindowMain(logger, serviceProvider));
         }
     }

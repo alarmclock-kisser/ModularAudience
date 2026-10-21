@@ -9,7 +9,7 @@ namespace ModularAudience.Audio.Tests
     {
         private const int SampleRate = 8000;
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(1, 1, "impulses")]
         [DataRow(1, 2, "antiphase")]
         [DataRow(47, 1, "mixed")]
@@ -81,7 +81,7 @@ namespace ModularAudience.Audio.Tests
             }
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(1)]
         [DataRow(2)]
         public async Task SnapshotSurvivesCallerMutationAndEverySelectionOwnsFreshStems(int channels)
@@ -123,7 +123,7 @@ namespace ModularAudience.Audio.Tests
             CollectionAssert.AreEqual(original, analysis.Source.Samples, "Returned stems must not alias the analyzed snapshot.");
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow(1, 1, true)]
         [DataRow(37, 2, true)]
         [DataRow(2087, 1, true)]
@@ -159,7 +159,7 @@ namespace ModularAudience.Audio.Tests
             }
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow("nan", null)]
         [DataRow("positive-infinity", null)]
         [DataRow("negative-infinity", null)]
@@ -202,7 +202,7 @@ namespace ModularAudience.Audio.Tests
             }
         }
 
-        [DataTestMethod]
+        [TestMethod]
         [DataRow("analysis", true)]
         [DataRow("analysis", false)]
         [DataRow("render", true)]

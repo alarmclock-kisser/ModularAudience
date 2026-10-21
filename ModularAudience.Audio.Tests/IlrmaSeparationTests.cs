@@ -258,7 +258,7 @@ namespace ModularAudience.Audio.Tests
                 UseCqtSynthesis = true
             };
 
-            Assert.ThrowsException<ArgumentException>(() =>
+            Assert.Throws<ArgumentException>(() =>
             {
                 _ = DeterministicSeparationProcessor.AnalyzeAsync(audio, bad).GetAwaiter().GetResult();
             }, "ILRMA must reject CQT synthesis.");
@@ -284,7 +284,7 @@ namespace ModularAudience.Audio.Tests
                 InstrumentProfiles = [InstrumentProfileId.SynthBass, InstrumentProfileId.Drums, InstrumentProfileId.Vocals]
             };
 
-            Assert.ThrowsException<ArgumentException>(() =>
+            Assert.Throws<ArgumentException>(() =>
             {
                 _ = DeterministicSeparationProcessor.AnalyzeAsync(audio, bad).GetAwaiter().GetResult();
             }, "ILRMA must reject more than two profiles.");

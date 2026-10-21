@@ -96,7 +96,7 @@ namespace ModularAudience.Audio
 
         public static string TimeFormat
         {
-            get => Logger.Settings.LogTimestampFormat;
+            get => Logger.Settings.LogTimestampFormat ?? "HH:mm:ss.fff";
             set => Logger.Settings.LogTimestampFormat = value;
         }
 

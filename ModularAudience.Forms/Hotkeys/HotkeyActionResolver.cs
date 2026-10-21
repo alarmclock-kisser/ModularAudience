@@ -32,6 +32,10 @@ namespace ModularAudience.Forms.Hotkeys
         private const int MK_CONTROL = 0x0008;
         private const int MK_MBUTTON = 0x0010;
 
+        private static readonly MethodInfo? ScrollBarOnScrollMethod = typeof(ScrollBar).GetMethod(
+            "OnScroll",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
         [DllImport("user32.dll")]
         private static extern short GetAsyncKeyState(int vKey);
 
@@ -139,7 +143,7 @@ namespace ModularAudience.Forms.Hotkeys
         }
 
         public static HotkeyActionTarget BuildNumericUpDownTarget(
-            NumericUpDown numericUpDown,
+            UpDownBase upDown,
             Form owner,
             bool increment,
             HotkeyModifiers actionModifiers)
@@ -149,12 +153,36 @@ namespace ModularAudience.Forms.Hotkeys
                 ActionKind = HotkeyActionKinds.NumericUpDown,
                 OwnerType = owner.GetType().FullName ?? owner.GetType().Name,
                 OwnerTitle = owner.Text ?? string.Empty,
-                ControlPath = BuildPath(numericUpDown, owner),
+                ControlPath = BuildPath(upDown, owner),
                 NumericUpDownIncrement = increment,
                 Gesture = HotkeyMouseGesture.LeftClick,
                 ActionModifiers = actionModifiers,
                 RelativeX = 0.5f,
                 RelativeY = increment ? 0.25f : 0.75f
+            };
+
+            if (owner is TrackView trackView)
+            {
+                target.TrackViewId = trackView.TrackViewId;
+                target.UseLastFocusedTrackView = true;
+            }
+
+            return target;
+        }
+
+        public static HotkeyActionTarget BuildScrollBarTarget(ScrollBar scrollBar, Form owner)
+        {
+            HotkeyActionTarget target = new()
+            {
+                ActionKind = HotkeyActionKinds.ScrollBar,
+                OwnerType = owner.GetType().FullName ?? owner.GetType().Name,
+                OwnerTitle = owner.Text ?? string.Empty,
+                ControlPath = BuildPath(scrollBar, owner),
+                Gesture = HotkeyMouseGesture.LeftClick,
+                ActionModifiers = HotkeyModifiers.None,
+                RelativeX = 0.5f,
+                RelativeY = 0.5f,
+                ScrollTickDistance = ComputeDefaultScrollTickDistance(scrollBar)
             };
 
             if (owner is TrackView trackView)
@@ -191,13 +219,56 @@ namespace ModularAudience.Forms.Hotkeys
 
         public static string BuildNumericUpDownActionName(
             Form owner,
-            NumericUpDown numericUpDown,
+            UpDownBase upDown,
             bool increment)
         {
             string ownerName = GetOwnerDisplayName(owner);
-            string controlName = GetControlDisplayName(numericUpDown, owner);
+            string controlName = GetControlDisplayName(upDown, owner);
             string direction = increment ? "Increment" : "Decrement";
             return $"{ownerName} - {controlName} [{direction}]";
+        }
+
+        public static HotkeyActionTarget BuildLoopRateTarget(Form owner, int trackIndex, bool shiftAll)
+        {
+            return new HotkeyActionTarget
+            {
+                ActionKind = HotkeyActionKinds.LoopTrackRate,
+                OwnerType = owner.GetType().FullName ?? owner.GetType().Name,
+                OwnerTitle = owner.Text ?? string.Empty,
+                LoopControlTrackIndex = trackIndex,
+                LoopRateUnitsPerWheelTick = HotkeyDefaults.LoopRateUnitsPerWheelTick,
+                LoopRateShiftAll = shiftAll,
+                Gesture = HotkeyMouseGesture.LeftClick,
+                ActionModifiers = HotkeyModifiers.None,
+                RelativeX = 0.5f,
+                RelativeY = 0.5f
+            };
+        }
+
+        public static string BuildLoopRateActionName(Form owner, int trackIndex, bool shiftAll)
+        {
+            string ownerName = GetOwnerDisplayName(owner);
+            string name = $"Track {trackIndex + 1}";
+            string suffix = shiftAll ? "Varispeed wheel, all tracks" : "Varispeed wheel";
+            return $"{ownerName} - {name} [{suffix}]";
+        }
+
+        public static string BuildScrollBarActionName(Form owner, ScrollBar scrollBar)
+        {
+            string ownerName = GetOwnerDisplayName(owner);
+            string controlName = GetControlDisplayName(scrollBar, owner);
+            string orientation = scrollBar is HScrollBar ? "horizontal" : "vertical";
+            return $"{ownerName} - {controlName} [Wheel, {orientation}]";
+        }
+
+        public static int ComputeDefaultScrollTickDistance(ScrollBar scrollBar)
+        {
+            int range = Math.Max(1, scrollBar.Maximum - scrollBar.Minimum);
+            double distance = range * (HotkeyDefaults.DefaultScrollTickPercent / 100.0);
+            return Math.Clamp(
+                (int)Math.Round(distance, MidpointRounding.AwayFromZero),
+                HotkeyDefaults.MinScrollTickDistance,
+                range);
         }
 
         public static bool IsToggleAction(Control control)
@@ -253,6 +324,39 @@ namespace ModularAudience.Forms.Hotkeys
             {
                 System.Diagnostics.Debug.WriteLine($"Hotkeys: target control for '{target.OwnerType}' is not available.");
                 return false;
+            }
+
+            if (control is UpDownBase upDown
+                && target.Gesture == HotkeyMouseGesture.LeftClick
+                && IsSpinnerClick(upDown, target.RelativeX))
+            {
+                // Bindings that were captured on an up/down spinner as a plain click are
+                // executed through the up/down buttons directly, because a simulated click
+                // on the up/down control does not reliably reach the spinner.
+                try
+                {
+                    if (owner.WindowState == FormWindowState.Minimized)
+                    {
+                        owner.WindowState = FormWindowState.Normal;
+                    }
+
+                    if (target.RelativeY < 0.5f)
+                    {
+                        upDown.UpButton();
+                    }
+                    else
+                    {
+                        upDown.DownButton();
+                    }
+
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"Hotkeys: could not change numeric up/down for '{target.OwnerType}': {ex.Message}");
+                    return false;
+                }
             }
 
             try
@@ -330,15 +434,15 @@ namespace ModularAudience.Forms.Hotkeys
             }
 
             Control? control = ResolveControl(owner, target.ControlPath);
-            if (control is not NumericUpDown numericUpDown
-                || numericUpDown.IsDisposed
-                || numericUpDown.Disposing)
+            if (control is not UpDownBase upDown
+                || upDown.IsDisposed
+                || upDown.Disposing)
             {
                 System.Diagnostics.Debug.WriteLine($"Hotkeys: numeric up/down target for '{target.OwnerType}' was not found.");
                 return false;
             }
 
-            if (!numericUpDown.Visible || !numericUpDown.Enabled)
+            if (!upDown.Visible || !upDown.Enabled)
             {
                 System.Diagnostics.Debug.WriteLine(
                     $"Hotkeys: numeric up/down target for '{target.OwnerType}' is not available.");
@@ -354,11 +458,11 @@ namespace ModularAudience.Forms.Hotkeys
 
                 if (target.NumericUpDownIncrement)
                 {
-                    numericUpDown.UpButton();
+                    upDown.UpButton();
                 }
                 else
                 {
-                    numericUpDown.DownButton();
+                    upDown.DownButton();
                 }
 
                 return true;
@@ -465,10 +569,10 @@ namespace ModularAudience.Forms.Hotkeys
 
         public static bool TryGetNumericUpDownChange(
             Point screenPoint,
-            out NumericUpDown? numericUpDown,
+            out UpDownBase? upDown,
             out bool increment)
         {
-            numericUpDown = null;
+            upDown = null;
             increment = false;
 
             POINT point = new() { X = screenPoint.X, Y = screenPoint.Y };
@@ -479,12 +583,12 @@ namespace ModularAudience.Forms.Hotkeys
             }
 
             Control? control = Control.FromChildHandle(handle);
-            while (control != null && control is not NumericUpDown && control is not Form)
+            while (control != null && control is not UpDownBase && control is not Form)
             {
                 control = control.Parent;
             }
 
-            NumericUpDown? target = control as NumericUpDown;
+            UpDownBase? target = control as UpDownBase;
             if (target == null || !target.Visible || !target.Enabled)
             {
                 return false;
@@ -509,8 +613,206 @@ namespace ModularAudience.Forms.Hotkeys
 
             Point localPoint = buttons.PointToClient(screenPoint);
             increment = localPoint.Y < Math.Max(1, buttons.ClientSize.Height) / 2f;
-            numericUpDown = target;
+            upDown = target;
             return true;
+        }
+
+        public static bool TryGetScrollBar(Point screenPoint, out ScrollBar? scrollBar)
+        {
+            scrollBar = null;
+
+            POINT point = new() { X = screenPoint.X, Y = screenPoint.Y };
+            IntPtr handle = WindowFromPoint(point);
+            if (handle == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            Control? control = Control.FromChildHandle(handle);
+            while (control != null && control is not ScrollBar && control is not Form)
+            {
+                control = control.Parent;
+            }
+
+            if (control is not ScrollBar target || !target.Visible || !target.Enabled)
+            {
+                return false;
+            }
+
+            if (!target.RectangleToScreen(target.ClientRectangle).Contains(screenPoint))
+            {
+                return false;
+            }
+
+            scrollBar = target;
+            return true;
+        }
+
+        public static bool TryResolveScrollBar(HotkeyActionTarget target, out ScrollBar? scrollBar)
+        {
+            scrollBar = null;
+
+            Form? owner = ResolveOwner(target);
+            if (owner == null || owner.IsDisposed || owner.Disposing)
+            {
+                return false;
+            }
+
+            if (ResolveControl(owner, target.ControlPath) is not ScrollBar resolved
+                || resolved.IsDisposed
+                || resolved.Disposing)
+            {
+                return false;
+            }
+
+            scrollBar = resolved;
+            return true;
+        }
+
+        public static bool ExecuteScrollBar(
+            HotkeyActionTarget target,
+            int wheelDelta,
+            bool horizontalWheel = false)
+        {
+            if (wheelDelta == 0)
+            {
+                return false;
+            }
+
+            if (!TryResolveScrollBar(target, out ScrollBar? scrollBar)
+                || scrollBar == null
+                || !scrollBar.Visible
+                || !scrollBar.Enabled)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"Hotkeys: scrollbar target for '{target.OwnerType}' is not available.");
+                return false;
+            }
+
+            try
+            {
+                int ticks = wheelDelta / 120;
+                if (ticks == 0)
+                {
+                    ticks = Math.Sign(wheelDelta);
+                }
+
+                int range = Math.Max(1, scrollBar.Maximum - scrollBar.Minimum);
+                int distance = target.ScrollTickDistance > 0
+                    ? target.ScrollTickDistance
+                    : ComputeDefaultScrollTickDistance(scrollBar);
+                distance = Math.Clamp(distance, HotkeyDefaults.MinScrollTickDistance, range);
+
+                // A vertical wheel scrolls up when it is turned away from the user;
+                // a horizontal wheel scrolls forward when it is tilted to the right.
+                int direction = horizontalWheel ? 1 : (scrollBar is VScrollBar ? -1 : 1);
+                long requested = scrollBar.Value + (long)ticks * distance * direction;
+                int newValue = (int)Math.Clamp(requested, scrollBar.Minimum, scrollBar.Maximum);
+                if (newValue == scrollBar.Value)
+                {
+                    return true;
+                }
+
+                int oldValue = scrollBar.Value;
+                scrollBar.Value = newValue;
+
+                if (ScrollBarOnScrollMethod != null)
+                {
+                    ScrollOrientation orientation = scrollBar is VScrollBar
+                        ? ScrollOrientation.VerticalScroll
+                        : ScrollOrientation.HorizontalScroll;
+                    ScrollBarOnScrollMethod.Invoke(
+                        scrollBar,
+                        [
+                            new ScrollEventArgs(
+                                ScrollEventType.ThumbPosition,
+                                oldValue,
+                                newValue,
+                                orientation)
+                        ]);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"Hotkeys: could not scroll scrollbar for '{target.OwnerType}': {ex.Message}");
+                return false;
+            }
+        }
+
+        public static bool ExecuteLoopRate(
+            HotkeyActionTarget target,
+            int wheelDelta,
+            bool horizontalWheel = false)
+        {
+            if (wheelDelta == 0 || horizontalWheel)
+            {
+                // The varispeed wheel reacts to the vertical wheel only.
+                return false;
+            }
+
+            Form? owner = ResolveOwner(target);
+            if (owner is not LoopControl loopControl
+                || loopControl.IsDisposed
+                || loopControl.Disposing)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"Hotkeys: Loop Control for '{target.OwnerType}' is not available.");
+                return false;
+            }
+
+            int ticks = wheelDelta / 120;
+            if (ticks == 0)
+            {
+                ticks = Math.Sign(wheelDelta);
+            }
+
+            int trackIndex = target.LoopControlTrackIndex;
+            if (trackIndex < 0)
+            {
+                // Fallback for hotkeys that were registered before the track index
+                // was stored: the audio id is looked up in the playlist.
+                if (!Guid.TryParse(target.LoopControlAudioId, out Guid legacyAudioId))
+                {
+                    return false;
+                }
+
+                trackIndex = loopControl.GetPlaylistTrackIndexByAudioId(legacyAudioId);
+                if (trackIndex < 0)
+                {
+                    return false;
+                }
+            }
+
+            // One wheel notch changes the varispeed by a small step. The rate scale is
+            // logarithmic, so 25 units are roughly three percent.
+            int unitsPerTick = target.LoopRateUnitsPerWheelTick > 0
+                ? target.LoopRateUnitsPerWheelTick
+                : HotkeyDefaults.LoopRateUnitsPerWheelTick;
+            int positionUnits = ticks * unitsPerTick;
+            return loopControl.NudgePlaylistRateByUnits(
+                trackIndex,
+                positionUnits,
+                target.LoopRateShiftAll);
+        }
+
+        private static bool IsSpinnerClick(UpDownBase upDown, float relativeX)
+        {
+            Control? buttons = upDown.Controls
+                .Cast<Control>()
+                .FirstOrDefault(child => string.Equals(
+                    child.GetType().Name,
+                    "UpDownButtons",
+                    StringComparison.Ordinal));
+            if (buttons == null || buttons.Width <= 0 || upDown.ClientSize.Width <= 0)
+            {
+                return false;
+            }
+
+            float spinnerLeft = buttons.Left / (float)upDown.ClientSize.Width;
+            return relativeX >= spinnerLeft - 0.02f;
         }
 
         public static bool IsSelectableContextMenuItem(ToolStripItem? item)
@@ -786,6 +1088,17 @@ namespace ModularAudience.Forms.Hotkeys
             if (string.Equals(target.OwnerType, typeof(LoopControl).FullName, StringComparison.Ordinal))
             {
                 LoopControl? loopControl = WindowMain.LoopControlWindow;
+                if (loopControl == null || loopControl.IsDisposed || loopControl.Disposing)
+                {
+                    // The window may be closed, but a hotkey that points to it still has
+                    // to work, so the window is opened again.
+                    loopControl = WindowMain.EnsureLoopControlWindow(show: true);
+                }
+                else if (!loopControl.Visible)
+                {
+                    WindowMain.EnsureLoopControlWindow(show: true);
+                }
+
                 if (loopControl != null && !loopControl.IsDisposed && !loopControl.Disposing)
                 {
                     return loopControl;
@@ -968,7 +1281,8 @@ namespace ModularAudience.Forms.Hotkeys
         {
             if (owner is TrackView trackView)
             {
-                return "Track View #" + trackView.TrackViewId.ToString("D2");
+                int trackViewId = trackView.TrackViewId;
+                return "Track View #" + trackViewId.ToString("D2");
             }
 
             if (owner is WindowMain)
