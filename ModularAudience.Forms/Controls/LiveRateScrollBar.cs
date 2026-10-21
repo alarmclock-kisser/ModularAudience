@@ -4,7 +4,11 @@ using Timer = System.Windows.Forms.Timer;
 
 namespace ModularAudience.Forms.Controls
 {
-    internal sealed class LiveRateScrollBar : HScrollBar
+    /// <summary>
+    /// The class must be public, otherwise the Visual Studio designer cannot serialize it
+    /// and drops the control when the form is saved.
+    /// </summary>
+    public sealed class LiveRateScrollBar : HScrollBar
     {
         private const int LeftButtonDown = 0x0201;
         private const int LeftButtonUp = 0x0202;
@@ -153,7 +157,7 @@ namespace ModularAudience.Forms.Controls
             }
         }
 
-        internal static int GetNextValue(int current, int minimum, int maximum, int mouseX, TrackGeometry geometry)
+        public static int GetNextValue(int current, int minimum, int maximum, int mouseX, TrackGeometry geometry)
         {
             int travel = geometry.Right - geometry.Left - (geometry.ThumbRight - geometry.ThumbLeft);
             if (travel <= 0 || minimum >= maximum || (mouseX >= geometry.ThumbLeft && mouseX < geometry.ThumbRight))
@@ -236,9 +240,9 @@ namespace ModularAudience.Forms.Controls
             return true;
         }
 
-        internal readonly record struct TrackGeometry(int Left, int Right, int ThumbLeft, int ThumbRight)
+        public readonly record struct TrackGeometry(int Left, int Right, int ThumbLeft, int ThumbRight)
         {
-            internal bool IsTrackClick(int mouseX) => mouseX >= this.Left && mouseX < this.Right
+            public bool IsTrackClick(int mouseX) => mouseX >= this.Left && mouseX < this.Right
                 && (mouseX < this.ThumbLeft || mouseX >= this.ThumbRight);
         }
 

@@ -2,7 +2,11 @@ using System.Windows.Forms.VisualStyles;
 
 namespace ModularAudience.Forms.Controls
 {
-    internal sealed class PlaylistTrackListBox : CheckedListBox
+    /// <summary>
+    /// The class must be public, otherwise the Visual Studio designer cannot serialize it
+    /// and drops the control when the form is saved.
+    /// </summary>
+    public sealed class PlaylistTrackListBox : CheckedListBox
     {
         private const int LeftButtonDown = 0x0201;
         private const int LeftButtonUp = 0x0202;
@@ -281,7 +285,7 @@ namespace ModularAudience.Forms.Controls
         }
     }
 
-    internal sealed class PlaylistTrackRateChangedEventArgs : EventArgs
+    public sealed class PlaylistTrackRateChangedEventArgs : EventArgs
     {
         public PlaylistTrackRateChangedEventArgs(int rowIndex, int position, bool resetAll = false, bool shiftAll = false)
         {

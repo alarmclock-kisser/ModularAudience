@@ -58,6 +58,7 @@
             beatGridAnalogToolStripMenuItem = new ToolStripMenuItem();
             vScrollBar_volume = new VScrollBar();
             hScrollBar_offset = new HScrollBar();
+            hScrollBar_rate = new ModularAudience.Forms.Controls.LiveRateScrollBar();
             label_volume = new Label();
             textBox_time = new TextBox();
             checkBox_settings = new CheckBox();
@@ -375,9 +376,23 @@
             checkBox_solo.Text = "Solo";
             checkBox_solo.UseVisualStyleBackColor = true;
             checkBox_solo.CheckedChanged += checkBox_solo_CheckedChanged;
-            // 
+            //
+            // hScrollBar_rate
+            //
+            hScrollBar_rate.ContextMenuStrip = contextMenu_rate;
+            hScrollBar_rate.Location = new Point(2, 103);
+            hScrollBar_rate.Maximum = 100;
+            hScrollBar_rate.Minimum = -100;
+            hScrollBar_rate.Name = "hScrollBar_rate";
+            hScrollBar_rate.Size = new Size(113, 17);
+            hScrollBar_rate.TabIndex = 17;
+            hScrollBar_rate.MouseDown += hScrollBar_rate_MouseDown;
+            hScrollBar_rate.Scroll += hScrollBar_rate_Scroll;
+            hScrollBar_rate.ValueChanged += hScrollBar_rate_ValueChanged;
+            toolTip_trackView.SetToolTip(hScrollBar_rate, "Playback rate (varispeed).\nCtrl+click: change rate on all TrackViews.\nRight-click: context menu (jump here, reset center).");
+            //
             // contextMenu_rate
-            // 
+            //
             contextMenu_rate.Items.AddRange(new ToolStripItem[] { menuItem_rateJumpHere, menuItem_rateResetCenter });
             contextMenu_rate.Name = "contextMenu_rate";
             contextMenu_rate.Size = new Size(169, 48);
@@ -421,6 +436,7 @@
             BackColor = SystemColors.ControlLight;
             ClientSize = new Size(1064, 197);
             Controls.Add(label_info_rate);
+            Controls.Add(hScrollBar_rate);
             Controls.Add(checkBox_solo);
             Controls.Add(checkBox_mute);
             Controls.Add(checkBox_sync);

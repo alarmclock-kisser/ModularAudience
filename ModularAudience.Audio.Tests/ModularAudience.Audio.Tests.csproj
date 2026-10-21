@@ -15,6 +15,5 @@
   <ItemGroup>
 	<ProjectReference Include="..\ModularAudience.Audio\ModularAudience.Audio.csproj" />
 	<ProjectReference Include="..\ModularAudience.Forms\ModularAudience.Forms.csproj" />
-	<Compile Include="..\ModularAudience.Forms\Controls\LiveRateScrollBar.cs" Link="Controls\LiveRateScrollBar.cs" />
   </ItemGroup>
 </Project>

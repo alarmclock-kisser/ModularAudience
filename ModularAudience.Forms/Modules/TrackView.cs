@@ -255,8 +255,40 @@ namespace ModularAudience.Forms.Modules
             catch { }
         }
 
+        /// <summary>
+        /// Creates the varispeed scroll bar if the designer did not add it. The Visual
+        /// Studio designer can drop hand written controls when the form is saved, and a
+        /// missing scroll bar must not break the track view.
+        /// </summary>
+        private void EnsureRateScrollBar()
+        {
+            if (this.hScrollBar_rate != null)
+            {
+                return;
+            }
+
+            ModularAudience.Forms.Controls.LiveRateScrollBar scrollBar = new()
+            {
+                ContextMenuStrip = this.contextMenu_rate,
+                Location = new Point(2, 103),
+                Maximum = 100,
+                Minimum = -100,
+                Name = "hScrollBar_rate",
+                Size = new Size(113, 17),
+                TabIndex = 17
+            };
+
+            scrollBar.MouseDown += this.hScrollBar_rate_MouseDown;
+            scrollBar.Scroll += this.hScrollBar_rate_Scroll;
+            scrollBar.ValueChanged += this.hScrollBar_rate_ValueChanged;
+            this.hScrollBar_rate = scrollBar;
+            this.Controls.Add(scrollBar);
+        }
+
         private void InitializeTrackControls()
         {
+            this.EnsureRateScrollBar();
+
             this.vScrollBar_volume.Minimum = 0;
             this.vScrollBar_volume.Maximum = Math.Max(1, this.vScrollBar_volume.Maximum);
             this.vScrollBar_volume.Value = (int)Math.Clamp(this.vScrollBar_volume.Maximum * 0.2f, this.vScrollBar_volume.Minimum, this.vScrollBar_volume.Maximum - 1);
