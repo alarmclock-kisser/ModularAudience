@@ -1,6 +1,8 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio;
 using ModularAudience.Forms.Modules.BeatclickerGame;
+using System.Collections;
+using System.Reflection;
 
 namespace ModularAudience.Audio.Tests
 {
@@ -9,6 +11,7 @@ namespace ModularAudience.Audio.Tests
     /// These verify the hard boundaries (a-k) from the repo note are respected.
     /// </summary>
     [TestClass]
+    [DoNotParallelize]
     public class BeatClickerGenerationTests
     {
         private static AudioObj CreateTestAudio(float bpm, float durationSeconds, int sampleRate = 44100)
@@ -72,7 +75,18 @@ namespace ModularAudience.Audio.Tests
             // This is a code inspection test: the generation sets Number = 0 for spinners.
             // We verify the DrawObjectNumber method skips Number <= 0.
             // (The actual generation is tested via the integration test below.)
-            Assert.Inconclusive("Spinner Number=0 is enforced in GenerateBeatCatchClassicBeatmap");
+            using var audio = CreateTestAudio(120f, 180f, 1000);
+            using var game = new BeatClickerGameForm(audio, taikoMode:false, difficultyIndex:6);
+            int spinners=0;
+            for(int attempt=0; attempt<4 && spinners==0; attempt++){
+                InvokeGame(game,"GenerateBeatMap");
+                foreach(object item in GameObjects(game)){
+                    if(ItemField(item,"Type").ToString()!="Spinner") continue;
+                    spinners++;
+                    Assert.AreEqual(0, (int)ItemField(item,"Number"));
+                }
+            }
+            Assert.IsTrue(spinners>0,"The generated maps must exercise spinner numbering.");
         }
 
         [TestMethod]
@@ -106,17 +120,17 @@ namespace ModularAudience.Audio.Tests
         {
             // Verify that two consecutive generations produce different beatmaps
             // (no fixed seed). We test this by generating two beatmaps and comparing.
-            var audio = CreateTestAudio(120f, 8f);
-
-            var game1 = new BeatClickerGameForm(audio, taikoMode: false, difficultyIndex: 2);
-            var game2 = new BeatClickerGameForm(audio, taikoMode: false, difficultyIndex: 2);
-
-            // The beatmap is generated in the constructor (synchronously) or in StartGame (async).
-            // Since we removed the constructor generation, the beatmap is empty until StartGame.
-            // For this test, we verify that the Random() constructor (no seed) is used
-            // by checking that the code doesn't reference a fixed seed.
-            // This is a structural test — the actual randomness is verified by playtesting.
-            Assert.Inconclusive("No fixed seed: new Random() is used in GenerateBeatCatchClassicBeatmap");
+            using var audio=CreateTestAudio(120f,60f,1000);
+            using var game=new BeatClickerGameForm(audio,taikoMode:false,difficultyIndex:4);
+            InvokeGame(game,"GenerateBeatMap");
+            string first=MapSignature(game);
+            Assert.IsTrue(GameObjects(game).Count>5);
+            bool differs=false;
+            for(int attempt=0;attempt<3;attempt++){
+                InvokeGame(game,"GenerateBeatMap");
+                differs |= MapSignature(game)!=first;
+            }
+            Assert.IsTrue(differs,"Independent generations must not replay a fixed map.");
         }
 
         [TestMethod]
@@ -290,7 +304,32 @@ namespace ModularAudience.Audio.Tests
             // Verify that the auto-miss logic is capped at 1 per tick.
             // This is a structural test: the GameTimer_Tick uses an if-block (not a while-loop)
             // for auto-miss, so only one element can be missed per 16ms tick.
-            Assert.Inconclusive("Auto-miss is capped at 1 per tick (if-block, not while-loop)");
+            using var audio=CreateTestAudio(120f,60f,1000);
+            using var game=new BeatClickerGameForm(audio,taikoMode:false,difficultyIndex:2);
+            InvokeGame(game,"GenerateBeatMap");
+            var objects=GameObjects(game);
+            Assert.IsTrue(objects.Count>=3);
+            for(int i=0;i<objects.Count;i++){
+                object item=objects[i]!;
+                var type=item.GetType();
+                type.GetField("Time")!.SetValue(item,-10f);
+                type.GetField("Type")!.SetValue(item,Enum.Parse(type.GetField("Type")!.FieldType,"Circle"));
+                objects[i]=item;
+            }
+            GameField(game,"_gameRunning").SetValue(game,true);
+            GameField(game,"_beatmapReady").SetValue(game,true);
+            GameField(game,"_countInActive").SetValue(game,false);
+            InvokeGame(game,"GameTimer_Tick",null,EventArgs.Empty);
+            Assert.AreEqual(1,GameField(game,"_currentHitIndex").GetValue(game));
+            InvokeGame(game,"GameTimer_Tick",null,EventArgs.Empty);
+            Assert.AreEqual(2,GameField(game,"_currentHitIndex").GetValue(game));
+            GameField(game,"_gameRunning").SetValue(game,false);
         }
+
+        private static FieldInfo GameField(object game,string name)=>game.GetType().GetField(name,BindingFlags.Instance|BindingFlags.NonPublic)!;
+        private static IList GameObjects(object game)=>(IList)GameField(game,"_hitObjects").GetValue(game)!;
+        private static object ItemField(object item,string name)=>item.GetType().GetField(name)!.GetValue(item)!;
+        private static void InvokeGame(object game,string name,params object?[] args)=>game.GetType().GetMethod(name,BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(game,args);
+        private static string MapSignature(object game)=>string.Join(";",GameObjects(game).Cast<object>().Select(item=>$"{ItemField(item,"Type")}:{ItemField(item,"Time")}:{ItemField(item,"X")}:{ItemField(item,"Y")}"));
     }
 }

@@ -76,6 +76,8 @@
             textBox_recordingTime = new TextBox();
             label_stopRecordInfo = new Label();
             button_newTrack = new Button();
+            contextMenuStrip_newTrack = new ContextMenuStrip(components);
+            toolStripMenuItem_browseYoutube = new ToolStripMenuItem();
             button_copyLog = new Button();
             listBox_log = new ListBox();
             button_breakbeatArchitect = new Button();
@@ -530,14 +532,29 @@
             // button_newTrack
             // 
             button_newTrack.BackColor = Color.FromArgb(192, 192, 255);
+            button_newTrack.ContextMenuStrip = contextMenuStrip_newTrack;
             button_newTrack.Font = new Font("Segoe UI", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
             button_newTrack.Location = new Point(12, 90);
             button_newTrack.Name = "button_newTrack";
             button_newTrack.Size = new Size(51, 23);
             button_newTrack.TabIndex = 21;
             button_newTrack.Text = "+ Track";
+            toolTip_playlist.SetToolTip(button_newTrack, "Create a new track.\nRight-click: Browse YT ... to search YouTube and import audio into a dedicated bag.");
             button_newTrack.UseVisualStyleBackColor = false;
             button_newTrack.Click += button_newTrack_Click;
+            //
+            // contextMenuStrip_newTrack
+            //
+            contextMenuStrip_newTrack.Items.AddRange(new ToolStripItem[] { toolStripMenuItem_browseYoutube });
+            contextMenuStrip_newTrack.Name = "contextMenuStrip_newTrack";
+            contextMenuStrip_newTrack.Size = new Size(146, 26);
+            //
+            // toolStripMenuItem_browseYoutube
+            //
+            toolStripMenuItem_browseYoutube.Name = "toolStripMenuItem_browseYoutube";
+            toolStripMenuItem_browseYoutube.Size = new Size(145, 22);
+            toolStripMenuItem_browseYoutube.Text = "Browse YT ...";
+            toolStripMenuItem_browseYoutube.Click += BrowseYoutube_Click;
             // 
             // button_copyLog
             // 
@@ -777,6 +794,8 @@
         private TextBox textBox_recordingTime;
         private Label label_stopRecordInfo;
         private Button button_newTrack;
+        private ContextMenuStrip contextMenuStrip_newTrack;
+        private ToolStripMenuItem toolStripMenuItem_browseYoutube;
         private Button button_copyLog;
         private ListBox listBox_log;
         private Button button_breakbeatArchitect;

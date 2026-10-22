@@ -19,6 +19,8 @@ namespace ModularAudience.Forms
         {
             ApplicationConfiguration.Initialize();
 
+            EnsureAppSettingsFile();
+
             // Build configuration from appsettings.json
             var configuration = new ConfigurationBuilder()
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
@@ -67,6 +69,27 @@ namespace ModularAudience.Forms
             TabNavigationDisabler.Install();
 
             Application.Run(new WindowMain(logger, serviceProvider));
+        }
+
+        private static void EnsureAppSettingsFile()
+        {
+            var appSettingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+            if (File.Exists(appSettingsPath))
+            {
+                return;
+            }
+
+            using var defaults = typeof(Program).Assembly.GetManifestResourceStream("ModularAudience.Forms.appsettings.json")
+                ?? throw new InvalidOperationException("The embedded default appsettings.json resource is missing.");
+
+            try
+            {
+                using var appSettings = new FileStream(appSettingsPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                defaults.CopyTo(appSettings);
+            }
+            catch (IOException) when (File.Exists(appSettingsPath))
+            {
+            }
         }
     }
 }

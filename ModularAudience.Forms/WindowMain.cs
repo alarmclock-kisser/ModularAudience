@@ -221,8 +221,8 @@ namespace ModularAudience.Forms
             }
 
             // Set build information timestamp from file last write time
-            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-            string buildTimestamp = System.IO.File.GetLastWriteTime(assembly.Location).ToString("dd/MM/yyyy - HH:mm:ss");
+            string buildPath = Environment.ProcessPath ?? AppContext.BaseDirectory;
+            string buildTimestamp = System.IO.File.GetLastWriteTime(buildPath).ToString("dd/MM/yyyy - HH:mm:ss");
             this.label_currentlyEnqueued.Text = $"Build: {buildTimestamp}";
         }
 
@@ -802,8 +802,6 @@ namespace ModularAudience.Forms
         }
     }
 }
-
-
 
 
 

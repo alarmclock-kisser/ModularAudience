@@ -368,7 +368,7 @@ namespace ModularAudience.Forms
                 this.numeric_pyinMaximumHz.Value = (decimal)settings.PyinMaximumHz;
                 this.numeric_ilrmaIterations.Value = settings.IlrmaIterations;
                 this.numeric_ilrmaComponents.Value = settings.IlrmaComponents;
-                this.checkBox_addAutomaticProfiles.Checked = settings.EnsembleMode == InstrumentEnsembleMode.ProfilesAndAutomatic;
+                this.checkBox_addAutomaticProfiles.Checked = settings.EnsembleMode != InstrumentEnsembleMode.ProfilesOnly;
                 if (!settings.InstrumentProfiles.IsDefaultOrEmpty)
                 {
                     this.automaticProfilesDefaultActive = false;
