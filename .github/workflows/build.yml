@@ -3,6 +3,7 @@ name: Build and Release WinForms App Modular Audience
 on:
   push:
     branches: [ "master" ]
+  workflow_dispatch:
 
 # HIER sind die neuen Berechtigungen hinzugefügt
 permissions:
