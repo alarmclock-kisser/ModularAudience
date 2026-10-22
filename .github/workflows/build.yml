@@ -29,10 +29,13 @@ jobs:
     - name: Publish
       run: dotnet publish ModularAudience.Forms/ModularAudience.Forms.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfContained=true -o ./publish
 
+    - name: Package self-contained app
+      run: Compress-Archive -Path ./publish/* -DestinationPath ./ModularAudience-win-x64.zip -Force
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        files: ./publish/*.exe
+        files: ./ModularAudience-win-x64.zip
         tag_name: release-${{ github.run_number }}
         generate_release_notes: true
       env:
