@@ -79,18 +79,21 @@ internal static partial class GitHubReleaseSource
     }
 
     internal static async Task DownloadAsync(ReleaseAsset asset, string destination, string expectedHash,
-        CancellationToken token)
+        CancellationToken token, IProgress<string>? progress = null)
     {
         if (asset.Size <= 0 || asset.Size > MaximumAssetBytes)
             throw new InvalidDataException("The binary asset size exceeds the allowed limit.");
+        var transfer = new AssetTransferProgress(asset.Name, asset.Size, progress);
+        transfer.Report(0);
         using var response = await SendAsync(asset.Url, token);
         await using var source = await response.Content.ReadAsStreamAsync(token);
         await using (var target = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None,
             81920, FileOptions.Asynchronous))
         {
-            await CopyLimitedAsync(source, target, asset.Size, token);
+            await CopyLimitedAsync(source, target, asset.Size, token, transfer);
             await target.FlushAsync(token);
         }
+        progress?.Report($"Verifying SHA256 for {asset.Name}.");
         if (new FileInfo(destination).Length != asset.Size ||
             !string.Equals(await HashAsync(destination, token), expectedHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException($"SHA256 or size verification failed for {asset.Name}.");
@@ -112,7 +115,8 @@ internal static partial class GitHubReleaseSource
         return target.ToArray();
     }
 
-    private static async Task CopyLimitedAsync(Stream source, Stream target, long limit, CancellationToken token)
+    private static async Task CopyLimitedAsync(Stream source, Stream target, long limit, CancellationToken token,
+        AssetTransferProgress? progress = null)
     {
         var buffer = new byte[81920];
         long total = 0;
@@ -123,7 +127,9 @@ internal static partial class GitHubReleaseSource
             if (total > limit)
                 throw new InvalidDataException("The download exceeded the allowed size.");
             await target.WriteAsync(buffer.AsMemory(0, count), token);
+            progress?.Report(total);
         }
+        progress?.Report(total, completed: true);
     }
 
     private static async Task<HttpResponseMessage> SendAsync(string url, CancellationToken token)

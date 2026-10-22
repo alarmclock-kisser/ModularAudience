@@ -52,7 +52,7 @@ public sealed class YoutubeBrowserWindowTests
         Assert.AreEqual("2:05", list.Items[0].SubItems[2].Text);
         Assert.AreSame(videos[1], list.Items[1].Tag);
         Assert.IsTrue(list.MultiSelect);
-        Assert.AreEqual(6, list.Columns.Count);
+        Assert.AreEqual(7, list.Columns.Count);
     }
 
     [STATestMethod]

@@ -13,6 +13,7 @@ public sealed class YtdlpClient
     }
 
     public event EventHandler<string>? ProgressChanged;
+    public YtdlpNetworkOptions NetworkOptions { get; set; } = new();
 
     public Task<IReadOnlyList<YtdlpVideo>> SearchAsync(string query, int maxResults, CancellationToken cancellationToken)
     {
@@ -28,6 +29,23 @@ public sealed class YtdlpClient
     {
         YtdlpParser.ValidateMaxResults(maxResults);
         return ReadMetadataAsync(YtdlpParser.ValidateYoutubeUrl(youtubeUrl).AbsoluteUri, maxResults, cancellationToken);
+    }
+
+    public async Task<YtdlpVideo> GetVideoMetadataAsync(YtdlpVideo video, CancellationToken token)
+    {
+        var url = ValidateVideo(video);
+        var progress = CreateProgress(null);
+        await EnsureAvailableAsync(progress, token);
+        var arguments = CommonArguments();
+        arguments.AddRange(["--dump-single-json", "--no-playlist", "--skip-download", "--", url]);
+        var job = CreateJobDirectory();
+        try
+        {
+            var json = await YtdlpProcess.RunAsync(manager.YtdlpPath, arguments, job, progress, false, token);
+            return YtdlpParser.ParseVideos(json, 1).SingleOrDefault()
+                ?? throw new InvalidDataException("No video metadata was returned.");
+        }
+        finally { YtdlpBinaryManager.DeleteStaging(job); }
     }
 
     private async Task<IReadOnlyList<YtdlpVideo>> ReadMetadataAsync(string target, int maxResults, CancellationToken token)
@@ -88,7 +106,7 @@ public sealed class YtdlpClient
             await manager.EnsureAvailableAsync(progress, token);
     }
 
-    private List<string> CommonArguments()
+    private List<string> CommonArguments(YtdlpNetworkOptions? network = null)
     {
         var deno = manager.FindDeno()
             ?? throw new FileNotFoundException("Deno is required. Call EnsureBinariesAsync first.");
@@ -100,14 +118,14 @@ public sealed class YtdlpClient
             "--retries", "3", "--fragment-retries", "3", "--extractor-retries", "3",
             "--use-extractors", "youtube.*", "--ffmpeg-location", manager.FfmpegDirectory
         };
+        (network ?? NetworkOptions).AddArguments(arguments);
         return arguments;
     }
 
     private List<string> DownloadArguments(string url, string format, string job, YtdlpDownloadOptions options)
     {
-        var arguments = CommonArguments();
+        var arguments = CommonArguments(options.Network);
         arguments.AddRange(["--no-playlist", "--extract-audio", "--audio-format", format,
-            "--audio-quality", options.Mp3Bitrate.ToString(CultureInfo.InvariantCulture) + "K",
             "--format", "bestaudio/best", "--paths", job, "--output", "audio.%(ext)s",
             "--no-overwrites", "--windows-filenames", "--newline", "--progress", "--progress-delta", "1",
             "--progress-template", "download:" + YtdlpProgressParser.Prefix +
@@ -115,6 +133,7 @@ public sealed class YtdlpClient
                 "\"total_bytes\":%(progress.total_bytes)j,\"total_bytes_estimate\":%(progress.total_bytes_estimate)j," +
                 "\"speed\":%(progress.speed)j,\"eta\":%(progress.eta)j,\"elapsed\":%(progress.elapsed)j}",
             "--print", "after_move:" + OutputPathPrefix + "%(filepath)s", "--no-quiet"]);
+        AddAudioQualityArguments(arguments, format, options);
         var filter = "!is_live";
         if (options.MaxDuration is { } duration)
             filter += " & duration <= " + duration.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture);
@@ -125,11 +144,27 @@ public sealed class YtdlpClient
         return arguments;
     }
 
+    private static void AddAudioQualityArguments(List<string> arguments, string format, YtdlpDownloadOptions options)
+    {
+        if (format.Contains("3"))
+            arguments.AddRange(["--audio-quality", options.Mp3Bitrate.ToString(CultureInfo.InvariantCulture) + "K"]);
+        else
+            arguments.AddRange(["--postprocessor-args", "ExtractAudio+ffmpeg_o:-c:a " + WavCodec(options.WavBitDepth)]);
+    }
+
+    private static string WavCodec(int bitDepth) => bitDepth switch
+    {
+        8 => "pcm_u8", 16 => "pcm_s16le", 24 => "pcm_s24le", 32 => "pcm_s32le",
+        _ => throw new ArgumentOutOfRangeException(nameof(bitDepth), "WAV bit depth must be 8, 16, 24 or 32.")
+    };
+
     private static string ValidateOptions(YtdlpDownloadOptions options)
     {
         var format = YtdlpParser.ValidateOutputFormat(options.Format);
-        if (options.Mp3Bitrate is < 32 or > 320)
-            throw new ArgumentOutOfRangeException(nameof(options), "MP3 bitrate must be between 32 and 320 kbps.");
+        options.Network.Validate();
+        if (options.Mp3Bitrate is not (64 or 96 or 128 or 192 or 256 or 320))
+            throw new ArgumentOutOfRangeException(nameof(options), "Unsupported MP3 bitrate.");
+        _ = WavCodec(options.WavBitDepth);
         if (options.SaveToDisk && string.IsNullOrWhiteSpace(options.OutputDirectory))
             throw new ArgumentException("An output directory is required when SaveToDisk is enabled.", nameof(options));
         if (options.MaxDuration is { } duration && (duration <= TimeSpan.Zero || duration > TimeSpan.FromHours(24)))

@@ -11,11 +11,17 @@ internal sealed class YoutubeBrowserSettings
     public bool Maximized { get; set; }
     public int SplitterDistance { get; set; } = 760;
     public bool ShowThumbnails { get; set; } = true;
-    public bool[] VisibleColumns { get; set; } = [true, true, true, true, false, false];
+    public bool[] VisibleColumns { get; set; } = [true, true, true, true, false, false, true];
     public int ResultLimit { get; set; } = 30;
     public bool SaveToDisk { get; set; }
     public string Format { get; set; } = "wav";
     public int Mp3Bitrate { get; set; } = 192;
+    public int WavBitDepth { get; set; } = 16;
+    public int SortColumn { get; set; } = -1;
+    public bool SortDescending { get; set; }
+    public YtdlpIpVersion IpVersion { get; set; }
+    public int ProxyMode { get; set; }
+    public string ProxyUrl { get; set; } = string.Empty;
     public string OutputDirectory { get; set; } = DefaultOutputDirectory;
     public int CooldownSeconds { get; set; } = 5;
     public int MaxDurationMinutes { get; set; } = 30;
@@ -58,13 +64,22 @@ internal sealed class YoutubeBrowserSettings
         Height = Math.Clamp(Height, 680, 4320);
         SplitterDistance = Math.Clamp(SplitterDistance, 400, 7000);
         ResultLimit = Math.Clamp(ResultLimit, 1, 200);
-        Mp3Bitrate = Math.Clamp(Mp3Bitrate, 32, 320);
+        int[] bitrates = [64, 96, 128, 192, 256, 320];
+        Mp3Bitrate = bitrates.MinBy(value => Math.Abs((long)value - Mp3Bitrate));
+        if (WavBitDepth is not (8 or 16 or 24 or 32)) WavBitDepth = 16;
+        SortColumn = Math.Clamp(SortColumn, -1, 6);
+        if (!Enum.IsDefined(IpVersion)) IpVersion = YtdlpIpVersion.Automatic;
+        ProxyMode = Math.Clamp(ProxyMode, 0, 2);
+        ProxyUrl ??= string.Empty;
+        try { new YtdlpNetworkOptions { ProxyUrl = ProxyUrl }.Validate(); }
+        catch (ArgumentException) { ProxyUrl = string.Empty; ProxyMode = 0; }
         CooldownSeconds = Math.Clamp(CooldownSeconds, 0, 300);
         MaxDurationMinutes = Math.Clamp(MaxDurationMinutes, 1, 1440);
         MaxSizeMiB = Math.Clamp(MaxSizeMiB, 1, 16384);
         MaxParallelDownloads = Math.Clamp(MaxParallelDownloads, 1, YtdlpBatchRunner.MaximumParallelism);
         Format = Format == "mp3" ? "mp3" : "wav";
-        if (VisibleColumns is not { Length: 6 }) VisibleColumns = [true, true, true, true, false, false];
+        if (VisibleColumns is { Length: 6 }) VisibleColumns = [.. VisibleColumns, true];
+        if (VisibleColumns is not { Length: 7 }) VisibleColumns = [true, true, true, true, false, false, true];
         VisibleColumns[0] = true;
         OutputDirectory = NormalizeDirectory(OutputDirectory);
         if (!ValidStretch(Stretch)) Stretch = null;

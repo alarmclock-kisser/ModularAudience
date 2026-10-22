@@ -35,7 +35,16 @@ internal static class YtdlpProcess
             await Task.WhenAll(stdout, stderr, process.WaitForExitAsync(token));
             token.ThrowIfCancellationRequested();
             if (process.ExitCode != 0)
-                throw new InvalidOperationException($"yt-dlp exited with code {process.ExitCode}.\n{await stderr}");
+            {
+                string error = await stderr;
+                string diagnosis;
+                try { diagnosis = await YtdlpNetworkDiagnostics.InspectAsync(error, start.ArgumentList.ToArray(), token); }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                catch (Exception diagnosticError) { diagnosis = "Network diagnosis could not complete: " + diagnosticError.Message; }
+                token.ThrowIfCancellationRequested();
+                if (diagnosis.Length > 0) progress?.Report("Warning: " + diagnosis);
+                throw new InvalidOperationException($"yt-dlp exited with code {process.ExitCode}.\n{error}\n{diagnosis}");
+            }
             return await stdout;
         }
         catch

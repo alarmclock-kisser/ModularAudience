@@ -27,7 +27,12 @@ partial class YoutubeBrowserWindow
     private TextBox activityLog = null!;
     private CheckBox saveCheck = null!;
     private ComboBox formatCombo = null!;
-    private NumericUpDown bitrateNumber = null!;
+    private DomainUpDown audioQuality = null!;
+    private Label audioQualityLabel = null!;
+    private Button metadataButton = null!;
+    private ComboBox ipVersionCombo = null!;
+    private ComboBox proxyModeCombo = null!;
+    private TextBox proxyText = null!;
     private TextBox outputDirectory = null!;
     private Button folderButton = null!;
     private NumericUpDown cooldownSeconds = null!;
@@ -90,7 +95,10 @@ partial class YoutubeBrowserWindow
         AcceptButton = searchButton;
         Shown += Window_Shown;
         FormClosing += Window_FormClosing;
-        Controls.Add(rootLayout);
+        var viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        viewport.Layout += (_, _) => rootLayout.MinimumSize = new Size(0, viewport.ClientSize.Height);
+        viewport.Controls.Add(rootLayout);
+        Controls.Add(viewport);
         ResumeLayout(true);
     }
 
@@ -98,7 +106,8 @@ partial class YoutubeBrowserWindow
     {
         rootLayout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, Size = new Size(1180, 820), Padding = new Padding(12), ColumnCount = 1, RowCount = 7
+            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Size = new Size(1180, 820), Padding = new Padding(12), ColumnCount = 1, RowCount = 7
         };
         rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -106,7 +115,7 @@ partial class YoutubeBrowserWindow
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         var notice = new Label
         {
@@ -167,7 +176,8 @@ partial class YoutubeBrowserWindow
         resultsList.Columns.AddRange([
             new ColumnHeader { Text = "Title", Width = 320 }, new ColumnHeader { Text = "Uploader", Width = 160 },
             new ColumnHeader { Text = "Duration", Width = 90 }, new ColumnHeader { Text = "Views", Width = 100 },
-            new ColumnHeader { Text = "ID", Width = 120 }, new ColumnHeader { Text = "URL", Width = 320 }
+            new ColumnHeader { Text = "ID", Width = 120 }, new ColumnHeader { Text = "URL", Width = 320 },
+            new ColumnHeader { Text = "Upload Date", Width = 110 }
         ]);
         resultsSummary = new Label
         {
@@ -182,10 +192,11 @@ partial class YoutubeBrowserWindow
         resultsList.SelectedIndexChanged += Selection_Changed;
         resultsList.DoubleClick += Open_Click;
         resultsList.ColumnWidthChanging += Column_WidthChanging;
+        resultsList.ColumnClick += Column_Click;
         browsingTabs = new TabControl
         {
             Name = "browsingTabs", Dock = DockStyle.Fill, AccessibleName = "YouTube results and downloads",
-            Size = new Size(1156, 340), Margin = new Padding(0, 0, 0, 8)
+            Size = new Size(1156, 340), MinimumSize = new Size(0, 260), Margin = new Padding(0, 0, 0, 8)
         };
         resultsTab = new TabPage { Name = "resultsTab", Text = "Results", Size = new Size(1148, 312), UseVisualStyleBackColor = true };
         downloadsTab = new TabPage { Name = "downloadsTab", Text = "Downloads", Size = new Size(1148, 312), UseVisualStyleBackColor = true };
@@ -227,17 +238,21 @@ partial class YoutubeBrowserWindow
 
     private void InitializeDetailsPanel()
     {
-        detailsLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        detailsLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
         detailsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         detailsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        detailsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 160));
-        detailsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        detailsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 35));
+        detailsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 65));
+        detailsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         thumbnailCheck = new CheckBox { Text = "Show selected-video thumbnail", Checked = true, AutoSize = true };
         thumbnailPicture = new PictureBox
         {
             Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = SystemColors.ControlLight,
             AccessibleName = "Selected video thumbnail", TabStop = false
         };
+        metadataButton = DesignerButton("Load full metadata");
+        metadataButton.AccessibleName = "Load upload date and full metadata for the selected video";
+        metadataButton.Click += Metadata_Click;
         descriptionText = new TextBox
         {
             Dock = DockStyle.Fill, ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Vertical,
@@ -246,6 +261,7 @@ partial class YoutubeBrowserWindow
         detailsLayout.Controls.Add(thumbnailCheck, 0, 0);
         detailsLayout.Controls.Add(thumbnailPicture, 0, 1);
         detailsLayout.Controls.Add(descriptionText, 0, 2);
+        detailsLayout.Controls.Add(metadataButton, 0, 3);
         mainSplit.Panel2.Controls.Add(detailsLayout);
         thumbnailCheck.CheckedChanged += Selection_Changed;
     }
@@ -258,13 +274,13 @@ partial class YoutubeBrowserWindow
         openItem.Click += Open_Click;
         copyItem.Click += Copy_Click;
         columnsMenu.Items.AddRange([openItem, copyItem, new ToolStripSeparator()]);
-        string[] titles = ["Title", "Uploader", "Duration", "Views", "ID", "URL"];
+        string[] titles = ["Title", "Uploader", "Duration", "Views", "ID", "URL", "Upload Date"];
         columnMenuItems = new ToolStripMenuItem[titles.Length];
         for (int index = 0; index < titles.Length; index++)
         {
             var item = new ToolStripMenuItem("Show " + titles[index])
             {
-                CheckOnClick = true, Checked = index < 4, Enabled = index != 0
+                CheckOnClick = true, Checked = index < 4 || index == 6, Enabled = index != 0
             };
             item.CheckedChanged += Column_CheckedChanged;
             columnMenuItems[index] = item;
@@ -280,15 +296,17 @@ partial class YoutubeBrowserWindow
 
     private void InitializeOptionsPanel()
     {
-        optionsGroup = new GroupBox { Text = "Download and RAM import options", Dock = DockStyle.Fill, AutoSize = true };
-        var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, RowCount = 4 };
+        optionsGroup = new GroupBox { Text = "Download and RAM import options", Dock = DockStyle.Fill, AutoSize = false, Height = 210 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 5 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         var numbers = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
         saveCheck = new CheckBox { Text = "Save converted audio", AutoSize = true, Margin = new Padding(3, 6, 10, 0) };
         formatCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 70, AccessibleName = "Audio format" };
         formatCombo.Items.AddRange(["WAV", "MP3"]);
         formatCombo.SelectedIndex = 0;
-        bitrateNumber = DesignerNumber(32, 320, 192, "MP3 bitrate in kbps");
+        audioQuality = new DomainUpDown { Name = "audioQuality", ReadOnly = true, Width = 70, Wrap = false };
+        audioQualityLabel = new Label { Text = "Bit depth", AutoSize = true, Margin = new Padding(6, 7, 3, 0) };
+        audioQuality.SelectedItemChanged += AudioQuality_Changed;
         cooldownSeconds = DesignerNumber(0, 300, 5, "Import cooldown in seconds");
         maxDurationMinutes = DesignerNumber(1, 1440, 30, "Maximum video duration in minutes");
         maxSizeMiB = DesignerNumber(1, 16384, 512, "Maximum download size in MiB");
@@ -296,7 +314,8 @@ partial class YoutubeBrowserWindow
         maxParallelDownloadsNumber.Name = "maxParallelDownloadsNumber";
         numbers.Controls.Add(saveCheck);
         AddDesignerField(numbers, "Format", formatCombo);
-        AddDesignerField(numbers, "kbps", bitrateNumber);
+        numbers.Controls.Add(audioQualityLabel);
+        numbers.Controls.Add(audioQuality);
         AddDesignerField(numbers, "Cooldown (s)", cooldownSeconds);
         AddDesignerField(numbers, "Max minutes", maxDurationMinutes);
         AddDesignerField(numbers, "Max MiB", maxSizeMiB);
@@ -304,12 +323,32 @@ partial class YoutubeBrowserWindow
         layout.Controls.Add(numbers, 0, 0);
         InitializeDirectoryRow(layout);
         InitializeStretchRow(layout);
+        InitializeNetworkRow(layout);
         storageLabel = new Label { AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(3, 0, 3, 5) };
-        layout.Controls.Add(storageLabel, 0, 3);
+        layout.Controls.Add(storageLabel, 0, 4);
+        // GroupBox auto-size measures wrapped rows without their final width and reserves excess height.
+        layout.SizeChanged += (_, _) => optionsGroup.Height = layout.Bottom + optionsGroup.Padding.Bottom;
         optionsGroup.Controls.Add(layout);
         rootLayout.Controls.Add(optionsGroup, 0, 3);
         saveCheck.CheckedChanged += Options_Changed;
         formatCombo.SelectedIndexChanged += Options_Changed;
+    }
+
+    private void InitializeNetworkRow(TableLayoutPanel parent)
+    {
+        var row = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
+        ipVersionCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100, AccessibleName = "Network IP version" };
+        ipVersionCombo.Items.AddRange(["Automatic", "IPv4", "IPv6"]);
+        ipVersionCombo.SelectedIndex = 0;
+        proxyModeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 170, AccessibleName = "Proxy routing" };
+        proxyModeCombo.Items.AddRange(["Environment / default", "Direct (no proxy)", "Explicit HTTP(S) proxy"]);
+        proxyModeCombo.SelectedIndex = 0;
+        proxyText = new TextBox { Width = 235, MaxLength = 2048, PlaceholderText = "https://proxy.example:8080", AccessibleName = "Explicit proxy URL without credentials", Enabled = false };
+        proxyModeCombo.SelectedIndexChanged += (_, _) => proxyText.Enabled = proxyModeCombo.SelectedIndex == 2;
+        AddDesignerField(row, "Network", ipVersionCombo);
+        AddDesignerField(row, "Proxy", proxyModeCombo);
+        row.Controls.Add(proxyText);
+        parent.Controls.Add(row, 0, 3);
     }
 
     private void InitializeDirectoryRow(TableLayoutPanel parent)

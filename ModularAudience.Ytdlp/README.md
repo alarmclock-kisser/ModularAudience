@@ -1,6 +1,6 @@
 # ModularAudience.Ytdlp
 
-Standalone `net10.0` library with no NuGet, Forms, Audio, shell, logging, authentication, cookies, or DRM dependencies. The managed project is platform-neutral; its automatically provisioned native tools require Windows x64. The project is intentionally not added to the solution or any existing project.
+Standalone `net10.0` library with no NuGet, Forms, Audio, shell, logging, authentication, cookies, or DRM dependencies. The managed project is platform-neutral; its automatically provisioned native tools require Windows x64. The Forms project integrates it through the nonmodal YouTube Browser.
 
 ## Browser integration
 
@@ -17,6 +17,24 @@ Sources:
 ZIP executable selection accepts the exact filename at the archive root or after a directory separator, rejects traversal/absolute entry paths, and writes only to fixed executable names inside staging. It does not extract arbitrary archive paths.
 
 HTTP redirects must stay on explicitly approved HTTPS GitHub asset hosts. Downloads are streamed to unique staging files with size limits. A failed update emits a warning if installed executable hashes still match; otherwise it fails. GitHub unauthenticated API rate limits and network availability apply. Each dependency update has a 20-minute timeout.
+
+Binary transfer messages identify the actual asset and show downloaded / total decimal MB, throttled to approximately four updates per second. SHA256 verification is a separate phase; a completed transfer alone does not mean installation succeeded.
+
+## Browser metadata and audio quality
+
+Results support ascending/descending header sorting with direction arrows. Duration, view count and upload date sort by their typed values, with unknown values last. `UploadDate` is a nullable `DateOnly`, parsed strictly from yt-dlp's `upload_date` (`yyyyMMdd`). Flat results may omit dates; the browser's **Load full metadata** action calls `GetVideoMetadataAsync` asynchronously for only the selected video. No dates are guessed. Seven-column visibility settings migrate older six-column arrays without changing the original six preferences.
+
+MP3 offers 64/96/128/192/256/320 kbps. WAV offers actual 8/16/24/32-bit PCM via `ExtractAudio+ffmpeg_o:-c:a`: `pcm_u8`, `pcm_s16le`, `pcm_s24le`, `pcm_s32le`. 32-bit WAV is signed integer PCM, not floating point. These settings are independent; legacy MP3 values migrate to the nearest supported bitrate. Increasing depth cannot restore quality absent from the source.
+
+Thumbnail loading prefers YouTube's canonical HTTPS JPEG endpoint instead of flat-metadata WebP/AVIF URLs unsupported by GDI+. A trusted metadata URL is a fallback. The loader checks byte signatures, size and dimensions and reports unsupported encodings explicitly; redirects and untrusted image hosts remain disabled.
+
+## Network routing and connection failures
+
+`YtdlpClient.NetworkOptions` applies to metadata requests; `YtdlpDownloadOptions.Network` captures each download's routing. `YtdlpNetworkOptions.IpVersion` defaults to `Automatic`. `ProxyUrl = null` preserves inherited/default discovery, an empty string explicitly disables proxies, and a nonempty HTTP(S) URL explicitly selects an authorized proxy. Credentials in URLs are rejected. No automatic IP/proxy/security workaround is applied. These settings affect yt-dlp, not the GitHub installer or thumbnail HTTP client.
+
+On connection-refused errors (including Windows 10061), the exception retains stderr and adds redacted process proxy status, effective route arguments and bounded direct DNS/TCP probes against the reported `googlevideo.com` hosts. IPv4/IPv6 results are distinguished. A TCP success is **not** proof that TLS, signed media requests or full downloads work. Direct probes do not test a configured proxy. The diagnosis cannot identify which firewall, gateway, security product or remote server refused an earlier connection. TLS certificate validation and retry counts are unchanged.
+
+Certificate-chain failures and HTTP 503 responses receive distinct explanations. They are not presented as codec problems or successful downloads, and certificate verification is never disabled. Browser settings apply to future operations; already running jobs retain their captured options.
 
 ## JavaScript runtime
 

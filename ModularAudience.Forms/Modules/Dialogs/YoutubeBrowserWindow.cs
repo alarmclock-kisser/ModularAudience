@@ -75,6 +75,7 @@ public partial class YoutubeBrowserWindow : Form
         uploaderButton.Enabled = relatedButton.Enabled && !string.IsNullOrWhiteSpace(SelectedVideo()?.Uploader);
         openButton.Enabled = !closing && resultsList.SelectedItems.Count == 1;
         copyButton.Enabled = !closing && resultsList.SelectedItems.Count > 0;
+        metadataButton.Enabled = available && resultsList.SelectedItems.Count == 1;
         operationProgress.Visible = busy || activeBatch is not null;
         UpdateOptionAvailability();
     }

@@ -9,5 +9,6 @@ public sealed record YtdlpVideo
     public double? DurationSeconds { get; init; }
     public string? ThumbnailUrl { get; init; }
     public long? ViewCount { get; init; }
+    public DateOnly? UploadDate { get; init; }
     public string? Description { get; init; }
 }

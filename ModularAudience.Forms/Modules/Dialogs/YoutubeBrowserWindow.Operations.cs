@@ -11,6 +11,7 @@ public partial class YoutubeBrowserWindow
     private void StartOperation(string message, Func<CancellationToken, Task> action, bool isBatch = false)
     {
         if (busy || closing || IsDisposed || resourcesReleased) return;
+        client.NetworkOptions = CaptureNetworkOptions();
         busy = true;
         activeBatch = null;
         operationGeneration++;
@@ -40,6 +41,9 @@ public partial class YoutubeBrowserWindow
         try
         {
             source.Token.ThrowIfCancellationRequested();
+            if (proxyModeCombo.SelectedIndex == 2 && string.IsNullOrWhiteSpace(proxyText.Text))
+                throw new ArgumentException("Enter an explicit proxy URL or choose another proxy mode.");
+            client.NetworkOptions.Validate();
             await action(source.Token);
             if (!IsDisposed && !resourcesReleased)
                 statusLabel.Text = activeBatch?.Jobs.Any(job => job.Error is not null) == true
@@ -97,7 +101,8 @@ public partial class YoutubeBrowserWindow
     {
         string line = text.Replace('\r', ' ').Replace('\n', ' ');
         statusLabel.Text = line.Length > 240 ? line[..240] : line;
-        AppendLog(text);
+        if (!(line.StartsWith("Downloading ", StringComparison.Ordinal) && line.EndsWith(" MB", StringComparison.Ordinal)))
+            AppendLog(text);
         if (line.StartsWith("Warning:", StringComparison.OrdinalIgnoreCase))
             LogManager.LogWarning("YouTube browser: " + statusLabel.Text);
     }
@@ -137,11 +142,12 @@ public partial class YoutubeBrowserWindow
             {
                 var row = new ListViewItem(video.Title) { Tag = video };
                 row.SubItems.AddRange([video.Uploader, FormatDuration(video.DurationSeconds),
-                    video.ViewCount?.ToString("N0") ?? "Unknown", video.Id, video.Url]);
+                    video.ViewCount?.ToString("N0") ?? "Unknown", video.Id, video.Url, FormatUploadDate(video.UploadDate)]);
                 resultsList.Items.Add(row);
             }
         }
         finally { resultsList.EndUpdate(); }
+        ApplySort();
         resultsSummary.Text = $"{videos.Count} result(s) | Select multiple rows for bounded parallel downloads and serial audio import";
         Selection_Changed(this, EventArgs.Empty);
     }
@@ -173,7 +179,9 @@ public partial class YoutubeBrowserWindow
         Format = formatCombo.SelectedIndex == 1 ? "mp3" : "wav",
         SaveToDisk = saveCheck.Checked,
         OutputDirectory = outputDirectory.Text.Trim(),
-        Mp3Bitrate = (int)bitrateNumber.Value,
+        Mp3Bitrate = mp3Bitrate,
+        WavBitDepth = wavBitDepth,
+        Network = CaptureNetworkOptions(),
         MaxDuration = TimeSpan.FromMinutes((double)maxDurationMinutes.Value),
         MaxFileSizeBytes = (long)maxSizeMiB.Value * 1024 * 1024
     };

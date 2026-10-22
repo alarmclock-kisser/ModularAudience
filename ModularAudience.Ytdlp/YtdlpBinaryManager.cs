@@ -119,7 +119,7 @@ public sealed class YtdlpBinaryManager
         {
             progress?.Report($"Downloading and verifying {tool}.");
             var package = Path.Combine(staging, "package.download");
-            await GitHubReleaseSource.DownloadAsync(asset, package, hash, token);
+            await GitHubReleaseSource.DownloadAsync(asset, package, hash, token, progress);
             var payload = Path.Combine(staging, "payload");
             Directory.CreateDirectory(payload);
             if (asset.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))

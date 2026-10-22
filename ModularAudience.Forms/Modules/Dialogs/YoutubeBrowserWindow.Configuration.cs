@@ -6,7 +6,9 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 public partial class YoutubeBrowserWindow
 {
     private PlaylistStretchSettings? stretchSettings;
-    private readonly int[] columnWidths = [320, 160, 90, 100, 120, 320];
+    private readonly int[] columnWidths = [320, 160, 90, 100, 120, 320, 110];
+    private int mp3Bitrate = 192;
+    private int wavBitDepth = 16;
 
     private void RestoreSettings()
     {
@@ -21,8 +23,16 @@ public partial class YoutubeBrowserWindow
             thumbnailCheck.Checked = settings.ShowThumbnails;
             resultLimit.Value = settings.ResultLimit;
             saveCheck.Checked = settings.SaveToDisk;
+            mp3Bitrate = settings.Mp3Bitrate;
+            wavBitDepth = settings.WavBitDepth;
             formatCombo.SelectedIndex = settings.Format == "mp3" ? 1 : 0;
-            bitrateNumber.Value = settings.Mp3Bitrate;
+            UpdateAudioQuality();
+            ipVersionCombo.SelectedIndex = (int)settings.IpVersion;
+            proxyModeCombo.SelectedIndex = settings.ProxyMode;
+            proxyText.Text = settings.ProxyUrl;
+            sortColumn = settings.SortColumn;
+            sortDescending = settings.SortDescending;
+            ApplySort();
             outputDirectory.Text = settings.OutputDirectory;
             cooldownSeconds.Value = settings.CooldownSeconds;
             maxDurationMinutes.Value = settings.MaxDurationMinutes;
@@ -52,7 +62,11 @@ public partial class YoutubeBrowserWindow
                 VisibleColumns = columnMenuItems.Select(item => item.Checked).ToArray(),
                 ResultLimit = (int)resultLimit.Value, SaveToDisk = saveCheck.Checked,
                 Format = formatCombo.SelectedIndex == 1 ? "mp3" : "wav",
-                Mp3Bitrate = (int)bitrateNumber.Value, OutputDirectory = outputDirectory.Text.Trim(),
+                Mp3Bitrate = mp3Bitrate, WavBitDepth = wavBitDepth,
+                SortColumn = sortColumn, SortDescending = sortDescending,
+                IpVersion = (ModularAudience.Ytdlp.YtdlpIpVersion)ipVersionCombo.SelectedIndex,
+                ProxyMode = proxyModeCombo.SelectedIndex, ProxyUrl = proxyText.Text.Trim(),
+                OutputDirectory = outputDirectory.Text.Trim(),
                 CooldownSeconds = (int)cooldownSeconds.Value,
                 MaxDurationMinutes = (int)maxDurationMinutes.Value, MaxSizeMiB = (int)maxSizeMiB.Value,
                 MaxParallelDownloads = (int)maxParallelDownloadsNumber.Value,
@@ -65,13 +79,36 @@ public partial class YoutubeBrowserWindow
         }
     }
 
-    private void Options_Changed(object? sender, EventArgs e) => UpdateOptionAvailability();
+    private void Options_Changed(object? sender, EventArgs e)
+    {
+        if (sender == formatCombo) UpdateAudioQuality();
+        UpdateOptionAvailability();
+    }
+
+    private void UpdateAudioQuality()
+    {
+        bool mp3 = formatCombo.SelectedIndex == 1;
+        audioQuality.SelectedItemChanged -= AudioQuality_Changed;
+        audioQuality.Items.Clear();
+        int[] values = mp3 ? [64, 96, 128, 192, 256, 320] : [8, 16, 24, 32];
+        foreach (int value in values) audioQuality.Items.Add(value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        audioQuality.SelectedItem = (mp3 ? mp3Bitrate : wavBitDepth).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        audioQualityLabel.Text = mp3 ? "Bitrate (kbps)" : "Bit depth (PCM)";
+        audioQuality.AccessibleName = mp3 ? "MP3 bitrate in kbps" : "WAV PCM bit depth (32-bit signed integer)";
+        audioQuality.SelectedItemChanged += AudioQuality_Changed;
+    }
+
+    private void AudioQuality_Changed(object? sender, EventArgs e)
+    {
+        if (!int.TryParse(audioQuality.SelectedItem?.ToString(), out int value)) return;
+        if (formatCombo.SelectedIndex == 1) mp3Bitrate = value;
+        else wavBitDepth = value;
+    }
 
     private void UpdateOptionAvailability()
     {
         outputDirectory.Enabled = saveCheck.Checked;
         folderButton.Enabled = saveCheck.Checked;
-        bitrateNumber.Enabled = formatCombo.SelectedIndex == 1;
         stretchConfigButton.Enabled = stretchCheck.Checked && !busy && !closing;
         stretchLabel.Text = stretchCheck.Checked && stretchSettings is not null
             ? $"Target: {stretchSettings.TargetBpm:0.##} BPM | Stretch {(stretchSettings.UseV2 ? "V2" : "V1")}"
@@ -80,6 +117,12 @@ public partial class YoutubeBrowserWindow
             ? "Saved files are the ORIGINAL converted audio. Stretch affects only the imported RAM AudioObj."
             : "Temporary disk space is required. Files are deleted after loading into RAM; stretch affects RAM only.";
     }
+
+    private ModularAudience.Ytdlp.YtdlpNetworkOptions CaptureNetworkOptions() => new()
+    {
+        IpVersion = (ModularAudience.Ytdlp.YtdlpIpVersion)ipVersionCombo.SelectedIndex,
+        ProxyUrl = proxyModeCombo.SelectedIndex switch { 1 => string.Empty, 2 => proxyText.Text.Trim(), _ => null }
+    };
 
     private void Folder_Click(object? sender, EventArgs e)
     {

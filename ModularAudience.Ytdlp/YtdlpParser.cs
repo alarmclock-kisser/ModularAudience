@@ -116,6 +116,8 @@ public static partial class YtdlpParser
             DurationSeconds = duration is >= 0 && double.IsFinite(duration.Value) ? duration : null,
             ThumbnailUrl = Thumbnail(entry),
             ViewCount = Integer(entry, "view_count"),
+            UploadDate = DateOnly.TryParseExact(Text(entry, "upload_date"), "yyyyMMdd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var uploaded) ? uploaded : null,
             Description = Text(entry, "description")
         };
     }
