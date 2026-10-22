@@ -311,6 +311,13 @@ namespace ModularAudience.Forms
 
         private void GlobalKeyChanged(Keys key, bool isDown)
         {
+            if (isDown && TextInputFocus.IsActive())
+            {
+                // The user is typing into a control, so the key must not trigger a
+                // hotkey like the syncer hotkeys.
+                return;
+            }
+
             HotkeyManager? manager = HotkeyManager.Instance;
             HotkeyCombo pausingHotkey = manager?.PausingSyncerHotkey ?? new HotkeyCombo { Key = Keys.ShiftKey, Modifiers = HotkeyModifiers.None };
             HotkeyCombo nudgingHotkey = manager?.NudgingSyncerHotkey ?? new HotkeyCombo { Key = Keys.CapsLock, Modifiers = HotkeyModifiers.None };

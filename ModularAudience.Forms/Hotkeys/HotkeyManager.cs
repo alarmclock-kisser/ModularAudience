@@ -505,6 +505,13 @@ namespace ModularAudience.Forms.Hotkeys
 
             this.PrunePressedKeys();
 
+            if (TextInputFocus.IsActive())
+            {
+                // The user is typing into a control, so the key belongs to that control
+                // and must not trigger a hotkey.
+                return false;
+            }
+
             string? hardwareId = this._deviceTracker.TakeKeyboardId(key);
             if (!string.IsNullOrEmpty(hardwareId))
             {
@@ -793,6 +800,12 @@ namespace ModularAudience.Forms.Hotkeys
         {
             if (delta == 0)
             {
+                return false;
+            }
+
+            if (TextInputFocus.IsActive())
+            {
+                // The wheel belongs to the focused input, for example a numeric field.
                 return false;
             }
 
