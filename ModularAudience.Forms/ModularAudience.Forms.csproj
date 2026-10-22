@@ -24,10 +24,7 @@
 
   <ItemGroup>
     <Content Include="ModularAudience_favicon.ico" />
-    <Content Include="appsettings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
+    <EmbeddedResource Include="appsettings.json" LogicalName="ModularAudience.Forms.appsettings.json" />
   </ItemGroup>
 
   <ItemGroup>
