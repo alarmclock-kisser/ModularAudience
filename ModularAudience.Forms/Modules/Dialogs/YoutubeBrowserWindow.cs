@@ -58,6 +58,7 @@ public partial class YoutubeBrowserWindow : Form
     private void Cancel_Click(object? sender, EventArgs e)
     {
         operationCancellation?.Cancel();
+        dateCancellation?.Cancel();
         cancelButton.Enabled = false;
         statusLabel.Text = "Cancelling; waiting for active processing and cleanup...";
     }
@@ -152,6 +153,7 @@ public partial class YoutubeBrowserWindow : Form
         if (closing) return;
         closing = true;
         operationCancellation?.Cancel();
+        dateCancellation?.Cancel();
         previewCancellation?.Cancel();
         RefreshAvailability();
         statusLabel.Text = "Closing; waiting for processing and temporary-file cleanup...";
@@ -159,6 +161,7 @@ public partial class YoutubeBrowserWindow : Form
         {
             await Task.Yield();
             await operation;
+            await Task.WhenAll(dateTasks.ToArray());
             await Task.WhenAll(previewTasks.ToArray());
         }
         catch (Exception error)
@@ -177,6 +180,7 @@ public partial class YoutubeBrowserWindow : Form
     {
         if (resourcesReleased) return;
         resourcesReleased = true;
+        dateCancellation?.Cancel();
         progressTimer?.Stop();
         operationClock.Stop();
         operationCancellation?.Cancel();

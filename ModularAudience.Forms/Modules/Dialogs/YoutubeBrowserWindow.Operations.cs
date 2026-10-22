@@ -11,7 +11,8 @@ public partial class YoutubeBrowserWindow
     private void StartOperation(string message, Func<CancellationToken, Task> action, bool isBatch = false)
     {
         if (busy || closing || IsDisposed || resourcesReleased) return;
-        client.NetworkOptions = CaptureNetworkOptions();
+        try { client.NetworkOptions = CaptureNetworkOptions(); }
+        catch (ArgumentException error) { ReportError("Invalid network settings", error); return; }
         busy = true;
         activeBatch = null;
         operationGeneration++;
@@ -116,6 +117,8 @@ public partial class YoutubeBrowserWindow
     private void Search(bool requirePlaylistUrl, bool forceSearch = false)
     {
         if (!binariesReady || busy || closing) return;
+        dateCancellation?.Cancel();
+        ++dateGeneration;
         string query = queryText.Text.Trim();
         int limit = (int)resultLimit.Value;
         StartOperation("Loading YouTube metadata...", async token =>
@@ -127,6 +130,7 @@ public partial class YoutubeBrowserWindow
                 : await client.SearchAsync(query, limit, token);
             token.ThrowIfCancellationRequested();
             PopulateResults(videos);
+            StartUploadDates(videos);
             browsingTabs.SelectedTab = resultsTab;
             AppendLog($"Loaded {videos.Count} result(s). Related results are searches, not personal recommendations.");
         });
@@ -172,7 +176,9 @@ public partial class YoutubeBrowserWindow
         if (busy || closing || !binariesReady) return;
         var videos = SelectedVideos();
         if (videos.Length == 0) return;
-        var options = CaptureDownloadOptions();
+        YtdlpDownloadOptions options;
+        try { options = CaptureDownloadOptions(); }
+        catch (ArgumentException error) { ReportError("Invalid download settings", error); return; }
         var cooldown = TimeSpan.FromSeconds((int)cooldownSeconds.Value);
         var stretch = stretchCheck.Checked ? stretchSettings : null;
         int maxParallel = (int)maxParallelDownloadsNumber.Value;
@@ -193,9 +199,9 @@ public partial class YoutubeBrowserWindow
     };
 
     private async Task ImportBatchAsync(YtdlpVideo[] videos, YtdlpDownloadOptions options,
-        TimeSpan cooldown, PlaylistStretchSettings? stretch, int maxParallel, CancellationToken token)
+        TimeSpan cooldown, PlaylistStretchSettings? stretch, int maxParallel, CancellationToken token, DownloadJob[]? retryJobs = null)
     {
-        var batch = InitializeBatch(videos);
+        var batch = InitializeRetryBatch(videos, retryJobs);
         using var importGate = new SemaphoreSlim(1, 1);
         bool recoveryShown = false, recoveryRetried = false;
         try
@@ -241,6 +247,10 @@ public partial class YoutubeBrowserWindow
     private async Task RunImportJobAsync(DownloadBatch batch, DownloadJob job, YtdlpDownloadOptions options,
         TimeSpan cooldown, PlaylistStretchSettings? stretch, SemaphoreSlim importGate, CancellationToken token)
     {
+        using var jobCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+        job.Cancellation = jobCancellation;
+        if (job.CancelRequested) jobCancellation.Cancel();
+        token = jobCancellation.Token;
         job.Started = true;
         job.Clock.Start();
         job.NetworkStage = true;
@@ -256,11 +266,11 @@ public partial class YoutubeBrowserWindow
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
             job.Status = "Cancelled";
-            throw;
         }
         catch (Exception error) { RecordJobFailure(job, error); }
         finally
         {
+            job.Cancellation = null;
             CompleteJob(job, job.Status);
             RefreshBatchProgress(batch);
         }

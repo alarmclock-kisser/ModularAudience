@@ -64,12 +64,11 @@ namespace ModularAudience.Audio.Tests
             else
                 GetControl<NumericUpDown>(dialog, controlName).Value += 2;
 
-            AssertIdleWithoutAnalysis(dialog);
-            Assert.AreEqual("Settings changed. Detect sources again before separating.", GetControl<Label>(dialog, "label_status").Text,
-                "Changing settings must clearly invalidate the cached model.");
             if (controlName == "comboBox_windowSize")
                 Assert.AreEqual("128 samples (fixed)", GetControl<Label>(dialog, "label_hopSizeValue").Text,
                     "The FFT selection event must safely update the fixed hop size.");
+
+            AssertAnalysisRetainedButIncompatible(dialog, analysis);
         }
 
         [STATestMethod]
@@ -91,10 +90,8 @@ namespace ModularAudience.Audio.Tests
             Assert.IsTrue(GetControl<CheckBox>(dialog, "checkBox_cqtSynthesis").Enabled, "CQT synthesis must be enabled.");
             Assert.IsTrue(GetControl<CheckBox>(dialog, "checkBox_ilrma").Enabled, "ILRMA must be enabled.");
 
-            DomainUpDown ensemble = GetControl<DomainUpDown>(dialog, "domainUpDown_ensembleMode");
-            Assert.AreEqual("Automatic", ensemble.Text, "The ensemble mode must default to Automatic.");
-            CollectionAssert.AreEqual(new object[] { "Automatic", "ProfilesOnly", "ProfilesAndAutomatic" }, ensemble.Items.Cast<object>().ToArray(),
-                "The ensemble selector must expose exactly the three supported modes.");
+            CheckBox automatic = GetControl<CheckBox>(dialog, "checkBox_addAutomaticProfiles");
+            Assert.IsTrue(automatic.Checked, "Automatic profiles must be enabled by default.");
 
             CheckedListBox profiles = GetControl<CheckedListBox>(dialog, "checkedListBox_profiles");
             Assert.AreEqual(16, profiles.Items.Count, "All 16 catalog instrument profiles must be listed for selection.");
@@ -116,15 +113,15 @@ namespace ModularAudience.Audio.Tests
             using DeterministicSeparationDialog dialog = new(source);
             ConfigureSmallAnalysis(dialog);
 
-            GetControl<DomainUpDown>(dialog, "domainUpDown_ensembleMode").Text = "ProfilesOnly";
+            GetControl<CheckBox>(dialog, "checkBox_addAutomaticProfiles").Checked = false;
             CheckedListBox profiles = GetControl<CheckedListBox>(dialog, "checkedListBox_profiles");
             profiles.SetItemChecked(0, true);
             DeterministicSeparationSettings guided = (DeterministicSeparationSettings)Invoke(dialog, "ReadSettings")!;
             Assert.AreEqual(InstrumentEnsembleMode.ProfilesOnly, guided.EnsembleMode);
             Assert.AreEqual(1, guided.InstrumentProfiles.Length, "A checked profile must be readable as an immutable selection.");
 
-            // Seed the cached analysis from the default Automatic settings (the only connected pipeline path).
-            GetControl<DomainUpDown>(dialog, "domainUpDown_ensembleMode").Text = "Automatic";
+            // Seed the cached analysis from the default Automatic settings.
+            GetControl<CheckBox>(dialog, "checkBox_addAutomaticProfiles").Checked = true;
             profiles.SetItemChecked(0, false);
             DeterministicSeparationSettings baseline = (DeterministicSeparationSettings)Invoke(dialog, "ReadSettings")!;
             baseline.Validate();
@@ -135,14 +132,11 @@ namespace ModularAudience.Audio.Tests
             Assert.IsTrue(GetControl<Button>(dialog, "button_separate").Enabled, "The seeded current analysis must enable separation.");
 
             profiles.SetItemChecked(1, true);
-            AssertIdleWithoutAnalysis(dialog);
-            Assert.AreEqual("Instrument profile selection changed. Detect sources again before separating.", GetControl<Label>(dialog, "label_status").Text,
-                "Changing the committed profile selection must invalidate the cached model.");
+            AssertAnalysisRetainedButIncompatible(dialog, analysis);
 
-            GetControl<DomainUpDown>(dialog, "domainUpDown_ensembleMode").Text = "ProfilesAndAutomatic";
-            AssertIdleWithoutAnalysis(dialog);
-            Assert.AreEqual("Settings changed. Detect sources again before separating.", GetControl<Label>(dialog, "label_status").Text,
-                "Changing the ensemble mode must invalidate the cached model.");
+            GetControl<CheckBox>(dialog, "checkBox_addAutomaticProfiles").Checked = false;
+            profiles.SetItemChecked(1, true);
+            AssertAnalysisRetainedButIncompatible(dialog, analysis);
         }
 
         [STATestMethod]
@@ -153,7 +147,7 @@ namespace ModularAudience.Audio.Tests
             AudioObj source = scope.Create([0.25f, -0.125f], 8000);
             using DeterministicSeparationDialog dialog = new(source);
 
-            GetControl<DomainUpDown>(dialog, "domainUpDown_ensembleMode").Text = "ProfilesOnly";
+            GetControl<CheckBox>(dialog, "checkBox_addAutomaticProfiles").Checked = false;
             CheckedListBox profiles = GetControl<CheckedListBox>(dialog, "checkedListBox_profiles");
             profiles.SetItemChecked(2, true);
             profiles.SetItemChecked(0, true);
@@ -225,6 +219,17 @@ namespace ModularAudience.Audio.Tests
             Assert.AreEqual(0, grid.Rows.Count, "An invalidated or new dialog must not retain source rows.");
             Assert.IsFalse(grid.Enabled, "Source selection must be disabled without a current analysis.");
             Assert.AreEqual(0, GetControl<ProgressBar>(dialog, "progressBar_operation").Value, "Idle progress must be reset.");
+        }
+
+        private static void AssertAnalysisRetainedButIncompatible(DeterministicSeparationDialog dialog, DeterministicSeparationAnalysis analysis)
+        {
+            Assert.AreSame(analysis, GetField(dialog, "analysis").GetValue(dialog), "Keep the detected model available for restoring settings.");
+            Assert.IsFalse(GetControl<Button>(dialog, "button_separate").Enabled, "An incompatible model must never be separated.");
+            Assert.IsTrue(GetControl<Button>(dialog, "button_restoreSettings").Enabled);
+            Assert.AreEqual("Settings differ from the current analysis. Restore detection settings or detect sources again.",
+                GetControl<Label>(dialog, "label_status").Text);
+            Invoke(dialog, "button_restoreSettings_Click", null!, EventArgs.Empty);
+            Assert.IsTrue(GetControl<Button>(dialog, "button_separate").Enabled, "Restoring compatible settings must enable the retained model.");
         }
 
         private static void ConfigureSmallAnalysis(DeterministicSeparationDialog dialog)
@@ -334,7 +339,10 @@ namespace ModularAudience.Audio.Tests
         {
             MethodInfo? method = instance.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.IsNotNull(method, $"Expected instance method {name} on {instance.GetType().Name}.");
-            return method.Invoke(instance, arguments);
+            var parameters = method.GetParameters();
+            var supplied = parameters.Select((parameter, index) =>
+                index < arguments.Length ? arguments[index] : parameter.DefaultValue).ToArray();
+            return method.Invoke(instance, supplied);
         }
     }
 }

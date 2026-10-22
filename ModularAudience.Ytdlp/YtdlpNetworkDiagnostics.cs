@@ -11,6 +11,10 @@ public static partial class YtdlpNetworkDiagnostics
 
     public static async Task<string> InspectAsync(string error, IReadOnlyList<string> arguments, CancellationToken token)
     {
+        if (YtdlpProcessException.Classify(error) == YtdlpFailureKind.NameResolution)
+            return "Network diagnosis: DNS/address resolution failed before HTTPS or audio download. " + DescribeRoute(arguments) +
+                " Forced IPv6 requires a usable IPv6 DNS/network route. Try Automatic or an explicitly confirmed IPv4 recovery; " +
+                "if resolution still fails, check DNS and the authorized proxy/network. Cookies and disabling TLS verification cannot repair DNS. No settings were changed.";
         if (error.Contains("CERTIFICATE_VERIFY_FAILED", StringComparison.OrdinalIgnoreCase))
             return "Network diagnosis: TLS certificate-chain verification failed before media download. " +
                 "Check the certificate chain and any authorized HTTPS inspection/proxy with your administrator. " +

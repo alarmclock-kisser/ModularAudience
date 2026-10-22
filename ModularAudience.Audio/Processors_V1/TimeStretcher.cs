@@ -49,7 +49,7 @@ namespace ModularAudience.Audio.Processors_V1
                             adjustBpm: true);
             }
 
-                    if (factor >= 1.5)
+                    if (factor >= 1.5 || factor < 1.0)
             {
                         return await TimeStretchSlowAsync(
                     obj,

@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace ModularAudience.Ytdlp;
 
-public sealed class YtdlpClient
+public sealed partial class YtdlpClient
 {
     private const string OutputPathPrefix = "__MA_OUTPUT__:";
     private readonly YtdlpBinaryManager manager;

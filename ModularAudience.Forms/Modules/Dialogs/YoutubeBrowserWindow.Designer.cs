@@ -95,10 +95,7 @@ partial class YoutubeBrowserWindow
         AcceptButton = searchButton;
         Shown += Window_Shown;
         FormClosing += Window_FormClosing;
-        var viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
-        viewport.Layout += (_, _) => rootLayout.MinimumSize = new Size(0, viewport.ClientSize.Height);
-        viewport.Controls.Add(rootLayout);
-        Controls.Add(viewport);
+        Controls.Add(rootLayout);
         ResumeLayout(true);
     }
 
@@ -106,8 +103,8 @@ partial class YoutubeBrowserWindow
     {
         rootLayout = new TableLayoutPanel
         {
-            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Size = new Size(1180, 820), Padding = new Padding(12), ColumnCount = 1, RowCount = 7
+            Dock = DockStyle.Fill, AutoSize = false,
+            Size = new Size(1180, 820), Padding = new Padding(8), ColumnCount = 1, RowCount = 7
         };
         rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -115,12 +112,12 @@ partial class YoutubeBrowserWindow
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         var notice = new Label
         {
-            AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(0, 0, 0, 8),
-            Text = "YOUTUBE AUDIO LIBRARY\nDownload only authorized content. Browser sessions require explicit consent; no DRM or access-control bypass."
+            AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(0, 0, 0, 3),
+            Text = "YouTube Browser — Authorized content only. Browser sessions require consent; no DRM or access-control bypass."
         };
         rootLayout.Controls.Add(notice, 0, 0);
     }
@@ -133,18 +130,19 @@ partial class YoutubeBrowserWindow
         queryText = new TextBox
         {
             Dock = DockStyle.Fill, PlaceholderText = "Search words or an HTTPS YouTube video / playlist URL",
-            MaxLength = 4096, AccessibleName = "YouTube search words or URL", Margin = new Padding(0, 5, 6, 8)
+            MaxLength = 4096, AccessibleName = "YouTube search words or URL", Margin = new Padding(0, 3, 6, 3)
         };
         resultLimit = new NumericUpDown
         {
             Minimum = 1, Maximum = 200, Value = 30, Width = 64,
-            AccessibleName = "Maximum results (1 to 200)", Margin = new Padding(3, 5, 6, 8)
+            AccessibleName = "Maximum results (1 to 200)", Margin = new Padding(3, 3, 6, 3)
         };
         var limitPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
         limitPanel.Controls.Add(new Label { Text = "Results", AutoSize = true, Margin = new Padding(3, 8, 0, 0) });
         limitPanel.Controls.Add(resultLimit);
         searchButton = DesignerButton("Search");
-        playlistButton = DesignerButton("Open playlist URL");
+        playlistButton = DesignerButton("Open URL");
+        playlistButton.AccessibleName = "Open YouTube video or playlist URL";
         queryPanel.Controls.Add(queryText, 0, 0);
         queryPanel.Controls.Add(limitPanel, 1, 0);
         queryPanel.Controls.Add(searchButton, 2, 0);
@@ -161,9 +159,10 @@ partial class YoutubeBrowserWindow
         {
             Dock = DockStyle.Fill, Size = new Size(1156, 340), SplitterWidth = 6,
             SplitterDistance = 760, Panel1MinSize = 420, Panel2MinSize = 270,
-            Margin = new Padding(0, 0, 0, 8)
+            Margin = new Padding(0, 0, 0, 4)
         };
         var listLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        listLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         listLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         listLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         resultsList = new ListView
@@ -171,7 +170,7 @@ partial class YoutubeBrowserWindow
             Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = true,
             HideSelection = false, GridLines = true, AllowColumnReorder = true,
             AccessibleName = "YouTube search results", UseCompatibleStateImageBehavior = false,
-            Margin = Padding.Empty
+            Margin = Padding.Empty, ShowItemToolTips = true
         };
         resultsList.Columns.AddRange([
             new ColumnHeader { Text = "Title", Width = 320 }, new ColumnHeader { Text = "Uploader", Width = 160 },
@@ -192,11 +191,13 @@ partial class YoutubeBrowserWindow
         resultsList.SelectedIndexChanged += Selection_Changed;
         resultsList.DoubleClick += Open_Click;
         resultsList.ColumnWidthChanging += Column_WidthChanging;
+        resultsList.ColumnWidthChanged += ResultsColumn_WidthChanged;
+        resultsList.ClientSizeChanged += ResultList_SizeChanged;
         resultsList.ColumnClick += Column_Click;
         browsingTabs = new TabControl
         {
             Name = "browsingTabs", Dock = DockStyle.Fill, AccessibleName = "YouTube results and downloads",
-            Size = new Size(1156, 340), MinimumSize = new Size(0, 260), Margin = new Padding(0, 0, 0, 8)
+            Size = new Size(1156, 340), Margin = new Padding(0, 0, 0, 4)
         };
         resultsTab = new TabPage { Name = "resultsTab", Text = "Results", Size = new Size(1148, 312), UseVisualStyleBackColor = true };
         downloadsTab = new TabPage { Name = "downloadsTab", Text = "Downloads", Size = new Size(1148, 312), UseVisualStyleBackColor = true };
@@ -221,7 +222,7 @@ partial class YoutubeBrowserWindow
         {
             Name = "downloadJobsList", AccessibleName = "Download jobs", Dock = DockStyle.Fill,
             View = View.Details, OwnerDraw = true, FullRowSelect = true, HideSelection = false,
-            MultiSelect = false, UseCompatibleStateImageBehavior = false, Margin = Padding.Empty
+            MultiSelect = true, UseCompatibleStateImageBehavior = false, Margin = Padding.Empty
         };
         downloadJobsList.Columns.AddRange([
             new ColumnHeader { Text = "Title", Width = 320 }, new ColumnHeader { Text = "Phase", Width = 190 },
@@ -231,6 +232,8 @@ partial class YoutubeBrowserWindow
         downloadJobsList.DrawColumnHeader += JobList_DrawColumnHeader;
         downloadJobsList.DrawItem += JobList_DrawItem;
         downloadJobsList.DrawSubItem += JobList_DrawSubItem;
+        downloadJobsList.ClientSizeChanged += JobList_SizeChanged;
+        InitializeDownloadJobsMenu();
         layout.Controls.Add(notice, 0, 0);
         layout.Controls.Add(downloadJobsList, 0, 1);
         downloadsTab.Controls.Add(layout);
@@ -241,8 +244,8 @@ partial class YoutubeBrowserWindow
         detailsLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
         detailsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         detailsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        detailsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 35));
-        detailsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 65));
+        detailsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 5));
+        detailsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 95));
         detailsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         thumbnailCheck = new CheckBox { Text = "Show selected-video thumbnail", Checked = true, AutoSize = true };
         thumbnailPicture = new PictureBox
@@ -250,7 +253,7 @@ partial class YoutubeBrowserWindow
             Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = SystemColors.ControlLight,
             AccessibleName = "Selected video thumbnail", TabStop = false
         };
-        metadataButton = DesignerButton("Load full metadata");
+        metadataButton = DesignerButton("Full metadata");
         metadataButton.AccessibleName = "Load upload date and full metadata for the selected video";
         metadataButton.Click += Metadata_Click;
         descriptionText = new TextBox
@@ -316,10 +319,10 @@ partial class YoutubeBrowserWindow
         AddDesignerField(numbers, "Format", formatCombo);
         numbers.Controls.Add(audioQualityLabel);
         numbers.Controls.Add(audioQuality);
-        AddDesignerField(numbers, "Cooldown (s)", cooldownSeconds);
-        AddDesignerField(numbers, "Max minutes", maxDurationMinutes);
-        AddDesignerField(numbers, "Max MiB", maxSizeMiB);
-        AddDesignerField(numbers, "Max parallel downloads", maxParallelDownloadsNumber);
+        AddDesignerField(numbers, "Wait (s)", cooldownSeconds);
+        AddDesignerField(numbers, "Minutes", maxDurationMinutes);
+        AddDesignerField(numbers, "MiB", maxSizeMiB);
+        AddDesignerField(numbers, "Parallel", maxParallelDownloadsNumber);
         layout.Controls.Add(numbers, 0, 0);
         InitializeDirectoryRow(layout);
         InitializeStretchRow(layout);
@@ -348,7 +351,35 @@ partial class YoutubeBrowserWindow
         AddDesignerField(row, "Network", ipVersionCombo);
         AddDesignerField(row, "Proxy", proxyModeCombo);
         row.Controls.Add(proxyText);
+        var resetNetwork = DesignerButton("Reset network");
+        resetNetwork.Click += ResetNetwork_Click;
+        row.Controls.Add(resetNetwork);
         parent.Controls.Add(row, 0, 3);
+    }
+
+    private void InitializeDownloadJobsMenu()
+    {
+        var menu = new ContextMenuStrip(components);
+        var cancel = new ToolStripMenuItem("Cancel selected", null, CancelJobs_Click);
+        var retry = new ToolStripMenuItem("Retry selected", null, RetryJobs_Click);
+        var delete = new ToolStripMenuItem("Delete selected", null, DeleteJobs_Click);
+        menu.Items.AddRange([cancel, retry, delete]);
+        menu.Opening += (_, _) =>
+        {
+            var jobs = SelectedDownloadJobs();
+            cancel.Enabled = jobs.Any(job => !job.Terminal && !job.HandedOff && !job.CancelRequested) && !closing;
+            retry.Enabled = !busy && !closing && binariesReady && jobs.Any(CanRetryJob);
+            delete.Enabled = !closing && jobs.Any(job => job.Terminal);
+        };
+        downloadJobsList.ContextMenuStrip = menu;
+        downloadJobsList.MouseDown += (_, e) =>
+        {
+            if (e.Button != MouseButtons.Right) return;
+            var item = downloadJobsList.GetItemAt(e.X, e.Y);
+            if (item is null || item.Selected) return;
+            downloadJobsList.SelectedItems.Clear();
+            item.Selected = true;
+        };
     }
 
     private void InitializeDirectoryRow(TableLayoutPanel parent)
@@ -383,14 +414,14 @@ partial class YoutubeBrowserWindow
     private void InitializeActionPanel()
     {
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Margin = new Padding(0, 3, 0, 3) };
-        downloadButton = DesignerButton("Download + import selected");
-        openButton = DesignerButton("Open browser");
+        downloadButton = DesignerButton("Download + import");
+        openButton = DesignerButton("Browser");
         copyButton = DesignerButton("Copy URL(s)");
-        relatedButton = DesignerButton("Related search (title + uploader)");
-        uploaderButton = DesignerButton("More by uploader (search)");
+        relatedButton = DesignerButton("Related search");
+        uploaderButton = DesignerButton("Uploader search");
         var columnButton = DesignerButton("Columns...");
-        updateButton = DesignerButton("Check / retry updates");
-        cancelButton = DesignerButton("Cancel operation");
+        updateButton = DesignerButton("Update tools");
+        cancelButton = DesignerButton("Cancel");
         actions.Controls.AddRange([downloadButton, openButton, copyButton, relatedButton,
             uploaderButton, columnButton, updateButton, cancelButton]);
         downloadButton.Click += Download_Click;
@@ -412,10 +443,10 @@ partial class YoutubeBrowserWindow
             BackColor = SystemColors.Window, AccessibleName = "Bounded YouTube operation activity log"
         };
         rootLayout.Controls.Add(activityLog, 0, 5);
-        var status = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2, RowCount = 3 };
+        var status = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 3, RowCount = 2 };
         status.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         status.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        status.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        status.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         status.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         status.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         statusLabel = new Label
@@ -433,7 +464,7 @@ partial class YoutubeBrowserWindow
             Name = "batchProgressLabel", Text = "No active batch", AutoSize = true,
             Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AccessibleName = "Batch progress"
         };
-        var timing = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
+        var timing = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false, MinimumSize = new Size(230, 27) };
         elapsedLabel = new Label
         {
             Name = "elapsedLabel", Text = "Elapsed: 00:00:00", AutoSize = true, AccessibleName = "Batch elapsed time"
@@ -444,11 +475,10 @@ partial class YoutubeBrowserWindow
         };
         timing.Controls.AddRange([elapsedLabel, etaLabel]);
         status.Controls.Add(statusLabel, 0, 0);
-        status.SetColumnSpan(statusLabel, 2);
+        status.SetColumnSpan(statusLabel, 3);
         status.Controls.Add(operationProgress, 0, 1);
         status.Controls.Add(batchProgressLabel, 1, 1);
-        status.Controls.Add(timing, 0, 2);
-        status.SetColumnSpan(timing, 2);
+        status.Controls.Add(timing, 2, 1);
         progressTimer = new System.Windows.Forms.Timer(components!) { Interval = 500 };
         progressTimer.Tick += ProgressTimer_Tick;
         rootLayout.Controls.Add(status, 0, 6);
@@ -457,7 +487,7 @@ partial class YoutubeBrowserWindow
     private static Button DesignerButton(string text) => new()
     {
         Text = text, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        Padding = new Padding(5, 3, 5, 3), UseVisualStyleBackColor = true
+        Padding = new Padding(3, 1, 3, 1), UseVisualStyleBackColor = true
     };
 
     private static NumericUpDown DesignerNumber(int minimum, int maximum, int value, string accessibleName) => new()

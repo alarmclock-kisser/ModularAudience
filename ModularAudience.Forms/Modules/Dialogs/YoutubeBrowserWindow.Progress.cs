@@ -27,6 +27,8 @@ public partial class YoutubeBrowserWindow
         public bool HandedOff { get; set; }
         public Exception? Error { get; set; }
         public int Attempt { get; set; }
+        public bool CancelRequested { get; set; }
+        public CancellationTokenSource? Cancellation { get; set; }
         public TimeSpan? CooldownDeadline { get; set; }
         public string? LastLog { get; set; }
         public long LastLogTimestamp { get; set; }
@@ -41,14 +43,17 @@ public partial class YoutubeBrowserWindow
         public bool Settled { get; set; }
     }
 
-    private DownloadBatch InitializeBatch(YtdlpVideo[] videos)
+    private DownloadBatch InitializeBatch(YtdlpVideo[] videos) => InitializeRetryBatch(videos, null);
+
+    private DownloadBatch InitializeRetryBatch(YtdlpVideo[] videos, DownloadJob[]? retryJobs)
     {
-        var jobs = new DownloadJob[videos.Length];
+        var jobs = retryJobs ?? new DownloadJob[videos.Length];
         downloadJobsList.BeginUpdate();
         try
         {
-            downloadJobsList.Items.Clear();
-            for (int index = 0; index < videos.Length; index++)
+            if (retryJobs is not null)
+                foreach (var job in retryJobs) ResetForRecovery(job);
+            for (int index = 0; retryJobs is null && index < videos.Length; index++)
             {
                 var row = new ListViewItem(videos[index].Title);
                 row.SubItems.AddRange(["Queued", "Unknown", "--", "Unknown", "--"]);

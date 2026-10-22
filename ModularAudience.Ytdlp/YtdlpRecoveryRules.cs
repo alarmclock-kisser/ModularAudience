@@ -13,7 +13,7 @@ public static class YtdlpRecoveryRules
     {
         YtdlpRecoveryAction.RetrySameSettings => kind is YtdlpFailureKind.TransientNetwork or YtdlpFailureKind.ConnectionRefused,
         YtdlpRecoveryAction.SystemCertificateTrust => kind == YtdlpFailureKind.Certificate && !options.Network.UseSystemCertificateTrust,
-        YtdlpRecoveryAction.IPv4 => kind == YtdlpFailureKind.ConnectionRefused && options.Network.IpVersion != YtdlpIpVersion.IPv4,
+        YtdlpRecoveryAction.IPv4 => kind is (YtdlpFailureKind.ConnectionRefused or YtdlpFailureKind.NameResolution) && options.Network.IpVersion != YtdlpIpVersion.IPv4,
         YtdlpRecoveryAction.BrowserSession => kind == YtdlpFailureKind.Authentication && options.BrowserSession is null,
         _ => false
     };

@@ -76,7 +76,7 @@ public partial class YoutubeBrowserWindow
                 .Select(job => $"{job.Video.Title} [{job.Video.Id}]\r\n{job.Error}"));
         var decision = RequestRecovery(errors, options, diagnostics, token);
         if (decision is null) return (true, false);
-        var eligible = candidates.Where(job => YtdlpRecoveryRules.CanApply(
+        var eligible = candidates.Where(job => job.Row.ListView is not null && !job.CancelRequested && YtdlpRecoveryRules.CanApply(
             (YtdlpProcessException)job.Error!, decision.Action, options)).ToArray();
         if (eligible.Length == 0) return (true, false);
         var recovered = YtdlpRecoveryRules.Apply(((YtdlpProcessException)eligible[0].Error!).FailureKind, decision, options);
@@ -100,11 +100,13 @@ public partial class YoutubeBrowserWindow
     }
 
     private static DownloadJob[] RecoverableJobs(DownloadBatch batch) => batch.Jobs
-        .Where(job => job.Terminal && !job.HandedOff && job.Error is YtdlpProcessException).ToArray();
+        .Where(job => job.Terminal && !job.HandedOff && !job.CancelRequested && job.Error is YtdlpProcessException).ToArray();
 
     private void ResetForRecovery(DownloadJob job)
     {
         job.Attempt++;
+        job.CancelRequested = false;
+        job.Clock.Reset();
         job.Terminal = false;
         job.Error = null;
         job.Latest = null;

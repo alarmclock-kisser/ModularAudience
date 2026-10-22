@@ -93,7 +93,7 @@ public partial class YoutubeBrowserWindow
         int[] values = mp3 ? [64, 96, 128, 192, 256, 320] : [8, 16, 24, 32];
         foreach (int value in values) audioQuality.Items.Add(value.ToString(System.Globalization.CultureInfo.InvariantCulture));
         audioQuality.SelectedItem = (mp3 ? mp3Bitrate : wavBitDepth).ToString(System.Globalization.CultureInfo.InvariantCulture);
-        audioQualityLabel.Text = mp3 ? "Bitrate (kbps)" : "Bit depth (PCM)";
+        audioQualityLabel.Text = mp3 ? "kbps" : "PCM bits";
         audioQuality.AccessibleName = mp3 ? "MP3 bitrate in kbps" : "WAV PCM bit depth (32-bit signed integer)";
         audioQuality.SelectedItemChanged += AudioQuality_Changed;
     }
@@ -118,11 +118,26 @@ public partial class YoutubeBrowserWindow
             : "Temporary disk space is required. Files are deleted after loading into RAM; stretch affects RAM only.";
     }
 
-    private ModularAudience.Ytdlp.YtdlpNetworkOptions CaptureNetworkOptions() => new()
+    private ModularAudience.Ytdlp.YtdlpNetworkOptions CaptureNetworkOptions()
     {
-        IpVersion = (ModularAudience.Ytdlp.YtdlpIpVersion)ipVersionCombo.SelectedIndex,
-        ProxyUrl = proxyModeCombo.SelectedIndex switch { 1 => string.Empty, 2 => proxyText.Text.Trim(), _ => null }
-    };
+        if (proxyModeCombo.SelectedIndex == 2 && string.IsNullOrWhiteSpace(proxyText.Text))
+            throw new ArgumentException("Enter an HTTP(S) proxy URL or select Environment / default. An explicit proxy cannot be empty.");
+        var options = new ModularAudience.Ytdlp.YtdlpNetworkOptions
+        {
+            IpVersion = (ModularAudience.Ytdlp.YtdlpIpVersion)ipVersionCombo.SelectedIndex,
+            ProxyUrl = proxyModeCombo.SelectedIndex switch { 1 => string.Empty, 2 => proxyText.Text.Trim(), _ => null }
+        };
+        options.Validate();
+        return options;
+    }
+
+    private void ResetNetwork_Click(object? sender, EventArgs e)
+    {
+        ipVersionCombo.SelectedIndex = 0;
+        proxyModeCombo.SelectedIndex = 0;
+        proxyText.Clear();
+        AppendLog("Network reset: automatic IP selection and environment/default proxy routing. TLS verification remains enabled.");
+    }
 
     private void Folder_Click(object? sender, EventArgs e)
     {
@@ -177,12 +192,12 @@ public partial class YoutubeBrowserWindow
 
     private void ApplyColumns()
     {
-        for (int index = 0; index < columnMenuItems.Length; index++)
-            resultsList.Columns[index].Width = columnMenuItems[index].Checked ? columnWidths[index] : 0;
+        FitResultColumns();
     }
 
     private void Column_WidthChanging(object? sender, ColumnWidthChangingEventArgs e)
     {
+        if (fittingColumns) return;
         if (!columnMenuItems[e.ColumnIndex].Checked)
         {
             e.Cancel = true;

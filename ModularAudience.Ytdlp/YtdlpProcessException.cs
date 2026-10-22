@@ -4,7 +4,7 @@ namespace ModularAudience.Ytdlp;
 
 public enum YtdlpFailureKind
 {
-    Unknown, TransientNetwork, ConnectionRefused, Certificate, Authentication, RateLimited, AccessDenied, BrowserCookies
+    Unknown, TransientNetwork, ConnectionRefused, Certificate, Authentication, RateLimited, AccessDenied, BrowserCookies, NameResolution
 }
 
 public sealed class YtdlpProcessException : InvalidOperationException
@@ -49,6 +49,7 @@ public sealed class YtdlpProcessException : InvalidOperationException
         if (Has("DRM", "members-only", "members only", "not available in your country", "copyright", "video is private")) return YtdlpFailureKind.AccessDenied;
         if (Has("sign in", "login required", "log in", "authentication required", "use --cookies")) return YtdlpFailureKind.Authentication;
         if (Has("10061", "connection refused")) return YtdlpFailureKind.ConnectionRefused;
+        if (Has("getaddrinfo failed", "Failed to resolve", "Name or service not known", "Temporary failure in name resolution")) return YtdlpFailureKind.NameResolution;
         if (Has("HTTP Error 502", "HTTP Error 503", "HTTP Error 504", "timed out", "connection reset")) return YtdlpFailureKind.TransientNetwork;
         return YtdlpFailureKind.Unknown;
     }

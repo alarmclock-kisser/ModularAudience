@@ -510,7 +510,7 @@ namespace ModularAudience.Audio.Processors_V3
                 channels,
                 coarseAbsoluteFrame,
                 sampleRate);
-            double fineRelativeFrame = fineAbsoluteFrame - trimStartFrame;
+            double fineRelativeFrame = Math.Max(0, fineAbsoluteFrame - trimStartFrame);
             return Math.Abs(fineRelativeFrame - expectedRelativeFrame) <= maximumOffsetFrames
                 ? fineRelativeFrame
                 : valleyFrame;
@@ -519,7 +519,7 @@ namespace ModularAudience.Audio.Processors_V3
         private static long FindSampleAccurateValley(float[] data, int channels, long centerFrame, int sampleRate)
         {
             int totalFrames = data.Length / Math.Max(1, channels);
-            int radius = Math.Max(1, (int)Math.Round(sampleRate * 0.006));
+            int radius = Math.Max(1, (int)Math.Round(sampleRate * 0.016));
             int window = Math.Max(1, (int)Math.Round(sampleRate * 0.002));
             int halfWindow = window / 2;
             int first = (int)Math.Clamp(centerFrame - radius, halfWindow, totalFrames - window + halfWindow - 1L);
@@ -617,7 +617,8 @@ namespace ModularAudience.Audio.Processors_V3
                 index >= localStart;
                 index--)
             {
-                if (envelope[index] > envelope[index + 1])
+                if (envelope[index] > bestEnergy + 0.01f || envelope[index] > envelope[index + 1] ||
+                    (index > localStart && envelope[index - 1] < envelope[index]))
                 {
                     continue;
                 }
