@@ -32,10 +32,10 @@ public partial class YoutubeBrowserWindow
         RefreshOperationTiming();
         progressTimer.Start();
         RefreshAvailability();
-        operation = ExecuteOperationAsync(action, source);
+        operation = ExecuteOperationAsync(action, source, isBatch);
     }
 
-    private async Task ExecuteOperationAsync(Func<CancellationToken, Task> action, CancellationTokenSource source)
+    private async Task ExecuteOperationAsync(Func<CancellationToken, Task> action, CancellationTokenSource source, bool isBatch)
     {
         await Task.Yield();
         try
@@ -44,9 +44,12 @@ public partial class YoutubeBrowserWindow
             if (proxyModeCombo.SelectedIndex == 2 && string.IsNullOrWhiteSpace(proxyText.Text))
                 throw new ArgumentException("Enter an explicit proxy URL or choose another proxy mode.");
             client.NetworkOptions.Validate();
-            await action(source.Token);
+            bool succeeded = true;
+            if (isBatch) await action(source.Token);
+            else succeeded = await ExecuteWithRecoveryAsync(action, source.Token);
             if (!IsDisposed && !resourcesReleased)
-                statusLabel.Text = activeBatch?.Jobs.Any(job => job.Error is not null) == true
+                statusLabel.Text = !succeeded ? "Operation failed; recovery was not applied. See the diagnostics." :
+                    activeBatch?.Jobs.Any(job => job.Error is not null) == true
                     ? "Batch finished with errors. See the activity log." : "Ready.";
         }
         catch (OperationCanceledException) when (source.IsCancellationRequested)
@@ -92,13 +95,16 @@ public partial class YoutubeBrowserWindow
     {
         long now = Environment.TickCount64;
         long previous = Interlocked.Read(ref lastProgressTick);
-        if (now - previous < 300 && !text.StartsWith("Warning:", StringComparison.OrdinalIgnoreCase)) return;
+        if (now - previous < 300 && !text.StartsWith("Warning:", StringComparison.OrdinalIgnoreCase) &&
+            !text.StartsWith(YtdlpRetryPolicy.ProgressPrefix, StringComparison.Ordinal)) return;
         Interlocked.Exchange(ref lastProgressTick, now);
         currentProgress?.Report(text);
     }
 
     private void ShowProgress(string text)
     {
+        if (text.StartsWith(YtdlpRetryPolicy.ProgressPrefix, StringComparison.Ordinal))
+            text = text[YtdlpRetryPolicy.ProgressPrefix.Length..];
         string line = text.Replace('\r', ' ').Replace('\n', ' ');
         statusLabel.Text = line.Length > 240 ? line[..240] : line;
         if (!(line.StartsWith("Downloading ", StringComparison.Ordinal) && line.EndsWith(" MB", StringComparison.Ordinal)))
@@ -191,11 +197,12 @@ public partial class YoutubeBrowserWindow
     {
         var batch = InitializeBatch(videos);
         using var importGate = new SemaphoreSlim(1, 1);
+        bool recoveryShown = false, recoveryRetried = false;
         try
         {
             ValidateBatchOutput(options);
-            await YtdlpBatchRunner.RunAsync(batch.Jobs, maxParallel,
-                (job, workerToken) => RunImportJobAsync(batch, job, options, cooldown, stretch, importGate, workerToken), token);
+            await RunBatchPassAsync(batch, batch.Jobs, options, cooldown, stretch, maxParallel, importGate, token);
+            (recoveryShown, recoveryRetried) = await RecoverBatchAsync(batch, options, cooldown, stretch, maxParallel, importGate, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -218,7 +225,7 @@ public partial class YoutubeBrowserWindow
                 .Select(job => new InvalidOperationException($"{job.Video.Title} [{job.Video.Id}]: {job.Error!.Message}", job.Error)).ToArray();
             AppendLog($"Batch finished: {batch.Jobs.Count(job => job.Status == "Completed")} imported, " +
                 $"{failures.Length} failed, {batch.Jobs.Count(job => job.Status == "Cancelled")} cancelled.");
-            if (failures.Length > 0 && !closing && !IsDisposed && !resourcesReleased)
+            if (failures.Length > 0 && (!recoveryShown || recoveryRetried) && !token.IsCancellationRequested && !closing && !IsDisposed && !resourcesReleased)
                 ReportError("Some YouTube imports failed", new AggregateException("Failed imports (including cleanup failures):", failures));
         }
     }

@@ -14,6 +14,7 @@ public sealed class YtdlpClient
 
     public event EventHandler<string>? ProgressChanged;
     public YtdlpNetworkOptions NetworkOptions { get; set; } = new();
+    public YtdlpBrowserSession? MetadataSession { get; set; }
 
     public Task<IReadOnlyList<YtdlpVideo>> SearchAsync(string query, int maxResults, CancellationToken cancellationToken)
     {
@@ -37,6 +38,7 @@ public sealed class YtdlpClient
         var progress = CreateProgress(null);
         await EnsureAvailableAsync(progress, token);
         var arguments = CommonArguments();
+        MetadataSession?.AddArguments(arguments);
         arguments.AddRange(["--dump-single-json", "--no-playlist", "--skip-download", "--", url]);
         var job = CreateJobDirectory();
         try
@@ -53,6 +55,7 @@ public sealed class YtdlpClient
         var progress = CreateProgress(null);
         await EnsureAvailableAsync(progress, token);
         var arguments = CommonArguments();
+        MetadataSession?.AddArguments(arguments);
         arguments.AddRange(["--dump-single-json", "--flat-playlist", "--skip-download", "--yes-playlist",
             "--playlist-end", maxResults.ToString(CultureInfo.InvariantCulture), "--", target]);
         var job = CreateJobDirectory();
@@ -125,6 +128,7 @@ public sealed class YtdlpClient
     private List<string> DownloadArguments(string url, string format, string job, YtdlpDownloadOptions options)
     {
         var arguments = CommonArguments(options.Network);
+        options.BrowserSession?.AddArguments(arguments);
         arguments.AddRange(["--no-playlist", "--extract-audio", "--audio-format", format,
             "--format", "bestaudio/best", "--paths", job, "--output", "audio.%(ext)s",
             "--no-overwrites", "--windows-filenames", "--newline", "--progress", "--progress-delta", "1",
@@ -162,6 +166,7 @@ public sealed class YtdlpClient
     {
         var format = YtdlpParser.ValidateOutputFormat(options.Format);
         options.Network.Validate();
+        options.BrowserSession?.Validate();
         if (options.Mp3Bitrate is not (64 or 96 or 128 or 192 or 256 or 320))
             throw new ArgumentOutOfRangeException(nameof(options), "Unsupported MP3 bitrate.");
         _ = WavCodec(options.WavBitDepth);

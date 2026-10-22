@@ -120,7 +120,7 @@ partial class YoutubeBrowserWindow
         var notice = new Label
         {
             AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(0, 0, 0, 8),
-            Text = "YOUTUBE AUDIO LIBRARY\nDownload only content you are authorized to use. No DRM bypass or cookies are supported."
+            Text = "YOUTUBE AUDIO LIBRARY\nDownload only authorized content. Browser sessions require explicit consent; no DRM or access-control bypass."
         };
         rootLayout.Controls.Add(notice, 0, 0);
     }

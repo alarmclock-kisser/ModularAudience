@@ -26,6 +26,7 @@ public partial class YoutubeBrowserWindow
         public bool DownloadFinished { get; set; }
         public bool HandedOff { get; set; }
         public Exception? Error { get; set; }
+        public int Attempt { get; set; }
         public TimeSpan? CooldownDeadline { get; set; }
         public string? LastLog { get; set; }
         public long LastLogTimestamp { get; set; }
@@ -72,10 +73,12 @@ public partial class YoutubeBrowserWindow
         ReferenceEquals(activeBatch, batch) && ReferenceEquals(operationCancellation, batch.Source) &&
         operationGeneration == batch.Generation;
 
-    private IProgress<YtdlpDownloadProgress> CreateDownloadProgress(DownloadBatch batch, DownloadJob job) =>
-        new Progress<YtdlpDownloadProgress>(progress =>
+    private IProgress<YtdlpDownloadProgress> CreateDownloadProgress(DownloadBatch batch, DownloadJob job)
+    {
+        int attempt = job.Attempt;
+        return new Progress<YtdlpDownloadProgress>(progress =>
         {
-            if (!CanUpdateJob(batch, job) || !job.NetworkStage || job.DownloadFinished) return;
+            if (job.Attempt != attempt || !CanUpdateJob(batch, job) || !job.NetworkStage || job.DownloadFinished) return;
             job.Latest = progress;
             job.LastProgressTimestamp = Environment.TickCount64;
             if (progress.Status == "finished")
@@ -87,11 +90,23 @@ public partial class YoutubeBrowserWindow
             RefreshJob(job);
             RefreshBatchProgress(batch);
         });
+    }
 
-    private IProgress<string> CreateJobTextProgress(DownloadBatch batch, DownloadJob job, bool audio) =>
-        new Progress<string>(text =>
+    private IProgress<string> CreateJobTextProgress(DownloadBatch batch, DownloadJob job, bool audio)
+    {
+        int attempt = job.Attempt;
+        return new Progress<string>(text =>
         {
-            if (!CanUpdateJob(batch, job) || (audio ? !job.AudioStage : !job.NetworkStage)) return;
+            if (job.Attempt != attempt || !CanUpdateJob(batch, job) || (audio ? !job.AudioStage : !job.NetworkStage)) return;
+            if (!audio && text.StartsWith(YtdlpRetryPolicy.ProgressPrefix, StringComparison.Ordinal))
+            {
+                job.DownloadFinished = false;
+                job.Latest = null;
+                job.Status = "Retry waiting / refreshing URLs";
+                RefreshJob(job);
+                LogJobProgress(batch, job, text[YtdlpRetryPolicy.ProgressPrefix.Length..], warning: true, force: true);
+                return;
+            }
             if (text.StartsWith(YtdlpProgressParser.Prefix, StringComparison.Ordinal)) return;
             bool warning = text.StartsWith("Warning:", StringComparison.OrdinalIgnoreCase);
             string? phase = audio ? AudioPhase(text) : DownloadPhase(text);
@@ -104,6 +119,7 @@ public partial class YoutubeBrowserWindow
             }
             if (warning || phase is not null) LogJobProgress(batch, job, warning ? text : phase!, warning);
         });
+    }
 
     private static string? DownloadPhase(string text) =>
         text.StartsWith("[ExtractAudio]", StringComparison.Ordinal) ||
@@ -122,10 +138,10 @@ public partial class YoutubeBrowserWindow
         _ => null
     };
 
-    private void LogJobProgress(DownloadBatch batch, DownloadJob job, string message, bool warning)
+    private void LogJobProgress(DownloadBatch batch, DownloadJob job, string message, bool warning, bool force = false)
     {
         long now = Environment.TickCount64;
-        if (job.LastLog == message || (job.LastLog is not null && now - job.LastLogTimestamp < 1000)) return;
+        if (job.LastLog == message || (!force && job.LastLog is not null && now - job.LastLogTimestamp < 1000)) return;
         job.LastLog = message;
         job.LastLogTimestamp = now;
         string line = message.Replace('\r', ' ').Replace('\n', ' ');

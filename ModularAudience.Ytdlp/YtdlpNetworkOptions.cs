@@ -7,12 +7,14 @@ public sealed record YtdlpNetworkOptions
     public YtdlpIpVersion IpVersion { get; init; }
     // null inherits the process environment; empty explicitly disables proxies.
     public string? ProxyUrl { get; init; }
+    public bool UseSystemCertificateTrust { get; init; }
 
     public void Validate() => AddArguments([]);
 
     internal void AddArguments(List<string> arguments)
     {
         if (!Enum.IsDefined(IpVersion)) throw new ArgumentException("Invalid IP version.");
+        if (UseSystemCertificateTrust) arguments.AddRange(["--compat-options", "no-certifi"]);
         if (IpVersion != YtdlpIpVersion.Automatic)
             arguments.Add(IpVersion == YtdlpIpVersion.IPv4 ? "--force-ipv4" : "--force-ipv6");
         if (ProxyUrl is null) return;

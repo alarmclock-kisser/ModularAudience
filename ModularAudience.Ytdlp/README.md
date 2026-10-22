@@ -1,6 +1,6 @@
 # ModularAudience.Ytdlp
 
-Standalone `net10.0` library with no NuGet, Forms, Audio, shell, logging, authentication, cookies, or DRM dependencies. The managed project is platform-neutral; its automatically provisioned native tools require Windows x64. The Forms project integrates it through the nonmodal YouTube Browser.
+Standalone `net10.0` library with no NuGet, Forms, Audio, shell or logging dependencies. The managed project is platform-neutral; its automatically provisioned native tools require Windows x64. The Forms project integrates it through the nonmodal YouTube Browser. An optional, explicitly authorized browser session is supported for authentication; DRM/access-control bypass is not.
 
 ## Browser integration
 
@@ -35,6 +35,22 @@ Thumbnail loading prefers YouTube's canonical HTTPS JPEG endpoint instead of fla
 On connection-refused errors (including Windows 10061), the exception retains stderr and adds redacted process proxy status, effective route arguments and bounded direct DNS/TCP probes against the reported `googlevideo.com` hosts. IPv4/IPv6 results are distinguished. A TCP success is **not** proof that TLS, signed media requests or full downloads work. Direct probes do not test a configured proxy. The diagnosis cannot identify which firewall, gateway, security product or remote server refused an earlier connection. TLS certificate validation and retry counts are unchanged.
 
 Certificate-chain failures and HTTP 503 responses receive distinct explanations. They are not presented as codec problems or successful downloads, and certificate verification is never disabled. Browser settings apply to future operations; already running jobs retain their captured options.
+
+### Bounded retry and assisted recovery
+
+`YtdlpProcessException` retains the exit code, sanitized diagnostics and a `YtdlpFailureKind`. The final `ERROR:` line takes precedence over earlier warnings. HTTP 502/503/504, timeouts and connection resets permit **one additional process attempt**, after a cancellable delay. Each process still has yt-dlp's existing bounded internal retries; this is not an unlimited outer loop. A new process re-extracts metadata/media URLs and can resume the job-local partial download. Conversion, disk publication and RAM import happen only after successful completion.
+
+Reported `Retry-After` seconds and HTTP dates are respected. Waits over 30 seconds or malformed waits are not automatically retried or offered for immediate assisted recovery. HTTP 429, TLS errors, refused connections, browser-cookie failures and access restrictions are not automatically retried by the outer policy.
+
+The Forms browser waits for all active batch jobs and cleanup before showing a single copyable recovery dialog. Only matching, terminal process failures that have not been handed to the audio collection are eligible. Successful imports and cleanup/import failures are never repeated. There is at most one assisted recovery pass per operation; callbacks from earlier passes cannot overwrite current progress. Search/metadata requests use the same recovery dialog. Explicit recovery may select a fresh-URL retry, IPv4 for connection failures, system certificate trust for certificate-chain failures, or an authorized browser session for authentication failures. Options are scoped to this operation and not persisted.
+
+System trust passes `--compat-options no-certifi` to use the runtime's normal system CA trust instead of the bundled certifi CA list. TLS verification remains enabled; no certificate is silently accepted or installed. Browser sessions do not fix certificate errors, refused TCP connections or upstream HTTP 503 responses.
+
+### Browser-session consent and privacy
+
+`YtdlpDownloadOptions.BrowserSession` and `YtdlpClient.MetadataSession` default to null. `YtdlpBrowserSession` supports Edge, Chrome and Firefox, an explicit local profile name, and `ConsentGranted = true`. The dialog resets consent every time. It explains that yt-dlp reads the selected profile's cookie database as the current Windows user and that it can contain sessions for other websites. No profile scanning, cookie access or browser process control occurs merely by opening the dialog.
+
+Only after confirmation is `--cookies-from-browser browser:profile` passed to yt-dlp. Profile paths, containers and credential-bearing arguments are not accepted. No cookie-file export is requested, but yt-dlp can make temporary database copies while reading. Its child TEMP/TMP/TMPDIR are scoped to an owned job subdirectory for browser-session attempts; this scratch is cleaned after process exit/cancellation and cleanup failures emit a warning. Header values for Cookie/Set-Cookie/Authorization/Proxy-Authorization are redacted before diagnostic retention and UI/log callbacks, including long headers crossing read-buffer/tail boundaries. No cookie values enter the managed browser UI; consent/session options are not saved to browser settings. A confirmed recovery operation can include its one bounded automatic process retry. Existing Windows/browser protections remain authoritative: locked databases, DPAPI or app-bound encryption errors terminate the attempt and are not bypassed. No elevation, security-product changes, CAPTCHA solving, geo-bypass, DRM handling or entitlement bypass is added. Authentication success and download availability remain dependent on the authorized account and upstream service.
 
 ## JavaScript runtime
 
@@ -107,6 +123,7 @@ Sealed record with public init properties:
 - `double? DurationSeconds`
 - `string? ThumbnailUrl`
 - `long? ViewCount`
+- `DateOnly? UploadDate`
 - `string? Description`
 
 Flat playlist/search metadata may omit duration, uploader, thumbnails, views, or description. Missing optional fields remain null; an absent uploader is empty. Returned video URLs are canonical YouTube watch URLs. Invalid/null entries are skipped; malformed JSON is rejected. A download requires a video URL matching `Id`, not a playlist-only URL.
@@ -118,7 +135,10 @@ Public init properties:
 - `string Format = "wav"`: accepts only `mp3` or `wav`, case-insensitively.
 - `bool SaveToDisk = false`
 - `string OutputDirectory = ""`: required for saved downloads.
-- `int Mp3Bitrate = 192`: 32–320 kbps; relevant to MP3 encoding.
+- `int Mp3Bitrate = 192`: one of 64/96/128/192/256/320 kbps; relevant to MP3 encoding.
+- `int WavBitDepth = 16`: one of 8/16/24/32 bits; 32-bit signed integer PCM.
+- `YtdlpNetworkOptions Network`: per-download routing; optional system trust requires explicit selection in the browser.
+- `YtdlpBrowserSession? BrowserSession = null`: explicit browser/profile consent for a recovery operation only.
 - `TimeSpan? MaxDuration = TimeSpan.FromHours(4)`: positive, at most 24 hours, or null to disable.
 - `long? MaxFileSizeBytes = 2147483648`: positive, at most 16 GiB, or null to disable.
 
@@ -150,6 +170,6 @@ Result limits are 1–200. Search queries are nonempty, at most 500 characters, 
 
 ## Licensing and scope
 
-All additional native tools are free open-source software. yt-dlp's standalone executable bundles third-party components; BtbN's selected FFmpeg build is GPL, not LGPL-only. Deno is open source. Review the exact upstream release licenses and redistribution/source-notice obligations before bundling or distributing native tools. Download only content you are authorized to access and use. There is no cookie import, login bypass, DRM handling, or automatic acceptance of restricted content.
+All additional native tools are free open-source software. yt-dlp's standalone executable bundles third-party components; BtbN's selected FFmpeg build is GPL, not LGPL-only. Deno is open source. Review the exact upstream release licenses and redistribution/source-notice obligations before bundling or distributing native tools. Download only content you are authorized to access and use. Browser authentication requires explicit consent; there is no login/DRM/access-control bypass or automatic acceptance of restricted content.
 
-No builds or tests were run as part of this implementation, as requested. Runtime compatibility with changing YouTube endpoints must be validated by the integrating application.
+Targeted regression tests cover retry bounds/cancellation/server waits, error classification, header redaction, browser-consent/profile validation, recovery-dialog decisions and exclusion of successful/import-cleanup jobs. Tests do not read real browser cookies or require live YouTube access. Runtime compatibility with changing YouTube endpoints and external network restrictions cannot be guaranteed by offline tests.

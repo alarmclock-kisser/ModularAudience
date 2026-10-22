@@ -1,6 +1,6 @@
 namespace ModularAudience.Ytdlp;
 
-public sealed class YtdlpDownloadOptions
+public sealed record YtdlpDownloadOptions
 {
     public string Format { get; init; } = "wav";
     public bool SaveToDisk { get; init; }
@@ -8,6 +8,7 @@ public sealed class YtdlpDownloadOptions
     public int Mp3Bitrate { get; init; } = 192;
     public int WavBitDepth { get; init; } = 16;
     public YtdlpNetworkOptions Network { get; init; } = new();
+    public YtdlpBrowserSession? BrowserSession { get; init; }
     public TimeSpan? MaxDuration { get; init; } = TimeSpan.FromHours(4);
     public long? MaxFileSizeBytes { get; init; } = 2L * 1024 * 1024 * 1024;
 }

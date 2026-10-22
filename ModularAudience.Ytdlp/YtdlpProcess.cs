@@ -8,7 +8,15 @@ internal static class YtdlpProcess
     private const int MaximumOutputCharacters = 16 * 1024 * 1024;
     private const int MaximumErrorCharacters = 16 * 1024;
 
-    internal static async Task<string> RunAsync(string executable, IEnumerable<string> arguments,
+    internal static Task<string> RunAsync(string executable, IEnumerable<string> arguments,
+        string workingDirectory, IProgress<string>? progress, bool reportOutput, CancellationToken token)
+    {
+        var capturedArguments = arguments.ToArray();
+        return YtdlpRetryPolicy.ExecuteAsync((_, cancellation) => RunOnceAsync(executable, capturedArguments,
+            workingDirectory, progress, reportOutput, cancellation), progress, token);
+    }
+
+    private static async Task<string> RunOnceAsync(string executable, IEnumerable<string> arguments,
         string workingDirectory, IProgress<string>? progress, bool reportOutput, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
@@ -24,6 +32,7 @@ internal static class YtdlpProcess
         };
         foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
+        using var sessionScratch = new YtdlpSessionScratch(start, workingDirectory, progress);
         using var process = new Process { StartInfo = start };
         if (!process.Start())
             throw new InvalidOperationException("Unable to start yt-dlp.");
@@ -43,7 +52,7 @@ internal static class YtdlpProcess
                 catch (Exception diagnosticError) { diagnosis = "Network diagnosis could not complete: " + diagnosticError.Message; }
                 token.ThrowIfCancellationRequested();
                 if (diagnosis.Length > 0) progress?.Report("Warning: " + diagnosis);
-                throw new InvalidOperationException($"yt-dlp exited with code {process.ExitCode}.\n{error}\n{diagnosis}");
+                throw new YtdlpProcessException(process.ExitCode, error, diagnosis);
             }
             return await stdout;
         }
@@ -63,20 +72,21 @@ internal static class YtdlpProcess
         {
             var capture = new StringBuilder();
             var line = new StringBuilder();
+            IProgress<string>? lines = keepTail ? new DiagnosticCapture(capture, progress) : progress;
             var buffer = new char[4096];
             int count;
             while ((count = await reader.ReadAsync(buffer.AsMemory(), token)) > 0)
             {
-                capture.Append(buffer, 0, count);
-                if (keepTail && capture.Length > MaximumErrorCharacters)
-                    capture.Remove(0, capture.Length - MaximumErrorCharacters);
-                else if (!keepTail && capture.Length > MaximumOutputCharacters)
-                    throw new InvalidDataException("yt-dlp output exceeded the allowed limit.");
-                if (progress is not null)
-                    ReportLines(buffer, count, line, progress);
+                if (!keepTail)
+                {
+                    capture.Append(buffer, 0, count);
+                    if (capture.Length > MaximumOutputCharacters)
+                        throw new InvalidDataException("yt-dlp output exceeded the allowed limit.");
+                }
+                if (lines is not null) ReportLines(buffer, count, line, lines);
             }
             if (line.Length > 0)
-                progress?.Report(line.ToString());
+                lines?.Report(YtdlpDiagnosticRedactor.Redact(line.ToString()));
             return capture.ToString();
         }
         catch
@@ -91,14 +101,25 @@ internal static class YtdlpProcess
         for (var index = 0; index < count; index++)
         {
             var character = buffer[index];
-            if (character is '\r' or '\n' || line.Length == 1024)
+            if (character is '\r' or '\n')
             {
                 if (line.Length > 0)
-                    progress.Report(line.ToString());
+                    progress.Report(YtdlpDiagnosticRedactor.Redact(line.ToString()));
                 line.Clear();
             }
-            if (!char.IsControl(character))
+            if (!char.IsControl(character) && line.Length < 1024)
                 line.Append(character);
+        }
+    }
+
+    private sealed class DiagnosticCapture(StringBuilder capture, IProgress<string>? progress) : IProgress<string>
+    {
+        public void Report(string value)
+        {
+            string safe = YtdlpDiagnosticRedactor.Redact(value);
+            capture.AppendLine(safe);
+            if (capture.Length > MaximumErrorCharacters) capture.Remove(0, capture.Length - MaximumErrorCharacters);
+            progress?.Report(safe);
         }
     }
 
