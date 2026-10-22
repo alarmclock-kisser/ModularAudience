@@ -51,6 +51,7 @@
     <ProjectReference Include="..\ModularAudience.MidiController\ModularAudience.MidiController.csproj" />
     <ProjectReference Include="..\ModularAudience.Onnx\ModularAudience.Onnx.csproj" />
     <ProjectReference Include="..\ModularAudience.Shared\ModularAudience.Shared.csproj" />
+    <ProjectReference Include="..\ModularAudience.Ytdlp\ModularAudience.Ytdlp.csproj" />
   </ItemGroup>
 
   <ItemGroup>
