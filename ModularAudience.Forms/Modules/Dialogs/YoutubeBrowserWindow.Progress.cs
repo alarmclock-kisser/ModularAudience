@@ -9,6 +9,7 @@ public partial class YoutubeBrowserWindow
     private readonly Stopwatch operationClock = new();
     private int operationGeneration;
     private DownloadBatch? activeBatch;
+    private YtdlpDownloadProgress? toolTransfer;
 
     private sealed class DownloadJob(YtdlpVideo video, int index, ListViewItem row)
     {
@@ -56,7 +57,7 @@ public partial class YoutubeBrowserWindow
             for (int index = 0; retryJobs is null && index < videos.Length; index++)
             {
                 var row = new ListViewItem(videos[index].Title);
-                row.SubItems.AddRange(["Queued", "Unknown", "--", "Unknown", "--"]);
+                row.SubItems.AddRange(["Queued", "Unknown", "--", "Unknown", "--", "--"]);
                 jobs[index] = new DownloadJob(videos[index], index, row);
                 row.Tag = jobs[index];
                 downloadJobsList.Items.Add(row);
@@ -190,7 +191,9 @@ public partial class YoutubeBrowserWindow
         if (IsDisposed || resourcesReleased) return;
         elapsedLabel.Text = "Elapsed: " + FormatClock(operationClock.Elapsed);
         if (activeBatch is { } batch) RefreshBatchProgress(batch);
-        else etaLabel.Text = "ETA: unknown";
+        else etaLabel.Text = toolTransfer is { } transfer
+            ? "Download ETA: " + (transfer.Status == "finished" ? "00:00:00" : transfer.Eta is { } eta ? FormatClock(eta) : "calculating...")
+            : "ETA: unknown";
     }
 
     private void RefreshBatchProgress(DownloadBatch batch)
@@ -206,7 +209,14 @@ public partial class YoutubeBrowserWindow
         else
         {
             var eta = CalculateBatchEta(operationClock.Elapsed, completed, batch.Jobs.Length);
-            etaLabel.Text = "Batch ETA (estimate): " + (eta is { } remaining ? FormatClock(remaining) : "unknown");
+            string label = "Batch ETA (estimate): ";
+            if (eta is null)
+            {
+                var estimates = batch.Jobs.Where(job => !job.Terminal).Select(JobEta).ToArray();
+                eta = estimates.Max();
+                label = "Active download ETA (estimate): ";
+            }
+            etaLabel.Text = label + (eta is { } remaining ? FormatClock(remaining) : "unknown");
         }
     }
 
@@ -235,6 +245,10 @@ public partial class YoutubeBrowserWindow
             ? Math.Clamp(100d * progress.DownloadedBytes / progress.TotalBytes.Value, 0, 100) : null;
     }
 
+    private static string TransferText(YtdlpDownloadProgress progress) =>
+        $"{progress.DownloadedBytes / 1_000_000d:0.00} / {(progress.IsTotalEstimated ? "~" : "")}" +
+        (progress.TotalBytes is { } total ? $"{total / 1_000_000d:0.00} MB" : "? MB");
+
     private static string DownloadText(DownloadJob job) => DownloadPercent(job) is { } percent
         ? $"{(job.Latest?.IsTotalEstimated == true ? "~" : "")}{percent:0.0}%" : "Unknown";
 
@@ -255,6 +269,7 @@ public partial class YoutubeBrowserWindow
         var eta = JobEta(job);
         job.Row.SubItems[4].Text = eta is { } remaining ? FormatClock(remaining) : "Unknown";
         job.Row.SubItems[5].Text = JobSpeed(job);
+        job.Row.SubItems[6].Text = job.Latest is { } progress ? TransferText(progress) : "--";
         downloadJobsList.Invalidate(job.Row.Bounds);
     }
 

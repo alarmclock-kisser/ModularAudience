@@ -17,8 +17,8 @@ public partial class YoutubeBrowserWindow
         previewCancellation?.Cancel();
         ClearThumbnail();
         thumbnailPicture.Visible = thumbnailCheck.Checked;
-        detailsLayout.RowStyles[1].Height = thumbnailCheck.Checked ? 5 : 0;
-        detailsLayout.RowStyles[2].Height = thumbnailCheck.Checked ? 95 : 100;
+        detailsLayout.RowStyles[1].Height = thumbnailCheck.Checked ? 50 : 0;
+        detailsLayout.RowStyles[2].Height = thumbnailCheck.Checked ? 50 : 100;
         RefreshAvailability();
         var video = SelectedVideo();
         descriptionText.Text = video is null

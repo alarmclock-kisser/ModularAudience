@@ -50,6 +50,27 @@ public partial class YoutubeBrowserWindow
         });
     }
 
+    private void ShowRelated_Click(object? sender, EventArgs e)
+    {
+        if (busy || closing || !binariesReady || SelectedVideo() is not { } video) return;
+        int limit = (int)resultLimit.Value;
+        dateCancellation?.Cancel();
+        ++dateGeneration;
+        StartOperation("Loading related / next-up videos...", async token =>
+        {
+            var videos = await client.GetRelatedVideosAsync(video, limit, token);
+            token.ThrowIfCancellationRequested();
+            // Recommendation order puts next-up first; clear any previous table sorting.
+            sortColumn = -1;
+            resultsList.ListViewItemSorter = null;
+            PopulateResults(videos);
+            resultsSummary.Text = $"{videos.Count} related / next-up video(s) for: {video.Title}";
+            browsingTabs.SelectedTab = resultsTab;
+            StartUploadDates(videos);
+            AppendLog($"Loaded YouTube recommendations for: {video.Title}. Recommendations can differ from a signed-in browser.");
+        });
+    }
+
     private sealed class VideoRowComparer(int column, bool descending) : IComparer
     {
         public int Compare(object? x, object? y)

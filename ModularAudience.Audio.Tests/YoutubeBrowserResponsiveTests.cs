@@ -47,6 +47,13 @@ public sealed class YoutubeBrowserResponsiveTests
             }
             Assert.IsTrue(list.Columns.Cast<ColumnHeader>().Sum(column => column.Width) <= list.ClientSize.Width,
                 "Visible result columns must fit without a horizontal scrollbar.");
+            var thumbnail = Field<PictureBox>(window, "thumbnailPicture");
+            Assert.IsTrue(thumbnail.Height >= 80, $"Thumbnail is too small to recognize at {size}: {thumbnail.Size}.");
+            var waitCheck = Field<CheckBox>(window, "waitForBpmCheck");
+            var waitSeconds = Field<NumericUpDown>(window, "cooldownSeconds");
+            Assert.AreSame(waitSeconds.Parent, waitCheck.Parent);
+            Assert.IsTrue(Math.Abs(waitSeconds.Top - waitCheck.Top) < 10, "BPM checkbox must remain beside Wait (s).");
+            Assert.IsTrue(waitCheck.Left >= waitSeconds.Right);
         }
         Assert.IsNull(videos[0].UploadDate, "The flat result really lacks a date; the parser must not invent one.");
     }

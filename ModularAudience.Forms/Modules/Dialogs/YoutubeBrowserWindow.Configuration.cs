@@ -9,6 +9,7 @@ public partial class YoutubeBrowserWindow
     private readonly int[] columnWidths = [320, 160, 90, 100, 120, 320, 110];
     private int mp3Bitrate = 192;
     private int wavBitDepth = 16;
+    private string configuredBinariesPath = string.Empty;
 
     private void RestoreSettings()
     {
@@ -16,6 +17,7 @@ public partial class YoutubeBrowserWindow
         try
         {
             var settings = YoutubeBrowserSettings.Load(out settingsWarning);
+            configuredBinariesPath = settings.YTDownloaderBinariesPath;
             Size = new Size(settings.Width, settings.Height);
             if (settings.Maximized) WindowState = FormWindowState.Maximized;
             mainSplit.SplitterDistance = Math.Clamp(settings.SplitterDistance, mainSplit.Panel1MinSize,
@@ -35,6 +37,7 @@ public partial class YoutubeBrowserWindow
             ApplySort();
             outputDirectory.Text = settings.OutputDirectory;
             cooldownSeconds.Value = settings.CooldownSeconds;
+            waitForBpmCheck.Checked = settings.WaitForBpmTag;
             maxDurationMinutes.Value = settings.MaxDurationMinutes;
             maxSizeMiB.Value = settings.MaxSizeMiB;
             maxParallelDownloadsNumber.Value = settings.MaxParallelDownloads;
@@ -67,7 +70,9 @@ public partial class YoutubeBrowserWindow
                 IpVersion = (ModularAudience.Ytdlp.YtdlpIpVersion)ipVersionCombo.SelectedIndex,
                 ProxyMode = proxyModeCombo.SelectedIndex, ProxyUrl = proxyText.Text.Trim(),
                 OutputDirectory = outputDirectory.Text.Trim(),
+                YTDownloaderBinariesPath = configuredBinariesPath,
                 CooldownSeconds = (int)cooldownSeconds.Value,
+                WaitForBpmTag = waitForBpmCheck.Checked,
                 MaxDurationMinutes = (int)maxDurationMinutes.Value, MaxSizeMiB = (int)maxSizeMiB.Value,
                 MaxParallelDownloads = (int)maxParallelDownloadsNumber.Value,
                 StretchEnabled = stretchCheck.Checked, Stretch = stretchSettings
@@ -83,6 +88,14 @@ public partial class YoutubeBrowserWindow
     {
         if (sender == formatCombo) UpdateAudioQuality();
         UpdateOptionAvailability();
+    }
+
+    private void WaitForBpm_CheckedChanged(object? sender, EventArgs e)
+    {
+        if (restoringSettings) return;
+        decimal seconds = waitForBpmCheck.Checked ? cooldownSeconds.Value * 4 : cooldownSeconds.Value / 4;
+        cooldownSeconds.Value = Math.Clamp(decimal.Round(seconds, 0, MidpointRounding.AwayFromZero),
+            cooldownSeconds.Minimum, cooldownSeconds.Maximum);
     }
 
     private void UpdateAudioQuality()

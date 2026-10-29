@@ -9,6 +9,39 @@ namespace ModularAudience.Audio.Tests
     public sealed class YoutubeAudioImporterTests
     {
         [TestMethod]
+        public async Task WaitForBpmTagAsync_ExternalTagArrives_ReleasesWaitAndImportsTaggedBpm()
+        {
+            string path = NewWavPath();
+            try
+            {
+                WriteWav(path, [0, 8192, -8192, 0]);
+                var waiting = YoutubeAudioImporter.WaitForBpmTagAsync(path, TimeSpan.FromSeconds(5), CancellationToken.None);
+                await Task.Delay(350);
+                Assert.IsFalse(waiting.IsCompleted);
+                Assert.IsTrue(AudioObj.WriteBpmTagToFile(path, 128));
+                Assert.IsTrue(await waiting.WaitAsync(TimeSpan.FromSeconds(3)));
+                using var audio = await YoutubeAudioImporter.ImportAsync(path, "Tagged", false, TimeSpan.Zero, null, null, CancellationToken.None);
+                Assert.AreEqual(128f, audio.Bpm);
+            }
+            finally { File.Delete(path); }
+        }
+
+        [TestMethod]
+        public async Task WaitForBpmTagAsync_NoTag_TimesOutAndCanBeCancelled()
+        {
+            string path = NewWavPath();
+            try
+            {
+                WriteWav(path, [0, 8192, -8192, 0]);
+                Assert.IsFalse(await YoutubeAudioImporter.WaitForBpmTagAsync(path, TimeSpan.FromMilliseconds(100), CancellationToken.None));
+                using var cancellation = new CancellationTokenSource(100);
+                await Assert.ThrowsAsync<OperationCanceledException>(() =>
+                    YoutubeAudioImporter.WaitForBpmTagAsync(path, TimeSpan.FromSeconds(5), cancellation.Token));
+            }
+            finally { File.Delete(path); }
+        }
+
+        [TestMethod]
         public void CalculateStretchFactor_SlowerActualSourceBpm_ReturnsPointEight()
         {
             double factor = YoutubeAudioImporter.CalculateStretchFactor(100f, 125f);

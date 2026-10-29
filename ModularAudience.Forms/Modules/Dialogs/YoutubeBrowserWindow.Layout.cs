@@ -9,7 +9,7 @@ public partial class YoutubeBrowserWindow
     private void JobList_SizeChanged(object? sender, EventArgs e)
     {
         if (downloadJobsList is null) return;
-        FitColumns(downloadJobsList, [320, 190, 160, 90, 100, 110]);
+        FitColumns(downloadJobsList, [280, 170, 100, 90, 100, 110, 180]);
     }
 
     private void FitResultColumns()

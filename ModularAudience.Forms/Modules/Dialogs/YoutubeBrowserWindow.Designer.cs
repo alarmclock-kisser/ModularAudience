@@ -30,6 +30,8 @@ partial class YoutubeBrowserWindow
     private DomainUpDown audioQuality = null!;
     private Label audioQualityLabel = null!;
     private Button metadataButton = null!;
+    private Button showRelatedButton = null!;
+    private CheckBox waitForBpmCheck = null!;
     private ComboBox ipVersionCombo = null!;
     private ComboBox proxyModeCombo = null!;
     private TextBox proxyText = null!;
@@ -51,6 +53,7 @@ partial class YoutubeBrowserWindow
     private Button openButton = null!;
     private Button copyButton = null!;
     private Button updateButton = null!;
+    private Button toolsFolderButton = null!;
     private Button cancelButton = null!;
     private Label statusLabel = null!;
     private ProgressBar operationProgress = null!;
@@ -85,7 +88,7 @@ partial class YoutubeBrowserWindow
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
         ClientSize = new Size(1180, 820);
-        MinimumSize = new Size(1000, 680);
+        MinimumSize = new Size(1000, 780);
         Text = "YouTube Browser — ModularAudience";
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
@@ -227,7 +230,8 @@ partial class YoutubeBrowserWindow
         downloadJobsList.Columns.AddRange([
             new ColumnHeader { Text = "Title", Width = 320 }, new ColumnHeader { Text = "Phase", Width = 190 },
             new ColumnHeader { Text = "Download", Width = 160 }, new ColumnHeader { Text = "Elapsed", Width = 90 },
-            new ColumnHeader { Text = "ETA", Width = 100 }, new ColumnHeader { Text = "Speed", Width = 110 }
+            new ColumnHeader { Text = "ETA", Width = 100 }, new ColumnHeader { Text = "Speed", Width = 110 },
+            new ColumnHeader { Text = "Transferred", Width = 180 }
         ]);
         downloadJobsList.DrawColumnHeader += JobList_DrawColumnHeader;
         downloadJobsList.DrawItem += JobList_DrawItem;
@@ -244,8 +248,8 @@ partial class YoutubeBrowserWindow
         detailsLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
         detailsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         detailsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        detailsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 5));
-        detailsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 95));
+        detailsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        detailsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         detailsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         thumbnailCheck = new CheckBox { Text = "Show selected-video thumbnail", Checked = true, AutoSize = true };
         thumbnailPicture = new PictureBox
@@ -256,6 +260,12 @@ partial class YoutubeBrowserWindow
         metadataButton = DesignerButton("Full metadata");
         metadataButton.AccessibleName = "Load upload date and full metadata for the selected video";
         metadataButton.Click += Metadata_Click;
+        showRelatedButton = DesignerButton("Show related");
+        showRelatedButton.Enabled = false;
+        showRelatedButton.AccessibleName = "Show related and next-up videos for the selected video";
+        showRelatedButton.Click += ShowRelated_Click;
+        var detailActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
+        detailActions.Controls.AddRange([metadataButton, showRelatedButton]);
         descriptionText = new TextBox
         {
             Dock = DockStyle.Fill, ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Vertical,
@@ -264,7 +274,7 @@ partial class YoutubeBrowserWindow
         detailsLayout.Controls.Add(thumbnailCheck, 0, 0);
         detailsLayout.Controls.Add(thumbnailPicture, 0, 1);
         detailsLayout.Controls.Add(descriptionText, 0, 2);
-        detailsLayout.Controls.Add(metadataButton, 0, 3);
+        detailsLayout.Controls.Add(detailActions, 0, 3);
         mainSplit.Panel2.Controls.Add(detailsLayout);
         thumbnailCheck.CheckedChanged += Selection_Changed;
     }
@@ -274,9 +284,11 @@ partial class YoutubeBrowserWindow
         columnsMenu = new ContextMenuStrip(components);
         var openItem = new ToolStripMenuItem("Open in browser (no download)");
         var copyItem = new ToolStripMenuItem("Copy selected URLs");
+        var relatedItem = new ToolStripMenuItem("Show related / next-up");
+        relatedItem.Click += ShowRelated_Click;
         openItem.Click += Open_Click;
         copyItem.Click += Copy_Click;
-        columnsMenu.Items.AddRange([openItem, copyItem, new ToolStripSeparator()]);
+        columnsMenu.Items.AddRange([openItem, relatedItem, copyItem, new ToolStripSeparator()]);
         string[] titles = ["Title", "Uploader", "Duration", "Views", "ID", "URL", "Upload Date"];
         columnMenuItems = new ToolStripMenuItem[titles.Length];
         for (int index = 0; index < titles.Length; index++)
@@ -294,6 +306,7 @@ partial class YoutubeBrowserWindow
         {
             openItem.Enabled = !closing && SelectedVideo() is not null;
             copyItem.Enabled = !closing && resultsList.SelectedItems.Count > 0;
+            relatedItem.Enabled = !busy && !closing && binariesReady && SelectedVideo() is not null;
         };
     }
 
@@ -320,6 +333,13 @@ partial class YoutubeBrowserWindow
         numbers.Controls.Add(audioQualityLabel);
         numbers.Controls.Add(audioQuality);
         AddDesignerField(numbers, "Wait (s)", cooldownSeconds);
+        waitForBpmCheck = new CheckBox
+        {
+            Text = "wait for BPM tag", AutoSize = true, Margin = new Padding(3, 6, 3, 0),
+            AccessibleName = "Wait for a BPM tag until the maximum Wait seconds elapse"
+        };
+        waitForBpmCheck.CheckedChanged += WaitForBpm_CheckedChanged;
+        numbers.Controls.Add(waitForBpmCheck);
         AddDesignerField(numbers, "Minutes", maxDurationMinutes);
         AddDesignerField(numbers, "MiB", maxSizeMiB);
         AddDesignerField(numbers, "Parallel", maxParallelDownloadsNumber);
@@ -421,9 +441,12 @@ partial class YoutubeBrowserWindow
         uploaderButton = DesignerButton("Uploader search");
         var columnButton = DesignerButton("Columns...");
         updateButton = DesignerButton("Update tools");
+        toolsFolderButton = DesignerButton("Tools folder...");
+        toolsFolderButton.AccessibleName = "Choose the persistent folder for YouTube downloader tools";
+        toolsFolderButton.Click += ToolsFolder_Click;
         cancelButton = DesignerButton("Cancel");
         actions.Controls.AddRange([downloadButton, openButton, copyButton, relatedButton,
-            uploaderButton, columnButton, updateButton, cancelButton]);
+            uploaderButton, columnButton, updateButton, toolsFolderButton, cancelButton]);
         downloadButton.Click += Download_Click;
         openButton.Click += Open_Click;
         copyButton.Click += Copy_Click;

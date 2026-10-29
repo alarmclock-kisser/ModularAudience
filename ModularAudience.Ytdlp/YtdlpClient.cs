@@ -133,9 +133,9 @@ public sealed partial class YtdlpClient
             "--format", "bestaudio/best", "--paths", job, "--output", "audio.%(ext)s",
             "--no-overwrites", "--windows-filenames", "--newline", "--progress", "--progress-delta", "1",
             "--progress-template", "download:" + YtdlpProgressParser.Prefix +
-                "{\"status\":%(progress.status)j,\"downloaded_bytes\":%(progress.downloaded_bytes)j," +
-                "\"total_bytes\":%(progress.total_bytes)j,\"total_bytes_estimate\":%(progress.total_bytes_estimate)j," +
-                "\"speed\":%(progress.speed)j,\"eta\":%(progress.eta)j,\"elapsed\":%(progress.elapsed)j}",
+                "{\"status\":%(progress.status)j,\"downloaded_bytes\":%(progress.downloaded_bytes|0)j," +
+                "\"total_bytes\":%(progress.total_bytes|0)j,\"total_bytes_estimate\":%(progress.total_bytes_estimate|0)j," +
+                "\"speed\":%(progress.speed|null)j,\"eta\":%(progress.eta|null)j,\"elapsed\":%(progress.elapsed|null)j}",
             "--print", "after_move:" + OutputPathPrefix + "%(filepath)s", "--no-quiet"]);
         AddAudioQualityArguments(arguments, format, options);
         var filter = "!is_live";
@@ -211,21 +211,23 @@ public sealed partial class YtdlpClient
         string format, CancellationToken token)
     {
         Directory.CreateDirectory(outputDirectory);
-        var name = $"YouTube_{SafeTitle(video.Title)}_{video.Id}_{Guid.NewGuid():N}.{format}";
+        var name = $"{SafeTitle(video.Title)}.{format}";
         var destination = Path.Combine(outputDirectory, name);
-        var staging = Path.Combine(outputDirectory, ".ytdlp-" + Guid.NewGuid().ToString("N") + ".partial");
+        var stagingDirectory = Path.Combine(outputDirectory, ".ytdlp-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(stagingDirectory);
+        var staging = Path.Combine(stagingDirectory, name);
         try
         {
             await CopyFileAsync(source, staging, token);
             token.ThrowIfCancellationRequested();
+            // Publish a fully closed file from another directory. Destination-folder watchers receive
+            // a Created event, rather than only a .partial -> audio extension rename.
             File.Move(staging, destination, overwrite: false);
             return destination;
         }
         finally
         {
-            try { File.Delete(staging); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            YtdlpBinaryManager.DeleteStaging(stagingDirectory);
         }
     }
 
@@ -242,9 +244,15 @@ public sealed partial class YtdlpClient
     private static string SafeTitle(string title)
     {
         var invalid = Path.GetInvalidFileNameChars();
-        var safe = new string((title ?? string.Empty).Take(80)
-            .Select(c => char.IsControl(c) || invalid.Contains(c) ? '_' : c).ToArray()).Trim(' ', '.');
-        return string.IsNullOrWhiteSpace(safe) ? "audio" : safe;
+        var safe = new string((title ?? string.Empty)
+            .Select(c => char.IsControl(c) || invalid.Contains(c) ? '_' : c).ToArray()).TrimEnd(' ', '.');
+        if (string.IsNullOrWhiteSpace(safe)) return "audio";
+        string stem = safe.Split('.')[0].TrimEnd(' ');
+        if (stem.Equals("CON", StringComparison.OrdinalIgnoreCase) || stem.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
+            stem.Equals("AUX", StringComparison.OrdinalIgnoreCase) || stem.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
+            (stem.Length == 4 && (stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase) || stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
+             "123456789¹²³".Contains(stem[3]))) safe = "_" + safe;
+        return safe;
     }
 
     private static string CreateJobDirectory()

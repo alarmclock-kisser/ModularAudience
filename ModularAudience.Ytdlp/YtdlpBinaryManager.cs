@@ -13,17 +13,42 @@ public sealed class YtdlpBinaryManager
     private string? verifiedDenoDirectory;
     private string? fallbackDenoPath;
 
-    public string BinaryDirectory { get; } = Path.Combine(
+    public static string DefaultBinaryDirectory { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ModularAudience", "binaries_ytdlp");
 
-    public Task EnsureBinariesAsync(IProgress<string>? progress, CancellationToken cancellationToken) =>
-        EnsureBinariesAsync(progress, cancellationToken, onlyIfMissing: false);
+    public string BinaryDirectory { get; private set; }
+
+    public YtdlpBinaryManager(string? binaryDirectory = null)
+    {
+        BinaryDirectory = NormalizeBinaryDirectory(binaryDirectory ?? DefaultBinaryDirectory);
+    }
+
+    public void SetBinaryDirectory(string directory)
+    {
+        BinaryDirectory = NormalizeBinaryDirectory(directory);
+        verifiedDenoDirectory = null;
+        fallbackDenoPath = null;
+    }
+
+    public bool HasInstalledTools => GetInstalledDirectory("yt-dlp", YtdlpFiles) is not null &&
+        GetInstalledDirectory("ffmpeg", FfmpegFiles) is not null && GetInstalledDirectory("deno", DenoFiles) is not null;
+
+    private static string NormalizeBinaryDirectory(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory) || directory.Any(char.IsControl) || !Path.IsPathFullyQualified(directory))
+            throw new ArgumentException("Choose a fully qualified folder for the YouTube downloader tools.", nameof(directory));
+        return Path.GetFullPath(directory);
+    }
+
+    public Task EnsureBinariesAsync(IProgress<string>? progress, CancellationToken cancellationToken,
+        IProgress<YtdlpDownloadProgress>? downloadProgress = null) =>
+        EnsureBinariesAsync(progress, cancellationToken, onlyIfMissing: false, downloadProgress);
 
     internal Task EnsureAvailableAsync(IProgress<string>? progress, CancellationToken cancellationToken) =>
         EnsureBinariesAsync(progress, cancellationToken, onlyIfMissing: true);
 
     private async Task EnsureBinariesAsync(IProgress<string>? progress, CancellationToken cancellationToken,
-        bool onlyIfMissing)
+        bool onlyIfMissing, IProgress<YtdlpDownloadProgress>? downloadProgress = null)
     {
         RequireWindows();
         await UpdateGate.WaitAsync(cancellationToken);
@@ -33,10 +58,10 @@ public sealed class YtdlpBinaryManager
             if (onlyIfMissing && HasBinaries)
                 return;
             Directory.CreateDirectory(BinaryDirectory);
-            await UpdateSafelyAsync("yt-dlp", "yt-dlp/yt-dlp", "yt-dlp.exe", YtdlpFiles, progress, cancellationToken);
+            await UpdateSafelyAsync("yt-dlp", "yt-dlp/yt-dlp", "yt-dlp.exe", YtdlpFiles, progress, cancellationToken, downloadProgress);
             await UpdateSafelyAsync("ffmpeg", "BtbN/FFmpeg-Builds", "ffmpeg-master-latest-win64-gpl.zip",
-                FfmpegFiles, progress, cancellationToken);
-            await UpdateDenoAsync(progress, cancellationToken);
+                FfmpegFiles, progress, cancellationToken, downloadProgress);
+            await UpdateDenoAsync(progress, cancellationToken, downloadProgress);
         }
         finally { UpdateGate.Release(); }
     }
@@ -56,12 +81,13 @@ public sealed class YtdlpBinaryManager
     internal string FfmpegDirectory => GetInstalledDirectory("ffmpeg", FfmpegFiles)
         ?? throw new FileNotFoundException("FFmpeg is not installed. Call EnsureBinariesAsync first.");
 
-    private async Task UpdateDenoAsync(IProgress<string>? progress, CancellationToken token)
+    private async Task UpdateDenoAsync(IProgress<string>? progress, CancellationToken token,
+        IProgress<YtdlpDownloadProgress>? downloadProgress)
     {
         try
         {
             await UpdateSafelyAsync("deno", "denoland/deno", "deno-x86_64-pc-windows-msvc.zip",
-                DenoFiles, progress, token);
+                DenoFiles, progress, token, downloadProgress);
             verifiedDenoDirectory = GetInstalledDirectory("deno", DenoFiles);
             fallbackDenoPath = null;
         }
@@ -77,7 +103,7 @@ public sealed class YtdlpBinaryManager
     }
 
     private async Task UpdateSafelyAsync(string tool, string repository, string assetName, string[] files,
-        IProgress<string>? progress, CancellationToken token)
+        IProgress<string>? progress, CancellationToken token, IProgress<YtdlpDownloadProgress>? downloadProgress = null)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromMinutes(20));
@@ -93,9 +119,10 @@ public sealed class YtdlpBinaryManager
             if (await IsCurrentAsync(tool, hash, files, timeout.Token))
             {
                 progress?.Report($"{tool} is up to date.");
+                CleanupOldVersions(tool, progress);
                 return;
             }
-            await InstallAsync(tool, asset, hash, files, progress, timeout.Token);
+            await InstallAsync(tool, asset, hash, files, progress, timeout.Token, downloadProgress);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
         catch (Exception error) when (IsUpdateFailure(error))
@@ -111,7 +138,7 @@ public sealed class YtdlpBinaryManager
         OperationCanceledException;
 
     private async Task InstallAsync(string tool, ReleaseAsset asset, string hash, string[] files,
-        IProgress<string>? progress, CancellationToken token)
+        IProgress<string>? progress, CancellationToken token, IProgress<YtdlpDownloadProgress>? downloadProgress)
     {
         var staging = Path.Combine(BinaryDirectory, ".stage-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(staging);
@@ -119,7 +146,7 @@ public sealed class YtdlpBinaryManager
         {
             progress?.Report($"Downloading and verifying {tool}.");
             var package = Path.Combine(staging, "package.download");
-            await GitHubReleaseSource.DownloadAsync(asset, package, hash, token, progress);
+            await GitHubReleaseSource.DownloadAsync(asset, package, hash, token, progress, downloadProgress);
             var payload = Path.Combine(staging, "payload");
             Directory.CreateDirectory(payload);
             if (asset.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
@@ -138,8 +165,41 @@ public sealed class YtdlpBinaryManager
             token.ThrowIfCancellationRequested();
             File.Move(marker, MarkerPath(tool), overwrite: true);
             progress?.Report($"{tool} was installed successfully.");
+            CleanupOldVersions(tool, progress);
         }
         finally { DeleteStaging(staging); }
+    }
+
+    private void CleanupOldVersions(string tool, IProgress<string>? progress)
+    {
+        var state = ReadState(tool);
+        if (state is null) return;
+        string current = StateDirectory(tool, state);
+        if (!Directory.Exists(current)) return;
+        try
+        {
+            foreach (string directory in Directory.EnumerateDirectories(BinaryDirectory, tool + "-*", SearchOption.TopDirectoryOnly))
+            {
+                if (string.Equals(directory, current, StringComparison.OrdinalIgnoreCase)) continue;
+                string suffix = Path.GetFileName(directory)[(tool.Length + 1)..];
+                // Only remove version directories created by this manager, never user folders or directory links.
+                if (suffix.Length != 97 || suffix[64] != '-' || !IsHex(suffix[..64], 64) || !IsHex(suffix[65..], 32)) continue;
+                try
+                {
+                    if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) continue;
+                    Directory.Delete(directory, recursive: true);
+                    progress?.Report($"Removed old {tool} version: {Path.GetFileName(directory)}.");
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                    progress?.Report($"Warning: Unable to remove old {tool} version; cleanup will retry on the next update check. {error.Message}");
+                }
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            progress?.Report($"Warning: Unable to enumerate old {tool} versions for cleanup. {error.Message}");
+        }
     }
 
     private static async Task ExtractExecutablesAsync(string package, string destination, string[] files,

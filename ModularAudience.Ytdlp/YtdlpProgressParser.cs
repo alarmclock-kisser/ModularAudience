@@ -38,6 +38,8 @@ public static class YtdlpProgressParser
             return false;
         var total = actual is > 0 ? actual : estimate is > 0 ? estimate : null;
         var bytes = downloaded ?? 0;
+        if (speed is not > 0 && bytes > 0 && elapsed is > 0)
+            speed = bytes / elapsed.Value;
         if (eta is null && speed is > 0 && total is { } knownTotal)
             TryGetDuration(Math.Max(0, knownTotal - bytes) / speed.Value, out etaTime);
         progress = new YtdlpDownloadProgress

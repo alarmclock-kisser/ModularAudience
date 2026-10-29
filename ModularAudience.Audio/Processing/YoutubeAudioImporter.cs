@@ -8,6 +8,56 @@ namespace ModularAudience.Audio.Processing
 {
     public static class YoutubeAudioImporter
     {
+        public static async Task<bool> WaitForBpmTagAsync(string filePath, TimeSpan maximumWait,
+            CancellationToken cancellationToken)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+            if (maximumWait < TimeSpan.Zero || maximumWait > TimeSpan.FromSeconds(300))
+                throw new ArgumentOutOfRangeException(nameof(maximumWait));
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                float? bpm = await Task.Run(() => ReadSharedBpmTag(filePath), cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (bpm is > 0 && float.IsFinite(bpm.Value)) return true;
+                var remaining = maximumWait - clock.Elapsed;
+                if (remaining <= TimeSpan.Zero) return false;
+                await Task.Delay(remaining < TimeSpan.FromMilliseconds(250) ? remaining : TimeSpan.FromMilliseconds(250),
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        private static float? ReadSharedBpmTag(string filePath)
+        {
+            try
+            {
+                // No duration/audio scanning and no exclusive reader while an external tagger works.
+                using var file = TagLib.File.Create(new SharedTagFile(filePath), TagLib.ReadStyle.None);
+                if (file.Tag.BeatsPerMinute > 0) return file.Tag.BeatsPerMinute;
+                if (file.GetTag(TagLib.TagTypes.Id3v2, false) is TagLib.Id3v2.Tag id3)
+                {
+                    string? text = TagLib.Id3v2.TextInformationFrame.Get(id3, "TBPM", false)?.Text.FirstOrDefault()
+                        ?? TagLib.Id3v2.UserTextInformationFrame.Get(id3, "BPM", false)?.Text.FirstOrDefault();
+                    if (float.TryParse(text?.Replace(',', '.'), System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float bpm) && float.IsFinite(bpm) && bpm > 0)
+                        return bpm;
+                }
+            }
+            // Partial tags and temporary write locks are expected while the external tagger saves.
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or TagLib.CorruptFileException or TagLib.UnsupportedFormatException) { }
+            return null;
+        }
+
+        private sealed class SharedTagFile(string path) : TagLib.File.IFileAbstraction
+        {
+            public string Name => path;
+            public Stream ReadStream => new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            public Stream WriteStream => throw new NotSupportedException("BPM polling is read-only.");
+            public void CloseStream(Stream stream) => stream.Dispose();
+        }
+
         /// <summary>
         /// Imports a local download without taking ownership of its file.
         /// Callers should normally supply a five-second cooldown.

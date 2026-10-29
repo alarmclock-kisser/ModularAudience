@@ -7,6 +7,7 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 public partial class YoutubeBrowserWindow
 {
     private IProgress<string>? currentProgress;
+    private bool batchWaitForBpmTag;
 
     private void StartOperation(string message, Func<CancellationToken, Task> action, bool isBatch = false)
     {
@@ -15,6 +16,7 @@ public partial class YoutubeBrowserWindow
         catch (ArgumentException error) { ReportError("Invalid network settings", error); return; }
         busy = true;
         activeBatch = null;
+        toolTransfer = null;
         operationGeneration++;
         operationClock.Restart();
         operationCancellation = new CancellationTokenSource();
@@ -85,7 +87,17 @@ public partial class YoutubeBrowserWindow
     private async Task UpdateBinariesAsync(CancellationToken token)
     {
         binariesReady = false;
-        await binaryManager.EnsureBinariesAsync(currentProgress, token);
+        var source = operationCancellation;
+        var transferProgress = new Progress<YtdlpDownloadProgress>(transfer =>
+        {
+            if (operationCancellation != source || closing || IsDisposed || resourcesReleased) return;
+            toolTransfer = transfer;
+            operationProgress.Style = ProgressBarStyle.Continuous;
+            operationProgress.Value = (int)((transfer.Percent ?? 0) * operationProgress.Maximum / 100);
+            batchProgressLabel.Text = TransferText(transfer) + $" | {transfer.SpeedBytesPerSecond / 1_000_000:0.00} MB/s";
+            RefreshOperationTiming();
+        });
+        await binaryManager.EnsureBinariesAsync(currentProgress, token, transferProgress);
         token.ThrowIfCancellationRequested();
         binariesReady = true;
         AppendLog("Tool release check completed. Search and import are available.");
@@ -108,7 +120,12 @@ public partial class YoutubeBrowserWindow
             text = text[YtdlpRetryPolicy.ProgressPrefix.Length..];
         string line = text.Replace('\r', ' ').Replace('\n', ' ');
         statusLabel.Text = line.Length > 240 ? line[..240] : line;
-        if (!(line.StartsWith("Downloading ", StringComparison.Ordinal) && line.EndsWith(" MB", StringComparison.Ordinal)))
+        if (toolTransfer is not null && !line.StartsWith("Downloading ", StringComparison.Ordinal))
+        {
+            toolTransfer = null;
+            batchProgressLabel.Text = line;
+        }
+        if (!line.StartsWith("Downloading ", StringComparison.Ordinal))
             AppendLog(text);
         if (line.StartsWith("Warning:", StringComparison.OrdinalIgnoreCase))
             LogManager.LogWarning("YouTube browser: " + statusLabel.Text);
@@ -201,6 +218,7 @@ public partial class YoutubeBrowserWindow
     private async Task ImportBatchAsync(YtdlpVideo[] videos, YtdlpDownloadOptions options,
         TimeSpan cooldown, PlaylistStretchSettings? stretch, int maxParallel, CancellationToken token, DownloadJob[]? retryJobs = null)
     {
+        batchWaitForBpmTag = waitForBpmCheck.Checked;
         var batch = InitializeRetryBatch(videos, retryJobs);
         using var importGate = new SemaphoreSlim(1, 1);
         bool recoveryShown = false, recoveryRetried = false;
@@ -318,10 +336,18 @@ public partial class YoutubeBrowserWindow
     private async Task CooldownAndImportAsync(DownloadBatch batch, DownloadJob job, YtdlpDownloadResult result,
         TimeSpan cooldown, PlaylistStretchSettings? stretch, SemaphoreSlim importGate, CancellationToken token)
     {
-        job.Status = "Cooldown";
+        job.Status = batchWaitForBpmTag ? "Waiting for BPM tag" : "Cooldown";
         job.CooldownDeadline = job.Clock.Elapsed + cooldown;
         RefreshJob(job);
-        try { await Task.Delay(cooldown, token); }
+        try
+        {
+            if (batchWaitForBpmTag)
+            {
+                bool tagged = await YoutubeAudioImporter.WaitForBpmTagAsync(result.FilePath, cooldown, token);
+                AppendLog(tagged ? $"BPM tag detected: {job.Video.Title}" : $"BPM tag wait timed out; importing: {job.Video.Title}");
+            }
+            else await Task.Delay(cooldown, token);
+        }
         finally { job.CooldownDeadline = null; }
         job.Status = "Waiting for audio import";
         RefreshJob(job);

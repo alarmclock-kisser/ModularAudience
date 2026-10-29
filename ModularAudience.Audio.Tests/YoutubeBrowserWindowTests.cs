@@ -13,6 +13,23 @@ namespace ModularAudience.Audio.Tests;
 public sealed class YoutubeBrowserWindowTests
 {
     [STATestMethod]
+    public void BpmWaitToggle_ScalesWaitAndRelatedActionsRequireSelection()
+    {
+        using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+        var wait = Field<NumericUpDown>(window, "cooldownSeconds");
+        var check = Field<CheckBox>(window, "waitForBpmCheck");
+        check.Checked = false;
+        wait.Value = 5;
+        check.Checked = true;
+        Assert.AreEqual(20m, wait.Value);
+        check.Checked = false;
+        Assert.AreEqual(5m, wait.Value);
+        Assert.IsFalse(Field<Button>(window, "showRelatedButton").Enabled);
+        var menu = Field<ContextMenuStrip>(window, "columnsMenu");
+        Assert.AreEqual("Show related / next-up", menu.Items[1].Text);
+    }
+
+    [STATestMethod]
     public void Constructor_ResizableLayout_CanResizeWithoutNetworkOrImport()
     {
         int imported = 0;
@@ -65,7 +82,7 @@ public sealed class YoutubeBrowserWindowTests
         var list = Field<ListView>(window, "downloadJobsList");
         Assert.IsTrue(list.OwnerDraw);
         Assert.AreEqual(View.Details, list.View);
-        CollectionAssert.AreEqual(new[] { "Title", "Phase", "Download", "Elapsed", "ETA", "Speed" },
+        CollectionAssert.AreEqual(new[] { "Title", "Phase", "Download", "Elapsed", "ETA", "Speed", "Transferred" },
             list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray());
         var elapsed = Field<Label>(window, "elapsedLabel");
         var eta = Field<Label>(window, "etaLabel");
@@ -121,6 +138,8 @@ public sealed class YoutubeBrowserWindowTests
             Assert.AreEqual("25.0%", row.SubItems[2].Text);
             Assert.AreEqual("00:00:06", row.SubItems[4].Text);
             Assert.AreEqual("0.5 KiB/s", row.SubItems[5].Text);
+            StringAssert.Contains(row.SubItems[6].Text, "MB");
+            StringAssert.Contains(Field<Label>(window, "etaLabel").Text, "00:00:06");
             var overall = Field<ProgressBar>(window, "operationProgress");
             Assert.AreEqual(0, overall.Value);
 

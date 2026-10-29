@@ -79,11 +79,11 @@ internal static partial class GitHubReleaseSource
     }
 
     internal static async Task DownloadAsync(ReleaseAsset asset, string destination, string expectedHash,
-        CancellationToken token, IProgress<string>? progress = null)
+        CancellationToken token, IProgress<string>? progress = null, IProgress<YtdlpDownloadProgress>? downloadProgress = null)
     {
         if (asset.Size <= 0 || asset.Size > MaximumAssetBytes)
             throw new InvalidDataException("The binary asset size exceeds the allowed limit.");
-        var transfer = new AssetTransferProgress(asset.Name, asset.Size, progress);
+        var transfer = new AssetTransferProgress(asset.Name, asset.Size, progress, downloadProgress);
         transfer.Report(0);
         using var response = await SendAsync(asset.Url, token);
         await using var source = await response.Content.ReadAsStreamAsync(token);

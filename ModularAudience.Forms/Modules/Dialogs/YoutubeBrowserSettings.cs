@@ -23,7 +23,9 @@ internal sealed class YoutubeBrowserSettings
     public int ProxyMode { get; set; }
     public string ProxyUrl { get; set; } = string.Empty;
     public string OutputDirectory { get; set; } = DefaultOutputDirectory;
+    public string YTDownloaderBinariesPath { get; set; } = string.Empty;
     public int CooldownSeconds { get; set; } = 5;
+    public bool WaitForBpmTag { get; set; }
     public int MaxDurationMinutes { get; set; } = 30;
     public int MaxSizeMiB { get; set; } = 512;
     public int MaxParallelDownloads { get; set; } = 2;
@@ -82,6 +84,7 @@ internal sealed class YoutubeBrowserSettings
         if (VisibleColumns is not { Length: 7 }) VisibleColumns = [true, true, true, true, false, false, true];
         VisibleColumns[0] = true;
         OutputDirectory = NormalizeDirectory(OutputDirectory);
+        YTDownloaderBinariesPath ??= string.Empty;
         if (!ValidStretch(Stretch)) Stretch = null;
         if (Stretch is not null) Stretch = Stretch with { Threads = Math.Clamp(Stretch.Threads, 1, Math.Max(1, Environment.ProcessorCount)) };
         StretchEnabled &= Stretch is not null;

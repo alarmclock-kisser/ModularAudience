@@ -42,6 +42,17 @@ public sealed class YtdlpProgressParserTests
     }
 
     [TestMethod]
+    public void TryParse_MissingSpeed_UsesTransferredBytesAndElapsedForRateAndEta()
+    {
+        var progress = Parse("""
+            {"status":"downloading","downloaded_bytes":2000000,"total_bytes":8000000,
+             "total_bytes_estimate":0,"speed":null,"eta":null,"elapsed":4}
+            """);
+        Assert.AreEqual<double?>(500000, progress.SpeedBytesPerSecond);
+        Assert.AreEqual<TimeSpan?>(TimeSpan.FromSeconds(12), progress.Eta);
+    }
+
+    [TestMethod]
     public void TryParse_UnknownTotals_LeavesPercentAndEtaUnknown()
     {
         foreach (string totals in new[] { "", ",\"total_bytes\":null,\"total_bytes_estimate\":null",

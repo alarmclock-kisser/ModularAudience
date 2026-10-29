@@ -47,6 +47,29 @@ public sealed class YtdlpRepairTests
     }
 
     [TestMethod]
+    public void AssetTransfer_ReportsBytesRateAndEtaThroughTheDownloadCallback()
+    {
+        var type = typeof(YtdlpClient).Assembly.GetType("ModularAudience.Ytdlp.AssetTransferProgress")!;
+        var messages = new List<string>();
+        var updates = new List<YtdlpDownloadProgress>();
+        var transfer = Activator.CreateInstance(type, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            null, ["ffmpeg.zip", 100_000_000L, new Capture<string>(messages), new Capture<YtdlpDownloadProgress>(updates)], null)!;
+        type.GetMethod("Report", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(transfer, [25_000_000L, false]);
+        Assert.HasCount(1, updates);
+        Assert.AreEqual(25_000_000L, updates[0].DownloadedBytes);
+        Assert.AreEqual<long?>(100_000_000, updates[0].TotalBytes);
+        Assert.IsTrue(updates[0].SpeedBytesPerSecond > 0);
+        Assert.IsNotNull(updates[0].Eta);
+        StringAssert.Contains(messages[0], "25.00 / 100.00 MB");
+        StringAssert.Contains(messages[0], "MB/s | ETA:");
+    }
+
+    private sealed class Capture<T>(List<T> values) : IProgress<T>
+    {
+        public void Report(T value) => values.Add(value);
+    }
+
+    [TestMethod]
     public void Network_DefaultRoutingMakesNoChanges_ExplicitRoutingUsesSafeArguments()
     {
         var add = typeof(YtdlpNetworkOptions).GetMethod("AddArguments", BindingFlags.Instance | BindingFlags.NonPublic)!;

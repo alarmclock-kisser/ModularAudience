@@ -39,11 +39,14 @@ public partial class YoutubeBrowserWindow : Form
             AppendLog(settingsWarning);
             LogManager.LogWarning(settingsWarning);
         }
-        StartOperation("Checking tool releases...", UpdateBinariesAsync);
+        if (EnsureBinaryDirectory()) StartOperation("Checking tool releases...", UpdateBinariesAsync);
     }
 
-    private void Update_Click(object? sender, EventArgs e) =>
-        StartOperation("Checking tool releases...", UpdateBinariesAsync);
+    private void Update_Click(object? sender, EventArgs e)
+    {
+        if (busy || closing) return;
+        if (EnsureBinaryDirectory()) StartOperation("Checking tool releases...", UpdateBinariesAsync);
+    }
 
     private void Search_Click(object? sender, EventArgs e) => Search(false);
     private void Playlist_Click(object? sender, EventArgs e) => Search(true);
@@ -70,6 +73,7 @@ public partial class YoutubeBrowserWindow : Form
         queryPanel.Enabled = available;
         optionsGroup.Enabled = available;
         updateButton.Enabled = !busy && !closing;
+        toolsFolderButton.Enabled = !busy && !closing;
         cancelButton.Enabled = busy && !closing && operationCancellation?.IsCancellationRequested == false;
         downloadButton.Enabled = available && resultsList.SelectedItems.Count > 0;
         relatedButton.Enabled = available && resultsList.SelectedItems.Count == 1;
@@ -77,6 +81,7 @@ public partial class YoutubeBrowserWindow : Form
         openButton.Enabled = !closing && resultsList.SelectedItems.Count == 1;
         copyButton.Enabled = !closing && resultsList.SelectedItems.Count > 0;
         metadataButton.Enabled = available && resultsList.SelectedItems.Count == 1;
+        showRelatedButton.Enabled = metadataButton.Enabled;
         operationProgress.Visible = busy || activeBatch is not null;
         UpdateOptionAvailability();
     }
