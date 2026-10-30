@@ -56,6 +56,15 @@ public sealed class YoutubeBrowserResponsiveTests
             Assert.IsTrue(waitCheck.Left >= waitSeconds.Right);
         }
         Assert.IsNull(videos[0].UploadDate, "The flat result really lacks a date; the parser must not invent one.");
+        foreach (var narrow in new[] { new Size(800, 600), new Size(600, 400) })
+        {
+            window.Size = narrow;
+            window.PerformLayout();
+            Assert.IsFalse(Field<SplitContainer>(window, "mainSplit").Panel2Collapsed, "Normal results/details remain until below 600x400.");
+            Assert.IsTrue(list.Width > 200 && list.Height > 100, $"Results table too small at {narrow}: {list.Size}");
+            Assert.IsTrue(Field<TabControl>(window, "browsingTabs").TabPages.Cast<TabPage>().Any(tab => tab.Text == "Options / actions"));
+            Assert.IsFalse(window.AutoScroll);
+        }
         window.Size = window.MinimumSize;
         window.PerformLayout();
         Assert.IsTrue(Field<SplitContainer>(window, "mainSplit").Panel2Collapsed);

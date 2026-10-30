@@ -8,6 +8,7 @@ public partial class YoutubeBrowserWindow
 {
     private IProgress<string>? currentProgress;
     private bool batchWaitForBpmTag;
+    private Func<string, int, CancellationToken, Task<IReadOnlyList<YtdlpVideo>>>? searchProvider;
 
     private void StartOperation(string message, Func<CancellationToken, Task> action, bool isBatch = false)
     {
@@ -144,7 +145,7 @@ public partial class YoutubeBrowserWindow
             bool isUrl = requirePlaylistUrl || (!forceSearch && LooksLikeUrl(query));
             var videos = isUrl
                 ? await client.BrowseAsync(YtdlpParser.ValidateYoutubeUrl(query).AbsoluteUri, limit, token)
-                : await client.SearchAsync(query, limit, token);
+                : await (searchProvider?.Invoke(query, limit, token) ?? client.SearchAsync(query, limit, token));
             token.ThrowIfCancellationRequested();
             PublishResults(videos, query, $"{videos.Count}/{limit} result(s) loaded");
             StartUploadDates(videos);

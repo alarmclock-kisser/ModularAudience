@@ -60,6 +60,12 @@ public partial class YoutubeBrowserWindow
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
+        // Handle Enter before WinForms routes it to an AcceptButton on another/hidden tab.
+        if (keyData == Keys.Enter && queryText.ContainsFocus)
+        {
+            Search(false);
+            return true;
+        }
         if (keyData is (Keys.Control | Keys.Z) or (Keys.Control | Keys.Y))
         {
             NavigateResultsHistory(keyData == (Keys.Control | Keys.Z) ? -1 : 1);

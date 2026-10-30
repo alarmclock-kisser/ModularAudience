@@ -14,9 +14,18 @@ public partial class YoutubeBrowserWindow
         browseCancellation?.Cancel();
         var source = new CancellationTokenSource();
         browseCancellation = source;
-        client.NetworkOptions = CaptureNetworkOptions();
+        try { client.NetworkOptions = CaptureNetworkOptions(); }
+        catch (ArgumentException error)
+        {
+            browseCancellation = null;
+            source.Dispose();
+            ReportError("Invalid network settings", error);
+            return;
+        }
         browsing = true;
         statusLabel.Text = message;
+        browsingTabs.SelectedTab = resultsTab;
+        UseWaitCursor = true;
         RefreshAvailability();
         browseOperation = RunBrowseAsync();
         browseTasks.Add(browseOperation);
@@ -26,6 +35,7 @@ public partial class YoutubeBrowserWindow
             try
             {
                 await Task.Yield();
+                source.Token.ThrowIfCancellationRequested();
                 await ExecuteWithRecoveryAsync(action, source.Token);
             }
             catch (OperationCanceledException) when (source.IsCancellationRequested) { }
@@ -36,6 +46,7 @@ public partial class YoutubeBrowserWindow
                 {
                     browsing = false;
                     browseCancellation = null;
+                    UseWaitCursor = false;
                     RefreshAvailability();
                 }
                 source.Dispose();

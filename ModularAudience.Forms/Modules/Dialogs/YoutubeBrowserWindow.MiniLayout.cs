@@ -7,7 +7,12 @@ public partial class YoutubeBrowserWindow
     private bool miniLayout;
     private bool switchingMiniLayout;
     private readonly Dictionary<int, (SizeType Type, float Height)> normalRowStyles = [];
-    private readonly Size normalLayoutThreshold = new(1000, 780);
+    private readonly Size normalLayoutThreshold = new(600, 400);
+    private bool condensedLayout;
+    private TabPage? settingsTab;
+    private TableLayoutPanel? settingsLayout;
+    private Control? normalActions;
+    private readonly Dictionary<int, (SizeType Type, float Height)> expandedRowStyles = [];
     private WaveformPreview? thumbnailPopup;
     private string? hoveredThumbnailId;
     private CancellationTokenSource? popupCancellation;
@@ -18,6 +23,7 @@ public partial class YoutubeBrowserWindow
     private void UpdateMiniLayout()
     {
         if (rootLayout is null || switchingMiniLayout || resourcesReleased) return;
+        UpdateCondensedLayout();
         bool compact = Width < normalLayoutThreshold.Width || Height < normalLayoutThreshold.Height;
         if (compact == miniLayout) return;
         switchingMiniLayout = true;
@@ -37,12 +43,18 @@ public partial class YoutubeBrowserWindow
                 }
                 else if (normalRowStyles.TryGetValue(row, out var saved))
                 { style.SizeType = saved.Type; style.Height = saved.Height; }
-                rootLayout.GetControlFromPosition(0, row)!.Visible = !compact;
+                if (rootLayout.GetControlFromPosition(0, row) is { } control)
+                    control.Visible = !compact && (!condensedLayout || row is 1 or 2);
             }
             // The same tables stay alive: selection, downloads and history survive layout switches.
-            mainSplit.Panel1MinSize = compact ? 100 : 420;
+            mainSplit.Panel1MinSize = compact ? 100 : condensedLayout ? 240 : 420;
             mainSplit.Panel2Collapsed = compact;
             resultsSummary.Visible = !compact;
+            if (settingsTab is not null)
+            {
+                if (compact) browsingTabs.TabPages.Remove(settingsTab);
+                else if (condensedLayout && !browsingTabs.TabPages.Contains(settingsTab)) browsingTabs.TabPages.Add(settingsTab);
+            }
             queryPanel.GetControlFromPosition(1, 0)!.Visible = !compact;
             playlistButton.Visible = !compact;
             queryPanel.ColumnStyles[1].SizeType = compact ? SizeType.Absolute : SizeType.AutoSize;
@@ -57,6 +69,74 @@ public partial class YoutubeBrowserWindow
         }
         finally { rootLayout.ResumeLayout(true); switchingMiniLayout = false; }
         FitResultColumns();
+    }
+
+    private void UpdateCondensedLayout()
+    {
+        bool condensed = Width < 1000 || Height < 780;
+        if (condensed == condensedLayout) return;
+        // Restore the mini-only row changes before changing the underlying normal layout.
+        if (miniLayout)
+            foreach (var pair in normalRowStyles)
+            { rootLayout.RowStyles[pair.Key].SizeType = pair.Value.Type; rootLayout.RowStyles[pair.Key].Height = pair.Value.Height; }
+        rootLayout.SuspendLayout();
+        try
+        {
+            condensedLayout = condensed;
+            normalActions ??= rootLayout.GetControlFromPosition(0, 4);
+            if (settingsTab is null)
+            {
+                settingsTab = new TabPage("Options / actions") { UseVisualStyleBackColor = true };
+                settingsLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty };
+                settingsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                settingsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+                settingsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                settingsTab.Controls.Add(settingsLayout);
+            }
+            if (condensed)
+            {
+                foreach (int row in new[] { 0, 3, 4, 5, 6 })
+                {
+                    var style = rootLayout.RowStyles[row];
+                    expandedRowStyles[row] = (style.SizeType, style.Height);
+                    style.SizeType = SizeType.Absolute;
+                    style.Height = 0;
+                    if (rootLayout.GetControlFromPosition(0, row) is { } control) control.Visible = false;
+                }
+                settingsLayout!.Controls.Add(optionsGroup, 0, 0);
+                settingsLayout.Controls.Add(normalActions!, 0, 1);
+                optionsGroup.Visible = normalActions!.Visible = true;
+                browsingTabs.TabPages.Add(settingsTab);
+                mainSplit.Panel1MinSize = 240;
+                mainSplit.Panel2MinSize = 220;
+            }
+            else
+            {
+                rootLayout.Controls.Add(optionsGroup, 0, 3);
+                rootLayout.Controls.Add(normalActions!, 0, 4);
+                browsingTabs.TabPages.Remove(settingsTab);
+                foreach (var pair in expandedRowStyles)
+                {
+                    var style = rootLayout.RowStyles[pair.Key];
+                    style.SizeType = pair.Value.Type;
+                    style.Height = pair.Value.Height;
+                    rootLayout.GetControlFromPosition(0, pair.Key)!.Visible = true;
+                }
+                mainSplit.Panel1MinSize = 420;
+                mainSplit.Panel2MinSize = 270;
+            }
+            if (miniLayout)
+            {
+                foreach (int row in new[] { 0, 3, 4, 5, 6 })
+                {
+                    var style = rootLayout.RowStyles[row];
+                    normalRowStyles[row] = (style.SizeType, style.Height);
+                    style.SizeType = SizeType.Absolute;
+                    style.Height = 0;
+                }
+            }
+        }
+        finally { rootLayout.ResumeLayout(true); }
     }
 
     private void HideThumbnailPopup()

@@ -13,6 +13,39 @@ namespace ModularAudience.Audio.Tests;
 public sealed class YoutubeBrowserWindowTests
 {
     [STATestMethod]
+    public void SearchInSmallLayouts_EnterAndSearchButtonPublishResultsAndSelectResultsTab()
+    {
+        using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+        _ = window.Handle;
+        _ = Field<ListView>(window, "resultsList").Handle;
+        SetField(window, "binariesReady", true);
+        int searches = 0;
+        SetField(window, "searchProvider", new Func<string, int, CancellationToken, Task<IReadOnlyList<YtdlpVideo>>>((query, limit, token) =>
+        {
+            searches++;
+            return Task.FromResult<IReadOnlyList<YtdlpVideo>>([new() { Id = "abcdefghijk", Title = query, UploadDate = new(2025, 1, 1) }]);
+        }));
+        foreach (var size in new[] { new System.Drawing.Size(600, 400), new System.Drawing.Size(420, 260), new System.Drawing.Size(800, 600) })
+        {
+            window.Size = size;
+            window.PerformLayout();
+            Invoke(window, "RefreshAvailability");
+            foreach (string handler in new[] { "Query_KeyDown", "Search_Click" })
+            {
+                Field<TextBox>(window, "queryText").Text = size + handler;
+                if (handler == "Query_KeyDown") Invoke(window, handler, null, new KeyEventArgs(Keys.Enter));
+                else Invoke(window, handler, null, EventArgs.Empty);
+                var timer = Stopwatch.StartNew();
+                while (!Field<Task>(window, "browseOperation").IsCompleted && timer.Elapsed < TimeSpan.FromSeconds(5)) Application.DoEvents();
+                Assert.IsTrue(Field<Task>(window, "browseOperation").IsCompleted);
+                Assert.AreEqual(size + handler, Field<ListView>(window, "resultsList").Items[0].Text);
+                Assert.AreSame(Field<TabPage>(window, "resultsTab"), Field<TabControl>(window, "browsingTabs").SelectedTab);
+            }
+        }
+        Assert.AreEqual(6, searches);
+    }
+
+    [STATestMethod]
     public void RunningDownloads_LeaveBrowsingAndHistoryAvailable_AndChannelRowsHaveNoVideoMetrics()
     {
         using var cancellation = new CancellationTokenSource();
