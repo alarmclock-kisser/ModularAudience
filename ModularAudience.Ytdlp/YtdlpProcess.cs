@@ -9,15 +9,15 @@ internal static class YtdlpProcess
     private const int MaximumErrorCharacters = 16 * 1024;
 
     internal static Task<string> RunAsync(string executable, IEnumerable<string> arguments,
-        string workingDirectory, IProgress<string>? progress, bool reportOutput, CancellationToken token)
+        string workingDirectory, IProgress<string>? progress, bool reportOutput, CancellationToken token, string? cookieContents = null)
     {
         var capturedArguments = arguments.ToArray();
         return YtdlpRetryPolicy.ExecuteAsync((_, cancellation) => RunOnceAsync(executable, capturedArguments,
-            workingDirectory, progress, reportOutput, cancellation), progress, token);
+            workingDirectory, progress, reportOutput, cancellation, cookieContents), progress, token);
     }
 
     private static async Task<string> RunOnceAsync(string executable, IEnumerable<string> arguments,
-        string workingDirectory, IProgress<string>? progress, bool reportOutput, CancellationToken token)
+        string workingDirectory, IProgress<string>? progress, bool reportOutput, CancellationToken token, string? cookieContents)
     {
         token.ThrowIfCancellationRequested();
         var start = new ProcessStartInfo(executable)
@@ -32,7 +32,7 @@ internal static class YtdlpProcess
         };
         foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
-        using var sessionScratch = new YtdlpSessionScratch(start, workingDirectory, progress);
+        using var sessionScratch = new YtdlpSessionScratch(start, workingDirectory, progress, cookieContents);
         using var process = new Process { StartInfo = start };
         if (!process.Start())
             throw new InvalidOperationException("Unable to start yt-dlp.");

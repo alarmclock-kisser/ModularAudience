@@ -15,7 +15,10 @@ public sealed class YtdlpProcessException : InvalidOperationException
     public DateTimeOffset? RetryNotBeforeUtc { get; }
 
     public YtdlpProcessException(int exitCode, string error, string diagnosis = "")
-        : base($"yt-dlp exited with code {exitCode}.\n{YtdlpDiagnosticRedactor.Redact(error)}\n{diagnosis}")
+        : base($"yt-dlp exited with code {exitCode}.\n{YtdlpDiagnosticRedactor.Redact(error)}\n{diagnosis}" +
+            (Classify(error) == YtdlpFailureKind.BrowserCookies
+                ? "\nBrowser cookies could not be read. Chrome on Windows may use App-Bound Encryption (DPAPI). Select an exported YouTube Netscape cookies.txt file or a signed-in Firefox profile in recovery."
+                : string.Empty))
     {
         ExitCode = exitCode;
         FailureKind = Classify(error);

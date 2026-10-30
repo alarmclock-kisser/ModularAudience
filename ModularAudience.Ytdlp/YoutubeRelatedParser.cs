@@ -28,7 +28,11 @@ public static class YoutubeRelatedParser
         foreach (string key in new[] { "onResponseReceivedEndpoints", "onResponseReceivedActions" })
             if (root.TryGetProperty(key, out var actions) && actions.ValueKind == JsonValueKind.Array)
                 foreach (var action in actions.EnumerateArray())
+                {
                     if (At(action, "appendContinuationItemsAction", "continuationItems") is { } items) Visit(items);
+                    if (At(action, "reloadContinuationItemsCommand", "continuationItems") is { } reloaded) Visit(reloaded);
+                }
+        if (At(root, "continuationContents", "itemSectionContinuation") is { } section) Visit(section);
         continuation = next;
         return videos.AsReadOnly();
 
@@ -44,7 +48,9 @@ public static class YoutubeRelatedParser
             {
                 if (property.Name is "adSlotRenderer" or "promotedSparklesWebRenderer" or "promotedVideoRenderer") continue;
                 if (property.Name == "continuationItemRenderer")
-                    next ??= Text(At(property.Value, "continuationEndpoint", "continuationCommand", "token"));
+                    next ??= Text(At(property.Value, "continuationEndpoint", "continuationCommand", "token"))
+                        ?? Text(At(property.Value, "button", "buttonRenderer", "command", "continuationCommand", "token"));
+                else if (property.Name == "nextContinuationData") next ??= Text(At(property.Value, "continuation"));
                 else if (property.Name is "compactVideoRenderer" or "videoRenderer" or "playlistPanelVideoRenderer")
                     Add(Renderer(property.Value));
                 else if (property.Name == "lockupViewModel") Add(Lockup(property.Value));

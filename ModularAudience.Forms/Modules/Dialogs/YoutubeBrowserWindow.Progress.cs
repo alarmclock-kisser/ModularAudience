@@ -10,6 +10,7 @@ public partial class YoutubeBrowserWindow
     private int operationGeneration;
     private DownloadBatch? activeBatch;
     private YtdlpDownloadProgress? toolTransfer;
+    private bool showDownloadsOnBatchStart = true;
 
     private sealed class DownloadJob(YtdlpVideo video, int index, ListViewItem row)
     {
@@ -66,7 +67,8 @@ public partial class YoutubeBrowserWindow
         finally { downloadJobsList.EndUpdate(); }
         var batch = new DownloadBatch(jobs, operationCancellation!, operationGeneration);
         activeBatch = batch;
-        browsingTabs.SelectedTab = downloadsTab;
+        if (showDownloadsOnBatchStart) browsingTabs.SelectedTab = downloadsTab;
+        showDownloadsOnBatchStart = true;
         operationProgress.Style = ProgressBarStyle.Continuous;
         operationProgress.Value = 0;
         operationProgress.AccessibleName = "Completed jobs, including failed and cancelled jobs";

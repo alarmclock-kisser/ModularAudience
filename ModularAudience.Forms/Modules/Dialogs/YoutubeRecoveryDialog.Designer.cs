@@ -1,5 +1,7 @@
 using System.ComponentModel;
 
+#nullable enable
+
 namespace ModularAudience.Forms.Modules.Dialogs;
 
 partial class YoutubeRecoveryDialog
@@ -14,10 +16,14 @@ partial class YoutubeRecoveryDialog
     private Label validationLabel = null!;
     private Button retryButton = null!;
     private FlowLayoutPanel sessionPanel = null!;
+    private CheckBox cookieFileCheck = null!;
+    private TextBox cookieFileText = null!;
+    private Button cookieBrowseButton = null!;
+    private Button connectChromeButton = null!;
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) components?.Dispose();
+        if (disposing) { bridgeCancellation?.Cancel(); components?.Dispose(); }
         base.Dispose(disposing);
     }
 
@@ -36,7 +42,7 @@ partial class YoutubeRecoveryDialog
         layout.Controls.Add(new Label
         {
             AutoSize = true, Dock = DockStyle.Fill,
-            Text = "YouTube recovery — only matching failed items will be retried. Successful imports are never repeated.\nOne assisted retry is allowed; rate limits, DRM and access restrictions are not bypassed.",
+            Text = "YouTube recovery — only matching failed items will be retried. Successful imports are never repeated.\nIf browser cookie extraction fails, a different cookie source can be selected once.",
             Padding = new Padding(0, 0, 0, 8)
         }, 0, 0);
         diagnosticsText = new TextBox
@@ -58,17 +64,28 @@ partial class YoutubeRecoveryDialog
         sessionPanel.Controls.Add(browserCombo);
         sessionPanel.Controls.Add(new Label { AutoSize = true, Text = "Profile", Margin = new Padding(3, 6, 3, 0) });
         sessionPanel.Controls.Add(profileText);
+        cookieFileCheck = new CheckBox { Text = "Use exported cookies.txt instead", AutoSize = true };
+        cookieFileCheck.CheckedChanged += CookieSource_Changed;
+        cookieFileText = new TextBox { Width = 380, ReadOnly = true, AccessibleName = "Exported Netscape cookie file" };
+        cookieBrowseButton = new Button { Text = "Browse cookies.txt...", AutoSize = true };
+        cookieBrowseButton.Click += CookieBrowse_Click;
+        sessionPanel.SetFlowBreak(profileText, true);
+        sessionPanel.Controls.AddRange([cookieFileCheck, cookieFileText, cookieBrowseButton]);
+        connectChromeButton = new Button { Text = "Connect Chrome automatically...", AutoSize = true };
+        connectChromeButton.Click += ConnectChrome_Click;
+        sessionPanel.SetFlowBreak(cookieBrowseButton, true);
+        sessionPanel.Controls.Add(connectChromeButton);
         layout.Controls.Add(sessionPanel, 0, 3);
         privacyLabel = new Label
         {
             AutoSize = true, Dock = DockStyle.Fill,
-            Text = "yt-dlp will read this profile's cookie database as the current Windows user; it can contain other websites' sessions.\nRelevant cookies are used for requests. No cookie-file export or cookie-value logging is requested.\nTemporary database copies stay in the job folder and are cleaned after process exit; cleanup failures are reported.\nThis retry operation can include one automatic repeat. Browser/Windows encryption is not bypassed.\nUse Default / Profile 1 for Chromium, or abc.default-release for Firefox. Paths are not accepted.",
+            Text = "Chrome on Windows may reject direct cookie extraction with DPAPI / App-Bound Encryption errors.\nUse Connect Chrome automatically: one-time extension installation, then automatic YouTube cookie transfer for this window.\nAlternatively select exported Netscape cookies.txt or a signed-in Firefox profile (about:profiles).\nCookie files contain login credentials: keep them private. Temporary per-attempt copies are cleaned after use.\nBrowser profiles use Default / Profile 1 for Chromium, or abc.default-release for Firefox.",
             Padding = new Padding(0, 4, 0, 4)
         };
         layout.Controls.Add(privacyLabel, 0, 4);
         consentCheck = new CheckBox
         {
-            Text = "I authorize reading this browser profile's cookies for this retry only.", AutoSize = true, Dock = DockStyle.Top
+            Text = "I authorize using the selected browser profile or cookie file for this retry only.", AutoSize = true, Dock = DockStyle.Top
         };
         consentCheck.CheckedChanged += Consent_Changed;
         layout.Controls.Add(consentCheck, 0, 5);

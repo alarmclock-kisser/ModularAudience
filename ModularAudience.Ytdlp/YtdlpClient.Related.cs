@@ -52,7 +52,7 @@ public sealed partial class YtdlpClient
         string version = Regex.Match(html, "\"INNERTUBE_CLIENT_VERSION\"\\s*:\\s*\"([^\"]+)\"").Groups[1].Value;
         string visitor = Regex.Match(html, "\"VISITOR_DATA\"\\s*:\\s*\"([^\"]+)\"").Groups[1].Value;
         var usedTokens = new HashSet<string>(StringComparer.Ordinal);
-        for (int page = 0; results.Count < maxResults && version.Length > 0 && page < 12; page++)
+        for (int page = 0; results.Count < maxResults && version.Length > 0 && page < YtdlpParser.MaximumResults; page++)
         {
             if (results.Count > 0 && continuation is null) break;
             if (continuation is not null && !usedTokens.Add(continuation)) break;
@@ -71,6 +71,7 @@ public sealed partial class YtdlpClient
             string json = await ReadRelatedResponseAsync(http, request, cancellationToken);
             using var next = JsonDocument.Parse(json);
             Add(next.RootElement);
+            progress.Report($"Loaded {results.Count}/{maxResults} related videos; loading further recommendations...");
             if (continuation is null) break;
         }
         if (results.Count == 0)

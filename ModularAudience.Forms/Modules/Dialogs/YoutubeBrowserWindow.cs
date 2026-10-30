@@ -21,6 +21,7 @@ public partial class YoutubeBrowserWindow : Form
     private bool resourcesReleased;
     private long lastProgressTick;
     private string? settingsWarning;
+    private YtdlpBrowserSession? connectedSession;
 
     public YoutubeBrowserWindow(Action<AudioObj> importAudio)
     {
@@ -191,6 +192,8 @@ public partial class YoutubeBrowserWindow : Form
         operationCancellation?.Cancel();
         previewCancellation?.Cancel();
         client.ProgressChanged -= Client_ProgressChanged;
+        connectedSession = null;
+        client.MetadataSession = null;
         thumbnailClient.Dispose();
         var image = thumbnailPicture.Image;
         thumbnailPicture.Image = null;

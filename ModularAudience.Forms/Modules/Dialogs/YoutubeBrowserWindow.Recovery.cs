@@ -26,7 +26,17 @@ public partial class YoutubeBrowserWindow
                 await action(token);
                 return true;
             }
-            finally { client.NetworkOptions = originalNetwork; client.MetadataSession = originalSession; }
+            catch (YtdlpProcessException cookieError) when (cookieError.FailureKind == YtdlpFailureKind.BrowserCookies)
+            {
+                var alternative = RequestRecovery([cookieError], recovered, cookieError.Message, token);
+                if (alternative is null) return false;
+                var corrected = YtdlpRecoveryRules.Apply(cookieError.FailureKind, alternative, recovered);
+                client.NetworkOptions = corrected.Network;
+                client.MetadataSession = corrected.BrowserSession;
+                await action(token);
+                return true;
+            }
+            finally { client.NetworkOptions = originalNetwork; client.MetadataSession = connectedSession ?? originalSession; }
         }
     }
 
@@ -51,6 +61,12 @@ public partial class YoutubeBrowserWindow
             return null;
         }
         AppendLog($"Explicit recovery selected: {dialog.Decision.Action}. Applies to matching failed requests in this operation only.");
+        if (dialog.Decision.Session is { CookieContents: not null } session)
+        {
+            connectedSession = session;
+            client.MetadataSession = session;
+            AppendLog("Chrome YouTube session connected for this browser window. Cookies are not saved to settings.");
+        }
         return dialog.Decision;
     }
 
@@ -65,7 +81,7 @@ public partial class YoutubeBrowserWindow
 
     private async Task<(bool Shown, bool Retried)> RecoverBatchAsync(DownloadBatch batch,
         YtdlpDownloadOptions options, TimeSpan cooldown, PlaylistStretchSettings? stretch,
-        int maxParallel, SemaphoreSlim importGate, CancellationToken token)
+        int maxParallel, SemaphoreSlim importGate, CancellationToken token, bool allowCookieCorrection = true)
     {
         token.ThrowIfCancellationRequested();
         var candidates = RecoverableJobs(batch);
@@ -85,6 +101,8 @@ public partial class YoutubeBrowserWindow
         batch.Settled = false;
         RefreshBatchProgress(batch);
         await RunBatchPassAsync(batch, eligible, recovered, cooldown, stretch, maxParallel, importGate, token);
+        if (allowCookieCorrection && eligible.Any(job => job.Error is YtdlpProcessException { FailureKind: YtdlpFailureKind.BrowserCookies }))
+            await RecoverBatchAsync(batch, recovered, cooldown, stretch, maxParallel, importGate, token, allowCookieCorrection: false);
         return (true, true);
     }
 

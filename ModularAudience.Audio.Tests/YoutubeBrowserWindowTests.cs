@@ -13,6 +13,30 @@ namespace ModularAudience.Audio.Tests;
 public sealed class YoutubeBrowserWindowTests
 {
     [STATestMethod]
+    public void ResultsHistory_RestoresPagesAndDiscardsForwardBranchAfterNewSearch()
+    {
+        using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+        _ = window.Handle;
+        _ = Field<ListView>(window, "resultsList").Handle;
+        var limit = Field<NumericUpDown>(window, "resultLimit");
+        limit.Value = 64;
+        Invoke(window, "PublishResults", new YtdlpVideo[] { new() { Id = "abcdefghijk", Title = "First" } }, "first query", "First page", false);
+        limit.Value = 128;
+        Invoke(window, "PublishResults", new YtdlpVideo[] { new() { Id = "dQw4w9WgXcQ", Title = "Related" } }, "related query", "Related page", true);
+        Invoke(window, "NavigateResultsHistory", -1);
+        Assert.AreEqual("First", Field<ListView>(window, "resultsList").Items[0].Text);
+        Assert.AreEqual("first query", Field<TextBox>(window, "queryText").Text);
+        Assert.AreEqual(64m, limit.Value);
+        Invoke(window, "NavigateResultsHistory", 1);
+        Assert.AreEqual("Related", Field<ListView>(window, "resultsList").Items[0].Text);
+        Assert.AreEqual(128m, limit.Value);
+        Invoke(window, "NavigateResultsHistory", -1);
+        Invoke(window, "PublishResults", new YtdlpVideo[] { new() { Id = "third123456", Title = "Third" } }, "third", "Third page", false);
+        Invoke(window, "NavigateResultsHistory", 1);
+        Assert.AreEqual("Third", Field<ListView>(window, "resultsList").Items[0].Text);
+    }
+
+    [STATestMethod]
     public void BpmWaitToggle_ScalesWaitAndRelatedActionsRequireSelection()
     {
         using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
@@ -26,7 +50,8 @@ public sealed class YoutubeBrowserWindowTests
         Assert.AreEqual(5m, wait.Value);
         Assert.IsFalse(Field<Button>(window, "showRelatedButton").Enabled);
         var menu = Field<ContextMenuStrip>(window, "columnsMenu");
-        Assert.AreEqual("Show related / next-up", menu.Items[1].Text);
+        Assert.AreEqual("Download enqueue", menu.Items[0].Text);
+        Assert.AreEqual("Show related / next-up", menu.Items[2].Text);
     }
 
     [STATestMethod]

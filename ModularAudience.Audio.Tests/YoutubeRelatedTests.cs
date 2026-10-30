@@ -33,6 +33,19 @@ public sealed class YoutubeRelatedTests
     }
 
     [TestMethod]
+    public void Parse_ReloadContinuationAndButtonToken_KeepPaginationAvailable()
+    {
+        using var json = JsonDocument.Parse("""
+            {"onResponseReceivedEndpoints":[{"reloadContinuationItemsCommand":{"continuationItems":[
+              {"compactVideoRenderer":{"videoId":"abcdefghijk"}},
+              {"continuationItemRenderer":{"button":{"buttonRenderer":{"command":{"continuationCommand":{"token":"MORE"}}}}}}
+            ]}}]}
+            """);
+        Assert.HasCount(1, YoutubeRelatedParser.Parse(json.RootElement, 128, out var continuation));
+        Assert.AreEqual("MORE", continuation);
+    }
+
+    [TestMethod]
     public void Parse_Continuation_RespectsLimit()
     {
         using var json = JsonDocument.Parse("""

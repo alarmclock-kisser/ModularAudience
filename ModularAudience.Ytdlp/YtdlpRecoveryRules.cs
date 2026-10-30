@@ -14,7 +14,8 @@ public static class YtdlpRecoveryRules
         YtdlpRecoveryAction.RetrySameSettings => kind is YtdlpFailureKind.TransientNetwork or YtdlpFailureKind.ConnectionRefused,
         YtdlpRecoveryAction.SystemCertificateTrust => kind == YtdlpFailureKind.Certificate && !options.Network.UseSystemCertificateTrust,
         YtdlpRecoveryAction.IPv4 => kind is (YtdlpFailureKind.ConnectionRefused or YtdlpFailureKind.NameResolution) && options.Network.IpVersion != YtdlpIpVersion.IPv4,
-        YtdlpRecoveryAction.BrowserSession => kind == YtdlpFailureKind.Authentication && options.BrowserSession is null,
+        YtdlpRecoveryAction.BrowserSession => (kind == YtdlpFailureKind.Authentication && options.BrowserSession is null) ||
+            kind == YtdlpFailureKind.BrowserCookies,
         _ => false
     };
 

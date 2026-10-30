@@ -22,7 +22,9 @@ public sealed partial class YtdlpClient
         YtdlpParser.ValidateMaxResults(maxResults);
         if (query.Length > 500 || query.Any(char.IsControl))
             throw new ArgumentException("Search queries must contain at most 500 characters and no control characters.", nameof(query));
-        return ReadMetadataAsync($"ytsearch{maxResults}:{query.Trim()}", maxResults, cancellationToken);
+        // Search pages can contain playlists/unavailable entries which are not usable video rows.
+        int fetchCount = Math.Min(YtdlpParser.MaximumResults + 25, maxResults + 25);
+        return ReadMetadataAsync($"ytsearch{fetchCount}:{query.Trim()}", maxResults, cancellationToken, fetchCount);
     }
 
     public Task<IReadOnlyList<YtdlpVideo>> BrowseAsync(string youtubeUrl, int maxResults,
@@ -43,25 +45,25 @@ public sealed partial class YtdlpClient
         var job = CreateJobDirectory();
         try
         {
-            var json = await YtdlpProcess.RunAsync(manager.YtdlpPath, arguments, job, progress, false, token);
+            var json = await YtdlpProcess.RunAsync(manager.YtdlpPath, arguments, job, progress, false, token, MetadataSession?.CookieContents);
             return YtdlpParser.ParseVideos(json, 1).SingleOrDefault()
                 ?? throw new InvalidDataException("No video metadata was returned.");
         }
         finally { YtdlpBinaryManager.DeleteStaging(job); }
     }
 
-    private async Task<IReadOnlyList<YtdlpVideo>> ReadMetadataAsync(string target, int maxResults, CancellationToken token)
+    private async Task<IReadOnlyList<YtdlpVideo>> ReadMetadataAsync(string target, int maxResults, CancellationToken token, int? fetchCount = null)
     {
         var progress = CreateProgress(null);
         await EnsureAvailableAsync(progress, token);
         var arguments = CommonArguments();
         MetadataSession?.AddArguments(arguments);
         arguments.AddRange(["--dump-single-json", "--flat-playlist", "--skip-download", "--yes-playlist",
-            "--playlist-end", maxResults.ToString(CultureInfo.InvariantCulture), "--", target]);
+            "--playlist-end", (fetchCount ?? maxResults).ToString(CultureInfo.InvariantCulture), "--", target]);
         var job = CreateJobDirectory();
         try
         {
-            var json = await YtdlpProcess.RunAsync(manager.YtdlpPath, arguments, job, progress, false, token);
+            var json = await YtdlpProcess.RunAsync(manager.YtdlpPath, arguments, job, progress, false, token, MetadataSession?.CookieContents);
             var videos = YtdlpParser.ParseVideos(json, maxResults);
             progress.Report($"Loaded {videos.Count} YouTube video entries.");
             return videos;
@@ -85,7 +87,7 @@ public sealed partial class YtdlpClient
         try
         {
             var arguments = DownloadArguments(url, format, job, options);
-            var text = await YtdlpProcess.RunAsync(manager.YtdlpPath, arguments, job, output, true, cancellationToken);
+            var text = await YtdlpProcess.RunAsync(manager.YtdlpPath, arguments, job, output, true, cancellationToken, options.BrowserSession?.CookieContents);
             var path = ValidateDownloadedPath(text, job, format, options.MaxFileSizeBytes);
             cancellationToken.ThrowIfCancellationRequested();
             if (outputDirectory is not null)

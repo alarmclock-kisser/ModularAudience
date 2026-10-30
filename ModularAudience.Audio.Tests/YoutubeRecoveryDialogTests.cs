@@ -11,6 +11,18 @@ namespace ModularAudience.Audio.Tests;
 public sealed class YoutubeRecoveryDialogTests
 {
     [STATestMethod]
+    public void DpapiDialog_OffersCookieFileInsteadOfDeadEnd()
+    {
+        using var dialog = CreateDialog("ERROR: Failed to decrypt with DPAPI");
+        Assert.AreEqual(1, Field<ComboBox>(dialog, "actionCombo").Items.Count);
+        Assert.IsTrue(Field<CheckBox>(dialog, "cookieFileCheck").Checked);
+        Assert.IsFalse(Field<ComboBox>(dialog, "browserCombo").Enabled);
+        Field<CheckBox>(dialog, "consentCheck").Checked = true;
+        Assert.IsFalse(Field<Button>(dialog, "retryButton").Enabled, "A cookie file must be selected first.");
+        StringAssert.Contains(Field<Label>(dialog, "privacyLabel").Text, "App-Bound Encryption");
+    }
+
+    [STATestMethod]
     public void AuthenticationDialog_RequiresFreshConsent_AndTlsDialogNeverOffersCookies()
     {
         using (var dialog = CreateDialog("ERROR: Sign in to confirm"))

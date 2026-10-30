@@ -20,7 +20,7 @@ public sealed class YtdlpRecoveryTests
             "[Console]::Error.WriteLine('Cookie: '+('SENSITIVE_COOKIE_VALUE'*1400)); [Console]::Error.WriteLine('ERROR: [youtube] v586fXgj50Y: HTTP Error 503: Service Unavailable'); exit 1"];
         var progress = new CaptureProgress();
         var task = (Task<string>)run.Invoke(null,
-            [executable, arguments, Path.GetTempPath(), progress, false, timeout.Token])!;
+            [executable, arguments, Path.GetTempPath(), progress, false, timeout.Token, null])!;
         Exception? failure = null;
         try { await task; }
         catch (Exception error) { failure = error; }
@@ -117,7 +117,7 @@ public sealed class YtdlpRecoveryTests
     {
         var options = new YtdlpDownloadOptions { WavBitDepth = 24, Network = new() { ProxyUrl = "http://proxy.example:8080" } };
         foreach (var kind in Enum.GetValues<YtdlpFailureKind>())
-            Assert.AreEqual(kind == YtdlpFailureKind.Authentication,
+            Assert.AreEqual(kind is YtdlpFailureKind.Authentication or YtdlpFailureKind.BrowserCookies,
                 YtdlpRecoveryRules.CanApply(kind, YtdlpRecoveryAction.BrowserSession, options), kind.ToString());
         var session = new YtdlpBrowserSession { Browser = YtdlpBrowser.Firefox, Profile = "abc.default-release", ConsentGranted = true };
         var recovered = YtdlpRecoveryRules.Apply(YtdlpFailureKind.Authentication, new(YtdlpRecoveryAction.BrowserSession, session), options);

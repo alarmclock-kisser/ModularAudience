@@ -146,7 +146,7 @@ public partial class YoutubeBrowserWindow
                 ? await client.BrowseAsync(YtdlpParser.ValidateYoutubeUrl(query).AbsoluteUri, limit, token)
                 : await client.SearchAsync(query, limit, token);
             token.ThrowIfCancellationRequested();
-            PopulateResults(videos);
+            PublishResults(videos, query, $"{videos.Count}/{limit} result(s) loaded");
             StartUploadDates(videos);
             browsingTabs.SelectedTab = resultsTab;
             AppendLog($"Loaded {videos.Count} result(s). Related results are searches, not personal recommendations.");
@@ -188,7 +188,11 @@ public partial class YoutubeBrowserWindow
             : $"{duration.Minutes}:{duration.Seconds:00}";
     }
 
-    private void Download_Click(object? sender, EventArgs e)
+    private void Download_Click(object? sender, EventArgs e) => DownloadSelected(showDownloads: true);
+
+    private void DownloadEnqueue_Click(object? sender, EventArgs e) => DownloadSelected(showDownloads: false);
+
+    private void DownloadSelected(bool showDownloads)
     {
         if (busy || closing || !binariesReady) return;
         var videos = SelectedVideos();
@@ -199,6 +203,7 @@ public partial class YoutubeBrowserWindow
         var cooldown = TimeSpan.FromSeconds((int)cooldownSeconds.Value);
         var stretch = stretchCheck.Checked ? stretchSettings : null;
         int maxParallel = (int)maxParallelDownloadsNumber.Value;
+        showDownloadsOnBatchStart = showDownloads;
         StartOperation($"Importing {videos.Length} selected video(s)...",
             token => ImportBatchAsync(videos, options, cooldown, stretch, maxParallel, token), isBatch: true);
     }
@@ -211,6 +216,7 @@ public partial class YoutubeBrowserWindow
         Mp3Bitrate = mp3Bitrate,
         WavBitDepth = wavBitDepth,
         Network = CaptureNetworkOptions(),
+        BrowserSession = connectedSession,
         MaxDuration = TimeSpan.FromMinutes((double)maxDurationMinutes.Value),
         MaxFileSizeBytes = (long)maxSizeMiB.Value * 1024 * 1024
     };
@@ -298,6 +304,8 @@ public partial class YoutubeBrowserWindow
         TimeSpan cooldown, PlaylistStretchSettings? stretch, SemaphoreSlim importGate, CancellationToken token)
     {
         var jobClient = new YtdlpClient(binaryManager);
+        if (connectedSession is not null && options.BrowserSession is null)
+            options = options with { BrowserSession = connectedSession };
         var text = CreateJobTextProgress(batch, job, audio: false);
         var typed = CreateDownloadProgress(batch, job);
         var result = await jobClient.DownloadAsync(job.Video, options, text, token, typed);

@@ -24,7 +24,7 @@ public sealed partial class YtdlpClient
         try
         {
             string output = await YtdlpProcess.RunAsync(manager.YtdlpPath, arguments, job,
-                new Progress<string>(), false, deadline.Token).ConfigureAwait(false);
+                new Progress<string>(), false, deadline.Token, MetadataSession?.CookieContents).ConfigureAwait(false);
             var date = ParseUploadDateOutput(output);
             if (date is { } value) uploadDates[video.Id] = value;
             return date;

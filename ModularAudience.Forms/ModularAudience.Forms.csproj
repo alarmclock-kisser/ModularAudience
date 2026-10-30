@@ -25,6 +25,7 @@
   <ItemGroup>
     <Content Include="ModularAudience_favicon.ico" />
     <EmbeddedResource Include="appsettings.json" LogicalName="ModularAudience.Forms.appsettings.json" />
+    <EmbeddedResource Include="BrowserBridge\*" LogicalName="ModularAudience.BrowserBridge.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

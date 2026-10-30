@@ -25,7 +25,7 @@ public partial class YoutubeBrowserWindow
         for (int index = 0; index < ResultHeaders.Length; index++)
             resultsList.Columns[index].Text = ResultHeaders[index] +
                 (index == sortColumn ? sortDescending ? " ▼" : " ▲" : "");
-        if (sortColumn < 0) return;
+        if (sortColumn < 0) { resultsList.ListViewItemSorter = null; return; }
         resultsList.ListViewItemSorter = new VideoRowComparer(sortColumn, sortDescending);
         resultsList.Sort();
     }
@@ -61,10 +61,7 @@ public partial class YoutubeBrowserWindow
             var videos = await client.GetRelatedVideosAsync(video, limit, token);
             token.ThrowIfCancellationRequested();
             // Recommendation order puts next-up first; clear any previous table sorting.
-            sortColumn = -1;
-            resultsList.ListViewItemSorter = null;
-            PopulateResults(videos);
-            resultsSummary.Text = $"{videos.Count} related / next-up video(s) for: {video.Title}";
+            PublishResults(videos, queryText.Text, $"{videos.Count}/{limit} related / next-up video(s) for: {video.Title}", recommendationOrder: true);
             browsingTabs.SelectedTab = resultsTab;
             StartUploadDates(videos);
             AppendLog($"Loaded YouTube recommendations for: {video.Title}. Recommendations can differ from a signed-in browser.");

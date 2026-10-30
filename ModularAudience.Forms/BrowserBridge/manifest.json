@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "ModularAudience YouTube Session",
+  "version": "1.0.0",
+  "description": "Connect your YouTube session to the local ModularAudience application.",
+  "permissions": ["cookies"],
+  "host_permissions": ["https://*.youtube.com/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{
+    "matches": ["http://127.0.0.1/*"],
+    "js": ["connect.js"],
+    "run_at": "document_idle"
+  }]
+}

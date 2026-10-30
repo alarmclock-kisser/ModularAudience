@@ -282,13 +282,15 @@ partial class YoutubeBrowserWindow
     private void InitializeColumnsMenu()
     {
         columnsMenu = new ContextMenuStrip(components);
+        var enqueueItem = new ToolStripMenuItem("Download enqueue");
+        enqueueItem.Click += DownloadEnqueue_Click;
         var openItem = new ToolStripMenuItem("Open in browser (no download)");
         var copyItem = new ToolStripMenuItem("Copy selected URLs");
         var relatedItem = new ToolStripMenuItem("Show related / next-up");
         relatedItem.Click += ShowRelated_Click;
         openItem.Click += Open_Click;
         copyItem.Click += Copy_Click;
-        columnsMenu.Items.AddRange([openItem, relatedItem, copyItem, new ToolStripSeparator()]);
+        columnsMenu.Items.AddRange([enqueueItem, openItem, relatedItem, copyItem, new ToolStripSeparator()]);
         string[] titles = ["Title", "Uploader", "Duration", "Views", "ID", "URL", "Upload Date"];
         columnMenuItems = new ToolStripMenuItem[titles.Length];
         for (int index = 0; index < titles.Length; index++)
@@ -304,6 +306,7 @@ partial class YoutubeBrowserWindow
         resultsList.ContextMenuStrip = columnsMenu;
         columnsMenu.Opening += (sender, args) =>
         {
+            enqueueItem.Enabled = !busy && !closing && binariesReady && resultsList.SelectedItems.Count > 0;
             openItem.Enabled = !closing && SelectedVideo() is not null;
             copyItem.Enabled = !closing && resultsList.SelectedItems.Count > 0;
             relatedItem.Enabled = !busy && !closing && binariesReady && SelectedVideo() is not null;
