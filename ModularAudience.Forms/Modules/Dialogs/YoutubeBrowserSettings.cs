@@ -62,8 +62,8 @@ internal sealed class YoutubeBrowserSettings
     private bool Normalize()
     {
         string before = JsonSerializer.Serialize(this);
-        Width = Math.Clamp(Width, 1000, 7680);
-        Height = Math.Clamp(Height, 680, 4320);
+        Width = Math.Clamp(Width, 420, 7680);
+        Height = Math.Clamp(Height, 260, 4320);
         SplitterDistance = Math.Clamp(SplitterDistance, 400, 7000);
         ResultLimit = Math.Clamp(ResultLimit, 1, 200);
         int[] bitrates = [64, 96, 128, 192, 256, 320];

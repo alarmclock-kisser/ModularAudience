@@ -15,13 +15,16 @@ public partial class YoutubeBrowserWindow
     private async void Selection_Changed(object? sender, EventArgs e)
     {
         previewCancellation?.Cancel();
+        HideThumbnailPopup();
         ClearThumbnail();
         thumbnailPicture.Visible = thumbnailCheck.Checked;
         detailsLayout.RowStyles[1].Height = thumbnailCheck.Checked ? 50 : 0;
         detailsLayout.RowStyles[2].Height = thumbnailCheck.Checked ? 50 : 100;
         RefreshAvailability();
         var video = SelectedVideo();
-        descriptionText.Text = video is null
+        descriptionText.Text = video is { IsChannel: true }
+            ? $"Channel: {video.Title}{Environment.NewLine}{video.Url}{Environment.NewLine}{Environment.NewLine}Double-click to browse this channel's videos."
+            : video is null
             ? $"{resultsList.SelectedItems.Count} selected. Select one video to view its available metadata."
             : $"{video.Title}{Environment.NewLine}Uploader: {video.Uploader}{Environment.NewLine}" +
               $"Duration: {FormatDuration(video.DurationSeconds)} | Views: {video.ViewCount?.ToString("N0") ?? "Unknown"}" +

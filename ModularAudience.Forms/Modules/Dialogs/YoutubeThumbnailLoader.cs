@@ -10,6 +10,11 @@ internal static class YoutubeThumbnailLoader
 
     internal static IEnumerable<Uri> Candidates(YtdlpVideo video)
     {
+        if (video.IsChannel)
+        {
+            if (video.ThumbnailUrl is not null) yield return ValidateUrl(video.ThumbnailUrl);
+            yield break;
+        }
         // Flat metadata often chooses /vi_webp/ images. GDI+ cannot decode WebP/AVIF.
         var canonical = YtdlpParser.ValidateYoutubeUrl(video.Url);
         string id = canonical.Query.TrimStart('?').Split('&').First(part => part.StartsWith("v=", StringComparison.Ordinal))[2..];

@@ -62,6 +62,7 @@ public partial class YoutubeBrowserWindow : Form
     private void Cancel_Click(object? sender, EventArgs e)
     {
         operationCancellation?.Cancel();
+        browseCancellation?.Cancel();
         dateCancellation?.Cancel();
         cancelButton.Enabled = false;
         statusLabel.Text = "Cancelling; waiting for active processing and cleanup...";
@@ -70,18 +71,18 @@ public partial class YoutubeBrowserWindow : Form
     private void RefreshAvailability()
     {
         if (IsDisposed || resourcesReleased) return;
-        bool available = !busy && !closing && binariesReady;
+        bool available = CanBrowse;
         queryPanel.Enabled = available;
         optionsGroup.Enabled = available;
-        updateButton.Enabled = !busy && !closing;
-        toolsFolderButton.Enabled = !busy && !closing;
-        cancelButton.Enabled = busy && !closing && operationCancellation?.IsCancellationRequested == false;
-        downloadButton.Enabled = available && resultsList.SelectedItems.Count > 0;
-        relatedButton.Enabled = available && resultsList.SelectedItems.Count == 1;
+        updateButton.Enabled = !busy && !browsing && !closing;
+        toolsFolderButton.Enabled = !busy && !browsing && !closing;
+        cancelButton.Enabled = !closing && (browsing || busy && operationCancellation?.IsCancellationRequested == false);
+        downloadButton.Enabled = CanEnqueueDownloads && SelectedVideos().Any(video => !video.IsChannel);
+        relatedButton.Enabled = available && SelectedVideo() is { IsChannel: false };
         uploaderButton.Enabled = relatedButton.Enabled && !string.IsNullOrWhiteSpace(SelectedVideo()?.Uploader);
         openButton.Enabled = !closing && resultsList.SelectedItems.Count == 1;
         copyButton.Enabled = !closing && resultsList.SelectedItems.Count > 0;
-        metadataButton.Enabled = available && resultsList.SelectedItems.Count == 1;
+        metadataButton.Enabled = available && SelectedVideo() is { IsChannel: false };
         showRelatedButton.Enabled = metadataButton.Enabled;
         operationProgress.Visible = busy || activeBatch is not null;
         UpdateOptionAvailability();
@@ -158,6 +159,8 @@ public partial class YoutubeBrowserWindow : Form
         e.Cancel = true;
         if (closing) return;
         closing = true;
+        HideThumbnailPopup();
+        browseCancellation?.Cancel();
         operationCancellation?.Cancel();
         dateCancellation?.Cancel();
         previewCancellation?.Cancel();
@@ -167,6 +170,7 @@ public partial class YoutubeBrowserWindow : Form
         {
             await Task.Yield();
             await operation;
+            await Task.WhenAll(browseTasks.ToArray());
             await Task.WhenAll(dateTasks.ToArray());
             await Task.WhenAll(previewTasks.ToArray());
         }
@@ -186,6 +190,8 @@ public partial class YoutubeBrowserWindow : Form
     {
         if (resourcesReleased) return;
         resourcesReleased = true;
+        HideThumbnailPopup();
+        browseCancellation?.Cancel();
         dateCancellation?.Cancel();
         progressTimer?.Stop();
         operationClock.Stop();
@@ -194,6 +200,7 @@ public partial class YoutubeBrowserWindow : Form
         client.ProgressChanged -= Client_ProgressChanged;
         connectedSession = null;
         client.MetadataSession = null;
+        thumbnailPopup?.Dispose();
         thumbnailClient.Dispose();
         var image = thumbnailPicture.Image;
         thumbnailPicture.Image = null;

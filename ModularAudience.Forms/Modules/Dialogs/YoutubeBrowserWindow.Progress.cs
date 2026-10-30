@@ -38,7 +38,8 @@ public partial class YoutubeBrowserWindow
 
     private sealed class DownloadBatch(DownloadJob[] jobs, CancellationTokenSource source, int generation)
     {
-        public DownloadJob[] Jobs { get; } = jobs;
+        public DownloadJob[] Jobs { get; set; } = jobs;
+        public Queue<DownloadJob>? PendingQueue { get; set; }
         public CancellationTokenSource Source { get; } = source;
         public int Generation { get; } = generation;
         public bool Cancelled { get; set; }

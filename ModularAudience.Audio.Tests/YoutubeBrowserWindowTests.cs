@@ -13,6 +13,62 @@ namespace ModularAudience.Audio.Tests;
 public sealed class YoutubeBrowserWindowTests
 {
     [STATestMethod]
+    public void RunningDownloads_LeaveBrowsingAndHistoryAvailable_AndChannelRowsHaveNoVideoMetrics()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+        _ = window.Handle;
+        _ = Field<ListView>(window, "resultsList").Handle;
+        SetField(window, "operationCancellation", cancellation);
+        SetField(window, "binariesReady", true);
+        SetField(window, "busy", true);
+        Invoke(window, "InitializeBatch", (object)new[] { new YtdlpVideo { Title = "Downloading" } });
+        Invoke(window, "RefreshAvailability");
+        Assert.IsTrue(Field<TableLayoutPanel>(window, "queryPanel").Enabled);
+        var channel = new YtdlpVideo { IsChannel = true, Id = "UCsXVk37bltHxD1rDPwtNM8Q", Title = "Channel", Url = "https://www.youtube.com/channel/UCsXVk37bltHxD1rDPwtNM8Q/videos" };
+        Invoke(window, "PublishResults", new[] { channel }, "channel search", "Channels", false);
+        var row = Field<ListView>(window, "resultsList").Items[0];
+        foreach (int index in new[] { 2, 3, 6 }) Assert.AreEqual("", row.SubItems[index].Text);
+        Invoke(window, "PublishResults", new[] { new YtdlpVideo { Title = "Video" } }, "Channel :: Channel", "Channel videos", false);
+        Invoke(window, "NavigateResultsHistory", -1);
+        Assert.AreSame(channel, Field<ListView>(window, "resultsList").Items[0].Tag);
+    }
+
+    [TestMethod]
+    public void ChannelParser_RecognizesChannelEntriesAndCanonicalizesVideosUrl()
+    {
+        const string id = "UCsXVk37bltHxD1rDPwtNM8Q";
+        var entries = YtdlpParser.ParseVideos("{\"entries\":[{\"id\":\"" + id + "\",\"title\":\"Kurzgesagt\",\"ie_key\":\"YoutubeTab\"}]}", 30, true);
+        Assert.HasCount(1, entries);
+        Assert.IsTrue(entries[0].IsChannel);
+        Assert.AreEqual("https://www.youtube.com/channel/" + id + "/videos", YtdlpParser.ValidateYoutubeUrl(entries[0].Url).AbsoluteUri);
+        Assert.AreEqual("https://www.youtube.com/@kurzgesagt/videos", YtdlpParser.ValidateYoutubeUrl("https://www.youtube.com/@kurzgesagt").AbsoluteUri);
+    }
+
+    [STATestMethod]
+    public void EnqueueRunningBatch_AddsJobsWithoutChangingResultsTabOrDuplicatingActiveVideo()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+        SetField(window, "operationCancellation", cancellation);
+        SetField(window, "binariesReady", true);
+        SetField(window, "busy", true);
+        var first = new YtdlpVideo { Id = "abcdefghijk", Title = "First" };
+        var second = new YtdlpVideo { Id = "dQw4w9WgXcQ", Title = "Second" };
+        var batch = Invoke(window, "InitializeBatch", (object)new[] { first })!;
+        var jobType = batch.GetType().GetProperty("Jobs")!.PropertyType.GetElementType()!;
+        var queue = Activator.CreateInstance(typeof(Queue<>).MakeGenericType(jobType))!;
+        SetProperty(batch, "PendingQueue", queue);
+        var tabs = Field<TabControl>(window, "browsingTabs");
+        tabs.SelectedTab = Field<TabPage>(window, "resultsTab");
+        Invoke(window, "EnqueueDownloadVideos", batch, new[] { first, second });
+        Assert.AreEqual(2, Field<ListView>(window, "downloadJobsList").Items.Count);
+        Assert.AreEqual(1, (int)queue.GetType().GetProperty("Count")!.GetValue(queue)!);
+        Assert.AreSame(Field<TabPage>(window, "resultsTab"), tabs.SelectedTab);
+        Assert.AreEqual(2, Property<Array>(batch, "Jobs").Length);
+    }
+
+    [STATestMethod]
     public void ResultsHistory_RestoresPagesAndDiscardsForwardBranchAfterNewSearch()
     {
         using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
@@ -67,7 +123,7 @@ public sealed class YoutubeBrowserWindowTests
         var split = Field<SplitContainer>(window, "mainSplit");
         Assert.AreEqual(FormBorderStyle.Sizable, window.FormBorderStyle);
         Assert.IsTrue(split.Panel1.Width >= split.Panel1MinSize);
-        Assert.IsTrue(split.Panel2.Width >= split.Panel2MinSize);
+        Assert.IsTrue(split.Panel2Collapsed, "At the new minimum size the compact layout hides the detail panel.");
         int originalWidth = split.Width;
         window.Width += 400;
         window.PerformLayout();

@@ -9,6 +9,28 @@ public sealed class YtdlpBatchRunnerTests
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(5);
 
     [TestMethod]
+    public async Task RunQueueAsync_AppendedItemsAreProcessedWithoutExceedingParallelLimit()
+    {
+        foreach (int limit in new[] { 1, 2 })
+        {
+            var queue = new Queue<int>([0, 1]);
+            var processed = new System.Collections.Concurrent.ConcurrentBag<int>();
+            int active = 0, maximum = 0;
+            await YtdlpBatchRunner.RunQueueAsync(queue, limit, async (item, token) =>
+            {
+                int count = Interlocked.Increment(ref active);
+                maximum = Math.Max(maximum, count);
+                if (item == 0) { queue.Enqueue(2); queue.Enqueue(3); }
+                await Task.Delay(20, token);
+                processed.Add(item);
+                Interlocked.Decrement(ref active);
+            }, CancellationToken.None);
+            CollectionAssert.AreEquivalent(new[] { 0, 1, 2, 3 }, processed.ToArray());
+            Assert.IsTrue(maximum <= limit);
+        }
+    }
+
+    [TestMethod]
     public async Task RunAsync_ParallelLimitsOneAndTwo_ReachLimitWithoutExceedingItAcrossFourItems()
     {
         foreach (int limit in new[] { 1, 2 })

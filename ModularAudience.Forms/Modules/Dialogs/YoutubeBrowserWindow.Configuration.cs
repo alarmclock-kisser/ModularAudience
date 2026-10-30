@@ -60,7 +60,7 @@ public partial class YoutubeBrowserWindow
             {
                 Width = size.Width, Height = size.Height,
                 Maximized = WindowState == FormWindowState.Maximized,
-                SplitterDistance = mainSplit.SplitterDistance,
+                SplitterDistance = miniLayout ? normalSplitterDistance : mainSplit.SplitterDistance,
                 ShowThumbnails = thumbnailCheck.Checked,
                 VisibleColumns = columnMenuItems.Select(item => item.Checked).ToArray(),
                 ResultLimit = (int)resultLimit.Value, SaveToDisk = saveCheck.Checked,

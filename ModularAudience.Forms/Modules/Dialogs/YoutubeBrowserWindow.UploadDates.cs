@@ -17,7 +17,7 @@ public partial class YoutubeBrowserWindow
         dateCancellation = new CancellationTokenSource();
         int generation = ++dateGeneration;
         foreach (ListViewItem row in resultsList.Items)
-            if (((YtdlpVideo)row.Tag!).UploadDate is null) row.SubItems[6].Text = "Loading...";
+            if (row.Tag is YtdlpVideo { IsChannel: false, UploadDate: null }) row.SubItems[6].Text = "Loading...";
         var lookupClient = new YtdlpClient(binaryManager)
         {
             NetworkOptions = client.NetworkOptions,
@@ -45,7 +45,7 @@ public partial class YoutubeBrowserWindow
         Func<YtdlpVideo, CancellationToken, Task<DateOnly?>> provider, int generation, CancellationToken token)
     {
         using var slots = new SemaphoreSlim(4);
-        await Task.WhenAll(videos.Where(video => video.UploadDate is null).GroupBy(video => video.Id)
+        await Task.WhenAll(videos.Where(video => !video.IsChannel && video.UploadDate is null).GroupBy(video => video.Id)
             .Select(group => LoadUploadDateAsync(group.First(), provider, slots, generation, token)));
         if (generation == dateGeneration && !closing && !resourcesReleased) ApplySort();
     }

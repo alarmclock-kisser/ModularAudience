@@ -133,12 +133,12 @@ public partial class YoutubeBrowserWindow
 
     private void Search(bool requirePlaylistUrl, bool forceSearch = false)
     {
-        if (!binariesReady || busy || closing) return;
+        if (!CanBrowse) return;
         dateCancellation?.Cancel();
         ++dateGeneration;
         string query = queryText.Text.Trim();
         int limit = (int)resultLimit.Value;
-        StartOperation("Loading YouTube metadata...", async token =>
+        StartBrowseOperation("Loading YouTube metadata...", async token =>
         {
             if (string.IsNullOrWhiteSpace(query)) throw new ArgumentException("Enter search words or a YouTube URL.");
             bool isUrl = requirePlaylistUrl || (!forceSearch && LooksLikeUrl(query));
@@ -167,9 +167,9 @@ public partial class YoutubeBrowserWindow
             resultsList.Items.Clear();
             foreach (var video in videos)
             {
-                var row = new ListViewItem(video.Title) { Tag = video };
-                row.SubItems.AddRange([video.Uploader, FormatDuration(video.DurationSeconds),
-                    video.ViewCount?.ToString("N0") ?? "Unknown", video.Id, video.Url, FormatUploadDate(video.UploadDate)]);
+                var row = new ListViewItem(video.IsChannel ? "[Channel] " + video.Title : video.Title) { Tag = video };
+                row.SubItems.AddRange([video.Uploader, video.IsChannel ? "" : FormatDuration(video.DurationSeconds),
+                    video.IsChannel ? "" : video.ViewCount?.ToString("N0") ?? "Unknown", video.Id, video.Url, video.IsChannel ? "" : FormatUploadDate(video.UploadDate)]);
                 resultsList.Items.Add(row);
             }
         }
@@ -188,14 +188,51 @@ public partial class YoutubeBrowserWindow
             : $"{duration.Minutes}:{duration.Seconds:00}";
     }
 
-    private void Download_Click(object? sender, EventArgs e) => DownloadSelected(showDownloads: true);
+    private void Download_Click(object? sender, EventArgs e)
+    {
+        if (busy) { DownloadEnqueue_Click(sender, e); return; }
+        DownloadSelected(showDownloads: true);
+    }
 
-    private void DownloadEnqueue_Click(object? sender, EventArgs e) => DownloadSelected(showDownloads: false);
+    private bool CanEnqueueDownloads => !closing && binariesReady &&
+        (!busy || activeBatch is { PendingQueue: not null, Settled: false } batch && !batch.Source.IsCancellationRequested);
+
+    private void DownloadEnqueue_Click(object? sender, EventArgs e)
+    {
+        if (!CanEnqueueDownloads) return;
+        if (busy && activeBatch is { } batch)
+        {
+            EnqueueDownloadVideos(batch, SelectedVideos().Where(video => !video.IsChannel).ToArray());
+            return;
+        }
+        DownloadSelected(showDownloads: false);
+    }
+
+    private void EnqueueDownloadVideos(DownloadBatch batch, YtdlpVideo[] videos)
+    {
+        if (batch.PendingQueue is null || batch.Source.IsCancellationRequested) return;
+        var queued = new List<DownloadJob>();
+        var existing = batch.Jobs.Where(job => !job.Terminal).Select(job => job.Video.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var video in videos)
+        {
+            if (!existing.Add(video.Id)) continue;
+            var row = new ListViewItem(video.Title);
+            row.SubItems.AddRange(["Queued", "Unknown", "--", "Unknown", "--", "--"]);
+            var job = new DownloadJob(video, batch.Jobs.Length + queued.Count, row);
+            row.Tag = job;
+            downloadJobsList.Items.Add(row);
+            queued.Add(job);
+            batch.PendingQueue.Enqueue(job);
+        }
+        batch.Jobs = [.. batch.Jobs, .. queued];
+        RefreshBatchProgress(batch);
+        AppendLog($"Enqueued {queued.Count} additional video(s); using the running batch's download and import settings.");
+    }
 
     private void DownloadSelected(bool showDownloads)
     {
         if (busy || closing || !binariesReady) return;
-        var videos = SelectedVideos();
+        var videos = SelectedVideos().Where(video => !video.IsChannel).ToArray();
         if (videos.Length == 0) return;
         YtdlpDownloadOptions options;
         try { options = CaptureDownloadOptions(); }

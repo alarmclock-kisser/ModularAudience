@@ -34,9 +34,10 @@ public partial class YoutubeBrowserWindow
 
     private void NavigateResultsHistory(int direction)
     {
-        if (busy || closing || historyPosition < 0) return;
+        if (closing || historyPosition < 0) return;
         int next = historyPosition + direction;
         if (next < 0 || next >= resultsHistory.Count) return;
+        browseCancellation?.Cancel();
         resultsHistory[historyPosition] = CaptureResultsPage();
         dateCancellation?.Cancel();
         ++dateGeneration;

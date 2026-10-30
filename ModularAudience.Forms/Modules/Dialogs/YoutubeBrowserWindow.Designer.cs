@@ -88,7 +88,7 @@ partial class YoutubeBrowserWindow
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
         ClientSize = new Size(1180, 820);
-        MinimumSize = new Size(1000, 780);
+        MinimumSize = new Size(420, 260);
         Text = "YouTube Browser — ModularAudience";
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
@@ -100,6 +100,13 @@ partial class YoutubeBrowserWindow
         FormClosing += Window_FormClosing;
         Controls.Add(rootLayout);
         ResumeLayout(true);
+        SizeChanged += MiniLayout_SizeChanged;
+        LocationChanged += (sender, args) => HideThumbnailPopup();
+        Deactivate += (sender, args) => HideThumbnailPopup();
+        browsingTabs.SelectedIndexChanged += (sender, args) => HideThumbnailPopup();
+        resultsList.MouseMove += Results_MouseMove;
+        resultsList.MouseLeave += (sender, args) => HideThumbnailPopup();
+        UpdateMiniLayout();
     }
 
     private void InitializeRootLayout()
@@ -192,7 +199,7 @@ partial class YoutubeBrowserWindow
         InitializeDetailsPanel();
         InitializeColumnsMenu();
         resultsList.SelectedIndexChanged += Selection_Changed;
-        resultsList.DoubleClick += Open_Click;
+        resultsList.DoubleClick += Result_DoubleClick;
         resultsList.ColumnWidthChanging += Column_WidthChanging;
         resultsList.ColumnWidthChanged += ResultsColumn_WidthChanged;
         resultsList.ClientSizeChanged += ResultList_SizeChanged;
@@ -306,10 +313,10 @@ partial class YoutubeBrowserWindow
         resultsList.ContextMenuStrip = columnsMenu;
         columnsMenu.Opening += (sender, args) =>
         {
-            enqueueItem.Enabled = !busy && !closing && binariesReady && resultsList.SelectedItems.Count > 0;
+            enqueueItem.Enabled = CanEnqueueDownloads && SelectedVideos().Any(video => !video.IsChannel);
             openItem.Enabled = !closing && SelectedVideo() is not null;
             copyItem.Enabled = !closing && resultsList.SelectedItems.Count > 0;
-            relatedItem.Enabled = !busy && !closing && binariesReady && SelectedVideo() is not null;
+            relatedItem.Enabled = CanBrowse && SelectedVideo() is { IsChannel: false };
         };
     }
 

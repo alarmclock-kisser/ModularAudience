@@ -74,9 +74,18 @@ public partial class YoutubeBrowserWindow
         YtdlpDownloadOptions options, TimeSpan cooldown, PlaylistStretchSettings? stretch,
         int maxParallel, SemaphoreSlim importGate, CancellationToken token)
     {
-        await YtdlpBatchRunner.RunAsync(jobs, maxParallel,
-            (job, cancellation) => RunImportJobAsync(batch, job, options, cooldown, stretch, importGate, cancellation), token);
-        batch.Settled = true;
+        var queue = new Queue<DownloadJob>(jobs);
+        batch.PendingQueue = queue;
+        try
+        {
+            await YtdlpBatchRunner.RunQueueAsync(queue, maxParallel,
+                (job, cancellation) => RunImportJobAsync(batch, job, options, cooldown, stretch, importGate, cancellation), token);
+        }
+        finally
+        {
+            batch.PendingQueue = null;
+            batch.Settled = true;
+        }
     }
 
     private async Task<(bool Shown, bool Retried)> RecoverBatchAsync(DownloadBatch batch,

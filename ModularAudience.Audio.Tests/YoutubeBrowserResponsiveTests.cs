@@ -29,7 +29,7 @@ public sealed class YoutubeBrowserResponsiveTests
         foreach (var item in Field<ToolStripMenuItem[]>(window, "columnMenuItems")) item.Checked = true;
         CreateHandles(window);
         window.WindowState = FormWindowState.Normal;
-        foreach (var size in new[] { window.MinimumSize, new Size(1180, 820), new Size(1500, 1000), window.MinimumSize })
+        foreach (var size in new[] { new Size(1000, 780), new Size(1180, 820), new Size(1500, 1000), new Size(1000, 780) })
         {
             window.Size = size;
             window.PerformLayout();
@@ -56,6 +56,14 @@ public sealed class YoutubeBrowserResponsiveTests
             Assert.IsTrue(waitCheck.Left >= waitSeconds.Right);
         }
         Assert.IsNull(videos[0].UploadDate, "The flat result really lacks a date; the parser must not invent one.");
+        window.Size = window.MinimumSize;
+        window.PerformLayout();
+        Assert.IsTrue(Field<SplitContainer>(window, "mainSplit").Panel2Collapsed);
+        Assert.IsFalse(Field<GroupBox>(window, "optionsGroup").Visible);
+        Assert.IsTrue(list.Width > 300 && list.Height >= 100, $"Mini table {list.Size}; root {root.Size}");
+        window.Size = new Size(1180, 820);
+        window.PerformLayout();
+        Assert.IsFalse(Field<SplitContainer>(window, "mainSplit").Panel2Collapsed);
     }
 
     private static T Field<T>(object target, string name) =>

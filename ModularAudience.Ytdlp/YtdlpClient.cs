@@ -24,7 +24,7 @@ public sealed partial class YtdlpClient
             throw new ArgumentException("Search queries must contain at most 500 characters and no control characters.", nameof(query));
         // Search pages can contain playlists/unavailable entries which are not usable video rows.
         int fetchCount = Math.Min(YtdlpParser.MaximumResults + 25, maxResults + 25);
-        return ReadMetadataAsync($"ytsearch{fetchCount}:{query.Trim()}", maxResults, cancellationToken, fetchCount);
+        return ReadMetadataAsync("https://www.youtube.com/results?search_query=" + Uri.EscapeDataString(query.Trim()), maxResults, cancellationToken, fetchCount);
     }
 
     public Task<IReadOnlyList<YtdlpVideo>> BrowseAsync(string youtubeUrl, int maxResults,
@@ -64,7 +64,7 @@ public sealed partial class YtdlpClient
         try
         {
             var json = await YtdlpProcess.RunAsync(manager.YtdlpPath, arguments, job, progress, false, token, MetadataSession?.CookieContents);
-            var videos = YtdlpParser.ParseVideos(json, maxResults);
+            var videos = YtdlpParser.ParseVideos(json, maxResults, includeChannels: true);
             progress.Report($"Loaded {videos.Count} YouTube video entries.");
             return videos;
         }

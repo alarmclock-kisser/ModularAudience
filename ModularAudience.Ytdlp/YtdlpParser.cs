@@ -46,6 +46,12 @@ public static partial class YtdlpParser
     private static Uri Canonicalize(Uri uri, string host)
     {
         var segments = uri.AbsolutePath.Trim('/').Split('/');
+        if (host != "youtu.be" &&
+            ((segments[0] == "channel" && segments.Length is 2 or 3 && Regex.IsMatch(segments[1], "^UC[A-Za-z0-9_-]{22}$") &&
+              (segments.Length == 2 || segments[2] == "videos")) ||
+             (segments.Length is 1 or 2 && segments[0].StartsWith('@') && Regex.IsMatch(segments[0], "^@[\\p{L}\\p{N}_.-]+$") &&
+              (segments.Length == 1 || segments[1] == "videos"))))
+            return new Uri("https://www.youtube.com/" + (segments[0] == "channel" ? "channel/" + segments[1] : segments[0]) + "/videos");
         var videoId = host == "youtu.be" && segments.Length == 1 ? segments[0] : null;
         if (host != "youtu.be" && segments.Length == 2 && segments[0] is "shorts" or "live" or "embed")
             videoId = segments[1];
@@ -75,7 +81,7 @@ public static partial class YtdlpParser
         return null;
     }
 
-    public static IReadOnlyList<YtdlpVideo> ParseVideos(string json, int maxResults = 50)
+    public static IReadOnlyList<YtdlpVideo> ParseVideos(string json, int maxResults = 50, bool includeChannels = false)
     {
         ValidateMaxResults(maxResults);
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 64 });
@@ -87,7 +93,7 @@ public static partial class YtdlpParser
         {
             foreach (var entry in entries.EnumerateArray())
             {
-                var video = ParseVideo(entry);
+                var video = ParseVideo(entry) ?? (includeChannels ? ParseChannel(entry) : null);
                 if (video is not null)
                     result.Add(video);
                 if (result.Count == maxResults)
@@ -120,6 +126,16 @@ public static partial class YtdlpParser
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out var uploaded) ? uploaded : null,
             Description = Text(entry, "description")
         };
+    }
+
+    private static YtdlpVideo? ParseChannel(JsonElement entry)
+    {
+        if (entry.ValueKind != JsonValueKind.Object) return null;
+        string? id = Text(entry, "id");
+        if (id is null || !Regex.IsMatch(id, "^UC[A-Za-z0-9_-]{22}$")) return null;
+        return new YtdlpVideo { IsChannel = true, Id = id, Title = Text(entry, "title") ?? Text(entry, "channel") ?? id,
+            Uploader = Text(entry, "channel") ?? Text(entry, "uploader") ?? string.Empty,
+            Url = $"https://www.youtube.com/channel/{id}/videos", ThumbnailUrl = Thumbnail(entry), Description = Text(entry, "description") };
     }
 
     private static string? Thumbnail(JsonElement entry)

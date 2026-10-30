@@ -2,6 +2,7 @@ namespace ModularAudience.Ytdlp;
 
 public sealed record YtdlpVideo
 {
+    public bool IsChannel { get; init; }
     public string Id { get; init; } = string.Empty;
     public string Title { get; init; } = string.Empty;
     public string Url { get; init; } = string.Empty;

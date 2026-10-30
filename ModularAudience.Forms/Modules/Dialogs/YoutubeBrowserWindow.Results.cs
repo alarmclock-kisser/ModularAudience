@@ -32,8 +32,8 @@ public partial class YoutubeBrowserWindow
 
     private void Metadata_Click(object? sender, EventArgs e)
     {
-        if (SelectedVideo() is not { } video) return;
-        StartOperation("Loading selected-video metadata...", async token =>
+        if (SelectedVideo() is not { IsChannel: false } video) return;
+        StartBrowseOperation("Loading selected-video metadata...", async token =>
         {
             var metadata = await client.GetVideoMetadataAsync(video, token);
             token.ThrowIfCancellationRequested();
@@ -52,11 +52,11 @@ public partial class YoutubeBrowserWindow
 
     private void ShowRelated_Click(object? sender, EventArgs e)
     {
-        if (busy || closing || !binariesReady || SelectedVideo() is not { } video) return;
+        if (!CanBrowse || SelectedVideo() is not { IsChannel: false } video) return;
         int limit = (int)resultLimit.Value;
         dateCancellation?.Cancel();
         ++dateGeneration;
-        StartOperation("Loading related / next-up videos...", async token =>
+        StartBrowseOperation("Loading related / next-up videos...", async token =>
         {
             var videos = await client.GetRelatedVideosAsync(video, limit, token);
             token.ThrowIfCancellationRequested();

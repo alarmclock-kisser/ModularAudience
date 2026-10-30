@@ -6,6 +6,36 @@ public static class YtdlpBatchRunner
 {
     public const int MaximumParallelism = 8;
 
+    /// <summary>Processes a queue which the caller may append to on the same synchronization context while work is running.</summary>
+    public static async Task RunQueueAsync<T>(Queue<T> queue, int maxParallelism,
+        Func<T, CancellationToken, Task> processItem, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(queue);
+        ArgumentNullException.ThrowIfNull(processItem);
+        if (maxParallelism is < 1 or > MaximumParallelism) throw new ArgumentOutOfRangeException(nameof(maxParallelism));
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var running = new List<Task>();
+        try
+        {
+            while (queue.Count > 0 || running.Count > 0)
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                while (queue.Count > 0 && running.Count < maxParallelism)
+                    running.Add(processItem(queue.Dequeue(), cancellation.Token));
+                var finished = await Task.WhenAny(running);
+                running.Remove(finished);
+                await finished;
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        catch
+        {
+            await cancellation.CancelAsync();
+            try { await Task.WhenAll(running); } catch { }
+            throw;
+        }
+    }
+
     /// <summary>
     /// Runs at most maxParallelism items concurrently on the caller's synchronization context.
     /// A worker slot covers the entire callback, including download, cooldown, import and cleanup,
