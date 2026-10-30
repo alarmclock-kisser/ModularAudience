@@ -290,6 +290,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             ClientSize = new Size(968, 513);
             Controls.Add(panel_pattern);
             Controls.Add(panel_controls);
+            FormBorderStyle = FormBorderStyle.Sizable;
+            MaximizeBox = true;
+            MinimizeBox = true;
+            MaximumSize = Size.Empty;
             // The right-hand button cluster is anchored to the right edge, so the window must
             // never be narrower than its design width or it would slide over the BPM controls.
             MinimumSize = new Size(968, 360);
