@@ -73,8 +73,9 @@ internal sealed partial class YoutubeRecoveryDialog : Form
         try
         {
             string directory = YoutubeChromeBridge.InstallExtensionFiles();
-            try { Clipboard.SetText(directory); }
-            catch (System.Runtime.InteropServices.ExternalException) { /* The connection page also offers Copy folder. */ }
+            // Retry if another application briefly owns the clipboard; do not silently
+            // claim the path was copied when the operation failed.
+            Clipboard.SetDataObject(directory, true, 10, 100);
             connectChromeButton.Enabled = false;
             retryButton.Enabled = false;
             validationLabel.Text = "Chrome opens the connection and extensions tabs. Extension folder copied to clipboard. Enable Developer mode → Load unpacked → Ctrl+V in the folder dialog → Select folder. Then reload the connection tab. Connecting authorizes YouTube cookies for this window's downloads.";

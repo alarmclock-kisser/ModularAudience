@@ -52,8 +52,7 @@ public partial class YoutubeBrowserWindow
             resultsSummary.Visible = !compact;
             if (settingsTab is not null)
             {
-                if (compact) browsingTabs.TabPages.Remove(settingsTab);
-                else if (condensedLayout && !browsingTabs.TabPages.Contains(settingsTab)) browsingTabs.TabPages.Add(settingsTab);
+                if (condensedLayout && !browsingTabs.TabPages.Contains(settingsTab)) browsingTabs.TabPages.Add(settingsTab);
             }
             queryPanel.GetControlFromPosition(1, 0)!.Visible = !compact;
             playlistButton.Visible = !compact;

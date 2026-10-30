@@ -21,6 +21,22 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public void ReapplyingLoopSettingsDoesNotReplaceOrRewindThePlaybackPipeline()
+        {
+            using RateTestAudio audio = new(playing: true);
+            var looping = audio.Pipeline;
+            looping.Read(new float[960]);
+            for (int i = 0; i < 100; i++) audio.Service.SetLoop(0, audio.Data.LongLength);
+            Assert.AreSame(looping, audio.Pipeline, "Identical loop bounds must preserve the live resampler.");
+            audio.Service.ClearLoop();
+            var normal = audio.Pipeline;
+            normal.Read(new float[960]);
+            for (int i = 0; i < 100; i++) audio.UpdateLoopFraction(0, audio.Length, 0, false, false);
+            Assert.AreSame(normal, audio.Pipeline, "Dragging a non-looping selection must not rebuild the audio pipeline.");
+            Assert.AreEqual(960, normal.Read(new float[960]));
+        }
+
+        [TestMethod]
         public async Task AValueSetBeforePlaybackIsStored()
         {
             using RateTestAudio audio = new(playing: false);

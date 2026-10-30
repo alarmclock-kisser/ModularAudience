@@ -10,6 +10,38 @@ namespace ModularAudience.Audio.Tests;
 [DoNotParallelize]
 public sealed class YoutubeUploadDateTests
 {
+    [STATestMethod]
+    public void AutomaticDates_KeepSelectedFocusedRowAndNativeHandleInMiniLayout()
+    {
+        using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+        window.Size = new System.Drawing.Size(500, 300);
+        _ = window.Handle;
+        var list = (ListView)Field(window, "resultsList").GetValue(window)!;
+        _ = list.Handle;
+        YtdlpVideo[] videos = Enumerable.Range(0, 25).Select(index => new YtdlpVideo
+        { Id = $"video{index:000000}", Title = $"Video {index:00}" }).ToArray();
+        Invoke(window, "PopulateResults", videos);
+        var selected = list.Items[10];
+        selected.Selected = true;
+        selected.Focused = true;
+        list.TopItem = list.Items[8];
+        var top = list.TopItem;
+        IntPtr handle = list.Handle;
+        int recreated = 0;
+        list.HandleCreated += (_, _) => recreated++;
+        Field(window, "sortColumn").SetValue(window, 6);
+        Func<YtdlpVideo, CancellationToken, Task<DateOnly?>> provider = (video, token) =>
+            Task.FromResult<DateOnly?>(new DateOnly(2024, 1, 1).AddDays(24 - Array.IndexOf(videos, video)));
+        Field(window, "uploadDateProvider").SetValue(window, provider);
+        Invoke(window, "StartUploadDates", videos);
+        Assert.AreEqual(handle, list.Handle);
+        Assert.AreEqual(0, recreated, "Background enrichment must not recreate the native list control.");
+        Assert.IsTrue(selected.Selected);
+        Assert.AreSame(selected, list.FocusedItem);
+        Assert.AreSame(top, list.TopItem);
+        Assert.AreEqual("2024-01-15", selected.SubItems[6].Text);
+    }
+
     [TestMethod]
     public void DateOutput_UsesExactCalendarDatesOnly()
     {

@@ -519,14 +519,16 @@ namespace ModularAudience.Forms.Modules
                 int extraShiftPixels = (int)Math.Round(extraShiftSamples / (double)Math.Max(1, this.samplesPerPixel));
 
                 // Compute caret position relative to the clamped render offset
+                int renderSamplesPerPixel = this.samplesPerPixel;
                 long position = this.OriginalAudio.Position;
                 double caretPx = (position - clampOffsetFrames) / (double)Math.Max(1, this.samplesPerPixel);
                 float caretNormalizedForRender = (float)Math.Clamp(caretPx / Math.Max(1, width), 0.0, 1.0);
 
-                var bmp = await this.OriginalAudio.DrawWaveformAsync(
+                // Include renderer setup/cache work before its first await in the background task.
+                var bmp = await Task.Run(() => this.OriginalAudio.DrawWaveformAsync(
                     width: width,
                     height: height,
-                    samplesPerPixel: this.samplesPerPixel,
+                    samplesPerPixel: renderSamplesPerPixel,
                     drawEachChannel: drawChannels,
                     caretWidth: caretWidth,
                     offset: clampOffsetFrames,
@@ -537,7 +539,7 @@ namespace ModularAudience.Forms.Modules
                     timingMarkersInterval: markerInterval,
                     caretPosition: caretNormalizedForRender,
                     maxWorkers: Math.Max(1, Environment.ProcessorCount / 2)
-                ).ConfigureAwait(false);
+                ), token).ConfigureAwait(false);
 
                 if (token.IsCancellationRequested)
                 {
@@ -589,12 +591,17 @@ namespace ModularAudience.Forms.Modules
 
                 if (this.pictureBox_waveform.IsHandleCreated)
                 {
-                    this.pictureBox_waveform.Invoke((Action)(() =>
+                    await this.pictureBox_waveform.InvokeAsync(() =>
                     {
+                        if (token.IsCancellationRequested || tick != Interlocked.Read(ref this.renderTickCount) || this.IsDisposed || this.Disposing)
+                        {
+                            finalBmp.Dispose();
+                            return;
+                        }
                         this.DisposeCurrentBitmap();
                         this.currentWaveformBitmap = finalBmp;
                         this.pictureBox_waveform.Image = finalBmp;
-                    }));
+                    }).ConfigureAwait(false);
                 }
                 else
                 {
@@ -1335,8 +1342,8 @@ namespace ModularAudience.Forms.Modules
 
             if (this.resizingSelection)
             {
-                this.UpdateSelection();
                 this.resizingSelection = false;
+                this.UpdateSelection();
                 this.resizingSelectionEdge = SelectionEdge.None;
                 this.pictureBox_waveform.Capture = false;
                 this.pictureBox_waveform.Cursor = Cursors.Default;
@@ -1380,6 +1387,7 @@ namespace ModularAudience.Forms.Modules
             else if (this.dragSelecting)
             {
                 this.selectEndFrame = this.MapPixelToFrameInView(e.X);
+                this.dragSelecting = false;
                 this.UpdateSelection();
 
                 // SELEKTION BEENDET: Ein finaler Cache-Refresh (falls nötig) nach dem Dragging. 
@@ -1393,8 +1401,6 @@ namespace ModularAudience.Forms.Modules
 
         private void UpdateSelection()
         {
-            long previousSamples = this.GetCurrentSamplePosition();
-
             long start = Math.Min(this.selectStartFrame, this.selectEndFrame);
             long end = Math.Max(this.selectStartFrame, this.selectEndFrame);
 
@@ -1416,18 +1422,18 @@ namespace ModularAudience.Forms.Modules
             }
 
             this.RecalculateLoopFraction();
+            // Mouse moves only change the visual selection. Rebuilding/rewinding the
+            // live audio graph for every pointer event causes dropouts and UI stalls.
+            // MouseUp clears the drag flags and commits the final loop once.
+            if (this.dragSelecting || this.resizingSelection) return;
             this.ApplyLoopFractionToAudio();
 
             if (this.OriginalAudio.Playing)
             {
-                bool snapped = this.EnsureLoopPosition(previousSamples, false);
+                bool snapped = this.EnsureLoopPosition(null, false);
                 if (snapped)
                 {
                     this.AlignViewToCurrentPosition();
-                }
-                else
-                {
-                    this.RestoreLoopPlaybackPosition(previousSamples);
                 }
             }
         }

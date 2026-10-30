@@ -47,7 +47,8 @@ public partial class YoutubeBrowserWindow
         using var slots = new SemaphoreSlim(4);
         await Task.WhenAll(videos.Where(video => !video.IsChannel && video.UploadDate is null).GroupBy(video => video.Id)
             .Select(group => LoadUploadDateAsync(group.First(), provider, slots, generation, token)));
-        if (generation == dateGeneration && !closing && !resourcesReleased) ApplySort();
+        if (generation == dateGeneration && !closing && !resourcesReleased && sortColumn == 6)
+            UpdateResultRowsPreservingInteraction(ApplySort);
     }
 
     private async Task LoadUploadDateAsync(YtdlpVideo video,
@@ -70,13 +71,15 @@ public partial class YoutubeBrowserWindow
         catch (Exception error) { failure = error.Message; }
         finally { slots.Release(); }
         if (token.IsCancellationRequested || generation != dateGeneration || closing || resourcesReleased) return;
-        foreach (ListViewItem row in resultsList.Items)
+        UpdateResultRowsPreservingInteraction(() =>
         {
-            if (row.Tag is not YtdlpVideo current || current.Id != video.Id || current.UploadDate is not null) continue;
-            row.Tag = current with { UploadDate = date };
-            row.SubItems[6].Text = date is null ? "Unavailable" : FormatUploadDate(date);
-            row.ToolTipText = failure is null ? current.Title : "Upload date: " + failure;
-        }
+            foreach (ListViewItem row in resultsList.Items)
+            {
+                if (row.Tag is not YtdlpVideo current || current.Id != video.Id || current.UploadDate is not null) continue;
+                row.Tag = current with { UploadDate = date };
+                row.SubItems[6].Text = date is null ? "Unavailable" : FormatUploadDate(date);
+            }
+        });
         if (failure is not null) AppendLog($"Warning: Upload date for {video.Id}: {failure}");
     }
 }

@@ -14,6 +14,7 @@ public partial class YoutubeBrowserWindow
 
     private async void Selection_Changed(object? sender, EventArgs e)
     {
+        if (updatingResultRows) return;
         previewCancellation?.Cancel();
         HideThumbnailPopup();
         ClearThumbnail();

@@ -37,13 +37,26 @@ internal static class YoutubeChromeBridge
         using var listener = new HttpListener();
         listener.Prefixes.Add(origin + "/");
         listener.Start();
-        OpenChromeSetup(origin + endpoint);
+        string chrome = FindChromeExecutable();
+        OpenChromePage(chrome, origin + endpoint);
+        // Launch internal pages separately using CreateProcess. ShellExecute and a
+        // multi-URL invocation can drop the chrome:// URL on an existing instance.
+        await Task.Delay(500, token);
+        OpenChromePage(chrome, "chrome://extensions/");
         while (true)
         {
             var context = await listener.GetContextAsync().WaitAsync(token);
             using var response = context.Response;
-            if (context.Request.Url?.AbsolutePath != endpoint || context.Request.Headers["Host"] != $"127.0.0.1:{port}")
+            if (context.Request.Headers["Host"] != $"127.0.0.1:{port}")
             { response.StatusCode = 404; continue; }
+            if (context.Request.Url?.AbsolutePath == endpoint + "extensions" && context.Request.HttpMethod == "POST" &&
+                context.Request.Headers["Origin"] == origin)
+            {
+                OpenChromePage(chrome, "chrome://extensions/");
+                response.StatusCode = 204;
+                continue;
+            }
+            if (context.Request.Url?.AbsolutePath != endpoint) { response.StatusCode = 404; continue; }
             response.Headers["Cache-Control"] = "no-store";
             if (context.Request.HttpMethod == "GET")
             {
@@ -56,16 +69,18 @@ internal static class YoutubeChromeBridge
                     <h2>Connect YouTube to ModularAudience</h2>
                     <p id="status">Waiting for the ModularAudience YouTube Session extension.</p>
                     <ol>
-                    <li>Switch to the automatically opened <b>chrome://extensions</b> tab.</li>
-                    <li>Enable <b>Developer mode / Entwicklermodus</b> (top right).</li>
-                    <li>Click <b>Load unpacked / Entpackte Erweiterung laden</b>.</li>
-                    <li>In the folder dialog press <b>Ctrl+L, Ctrl+V, Enter</b>, then <b>Select folder / Ordner ausw&auml;hlen</b>.
+                    <li>Switch to the <b>chrome://extensions</b> tab.
+                    <button onclick="fetch(location.pathname+'extensions',{method:'POST'})">Open Chrome Extensions</button>
+                    If Chrome did not open it, type <b>chrome://extensions</b> in Chrome's address bar and press Enter.</li>
+                    <li>Enable <b>Developer mode</b> (top right).</li>
+                    <li>Click <b>Load unpacked</b>.</li>
+                    <li>In the folder dialog press <b>Ctrl+L, Ctrl+V, Enter</b>, then <b>Select folder</b>.
                     The extension folder has already been copied to your clipboard.</li>
-                    <li>Return here and <button onclick="location.reload()">Reload connection / Verbindung neu laden</button>.</li>
+                    <li>Return here and <button onclick="location.reload()">Reload connection</button>.</li>
                     </ol>
                     <p>Extension folder: <input id="folder" readonly style="width:75%" value="
                     """ + WebUtility.HtmlEncode(extensionDirectory) + """
-                    "><button onclick="navigator.clipboard.writeText(document.getElementById('folder').value)">Copy folder / Ordner kopieren</button></p>
+                    "><button onclick="navigator.clipboard.writeText(document.getElementById('folder').value)">Copy folder again</button></p>
                     """);
                 await response.OutputStream.WriteAsync(html, token);
                 continue;
@@ -87,7 +102,7 @@ internal static class YoutubeChromeBridge
         }
     }
 
-    private static void OpenChromeSetup(string connectionUrl)
+    private static string FindChromeExecutable()
     {
         string? chrome = null;
         foreach (var hive in new[] { Microsoft.Win32.Registry.CurrentUser, Microsoft.Win32.Registry.LocalMachine })
@@ -104,11 +119,21 @@ internal static class YoutubeChromeBridge
         }.FirstOrDefault(File.Exists);
         if (chrome is null)
             throw new FileNotFoundException("Google Chrome could not be located. Install Chrome to use the automatic connection.");
-        var start = new ProcessStartInfo(chrome) { UseShellExecute = true };
-        start.ArgumentList.Add("--new-window");
-        start.ArgumentList.Add(connectionUrl);
-        start.ArgumentList.Add("chrome://extensions/");
-        Process.Start(start);
+        return chrome;
+    }
+
+    internal static ProcessStartInfo ChromePageStartInfo(string chrome, string url)
+    {
+        var start = new ProcessStartInfo(chrome) { UseShellExecute = false };
+        start.ArgumentList.Add("--new-tab");
+        start.ArgumentList.Add(url);
+        return start;
+    }
+
+    private static void OpenChromePage(string chrome, string url)
+    {
+        using var process = Process.Start(ChromePageStartInfo(chrome, url));
+        if (process is null) throw new InvalidOperationException("Chrome could not be started.");
     }
 
     internal static YtdlpBrowserSession ParseSession(string json)

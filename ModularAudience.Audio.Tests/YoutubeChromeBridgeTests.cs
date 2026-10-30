@@ -10,6 +10,16 @@ namespace ModularAudience.Audio.Tests;
 public sealed class YoutubeChromeBridgeTests
 {
     [TestMethod]
+    public void ChromeExtensionsPage_IsLaunchedDirectlyAsItsOwnArgument()
+    {
+        var type = typeof(YoutubeBrowserWindow).Assembly.GetType("ModularAudience.Forms.Modules.Dialogs.YoutubeChromeBridge")!;
+        var start = (ProcessStartInfo)type.GetMethod("ChromePageStartInfo", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [@"C:\Program Files\Google\Chrome\Application\chrome.exe", "chrome://extensions/"])!;
+        Assert.IsFalse(start.UseShellExecute);
+        CollectionAssert.AreEqual(new[] { "--new-tab", "chrome://extensions/" }, start.ArgumentList.ToArray());
+    }
+
+    [TestMethod]
     public void ChromeTransfer_FiltersDomainsAndCreatesDisposableProcessCookieJar()
     {
         var type = typeof(YoutubeBrowserWindow).Assembly.GetType("ModularAudience.Forms.Modules.Dialogs.YoutubeChromeBridge")!;

@@ -6,6 +6,33 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 
 public partial class YoutubeBrowserWindow
 {
+    private bool updatingResultRows;
+
+    private void UpdateResultRowsPreservingInteraction(Action update)
+    {
+        bool hadFocus = resultsList.ContainsFocus;
+        var focused = resultsList.FocusedItem;
+        var selected = resultsList.SelectedItems.Cast<ListViewItem>().ToArray();
+        var top = resultsList.TopItem;
+        updatingResultRows = true;
+        resultsList.BeginUpdate();
+        try
+        {
+            update();
+            foreach (var row in selected)
+                if (row.ListView == resultsList && !row.Selected) row.Selected = true;
+            if (focused?.ListView == resultsList && !focused.Focused) focused.Focused = true;
+            if (top?.ListView == resultsList) resultsList.TopItem = top;
+        }
+        finally
+        {
+            resultsList.EndUpdate();
+            updatingResultRows = false;
+            // Restore only focus we owned at the beginning; never steal it from the search field.
+            if (hadFocus && !resultsList.ContainsFocus) resultsList.Focus();
+        }
+    }
+
     private int sortColumn = -1;
     private bool sortDescending;
     private static readonly string[] ResultHeaders = ["Title", "Uploader", "Duration", "Views", "ID", "URL", "Upload Date"];
