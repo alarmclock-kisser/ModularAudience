@@ -58,6 +58,9 @@
             toolStripMenuItem_recordMinus3 = new ToolStripMenuItem();
             toolStripMenuItem_recordMinus4 = new ToolStripMenuItem();
             toolStripMenuItem_recordMinus5 = new ToolStripMenuItem();
+            button_newTrack = new Button();
+            contextMenuStrip_newTrack = new ContextMenuStrip(components);
+            toolStripMenuItem_browseYoutube = new ToolStripMenuItem();
             button_scanBpm = new Button();
             textBox_scanBpmResult = new TextBox();
             textBox_scanTimingResult = new TextBox();
@@ -75,9 +78,6 @@
             textBox_info = new TextBox();
             textBox_recordingTime = new TextBox();
             label_stopRecordInfo = new Label();
-            button_newTrack = new Button();
-            contextMenuStrip_newTrack = new ContextMenuStrip(components);
-            toolStripMenuItem_browseYoutube = new ToolStripMenuItem();
             button_copyLog = new Button();
             listBox_log = new ListBox();
             button_breakbeatArchitect = new Button();
@@ -95,6 +95,7 @@
             contextMenuStrip_playlist.SuspendLayout();
             contextMenuStrip_random.SuspendLayout();
             contextMenuStrip_record.SuspendLayout();
+            contextMenuStrip_newTrack.SuspendLayout();
             SuspendLayout();
             // 
             // button_import
@@ -342,6 +343,33 @@
             toolStripMenuItem_recordMinus5.Text = "-5:00";
             toolStripMenuItem_recordMinus5.Click += recordPreRollMenuItem_Click;
             // 
+            // button_newTrack
+            // 
+            button_newTrack.BackColor = Color.FromArgb(192, 192, 255);
+            button_newTrack.ContextMenuStrip = contextMenuStrip_newTrack;
+            button_newTrack.Font = new Font("Segoe UI", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            button_newTrack.Location = new Point(12, 90);
+            button_newTrack.Name = "button_newTrack";
+            button_newTrack.Size = new Size(51, 23);
+            button_newTrack.TabIndex = 21;
+            button_newTrack.Text = "+ Track";
+            toolTip_playlist.SetToolTip(button_newTrack, "Create a new track.\nRight-click: Browse YT ... to search YouTube and import audio into a dedicated bag.");
+            button_newTrack.UseVisualStyleBackColor = false;
+            button_newTrack.Click += button_newTrack_Click;
+            // 
+            // contextMenuStrip_newTrack
+            // 
+            contextMenuStrip_newTrack.Items.AddRange(new ToolStripItem[] { toolStripMenuItem_browseYoutube });
+            contextMenuStrip_newTrack.Name = "contextMenuStrip_newTrack";
+            contextMenuStrip_newTrack.Size = new Size(142, 26);
+            // 
+            // toolStripMenuItem_browseYoutube
+            // 
+            toolStripMenuItem_browseYoutube.Name = "toolStripMenuItem_browseYoutube";
+            toolStripMenuItem_browseYoutube.Size = new Size(141, 22);
+            toolStripMenuItem_browseYoutube.Text = "Browse YT ...";
+            toolStripMenuItem_browseYoutube.Click += BrowseYoutube_Click;
+            // 
             // button_scanBpm
             // 
             button_scanBpm.Location = new Point(384, 291);
@@ -499,12 +527,12 @@
             // textBox_info
             // 
             textBox_info.Font = new Font("Bahnschrift", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            textBox_info.Location = new Point(384, 17);
+            textBox_info.Location = new Point(433, 17);
             textBox_info.Multiline = true;
             textBox_info.Name = "textBox_info";
             textBox_info.PlaceholderText = "No track currently selected.";
             textBox_info.ReadOnly = true;
-            textBox_info.Size = new Size(181, 210);
+            textBox_info.Size = new Size(132, 210);
             textBox_info.TabIndex = 17;
             textBox_info.TabStop = false;
             // 
@@ -529,33 +557,6 @@
             label_stopRecordInfo.Text = "Ctrl-Click to stop rec.";
             label_stopRecordInfo.Visible = false;
             // 
-            // button_newTrack
-            // 
-            button_newTrack.BackColor = Color.FromArgb(192, 192, 255);
-            button_newTrack.ContextMenuStrip = contextMenuStrip_newTrack;
-            button_newTrack.Font = new Font("Segoe UI", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            button_newTrack.Location = new Point(12, 90);
-            button_newTrack.Name = "button_newTrack";
-            button_newTrack.Size = new Size(51, 23);
-            button_newTrack.TabIndex = 21;
-            button_newTrack.Text = "+ Track";
-            toolTip_playlist.SetToolTip(button_newTrack, "Create a new track.\nRight-click: Browse YT ... to search YouTube and import audio into a dedicated bag.");
-            button_newTrack.UseVisualStyleBackColor = false;
-            button_newTrack.Click += button_newTrack_Click;
-            //
-            // contextMenuStrip_newTrack
-            //
-            contextMenuStrip_newTrack.Items.AddRange(new ToolStripItem[] { toolStripMenuItem_browseYoutube });
-            contextMenuStrip_newTrack.Name = "contextMenuStrip_newTrack";
-            contextMenuStrip_newTrack.Size = new Size(146, 26);
-            //
-            // toolStripMenuItem_browseYoutube
-            //
-            toolStripMenuItem_browseYoutube.Name = "toolStripMenuItem_browseYoutube";
-            toolStripMenuItem_browseYoutube.Size = new Size(145, 22);
-            toolStripMenuItem_browseYoutube.Text = "Browse YT ...";
-            toolStripMenuItem_browseYoutube.Click += BrowseYoutube_Click;
-            // 
             // button_copyLog
             // 
             button_copyLog.Font = new Font("Bahnschrift SemiLight Condensed", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
@@ -575,7 +576,7 @@
             listBox_log.HorizontalScrollbar = true;
             listBox_log.Location = new Point(131, 9);
             listBox_log.Name = "listBox_log";
-            listBox_log.Size = new Size(247, 212);
+            listBox_log.Size = new Size(296, 212);
             listBox_log.TabIndex = 22;
             listBox_log.TabStop = false;
             listBox_log.MouseClick += listBox_log_Click;
@@ -761,6 +762,7 @@
             contextMenuStrip_playlist.ResumeLayout(false);
             contextMenuStrip_random.ResumeLayout(false);
             contextMenuStrip_record.ResumeLayout(false);
+            contextMenuStrip_newTrack.ResumeLayout(false);
             ResumeLayout(false);
             PerformLayout();
         }
