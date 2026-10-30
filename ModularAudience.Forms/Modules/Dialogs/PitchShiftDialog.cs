@@ -39,6 +39,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.domainUpDown_step.Items.AddRange(Array.ConvertAll(SemitoneSteps, s => s.ToString()));
             this.domainUpDown_step.SelectedIndex = this.domainUpDown_step.Items.IndexOf("0,5");
+            if (this.domainUpDown_step.SelectedIndex < 0)
+                this.domainUpDown_step.SelectedIndex = Array.IndexOf(SemitoneSteps, 0.5f);
+            this.checkBox_fftPv.Text = "FFT-PV (preserve duration)";
+            this.checkBox_fftPv.AutoSize = true;
 
             foreach (AudioObj obj in samples)
             {
@@ -121,6 +125,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             if (totalItems == 0)
             {
+                this.button_shift.Enabled = true;
                 // No audio samples selected - this is not an exception, keep as is
                 return;
             }
@@ -129,6 +134,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.progressBar_processing.Value = 0;
             var pitchedBag = new System.Collections.Concurrent.ConcurrentBag<AudioObj>();
             var elementProgress = new double[totalItems];
+            float semitones = this.Semitones;
+            bool useFftPv = this.UseFftPv;
 
             // Erzeuge pro-Element Child-Progress-Objekte, die auf den UI-Thread reporten
             var tasks = selectedItems.Select((obj, idx) =>
@@ -162,7 +169,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         }
 
                         // Pitch shifting (innerhalb PitchShifter wird aufgeteilt und eigene Progress-Reports erzeugt)
-                        var result = await PitchShifter.CreatePitchShiftWithoutTimestretchAsync(obj, this.Semitones, childProgress).ConfigureAwait(false);
+                        var result = await PitchShifter.CreatePitchShiftAsync(obj, semitones, useFftPv, childProgress).ConfigureAwait(false);
 
                         // Ergebnis thread-sicher sammeln
                         pitchedBag.Add(result);
@@ -190,6 +197,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             // Wenn der Shift abgeschlossen ist, zeige die CollectionView mit den gepitchten Objekten an
             this.CollectionView ??= new AudioCollectionView(pitchedCollection);
+            this.CollectionView.Show();
+            this.button_shift.Enabled = true;
 
             // CollectionView umbenennen
             this.CollectionView.Rename("Pitch-Shifted " + (pitchedCollection.Count == 1

@@ -154,6 +154,15 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public void FloatMaxRateCanReadFiniteSourceWithoutOversizedResamplerBuffers()
+        {
+            var provider = new VarispeedSampleProvider(new ArraySampleProvider(new float[128], 48000, 2), 48000, float.MaxValue);
+            Assert.AreEqual((double)float.MaxValue, provider.CurrentRate);
+            Assert.AreEqual(2, provider.Read(new float[64]));
+            Assert.AreEqual(0, provider.Read(new float[64]));
+        }
+
+        [TestMethod]
         public async Task ConcurrentTargetsDoNotChangeFrameCountsOrStereoAlignment()
         {
             VarispeedSampleProvider provider = CreateProvider();

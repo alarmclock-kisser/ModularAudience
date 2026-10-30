@@ -13,7 +13,7 @@ namespace ModularAudience.Forms.Modules
         private readonly Dictionary<Guid, double> _jumpBaseMsByAudioId = new();
 
         private static double GetJumpRateFactor(AudioObj audio) =>
-            Math.Clamp(audio.SampleRateFactor, 0.01, 10.0);
+            Math.Clamp(audio.SampleRateFactor, 0.01, float.MaxValue);
 
         private double GetJumpBaseMs(AudioObj audio)
         {
@@ -43,7 +43,7 @@ namespace ModularAudience.Forms.Modules
             }
 
             this.UpdateJumpDistanceForRateImmediately(audio,
-                Math.Clamp(audio.ManualSampleRateFactor * audio.SyncNudgeSampleRateFactor, 0.01, 10.0));
+                Math.Clamp(audio.ManualSampleRateFactor * audio.SyncNudgeSampleRateFactor, 0.01, float.MaxValue));
         }
 
         private async void checkedListBox_playlistTracks_RatePositionChanged(object? sender, PlaylistTrackRateChangedEventArgs e)
@@ -144,10 +144,10 @@ namespace ModularAudience.Forms.Modules
             }
 
             double minimumLogPosition = 500.0 * Math.Log2(0.01);
-            double maximumLogPosition = 500.0 * Math.Log2(10.0);
+            double maximumLogPosition = 500.0 * Math.Log2(float.MaxValue);
             double anchorOffset = position > 0
-                ? targets.Max(audio => 500.0 * Math.Log2(Math.Clamp(audio.ManualSampleRateFactor, 0.01f, 10f)))
-                : targets.Min(audio => 500.0 * Math.Log2(Math.Clamp(audio.ManualSampleRateFactor, 0.01f, 10f)));
+                ? targets.Max(audio => 500.0 * Math.Log2(Math.Clamp(audio.ManualSampleRateFactor, 0.01f, float.MaxValue)))
+                : targets.Min(audio => 500.0 * Math.Log2(Math.Clamp(audio.ManualSampleRateFactor, 0.01f, float.MaxValue)));
             double newOffset = Math.Clamp(anchorOffset + position, minimumLogPosition, maximumLogPosition);
 
             foreach (AudioObj audio in targets)
@@ -166,8 +166,8 @@ namespace ModularAudience.Forms.Modules
             }
 
             double minimumLogPosition = 500.0 * Math.Log2(0.01);
-            double maximumLogPosition = 500.0 * Math.Log2(10.0);
-            double currentAudioOffset = 500.0 * Math.Log2(Math.Clamp(audio.ManualSampleRateFactor, 0.01f, 10f));
+            double maximumLogPosition = 500.0 * Math.Log2(float.MaxValue);
+            double currentAudioOffset = 500.0 * Math.Log2(Math.Clamp(audio.ManualSampleRateFactor, 0.01f, float.MaxValue));
             if (!_audioRateDragOffset.TryGetValue(audioId, out double dragOffset)
                 || Math.Abs(dragOffset - currentAudioOffset) > 0.000001)
             {
@@ -185,7 +185,7 @@ namespace ModularAudience.Forms.Modules
         {
             _audioRateDragOffset[audio.Id] = newOffset;
 
-            float currentFactor = (float)Math.Clamp(Math.Pow(2.0, newOffset / 500.0), 0.01, 10.0);
+            float currentFactor = (float)Math.Clamp(Math.Pow(2.0, newOffset / 500.0), 0.01, float.MaxValue);
 
             audio.ManualSampleRateFactor = currentFactor;
             int rowIndex = this.FindPlaylistTrackIndex(audio.Id);

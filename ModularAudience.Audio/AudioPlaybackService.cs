@@ -125,6 +125,13 @@ namespace ModularAudience.Audio
             this.position += samplesAvailable;
             return samplesAvailable;
         }
+
+        internal virtual void SkipFrames(double frames)
+        {
+            double samples = frames * this.WaveFormat.Channels;
+            this.position = samples >= this.data.LongLength - this.position
+                ? this.data.LongLength : this.position + (long)samples;
+        }
     }
 
     // Provider, der einen Bereich [loopStart, loopEnd) endlos looped
@@ -153,6 +160,15 @@ namespace ModularAudience.Audio
             }
 
             return this.Read(buffer.AsSpan(offset, count));
+        }
+
+        internal override void SkipFrames(double frames)
+        {
+            int channels = this.WaveFormat.Channels;
+            long loopFrames = (this.loopEnd - this.loopStart) / channels;
+            if (loopFrames <= 0) { base.SkipFrames(frames); return; }
+            long advance = (long)(frames % loopFrames) * channels;
+            this.position = this.loopStart + (this.position - this.loopStart + advance) % (this.loopEnd - this.loopStart);
         }
 
         public override int Read(Span<float> buffer)
@@ -537,7 +553,7 @@ namespace ModularAudience.Audio
                 if (this.pipeline is VarispeedSampleProvider provider)
                 {
                     provider.SetTargetRate(factor);
-                    this.PlaybackRate = Math.Clamp(factor, 0.01f, 10f);
+                    this.PlaybackRate = Math.Clamp(factor, 0.01f, float.MaxValue);
                 }
             }
             return Task.CompletedTask;

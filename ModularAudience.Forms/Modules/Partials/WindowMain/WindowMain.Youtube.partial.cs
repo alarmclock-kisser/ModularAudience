@@ -17,7 +17,7 @@ public partial class WindowMain
                 youtubeBrowser = new YoutubeBrowserWindow(ImportYoutubeAudio);
             if (youtubeBrowser.WindowState == FormWindowState.Minimized)
                 youtubeBrowser.WindowState = FormWindowState.Normal;
-            youtubeBrowser.Show(this);
+            youtubeBrowser.Show();
             youtubeBrowser.BringToFront();
             youtubeBrowser.Activate();
         }

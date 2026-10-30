@@ -381,10 +381,13 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            using var separationForm = new OnnxDemucsDialog(toSeparate);
-            separationForm.ShowDialog(this);
-            WindowMain.Instance?.UpdateTrackDependentUI();
-            WindowMain.Instance?.RefreshAllCollectionViews();
+            var separationForm = new OnnxDemucsDialog(toSeparate);
+            separationForm.FormClosed += (_, _) =>
+            {
+                WindowMain.Instance?.UpdateTrackDependentUI();
+                WindowMain.Instance?.RefreshAllCollectionViews();
+            };
+            separationForm.Show(this);
         }
 
         private void menuToolStripItem_sourceSeparateAnalog_Click(object sender, EventArgs e)

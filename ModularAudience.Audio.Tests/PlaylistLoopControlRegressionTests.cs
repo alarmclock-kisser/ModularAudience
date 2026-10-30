@@ -484,6 +484,27 @@ namespace ModularAudience.Audio.Tests
         }
 
         [STATestMethod]
+        public void RateDragCanExceedNineHundredPercentAndReachFloatMax()
+        {
+            using AudioTestScope scope = new();
+            AudioObj audio = scope.Create(new float[64000]);
+            WithPlaylist([audio], (dialog, _) =>
+            {
+                MethodInfo apply = typeof(LoopControl).GetMethod(
+                    "ApplyPlaylistRateToAudioAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                ((Task)apply.Invoke(dialog, [audio, 2000, false])!).GetAwaiter().GetResult();
+                Assert.AreEqual(16d, audio.ManualSampleRateFactor, 0.00001);
+                Assert.AreEqual(16d, audio.SampleRateFactor, 0.00001);
+                ((Task)apply.Invoke(dialog, [audio, int.MaxValue, false])!).GetAwaiter().GetResult();
+                Assert.AreEqual((double)float.MaxValue, audio.ManualSampleRateFactor);
+                Assert.AreEqual((double)float.MaxValue, audio.SampleRateFactor);
+                ((Task)apply.Invoke(dialog, [audio, -500, false])!).GetAwaiter().GetResult();
+                Assert.IsTrue(audio.ManualSampleRateFactor < float.MaxValue);
+                Assert.IsTrue(double.IsFinite(audio.SampleRateFactor));
+            });
+        }
+
+        [STATestMethod]
         public void RateDragResynchronizesAfterTrackViewFineAdjustment()
         {
             using AudioTestScope scope = new();

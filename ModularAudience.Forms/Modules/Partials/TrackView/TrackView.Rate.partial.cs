@@ -8,7 +8,7 @@ namespace ModularAudience.Forms.Modules
 
         private void SetRateAnchor(float factor)
         {
-            this.rateAnchorFactor = Math.Clamp(factor, 0.01f, 10.0f);
+            this.rateAnchorFactor = Math.Clamp(factor, 0.01f, float.MaxValue);
         }
 
         internal bool MatchesRateAudio(AudioObj audio) =>
@@ -41,7 +41,7 @@ namespace ModularAudience.Forms.Modules
 
         private bool ApplyPlaybackRateFactor(float factor, bool fireAndForget)
         {
-            double newFactor = Math.Clamp(factor, 0.01f, 10.0f);
+            double newFactor = Math.Clamp(factor, 0.01f, float.MaxValue);
             bool changed = this.OriginalAudio.ManualSampleRateFactor != (float)newFactor;
             this.OriginalAudio.ManualSampleRateFactor = (float)newFactor;
             this.UpdateRateLabel((float)newFactor);
@@ -52,14 +52,14 @@ namespace ModularAudience.Forms.Modules
             }
             else if (!fireAndForget)
             {
-                this.OriginalAudio.SampleRateFactor = Math.Clamp((float)newFactor * this.OriginalAudio.SyncNudgeSampleRateFactor, 0.01, 10.0);
+                this.OriginalAudio.SampleRateFactor = Math.Clamp(newFactor * this.OriginalAudio.SyncNudgeSampleRateFactor, 0.01, float.MaxValue);
             }
             return changed;
         }
 
         private void UpdateRateLabel(float factor)
         {
-            this.label_info_rate.Text = $"Rate: {((factor - 1.0f) * 100.0f):+0.0;-0.0;+0.0}%";
+            this.label_info_rate.Text = $"Rate: {((factor - 1.0) * 100.0):+0.0;-0.0;+0.0}%";
         }
     }
 }

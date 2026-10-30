@@ -1959,7 +1959,7 @@ namespace ModularAudience.Forms.Modules
 
                 // SampleRateFactor is the rate currently applied by the live
                 // varispeed pipeline. Manual and sync factors are already folded into it.
-                double rateFactor = Math.Clamp(audio.SampleRateFactor, 0.01, 10.0);
+                double rateFactor = Math.Clamp(audio.SampleRateFactor, 0.01, float.MaxValue);
                 if (Math.Abs(rateFactor - 1.0) < 0.0005) rateFactor = 1.0;
 
                 long captureStartFrame = Math.Clamp(audio.Position, 0L, totalFrames - 1);
@@ -2000,7 +2000,7 @@ namespace ModularAudience.Forms.Modules
                 AudioObj tempoAudio = this.OriginalAudio ?? trackInfos[0].audio;
                 double effectiveBpm = GetAudioBpm(tempoAudio)
                     * Math.Max(0.01, tempoAudio.StretchFactor)
-                    * Math.Clamp(tempoAudio.SampleRateFactor, 0.01, 10.0);
+                    * Math.Clamp(tempoAudio.SampleRateFactor, 0.01, float.MaxValue);
                 if (effectiveBpm > 0.0)
                 {
                     maxLoopDurationSeconds = 4.0 * Math.Max(0.01, this.Multiplier) * 60.0 / effectiveBpm;

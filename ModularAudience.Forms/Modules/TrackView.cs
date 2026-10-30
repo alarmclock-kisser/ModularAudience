@@ -1009,7 +1009,7 @@ namespace ModularAudience.Forms.Modules
         private float GetRateFactorFromScrollbar(int scrollbarValue)
         {
             float relativeOffset = scrollbarValue / 1000.0f;
-            return Math.Clamp(this.rateAnchorFactor + relativeOffset, 0.01f, 10.0f);
+            return Math.Clamp(this.rateAnchorFactor + relativeOffset, 0.01f, float.MaxValue);
         }
 
         private int GetRateScrollbarValueFromMouseX(int mouseX)
@@ -2754,7 +2754,7 @@ namespace ModularAudience.Forms.Modules
             original.SampleTag = result.SampleTag;
             original.ManualSampleRateFactor = manualRate;
             original.SyncNudgeSampleRateFactor = syncNudgeRate;
-            original.SampleRateFactor = Math.Clamp(manualRate * syncNudgeRate, 0.01, 10.0);
+            original.SampleRateFactor = Math.Clamp(manualRate * syncNudgeRate, 0.01, float.MaxValue);
             original.ScrollOffset = 0;
             original.StartingOffset = 0;
             original.SelectionStart = -1;

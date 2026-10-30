@@ -15,6 +15,7 @@ namespace ModularAudience.Audio.Processing
         private double currentRate;
         private double rateStep;
         private int remainingRampFrames;
+        private double highRateSkip;
 
         public WaveFormat WaveFormat { get; }
         internal double CurrentRate => this.currentRate;
@@ -36,7 +37,7 @@ namespace ModularAudience.Audio.Processing
         public void SetTargetRate(float rate)
         {
             if (!float.IsFinite(rate)) { throw new ArgumentOutOfRangeException(nameof(rate)); }
-            Volatile.Write(ref this.targetRate, Math.Clamp(rate, 0.01f, 10f));
+            Volatile.Write(ref this.targetRate, Math.Clamp(rate, 0.01f, float.MaxValue));
         }
 
         public int Read(float[] buffer, int offset, int count) => this.Read(buffer.AsSpan(offset, count));
@@ -73,6 +74,28 @@ namespace ModularAudience.Audio.Processing
         private int ReadBlock(Span<float> buffer, int frames, double rate)
         {
             int channels = this.WaveFormat.Channels;
+            // WDL requests input proportional to the rate. At extreme rates this would overflow
+            // its integer buffer sizes. Array-backed playback can advance directly instead.
+            double sourceStep = rate * this.source.WaveFormat.SampleRate / this.WaveFormat.SampleRate;
+            if (sourceStep > 1024 && this.source is ArraySampleProvider array)
+            {
+                int written = 0;
+                for (; written < frames; written++)
+                {
+                    double skip = Math.Floor(this.highRateSkip);
+                    array.SkipFrames(skip);
+                    this.highRateSkip -= skip;
+                    if (array.Read(buffer.Slice(written * channels, channels)) < channels) break;
+                    this.highRateSkip += sourceStep - 1;
+                }
+                return written;
+            }
+            if (this.highRateSkip >= 1 && this.source is ArraySampleProvider resumedArray)
+            {
+                double skip = Math.Floor(this.highRateSkip);
+                resumedArray.SkipFrames(skip);
+                this.highRateSkip -= skip;
+            }
             this.resampler.SetRates(this.source.WaveFormat.SampleRate * rate, this.WaveFormat.SampleRate);
             int needed = this.resampler.ResamplePrepare(frames, channels, out Span<float> input);
             int supplied = this.source.Read(input[..(needed * channels)]) / channels;
