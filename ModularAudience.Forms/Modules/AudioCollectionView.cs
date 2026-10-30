@@ -222,7 +222,7 @@ namespace ModularAudience.Forms
 
         public void listBox_audios_DrawItem(object? sender, DrawItemEventArgs e)
         {
-            e.DrawBackground();
+            Theming.ThemeManager.DrawItemBackground(this.listBox_audios, e);
             if (e.Index >= 0 && e.Index < this.listBox_audios.Items.Count)
             {
                 AudioObj? audio = this.listBox_audios.Items[e.Index] as AudioObj;
@@ -233,7 +233,7 @@ namespace ModularAudience.Forms
                     string bpmText = audio.Bpm > 0 ? $"[{audio.Bpm:F1}]" : audio.ScannedBpm > 0 ? $"[{audio.ScannedBpm:F1}]" : "[ ? ]";
                     // Textfarben basierend auf Auswahlstatus
                     Color textColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected
-                        ? SystemColors.HighlightText
+                        ? Theming.ThemeManager.GetColor(this.listBox_audios, "SelectionForeColor", SystemColors.HighlightText)
                         : this.listBox_audios.ForeColor;
                     // Zeichne Namen
                     Rectangle nameRect = new(e.Bounds.Left + 2, e.Bounds.Top, e.Bounds.Width - 100, e.Bounds.Height);
@@ -249,7 +249,7 @@ namespace ModularAudience.Forms
             {
                 try
                 {
-                    using var pen = new Pen(SystemColors.HotTrack, 2);
+                    using var pen = new Pen(Theming.ThemeManager.GetColor(this.listBox_audios, "AccentColor", SystemColors.HotTrack), 2);
                     // Draw line above this item
                     if (this._dragInsertIndex == e.Index)
                     {

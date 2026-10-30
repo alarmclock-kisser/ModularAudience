@@ -293,20 +293,20 @@ public partial class YoutubeBrowserWindow
 
     private void DrawDownloadBar(Graphics graphics, Rectangle bounds, DownloadJob job, bool selected)
     {
-        Color background = selected ? SystemColors.Highlight : downloadJobsList.BackColor;
-        Color foreground = selected ? SystemColors.HighlightText : downloadJobsList.ForeColor;
+        Color background = selected ? Theming.ThemeManager.GetColor(downloadJobsList, "SelectionBackColor", SystemColors.Highlight) : downloadJobsList.BackColor;
+        Color foreground = selected ? Theming.ThemeManager.GetColor(downloadJobsList, "SelectionForeColor", SystemColors.HighlightText) : downloadJobsList.ForeColor;
         using var backgroundBrush = new SolidBrush(background);
         graphics.FillRectangle(backgroundBrush, bounds);
         var track = Rectangle.Inflate(bounds, -4, -3);
         if (track.Width <= 2 || track.Height <= 2) return;
-        using var trackBrush = new SolidBrush(selected ? SystemColors.Highlight : SystemColors.ControlLight);
+        using var trackBrush = new SolidBrush(selected ? background : Theming.ThemeManager.GetColor(downloadJobsList, "BackColor", SystemColors.ControlLight));
         graphics.FillRectangle(trackBrush, track);
         var fill = Rectangle.Inflate(track, -1, -1);
         fill.Width = DownloadPercent(job) is { } percent ? (int)(fill.Width * percent / 100) : 0;
-        Color barColor = selected ? SystemColors.HighlightText : SystemColors.Highlight;
+        Color barColor = selected ? foreground : Theming.ThemeManager.GetColor(downloadJobsList, "AccentColor", SystemColors.Highlight);
         using var barBrush = new SolidBrush(barColor);
         graphics.FillRectangle(barBrush, fill);
-        ControlPaint.DrawBorder(graphics, track, SystemColors.ControlDark, ButtonBorderStyle.Solid);
+        ControlPaint.DrawBorder(graphics, track, Theming.ThemeManager.GetColor(downloadJobsList, "BorderColor", SystemColors.ControlDark), ButtonBorderStyle.Solid);
         const TextFormatFlags flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
             TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.PreserveGraphicsClipping;
         TextRenderer.DrawText(graphics, DownloadText(job), downloadJobsList.Font, track, foreground, flags);

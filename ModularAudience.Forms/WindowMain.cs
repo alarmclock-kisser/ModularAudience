@@ -161,6 +161,7 @@ namespace ModularAudience.Forms
         {
             Instance = this;
             this.InitializeComponent();
+            this.InitializeThemeMenu();
             this.Tag = this.Text;
             this.KeyPreview = true;
             this.StartPosition = FormStartPosition.Manual;

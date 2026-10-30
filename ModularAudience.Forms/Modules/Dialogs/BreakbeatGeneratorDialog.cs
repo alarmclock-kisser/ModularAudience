@@ -519,9 +519,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             AudioObj item = (AudioObj)this.listBox_samples.Items[e.Index];
             // Determine the color based on whether the item has a tag
-            Color textColor = item.Tag is not null ? Color.Gray : e.ForeColor;
+            Color textColor = item.Tag is not null ? Theming.ThemeManager.GetColor(this.listBox_samples, "DisabledForeColor", Color.Gray)
+                : Theming.ThemeManager.ItemTextColor(this.listBox_samples, e);
             // Draw the background
-            e.DrawBackground();
+            Theming.ThemeManager.DrawItemBackground(this.listBox_samples, e);
             // Draw the text
             using (Brush textBrush = new SolidBrush(textColor))
             {

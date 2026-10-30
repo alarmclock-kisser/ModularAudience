@@ -87,8 +87,8 @@ namespace ModularAudience.Forms
 
             if (selected)
             {
-                background = Color.FromArgb(38, 62, 58);
-                foreground = Color.FromArgb(220, 245, 235);
+                background = Theming.ThemeManager.GetColor(this.listBox_log, "SelectionBackColor", Color.FromArgb(38, 62, 58));
+                foreground = Theming.ThemeManager.GetColor(this.listBox_log, "SelectionForeColor", Color.FromArgb(220, 245, 235));
             }
             else if ((e.State & DrawItemState.ComboBoxEdit) != 0)
             {

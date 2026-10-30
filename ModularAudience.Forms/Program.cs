@@ -67,6 +67,7 @@ namespace ModularAudience.Forms
             // No automatic tab order in the windows, so that the arrow keys and the tab
             // key do not change the focus to a button or a scroll bar.
             TabNavigationDisabler.Install();
+            Theming.ThemeManager.Install();
 
             Application.Run(new WindowMain(logger, serviceProvider));
         }
