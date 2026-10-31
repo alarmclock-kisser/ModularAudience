@@ -8,7 +8,8 @@ public static class YtdlpBatchRunner
 
     /// <summary>Processes a queue which the caller may append to on the same synchronization context while work is running.</summary>
     public static async Task RunQueueAsync<T>(Queue<T> queue, int maxParallelism,
-        Func<T, CancellationToken, Task> processItem, CancellationToken cancellationToken)
+        Func<T, CancellationToken, Task> processItem, CancellationToken cancellationToken,
+        SemaphoreSlim? queueChanged = null)
     {
         ArgumentNullException.ThrowIfNull(queue);
         ArgumentNullException.ThrowIfNull(processItem);
@@ -20,8 +21,20 @@ public static class YtdlpBatchRunner
             while (queue.Count > 0 || running.Count > 0)
             {
                 cancellation.Token.ThrowIfCancellationRequested();
+                if (queueChanged != null) while (queueChanged.Wait(0)) { }
                 while (queue.Count > 0 && running.Count < maxParallelism)
                     running.Add(processItem(queue.Dequeue(), cancellation.Token));
+                if (queueChanged != null && running.Count < maxParallelism)
+                {
+                    // A batch may start with one item and receive more while it is downloading.
+                    // Wake on enqueue instead of waiting for an existing download to finish.
+                    using var wakeCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token);
+                    Task wake = queueChanged.WaitAsync(wakeCancellation.Token);
+                    Task completed = await Task.WhenAny(running.Append(wake));
+                    if (completed == wake) { await wake; continue; }
+                    await wakeCancellation.CancelAsync();
+                    try { await wake; } catch (OperationCanceledException) when (wakeCancellation.IsCancellationRequested) { }
+                }
                 var finished = await Task.WhenAny(running);
                 running.Remove(finished);
                 await finished;

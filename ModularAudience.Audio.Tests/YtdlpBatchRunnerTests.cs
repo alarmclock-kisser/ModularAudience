@@ -9,6 +9,48 @@ public sealed class YtdlpBatchRunnerTests
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(5);
 
     [TestMethod]
+    [DataRow(2)]
+    [DataRow(4)]
+    public async Task RunQueueAsync_LateEnqueueImmediatelyFillsFreeSlots(int limit)
+    {
+        var queue = new Queue<int>([0]);
+        using var changed = new SemaphoreSlim(0);
+        using var cancellation = new CancellationTokenSource();
+        var started = Enumerable.Range(0, limit + 1).Select(_ => Gate()).ToArray();
+        var release = Enumerable.Range(0, limit + 1).Select(_ => Gate()).ToArray();
+        int active = 0, peak = 0;
+        var sync = new object();
+        var run = YtdlpBatchRunner.RunQueueAsync(queue, limit, async (item, token) =>
+        {
+            lock (sync) { active++; peak = Math.Max(peak, active); }
+            started[item].TrySetResult();
+            try { await release[item].Task.WaitAsync(Deadline, token); }
+            finally { lock (sync) active--; }
+        }, cancellation.Token, changed);
+        try
+        {
+            await started[0].Task.WaitAsync(Deadline);
+            for (int i = 1; i <= limit; i++) queue.Enqueue(i);
+            changed.Release();
+            await Task.WhenAll(started.Take(limit).Select(gate => gate.Task)).WaitAsync(Deadline);
+            Assert.IsFalse(started[limit].Task.IsCompleted, "Items beyond the configured limit must remain queued.");
+            Assert.IsFalse(release[0].Task.IsCompleted, "New items must start before the first download finishes.");
+            lock (sync) Assert.AreEqual(limit, peak);
+            release[1].TrySetResult();
+            await started[limit].Task.WaitAsync(Deadline);
+            foreach (var gate in release) gate.TrySetResult();
+            await run.WaitAsync(Deadline);
+            Assert.AreEqual(limit, peak);
+        }
+        finally
+        {
+            await cancellation.CancelAsync();
+            foreach (var gate in release) gate.TrySetResult();
+            await DrainAsync(run);
+        }
+    }
+
+    [TestMethod]
     public async Task RunQueueAsync_AppendedItemsAreProcessedWithoutExceedingParallelLimit()
     {
         foreach (int limit in new[] { 1, 2 })

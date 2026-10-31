@@ -162,7 +162,6 @@ namespace ModularAudience.Forms
             this.listBox_audios.MouseMove += this.ListBox_audios_MouseMove_WaveformPreview;
             this.listBox_audios.MouseHover += this.ListBox_audios_MouseHover_WaveformPreview;
             this.listBox_audios.MouseLeave += this.ListBox_audios_MouseLeave_WaveformPreview;
-            this.listBox_audios.MouseEnter += (s, e) => this.listBox_audios.Focus();
 
             // Set minimum and maximum sizes
             this.MinimumSize = new Size(200, 100);

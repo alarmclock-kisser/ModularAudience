@@ -75,15 +75,18 @@ public partial class YoutubeBrowserWindow
         int maxParallel, SemaphoreSlim importGate, CancellationToken token)
     {
         var queue = new Queue<DownloadJob>(jobs);
+        using var queueChanged = new SemaphoreSlim(0);
         batch.PendingQueue = queue;
+        batch.QueueChanged = queueChanged;
         try
         {
             await YtdlpBatchRunner.RunQueueAsync(queue, maxParallel,
-                (job, cancellation) => RunImportJobAsync(batch, job, options, cooldown, stretch, importGate, cancellation), token);
+                (job, cancellation) => RunImportJobAsync(batch, job, options, cooldown, stretch, importGate, cancellation), token, queueChanged);
         }
         finally
         {
             batch.PendingQueue = null;
+            batch.QueueChanged = null;
             batch.Settled = true;
         }
     }

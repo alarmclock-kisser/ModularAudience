@@ -145,6 +145,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
         internal IReadOnlyList<AudioObj> SourceSamples => this.sourceSampleOrder;
 
         public event Func<BreakbeatPatternEditorDialog, Task>? SaveRequested;
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams parameters = base.CreateParams;
+                // Keep maximize and resizing available on every native handle, including
+                // handles recreated by DPI, theme or other window-style changes.
+                parameters.Style |= 0x00010000 | 0x00040000; // WS_MAXIMIZEBOX | WS_THICKFRAME
+                return parameters;
+            }
+        }
         internal event Action<AudioObj, int>? TrackAdded;
         internal event Action<BreakbeatPatternEditorDialog>? TrackSetRestored;
 
@@ -161,6 +173,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             IDictionary<AudioObj, BreakbeatTrackSettings>? trackSettingsBySample = null)
         {
             this.InitializeComponent();
+            this.FormBorderStyle = FormBorderStyle.Sizable;
+            this.MaximizeBox = true;
+            this.MaximumSize = Size.Empty;
             this.KeyPreview = true;
             this._controlActions = new ControlActionResolver(this._controlsManager.CurrentScheme);
             this._controlsManager.SchemeChanged += _ => this._controlActions = new ControlActionResolver(_);
@@ -2440,7 +2455,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                             }
 
                             this.TryPlaceGeneratedNote(row, column, entry.LengthSteps, entry.PitchSemitones,
-                                entry.VolumePercent, minimumDuration, options, placed);
+                                entry.VolumePercent, minimumDuration, options, placed, rowStart, rowEnd);
                         }
 
                         continue;
@@ -2476,7 +2491,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                         float pitch = this.RollGeneratePitch(rand, options);
                         float volume = this.RollGenerateVolume(rand, options);
                         if (this.TryPlaceGeneratedNote(row, column, lengthSteps, pitch, volume,
-                            minimumDuration, options, placed) && segment == 0)
+                            minimumDuration, options, placed, rowStart, rowEnd) && segment == 0)
                         {
                             segmentMotif.Add(new GenerateMotifEntry(column - segmentBase, lengthSteps, pitch, volume));
                         }
@@ -2513,7 +2528,9 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             float volumePercent,
             int minimumDurationTicks,
             BreakbeatGenerateOptions options,
-            List<BreakbeatPatternNote> placed)
+            List<BreakbeatPatternNote> placed,
+            int rowStart,
+            int rowEnd)
         {
             int stepTicks = this.GetTicksPerStep();
             int patternEndTick = this.bars * BreakbeatGenerator_V2.PatternTicksPerBar;
@@ -2537,7 +2554,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             {
                 long candidateEndTick = (long)candidate.StartTick + candidate.DurationTicks;
                 if (this.notes.Any(note =>
-                        candidate.StartTick < (long)note.StartTick + note.DurationTicks
+                        note.TrackIndex >= rowStart && note.TrackIndex <= rowEnd
+                        && candidate.StartTick < (long)note.StartTick + note.DurationTicks
                         && note.StartTick < candidateEndTick))
                 {
                     return false;

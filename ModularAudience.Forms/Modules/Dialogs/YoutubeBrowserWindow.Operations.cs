@@ -226,6 +226,7 @@ public partial class YoutubeBrowserWindow
             batch.PendingQueue.Enqueue(job);
         }
         batch.Jobs = [.. batch.Jobs, .. queued];
+        if (queued.Count > 0) batch.QueueChanged?.Release();
         RefreshBatchProgress(batch);
         AppendLog($"Enqueued {queued.Count} additional video(s); using the running batch's download and import settings.");
     }

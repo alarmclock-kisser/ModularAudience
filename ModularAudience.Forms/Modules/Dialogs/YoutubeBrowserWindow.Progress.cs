@@ -40,6 +40,7 @@ public partial class YoutubeBrowserWindow
     {
         public DownloadJob[] Jobs { get; set; } = jobs;
         public Queue<DownloadJob>? PendingQueue { get; set; }
+        public SemaphoreSlim? QueueChanged { get; set; }
         public CancellationTokenSource Source { get; } = source;
         public int Generation { get; } = generation;
         public bool Cancelled { get; set; }
