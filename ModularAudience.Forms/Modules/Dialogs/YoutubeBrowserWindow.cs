@@ -22,6 +22,9 @@ public partial class YoutubeBrowserWindow : Form
     private long lastProgressTick;
     private string? settingsWarning;
     private YtdlpBrowserSession? connectedSession;
+    private bool pendingUpdateCheck;
+    private bool updateCheckScheduled;
+    private Func<CancellationToken, Task>? updateToolsProvider;
 
     public YoutubeBrowserWindow(Action<AudioObj> importAudio)
     {
@@ -29,6 +32,7 @@ public partial class YoutubeBrowserWindow : Form
         client = new YtdlpClient(binaryManager);
         InitializeComponent();
         RestoreSettings();
+        InitializeSearchHistory();
         client.ProgressChanged += Client_ProgressChanged;
         RefreshAvailability();
     }
@@ -40,13 +44,43 @@ public partial class YoutubeBrowserWindow : Form
             AppendLog(settingsWarning);
             LogManager.LogWarning(settingsWarning);
         }
-        if (EnsureBinaryDirectory()) StartOperation("Checking tool releases...", UpdateBinariesAsync);
+        if (EnsureBinaryDirectory()) InitializeToolsForSelectedPolicy();
     }
 
     private void Update_Click(object? sender, EventArgs e)
     {
-        if (busy || closing) return;
-        if (EnsureBinaryDirectory()) StartOperation("Checking tool releases...", UpdateBinariesAsync);
+        if (busy || browsing || closing || IsDisposed || resourcesReleased) return;
+        if (EnsureBinaryDirectory()) StartToolUpdateCheck();
+    }
+
+    private void StartToolUpdateCheck()
+    {
+        pendingUpdateCheck = false;
+        StartOperation("Checking tool releases...", token =>
+            updateToolsProvider?.Invoke(token) ?? UpdateBinariesAsync(token));
+    }
+
+    private void InitializeToolsForSelectedPolicy()
+    {
+        if (checkForUpdates.Checked) { StartToolUpdateCheck(); return; }
+        binariesReady = binaryManager.HasInstalledTools;
+        statusLabel.Text = binariesReady ? "Ready. Automatic update checks are off." : "Tools are missing. Click Update tools to install them.";
+        RefreshAvailability();
+    }
+
+    private void CheckForUpdates_Changed(object? sender, EventArgs e)
+    {
+        if (restoringSettings) return;
+        SaveSettings();
+        pendingUpdateCheck = checkForUpdates.Checked;
+        TryStartPendingUpdateCheck();
+    }
+
+    private void TryStartPendingUpdateCheck()
+    {
+        if (!pendingUpdateCheck || !checkForUpdates.Checked || busy || browsing || closing || IsDisposed || resourcesReleased) return;
+        pendingUpdateCheck = false;
+        Update_Click(this, EventArgs.Empty);
     }
 
     private void Search_Click(object? sender, EventArgs e) => Search(false);
@@ -86,6 +120,15 @@ public partial class YoutubeBrowserWindow : Form
         showRelatedButton.Enabled = metadataButton.Enabled;
         operationProgress.Visible = busy || activeBatch is not null;
         UpdateOptionAvailability();
+        if (pendingUpdateCheck && !updateCheckScheduled && !busy && !browsing && !closing && IsHandleCreated)
+        {
+            updateCheckScheduled = true;
+            BeginInvoke((Action)(() =>
+            {
+                updateCheckScheduled = false;
+                TryStartPendingUpdateCheck();
+            }));
+        }
     }
 
     private YtdlpVideo? SelectedVideo() => resultsList.SelectedItems.Count == 1

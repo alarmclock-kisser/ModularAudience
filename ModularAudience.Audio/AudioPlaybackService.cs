@@ -627,7 +627,7 @@ namespace ModularAudience.Audio
             return this.GetCurrentSourceSampleIndex();
         }
 
-        public void SwapRawData(float[] data, int sampleRate, int channels, long startSampleIndex)
+        public void SwapRawData(float[] data, int sampleRate, int channels, long startSampleIndex, bool? loopWholeBuffer = null)
         {
             if (data == null || data.Length == 0 || this.switching == null)
             {
@@ -638,6 +638,12 @@ namespace ModularAudience.Audio
             this.rawSampleRate = sampleRate;
             this.rawChannels = channels;
             this.Channels = channels;
+            if (loopWholeBuffer.HasValue)
+            {
+                this.loopEnabled = loopWholeBuffer.Value;
+                this.loopStartSamples = 0;
+                this.loopEndSamples = data.LongLength;
+            }
 
             startSampleIndex = Math.Clamp(startSampleIndex, 0, data.LongLength);
             ISampleProvider source = this.CreateArraySource(startSampleIndex);

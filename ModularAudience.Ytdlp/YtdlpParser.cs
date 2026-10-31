@@ -119,6 +119,7 @@ public static partial class YtdlpParser
             Title = Text(entry, "title") ?? id,
             Url = $"https://www.youtube.com/watch?v={id}",
             Uploader = Text(entry, "uploader") ?? Text(entry, "channel") ?? string.Empty,
+            ChannelUrl = ParseChannelUrl(entry),
             DurationSeconds = duration is >= 0 && double.IsFinite(duration.Value) ? duration : null,
             ThumbnailUrl = Thumbnail(entry),
             ViewCount = Integer(entry, "view_count"),
@@ -136,6 +137,25 @@ public static partial class YtdlpParser
         return new YtdlpVideo { IsChannel = true, Id = id, Title = Text(entry, "title") ?? Text(entry, "channel") ?? id,
             Uploader = Text(entry, "channel") ?? Text(entry, "uploader") ?? string.Empty,
             Url = $"https://www.youtube.com/channel/{id}/videos", ThumbnailUrl = Thumbnail(entry), Description = Text(entry, "description") };
+    }
+
+    private static string? ParseChannelUrl(JsonElement entry)
+    {
+        string? id = Text(entry, "channel_id");
+        if (id != null && Regex.IsMatch(id, "^UC[A-Za-z0-9_-]{22}$")) return $"https://www.youtube.com/channel/{id}/videos";
+        foreach (string key in new[] { "channel_url", "uploader_url" })
+        {
+            try
+            {
+                string? value = Text(entry, key);
+                if (value == null) continue;
+                var canonical = ValidateYoutubeUrl(value);
+                if (canonical.AbsolutePath.StartsWith("/channel/", StringComparison.Ordinal) || canonical.AbsolutePath.StartsWith("/@", StringComparison.Ordinal))
+                    return canonical.AbsoluteUri;
+            }
+            catch (ArgumentException) { }
+        }
+        return null;
     }
 
     private static string? Thumbnail(JsonElement entry)

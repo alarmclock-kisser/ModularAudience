@@ -35,7 +35,7 @@ public partial class YoutubeBrowserWindow
     private void ToolsFolder_Click(object? sender, EventArgs e)
     {
         if (busy || closing) return;
-        if (ChooseToolsFolder()) StartOperation("Checking tool releases...", UpdateBinariesAsync);
+        if (ChooseToolsFolder()) InitializeToolsForSelectedPolicy();
     }
 
     private bool ChooseToolsFolder()

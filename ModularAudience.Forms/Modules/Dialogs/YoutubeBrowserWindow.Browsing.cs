@@ -62,14 +62,32 @@ public partial class YoutubeBrowserWindow
 
     private void Result_DoubleClick(object? sender, EventArgs e)
     {
-        if (SelectedVideo() is not { IsChannel: true } channel) { Open_Click(sender, e); return; }
-        string query = "Channel :: " + channel.Title;
+        var hit = resultsList.HitTest(resultsList.PointToClient(Cursor.Position));
+        if (SelectedVideo() is { IsChannel: true } || hit.Item != null && hit.SubItem != null && hit.Item.SubItems.IndexOf(hit.SubItem) == 1)
+        { NavigateToChannel_Click(sender, e); return; }
+        Open_Click(sender, e);
+    }
+
+    private Func<string, int, CancellationToken, Task<IReadOnlyList<ModularAudience.Ytdlp.YtdlpVideo>>>? channelVideosProvider;
+    private Func<ModularAudience.Ytdlp.YtdlpVideo, CancellationToken, Task<ModularAudience.Ytdlp.YtdlpVideo>>? channelMetadataProvider;
+
+    private void NavigateToChannel_Click(object? sender, EventArgs e)
+    {
+        if (!CanBrowse || SelectedVideo() is not { } video) return;
         int limit = (int)resultLimit.Value;
         StartBrowseOperation("Loading channel videos...", async token =>
         {
-            var videos = await client.BrowseAsync(channel.Url, limit, token);
+            var metadata = video;
+            if (!video.IsChannel && string.IsNullOrWhiteSpace(video.ChannelUrl))
+                metadata = await (channelMetadataProvider?.Invoke(video, token) ?? client.GetVideoMetadataAsync(video, token));
+            string? url = metadata.IsChannel ? metadata.Url : metadata.ChannelUrl;
+            if (string.IsNullOrWhiteSpace(url)) throw new InvalidOperationException("YouTube did not provide a channel URL for this video.");
+            url = ModularAudience.Ytdlp.YtdlpParser.ValidateYoutubeUrl(url).AbsoluteUri;
+            string name = metadata.IsChannel ? metadata.Title : metadata.Uploader;
+            string query = "Channel :: " + name;
+            var videos = await (channelVideosProvider?.Invoke(url, limit, token) ?? client.BrowseAsync(url, limit, token));
             token.ThrowIfCancellationRequested();
-            PublishResults(videos, query, $"{videos.Count}/{limit} videos from {channel.Title}", recommendationOrder: true);
+            PublishResults(videos, query, $"{videos.Count}/{limit} videos from {name}", recommendationOrder: true);
             queryText.Text = query;
             StartUploadDates(videos);
         });

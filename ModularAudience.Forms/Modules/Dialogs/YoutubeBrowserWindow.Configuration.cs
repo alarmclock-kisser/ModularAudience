@@ -18,6 +18,7 @@ public partial class YoutubeBrowserWindow
         {
             var settings = YoutubeBrowserSettings.Load(out settingsWarning);
             configuredBinariesPath = settings.YTDownloaderBinariesPath;
+            checkForUpdates.Checked = settings.CheckForUpdates;
             Size = new Size(settings.Width, settings.Height);
             if (settings.Maximized) WindowState = FormWindowState.Maximized;
             mainSplit.SplitterDistance = Math.Clamp(settings.SplitterDistance, mainSplit.Panel1MinSize,
@@ -71,6 +72,7 @@ public partial class YoutubeBrowserWindow
                 ProxyMode = proxyModeCombo.SelectedIndex, ProxyUrl = proxyText.Text.Trim(),
                 OutputDirectory = outputDirectory.Text.Trim(),
                 YTDownloaderBinariesPath = configuredBinariesPath,
+                CheckForUpdates = checkForUpdates.Checked,
                 CooldownSeconds = (int)cooldownSeconds.Value,
                 WaitForBpmTag = waitForBpmCheck.Checked,
                 MaxDurationMinutes = (int)maxDurationMinutes.Value, MaxSizeMiB = (int)maxSizeMiB.Value,

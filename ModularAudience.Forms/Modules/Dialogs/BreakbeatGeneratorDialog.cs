@@ -52,6 +52,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private int Seed => (int)this.numericUpDown_seed.Value;
 
         private bool Interleaved => this.checkBox_interleaved.Checked;
+        private readonly NumericUpDown numeric_pitchRange = new() { Name = "numeric_pitchRange", DecimalPlaces = 1, Increment = 0.5m, Maximum = 24, Size = new Size(62, 23), Location = new Point(172, 362) };
+        private readonly NumericUpDown numeric_pitchChance = new() { Name = "numeric_pitchChance", Maximum = 100, Increment = 5, Size = new Size(62, 23), Location = new Point(244, 362) };
+        private float PitchRange => (float)this.numeric_pitchRange.Value;
+        private int PitchChance => (int)this.numeric_pitchChance.Value;
         internal string SelectedPreset => this.comboBox_preset.SelectedItem as string ?? " - None - ";
 
         internal bool BotActivated { get; private set; } = false;
@@ -65,6 +69,15 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public BreakbeatGeneratorDialog(IEnumerable<AudioObj> samples)
         {
             this.InitializeComponent();
+            this.Controls.Add(new Label { Text = "Pitch ±st", AutoSize = true, Location = new Point(170, 345) });
+            this.Controls.Add(this.numeric_pitchRange);
+            this.Controls.Add(new Label { Text = "Pitch %", AutoSize = true, Location = new Point(244, 345) });
+            this.Controls.Add(this.numeric_pitchChance);
+            this.numeric_pitchRange.ValueChanged += (_, _) =>
+            {
+                decimal rounded = Math.Round(this.numeric_pitchRange.Value * 2, MidpointRounding.AwayFromZero) / 2;
+                if (rounded != this.numeric_pitchRange.Value) this.numeric_pitchRange.Value = rounded;
+            };
 
             foreach (AudioObj obj in samples)
             {
@@ -448,6 +461,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             if (this.IsDisposed || this.Disposing)
             {
+                await editor.SaveToCollectionAsync();
                 return;
             }
 
@@ -457,54 +471,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.currentPatternRowLabels = this.GetBeatMapRowLabels().ToArray();
             this.ShowBeatMap(editor.Pattern, this.currentPatternRowLabels, editor.Bars, editor.Resolution, editor.Notes);
 
-            AudioObj editedAudio = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
-                this.currentPatternNotes,
-                this.AudioC.Audios,
-                editor.Bars,
-                this.Bpm,
-                editor.Resolution,
-                this.Swing,
-                "BreakbeatEdited",
-                trackSettings: this.AudioC.Audios.Select(sample =>
-                    this.patternTrackSettings.TryGetValue(sample, out BreakbeatTrackSettings? settings) && settings is not null
-                        ? settings
-                        : new BreakbeatTrackSettings()).ToArray());
-
-            // Ctrl+Save mit markierten Takt(teil)en: nur die markierten Quarters
-            // lückenlos aneinandergereiht als AudioObj in die Collection
-            // (nicht zusammenhängende Markierungen werden übersprungen).
-            // Ohne Markierung oder ohne Ctrl: alles wie bisher.
-            if (editedAudio != null
-                && editor.SaveMarkedQuartersRequested
-                && editor.SelectedLoopSections is { Length: > 0 } markedQuarters)
-            {
-                try
-                {
-                    AudioObj excerpt = BreakbeatGenerator_V2.ExtractPatternQuarters(editedAudio, markedQuarters, this.Bpm);
-                    editedAudio.Dispose();
-                    editedAudio = excerpt;
-                }
-                catch (Exception ex)
-                {
-                    LogManager.Log("Breakbeat marked-quarters excerpt failed, saving full pattern instead.");
-                    LogManager.Log(ex);
-                }
-            }
-
-            if (editedAudio == null || this.IsDisposed || this.Disposing)
-            {
-                editedAudio?.Dispose();
-                return;
-            }
-
-            if (this.CollectionView == null || this.CollectionView.IsDisposed)
-            {
-                this.CollectionView = new AudioCollectionView([]);
-            }
-
-            this.CollectionView.AudioC.Audios.Add(editedAudio);
-            this.CollectionView.Show();
-            this.CollectionView.Rename("Break-Beat" + (this.CollectionView.AudioC.Audios.Count == 1 ? "" : "(s)") + " Generated " + this.Bpm.ToString("F1", CultureInfo.InvariantCulture) + " BPM");
+            await editor.SaveToCollectionAsync();
         }
 
 
@@ -1068,9 +1035,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async Task RenderAndShowBreakbeatAsync(List<bool[]> breakbeat, string patternName, IReadOnlyList<string>? rowLabels = null)
         {
-            this.ShowBeatMap(breakbeat, rowLabels ?? this.GetBeatMapRowLabels());
+            float pitchRange = this.PitchRange;
+            int pitchChance = this.PitchChance, seed = this.Seed;
+            var pitchedNotes = BreakbeatGenerator_V2.CreateGeneratedPitchNotes(breakbeat, this.AudioC.Audios.ToArray(), this.Bpm,
+                this.Resolution, this.Interleaved, pitchRange, pitchChance, seed);
+            this.ShowBeatMap(breakbeat, rowLabels ?? this.GetBeatMapRowLabels(), this.Bars, this.Resolution, pitchedNotes);
 
-            var audioObj = await BreakbeatGenerator_V2.RenderBreakbeatAsync(breakbeat, this.AudioC.Audios, this.Bpm, this.Resolution, this.Swing, patternName);
+            var audioObj = await BreakbeatGenerator_V2.RenderBreakbeatAsync(breakbeat, this.AudioC.Audios, this.Bpm, this.Resolution, this.Swing, patternName, interleaved: this.Interleaved,
+                pitchRangeSemitones: pitchRange, pitchChancePercent: pitchChance, pitchSeed: seed);
             if (audioObj == null)
             {
                 LogManager.Log("Failed to generate breakbeat audio.");
@@ -2259,6 +2231,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             public required List<AudioObj> Samples { get; init; }
             public required float Swing { get; init; }
             public required string SelectedPreset { get; init; }
+            public float PitchRange { get; init; }
+            public int PitchChance { get; init; }
         }
 
         private sealed class BotPreparedBreakbeat
@@ -2268,6 +2242,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             public required List<bool[]> Pattern { get; init; }
             public required string PatternName { get; init; }
             public required IReadOnlyList<string> RowLabels { get; init; }
+            public required List<BreakbeatPatternNote> Notes { get; init; }
+            public int Bars { get; init; }
+            public int Resolution { get; init; }
         }
 
         private async Task StartBotAsync()
@@ -2436,7 +2413,15 @@ namespace ModularAudience.Forms.Modules.Dialogs
             cancellationToken.ThrowIfCancellationRequested();
 
             string patternName = $"{snapshot.PatternNameBase}_{generationNumber:D3}";
-            AudioObj audioObj = await BreakbeatGenerator_V2.RenderBreakbeatAsync(breakbeat, snapshot.Samples, snapshot.Bpm, snapshot.Resolution, snapshot.Swing, patternName);
+            var notes = BreakbeatGenerator_V2.CreateGeneratedPitchNotes(breakbeat, snapshot.Samples, snapshot.Bpm,
+                snapshot.Resolution, snapshot.Interleaved, snapshot.PitchRange, snapshot.PitchChance, snapshot.Seed);
+            AudioObj audioObj;
+            try
+            {
+                audioObj = await BreakbeatGenerator_V2.RenderBreakbeatAsync(breakbeat, snapshot.Samples, snapshot.Bpm, snapshot.Resolution, snapshot.Swing, patternName, interleaved: snapshot.Interleaved,
+                    pitchRangeSemitones: snapshot.PitchRange, pitchChancePercent: snapshot.PitchChance, pitchSeed: snapshot.Seed);
+            }
+            finally { foreach (var sample in snapshot.Samples) sample.Dispose(); }
             if (audioObj == null)
             {
                 throw new InvalidOperationException("Breakbeat bot could not render the generated audio.");
@@ -2448,7 +2433,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 Duration = audioObj.Duration,
                 Pattern = breakbeat,
                 PatternName = patternName,
-                RowLabels = snapshot.RowLabels
+                RowLabels = snapshot.RowLabels, Notes = notes, Bars = snapshot.Bars, Resolution = snapshot.Resolution
             };
         }
 
@@ -2475,7 +2460,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     Seed = unchecked(this.Seed + (generationNumber * 7919)),
                     Samples = this.AudioC.Audios.Select(audio => audio.Clone()).ToList(),
                     Swing = this.Swing,
-                    SelectedPreset = this.SelectedPreset
+                    SelectedPreset = this.SelectedPreset,
+                    PitchRange = this.PitchRange,
+                    PitchChance = this.PitchChance
                 };
             });
         }
@@ -2495,7 +2482,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             await this.InvokeOnUiAsync(() =>
             {
-                this.ShowBeatMap(prepared.Pattern, prepared.RowLabels);
+                this.ShowBeatMap(prepared.Pattern, prepared.RowLabels, prepared.Bars, prepared.Resolution, prepared.Notes);
 
                 if (this.CollectionView == null || this.CollectionView.IsDisposed)
                 {

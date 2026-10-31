@@ -7,6 +7,7 @@ public sealed record YtdlpVideo
     public string Title { get; init; } = string.Empty;
     public string Url { get; init; } = string.Empty;
     public string Uploader { get; init; } = string.Empty;
+    public string? ChannelUrl { get; init; }
     public double? DurationSeconds { get; init; }
     public string? ThumbnailUrl { get; init; }
     public long? ViewCount { get; init; }

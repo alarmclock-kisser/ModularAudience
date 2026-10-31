@@ -426,11 +426,11 @@ namespace ModularAudience.Audio
             }
         }
 
-        public void SwapPlaybackData(float[] data, int sampleRate, int channels, long startSampleIndex)
+        public void SwapPlaybackData(float[] data, int sampleRate, int channels, long startSampleIndex, bool? loopWholeBuffer = null)
         {
             int ch = Math.Max(1, channels);
             long clampedSampleIndex = Math.Clamp(startSampleIndex, 0, Math.Max(0, data.LongLength - ch));
-            this.playback.SwapRawData(data, sampleRate, channels, clampedSampleIndex);
+            this.playback.SwapRawData(data, sampleRate, channels, clampedSampleIndex, loopWholeBuffer);
 
             int bytesPerFrame = ch * sizeof(float);
             long startFrames = clampedSampleIndex / ch;

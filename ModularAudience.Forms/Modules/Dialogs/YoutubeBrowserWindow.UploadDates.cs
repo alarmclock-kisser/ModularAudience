@@ -16,8 +16,11 @@ public partial class YoutubeBrowserWindow
         dateCancellation?.Dispose();
         dateCancellation = new CancellationTokenSource();
         int generation = ++dateGeneration;
-        foreach (ListViewItem row in resultsList.Items)
-            if (row.Tag is YtdlpVideo { IsChannel: false, UploadDate: null }) row.SubItems[6].Text = "Loading...";
+        UpdateResultRowsPreservingInteraction(() =>
+        {
+            foreach (ListViewItem row in resultsList.Items)
+                if (row.Tag is YtdlpVideo { IsChannel: false, UploadDate: null }) row.SubItems[6].Text = "Loading...";
+        });
         var lookupClient = new YtdlpClient(binaryManager)
         {
             NetworkOptions = client.NetworkOptions,
@@ -47,8 +50,8 @@ public partial class YoutubeBrowserWindow
         using var slots = new SemaphoreSlim(4);
         await Task.WhenAll(videos.Where(video => !video.IsChannel && video.UploadDate is null).GroupBy(video => video.Id)
             .Select(group => LoadUploadDateAsync(group.First(), provider, slots, generation, token)));
-        if (generation == dateGeneration && !closing && !resourcesReleased && sortColumn == 6)
-            UpdateResultRowsPreservingInteraction(ApplySort);
+        // Keep the user's viewport stable during enrichment, even when the date column
+        // was selected earlier. Explicit header clicks can sort the completed dates.
     }
 
     private async Task LoadUploadDateAsync(YtdlpVideo video,
@@ -71,13 +74,16 @@ public partial class YoutubeBrowserWindow
         catch (Exception error) { failure = error.Message; }
         finally { slots.Release(); }
         if (token.IsCancellationRequested || generation != dateGeneration || closing || resourcesReleased) return;
+        // Keep the native handle and interaction state; BufferedListView prevents flashing
+        // when the updated rows are presented together.
         UpdateResultRowsPreservingInteraction(() =>
         {
             foreach (ListViewItem row in resultsList.Items)
             {
                 if (row.Tag is not YtdlpVideo current || current.Id != video.Id || current.UploadDate is not null) continue;
                 row.Tag = current with { UploadDate = date };
-                row.SubItems[6].Text = date is null ? "Unavailable" : FormatUploadDate(date);
+                string text = date is null ? "Unavailable" : FormatUploadDate(date);
+                if (row.SubItems[6].Text != text) row.SubItems[6].Text = text;
             }
         });
         if (failure is not null) AppendLog($"Warning: Upload date for {video.Id}: {failure}");

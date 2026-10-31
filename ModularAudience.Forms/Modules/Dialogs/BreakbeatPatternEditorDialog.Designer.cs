@@ -6,6 +6,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         protected override void Dispose(bool disposing)
         {
+            if (disposing) this.DisposeNoteCache();
             if (disposing && (components != null))
             {
                 components.Dispose();
@@ -106,6 +107,15 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Controls.Add(button_help);
             panel_controls.Controls.Add(button_settings);
             panel_controls.Controls.Add(button_generate);
+            var button_clearAll = new Button
+            {
+                Name = "button_clearAll", Text = "Clear", Size = new Size(46, 25),
+                Location = new Point(574, 14), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+                UseVisualStyleBackColor = true
+            };
+            button_clearAll.Click += (_, _) => this.ClearAllPatternNotes();
+            toolTip_pattern.SetToolTip(button_clearAll, "Clear all notes on all tracks (undoable).");
+            panel_controls.Controls.Add(button_clearAll);
             panel_controls.Controls.Add(button_remix);
             panel_controls.Controls.Add(button_removeBar);
             panel_controls.Controls.Add(button_addBar);
@@ -173,9 +183,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             button_remix.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             button_remix.Enabled = false;
-            button_remix.Location = new Point(540, 14);
+            button_remix.Location = new Point(522, 14);
             button_remix.Name = "button_remix";
-            button_remix.Size = new Size(76, 25);
+            button_remix.Size = new Size(50, 25);
             button_remix.TabIndex = 12;
             button_remix.Text = "Remix";
             toolTip_pattern.SetToolTip(button_remix, "Derive a variation from the selected notes (needs 2+ selected notes; Ctrl+click skips the options dialog). The dialog's bottom checkbox switches between replacing the selection and copying the remix to the clipboard.");

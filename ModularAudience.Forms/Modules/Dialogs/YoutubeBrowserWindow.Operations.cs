@@ -143,6 +143,7 @@ public partial class YoutubeBrowserWindow
         {
             if (string.IsNullOrWhiteSpace(query)) throw new ArgumentException("Enter search words or a YouTube URL.");
             bool isUrl = requirePlaylistUrl || (!forceSearch && LooksLikeUrl(query));
+            RememberSearch(query);
             var videos = isUrl
                 ? await client.BrowseAsync(YtdlpParser.ValidateYoutubeUrl(query).AbsoluteUri, limit, token)
                 : await (searchProvider?.Invoke(query, limit, token) ?? client.SearchAsync(query, limit, token));
@@ -166,12 +167,14 @@ public partial class YoutubeBrowserWindow
         try
         {
             resultsList.Items.Clear();
+            originalResultOrder.Clear();
             foreach (var video in videos)
             {
                 var row = new ListViewItem(video.IsChannel ? "[Channel] " + video.Title : video.Title) { Tag = video };
                 row.SubItems.AddRange([video.Uploader, video.IsChannel ? "" : FormatDuration(video.DurationSeconds),
                     video.IsChannel ? "" : video.ViewCount?.ToString("N0") ?? "Unknown", video.Id, video.Url, video.IsChannel ? "" : FormatUploadDate(video.UploadDate)]);
                 resultsList.Items.Add(row);
+                originalResultOrder[row] = originalResultOrder.Count;
             }
         }
         finally { resultsList.EndUpdate(); }

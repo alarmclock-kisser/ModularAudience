@@ -6,6 +6,7 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 
 internal sealed class YoutubeBrowserSettings
 {
+    public bool CheckForUpdates { get; set; } = true;
     public int Width { get; set; } = 1180;
     public int Height { get; set; } = 820;
     public bool Maximized { get; set; }

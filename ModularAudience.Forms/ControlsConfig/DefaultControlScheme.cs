@@ -518,6 +518,19 @@ namespace ModularAudience.Forms.ControlsConfig
                 SortOrder = 91
             });
 
+            scheme.Bindings.Add(new ControlBinding
+            {
+                ActionId = "Generate.Reroll",
+                Implemented = true,
+                DisplayName = "Reroll last generated area",
+                Description = "Replace the last Generate result with a fresh variation in the same tracks and steps.",
+                Category = ActionCategory.NoteEditing,
+                ValidScopes = BindingScope.Global,
+                PrimaryInput = InputType.Key,
+                PrimaryKey = Keys.R,
+                SortOrder = 82
+            });
+
             // ===== SETTINGS =====
             scheme.Bindings.Add(new ControlBinding
             {

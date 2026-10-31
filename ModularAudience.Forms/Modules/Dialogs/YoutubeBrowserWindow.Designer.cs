@@ -53,6 +53,7 @@ partial class YoutubeBrowserWindow
     private Button openButton = null!;
     private Button copyButton = null!;
     private Button updateButton = null!;
+    private CheckBox checkForUpdates = null!;
     private Button toolsFolderButton = null!;
     private Button cancelButton = null!;
     private Label statusLabel = null!;
@@ -153,7 +154,13 @@ partial class YoutubeBrowserWindow
         searchButton = DesignerButton("Search");
         playlistButton = DesignerButton("Open URL");
         playlistButton.AccessibleName = "Open YouTube video or playlist URL";
-        queryPanel.Controls.Add(queryText, 0, 0);
+        var searchField = new Panel { Dock = DockStyle.Fill, Height = 29, Margin = Padding.Empty };
+        var historyButton = new Button { Text = "▼", Name = "searchHistoryButton", Width = 25, Dock = DockStyle.Right,
+            AccessibleName = "Show local search history", TabStop = false };
+        historyButton.Click += (_, _) => ShowSearchHistory();
+        searchField.Controls.Add(queryText);
+        searchField.Controls.Add(historyButton);
+        queryPanel.Controls.Add(searchField, 0, 0);
         queryPanel.Controls.Add(limitPanel, 1, 0);
         queryPanel.Controls.Add(searchButton, 2, 0);
         queryPanel.Controls.Add(playlistButton, 3, 0);
@@ -175,7 +182,7 @@ partial class YoutubeBrowserWindow
         listLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         listLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         listLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        resultsList = new ListView
+        resultsList = new ModularAudience.Forms.Controls.BufferedListView
         {
             Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = true,
             HideSelection = false, GridLines = true, AllowColumnReorder = true,
@@ -294,10 +301,12 @@ partial class YoutubeBrowserWindow
         var openItem = new ToolStripMenuItem("Open in browser (no download)");
         var copyItem = new ToolStripMenuItem("Copy selected URLs");
         var relatedItem = new ToolStripMenuItem("Show related / next-up");
+        var channelItem = new ToolStripMenuItem("Navigate to Channel");
+        channelItem.Click += NavigateToChannel_Click;
         relatedItem.Click += ShowRelated_Click;
         openItem.Click += Open_Click;
         copyItem.Click += Copy_Click;
-        columnsMenu.Items.AddRange([enqueueItem, openItem, relatedItem, copyItem, new ToolStripSeparator()]);
+        columnsMenu.Items.AddRange([enqueueItem, openItem, relatedItem, copyItem, channelItem, new ToolStripSeparator()]);
         string[] titles = ["Title", "Uploader", "Duration", "Views", "ID", "URL", "Upload Date"];
         columnMenuItems = new ToolStripMenuItem[titles.Length];
         for (int index = 0; index < titles.Length; index++)
@@ -317,6 +326,7 @@ partial class YoutubeBrowserWindow
             openItem.Enabled = !closing && SelectedVideo() is not null;
             copyItem.Enabled = !closing && resultsList.SelectedItems.Count > 0;
             relatedItem.Enabled = CanBrowse && SelectedVideo() is { IsChannel: false };
+            channelItem.Enabled = CanBrowse && SelectedVideo() is not null;
         };
     }
 
@@ -451,12 +461,16 @@ partial class YoutubeBrowserWindow
         uploaderButton = DesignerButton("Uploader search");
         var columnButton = DesignerButton("Columns...");
         updateButton = DesignerButton("Update tools");
+        checkForUpdates = new CheckBox { Text = "Check for Updates", AutoSize = true, Name = "checkForUpdates", Margin = new Padding(6, 8, 6, 3) };
+        checkForUpdates.CheckedChanged += CheckForUpdates_Changed;
         toolsFolderButton = DesignerButton("Tools folder...");
         toolsFolderButton.AccessibleName = "Choose the persistent folder for YouTube downloader tools";
         toolsFolderButton.Click += ToolsFolder_Click;
         cancelButton = DesignerButton("Cancel");
+        foreach (Control action in new Control[] { downloadButton, openButton, copyButton, relatedButton, uploaderButton, columnButton,
+            checkForUpdates, updateButton, toolsFolderButton, cancelButton }) action.Margin = new Padding(2, 3, 2, 3);
         actions.Controls.AddRange([downloadButton, openButton, copyButton, relatedButton,
-            uploaderButton, columnButton, updateButton, toolsFolderButton, cancelButton]);
+            uploaderButton, columnButton, checkForUpdates, updateButton, toolsFolderButton, cancelButton]);
         downloadButton.Click += Download_Click;
         openButton.Click += Open_Click;
         copyButton.Click += Copy_Click;

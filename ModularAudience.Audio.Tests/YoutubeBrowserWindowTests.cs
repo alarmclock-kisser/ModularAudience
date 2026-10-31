@@ -13,6 +13,75 @@ namespace ModularAudience.Audio.Tests;
 public sealed class YoutubeBrowserWindowTests
 {
     [STATestMethod]
+    public void UpdateToggleStartsExactlyOnceAndQueuedCheckWaitsUntilIdle()
+    {
+        string settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ModularAudience", "youtube-settings.json");
+        byte[]? originalSettings = File.Exists(settingsPath) ? File.ReadAllBytes(settingsPath) : null;
+        try
+        {
+            using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+            _ = window.Handle;
+            SetField(window, "restoringSettings", true);
+            var check = Field<CheckBox>(window, "checkForUpdates"); check.Checked = false;
+            SetField(window, "restoringSettings", false);
+            string directory = Path.GetTempPath();
+            SetField(window, "configuredBinariesPath", directory);
+            int calls = 0;
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            SetField(window, "updateToolsProvider", new Func<CancellationToken, Task>(async token =>
+            {
+                calls++;
+                await release.Task.WaitAsync(token);
+            }));
+            check.Checked = true;
+            void PumpUntil(Func<bool> done)
+            {
+                var clock = Stopwatch.StartNew();
+                while (!done() && clock.Elapsed < TimeSpan.FromSeconds(5)) { Application.DoEvents(); Thread.Sleep(1); }
+                Assert.IsTrue(done());
+            }
+            PumpUntil(() => calls == 1);
+            Assert.IsTrue(Field<bool>(window, "busy"));
+            check.Checked = false; check.Checked = true;
+            Assert.AreEqual(1, calls, "A second check must wait while an operation is active.");
+            check.Checked = false;
+            release.TrySetResult();
+            PumpUntil(() => !Field<bool>(window, "busy"));
+            Application.DoEvents();
+            Assert.AreEqual(1, calls, "Switching off cancels the queued check.");
+            check.Checked = true;
+            PumpUntil(() => calls == 2 && !Field<bool>(window, "busy"));
+            Assert.IsFalse(Field<bool>(window, "pendingUpdateCheck"));
+            Invoke(window, "Update_Click", null, EventArgs.Empty);
+            PumpUntil(() => calls == 3 && !Field<bool>(window, "busy"));
+            Assert.IsTrue(Field<TextBox>(window, "activityLog").Lines.Length < 20, "Toggling must not flood the log.");
+        }
+        finally
+        {
+            if (originalSettings == null) File.Delete(settingsPath);
+            else File.WriteAllBytes(settingsPath, originalSettings);
+        }
+    }
+
+    [STATestMethod]
+    public void AutomaticUpdatePolicyOffUsesInstalledToolsWithoutStartingOperation()
+    {
+        using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+        SetField(window, "restoringSettings", true);
+        Field<CheckBox>(window, "checkForUpdates").Checked = false;
+        SetField(window, "restoringSettings", false);
+        Invoke(window, "InitializeToolsForSelectedPolicy");
+        Assert.IsFalse(Field<bool>(window, "busy"));
+        Assert.IsTrue(Field<Task>(window, "operation").IsCompleted);
+        Assert.IsFalse(Field<bool>(window, "pendingUpdateCheck"));
+        Type settingsType = typeof(YoutubeBrowserWindow).Assembly.GetType("ModularAudience.Forms.Modules.Dialogs.YoutubeBrowserSettings")!;
+        object settings = System.Text.Json.JsonSerializer.Deserialize("{\"CheckForUpdates\":false}", settingsType)!;
+        Assert.AreEqual(false, settingsType.GetProperty("CheckForUpdates")!.GetValue(settings));
+        object defaults = Activator.CreateInstance(settingsType)!;
+        Assert.AreEqual(true, settingsType.GetProperty("CheckForUpdates")!.GetValue(defaults));
+    }
+
+    [STATestMethod]
     public void SearchInSmallLayouts_EnterAndSearchButtonPublishResultsAndSelectResultsTab()
     {
         using var window = new YoutubeBrowserWindow(_ => Assert.Fail());

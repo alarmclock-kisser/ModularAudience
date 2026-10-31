@@ -35,6 +35,7 @@ public partial class YoutubeBrowserWindow
 
     private int sortColumn = -1;
     private bool sortDescending;
+    private readonly Dictionary<ListViewItem, int> originalResultOrder = new();
     private static readonly string[] ResultHeaders = ["Title", "Uploader", "Duration", "Views", "ID", "URL", "Upload Date"];
 
     private static string FormatUploadDate(DateOnly? date) =>
@@ -42,9 +43,10 @@ public partial class YoutubeBrowserWindow
 
     private void Column_Click(object? sender, ColumnClickEventArgs e)
     {
-        sortDescending = sortColumn == e.Column && !sortDescending;
-        sortColumn = e.Column;
-        ApplySort();
+        if (sortColumn != e.Column) { sortColumn = e.Column; sortDescending = true; }
+        else if (sortDescending) sortDescending = false;
+        else { sortColumn = -1; sortDescending = false; }
+        UpdateResultRowsPreservingInteraction(ApplySort);
     }
 
     private void ApplySort()
@@ -52,9 +54,21 @@ public partial class YoutubeBrowserWindow
         for (int index = 0; index < ResultHeaders.Length; index++)
             resultsList.Columns[index].Text = ResultHeaders[index] +
                 (index == sortColumn ? sortDescending ? " ▼" : " ▲" : "");
-        if (sortColumn < 0) { resultsList.ListViewItemSorter = null; return; }
+        if (sortColumn < 0)
+        {
+            resultsList.ListViewItemSorter = new OriginalRowComparer(originalResultOrder);
+            resultsList.Sort();
+            resultsList.ListViewItemSorter = null;
+            return;
+        }
         resultsList.ListViewItemSorter = new VideoRowComparer(sortColumn, sortDescending);
         resultsList.Sort();
+    }
+
+    private sealed class OriginalRowComparer(Dictionary<ListViewItem, int> order) : IComparer
+    {
+        public int Compare(object? x, object? y) =>
+            order.GetValueOrDefault((ListViewItem)x!, int.MaxValue).CompareTo(order.GetValueOrDefault((ListViewItem)y!, int.MaxValue));
     }
 
     private void Metadata_Click(object? sender, EventArgs e)

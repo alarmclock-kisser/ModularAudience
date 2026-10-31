@@ -27,12 +27,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private readonly CheckBox check_varispeed = new();
         private readonly CheckBox check_truncated = new();
         private readonly CheckBox check_interleaved = new();
+        private readonly NumericUpDown numeric_loops = new();
+        private readonly CheckBox check_saveEnsemble = new() { Text = "Save new ensemble", AutoSize = true };
+        private readonly CheckBox check_saveSolo = new() { Text = "Save new solo", AutoSize = true };
+        private readonly bool autoReroll;
+        private readonly ComboBox combo_applyFromTracks = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 340 };
 
-        public BreakbeatPatternGenerateDialog(BreakbeatGenerateOptions options)
+        public BreakbeatPatternGenerateDialog(BreakbeatGenerateOptions options, TrackAutoRerollOptions? autoOptions = null)
         {
+            this.autoReroll = autoOptions != null;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.StartPosition = FormStartPosition.CenterParent;
-            this.ClientSize = new Size(360, 534);
+            this.ClientSize = new Size(390, autoReroll ? 620 : 534);
             this.MinimizeBox = false;
             this.MaximizeBox = false;
             this.ShowInTaskbar = false;
@@ -90,6 +96,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 "Maximum volume of generated notes.");
             AddNumeric("Seed (0 = random)", this.numeric_seed, options.Seed, 0, 999999, 1, 0,
                 "0 rolls fresh every time, a fixed value makes results reproducible.");
+            if (autoOptions != null)
+            {
+                this.Text = "Track Auto-Reroll: Generate Options";
+                AddNumeric("Reroll after N loops", this.numeric_loops, autoOptions.Loops, 1, 100000, 1, 0,
+                    "Count complete passes of the selected loop. Enabling or editing resets this track's counter.");
+                this.check_saveEnsemble.Checked = autoOptions.SaveEnsemble;
+                this.check_saveSolo.Checked = autoOptions.SaveSolo;
+            }
 
             GroupBox stretchGroup = new()
             {
@@ -122,7 +136,29 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.check_interleaved.Checked = options.Interleaved;
             this.toolTip.SetToolTip(this.check_interleaved,
                 "On: generated notes never overlap in time across tracks.");
-            stretchFlow.Controls.Add(this.check_interleaved);
+            if (!autoReroll) stretchFlow.Controls.Add(this.check_interleaved);
+            else
+            {
+                stretchFlow.Controls.Add(this.check_saveEnsemble);
+                stretchFlow.Controls.Add(this.check_saveSolo);
+                stretchFlow.Controls.Add(new Label { Text = "Apply from other tracks", AutoSize = true, Margin = new Padding(3, 10, 3, 3) });
+                stretchFlow.Controls.Add(this.combo_applyFromTracks);
+                var applyAll = new Button { Name = "button_applyForAll", Text = "Apply for all", AutoSize = true };
+                applyAll.Click += (_, _) =>
+                {
+                    this.ApplyForAll = true;
+                    this.DialogResult = DialogResult.OK;
+                    this.Close();
+                };
+                stretchFlow.Controls.Add(applyAll);
+                this.combo_applyFromTracks.Enabled = false;
+                this.combo_applyFromTracks.SelectedIndexChanged += (_, _) =>
+                {
+                    if (this.combo_applyFromTracks.SelectedItem is TrackOptionsItem item)
+                        this.ApplyAutoOptions(item.Options);
+                };
+                this.ClientSize = new Size(this.ClientSize.Width, this.ClientSize.Height + 100);
+            }
             stretchGroup.Controls.Add(stretchFlow);
             this.Controls.Add(stretchGroup);
             stretchGroup.BringToFront();
@@ -148,6 +184,36 @@ namespace ModularAudience.Forms.Modules.Dialogs
         }
 
         private readonly ToolTip toolTip;
+        public bool ApplyForAll { get; private set; }
+        private sealed record TrackOptionsItem(string Label, TrackAutoRerollOptions Options)
+        {
+            public override string ToString() => this.Label;
+        }
+        internal void SetOtherTrackOptions(IEnumerable<(int TrackNumber, string Name, TrackAutoRerollOptions Options)> tracks)
+        {
+            this.combo_applyFromTracks.Items.Clear();
+            foreach (var track in tracks)
+                this.combo_applyFromTracks.Items.Add(new TrackOptionsItem($"#{track.TrackNumber} — {track.Name}", track.Options.Clone()));
+            this.combo_applyFromTracks.Enabled = this.combo_applyFromTracks.Items.Count > 0;
+        }
+        private void ApplyAutoOptions(TrackAutoRerollOptions options)
+        {
+            this.ApplyOptions(options.Generate.Clone());
+            this.numeric_loops.Value = Math.Clamp(options.Loops, (int)this.numeric_loops.Minimum, (int)this.numeric_loops.Maximum);
+            this.check_saveEnsemble.Checked = options.SaveEnsemble;
+            this.check_saveSolo.Checked = options.SaveSolo;
+        }
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) this.toolTip.Dispose();
+            base.Dispose(disposing);
+        }
+        public TrackAutoRerollOptions AutoOptions => new()
+        {
+            Enabled = true, Loops = (int)this.numeric_loops.Value,
+            SaveEnsemble = this.check_saveEnsemble.Checked, SaveSolo = this.check_saveSolo.Checked,
+            Generate = this.Options
+        };
 
         private void ApplyOptions(BreakbeatGenerateOptions options)
         {
@@ -186,7 +252,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             AllowTimeStretch = this.check_timeStretch.Checked,
             AllowVarispeed = this.check_varispeed.Checked,
             AllowTruncated = this.check_truncated.Checked,
-            Interleaved = this.check_interleaved.Checked,
+            Interleaved = !this.autoReroll && this.check_interleaved.Checked,
             Seed = (int)this.numeric_seed.Value
         });
     }

@@ -291,7 +291,7 @@ namespace ModularAudience.Audio.Processors_V1
             return results.Where(r => r != null).ToList();
         }
 
-        public static async Task<AudioObj> CreatePitchShiftWithoutTimestretchAsync(AudioObj sample, float semitoneDelta = 1.0f, IProgress<double>? progress = null)
+        public static async Task<AudioObj> CreatePitchShiftWithoutTimestretchAsync(AudioObj sample, float semitoneDelta = 1.0f, IProgress<double>? progress = null, int? maxWorkers = null)
         {
             if (sample == null)
             {
@@ -302,7 +302,7 @@ namespace ModularAudience.Audio.Processors_V1
             using var resampled = await PitchShiftOneAsync(sample, semitoneDelta, new Progress<double>(p =>
             {
                 progress?.Report(Math.Clamp(p * 0.5, 0.0, 1.0)); // first half
-            })).ConfigureAwait(false);
+            }), maxWorkers).ConfigureAwait(false);
 
             // 2) Time-stretch resampled back to original frame count
             int originalFrames = (int)Math.Max(0, (sample.Data?.LongLength ?? 0) / Math.Max(1, sample.Channels));
@@ -346,7 +346,7 @@ namespace ModularAudience.Audio.Processors_V1
             return result;
         }
 
-        private static Task<AudioObj> PitchShiftOneAsync(AudioObj sample, float semitones, IProgress<double>? progress = null)
+        private static Task<AudioObj> PitchShiftOneAsync(AudioObj sample, float semitones, IProgress<double>? progress = null, int? maxWorkers = null)
         {
             return Task.Run(() =>
             {
@@ -410,7 +410,7 @@ namespace ModularAudience.Audio.Processors_V1
                 double cutoff = Math.Min(1.0, 1.0 / pitchFactor);
                 int kernelRadius = (int)Math.Ceiling(a / cutoff);
 
-                int maxDegreeOfParallelism = Math.Max(1, Math.Min(Environment.ProcessorCount, 8));
+                int maxDegreeOfParallelism = Math.Clamp(maxWorkers ?? 8, 1, Environment.ProcessorCount);
 
                 int partitionCount = maxDegreeOfParallelism;
                 var ranges = PartitionRange(0L, outputFrames, partitionCount);

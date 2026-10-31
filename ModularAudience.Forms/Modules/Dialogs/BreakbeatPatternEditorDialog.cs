@@ -94,6 +94,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private int currentResolution = 4;
         private bool initializing = true;
         private bool saveInProgress;
+        private readonly PatternRenderCache noteRenderCache = new();
+        private readonly CancellationTokenSource cacheLifetime = new();
+        private readonly System.Windows.Forms.Timer cacheWarmTimer = new() { Interval = 180 };
+        private Task cacheWarmWork = Task.CompletedTask;
+        private AudioCollectionView? savedCollection;
         private bool restoringHistory;
         private PatternEditorHistoryState? lastHistoryState;
         private readonly Stack<PatternEditorHistoryState> undoHistory = new();
@@ -117,7 +122,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             BreakbeatPatternNote[] Notes,
             int Bars,
             int Resolution,
-            decimal Bpm);
+            decimal Bpm,
+            KeyValuePair<AudioObj, TrackAutoRerollOptions>[] AutoRerolls,
+            AudioObj[] SoloTracks, AudioObj[] MutedTracks);
 
         public IReadOnlyList<bool[]> Pattern => this.BuildPatternMatrix();
 
@@ -157,6 +164,26 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return parameters;
             }
         }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct WindowStyleChange
+        {
+            public uint OldStyle;
+            public uint NewStyle;
+        }
+
+        protected override void WndProc(ref Message message)
+        {
+            // WinForms/Windows may update the style after CreateParams (for example during
+            // initial sizing). Preserve the maximize flag in those later updates as well.
+            if (message.Msg == 0x007C && message.WParam.ToInt64() == -16 && message.LParam != IntPtr.Zero)
+            {
+                var styles = System.Runtime.InteropServices.Marshal.PtrToStructure<WindowStyleChange>(message.LParam);
+                styles.NewStyle |= 0x00010000 | 0x00040000;
+                System.Runtime.InteropServices.Marshal.StructureToPtr(styles, message.LParam, false);
+            }
+            base.WndProc(ref message);
+        }
         internal event Action<AudioObj, int>? TrackAdded;
         internal event Action<BreakbeatPatternEditorDialog>? TrackSetRestored;
 
@@ -176,6 +203,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.MaximizeBox = true;
             this.MaximumSize = Size.Empty;
+            this.ConfigureExternalTrackDropTargets();
             this.KeyPreview = true;
             this._controlActions = new ControlActionResolver(this._controlsManager.CurrentScheme);
             this._controlsManager.SchemeChanged += _ => this._controlActions = new ControlActionResolver(_);
@@ -183,7 +211,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.pattern = pattern.Select(row => row.ToArray()).ToList();
             AudioObj[] sourceSamples = samples.ToArray();
             this.sourceSampleOrder = sourceSamples.ToList();
-            this.samples = sourceSamples.Select(sample => sample.Clone()).ToList();
+            this.samples = sourceSamples.Select(CloneSampleWithMetadata).ToList();
             this.originalSampleOrder = this.samples.ToList();
             this.trackSettingsBySample = trackSettingsBySample;
             this.trackSettings = sourceSamples.Select(sample =>
@@ -221,6 +249,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.FormClosing += this.BreakbeatPatternEditorDialog_FormClosing;
 this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.lastHistoryState = this.CaptureHistoryState();
+            this.cacheWarmTimer.Tick += this.WarmNoteCache;
         }
 
         /// <summary>
@@ -393,7 +422,9 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.notes.ToArray(),
             this.bars,
             this.currentResolution,
-            this.numericUpDown_bpm.Value);
+            this.numericUpDown_bpm.Value,
+            this.autoRerolls.Select(p => new KeyValuePair<AudioObj, TrackAutoRerollOptions>(p.Key, p.Value.Options.Clone())).ToArray(),
+            this.soloTracks.ToArray(), this.mutedTracks.ToArray());
 
         internal IReadOnlyList<KeyValuePair<AudioObj, BreakbeatTrackSettings>> GetSourceTrackSettings()
         {
@@ -424,7 +455,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 && first.Notes.SequenceEqual(second.Notes)
                 && first.Bars == second.Bars
                 && first.Resolution == second.Resolution
-                && first.Bpm == second.Bpm;
+                && first.Bpm == second.Bpm
+                && first.SoloTracks.ToHashSet().SetEquals(second.SoloTracks)
+                && first.MutedTracks.ToHashSet().SetEquals(second.MutedTracks)
+                && System.Text.Json.JsonSerializer.Serialize(first.AutoRerolls.Select(p => new { p.Key.Id, p.Value }))
+                    == System.Text.Json.JsonSerializer.Serialize(second.AutoRerolls.Select(p => new { p.Key.Id, p.Value }));
         }
 
         private static bool ReferenceSequenceEqual(IReadOnlyList<AudioObj> first, IReadOnlyList<AudioObj> second)
@@ -518,6 +553,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 ReplaceContents(this.trackSettings, state.TrackSettings);
                 ReplaceContents(this.rowLabels, state.RowLabels);
                 ReplaceContents(this.notes, state.Notes);
+                this.autoRerolls.Clear();
+                this.soloTracks.Clear(); this.soloTracks.UnionWith(state.SoloTracks);
+                this.mutedTracks.Clear(); this.mutedTracks.UnionWith(state.MutedTracks);
+                foreach (var pair in state.AutoRerolls)
+                    this.autoRerolls[pair.Key] = new TrackAutoRerollState { Options = pair.Value.Clone() };
                 if (this.selectedLoopSections.RemoveWhere(section => section / 4 >= state.Bars) > 0)
                 {
                     this.loopSelectionRevision++;
@@ -570,6 +610,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
         {
             HashSet<AudioObj> ownedSamples = new(ReferenceEqualityComparer.Instance);
             ownedSamples.UnionWith(this.samples);
+            ownedSamples.UnionWith(this.droppedSourceSamples);
             foreach (PatternEditorHistoryState state in this.undoHistory.Concat(this.redoHistory))
             {
                 ownedSamples.UnionWith(state.Samples);
@@ -646,7 +687,9 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             for (int row = 0; row < rows; row++)
             {
                 float y = grid.Top + row * cellHeight;
-                RectangleF labelBounds = new(8, y, Math.Max(1, grid.Left - 16), Math.Max(1f, cellHeight));
+                this.PaintAutoReroll(e.Graphics, row);
+                float nameLeft = this.TrackButtonBounds(row, 2).Right + 6;
+                RectangleF labelBounds = new(nameLeft, y, Math.Max(1, grid.Left - nameLeft - 8), Math.Max(1f, cellHeight));
                 string label = row < this.rowLabels.Count ? this.rowLabels[row] : $"Track {row + 1}";
                 string summary = row < this.trackSettings.Count
                     ? FormatTrackSettingsSummary(this.trackSettings[row])
@@ -856,7 +899,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
             if (this.previewAudio is not null && this.previewAudio.PlayerPlaying)
             {
-                double secondsPerBar = 240.0 / Math.Max(1.0, (double)this.Bpm);
+                double secondsPerBar = 240.0 / Math.Max(1.0, this.hearBaseBpm);
                 double patternDuration = this.bars * secondsPerBar;
                 double caretTime = this.previewAudio.CurrentTime.TotalSeconds;
                 caretTime = this.MapPreviewSequenceTime(caretTime, secondsPerBar);
@@ -1131,6 +1174,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.pictureBox_pattern.Focus();
             this.lastPatternPointer = e.Location;
             this.hasPatternPointer = true;
+            if (this.TryClickTrackButtons(e)) return;
+            if (this.TryClickAutoReroll(e)) return;
 
             if (this.generatingRect)
             {
@@ -1246,6 +1291,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             if (remappedDelete)
             {
                 this.drawingButton = e.Button;
+                this.drawing = true;
                 this.drawingRow = row;
                 this.drawingStartColumn = column;
                 this.rightClickDeleteActive = true;
@@ -1532,7 +1578,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             {
                 this.UpdateResizingNote(e.Location);
             }
-            else if (this.drawingButton == MouseButtons.Right)
+            else if (this.rightClickDeleteActive)
             {
                 if (this.TryGetCell(e.Location, out int row, out int column))
                 {
@@ -1752,6 +1798,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void pictureBox_pattern_MouseDoubleClick(object? sender, MouseEventArgs e)
         {
+            if (this.samples.Count > 0 && e.X < this.TrackButtonBounds(0, 2).Right + 6) return;
             if (e.Button != MouseButtons.Left)
             {
                 return;
@@ -1936,6 +1983,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             AudioObj sourceOriginal = this.sourceSampleOrder[sourceIndex];
             AudioObj newSourceSample = CloneSampleWithMetadata(sourceOriginal);
             AudioObj newEditorSample = CloneSampleWithMetadata(newSourceSample);
+            if (this.soloTracks.Contains(this.samples[row])) this.soloTracks.Add(newEditorSample);
+            if (this.mutedTracks.Contains(this.samples[row])) this.mutedTracks.Add(newEditorSample);
             BreakbeatTrackSettings clonedSettings = this.trackSettings[row];
             string clonedLabel = (row < this.rowLabels.Count ? this.rowLabels[row] : this.samples[row].Name) + " (Copy)";
             int displayIndex = row + 1;
@@ -1974,6 +2023,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             this.samples.Insert(displayIndex, newEditorSample);
+            if (this.autoRerolls.TryGetValue(this.samples[row], out var originalAuto))
+                this.autoRerolls[newEditorSample] = new TrackAutoRerollState { Options = originalAuto.Options.Clone() };
             this.originalSampleOrder.Insert(newSourceIndex, newEditorSample);
             this.sourceSampleOrder.Insert(newSourceIndex, newSourceSample);
             bool[] clonedPatternRow;
@@ -2038,6 +2089,27 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.UpdateExternalTrackDrop(e);
         }
 
+        private readonly HashSet<AudioObj> droppedSourceSamples = new(ReferenceEqualityComparer.Instance);
+
+        private void ConfigureExternalTrackDropTargets()
+        {
+            // Cover the complete editor, including track labels, empty space and the toolbar.
+            // The picture box already has these handlers from InitializeComponent.
+            void Register(Control control)
+            {
+                if (!ReferenceEquals(control, this.pictureBox_pattern))
+                {
+                    control.AllowDrop = true;
+                    control.DragEnter += this.pictureBox_pattern_DragEnter;
+                    control.DragOver += this.pictureBox_pattern_DragOver;
+                    control.DragLeave += this.pictureBox_pattern_DragLeave;
+                    control.DragDrop += this.pictureBox_pattern_DragDrop;
+                }
+                foreach (Control child in control.Controls) Register(child);
+            }
+            Register(this);
+        }
+
         private void pictureBox_pattern_DragOver(object? sender, DragEventArgs e)
         {
             this.UpdateExternalTrackDrop(e);
@@ -2052,7 +2124,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
         {
             try
             {
-                if (!TryGetDraggedSamples(e.Data, out AudioObj[] draggedSamples) || this.TrackAdded is null)
+                if (!TryGetDraggedSamples(e.Data, out AudioObj[] draggedSamples))
                 {
                     return;
                 }
@@ -2086,7 +2158,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void UpdateExternalTrackDrop(DragEventArgs e)
         {
-            if (!TryGetDraggedSamples(e.Data, out _) || this.TrackAdded is null)
+            if (!TryGetDraggedSamples(e.Data, out _) || (e.AllowedEffect & DragDropEffects.Copy) == 0)
             {
                 e.Effect = DragDropEffects.None;
                 this.ClearExternalTrackDrop();
@@ -2135,6 +2207,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             samples = [];
+            if (data?.GetData(typeof(List<AudioObj>)) is List<AudioObj> list)
+            {
+                samples = list.Where(sample => sample is not null).ToArray();
+                return samples.Length > 0;
+            }
             return false;
         }
 
@@ -2165,6 +2242,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
         private void InsertSampleTrack(AudioObj draggedSample, int displayIndex, int sourceIndex)
         {
             AudioObj sourceSample = CloneSampleWithMetadata(draggedSample);
+            this.droppedSourceSamples.Add(sourceSample);
             AudioObj editorSample = CloneSampleWithMetadata(sourceSample);
             BreakbeatTrackSettings settings = new();
             int patternColumns = this.pattern.Count > 0
@@ -2213,6 +2291,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             this.TrackAdded?.Invoke(sourceSample, sourceIndex);
+            if (this.TrackAdded is not null) this.droppedSourceSamples.Remove(sourceSample);
             this.RegisterPatternNotesChanged(originalNotes
                 .Concat(this.notes)
                 .Select(note => (BreakbeatPatternNote?)note)
@@ -2405,6 +2484,9 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
         }
 
         private sealed record GenerateMotifEntry(int ColumnOffset, int LengthSteps, float PitchSemitones, float VolumePercent);
+        private sealed record GenerateRerollState(int RowStart, int RowEnd, int ColStart, int ColEnd,
+            int Bars, int Resolution, AudioObj[] Samples, BreakbeatGenerateOptions Options, BreakbeatPatternNote[] Generated);
+        private GenerateRerollState? lastGenerate;
 
         private void GenerateRandomPatternInRect()
         {
@@ -2424,6 +2506,12 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             int totalColumns = Math.Max(1, this.bars * this.currentResolution);
             int colStart = Math.Clamp(this.PointToColumn(new Point(left, grid.Top)), 0, totalColumns - 1);
             int colEnd = Math.Clamp(this.PointToColumn(new Point(right, grid.Top)), 0, totalColumns - 1);
+
+            this.GeneratePatternInArea(rowStart, rowEnd, colStart, colEnd, options);
+        }
+
+        private void GeneratePatternInArea(int rowStart, int rowEnd, int colStart, int colEnd, BreakbeatGenerateOptions options)
+        {
 
             Random rand = options.Seed == 0 ? new Random() : new Random(options.Seed);
             List<BreakbeatPatternNote> placed = [];
@@ -2507,17 +2595,40 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             if (placed.Count > 0)
             {
                 this.RegisterPatternNotesChanged(placed.Select(note => (BreakbeatPatternNote?)note).ToArray());
-                this.selectedNotes.Clear();
-                foreach (BreakbeatPatternNote note in placed)
+                if (!this.automaticGeneration)
                 {
-                    this.selectedNotes.Add(note);
+                    this.selectedNotes.Clear();
+                    foreach (BreakbeatPatternNote note in placed) this.selectedNotes.Add(note);
                 }
 
-                if (this.checkBox_preHear.Checked && placed.Count == 1 && this.hearCancellationTokenSource is null)
+                if (!this.automaticGeneration && this.checkBox_preHear.Checked && placed.Count == 1 && this.hearCancellationTokenSource is null)
                 {
                     _ = this.PrehearNoteAsync(placed[0]);
                 }
             }
+            if (!this.automaticGeneration)
+                this.lastGenerate = new(rowStart, rowEnd, colStart, colEnd, this.bars, this.currentResolution,
+                    this.samples.ToArray(), options.Clone(), placed.ToArray());
+            this.pictureBox_pattern.Invalidate();
+            if (!this.automaticGeneration) this.CommitHistoryAction();
+        }
+
+        private void RerollLastGenerate()
+        {
+            if (this.lastGenerate is not { } last || this.generatingRect || this.generateDragging || this.saveInProgress
+                || last.Bars != this.bars || last.Resolution != this.currentResolution
+                || !last.Samples.SequenceEqual(this.samples, ReferenceEqualityComparer.Instance)) return;
+            // Never undo unrelated edits. Only the exact notes produced by the preceding roll
+            // are replaced; pre-existing notes and notes added afterwards remain untouched.
+            var generated = new HashSet<BreakbeatPatternNote>(last.Generated, ReferenceEqualityComparer.Instance);
+            var removed = this.notes.Where(generated.Contains).ToArray();
+            this.notes.RemoveAll(generated.Contains);
+            this.selectedNotes.RemoveWhere(generated.Contains);
+            this.deadGroupNotes.Clear();
+            this.RegisterPatternNotesChanged(removed.Select(n => (BreakbeatPatternNote?)n).ToArray());
+            var options = last.Options.Clone();
+            options.Seed = Random.Shared.Next(1, int.MaxValue);
+            this.GeneratePatternInArea(last.RowStart, last.RowEnd, last.ColStart, last.ColEnd, options);
         }
 
         private bool TryPlaceGeneratedNote(
@@ -2953,7 +3064,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     continue;
                 }
 
-                if (actionId is not ("Edit.Undo" or "Edit.Redo") && focusOnly == false)
+                if (actionId is not ("Edit.Undo" or "Edit.Redo" or "Generate.Reroll") && focusOnly == false)
                 {
                     // Only undo/redo were reachable without grid focus in the original editor.
                     return false;
@@ -2963,6 +3074,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
                 switch (actionId)
                 {
+                    case "Generate.Reroll":
+                        if (TextInputFocus.IsActive()) { consumed = false; return false; }
+                        this.RerollLastGenerate();
+                        return true;
                     case "Edit.Undo":
                         this.UndoEditorAction();
                         return true;
@@ -4075,7 +4190,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
         {
             int width = Math.Max(1, this.pictureBox_pattern.ClientSize.Width);
             int height = Math.Max(1, this.pictureBox_pattern.ClientSize.Height);
-            int labelWidth = Math.Clamp(width / 4, 130, 260);
+            int labelWidth = Math.Clamp(width / 3, 240, 340);
             int left = Math.Min(labelWidth, Math.Max(1, width - 16));
             int top = Math.Min(26, Math.Max(1, height - 1));
             return new Rectangle(left, top, Math.Max(1, width - left - 24), Math.Max(1, height - top - 6));
@@ -4093,6 +4208,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
         private void RegisterPatternNotesChanged(params BreakbeatPatternNote?[] changedNotes)
         {
             this.patternNotesRevision++;
+            if (!this.cacheLifetime.IsCancellationRequested)
+            {
+                this.cacheWarmTimer.Stop();
+                this.cacheWarmTimer.Start();
+            }
             this.UpdateRemixButtonState();
             if (this.hearCancellationTokenSource is null)
             {
@@ -4128,7 +4248,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             CancellationToken cancellationToken)
         {
             AudioObj? renderedPattern = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
-                patternNotes,
+                this.ApplyTrackAudibility(patternNotes),
                 this.samples,
                 this.bars,
                 bpm,
@@ -4136,7 +4256,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 this.swing,
                 "BreakbeatPreview",
                 cancellationToken,
-                trackSettings: this.trackSettings);
+                trackSettings: this.trackSettings, renderCache: this.noteRenderCache);
 
             if (renderedPattern is null)
             {
@@ -4213,7 +4333,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 return 0;
             }
 
-            double secondsPerBar = 240.0 / Math.Max(1.0, (double)this.Bpm);
+            double secondsPerBar = 240.0 / Math.Max(1.0, this.hearBaseBpm);
             double secondsPerQuarter = secondsPerBar / 4.0;
             double selectedDuration = this.previewQuarterMap.Length * secondsPerQuarter;
             double wrappedTime = this.previewAudio.CurrentTime.TotalSeconds % selectedDuration;
@@ -4235,7 +4355,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 return false;
             }
 
-            double secondsPerBar = 240.0 / Math.Max(1.0, (double)this.Bpm);
+            double secondsPerBar = 240.0 / Math.Max(1.0, this.hearBaseBpm);
             double timelineSeconds = this.previewAudio.CurrentTime.TotalSeconds;
             timelineSeconds = this.MapPreviewSequenceTime(timelineSeconds, secondsPerBar);
 
@@ -4280,7 +4400,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 samplePosition = (long)Math.Round(fraction * newTotalFrames) * Math.Max(1, replacement.Channels);
             }
 
-            current.SwapPlaybackData(replacement.Data, replacement.SampleRate, replacement.Channels, samplePosition);
+            // Replace loop bounds together with the buffer, before building the new pipeline.
+            // Rebuilding once more afterwards reset resampler history and could replay buffered audio.
+            current.SwapPlaybackData(replacement.Data, replacement.SampleRate, replacement.Channels, samplePosition,
+                loopWholeBuffer: newLoopSections.Length > 0);
             current.Data = replacement.Data;
             current.SampleRate = replacement.SampleRate;
             current.Channels = replacement.Channels;
@@ -4392,7 +4515,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     }
                 }
 
-                long targetFrames = 0;
+                long targetFrames = posFrames;
                 if (nextTimeline >= 0)
                 {
                     int targetOldIndex = Array.IndexOf(activeLoopSections, nextTimeline);
@@ -4413,34 +4536,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 return;
             }
 
-            // Caret in a selected quarter, but deselected quarters ahead in the OLD
-            // buffer would still play: skip over consecutive deselected quarters.
-            int lookIndex = oldIndex + 1;
-            bool foundGap = false;
-            while (lookIndex < activeLoopSections.Length && !stillSelected.Contains(activeLoopSections[lookIndex]))
-            {
-                foundGap = true;
-                lookIndex++;
-            }
-
-            if (foundGap)
-            {
-                long targetFrames = lookIndex < activeLoopSections.Length
-                    ? (long)lookIndex * quarterFrames
-                    : 0;
-                try
-                {
-                    // Only jump forward over the gap; wrap to 0 when the gap reaches
-                    // the end of the old buffer (loop restarts earlier).
-                    if (targetFrames > posFrames || targetFrames == 0)
-                    {
-                        this.previewAudio.SetPosition(targetFrames);
-                    }
-                }
-                catch
-                {
-                }
-            }
+            // A selected current quarter must finish. Only skip once playback actually
+            // enters a removed quarter; looking ahead used to truncate/repeat valid audio.
         }
 
         private void TryApplyLiveBpmVarispeed(float currentBpm)
@@ -4476,6 +4573,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             Interlocked.Increment(ref this.notePreviewRequestVersion);
             if (this.hearCancellationTokenSource is not null)
             {
+                this.StopAutoRerollPlayback((ModifierKeys & Keys.Control) == Keys.Control);
                 this.notePreviewCancellationTokenSource?.Cancel();
                 this.hearCancellationTokenSource.Cancel();
                 if (this.previewAudio?.Playing == true)
@@ -4489,6 +4587,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             await this.StopNotePreviewAsync();
             CancellationTokenSource cancellationTokenSource = new();
             this.hearCancellationTokenSource = cancellationTokenSource;
+            this.PrepareAutoRerollPlayback();
             this.pendingLivePreviewRegions.Clear();
             this.button_hear.Text = "Stop";
             AudioObj? pendingLivePreview = null;
@@ -4536,6 +4635,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 while (this.previewAudio.Playing && !cancellationTokenSource.IsCancellationRequested)
                 {
                     UpdatePreviewLoopPass(this.previewAudio, ref previousLoopFrame, ref loopPass);
+                    this.ObserveAutoRerollLoops(loopPass);
                     if (pendingLivePreview is not null
                         && (pendingLiveRevision != this.patternNotesRevision
                             || pendingSelectionRevision != this.loopSelectionRevision
@@ -4681,12 +4781,6 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                         if (activeLoopSections.Length > 0)
                         {
                             this.previewQuarterMap = activeLoopSections;
-                            this.previewAudio!.UpdateLoopFraction(
-                                0,
-                                this.previewAudio.Data.LongLength,
-                                this.previewAudio.Data.LongLength,
-                                loopEnabled: true,
-                                adjustPosition: false);
                         }
                         else
                         {
@@ -4697,10 +4791,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                         {
                             appliedBpm = pendingBpm;
                             this.hearBaseBpm = pendingBpm;
-                            this.hearLiveVarispeedFactor = 1f;
+                            this.hearLiveVarispeedFactor = Math.Clamp(this.hearLiveBpm / pendingBpm, 0.1f, 4f);
                             try
                             {
-                                await this.previewAudio!.AdjustSampleRate(1f);
+                                await this.previewAudio!.AdjustSampleRate(this.hearLiveVarispeedFactor);
                             }
                             catch
                             {
@@ -4786,7 +4880,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 int previewBars = Math.Max(1, (int)Math.Ceiling(note.DurationTicks / (double)BreakbeatGenerator_V2.PatternTicksPerBar));
                 BreakbeatPatternNote previewNote = note with { StartTick = 0 };
                 notePreviewAudio = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
-                    [previewNote],
+                    this.ApplyTrackAudibility([previewNote]),
                     this.samples,
                     previewBars,
                     (float)this.numericUpDown_bpm.Value,
@@ -4794,7 +4888,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     0f,
                     "BreakbeatNotePreview",
                     cancellationTokenSource.Token,
-                    trackSettings: this.trackSettings);
+                    trackSettings: this.trackSettings, renderCache: this.noteRenderCache);
 
                 if (notePreviewAudio is null
                     || cancellationTokenSource.IsCancellationRequested
@@ -5001,7 +5095,22 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
             private async void BreakbeatPatternEditorDialog_FormClosing(object? sender, FormClosingEventArgs e)
             {
+                if (this.saveInProgress)
+                {
+                    e.Cancel = true;
+                    return;
+                }
+                if (!this.autoSaveWork.IsCompleted)
+                {
+                    this.autoRerollClosing = true;
+                    e.Cancel = true;
+                    this.hearCancellationTokenSource?.Cancel();
+                    await this.autoSaveWork;
+                    if (!this.IsDisposed) this.Close();
+                    return;
+                }
                 CancellationTokenSource? hearCancellationTokenSource = this.hearCancellationTokenSource;
+                this.autoRerollClosing = true;
                 CancellationTokenSource? notePreviewCancellationTokenSource = this.notePreviewCancellationTokenSource;
                 if (hearCancellationTokenSource is null && notePreviewCancellationTokenSource is null)
                 {
@@ -5065,6 +5174,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 {
                     await saveRequested(this);
                 }
+                else
+                {
+                    await this.SaveToCollectionAsync();
+                }
             }
             catch (Exception ex)
             {
@@ -5086,6 +5199,38 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
         }
 
+        internal async Task SaveToCollectionAsync()
+        {
+            // Render from editor-owned clones and display-order notes/settings. The generator
+            // may already be disposed, and its source list may have a different track order.
+            float bpm = (float)this.Bpm;
+            var notes = this.ApplyTrackAudibility(this.GetNotesWithoutCoveredRetriggers());
+            var samples = this.samples.ToArray();
+            var settings = this.trackSettings.Select(NormalizeTrackSettings).ToArray();
+            int[] quarters = this.SaveMarkedQuartersRequested ? this.SelectedLoopSections : [];
+            AudioObj? rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(notes, samples,
+                this.bars, bpm, this.currentResolution, this.swing, "BreakbeatEdited", trackSettings: settings,
+                renderCache: this.noteRenderCache);
+            if (rendered == null) return;
+            try
+            {
+                if (quarters.Length > 0)
+                {
+                    AudioObj excerpt = BreakbeatGenerator_V2.ExtractPatternQuarters(rendered, quarters, bpm);
+                    rendered.Dispose();
+                    rendered = excerpt;
+                }
+                if (this.IsDisposed || this.Disposing) return;
+                if (this.savedCollection == null || this.savedCollection.IsDisposed)
+                    this.savedCollection = new AudioCollectionView([]);
+                this.savedCollection.AudioC.Audios.Add(rendered);
+                rendered = null; // Collection owns the rendered result, independent of this editor.
+                this.savedCollection.Show();
+                this.savedCollection.Rename($"Break-Beat Generated {bpm:F1} BPM");
+            }
+            finally { rendered?.Dispose(); }
+        }
+
         private void button_help_Click(object? sender, EventArgs e)
         {
             string helpText = string.Join(Environment.NewLine,
@@ -5098,6 +5243,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 "Alt+wheel on a note: volume +/-5% (0-250%); 100% is default.",
                 "Right-click a sample name: configure persistent defaults for new notes on that track. Double-click a sample name: rename the track.",
                 "Generate: pick randomization options, then drag a rectangle over empty cells to fill it with random notes (Ctrl+click skips the dialog; right-click/Esc cancels).",
+                "Track Auto: click Off to configure/enable (empty tracks fill immediately), On to disable. Roll rerolls once; click the counter to reset it. Right-click Auto to edit. Normal Stop preserves counters; Ctrl+Stop resets all counters. Solo/ensemble autosaves collect variations separately; simultaneous ensemble requests are combined.",
+                "R: reroll the last Generate rectangle with the same options. Configurable in the gear / Control Configuration.",
                 "Remix: with 2+ selected notes it derives a variation from the selection (pattern detection/reuse, mirror, halves swap, rotate, lane shift, humanize, ghosts, rolls, merge, thin-out, track shuffle, pitch/volume). Ctrl+click applies the persisted settings immediately; the dialog's bottom checkbox toggles between replacing the selection and copying the remix to the clipboard.",
                 "Drag a sample name left of the grid to reorder sample tracks.",
                 "Pre-hear toggles auto-preview; clicking a note always plays it.",

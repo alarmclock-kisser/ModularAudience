@@ -22,6 +22,7 @@ public sealed class YoutubeUploadDateTests
         { Id = $"video{index:000000}", Title = $"Video {index:00}" }).ToArray();
         Invoke(window, "PopulateResults", videos);
         var selected = list.Items[10];
+        int selectedVideoIndex = Array.FindIndex(videos, video => video.Id == ((YtdlpVideo)selected.Tag!).Id);
         selected.Selected = true;
         selected.Focused = true;
         list.TopItem = list.Items[8];
@@ -39,7 +40,7 @@ public sealed class YoutubeUploadDateTests
         Assert.IsTrue(selected.Selected);
         Assert.AreSame(selected, list.FocusedItem);
         Assert.AreSame(top, list.TopItem);
-        Assert.AreEqual("2024-01-15", selected.SubItems[6].Text);
+        Assert.AreEqual(new DateOnly(2024, 1, 1).AddDays(24 - selectedVideoIndex).ToString("yyyy-MM-dd"), selected.SubItems[6].Text);
     }
 
     [TestMethod]
@@ -70,9 +71,10 @@ public sealed class YoutubeUploadDateTests
         Invoke(window, "StartUploadDates", videos);
         var list = (ListView)Field(window, "resultsList").GetValue(window)!;
         Assert.AreEqual(2, calls);
-        Assert.AreEqual("2024-03-04", list.Items[0].SubItems[6].Text);
-        Assert.AreEqual(new DateOnly(2024, 3, 4), ((YtdlpVideo)list.Items[1].Tag!).UploadDate);
-        Assert.AreEqual("2020-01-01", list.Items[2].SubItems[6].Text);
+        ListViewItem Row(string id) => list.Items.Cast<ListViewItem>().Single(row => ((YtdlpVideo)row.Tag!).Id == id);
+        Assert.AreEqual("2024-03-04", Row(videos[0].Id).SubItems[6].Text);
+        Assert.AreEqual(new DateOnly(2024, 3, 4), ((YtdlpVideo)Row(videos[1].Id).Tag!).UploadDate);
+        Assert.AreEqual("2020-01-01", Row(videos[2].Id).SubItems[6].Text);
         Invoke(window, "PopulateResults", videos);
         Invoke(window, "StartUploadDates", videos);
         Assert.AreEqual(2, calls, "Repeated searches must use cached exact dates.");

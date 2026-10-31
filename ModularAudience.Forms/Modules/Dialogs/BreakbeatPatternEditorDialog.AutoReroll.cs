@@ -1,0 +1,329 @@
+using ModularAudience.Audio;
+using ModularAudience.Generators;
+
+namespace ModularAudience.Forms.Modules.Dialogs;
+
+internal sealed class TrackAutoRerollOptions
+{
+    public bool Enabled { get; set; }
+    public int Loops { get; set; } = 4;
+    public bool SaveEnsemble { get; set; }
+    public bool SaveSolo { get; set; }
+    public BreakbeatGenerateOptions Generate { get; set; } = new();
+    public TrackAutoRerollOptions Clone() => new()
+    {
+        Enabled = Enabled, Loops = Loops, SaveEnsemble = SaveEnsemble, SaveSolo = SaveSolo, Generate = Generate.Clone()
+    };
+}
+
+public partial class BreakbeatPatternEditorDialog
+{
+    private sealed class TrackAutoRerollState
+    {
+        public TrackAutoRerollOptions Options = new();
+        public long CompletedLoops;
+    }
+    // Sample identity follows reorder/undo; a numeric row index does not.
+    private readonly Dictionary<AudioObj, TrackAutoRerollState> autoRerolls = new(ReferenceEqualityComparer.Instance);
+    private bool automaticGeneration;
+    private long observedAutoLoopPass;
+    private int[] autoLoopSelection = [];
+    private Task autoSaveWork = Task.CompletedTask;
+    private readonly Dictionary<AudioObj, AudioCollectionView> autoSoloCollections = new(ReferenceEqualityComparer.Instance);
+    private AudioCollectionView? autoEnsembleCollection;
+    private long autoVariation;
+    private bool autoRerollClosing;
+    private readonly HashSet<string> savedEnsembleHashes = [];
+
+    private Rectangle AutoToggleBounds(int row)
+    {
+        Rectangle grid = this.GetGridBounds();
+        float height = grid.Height / (float)Math.Max(1, this.samples.Count);
+        return new Rectangle(4, grid.Top + (int)(row * height) + 1, 28, Math.Max(1, Math.Min(20, (int)height - 2)));
+    }
+    private Rectangle AutoCounterBounds(int row)
+    {
+        Rectangle toggle = this.AutoToggleBounds(row);
+        return new(toggle.Right + 3, toggle.Top, 46, toggle.Height);
+    }
+    private Rectangle AutoRollBounds(int row)
+    {
+        Rectangle counter = this.AutoCounterBounds(row);
+        return new(counter.Right + 3, counter.Top, 32, counter.Height);
+    }
+    private void PaintAutoReroll(Graphics graphics, int row)
+    {
+        var bounds = this.AutoToggleBounds(row);
+        this.autoRerolls.TryGetValue(this.samples[row], out var state);
+        bool on = state?.Options.Enabled == true;
+        using var brush = new SolidBrush(on ? Color.FromArgb(42, 133, 91) : Color.FromArgb(65, 69, 76));
+        graphics.FillRectangle(brush, bounds);
+        TextRenderer.DrawText(graphics, on ? "On" : "Off", SystemFonts.MessageBoxFont, bounds, Color.White,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        var label = this.AutoCounterBounds(row);
+        string text = state == null ? "Auto" : $"{state.CompletedLoops} / {state.Options.Loops}";
+        TextRenderer.DrawText(graphics, text, SystemFonts.MessageBoxFont, label, Color.LightGray,
+            TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        Rectangle roll = this.AutoRollBounds(row);
+        using var rollBrush = new SolidBrush(Color.FromArgb(65, 69, 76));
+        graphics.FillRectangle(rollBrush, roll);
+        TextRenderer.DrawText(graphics, "Roll", SystemFonts.MessageBoxFont, roll, Color.White,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        this.PaintTrackButtons(graphics, row);
+    }
+    private bool TryClickAutoReroll(MouseEventArgs e)
+    {
+        for (int row = 0; row < this.samples.Count; row++)
+        {
+            var bounds = this.AutoToggleBounds(row);
+            if (!Rectangle.Union(bounds, this.AutoRollBounds(row)).Contains(e.Location)) continue;
+            AudioObj sample = this.samples[row];
+            if (!this.autoRerolls.TryGetValue(sample, out var state))
+                this.autoRerolls[sample] = state = new();
+            if (e.Button == MouseButtons.Left && this.AutoCounterBounds(row).Contains(e.Location))
+            {
+                state.CompletedLoops = 0;
+                this.pictureBox_pattern.Invalidate();
+                return true;
+            }
+            if (e.Button == MouseButtons.Left && this.AutoRollBounds(row).Contains(e.Location))
+            {
+                this.RollAutoTrack(row);
+                return true;
+            }
+            if (e.Button == MouseButtons.Left && bounds.Contains(e.Location) && state.Options.Enabled)
+                state.Options.Enabled = false;
+            else
+            {
+                using var dialog = new BreakbeatPatternGenerateDialog(state.Options.Generate.Clone(), state.Options);
+                dialog.SetOtherTrackOptions(Enumerable.Range(0, this.samples.Count)
+                    .Where(other => other != row && this.autoRerolls.ContainsKey(this.samples[other]))
+                    .Select(other => (other + 1,
+                        other < this.rowLabels.Count ? this.rowLabels[other] : this.samples[other].Name,
+                        this.autoRerolls[this.samples[other]].Options)));
+                if (dialog.ShowDialog(this) != DialogResult.OK) return true;
+                if (dialog.ApplyForAll) this.ActivateAutoRerollForAll(dialog.AutoOptions);
+                else this.ActivateAutoReroll(row, dialog.AutoOptions);
+            }
+            this.pictureBox_pattern.Invalidate();
+            this.CommitHistoryAction();
+            return true;
+        }
+        return false;
+    }
+    private int[] AutoRerollSections()
+    {
+        int[] sections = this.GetLoopSectionsSnapshot();
+        return sections.Length > 0 ? sections : Enumerable.Range(0, this.bars * 4).ToArray();
+    }
+    private void ActivateAutoReroll(int row, TrackAutoRerollOptions options)
+    {
+        AudioObj sample = this.samples[row];
+        if (!this.autoRerolls.TryGetValue(sample, out var state)) this.autoRerolls[sample] = state = new();
+        state.Options = options.Clone();
+        state.CompletedLoops = 0;
+        int[] sections = this.AutoRerollSections();
+        int quarterTicks = BreakbeatGenerator_V2.PatternTicksPerBar / 4;
+        if (state.Options.Enabled && !this.notes.Any(n => n.TrackIndex == row && sections.Any(section =>
+            n.StartTick < (section + 1L) * quarterTicks && (long)n.StartTick + n.DurationTicks > section * quarterTicks)))
+            this.ApplyTrackAutoRerolls([row], sections);
+    }
+    private void ActivateAutoRerollForAll(TrackAutoRerollOptions options)
+    {
+        int[] sections = this.AutoRerollSections();
+        int quarterTicks = BreakbeatGenerator_V2.PatternTicksPerBar / 4;
+        var emptyRows = new List<int>();
+        for (int row = 0; row < this.samples.Count; row++)
+        {
+            if (!this.autoRerolls.TryGetValue(this.samples[row], out var state))
+                this.autoRerolls[this.samples[row]] = state = new();
+            state.Options = options.Clone();
+            state.Options.Enabled = true;
+            state.CompletedLoops = 0;
+            if (!this.notes.Any(n => n.TrackIndex == row && sections.Any(section =>
+                n.StartTick < (section + 1L) * quarterTicks && (long)n.StartTick + n.DurationTicks > section * quarterTicks)))
+                emptyRows.Add(row);
+        }
+        // Fill empty tracks together so their initial ensemble save is one shared final state.
+        if (emptyRows.Count > 0) this.ApplyTrackAutoRerolls(emptyRows, sections);
+        this.CommitHistoryAction();
+        this.pictureBox_pattern.Invalidate();
+    }
+    private void RollAutoTrack(int row)
+    {
+        if (this.saveInProgress || this.autoRerollClosing) return;
+        if (!this.autoRerolls.TryGetValue(this.samples[row], out var state))
+            this.autoRerolls[this.samples[row]] = state = new();
+        state.CompletedLoops = 0;
+        this.ApplyTrackAutoRerolls([row], this.AutoRerollSections());
+        this.pictureBox_pattern.Invalidate();
+    }
+    private void ResetAutoRerollCounters()
+    {
+        foreach (var state in this.autoRerolls.Values) state.CompletedLoops = 0;
+        this.pictureBox_pattern.Invalidate();
+    }
+    private void PrepareAutoRerollPlayback()
+    {
+        this.observedAutoLoopPass = 0;
+        int[] sections = this.GetLoopSectionsSnapshot();
+        if (!sections.SequenceEqual(this.autoLoopSelection)) this.ResetAutoRerollCounters();
+        this.autoLoopSelection = sections;
+    }
+    private void ResetAutoRerollClock()
+    {
+        this.PrepareAutoRerollPlayback();
+        this.ResetAutoRerollCounters();
+    }
+    private void StopAutoRerollPlayback(bool resetCounters)
+    {
+        if (resetCounters) this.ResetAutoRerollCounters();
+    }
+    private void ObserveAutoRerollLoops(long loopPass)
+    {
+        if (this.autoRerollClosing) return;
+        int[] sections = this.GetLoopSectionsSnapshot();
+        if (!sections.SequenceEqual(this.autoLoopSelection))
+        {
+            this.autoLoopSelection = sections;
+            this.observedAutoLoopPass = loopPass;
+            foreach (var state in this.autoRerolls.Values) state.CompletedLoops = 0;
+            return;
+        }
+        long elapsed = loopPass - this.observedAutoLoopPass;
+        if (elapsed <= 0) return;
+        this.observedAutoLoopPass = loopPass;
+        if (sections.Length == 0) return;
+        var due = new List<int>();
+        for (int row = 0; row < this.samples.Count; row++)
+        {
+            if (!this.autoRerolls.TryGetValue(this.samples[row], out var state) || !state.Options.Enabled) continue;
+            state.CompletedLoops += elapsed;
+            if (state.CompletedLoops >= Math.Max(1, state.Options.Loops))
+            {
+                state.CompletedLoops %= Math.Max(1, state.Options.Loops);
+                due.Add(row);
+            }
+        }
+        if (due.Count > 0) this.ApplyTrackAutoRerolls(due, sections);
+        this.pictureBox_pattern.Invalidate();
+    }
+    private void ApplyTrackAutoRerolls(IReadOnlyList<int> rows, int[] sections)
+    {
+        int quarterTicks = BreakbeatGenerator_V2.PatternTicksPerBar / 4;
+        var selected = sections.ToHashSet();
+        var before = this.notes.ToArray();
+        this.automaticGeneration = true;
+        try
+        {
+            foreach (int row in rows)
+            {
+                var options = this.autoRerolls[this.samples[row]].Options.Generate.Clone();
+                options.Interleaved = false;
+                options.Seed = options.Seed == 0 ? 0 : unchecked(options.Seed + (int)++this.autoVariation);
+                // Keep notes in unselected quarters, even if they overlap a selected boundary.
+                this.notes.RemoveAll(n => n.TrackIndex == row && selected.Contains(n.StartTick / quarterTicks));
+                foreach (var group in ContiguousSections(sections))
+                {
+                    int start = (int)Math.Ceiling(group.Start * quarterTicks / (double)this.GetTicksPerStep());
+                    int end = (group.End + 1) * quarterTicks / this.GetTicksPerStep() - 1;
+                    if (end >= start)
+                    {
+                        var previous = this.notes.ToHashSet(ReferenceEqualityComparer.Instance);
+                        this.GeneratePatternInArea(row, row, start, end, options);
+                        int endTick = (group.End + 1) * quarterTicks;
+                        for (int i = 0; i < this.notes.Count; i++)
+                            if (!previous.Contains(this.notes[i]) && (long)this.notes[i].StartTick + this.notes[i].DurationTicks > endTick)
+                                this.notes[i] = this.notes[i] with { DurationTicks = endTick - this.notes[i].StartTick, HardResized = true };
+                    }
+                }
+            }
+        }
+        finally { this.automaticGeneration = false; }
+        this.selectedNotes.RemoveWhere(n => !this.notes.Contains(n));
+        this.deadGroupNotes.Clear();
+        this.RegisterPatternNotesChanged(before.Concat(this.notes).Select(n => (BreakbeatPatternNote?)n).ToArray());
+        this.CommitHistoryAction();
+        this.QueueAutoRerollSaves(rows, sections);
+    }
+    private static IEnumerable<(int Start, int End)> ContiguousSections(int[] sections)
+    {
+        int[] ordered = sections.Distinct().Order().ToArray();
+        if (ordered.Length == 0) yield break;
+        int start = ordered[0], end = start;
+        foreach (int section in ordered.Skip(1))
+            if (section == end + 1) end = section;
+            else { yield return (start, end); start = end = section; }
+        yield return (start, end);
+    }
+    private void QueueAutoRerollSaves(IReadOnlyList<int> rows, int[] sections)
+    {
+        int[] solos = rows.Where(r => this.autoRerolls[this.samples[r]].Options.SaveSolo).ToArray();
+        bool ensemble = rows.Any(r => this.autoRerolls[this.samples[r]].Options.SaveEnsemble);
+        if (!ensemble && solos.Length == 0) return;
+        // Capture the final shared arrangement once AFTER all due tracks rerolled.
+        // Only one ensemble is queued, regardless of how many tracks requested it.
+        var notes = this.ApplyTrackAudibility(this.GetNotesWithoutCoveredRetriggers());
+        var samples = this.samples.Select(CloneSampleWithMetadata).ToArray();
+        var trackIdentities = this.samples.ToArray();
+        var settings = this.trackSettings.Select(NormalizeTrackSettings).ToArray();
+        string[] labels = this.rowLabels.ToArray();
+        int bars = this.bars, resolution = this.currentResolution;
+        float bpm = (float)this.Bpm, swing = this.swing;
+        long variation = ++this.autoVariation;
+        Task previous = this.autoSaveWork;
+        this.autoSaveWork = SaveAsync();
+        async Task SaveAsync()
+        {
+            try
+            {
+                await previous;
+                foreach (int row in solos) await RenderAsync(notes.Where(n => n.TrackIndex == row).ToArray(), $"{labels[row]} — Solo {variation}", row);
+                if (ensemble) await RenderAsync(notes, $"Ensemble {variation}", null);
+            }
+            catch (Exception error)
+            {
+                LogManager.Log("Auto-reroll save failed."); LogManager.Log(error);
+                if (!this.IsDisposed && !this.pictureBox_pattern.IsDisposed)
+                    this.toolTip_pattern.Show("Auto-reroll save failed: " + error.Message, this.pictureBox_pattern, 8, 8, 8000);
+            }
+            finally { foreach (var sample in samples) sample.Dispose(); }
+        }
+        async Task RenderAsync(BreakbeatPatternNote[] renderNotes, string name, int? soloRow)
+        {
+            bool isEnsemble = soloRow == null;
+            AudioObj? rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(renderNotes, samples, bars, bpm,
+                resolution, swing, name, trackSettings: settings);
+            if (rendered == null) return;
+            try
+            {
+                AudioObj excerpt = BreakbeatGenerator_V2.ExtractPatternQuarters(rendered, sections, bpm);
+                rendered.Dispose(); rendered = excerpt; rendered.Rename(name);
+                if (this.IsDisposed || this.Disposing) return;
+                string? hash = null;
+                if (isEnsemble)
+                {
+                    if (this.autoEnsembleCollection == null || this.autoEnsembleCollection.IsDisposed)
+                        this.savedEnsembleHashes.Clear();
+                    var bytes = System.Runtime.InteropServices.MemoryMarshal.AsBytes(rendered.Data.AsSpan());
+                    hash = $"{rendered.SampleRate}:{rendered.Channels}:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+                    if (this.savedEnsembleHashes.Contains(hash)) return;
+                }
+                AudioCollectionView? collection = isEnsemble ? this.autoEnsembleCollection
+                    : this.autoSoloCollections.GetValueOrDefault(trackIdentities[soloRow!.Value]);
+                if (collection == null || collection.IsDisposed)
+                {
+                    collection = new AudioCollectionView([]);
+                    collection.Rename(isEnsemble ? "Auto-Reroll Ensembles" : $"Auto-Reroll Solos — {labels[soloRow!.Value]}");
+                    if (isEnsemble) this.autoEnsembleCollection = collection;
+                    else this.autoSoloCollections[trackIdentities[soloRow!.Value]] = collection;
+                }
+                collection.AudioC.Audios.Add(rendered); rendered = null;
+                if (hash != null) this.savedEnsembleHashes.Add(hash);
+                collection.Show();
+            }
+            finally { rendered?.Dispose(); }
+        }
+    }
+
+}

@@ -43,8 +43,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public const int DefaultPitchChancePercent = 25;
         public const float DefaultPitchRangeSemitones = 3f;
         public const bool DefaultAllowPitchedNotes = false;
-        public const float DefaultVolumeMinPercent = 90f;
-        public const float DefaultVolumeMaxPercent = 110f;
+        public const float DefaultVolumeMinPercent = 100f;
+        public const float DefaultVolumeMaxPercent = 100f;
         public const bool DefaultAllowTimeStretch = false;
         public const bool DefaultAllowVarispeed = false;
         public const bool DefaultAllowTruncated = false;

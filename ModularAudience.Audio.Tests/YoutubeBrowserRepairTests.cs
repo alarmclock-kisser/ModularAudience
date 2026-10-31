@@ -32,13 +32,16 @@ public sealed class YoutubeBrowserRepairTests
         foreach (int column in new[] { 2, 3, 6 })
         {
             Invoke(window, "Column_Click", null, new ColumnClickEventArgs(column));
+            Assert.AreEqual("Ten", list.Items[0].Text);
+            Assert.AreEqual("Unknown", list.Items[2].Text);
+            StringAssert.EndsWith(list.Columns[column].Text, "▼");
+            Invoke(window, "Column_Click", null, new ColumnClickEventArgs(column));
             Assert.AreEqual("Two", list.Items[0].Text);
             Assert.AreEqual("Unknown", list.Items[2].Text);
             StringAssert.EndsWith(list.Columns[column].Text, "▲");
             Invoke(window, "Column_Click", null, new ColumnClickEventArgs(column));
-            Assert.AreEqual("Ten", list.Items[0].Text);
-            Assert.AreEqual("Unknown", list.Items[2].Text);
-            StringAssert.EndsWith(list.Columns[column].Text, "▼");
+            CollectionAssert.AreEqual(new[] { "Ten", "Two", "Unknown" }, list.Items.Cast<ListViewItem>().Select(row => row.Text).ToArray());
+            Assert.IsFalse(list.Columns[column].Text.Contains('▲') || list.Columns[column].Text.Contains('▼'));
         }
         Assert.AreEqual("2025-01-01", list.Items[0].SubItems[6].Text);
     }
