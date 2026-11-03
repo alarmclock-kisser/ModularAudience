@@ -113,6 +113,19 @@ public partial class YoutubeBrowserWindow
             !text.StartsWith(YtdlpRetryPolicy.ProgressPrefix, StringComparison.Ordinal)) return;
         Interlocked.Exchange(ref lastProgressTick, now);
         currentProgress?.Report(text);
+        if (browsing && browseCancellation?.IsCancellationRequested == false && !closing && !resourcesReleased && IsHandleCreated)
+        {
+            var source = browseCancellation;
+            try
+            {
+                BeginInvoke((Action)(() =>
+                {
+                    if (ReferenceEquals(browseCancellation, source) && !closing && !IsDisposed && !resourcesReleased)
+                        ShowProgress(text);
+                }));
+            }
+            catch (InvalidOperationException) when (closing || IsDisposed || resourcesReleased) { }
+        }
     }
 
     private void ShowProgress(string text)
@@ -143,6 +156,7 @@ public partial class YoutubeBrowserWindow
         {
             if (string.IsNullOrWhiteSpace(query)) throw new ArgumentException("Enter search words or a YouTube URL.");
             bool isUrl = requirePlaylistUrl || (!forceSearch && LooksLikeUrl(query));
+            AppendLog(isUrl ? "Opening YouTube URL..." : $"Searching YouTube for '{query}' (up to {limit} results)...");
             RememberSearch(query);
             var videos = isUrl
                 ? await client.BrowseAsync(YtdlpParser.ValidateYoutubeUrl(query).AbsoluteUri, limit, token)

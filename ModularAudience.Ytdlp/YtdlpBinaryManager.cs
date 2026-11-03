@@ -311,6 +311,9 @@ public sealed class YtdlpBinaryManager
 
     internal string? FindDeno()
     {
+        // A fresh browser/client must discover the persisted installation without
+        // requiring UpdateDenoAsync (and therefore GitHub requests) first.
+        verifiedDenoDirectory ??= GetInstalledDirectory("deno", DenoFiles);
         if (verifiedDenoDirectory is not null)
         {
             var path = Path.Combine(verifiedDenoDirectory, "deno.exe");

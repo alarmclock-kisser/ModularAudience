@@ -233,6 +233,8 @@ public partial class YoutubeBrowserWindow : Form
     {
         if (resourcesReleased) return;
         resourcesReleased = true;
+        searchHistoryMenu?.Dispose();
+        searchHistoryMenu = null;
         HideThumbnailPopup();
         browseCancellation?.Cancel();
         dateCancellation?.Cancel();

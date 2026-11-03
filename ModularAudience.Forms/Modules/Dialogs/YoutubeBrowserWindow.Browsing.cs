@@ -6,6 +6,7 @@ public partial class YoutubeBrowserWindow
     private Task browseOperation = Task.CompletedTask;
     private readonly HashSet<Task> browseTasks = [];
     private bool browsing;
+    private static readonly TimeSpan BrowseTimeout = TimeSpan.FromSeconds(90);
     private bool CanBrowse => !closing && binariesReady && (!busy || activeBatch is not null);
 
     private void StartBrowseOperation(string message, Func<CancellationToken, Task> action)
@@ -13,6 +14,7 @@ public partial class YoutubeBrowserWindow
         if (!CanBrowse) return;
         browseCancellation?.Cancel();
         var source = new CancellationTokenSource();
+        source.CancelAfter(BrowseTimeout);
         browseCancellation = source;
         try { client.NetworkOptions = CaptureNetworkOptions(); }
         catch (ArgumentException error)
@@ -24,6 +26,7 @@ public partial class YoutubeBrowserWindow
         }
         browsing = true;
         statusLabel.Text = message;
+        AppendLog(message);
         browsingTabs.SelectedTab = resultsTab;
         UseWaitCursor = true;
         RefreshAvailability();
@@ -36,9 +39,18 @@ public partial class YoutubeBrowserWindow
             {
                 await Task.Yield();
                 source.Token.ThrowIfCancellationRequested();
-                await ExecuteWithRecoveryAsync(action, source.Token);
+                bool succeeded = await ExecuteWithRecoveryAsync(action, source.Token);
+                if (ReferenceEquals(browseCancellation, source) && !closing && !resourcesReleased)
+                    statusLabel.Text = succeeded ? "Ready." : "Browsing failed. See the activity log.";
             }
-            catch (OperationCanceledException) when (source.IsCancellationRequested) { }
+            catch (OperationCanceledException) when (source.IsCancellationRequested)
+            {
+                if (ReferenceEquals(browseCancellation, source) && !closing)
+                {
+                    statusLabel.Text = "Search stopped or timed out. Please retry; see the activity log.";
+                    AppendLog("YouTube browsing stopped. A metadata request is limited to 90 seconds; use Search to retry.");
+                }
+            }
             catch (Exception error) { if (!closing) ReportError("YouTube browsing failed", error); }
             finally
             {
