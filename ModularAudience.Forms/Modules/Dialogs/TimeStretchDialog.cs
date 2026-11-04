@@ -28,6 +28,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public PlaylistStretchSettings? ConfirmedSettings { get; private set; }
 
         public bool ConfirmedUsedV2 { get; private set; }
+        public void SetConfigurationTempo(float sourceBpm, float targetBpm)
+        {
+            this.numericUpDown_initialBpm.Value = Math.Clamp((decimal)sourceBpm, this.numericUpDown_initialBpm.Minimum, this.numericUpDown_initialBpm.Maximum);
+            this.numericUpDown_targetBpm.Value = Math.Clamp((decimal)targetBpm, this.numericUpDown_targetBpm.Minimum, this.numericUpDown_targetBpm.Maximum);
+        }
         public static bool Channeled { get; internal set; } = true;
 
         private CancellationTokenSource? ProcessingCancellationSource = null;

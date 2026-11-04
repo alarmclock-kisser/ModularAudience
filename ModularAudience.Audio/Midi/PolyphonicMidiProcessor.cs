@@ -64,7 +64,7 @@ internal static class PolyphonicMidiProcessor
                 run.VoicedFrames++;
                 run.TotalStrength += strength;
             }
-            else if (run.Start >= 0 && (!audible || frame - run.Last > maximumGap))
+            else if (run.Start >= 0 && (frame == analysis.Strengths.Length || !audible || frame - run.Last > maximumGap))
             {
                 AddNote(notes, run, pitch, analysis, maximum, bpm);
                 run = new NoteRun();
@@ -76,7 +76,8 @@ internal static class PolyphonicMidiProcessor
     {
         long startSample = (long)run.Start * analysis.HopSize;
         long endSample = Math.Min(analysis.SampleCount, (run.Last + 1L) * analysis.HopSize);
-        if (endSample - startSample < Math.Ceiling(MinimumNoteSeconds * analysis.SampleRate) || run.VoicedFrames < 3)
+            if (endSample - startSample < Math.Ceiling(MinimumNoteSeconds * analysis.SampleRate) || run.VoicedFrames < 3
+                || run.VoicedFrames < (run.Last - run.Start + 1) * 0.6)
         {
             return;
         }
@@ -114,12 +115,13 @@ internal static class PolyphonicMidiProcessor
                 }
                 MidiNoteData left = notes[earlier].Midi;
                 MidiNoteData right = notes[index].Midi;
-                if (left.StartTick + left.DurationTicks > right.StartTick)
+                double overlap = Seconds(left.StartTick + left.DurationTicks - right.StartTick, bpm);
+                if (left.StartTick >= right.StartTick || overlap > 0.04)
                 {
                     continue;
                 }
-                double gap = Seconds(right.StartTick - left.StartTick - left.DurationTicks, bpm);
-                double transition = gap < 0.5 ? Math.Min(0.12, Math.Abs(left.NoteNumber - right.NoteNumber) * 0.006) : 0;
+                double gap = Math.Max(0, -overlap);
+                double transition = gap < 0.5 ? Math.Min(0.25, Math.Abs(left.NoteNumber - right.NoteNumber) * 0.012) : 0;
                 double candidate = scores[earlier] + ownScore - transition;
                 if (candidate > scores[index])
                 {
@@ -177,6 +179,17 @@ internal static class PolyphonicMidiProcessor
         foreach (MidiTrackData track in tracks)
         {
             track.Notes.Sort((left, right) => left.StartTick.CompareTo(right.StartTick));
+        }
+        // Adjacent spectral windows smear boundaries slightly. Trim those tiny overlaps
+        // on the selected melody rather than rejecting every second note from the path.
+        for (int i = 0; i + 1 < tracks[0].Notes.Count; i++)
+        {
+            var note = tracks[0].Notes[i];
+            tracks[0].Notes[i] = new MidiNoteData
+            {
+                NoteNumber = note.NoteNumber, Channel = note.Channel, Velocity = note.Velocity, StartTick = note.StartTick,
+                DurationTicks = Math.Min(note.DurationTicks, Math.Max(1, tracks[0].Notes[i + 1].StartTick - note.StartTick))
+            };
         }
         return tracks;
     }

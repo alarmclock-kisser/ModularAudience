@@ -8,6 +8,7 @@ internal sealed class DemucsDialogSettings
 {
     public List<string> ModelDirectories { get; set; } = ["D:/Models/Demucs"];
     public string SelectedModel { get; set; } = "";
+    public int KeepModelLoadedSeconds { get; set; } = 300;
     public DemucsLoadOptions Options { get; set; } = new();
     public string[] SelectedStems { get; set; } = ["drums", "bass", "other", "vocals", "guitar", "piano"];
     internal static string SettingsPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -24,6 +25,7 @@ internal sealed class DemucsDialogSettings
         result.ModelDirectories ??= ["D:/Models/Demucs"];
         result.Options ??= new();
         result.SelectedStems ??= [];
+        result.KeepModelLoadedSeconds = Math.Clamp(result.KeepModelLoadedSeconds, 0, 86400);
         return result;
     }
 

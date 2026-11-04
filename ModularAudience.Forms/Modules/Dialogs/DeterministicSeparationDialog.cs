@@ -626,7 +626,7 @@ namespace ModularAudience.Forms
             bool published = false;
             try
             {
-                collection = new AudioCollectionView([], $"Deterministic separation - {sourceName}");
+                collection = new AudioCollectionView([], $"{sourceName} - Stems Deterministic");
                 foreach (AudioObj stem in stems)
                 {
                     if (!this.IsCurrentOperation(cancellation) || collection.IsDisposed || collection.Disposing) return false;

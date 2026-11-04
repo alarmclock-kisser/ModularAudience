@@ -14,7 +14,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public MidiConversionPresetDialog()
         {
             this.InitializeComponent();
-            this.comboBox_preset.SelectedIndex = 2;
+            this.comboBox_preset.SelectedIndex = 0;
         }
     }
 }

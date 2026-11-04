@@ -3,12 +3,13 @@ using System.Numerics;
 
 namespace ModularAudience.Audio.Midi;
 
-internal sealed record PolyphonicAnalysis(float[][] Strengths, float[] Rms, int HopSize, int SampleCount, int SampleRate);
+internal sealed record PolyphonicAnalysis(float[][] Strengths, float[] Rms, int HopSize, int SampleCount, int SampleRate,
+    float[][]? RawStrengths = null);
 
 internal static class PolyphonicPitchAnalyzer
 {
-    internal const int LowestNote = 36;
-    internal const int HighestNote = 96;
+    internal const int LowestNote = 21;
+    internal const int HighestNote = 108;
 
     internal static PolyphonicAnalysis Analyze(AudioObj audio, int maxWorkers, CancellationToken cancellationToken, IProgress<double>? progress)
     {
@@ -44,9 +45,10 @@ internal static class PolyphonicPitchAnalyzer
                 }
             }
         });
+        var raw = strengths.Select(frame => (float[])frame.Clone()).ToArray();
         SuppressHarmonics(strengths, balances, cancellationToken);
         progress?.Report(0.78);
-        return new PolyphonicAnalysis(strengths, rms, hop, sampleCount, audio.SampleRate);
+        return new PolyphonicAnalysis(strengths, rms, hop, sampleCount, audio.SampleRate, raw);
     }
 
     private static int WindowSize(int sampleRate)
@@ -223,8 +225,8 @@ internal static class PolyphonicPitchAnalyzer
             float[] strengths = new float[128];
             float[] balances = new float[128];
             double maximum = this.magnitude.Skip(2).Max();
-            int minimumBin = Math.Max(2, (int)(60.0 * this.buffer.Length / sampleRate));
-            int maximumBin = Math.Min(this.power.Length - 2, (int)(2200.0 * this.buffer.Length / sampleRate));
+            int minimumBin = Math.Max(2, (int)(25.0 * this.buffer.Length / sampleRate));
+            int maximumBin = Math.Min(this.power.Length - 2, (int)(4500.0 * this.buffer.Length / sampleRate));
             for (int bin = minimumBin; bin <= maximumBin; bin++)
             {
                 double peak = this.magnitude[bin];

@@ -390,6 +390,7 @@
             // 
             this.numericUpDown_reroll.Location = new Point(418, 348);
             this.numericUpDown_reroll.Maximum = new decimal(new int[] { 64, 0, 0, 0 });
+            this.numericUpDown_reroll.Minimum = 1;
             this.numericUpDown_reroll.Name = "numericUpDown_reroll";
             this.numericUpDown_reroll.Size = new Size(34, 23);
             this.numericUpDown_reroll.TabIndex = 27;

@@ -329,6 +329,8 @@ public sealed class MidiFileData
     public static MidiFileData Convert(AudioObj audioObj, MidiConversionPreset preset = MidiConversionPreset.Synth)
     {
         ValidateAudio(audioObj, out int channels, out int frameCount, out double bpm);
+        if (preset == MidiConversionPreset.Synth)
+            return MelodyMidiProcessor.Convert(audioObj, bpm, 1, CancellationToken.None, null);
         if (preset == MidiConversionPreset.Polyphonic)
         {
             return PolyphonicMidiProcessor.Convert(audioObj, bpm, 1, CancellationToken.None, null);
@@ -367,6 +369,8 @@ public sealed class MidiFileData
         ValidateAudio(audioObj, out int channels, out int frameCount, out double bpm);
         maxWorkers = Math.Clamp(maxWorkers <= 0 ? Environment.ProcessorCount : maxWorkers, 1, Math.Min(Environment.ProcessorCount, frameCount));
         cancellationToken.ThrowIfCancellationRequested();
+        if (preset == MidiConversionPreset.Synth)
+            return await Task.Run(() => MelodyMidiProcessor.Convert(audioObj, bpm, maxWorkers, cancellationToken, progress), cancellationToken).ConfigureAwait(false);
         if (preset == MidiConversionPreset.Polyphonic)
         {
             return await Task.Run(() => PolyphonicMidiProcessor.Convert(audioObj, bpm, maxWorkers, cancellationToken, progress),

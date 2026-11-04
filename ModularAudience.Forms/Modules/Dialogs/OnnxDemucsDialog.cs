@@ -23,6 +23,8 @@ public partial class OnnxDemucsDialog : Form
     private readonly NumericUpDown interThreads = Number(0, Environment.ProcessorCount);
     private readonly NumericUpDown workers = Number(1, Environment.ProcessorCount);
     private readonly NumericUpDown overlap = new() { Minimum = 0, Maximum = 75, Value = 25, Increment = 5, Width = 120 };
+    private readonly NumericUpDown keepModelLoaded = new() { Minimum = 0, Maximum = 86400, Value = 300, Increment = 30, Width = 120 };
+    private string? loadedCacheKey;
     private readonly NumericUpDown cudaDevice = Number(0, 127);
     private readonly CheckBox cpuFallback = Check("Fall back to CPU if DirectML fails");
     private readonly CheckBox cpuOperators = Check("Allow CPU operators in DirectML graphs");
@@ -114,6 +116,8 @@ public partial class OnnxDemucsDialog : Form
         var qualityInfo = new Label { AutoSize = true, Dock = DockStyle.Fill,
             Text = "Model FFT: 4096 / hop: 1024 (fixed).\nOverlap: 0% fastest, 25% balanced, 50–75% smoother chunk boundaries; more inference work." };
         this.AddOption("Separation quality", qualityInfo);
+        this.AddOption("Keep model loaded (seconds)", this.keepModelLoaded);
+        this.AddOption("After closing", new Label { AutoSize = true, Text = "0 = unload immediately; idle models are reused before expiry." });
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
         buttons.Controls.AddRange([this.load, this.button_run, this.cancel]);
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 1 };
@@ -131,6 +135,7 @@ public partial class OnnxDemucsDialog : Form
         this.cancel.Click += (_, _) => { this.cancellation.Cancel(); this.status.Text = "Cancelling after the current operation…"; };
         foreach (Control control in this.optionsPanel.Controls.Cast<Control>().Concat(this.checksPanel.Controls.Cast<Control>()))
         {
+            if (ReferenceEquals(control, this.keepModelLoaded)) continue;
             if (control is CheckBox check) check.CheckedChanged += (_, _) => this.OptionsChanged();
             if (control is ComboBox combo) combo.SelectedIndexChanged += (_, _) => this.OptionsChanged();
             if (control is NumericUpDown number) number.ValueChanged += (_, _) => this.OptionsChanged();
@@ -175,7 +180,8 @@ public partial class OnnxDemucsDialog : Form
             this.Onnx = await Task.Run(() => new OnnxService(this.settings.ModelDirectories, loadImmediately: false));
             this.RefreshModels();
             if (this.Onnx.ModelPaths.Count == 0) await this.BrowseModelsAsync();
-            this.status.Text = warning ?? "Select a model and load options, then click Load model. No model is loaded yet.";
+            bool reused = this.comboBox_models.SelectedItem is ModelItem selected && this.TryReuseModel(selected.Path, this.ReadOptions());
+            if (!reused) this.status.Text = warning ?? "Select a model and load options, then click Load model. No model is loaded yet.";
         }
         catch (Exception error) { this.ShowError("Unable to prepare Demucs", error); }
         finally { this.initializing = false; this.SetBusy(false); }
@@ -184,6 +190,7 @@ public partial class OnnxDemucsDialog : Form
     private void ApplySettings()
     {
         var o = this.settings.Options;
+        this.keepModelLoaded.Value = Math.Clamp(this.settings.KeepModelLoadedSeconds, 0, 86400);
         o.NormalizeWorkers();
         this.provider.SelectedIndex = o.UseDirectML ? 0 : 1;
         this.device.SelectedItem = this.device.Items.Cast<DirectMLDevices.Adapter>().FirstOrDefault(d => d.Id == o.DeviceId) ?? this.device.Items[0];
@@ -298,10 +305,15 @@ public partial class OnnxDemucsDialog : Form
         {
             var options = this.ReadOptions();
             this.settings.Options = options;
+            this.settings.KeepModelLoadedSeconds = (int)this.keepModelLoaded.Value;
             this.settings.SelectedModel = model.Path;
             this.settings.Save();
+            if (this.TryReuseModel(model.Path, options)) return;
+            this.ReleaseModel();
+            this.Onnx = await Task.Run(() => new OnnxService(this.settings.ModelDirectories, loadImmediately: false));
             await Task.Run(() => this.Onnx.LoadModel(model.Path, options));
             this.ApplyEffectiveOptions(this.Onnx.EffectiveOptions!);
+            this.loadedCacheKey = DemucsModelCache.Key(model.Path, this.Onnx.EffectiveOptions!);
             this.settings.Save();
             this.loadedWithCurrentOptions = true;
             this.checkedListBox_stems.Items.Clear();
@@ -392,7 +404,7 @@ public partial class OnnxDemucsDialog : Form
                 extract.Data = samples;
                 extract.Rename($"{this.OriginalAudio.OriginalName}_{name}");
                 if (collection == null || collection.IsDisposed)
-                    collection = new AudioCollectionView([]);
+                    collection = new AudioCollectionView([], $"{this.OriginalAudio.Name} - Stems Demucs");
                 collection.AudioC.Audios.Add(extract);
                 collection.Show();
                 completed++;
@@ -427,6 +439,7 @@ public partial class OnnxDemucsDialog : Form
             try
             {
                 this.settings.Options = this.ReadOptions();
+                this.settings.KeepModelLoadedSeconds = (int)this.keepModelLoaded.Value;
                 this.settings.SelectedModel = (this.comboBox_models.SelectedItem as ModelItem)?.Path ?? "";
                 if (this.checkedListBox_stems.Items.Count > 0)
                     this.settings.SelectedStems = this.checkedListBox_stems.CheckedItems.Cast<string>().ToArray();
@@ -439,8 +452,43 @@ public partial class OnnxDemucsDialog : Form
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
-        this.Onnx?.Dispose();
+        this.ReleaseModel();
         this.cancellation.Dispose();
         base.OnFormClosed(e);
+    }
+
+    private bool TryReuseModel(string path, DemucsLoadOptions options)
+    {
+        string key = DemucsModelCache.Key(path, options);
+        if (this.Onnx?.IsOnline == true && this.loadedCacheKey == key)
+        {
+            this.loadedWithCurrentOptions = true;
+            this.status.Text = $"Ready — model already loaded — {this.Onnx.ExecutionProvider}\n{this.Onnx.FourierBackend}";
+            return true;
+        }
+        OnnxService? cached = DemucsModelCache.Take(key);
+        if (cached == null) return false;
+        this.ReleaseModel();
+        this.Onnx = cached;
+        this.loadedCacheKey = key;
+        this.ApplyEffectiveOptions(cached.EffectiveOptions!);
+        this.loadedWithCurrentOptions = true;
+        this.checkedListBox_stems.Items.Clear();
+        foreach (string stem in cached.AvailableStems)
+            this.checkedListBox_stems.Items.Add(stem, this.settings.SelectedStems.Contains(stem));
+        this.status.Text = $"Ready — reused loaded model — {cached.ExecutionProvider}\n{cached.FourierBackend}\n{cached.LoadWarning}";
+        return true;
+    }
+
+    private void ReleaseModel()
+    {
+        var service = this.Onnx;
+        this.Onnx = null;
+        string? key = this.loadedCacheKey;
+        this.loadedCacheKey = null;
+        if (service == null) return;
+        if (key != null && service.IsOnline)
+            DemucsModelCache.Return(key, service, TimeSpan.FromSeconds((double)this.keepModelLoaded.Value));
+        else service.Dispose();
     }
 }

@@ -344,7 +344,7 @@
             checkBox_sync.Name = "checkBox_sync";
             checkBox_sync.Size = new Size(94, 18);
             checkBox_sync.TabIndex = 14;
-            checkBox_sync.Text = "Sync Playback";
+            checkBox_sync.Text = "Sync";
             toolTip_trackView.SetToolTip(checkBox_sync, "Sync Playback.\nCtrl+click: toggle all TrackViews (if on, unchecks all; if off, checks all).");
             checkBox_sync.UseVisualStyleBackColor = true;
             checkBox_sync.CheckedChanged += checkBox_sync_CheckedChanged;

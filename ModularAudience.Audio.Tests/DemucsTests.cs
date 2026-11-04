@@ -83,6 +83,7 @@ public sealed class DemucsTests
         using var dialog = new OnnxDemucsDialog(audio);
         object? Field(string name) => typeof(OnnxDemucsDialog).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dialog);
         Assert.IsNull(Field("Onnx"));
+        Assert.AreEqual(300m, ((NumericUpDown)Field("keepModelLoaded")!).Value);
         Assert.AreEqual("Load model", ((Button)Field("load")!).Text);
         Assert.IsFalse(((Button)Field("button_run")!).Enabled);
         Assert.IsTrue(((NumericUpDown)Field("workers")!).Minimum >= 1);
@@ -124,6 +125,55 @@ public sealed class DemucsTests
         Assert.AreEqual(Environment.ProcessorCount, options.FourierWorkers);
         Assert.AreEqual(Environment.ProcessorCount, options.IntraOpThreads);
         Assert.AreEqual(Environment.ProcessorCount, options.InterOpThreads);
+    }
+
+    [TestMethod]
+    public void ModelCacheKeysIncludeDeviceOptionsButNormalizeDictionaryOrder()
+    {
+        var first = new DemucsLoadOptions { SessionConfigEntries = new() { ["b"] = "2", ["a"] = "1" } };
+        var second = new DemucsLoadOptions { SessionConfigEntries = new() { ["a"] = "1", ["b"] = "2" } };
+        Assert.AreEqual(DemucsModelCache.Key("test.onnx", first), DemucsModelCache.Key("test.onnx", second));
+        second.DeviceId = 1;
+        Assert.AreNotEqual(DemucsModelCache.Key("test.onnx", first), DemucsModelCache.Key("test.onnx", second));
+    }
+
+    [TestMethod]
+    [TestCategory("DemucsIntegration")]
+    public async Task IdleModelIsReusedExclusivelyAndUnloadedAfterTimeout()
+    {
+        const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
+        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        var service = new OnnxService(loadImmediately: false);
+        service.LoadModel(model, new DemucsLoadOptions { UseDirectML = false });
+        string key = DemucsModelCache.Key(model, service.EffectiveOptions!);
+        try
+        {
+            DemucsModelCache.Return(key, service, TimeSpan.FromSeconds(5));
+            var reused = DemucsModelCache.Take(key);
+            Assert.AreSame(service, reused);
+            Assert.IsNull(DemucsModelCache.Take(key), "An active dialog must exclusively own its session.");
+            await Task.Delay(60);
+            Assert.IsTrue(service.IsOnline, "Taken sessions cannot be expired by the old timer.");
+            DemucsModelCache.Return(key, service, TimeSpan.FromMilliseconds(50));
+            for (int i = 0; i < 100 && service.IsOnline; i++) await Task.Delay(20);
+            Assert.IsFalse(service.IsOnline, "Idle expiry must dispose the native ONNX session.");
+            Assert.IsNull(DemucsModelCache.Take(key));
+        }
+        finally { DemucsModelCache.Clear(); service.Dispose(); }
+    }
+
+    [TestMethod]
+    [TestCategory("DemucsIntegration")]
+    public void ZeroRetentionUnloadsModelImmediately()
+    {
+        const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
+        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        using var service = new OnnxService(loadImmediately: false);
+        service.LoadModel(model, new DemucsLoadOptions { UseDirectML = false });
+        string key = DemucsModelCache.Key(model, service.EffectiveOptions!);
+        DemucsModelCache.Return(key, service, TimeSpan.Zero);
+        Assert.IsFalse(service.IsOnline);
+        Assert.IsNull(DemucsModelCache.Take(key));
     }
 
     [TestMethod]

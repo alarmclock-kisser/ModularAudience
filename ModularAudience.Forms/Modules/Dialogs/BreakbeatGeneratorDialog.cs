@@ -2367,21 +2367,35 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 BotPreparedBreakbeat current = await this.GenerateBotPreparedBreakbeatAsync(generationNumber, cancellationToken);
-                int rerollInterval = await this.InvokeOnUiAsync(() => Math.Max(1, (int)this.numericUpDown_reroll.Value));
                 bool shouldAutoExport = await this.InvokeOnUiAsync(() => this.checkBox_autoExport.Checked);
-                bool exportThisGeneration = shouldAutoExport && generationNumber % rerollInterval == 0;
-
-                await this.PresentBotPreparedBreakbeatAsync(current, exportThisGeneration, generationNumber, cancellationToken);
-
-                this.botCurrentPlaybackAudio = current.Audio;
-                await current.Audio.PlayAsync(CancellationToken.None, initialVolume: 1.0f);
-                await this.WaitForBotPlaybackFullAsync(current.Audio, current.Duration, cancellationToken);
-                this.botCurrentPlaybackAudio = null;
-                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+                try
+                {
+                    await this.PresentBotPreparedBreakbeatAsync(current, shouldAutoExport, generationNumber, cancellationToken);
+                    this.botCurrentPlaybackAudio = current.Audio;
+                    int completedPasses = 0;
+                    do
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        current.Audio.SetPosition(0);
+                        current.Audio.StartingOffset = 0;
+                        await current.Audio.PlayAsync(CancellationToken.None, initialVolume: 1.0f);
+                        await this.WaitForBotPlaybackFullAsync(current.Audio, current.Duration, cancellationToken);
+                        completedPasses++;
+                    }
+                    while (await this.InvokeOnUiAsync(() => ShouldRepeatBotPattern(completedPasses, (int)this.numericUpDown_reroll.Value)));
+                }
+                finally
+                {
+                    await current.Audio.StopAsync();
+                    this.botCurrentPlaybackAudio = null;
+                    current.Audio.Dispose();
+                }
 
                 generationNumber++;
             }
         }
+
+        private static bool ShouldRepeatBotPattern(int completedPasses, int rerollLoops) => completedPasses < Math.Max(1, rerollLoops);
 
         private async Task WaitForBotPlaybackFullAsync(AudioObj audio, TimeSpan expectedDuration, CancellationToken cancellationToken)
         {

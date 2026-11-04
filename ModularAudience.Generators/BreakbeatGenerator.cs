@@ -194,15 +194,6 @@ namespace ModularAudience.Generators
                 results.Add(ordered[i].line);
             }
 
-            computed = await Task.WhenAll(tasks);
-
-            // Return lines in same order as input
-            foreach (var elem in elements)
-            {
-                var found = computed.First(f => f.elem == elem);
-                results.Add(found.line);
-            }
-
             if (interleaved)
             {
                 results = MakeInterleaved(results, elements.ToArray());

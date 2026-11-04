@@ -7,6 +7,17 @@ namespace ModularAudience.Audio.Tests;
 public sealed class PolyphonicMidiConversionTests
 {
     [TestMethod]
+    public void ClosesFinalQuietVoiceEvenWhenItReachesLastAnalysisFrame()
+    {
+        using AudioTestScope scope = new();
+        float[] signal = AudioTestData.Track(16000, 1000,
+            (0, Tone(60, 1000), 0.5f), (650, Tone(67, 350), 0.4f));
+        var midi = Convert(scope.Create(signal));
+        AssertPitches(midi, 60, 67);
+        Assert.IsTrue(Notes(midi).Any(n => n.NoteNumber == 67 && Seconds(midi, n.DurationTicks) > 0.25), Describe(midi));
+    }
+
+    [TestMethod]
     [DataRow(8000)]
     [DataRow(16000)]
     [DataRow(44100)]

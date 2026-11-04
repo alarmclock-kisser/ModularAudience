@@ -48,7 +48,7 @@ namespace ModularAudience.Forms.Modules
 
 
         private float CurrentVolume => 1f - (float)this.vScrollBar_volume.Value / Math.Max(1, this.vScrollBar_volume.Maximum);
-        internal bool Synced => this.checkBox_sync.Checked;
+        internal bool Synced => this.JoinedMix == null && this.checkBox_sync.Checked;
         internal bool Muted => this.checkBox_mute.Checked;
         internal bool Soloed => this.checkBox_solo.Checked;
 
@@ -102,6 +102,7 @@ namespace ModularAudience.Forms.Modules
         public TrackView(AudioObj audio, AudioCollection? sourceCollection = null)
         {
             this.InitializeComponent();
+            this.InitializeJoinControls();
             this.SetupBeatGridDivisionMenus();
             this.StartPosition = FormStartPosition.Manual;
             this.designerClientWidth = this.ClientSize.Width;
@@ -191,6 +192,7 @@ namespace ModularAudience.Forms.Modules
 
             e.Cancel = true;
             this.closeCleanupStarted = true;
+            this.LeaveCurrentMix();
             this.FormClosing -= this.TrackView_FormClosing;
 
             this.OriginalAudio.PlayingChanged -= this.OnTrackViewAudioPlayingChanged;

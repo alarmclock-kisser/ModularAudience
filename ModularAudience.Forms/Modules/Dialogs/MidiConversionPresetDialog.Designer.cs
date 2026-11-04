@@ -43,13 +43,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.label_description.Name = "label_description";
             this.label_description.Size = new Size(378, 75);
             this.label_description.TabIndex = 1;
-            this.label_description.Text = "Polyphonic: up to six notes, C2-C7, no AI model.\r\nTwo estimated tracks: melody and accompaniment.\r\nInstrument separation is approximate.\r\nSynth / Guitar: single-note transcription.\r\nThe preset does not select the playback sound.";
+            this.label_description.Text = "Synth: one continuous main-melody track from a mix.\r\nPolyphonic: estimated melody + accompaniment.\r\nGuitar: single-instrument, monophonic transcription.\r\nDense mixes may require an isolated stem for best results.\r\nThe preset does not select the playback sound.";
             //
             // comboBox_preset
             //
             this.comboBox_preset.DropDownStyle = ComboBoxStyle.DropDownList;
             this.comboBox_preset.FormattingEnabled = true;
-            this.comboBox_preset.Items.AddRange(new object[] { "Synth (monophonic)", "Guitar (monophonic)", "Polyphonic (melody + accompaniment)" });
+            this.comboBox_preset.Items.AddRange(new object[] { "Synth (main melody, single track)", "Guitar (monophonic)", "Polyphonic (melody + accompaniment)" });
             this.comboBox_preset.Location = new Point(12, 128);
             this.comboBox_preset.Name = "comboBox_preset";
             this.comboBox_preset.Size = new Size(378, 23);

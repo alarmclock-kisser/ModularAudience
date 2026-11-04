@@ -355,7 +355,7 @@ namespace ModularAudience.Forms
                     return;
                 }
 
-                string collectionTitle = $"Separated x{result.Stems.Count} - {this.OriginalAudio.Name}";
+                string collectionTitle = $"{this.OriginalAudio.Name} - Stems Analog";
                 AudioCollectionView acv = new([], collectionTitle);
                 this.Invoke(() =>
                 {
