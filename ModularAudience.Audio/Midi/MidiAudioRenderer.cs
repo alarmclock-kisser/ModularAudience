@@ -174,7 +174,7 @@ public static class MidiAudioRenderer
                     overlap: 0.75f,
                     factor: stretchFactor,
                     normalize: 0.0f,
-                    maxWorkers: Environment.ProcessorCount,
+                    maxWorkers: Math.Max(1, Environment.ProcessorCount / 2),
                     progress: null,
                     offload: false,
                     channeled: true).GetAwaiter().GetResult();

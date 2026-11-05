@@ -8,6 +8,25 @@ namespace ModularAudience.Audio.Tests
     public sealed class TimeStretcherV1Tests
     {
         [TestMethod]
+        public async Task CompressionPointSevenUsesLegacyFastPipeline()
+        {
+            const int sampleRate = 44100;
+            using var audio = new AudioObj
+            {
+                Data = Enumerable.Range(0, sampleRate * 2).Select(i => 0.3f * MathF.Sin(2 * MathF.PI * 440 * i / sampleRate)).ToArray(),
+                SampleRate = sampleRate, Channels = 1, Bpm = 100
+            };
+            await TimeStretcher.TimeStretchAllThreadsAsync(audio, 8192, 0.5f, 0.7,
+                normalize: 0.8f, maxWorkers: Environment.ProcessorCount, channeled: false);
+            Assert.IsTrue(audio.Metrics.Keys.Any(key => key.Equals("chunk", StringComparison.OrdinalIgnoreCase)),
+                "The legacy fast pipeline must run, not TimeStretchSlowAsync.");
+            Assert.AreEqual(1.4, audio.Duration.TotalSeconds, 8192.0 / sampleRate);
+            Assert.AreEqual(100 / 0.7, audio.Bpm, 0.001);
+            Assert.AreEqual(0.8f, audio.Data.Max(Math.Abs), 0.001f);
+            Assert.IsTrue(audio.Data.All(float.IsFinite));
+        }
+
+        [TestMethod]
         public async Task TimeStretchAllThreadsAsync_FastPathNormalizesToRequestedPeak()
         {
             const int sampleRate = 44100;
@@ -159,7 +178,7 @@ namespace ModularAudience.Audio.Tests
         [DataRow(0.25, 8192)]
         [DataRow(0.5, 8192, false)]
         [DataRow(0.25, 8192, false)]
-        public async Task TimeStretchAllThreadsAsync_FastStereoFactorsKeepExactDurationAndSourceTail(double factor, int chunkSize, bool channeled = true)
+        public async Task TimeStretchAllThreadsAsync_FastStereoFactorsKeepBlockRoundedDurationAndAudibleTail(double factor, int chunkSize, bool channeled = true)
         {
             const int sampleRate = 44100;
             const int sourceFrames = 8114;
@@ -191,12 +210,18 @@ namespace ModularAudience.Audio.Tests
                 channeled: channeled);
 
             int expectedFrames = (int)Math.Round(sourceFrames * factor, MidpointRounding.AwayFromZero);
-            Assert.AreEqual(expectedFrames * 2, audio.Data.Length);
-            Assert.AreEqual(TimeSpan.FromSeconds(expectedFrames / (double)sampleRate), audio.Duration);
+            // Legacy fast V1 overlap-add retains its final synthesis block. Do not force
+            // sample-exact duration by redirecting compression into the expansion algorithm.
+            Assert.IsTrue(Math.Abs(audio.Data.Length - expectedFrames * 2) <= chunkSize,
+                $"Expected block-rounded compression within one chunk: target {expectedFrames * 2}, actual {audio.Data.Length}.");
+            Assert.AreEqual(0, audio.Data.Length % 2, "Output must contain complete stereo frames.");
+            Assert.AreEqual(TimeSpan.FromSeconds(audio.Data.Length / (2.0 * sampleRate)), audio.Duration);
+            Assert.IsTrue(audio.Data.All(float.IsFinite));
 
-            int tailFrames = Math.Min(256, expectedFrames);
+            int actualFrames = audio.Data.Length / 2;
+            int tailFrames = Math.Min(256, actualFrames);
             double tailSumSquares = 0;
-            for (int frame = expectedFrames - tailFrames; frame < expectedFrames; frame++)
+            for (int frame = actualFrames - tailFrames; frame < actualFrames; frame++)
             {
                 tailSumSquares += audio.Data[frame * 2] * audio.Data[frame * 2];
                 tailSumSquares += audio.Data[frame * 2 + 1] * audio.Data[frame * 2 + 1];
@@ -237,7 +262,7 @@ namespace ModularAudience.Audio.Tests
                 channeled: true);
 
             float outputPeak = audio.Data.Max(Math.Abs);
-            Assert.AreEqual(0.1, audio.Duration.TotalSeconds, 1.0 / sampleRate);
+            Assert.AreEqual(0.1, audio.Duration.TotalSeconds, 4096.0 / sampleRate);
             Assert.IsTrue(outputPeak >= sourcePeak * 0.85f, $"Expected transient peak {sourcePeak:F4} to be preserved, got {outputPeak:F4}.");
 
             float earlyRms = GetWindowRms(audio.Data, 0, sampleRate / 200);
@@ -316,10 +341,16 @@ namespace ModularAudience.Audio.Tests
                 channeled: true);
 
             int outputSnareStartFrame = snareStartFrame / 2;
-            float earlyRms = GetWindowRms(audio.Data, outputSnareStartFrame + sampleRate / 100, outputSnareStartFrame + sampleRate * 2 / 100);
-            float lateRms = GetWindowRms(audio.Data, outputSnareStartFrame + sampleRate * 7 / 100, outputSnareStartFrame + sampleRate * 8 / 100);
+            // Locate the attack within a synthesis block rather than assuming a
+            // sample-exact onset from a windowed fast-path algorithm.
+            int searchStart = Math.Max(0, outputSnareStartFrame - 4096 / 2);
+            int searchEnd = Math.Min(audio.Data.Length, outputSnareStartFrame + 4096);
+            int attack = Enumerable.Range(searchStart, searchEnd - searchStart)
+                .MaxBy(index => Math.Abs(audio.Data[index]));
+            float earlyRms = GetWindowRms(audio.Data, attack, attack + sampleRate / 100);
+            float lateRms = GetWindowRms(audio.Data, attack + sampleRate * 7 / 100, attack + sampleRate * 8 / 100);
 
-            Assert.AreEqual(2.5, audio.Duration.TotalSeconds, 1.0 / sampleRate);
+            Assert.AreEqual(2.5, audio.Duration.TotalSeconds, 4096.0 / sampleRate);
             Assert.IsTrue(earlyRms > 0.05f, $"Expected the stretched snare attack near the mapped onset, got RMS {earlyRms:F4}.");
             Assert.IsTrue(lateRms < earlyRms * 0.5f, $"Expected a forward-decaying snare tail, got early RMS {earlyRms:F4} and late RMS {lateRms:F4}.");
         }

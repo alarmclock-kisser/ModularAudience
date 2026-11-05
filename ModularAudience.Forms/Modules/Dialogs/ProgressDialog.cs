@@ -12,6 +12,8 @@ public partial class ProgressDialog : Form
     private readonly CancellationTokenSource? cancellationSource;
     private bool closeRequested;
     private bool operationCompleted;
+    private bool cancellationRequested;
+    private readonly CancellationToken cancellationToken;
 
     public ProgressDialog(
         string title = "Processing ...",
@@ -25,6 +27,7 @@ public partial class ProgressDialog : Form
         this.timeFormat = string.IsNullOrWhiteSpace(timeFormat) ? "mm\\:ss\\.fff" : timeFormat;
         this.windowCloseDelay = Math.Max(0.0d, windowCloseDelay);
         this.cancellationSource = cancellationSource;
+        this.cancellationToken = ct;
         this.InitializeComponent();
         this.Text = title;
         this.label_operation.Text = title;
@@ -32,13 +35,15 @@ public partial class ProgressDialog : Form
         this.label_percent.Visible = progress != null;
         this.label_proposed.Visible = progress != null;
         this.timer_elapsed.Start();
-        this.cancellationRegistration = ct.Register(this.Close);
+        // Token callbacks can run on a worker thread (or synchronously inside Cancel).
+        // Never close/dispose the native dialog from within that callback.
+        this.cancellationRegistration = ct.Register(this.QueueClose);
         this.UpdateTimeLabels(0.0);
     }
 
     public void Report(double progress)
     {
-        if (this.IsDisposed)
+        if (this.IsDisposed || this.Disposing || this.closeRequested)
         {
             return;
         }
@@ -46,7 +51,7 @@ public partial class ProgressDialog : Form
         progress = Math.Clamp(progress, 0.0, 1.0);
         if (this.InvokeRequired)
         {
-            this.BeginInvoke(() => this.Report(progress));
+            this.PostToUi(() => this.Report(progress));
             return;
         }
 
@@ -57,6 +62,8 @@ public partial class ProgressDialog : Form
 
     public void Complete()
     {
+        if (this.IsDisposed || this.Disposing) return;
+        if (this.InvokeRequired) { this.PostToUi(this.Complete); return; }
         this.operationCompleted = true;
         this.timer_elapsed.Stop();
         this.stopwatch.Stop();
@@ -73,14 +80,14 @@ public partial class ProgressDialog : Form
 
         if (this.InvokeRequired)
         {
-            this.BeginInvoke(this.Close);
+            this.PostToUi(this.Close);
             return;
         }
 
         this.closeRequested = true;
         if (!this.operationCompleted)
         {
-            this.cancellationSource?.Cancel();
+            this.RequestCancellation();
         }
         if (this.windowCloseDelay <= 0.0d)
         {
@@ -96,10 +103,40 @@ public partial class ProgressDialog : Form
     {
         if (!this.operationCompleted)
         {
-            this.cancellationSource?.Cancel();
+            this.RequestCancellation();
         }
 
         base.OnFormClosing(e);
+    }
+
+    private void RequestCancellation()
+    {
+        if (this.cancellationRequested || this.operationCompleted) return;
+        this.cancellationRequested = true;
+        try { this.cancellationSource?.Cancel(); }
+        catch (ObjectDisposedException)
+        {
+            // The caller owns the source and may already have finished its cleanup.
+            // A delayed window-close message must still be safe in that case.
+        }
+    }
+
+    private void PostToUi(Action action)
+    {
+        if (this.IsDisposed || this.Disposing || !this.IsHandleCreated) return;
+        try { this.BeginInvoke((Action)(() => { if (!this.IsDisposed && !this.Disposing) action(); })); }
+        catch (InvalidOperationException) when (this.IsDisposed || this.Disposing || !this.IsHandleCreated) { }
+    }
+
+    private void QueueClose()
+    {
+        if (this.IsHandleCreated) this.PostToUi(this.Close);
+    }
+
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        if (this.cancellationToken.IsCancellationRequested) this.PostToUi(this.Close);
     }
 
     private void UpdateTimeLabels(double progress)

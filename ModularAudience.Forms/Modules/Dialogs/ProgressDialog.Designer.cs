@@ -13,6 +13,7 @@ partial class ProgressDialog
 
     protected override void Dispose(bool disposing)
     {
+        if (disposing) this.cancellationRegistration.Dispose();
         if (disposing && this.components != null)
         {
             this.components.Dispose();

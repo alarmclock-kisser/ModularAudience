@@ -49,7 +49,9 @@ namespace ModularAudience.Audio.Processors_V1
                             adjustBpm: true);
             }
 
-                    if (factor >= 1.5 || factor < 1.0)
+            // Restore the original routing: compression (< 1) uses the normal V1
+            // paths below, honoring channeled/worker selection. Slow is for expansion.
+                    if (factor >= 1.5)
             {
                         return await TimeStretchSlowAsync(
                     obj,

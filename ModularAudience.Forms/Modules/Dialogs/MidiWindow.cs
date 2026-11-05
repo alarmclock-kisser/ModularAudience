@@ -13,6 +13,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private readonly MidiSampleRenderCache sampleRenderCache = new();
         private AudioObj? previewAudio;
         private CancellationTokenSource? previewCts;
+        private readonly HashSet<Task> activeMidiRenders = [];
+        private CancellationTokenSource? saveRenderCts;
+        private bool closingMidiWindow;
+        private bool allowMidiClose;
+
+        private async Task<AudioObj> TrackMidiRenderAsync(Func<AudioObj> render, CancellationToken token)
+        {
+            var task = Task.Run(render, token);
+            this.activeMidiRenders.Add(task);
+            try { return await task; }
+            finally { this.activeMidiRenders.Remove(task); }
+        }
         private Point? midiSelectionStart;
         private Point? midiSelectionCurrent;
 
@@ -106,7 +118,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             double bpm = (double)this.numericUpDown_bpm.Value;
             using AudioObj? selectedCustomSample = this.customSample?.Clone();
             MidiRenderQuality quality = this.SelectedRenderQuality;
-            return await Task.Run(
+            return await this.TrackMidiRenderAsync(
                 () => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, selectedCustomSample, cancellationToken: cancellationToken, pitchFrequency: pitchFrequency,
                     previewQuality: true, progress: progress, renderQuality: quality, sampleCache: this.sampleRenderCache), cancellationToken);
         }
@@ -260,7 +272,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             ProgressDialog? progressDialog = null;
             try
             {
-                this.button_preview.Enabled = false;
+                this.button_preview.Enabled = true;
+                this.button_preview.Text = "Cancel rendering";
                 this.label_status.Text = "Rendering preview...";
                 runCts = new CancellationTokenSource();
                 this.previewCts = runCts;
@@ -274,9 +287,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 progressDialog = new ProgressDialog("Rendering MIDI preview...", progress, ct: runCts.Token, cancellationSource: runCts, windowCloseDelay: 0.0d);
                 progressDialog.Show(this);
                 progressDialog.BringToFront();
-                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, sample,
+                AudioObj audio = await this.TrackMidiRenderAsync(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, sample,
                     cancellationToken: runCts.Token, pitchFrequency: midi.PitchFrequency, previewQuality: true, progress: progress,
                     renderQuality: quality, sampleCache: this.sampleRenderCache), runCts.Token);
+                if (runCts.IsCancellationRequested || this.closingMidiWindow) { audio.Dispose(); return; }
                 progressDialog.Complete();
                 this.previewAudio = audio;
                 this.button_preview.Text = "Stop Preview";
@@ -291,8 +305,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             catch (Exception ex)
             {
                 LogManager.Log($"MIDI preview failed: {ex}");
-                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI preview failed", ex);
-                this.ResetPreviewState();
+                if (!this.IsDisposed && !this.closingMidiWindow)
+                    ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI preview failed", ex);
             }
             finally
             {
@@ -302,10 +316,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     this.ResetPreviewState();
                 }
-                else
-                {
-                    runCts?.Dispose();
-                }
+                runCts?.Dispose();
             }
         }
 
@@ -324,30 +335,36 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 using AudioObj? customSample = this.customSample?.Clone();
                 MidiRenderQuality quality = this.SelectedRenderQuality;
                 renderCts = new CancellationTokenSource();
+                this.saveRenderCts = renderCts;
                 Progress<double> progress = new(value => progressDialog?.Report(value));
                 progressDialog = new ProgressDialog("Rendering MIDI...", progress, ct: renderCts.Token, cancellationSource: renderCts);
                 progressDialog.Show(this);
                 progressDialog.BringToFront();
-                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, cancellationToken: renderCts.Token, pitchFrequency: midi.PitchFrequency,
+                AudioObj audio = await this.TrackMidiRenderAsync(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, cancellationToken: renderCts.Token, pitchFrequency: midi.PitchFrequency,
                     progress: progress, renderQuality: quality, sampleCache: this.sampleRenderCache), renderCts.Token);
+                if (renderCts.IsCancellationRequested || this.closingMidiWindow) { audio.Dispose(); return; }
                 WindowMain.Instance?.PlaceRenderedAudio(audio);
                 progressDialog.Complete();
                 this.label_status.Text = "Audio object saved";
             }
+            catch (OperationCanceledException) { }
             catch (Exception ex)
             {
                 LogManager.Log($"MIDI render failed: {ex}");
-                ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI rendering failed", ex);
+                if (!this.IsDisposed && !this.closingMidiWindow)
+                    ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI rendering failed", ex);
             }
             finally
             {
                 if (progressDialog != null && !progressDialog.IsDisposed)
                 {
                     progressDialog.Close();
+                    progressDialog.Dispose();
                 }
 
+                if (ReferenceEquals(this.saveRenderCts, renderCts)) this.saveRenderCts = null;
                 renderCts?.Dispose();
-                this.button_save.Enabled = true;
+                if (!this.IsDisposed) this.button_save.Enabled = true;
             }
         }
 
@@ -355,12 +372,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             this.previewCts?.Cancel();
             if (this.previewAudio != null) await this.previewAudio.StopAsync();
-            this.ResetPreviewState();
+            // The render/preview owner disposes its CTS in finally, after its progress
+            // dialog is gone. Stop must not dispose a source still used by that dialog.
+            if (this.previewCts != null && !this.IsDisposed)
+                this.label_status.Text = "Cancelling; waiting for the current V1 operation to finish…";
         }
 
         public async Task PreviewMidiAsync(MidiFileData midi, int trackIndex)
         {
+            var previous = this.previewCts;
             await this.StopPreviewAsync();
+            while (previous != null && ReferenceEquals(this.previewCts, previous) && !this.IsDisposed)
+                await Task.Delay(10);
+            if (this.IsDisposed || this.closingMidiWindow) return;
             MidiInstrument instrument = this.SelectedInstrument;
             double bpm = (double)this.numericUpDown_bpm.Value;
             using AudioObj? customSample = this.customSample?.Clone();
@@ -370,8 +394,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 runCts = new CancellationTokenSource();
                 this.previewCts = runCts;
-                AudioObj audio = await Task.Run(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, cancellationToken: runCts.Token, pitchFrequency: midi.PitchFrequency,
+                AudioObj audio = await this.TrackMidiRenderAsync(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, cancellationToken: runCts.Token, pitchFrequency: midi.PitchFrequency,
                     previewQuality: true, renderQuality: quality, sampleCache: this.sampleRenderCache), runCts.Token);
+                if (runCts.IsCancellationRequested || this.closingMidiWindow) { audio.Dispose(); return; }
                 this.previewAudio = audio;
                 this.timer_previewCaret.Start();
                 TaskCompletionSource playbackStopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -387,17 +412,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     this.ResetPreviewState();
                 }
-                else
-                {
-                    runCts?.Dispose();
-                }
+                runCts?.Dispose();
             }
         }
 
         private void ResetPreviewState()
         {
+            if (this.IsDisposed) return;
             this.timer_previewCaret.Stop();
-            this.previewCts?.Dispose();
             this.previewCts = null;
             this.previewAudio?.Dispose();
             this.previewAudio = null;
@@ -410,7 +432,22 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void MidiWindow_Resize(object? sender, EventArgs e) => this.pictureBox_midi.Invalidate();
 
-        private async void MidiWindow_FormClosing(object? sender, FormClosingEventArgs e) => await this.StopPreviewAsync();
+        private async void MidiWindow_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            if (this.allowMidiClose) return;
+            e.Cancel = true;
+            if (this.closingMidiWindow) return;
+            this.closingMidiWindow = true;
+            this.saveRenderCts?.Cancel();
+            await this.StopPreviewAsync();
+            try { await Task.WhenAll(this.activeMidiRenders.ToArray()); }
+            catch (OperationCanceledException) { }
+            catch (Exception error) { LogManager.Log(error); }
+            // Let render continuations release progress windows and sources first.
+            await Task.Yield();
+            this.allowMidiClose = true;
+            if (!this.IsDisposed) this.Close();
+        }
 
         public void ApplyEdit(MidiFileData midiFileData)
         {
