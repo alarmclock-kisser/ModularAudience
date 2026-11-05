@@ -96,6 +96,10 @@ public sealed class DemucsTests
         Assert.IsTrue(dialog.ClientSize.Width >= 780);
         var options = (TableLayoutPanel)Field("optionsPanel")!;
         ((Label)Field("status")!).Text = "Ready — DirectML (device 0)\nCUDA 12 CuFFT (device 0)\nSelect stems to extract.";
+        var devices = (ComboBox)Field("device")!;
+        devices.Items.Add("1: A graphics adapter with an intentionally very long descriptive name that must never expand the form layout");
+        devices.SelectedIndex = 0;
+        ((TextBox)Field("optimizedPath")!).Text = @"C:\An intentionally long model directory\with additional subdirectories\optimized-demucs-model.onnx";
         Assert.IsTrue(options.Bottom <= options.Parent!.ClientSize.Height, "All options must fit without an internal scrollbar.");
         Assert.AreEqual(4, options.ColumnCount);
         Assert.AreEqual(2, ((TableLayoutPanel)Field("checksPanel")!).ColumnCount);
@@ -113,6 +117,12 @@ public sealed class DemucsTests
                 Assert.IsTrue(child.Right <= checks.ClientSize.Width, $"Checkbox {child.Text} must fit horizontally.");
             Assert.IsTrue(root.GetControlFromPosition(0, 4)!.Bottom <= root.ClientSize.Height,
                 "Progress and status must remain inside the dialog.");
+            var footer = (TableLayoutPanel)root.GetControlFromPosition(0, 4)!;
+            var progress = (ProgressBar)Field("progressBar_inferencing")!;
+            Assert.IsTrue(progress.Right <= footer.ClientSize.Width, "Progress bar must dock inside the footer.");
+            var modelRow = (TableLayoutPanel)root.GetControlFromPosition(0, 0)!;
+            Assert.IsTrue(((Button)Field("browse")!).Right <= modelRow.ClientSize.Width, "Browse button must remain visible.");
+            Assert.IsTrue(((CheckedListBox)Field("checkedListBox_stems")!).Right <= root.ClientSize.Width);
         }
     }
 

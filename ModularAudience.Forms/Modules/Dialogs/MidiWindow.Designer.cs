@@ -22,6 +22,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         protected override void Dispose(bool disposing)
         {
+            if (disposing) { this.sampleRenderCache.Dispose(); this.customSample?.Dispose(); }
             if (disposing && (components != null)) components.Dispose();
             base.Dispose(disposing);
         }

@@ -23,17 +23,22 @@ public enum MidiRenderQuality
 
 public static class MidiAudioRenderer
 {
-    public static AudioObj Render(MidiFileData midi, int trackIndex, MidiInstrument instrument, double bpm, AudioObj? customSample = null, int sampleRate = 44100, CancellationToken cancellationToken = default, double pitchFrequency = 440.0, bool previewQuality = false, IProgress<double>? progress = null, MidiRenderQuality renderQuality = MidiRenderQuality.Balanced)
+    public static AudioObj Render(MidiFileData midi, int trackIndex, MidiInstrument instrument, double bpm, AudioObj? customSample = null, int sampleRate = 44100, CancellationToken cancellationToken = default, double pitchFrequency = 440.0, bool previewQuality = false, IProgress<double>? progress = null, MidiRenderQuality renderQuality = MidiRenderQuality.Balanced,
+        MidiSampleRenderCache? sampleCache = null)
     {
         ArgumentNullException.ThrowIfNull(midi);
+        if (instrument == MidiInstrument.CustomSample && (customSample == null || customSample.Data.Length == 0
+            || customSample.SampleRate <= 0 || customSample.Channels <= 0))
+            throw new InvalidOperationException("Select a valid custom audio sample before rendering.");
+        if (sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(sampleRate));
         bpm = Math.Clamp(bpm, 20.0, 400.0);
         pitchFrequency = Math.Clamp(pitchFrequency, 1.0, 1000.0);
         bool draftQuality = previewQuality || renderQuality == MidiRenderQuality.Draft;
-        if (draftQuality)
+        if (draftQuality && instrument != MidiInstrument.CustomSample)
         {
             sampleRate = Math.Min(sampleRate, 22050);
         }
-        else if (renderQuality == MidiRenderQuality.Fast)
+        else if (renderQuality == MidiRenderQuality.Fast && instrument != MidiInstrument.CustomSample)
         {
             sampleRate = Math.Min(sampleRate, 32000);
         }
@@ -49,6 +54,9 @@ public static class MidiAudioRenderer
             ? []
             : null;
         int noteIndex = 0;
+        string? sampleIdentity = instrument == MidiInstrument.CustomSample && sampleCache != null
+            ? Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Runtime.InteropServices.MemoryMarshal.AsBytes(customSample!.Data.AsSpan())))
+                + $":{customSample.SampleRate}:{customSample.Channels}" : null;
 
         try
         {
@@ -72,7 +80,10 @@ public static class MidiAudioRenderer
                 {
                     if (preparedSamples == null || !preparedSamples.TryGetValue((note.NoteNumber, noteFrames), out preparedCustomSample))
                     {
-                        preparedCustomSample = PrepareCustomSample(customSample, noteFrames, frequency, pitchFrequency, cancellationToken, sampleRate, renderQuality);
+                        AudioObj Prepare() => PrepareCustomSample(customSample, noteFrames, frequency, pitchFrequency, cancellationToken, sampleRate, renderQuality);
+                        string key = System.Text.Json.JsonSerializer.Serialize(new { Sample = sampleIdentity, note.NoteNumber, Frames = noteFrames,
+                            Rate = sampleRate, Root = pitchFrequency, Quality = renderQuality });
+                        preparedCustomSample = sampleCache == null ? Prepare() : sampleCache.GetOrCreate(key, Prepare, cancellationToken);
                         preparedSamples?.Add((note.NoteNumber, noteFrames), preparedCustomSample);
                     }
                 }

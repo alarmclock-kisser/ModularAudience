@@ -42,7 +42,7 @@ public partial class OnnxDemucsDialog : Form
     private readonly TextBox profilePath = new() { Dock = DockStyle.Fill };
     private readonly TextBox optimizedPath = new() { Dock = DockStyle.Fill };
     private readonly TextBox advanced = new() { Multiline = true, ScrollBars = ScrollBars.Vertical, Height = 65, Dock = DockStyle.Fill };
-    private readonly TableLayoutPanel optionsPanel = new() { AutoSize = true, Dock = DockStyle.Top, ColumnCount = 4 };
+    private readonly TableLayoutPanel optionsPanel = new() { AutoSize = false, Dock = DockStyle.Fill, ColumnCount = 4, Margin = Padding.Empty };
     private readonly TableLayoutPanel checksPanel = new() { AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 2 };
     private int optionCount;
     private bool busy;
@@ -56,30 +56,37 @@ public partial class OnnxDemucsDialog : Form
         this.OriginalAudio = audioObj;
         this.Text = "Demucs Source Separation";
         this.MaximumSize = Size.Empty;
-        this.MinimumSize = new Size(1100, 740);
-        this.ClientSize = new Size(1140, 770);
+        this.MinimumSize = new Size(1020, 770);
+        this.ClientSize = new Size(1040, 760);
         this.StartPosition = FormStartPosition.CenterParent;
         this.Controls.Clear();
         this.comboBox_models.DropDownStyle = ComboBoxStyle.DropDownList;
         this.comboBox_models.DisplayMember = nameof(ModelItem.Name);
         this.comboBox_models.Dock = DockStyle.Fill;
-        this.comboBox_models.Width = 560;
+        this.comboBox_models.MinimumSize = Size.Empty;
+        this.comboBox_models.Size = new Size(100, 23);
         this.checkedListBox_stems.Dock = DockStyle.Fill;
         this.checkedListBox_stems.Height = 115;
+        this.checkedListBox_stems.IntegralHeight = false;
+        this.checkedListBox_stems.Size = new Size(100, 112);
         this.progressBar_inferencing.Dock = DockStyle.Fill;
         this.progressBar_inferencing.Maximum = 1000;
+        this.progressBar_inferencing.Size = new Size(100, 22);
         this.button_run.Text = "Run";
         this.button_run.AutoSize = true;
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(12) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(10), Margin = Padding.Empty };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 115));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        var modelRow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2 };
+        var modelRow = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2, RowCount = 2, Margin = Padding.Empty };
         modelRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         modelRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        modelRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        modelRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         modelRow.Controls.Add(this.comboBox_models, 0, 0);
         modelRow.Controls.Add(this.browse, 1, 0);
         var retentionRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
@@ -97,44 +104,63 @@ public partial class OnnxDemucsDialog : Form
         };
         for (int i = 0; i < 2; i++)
         {
-            this.optionsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 175));
+            this.optionsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 155));
             this.optionsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         }
         this.AddOption("Execution provider", this.provider);
-        this.AddOption("DirectML device (DXGI adapter)", this.device);
+        this.AddOption("DirectML device", this.device);
         this.AddOption("Graph optimization", this.optimization);
         this.AddOption("Execution mode (CPU only)", this.execution);
-        this.AddOption("Intra-op threads (0 = automatic)", this.intraThreads);
-        this.AddOption("Inter-op threads (0 = automatic)", this.interThreads);
+        this.AddOption("Intra-op threads (0 = auto)", this.intraThreads);
+        this.AddOption("Inter-op threads (0 = auto)", this.interThreads);
         this.AddOption("Profiling output prefix", this.profilePath);
         this.AddOption("Save optimized model (optional)", this.optimizedPath);
         this.AddOption("CPU FFT workers", this.workers);
         this.AddOption("CUDA device ID", this.cudaDevice);
-        this.AddOption("CUDA 12 toolkit directory (optional)", this.cudaDirectory);
+        this.AddOption("CUDA 12 directory (optional)", this.cudaDirectory);
         this.AddOption("Chunk overlap (%)", this.overlap);
         int checksRow = (this.optionCount + 1) / 2;
-        var checkGroup = new GroupBox { Text = "Execution and FFT options", Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(8, 18, 8, 6) };
+        for (int row = 0; row < checksRow; row++) this.optionsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        this.optionsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
+        this.optionsPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var checkGroup = new GroupBox { Text = "Execution and FFT options", Dock = DockStyle.Fill, AutoSize = false, Padding = new Padding(8, 18, 8, 6), Margin = new Padding(3, 5, 3, 5) };
+        this.checksPanel.AutoSize = false;
+        this.checksPanel.Margin = Padding.Empty;
         this.checksPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         this.checksPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         int checkIndex = 0;
         foreach (var check in new[] { this.cpuFallback, this.cpuOperators, this.validate, this.disableDmlFusion, this.memoryPattern, this.cpuArena, this.spinning, this.prepacking, this.profiling, this.logging, this.cuda })
         {
+            check.AutoSize = false;
+            check.Dock = DockStyle.Fill;
+            check.Margin = new Padding(3, 1, 3, 1);
+            check.AutoEllipsis = true;
             this.checksPanel.Controls.Add(check, checkIndex % 2, checkIndex / 2);
             checkIndex++;
         }
+        this.checksPanel.RowCount = (checkIndex + 1) / 2;
+        for (int row = 0; row < this.checksPanel.RowCount; row++) this.checksPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / this.checksPanel.RowCount));
         checkGroup.Controls.Add(this.checksPanel);
         this.optionsPanel.Controls.Add(checkGroup, 0, checksRow);
         this.optionsPanel.SetColumnSpan(checkGroup, 4);
         this.optionCount = (checksRow + 1) * 2;
         this.AddOption("Extra ONNX session entries\n(one key=value per line)", this.advanced);
-        var qualityInfo = new Label { AutoSize = true, Dock = DockStyle.Fill,
-            Text = "Model FFT: 4096 / hop: 1024 (fixed).\nOverlap: 0% fastest, 25% balanced, 50–75% smoother chunk boundaries; more inference work." };
+        var qualityInfo = new Label { AutoSize = false, Dock = DockStyle.Fill, AutoEllipsis = true,
+            Text = "FFT 4096 / hop 1024 (fixed).\nOverlap: 0% fast; 25% balanced; 50–75% smoother boundaries, more work." };
         this.AddOption("Separation quality", qualityInfo);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
         buttons.Controls.AddRange([this.load, this.button_run, this.cancel]);
-        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 1 };
-        footer.Controls.Add(this.status);
-        footer.Controls.Add(this.progressBar_inferencing);
+        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = false, Height = 82, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty };
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        this.status.AutoSize = false;
+        this.status.MaximumSize = Size.Empty;
+        this.status.Dock = DockStyle.Fill;
+        this.status.AutoEllipsis = true;
+        footer.Controls.Add(this.status, 0, 0);
+        footer.Controls.Add(this.progressBar_inferencing, 0, 1);
+        root.RowStyles[4] = new RowStyle(SizeType.Absolute, 82);
         this.progressBar_inferencing.Height = 23;
         root.Controls.Add(modelRow, 0, 0);
         root.Controls.Add(this.optionsPanel, 0, 1);
@@ -169,7 +195,10 @@ public partial class OnnxDemucsDialog : Form
     {
         int row = this.optionCount / 2;
         int column = this.optionCount++ % 2 * 2;
-        this.optionsPanel.Controls.Add(new Label { Text = caption, AutoSize = true, Margin = new Padding(3, 7, 3, 5) }, column, row);
+        this.optionsPanel.Controls.Add(new Label { Text = caption, AutoSize = false, Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Margin = new Padding(3, 2, 3, 2) }, column, row);
+        control.MinimumSize = Size.Empty;
+        if (control is ComboBox or TextBox) control.Width = 100;
         control.Margin = new Padding(3, 4, 3, 4);
         this.optionsPanel.Controls.Add(control, column + 1, row);
     }

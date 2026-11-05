@@ -7,6 +7,40 @@ namespace ModularAudience.Audio.Tests;
 public sealed class MidiSampleRenderTests
 {
     [TestMethod]
+    public void PreviewAndSaveReusePreparedNotesAndInvalidateEditedSample()
+    {
+        using var sample = new AudioObj { Data = Enumerable.Range(0, 9600).Select(i => (float)(0.2 * Math.Sin(i * 0.1))).ToArray(), SampleRate = 48000, Channels = 2 };
+        var track = new MidiTrackData { Index = 0 };
+        track.Notes.Add(new() { NoteNumber = 67, Channel = 1, Velocity = 100, StartTick = 0, DurationTicks = 1920 });
+        track.ExtendLengthTo(1920);
+        var midi = MidiFileData.CreateGenerated([track], 960, 120);
+        using var cache = new MidiSampleRenderCache();
+        using var preview = MidiAudioRenderer.Render(midi, 0, MidiInstrument.CustomSample, 120, sample, previewQuality: true, sampleCache: cache);
+        Assert.AreEqual(1, cache.Count);
+        using var saved = MidiAudioRenderer.Render(midi, 0, MidiInstrument.CustomSample, 120, sample, sampleCache: cache);
+        Assert.AreEqual(1L, cache.Hits);
+        CollectionAssert.AreEqual(preview.Data, saved.Data);
+        sample.Data[100] = 0.9f;
+        using var edited = MidiAudioRenderer.Render(midi, 0, MidiInstrument.CustomSample, 120, sample, sampleCache: cache);
+        Assert.AreEqual(2, cache.Count);
+        cache.Dispose(); Assert.AreEqual(0, cache.Count);
+    }
+
+    [TestMethod]
+    [DataRow(48, 96)]
+    [DataRow(84, 480)]
+    public void StereoShortAndLongNotesRenderInPreviewAndSave(int pitch, int duration)
+    {
+        using var sample = new AudioObj { Data = Enumerable.Range(0, 44100).SelectMany(i => new[] { (float)(0.3 * Math.Sin(i * 0.04)), (float)(0.1 * Math.Sin(i * 0.07)) }).ToArray(), SampleRate = 44100, Channels = 2 };
+        var track = new MidiTrackData { Index = 0 };
+        track.Notes.Add(new() { NoteNumber = pitch, Channel = 1, Velocity = 100, DurationTicks = duration }); track.ExtendLengthTo(duration);
+        var midi = MidiFileData.CreateGenerated([track], 960, 120);
+        using var result = MidiAudioRenderer.Render(midi, 0, MidiInstrument.CustomSample, 120, sample, previewQuality: true);
+        Assert.IsTrue(result.Data.All(float.IsFinite));
+        Assert.IsTrue(result.Data.Any(v => Math.Abs(v) > 0.001f));
+    }
+
+    [TestMethod]
     [DataRow(MidiRenderQuality.Balanced)]
     [DataRow(MidiRenderQuality.Draft)]
     public void LongSampleNotePreservesPitchAndHasBoundedLevel(MidiRenderQuality quality)
