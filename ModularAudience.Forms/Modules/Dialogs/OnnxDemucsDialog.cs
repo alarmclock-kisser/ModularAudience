@@ -23,7 +23,8 @@ public partial class OnnxDemucsDialog : Form
     private readonly NumericUpDown interThreads = Number(0, Environment.ProcessorCount);
     private readonly NumericUpDown workers = Number(1, Environment.ProcessorCount);
     private readonly NumericUpDown overlap = new() { Minimum = 0, Maximum = 75, Value = 25, Increment = 5, Width = 120 };
-    private readonly NumericUpDown keepModelLoaded = new() { Minimum = 0, Maximum = 86400, Value = 300, Increment = 30, Width = 120 };
+    private readonly NumericUpDown keepModelLoaded = new() { Name = "keepModelLoaded", Minimum = 0, Maximum = 86400, Value = 300, Increment = 30, Width = 120,
+        AccessibleName = "Keep Model Loaded Seconds" };
     private string? loadedCacheKey;
     private readonly NumericUpDown cudaDevice = Number(0, 127);
     private readonly CheckBox cpuFallback = Check("Fall back to CPU if DirectML fails");
@@ -81,6 +82,19 @@ public partial class OnnxDemucsDialog : Form
         modelRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         modelRow.Controls.Add(this.comboBox_models, 0, 0);
         modelRow.Controls.Add(this.browse, 1, 0);
+        var retentionRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
+        retentionRow.Controls.Add(new Label { Text = "Keep Model Loaded Seconds", AutoSize = true, Margin = new Padding(3, 7, 8, 3) });
+        retentionRow.Controls.Add(this.keepModelLoaded);
+        retentionRow.Controls.Add(new Label { Text = "0 = unload on close; default 300 s", AutoSize = true, Margin = new Padding(8, 7, 3, 3) });
+        modelRow.Controls.Add(retentionRow, 0, 1);
+        modelRow.SetColumnSpan(retentionRow, 2);
+        this.keepModelLoaded.ValueChanged += (_, _) =>
+        {
+            if (this.initializing) return;
+            this.settings.KeepModelLoadedSeconds = (int)this.keepModelLoaded.Value;
+            try { this.settings.Save(); }
+            catch (Exception error) { this.ShowError("Unable to save model retention setting", error); }
+        };
         for (int i = 0; i < 2; i++)
         {
             this.optionsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 175));
@@ -116,8 +130,6 @@ public partial class OnnxDemucsDialog : Form
         var qualityInfo = new Label { AutoSize = true, Dock = DockStyle.Fill,
             Text = "Model FFT: 4096 / hop: 1024 (fixed).\nOverlap: 0% fastest, 25% balanced, 50–75% smoother chunk boundaries; more inference work." };
         this.AddOption("Separation quality", qualityInfo);
-        this.AddOption("Keep model loaded (seconds)", this.keepModelLoaded);
-        this.AddOption("After closing", new Label { AutoSize = true, Text = "0 = unload immediately; idle models are reused before expiry." });
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
         buttons.Controls.AddRange([this.load, this.button_run, this.cancel]);
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 1 };

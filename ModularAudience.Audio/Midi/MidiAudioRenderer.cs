@@ -72,7 +72,7 @@ public static class MidiAudioRenderer
                 {
                     if (preparedSamples == null || !preparedSamples.TryGetValue((note.NoteNumber, noteFrames), out preparedCustomSample))
                     {
-                        preparedCustomSample = PrepareCustomSample(customSample, noteFrames, frequency, pitchFrequency, cancellationToken, draftQuality, renderQuality);
+                        preparedCustomSample = PrepareCustomSample(customSample, noteFrames, frequency, pitchFrequency, cancellationToken, sampleRate, renderQuality);
                         preparedSamples?.Add((note.NoteNumber, noteFrames), preparedCustomSample);
                     }
                 }
@@ -108,9 +108,11 @@ public static class MidiAudioRenderer
             NormalizePeak(output, 0.95f);
             LogSineRender(track, output, sampleRate);
         }
-        else if (draftQuality && instrument == MidiInstrument.CustomSample)
+        else if (instrument == MidiInstrument.CustomSample)
         {
-            NormalizePeak(output, 0.8f);
+            // Attenuate only: retain MIDI velocity differences without boosting quiet passages.
+            float peak = FindPeak(output);
+            if (peak > 0.95f) NormalizePeak(output, 0.95f);
         }
 
         AudioObj rendered = new()
@@ -130,20 +132,17 @@ public static class MidiAudioRenderer
         return rendered;
     }
 
-    private static AudioObj PrepareCustomSample(AudioObj sample, int targetFrames, double targetFrequency, double referenceFrequency, CancellationToken cancellationToken, bool draftQuality, MidiRenderQuality renderQuality)
+    private static AudioObj PrepareCustomSample(AudioObj sample, int targetFrames, double targetFrequency, double referenceFrequency, CancellationToken cancellationToken, int outputSampleRate, MidiRenderQuality renderQuality)
     {
         double sampleRootFrequency = referenceFrequency * Math.Pow(2.0, (60 - 69) / 12.0);
         double semitones = 12.0 * Math.Log2(Math.Max(1.0, targetFrequency) / Math.Max(1.0, sampleRootFrequency));
-        if (draftQuality)
-        {
-            return PreparePreviewCustomSample(sample, targetFrames, semitones, cancellationToken);
-        }
-
-        AudioObj pitchedSample = Math.Abs(semitones) < 0.001
-            ? sample.Clone()
-            : PitchShifter.CreatePitchShiftWithoutTimestretchAsync(sample, (float)semitones)
-                .GetAwaiter()
-                .GetResult();
+        using AudioObj input = sample.Clone();
+        if (input.SampleRate != outputSampleRate) input.ResampleAsync(outputSampleRate).GetAwaiter().GetResult();
+        float referencePeak = Math.Min(1f, FindPeak(input.Data));
+        // Change pitch by band-limited resampling, then fit duration exactly once using V1.
+        // The former path first used a phase vocoder for pitch and then stretched again.
+        AudioObj pitchedSample = PitchShifter.CreatePitchShiftAsync(input, (float)semitones, useFftPv: false)
+            .GetAwaiter().GetResult();
 
         try
         {
@@ -152,28 +151,37 @@ public static class MidiAudioRenderer
             if (sourceFrames > 0 && sourceFrames != targetFrames)
             {
                 double stretchFactor = targetFrames / (double)sourceFrames;
-                TimeStretcher.TimeStretchAllThreadsAsync(
+                AudioObj stretched = TimeStretcher.TimeStretchAllThreadsAsync(
                     pitchedSample,
                     chunkSize: renderQuality switch
                     {
-                        MidiRenderQuality.Fast => 8192,
-                        MidiRenderQuality.Balanced => 12288,
+                        MidiRenderQuality.Draft => 2048,
+                        MidiRenderQuality.Fast => 4096,
+                        MidiRenderQuality.Balanced => 8192,
                         _ => 16384
                     },
-                    overlap: renderQuality switch
-                    {
-                        MidiRenderQuality.Fast => 0.35f,
-                        MidiRenderQuality.Balanced => 0.45f,
-                        _ => 0.5f
-                    },
+                    overlap: 0.75f,
                     factor: stretchFactor,
                     normalize: 0.0f,
                     maxWorkers: Environment.ProcessorCount,
                     progress: null,
                     offload: false,
-                    channeled: false).GetAwaiter().GetResult();
+                    channeled: true).GetAwaiter().GetResult();
+                if (!ReferenceEquals(stretched, pitchedSample))
+                    pitchedSample.ReplaceWith(stretched, disposeSource: true);
             }
-
+            cancellationToken.ThrowIfCancellationRequested();
+            // Never stretch the already-stretched waveform again in MixSample. Pad/trim
+            // V1's rounded result to the requested frame count instead.
+            int channels = Math.Max(1, pitchedSample.Channels);
+            float[] exact = new float[checked(targetFrames * channels)];
+            Array.Copy(pitchedSample.Data, exact, Math.Min(exact.Length, pitchedSample.Data.Length));
+            for (int i = 0; i < exact.Length; i++) if (!float.IsFinite(exact[i])) exact[i] = 0;
+            NormalizeSamplePeak(exact, referencePeak);
+            pitchedSample.Data = exact;
+            pitchedSample.SampleRate = outputSampleRate;
+            pitchedSample.Length = exact.Length;
+            pitchedSample.Duration = TimeSpan.FromSeconds(targetFrames / (double)outputSampleRate);
             return pitchedSample;
         }
         catch
@@ -341,7 +349,7 @@ public static class MidiAudioRenderer
             int outputIndex = (Math.Max(0, startFrame) + frame) * channels;
             for (int channel = 0; channel < channels; channel++)
             {
-                output[outputIndex + channel] = Math.Clamp(output[outputIndex + channel] + sample, -1f, 1f);
+                output[outputIndex + channel] += sample;
             }
             phase = instrument == MidiInstrument.Sine
                 ? (phase + 2.0 * Math.PI * phaseStep) % (2.0 * Math.PI)
@@ -445,7 +453,7 @@ public static class MidiAudioRenderer
                 continue;
             }
 
-            double sourcePosition = frame / (double)Math.Max(1, noteFrames - 1) * Math.Max(0, sourceFrames - 1);
+            double sourcePosition = Math.Min(sourceFrames - 1, frame * sample.SampleRate / (double)sampleRate);
             int sourceFrame = Math.Min(sourceFrames - 1, (int)sourcePosition);
             int nextFrame = Math.Min(sourceFrames - 1, sourceFrame + 1);
             double fraction = sourcePosition - sourceFrame;
@@ -461,7 +469,7 @@ public static class MidiAudioRenderer
                 float a = sample.Data[sourceFrame * sourceChannels + sourceChannel];
                 float b = sample.Data[nextFrame * sourceChannels + sourceChannel];
                 float value = (float)((a + (b - a) * fraction) * envelope * amplitude);
-                output[outputIndex + channel] = Math.Clamp(output[outputIndex + channel] + value, -1f, 1f);
+                output[outputIndex + channel] += value;
             }
         }
     }
