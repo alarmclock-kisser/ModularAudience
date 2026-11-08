@@ -269,7 +269,7 @@
             button_playlist.Size = new Size(51, 23);
             button_playlist.TabIndex = 32;
             button_playlist.TabStop = false;
-            button_playlist.Text = "▶ List";
+            button_playlist.Text = "\u25B6 List";
             toolTip_playlist.SetToolTip(button_playlist, "Right-click to configure.\nPlaylist empty.");
             button_playlist.UseVisualStyleBackColor = false;
             button_playlist.Click += button_playlist_TogglePlayPause_Click;
@@ -488,7 +488,6 @@
             comboBox_exportFormat.Size = new Size(56, 23);
             comboBox_exportFormat.TabIndex = 11;
             comboBox_exportFormat.TabStop = false;
-            comboBox_exportFormat.SelectedIndexChanged += comboBox_exportFormat_SelectedIndexChanged;
             // 
             // comboBox_exportBits
             // 
@@ -499,7 +498,6 @@
             comboBox_exportBits.Size = new Size(55, 23);
             comboBox_exportBits.TabIndex = 12;
             comboBox_exportBits.TabStop = false;
-            comboBox_exportBits.SelectedIndexChanged += comboBox_exportBits_SelectedIndexChanged;
             // 
             // button_autoSamples
             // 

@@ -14,8 +14,18 @@ namespace ModularAudience.Audio
     public class AudioCollection : IDisposable
     {
         // Fields
-        public string WorkingDirectory { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "ModularAudience");
-        public string ImportDirectory { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+        private string workingDirectory;
+        public string WorkingDirectory
+        {
+            get => this.workingDirectory;
+            set
+            {
+                string directory = AudioStoragePaths.PrepareWorkingDirectory(value);
+                AudioStoragePaths.StopFollowingDefaultWorkingDirectory(this);
+                this.ApplyDefaultWorkingDirectory(directory);
+            }
+        }
+        public string ImportDirectory { get; set; }
         public readonly BindingList<AudioObj> Audios = [];
         public readonly ConcurrentDictionary<Guid, CancellationToken> PlaybackCancellationTokens = [];
 
@@ -35,8 +45,8 @@ namespace ModularAudience.Audio
         public readonly AudioExporter Exporter;
 
         // Lambda
-        public string ExportPath => Path.Combine(this.WorkingDirectory, "_Exports");
-        public string RecordPath => Path.Combine(this.WorkingDirectory, "_Records");
+        public string ExportPath => Path.Combine(this.WorkingDirectory, AudioStoragePaths.ExportsFolderName);
+        public string RecordPath => Path.Combine(this.WorkingDirectory, AudioStoragePaths.RecordingsFolderName);
         public int Count => this.Audios.Count;
         public IEnumerable<Guid> Ids => this.Audios.Select(a => a.Id);
         public IEnumerable<Guid> Playing => this.Audios.Where(a => a.Playing).Select(a => a.Id);
@@ -47,18 +57,14 @@ namespace ModularAudience.Audio
 
         public AudioCollection(string? workingDir = null, string? importDir = null, int wavRecordingBits = 24)
         {
-            if (!string.IsNullOrEmpty(workingDir))
-            {
-                this.WorkingDirectory = workingDir;
-            }
-            if (!string.IsNullOrEmpty(importDir))
-            {
-                this.ImportDirectory = importDir;
-            }
+            bool followDefault = string.IsNullOrWhiteSpace(workingDir);
+            this.workingDirectory = followDefault ? AudioStoragePaths.WorkingDirectory : workingDir!;
+            this.ImportDirectory = string.IsNullOrWhiteSpace(importDir) ? AudioStoragePaths.MusicDirectory : importDir;
             Directory.CreateDirectory(this.WorkingDirectory);
             Directory.CreateDirectory(this.ExportPath);
             Directory.CreateDirectory(this.RecordPath);
             this.Exporter = new AudioExporter(this.ExportPath);
+            if (followDefault) AudioStoragePaths.FollowDefaultWorkingDirectory(this);
 
             this.Audios.ListChanged += (s, e) =>
             {
@@ -67,6 +73,12 @@ namespace ModularAudience.Audio
                     this.ToggleAddIndexToNames();
                 }
             };
+        }
+
+        internal void ApplyDefaultWorkingDirectory(string directory)
+        {
+            this.workingDirectory = directory;
+            this.Exporter.ExportDirectory = this.ExportPath;
         }
 
 
@@ -191,6 +203,7 @@ namespace ModularAudience.Audio
 
         public void Dispose()
         {
+            AudioStoragePaths.StopFollowingDefaultWorkingDirectory(this);
             // Dispose in batches to avoid GC spikes
             var audioList = this.Audios.ToList();
             for (int i = 0; i < audioList.Count; i += 5)

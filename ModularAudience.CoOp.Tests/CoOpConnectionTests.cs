@@ -76,4 +76,23 @@ public sealed class CoOpConnectionTests
         Assert.IsNull(client.HostPeer);
         Assert.IsNull(client.SessionAddress);
     }
+
+    [TestMethod]
+    public async Task Client_ConnectsToLocalHostnameUsingDirectTcpAndReportsActualEndpoints()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var serializer = new JsonCoOpMessageSerializer();
+        Task<CoOpConnection> connecting = CoOpClient.ConnectAsync("localhost", port, serializer, TimeSpan.FromSeconds(3));
+        using TcpClient peer = await listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(3));
+        await using CoOpConnection connection = await connecting;
+
+        await connection.SendAsync(new PingMessage(42));
+        byte[] frame = await CoOpFrameCodec.ReadFrameAsync(peer.GetStream()).AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.AreEqual(new IPEndPoint(IPAddress.Loopback, port).ToString(), connection.RemoteEndPoint);
+        Assert.AreEqual(peer.Client.RemoteEndPoint!.ToString(), connection.LocalEndPoint);
+        Assert.AreEqual(42L, ((PingMessage)serializer.Deserialize(frame)).Timestamp);
+    }
 }

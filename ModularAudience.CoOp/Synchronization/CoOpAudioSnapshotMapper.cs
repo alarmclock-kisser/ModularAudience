@@ -7,6 +7,8 @@ namespace ModularAudience.CoOp.Synchronization;
 /// <summary>
 /// Converts between live <see cref="AudioObj"/> instances and the immutable
 /// wire snapshots. Sample data is transported as raw little-endian f32 bytes.
+/// Received samples are materialized directly in RAM; FilePath is metadata
+/// only and is never loaded, created, or used as an audio cache here.
 /// </summary>
 public static class CoOpAudioSnapshotMapper
 {

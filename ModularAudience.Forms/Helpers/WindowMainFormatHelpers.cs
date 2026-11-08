@@ -1,9 +1,19 @@
 using ModularAudience.Audio;
+using System.Globalization;
 
 namespace ModularAudience.Forms.Helpers
 {
     internal static class WindowMainFormatHelpers
     {
+        internal static string FormatBuildInformation(long? releaseNumber, Func<DateTime> getBuildTimestamp)
+        {
+            ArgumentNullException.ThrowIfNull(getBuildTimestamp);
+            if (releaseNumber is <= 0) throw new ArgumentOutOfRangeException(nameof(releaseNumber));
+            return releaseNumber.HasValue
+                ? $"Build: {releaseNumber.Value.ToString(CultureInfo.InvariantCulture)}"
+                : $"Build: {getBuildTimestamp().ToString("dd/MM/yyyy - HH:mm:ss", CultureInfo.InvariantCulture)}";
+        }
+
         internal static string GetTimingString(float timing)
         {
             string timingString = string.Empty;

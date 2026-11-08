@@ -14,8 +14,15 @@ namespace ModularAudience.Forms.Helpers
             char[] sanitized = source
                 .Select(ch => InvalidFileNameChars.Contains(ch) ? '_' : ch)
                 .ToArray();
-            string result = new string(sanitized).Trim('_', ' ');
+            string result = new string(sanitized).Trim('_', ' ', '.');
             return string.IsNullOrWhiteSpace(result) ? "Audio" : result;
+        }
+
+        internal static string GetCollectionExportDirectory(string exportRoot, string? collectionName)
+        {
+            // Reuse the collection's named folder. File-level suffixes handle
+            // collisions; repeated exports must not create Collection_2, _3...
+            return Path.Combine(Path.GetFullPath(exportRoot), SanitizePathSegment(collectionName));
         }
 
         internal static string EnsureAudioFileExtension(string filePath)

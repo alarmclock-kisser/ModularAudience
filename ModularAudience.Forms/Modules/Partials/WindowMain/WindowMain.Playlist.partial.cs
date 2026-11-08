@@ -107,6 +107,7 @@ namespace ModularAudience.Forms
             this._playlistTimer = new System.Windows.Forms.Timer { Interval = 1000 };
             this._playlistTimer.Tick += (_, _) => this.UpdatePlaylistUI();
             this._playlistTimer.Start();
+            this.UpdatePlaylistButtonText();
 
             // Default countdown enabled state
             try { PlaylistCountdownEnabled = true; } catch { }
@@ -513,7 +514,7 @@ namespace ModularAudience.Forms
             {
                 this.toolStripMenuItem_timestretchEach.Checked = false;
                 this._playlistStretchSettings = null;
-                this.toolStripMenuItem_timestretchEach.Text = "â± Timestretch each...";
+                this.toolStripMenuItem_timestretchEach.Text = "\u23F1 Timestretch each...";
                 LogManager.Log("Playlist auto-timestretch disabled.");
                 return;
             }
@@ -532,7 +533,7 @@ namespace ModularAudience.Forms
             this._playlistStretchSettings = dlg.ConfirmedSettings;
             this.toolStripMenuItem_timestretchEach.Checked = true;
             string method = dlg.ConfirmedUsedV2 ? "V2" : "V1";
-            this.toolStripMenuItem_timestretchEach.Text = $"â± Timestretch each [{this._playlistStretchSettings.TargetBpm:F0} BPM, {method}]";
+            this.toolStripMenuItem_timestretchEach.Text = $"\u23F1 Timestretch each [{this._playlistStretchSettings.TargetBpm:F0} BPM, {method}]";
             LogManager.Log($"Playlist auto-timestretch enabled: target {this._playlistStretchSettings.TargetBpm:F0} BPM via Stretch {method}.");
         }
 
@@ -676,7 +677,7 @@ namespace ModularAudience.Forms
                 string name = Path.GetFileNameWithoutExtension(path);
                 if (name.Length > 32)
                 {
-                    name = name[..29] + "â€¦";
+                    name = name[..29] + "\u2026";
                 }
 
                 var meta = this.GetOrFetchMeta(path);
@@ -690,7 +691,7 @@ namespace ModularAudience.Forms
 
             if (paths.Count > 30)
             {
-                sb.AppendLine($"â€¦ and {paths.Count - 30} more.");
+                sb.AppendLine($"\u2026 and {paths.Count - 30} more.");
             }
 
             this.toolTip_playlist.SetToolTip(this.button_playlist, sb.ToString().TrimEnd());
@@ -713,9 +714,9 @@ namespace ModularAudience.Forms
                 }
 
                 PlaylistQueueSnapshot snapshot = this._playlist.GetQueueSnapshot();
-                this.button_playlist.Text = snapshot.IsPaused ? "|| List" : "â–¶ List";
+                this.button_playlist.Text = PlaylistUiText.ButtonText(snapshot.IsPaused);
 
-                // Preserve the build timestamp until the user actually interacts with the playlist.
+                // Preserve the release/build information until the user actually interacts with the playlist.
                 // The timer ticks every second, so without this guard the label would be
                 // overwritten immediately after startup.
                 if (this._playlistActivityStarted)
@@ -738,7 +739,7 @@ namespace ModularAudience.Forms
 
             if (snapshot.IsPlaying && !snapshot.IsPaused && !string.IsNullOrWhiteSpace(current))
             {
-                return $"â–¶ {current}";
+                return $"\u25B6 {current}";
             }
 
             if (snapshot.IsPaused && !string.IsNullOrWhiteSpace(current))
@@ -758,7 +759,7 @@ namespace ModularAudience.Forms
             }
 
             PlaylistQueueSnapshot snapshot = this._playlist.GetQueueSnapshot();
-            this.button_playlist.Text = snapshot.IsPaused ? "|| List" : "â–¶ List";
+            this.button_playlist.Text = PlaylistUiText.ButtonText(snapshot.IsPaused);
         }
 
         private void UpdatePlaylistHoverTitle()
@@ -785,29 +786,29 @@ namespace ModularAudience.Forms
         {
             if (this._isPreprocessingTrack)
             {
-                return "â³ Time-Stretching next track...";
+                return "\u231B Time-Stretching next track...";
             }
 
             if (!snapshot.IsPlaying && !snapshot.IsPaused && snapshot.CurrentPath == null)
             {
                 if (snapshot.FilePaths.Count > 0)
                 {
-                    return $"â–¶ List ready â€” {snapshot.FilePaths.Count} track(s) enqueued.";
+                    return $"\u25B6 List ready \u2014 {snapshot.FilePaths.Count} track(s) enqueued.";
                 }
 
                 return "No track currently enqueued in playlist.";
             }
 
-            string stateIcon = snapshot.IsPaused ? "||" : "â–¶";
+            string stateIcon = snapshot.IsPaused ? "||" : "\u25B6";
             TimeSpan pos = snapshot.CurrentPosition;
             TimeSpan dur = snapshot.CurrentDuration;
             string posStr = $"{(int)pos.TotalMinutes:D2}:{pos.Seconds:D2}";
             string durStr = $"{(int)dur.TotalMinutes:D2}:{dur.Seconds:D2}";
 
-            string name = GetCurrentPlaylistTrackName(snapshot) ?? "â€“";
+            string name = GetCurrentPlaylistTrackName(snapshot) ?? "\u2013";
             if (name.Length > 96)
             {
-                name = name[..63] + "â€¦";
+                name = name[..63] + "\u2026";
             }
 
             // Prefer the engine-reported current BPM (already adjusted for any applied stretch).
@@ -841,7 +842,7 @@ namespace ModularAudience.Forms
                 return null;
             }
 
-            string name = Path.GetFileNameWithoutExtension(path) ?? "â€“";
+            string name = Path.GetFileNameWithoutExtension(path) ?? "\u2013";
             // Remove generated suffixes after a double-underscore and common _stretched_ markers
             if (name.Contains("__"))
             {

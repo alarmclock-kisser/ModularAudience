@@ -1,4 +1,5 @@
 using System.Net;
+using ModularAudience.Audio;
 using ModularAudience.CoOp.Protocol;
 
 namespace ModularAudience.CoOp.Synchronization;
@@ -19,8 +20,18 @@ public sealed class CoOpSessionOptions
 
     public int DiscoveryPortSearchCount { get; init; } = CoOpDefaults.DiscoveryPortCount;
 
-    public string RemoteCollectionsRoot { get; init; } =
-        Path.Combine(Path.GetTempPath(), "ModularAudience", "CoOp");
+    /// <summary>
+    /// User-facing working directory for received collections, including exports
+    /// and recordings. This is not a temporary synchronization cache.
+    /// </summary>
+    private string? remoteCollectionsRoot;
+    public string RemoteCollectionsRoot
+    {
+        get => this.remoteCollectionsRoot ?? AudioStoragePaths.WorkingDirectory;
+        init => this.remoteCollectionsRoot = value;
+    }
+
+    internal bool UsesDefaultWorkingDirectory => this.remoteCollectionsRoot is null;
 
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(8);
 

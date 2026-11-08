@@ -34,12 +34,15 @@ public sealed class CoOpConnection : IAsyncDisposable
         this.client = client ?? throw new ArgumentNullException(nameof(client));
         this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         this.stream = client.GetStream();
+        this.LocalEndPoint = client.Client.LocalEndPoint?.ToString() ?? "unknown";
         this.RemoteEndPoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown";
     }
 
     public Guid ConnectionId { get; } = Guid.NewGuid();
 
     public string RemoteEndPoint { get; }
+
+    public string LocalEndPoint { get; }
 
     public bool IsConnected => Volatile.Read(ref this.closed) == 0 && this.client.Connected;
 

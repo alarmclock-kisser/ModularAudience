@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using ModularAudience.CoOp.Protocol;
 
@@ -19,21 +20,38 @@ public static class CoOpClient
             throw new ArgumentOutOfRangeException(nameof(port));
         }
 
-        var client = new TcpClient { NoDelay = true };
         using var timeoutSource = new CancellationTokenSource(timeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
-        try
+        IPAddress[] resolved = IPAddress.TryParse(host, out IPAddress? literal)
+            ? [literal]
+            : await Dns.GetHostAddressesAsync(host, linked.Token).ConfigureAwait(false);
+        IReadOnlyList<IPAddress> addresses = CoOpNetworkUtilities.SelectConnectionAddresses(
+            resolved, CoOpNetworkUtilities.GetLocalIPv4Networks());
+        SocketException? lastError = null;
+        foreach (IPAddress address in addresses)
         {
-            await client.ConnectAsync(host, port, linked.Token).ConfigureAwait(false);
-        }
-        catch
-        {
-            client.Dispose();
-            throw;
+            linked.Token.ThrowIfCancellationRequested();
+            TcpClient? client = null;
+            try
+            {
+                client = new TcpClient(address.AddressFamily) { NoDelay = true };
+                await client.ConnectAsync(address, port, linked.Token).ConfigureAwait(false);
+                var connection = new CoOpConnection(client, serializer);
+                await connection.StartAsync().ConfigureAwait(false);
+                return connection;
+            }
+            catch (SocketException error)
+            {
+                client?.Dispose();
+                lastError = error;
+            }
+            catch
+            {
+                client?.Dispose();
+                throw;
+            }
         }
 
-        var connection = new CoOpConnection(client, serializer);
-        await connection.StartAsync().ConfigureAwait(false);
-        return connection;
+        throw lastError ?? new SocketException((int)SocketError.HostNotFound);
     }
 }

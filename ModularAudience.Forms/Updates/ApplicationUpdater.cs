@@ -34,16 +34,22 @@ internal static class ApplicationUpdater
             {
                 throw new TimeoutException("The GitHub release check timed out.");
             }
-            ApplicationRelease? release = ApplicationRelease.NewerThan(latest, current.Value);
+            // Re-read after the network await: another window or process may
+            // have disabled checks or skipped this release in the meantime.
+            settings = settingsStore.LoadAndRecordRunningRelease(null);
+            if (!settings.AskToUpdate) return;
+            ApplicationRelease? release = ApplicationRelease.NewerThan(latest, current.Value, settings.SkipReleaseNumber);
             if (release is null || closed.IsCancellationRequested) return;
 
             initialFile.EnsureUnchanged(targetPath);
             string originalHash = await GitHubReleaseSource.HashAsync(targetPath, closed.Token);
             initialFile.EnsureUnchanged(targetPath);
             if (closed.IsCancellationRequested || owner.IsDisposed ||
-                !settingsStore.LoadAndRecordRunningRelease(null).AskToUpdate) return;
+                !settingsStore.LoadAndRecordRunningRelease(null).ShouldOfferRelease(release.Number)) return;
 
-            using var dialog = new ReleaseUpdateDialog(current.Value, release, targetPath, originalHash, settingsStore);
+            var historySource = new GitHubReleaseHistorySource();
+            using var dialog = new ReleaseUpdateDialog(current.Value, release, targetPath, originalHash, settingsStore,
+                token => historySource.GetAsync(current.Value, release.Number, token));
             if (dialog.ShowDialog(owner) == DialogResult.OK && !owner.IsDisposed)
                 owner.Close();
         }

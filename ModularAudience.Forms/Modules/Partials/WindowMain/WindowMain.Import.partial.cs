@@ -19,7 +19,6 @@ namespace ModularAudience.Forms
         private int _logSelectionAnchor = -1;
         private int _logDragEndIndex = -1;
         private bool _logShiftDragging;
-        private Font? _logListFont;
 
         private void Register_ListBox_Log()
         {
@@ -39,10 +38,9 @@ namespace ModularAudience.Forms
             // IntegralHeight must be false, otherwise WinForms shrinks/grows the whole control
             // to fit a whole number of rows whenever ItemHeight changes (e.g. Ctrl+Wheel).
             this.listBox_log.IntegralHeight = false;
-            _logListFont = new Font("Consolas", 8f, FontStyle.Regular);
-            this.listBox_log.Font = _logListFont;
-            this.listBox_log.ItemHeight = 16;
             this.listBox_log.DrawMode = DrawMode.OwnerDrawFixed;
+            this._logZoom = new LogListZoomController(this.listBox_log, this._applicationPreferences.LogFontSize);
+            this._logZoom.Changed += (_, _) => this.SaveApplicationPreference(() => this._preferencesStore.SetLogFontSize(this._logZoom.Size));
             // MultiExtended is the only mode that allows SetSelected() and gives us the
             // native click / ctrl+click / shift+click behaviour we build upon.
             this.listBox_log.SelectionMode = SelectionMode.MultiExtended;
@@ -309,24 +307,6 @@ namespace ModularAudience.Forms
             };
             this.listBox_log.LostFocus += (_, __) => EndLogRangeDrag();
 
-            // Ctrl + mouse wheel over the list rescales the font (and item height),
-            // without changing the size of the control itself.
-            this.listBox_log.MouseWheel += (_, e) =>
-            {
-                if ((ModifierKeys & Keys.Control) != Keys.Control)
-                {
-                    return;
-                }
-
-                float currentSize = _logListFont?.Size ?? 8f;
-                float newSize = Math.Clamp(currentSize + Math.Sign(e.Delta), 6f, 20f);
-                if (Math.Abs(newSize - currentSize) < 0.01f)
-                {
-                    return;
-                }
-
-                ApplyLogListFontSize(newSize);
-            };
         }
 
         private void EndLogRangeDrag()
@@ -337,27 +317,6 @@ namespace ModularAudience.Forms
             {
                 this.listBox_log.Capture = false;
             }
-        }
-
-        private void ApplyLogListFontSize(float size)
-        {
-            System.Drawing.Font previousFont = _logListFont ?? this.listBox_log.Font;
-            System.Drawing.Font newFont = new(previousFont.FontFamily, size, previousFont.Style);
-
-            // IntegralHeight must stay false, otherwise the control itself resizes to fit
-            // a whole number of rows. Remember and restore the bounds regardless.
-            bool keepIntegralHeight = this.listBox_log.IntegralHeight;
-            Size keepSize = this.listBox_log.Size;
-
-            _logListFont = newFont;
-            this.listBox_log.IntegralHeight = false;
-            this.listBox_log.Font = newFont;
-            this.listBox_log.ItemHeight = Math.Max(10, (int)Math.Round(size * 1.7f));
-            this.listBox_log.IntegralHeight = keepIntegralHeight;
-            this.listBox_log.Size = keepSize;
-            this.listBox_log.Invalidate();
-
-            previousFont.Dispose();
         }
 
         private void Register_ListBox_Log_ContextMenu()

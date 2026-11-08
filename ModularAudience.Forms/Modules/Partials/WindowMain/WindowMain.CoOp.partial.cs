@@ -12,9 +12,7 @@ namespace ModularAudience.Forms
         private CoOpUiController? _coOpController;
         private ContextMenuStrip? _coOpMenu;
         private ToolStripMenuItem? _coOpHostItem;
-        private ToolStripMenuItem? _coOpConnectItem;
-        private ToolStripComboBox? _coOpHostComboBox;
-        private ToolStripMenuItem? _coOpManualConnectItem;
+        private CoOpConnectionMenu? _coOpConnectionMenu;
         private ToolStripMenuItem? _coOpDisconnectItem;
         private ToolStripMenuItem? _coOpCopyAddressItem;
         private ToolStripMenuItem? _coOpStatusItem;
@@ -75,22 +73,13 @@ namespace ModularAudience.Forms
             };
             this._coOpHostItem.Click += async (_, _) => await this.ToggleHostCoOpAsync();
 
-            this._coOpConnectItem = new ToolStripMenuItem("Connect co-op")
+            this._coOpConnectionMenu = new CoOpConnectionMenu();
+            this._coOpConnectionMenu.ConnectToAddressRequested += async (_, _) => await this.ConnectCoOpToAddressAsync();
+            this._coOpConnectionMenu.HostSelected += async (_, e) =>
             {
-                CheckOnClick = false
+                this._coOpMenu?.Close(ToolStripDropDownCloseReason.ItemClicked);
+                await this.ConnectCoOpAsync(new CoOpEndpoint(e.Host.Address, e.Host.Port));
             };
-            this._coOpConnectItem.Click += async (_, _) => await this.ConnectCoOpAsync(forceManual: false);
-
-            this._coOpHostComboBox = new ToolStripComboBox
-            {
-                AutoSize = false,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Width = 260
-            };
-            this._coOpHostComboBox.SelectedIndexChanged += (_, _) => this.UpdateCoOpMenuState();
-
-            this._coOpManualConnectItem = new ToolStripMenuItem("Connect to address...");
-            this._coOpManualConnectItem.Click += async (_, _) => await this.ConnectCoOpAsync(forceManual: true);
 
             this._coOpDisconnectItem = new ToolStripMenuItem("Disconnect");
             this._coOpDisconnectItem.Click += async (_, _) => await this.DisconnectCoOpAsync();
@@ -107,9 +96,8 @@ namespace ModularAudience.Forms
             menu.Items.AddRange(
             [
                 this._coOpHostItem,
-                this._coOpConnectItem,
-                this._coOpHostComboBox,
-                this._coOpManualConnectItem,
+                this._coOpConnectionMenu.ConnectToAddress,
+                this._coOpConnectionMenu.Hosts,
                 this._coOpDisconnectItem,
                 this._coOpCopyAddressItem,
                 new ToolStripSeparator(),
@@ -159,7 +147,6 @@ namespace ModularAudience.Forms
             bool hosting = controller?.State == CoOpSessionState.Hosting;
             bool connected = controller?.State == CoOpSessionState.Connected;
             bool active = hosting || connected;
-            bool hasDiscoveredHosts = this._coOpHostComboBox?.Items.Count > 0;
 
             if (this._coOpHostItem != null)
             {
@@ -167,21 +154,7 @@ namespace ModularAudience.Forms
                 this._coOpHostItem.Enabled = !connected && !this._coOpMenuBusy;
             }
 
-            if (this._coOpConnectItem != null)
-            {
-                this._coOpConnectItem.Checked = connected;
-                this._coOpConnectItem.Enabled = !hosting && !this._coOpMenuBusy;
-            }
-
-            if (this._coOpHostComboBox != null)
-            {
-                this._coOpHostComboBox.Enabled = !active && !this._coOpMenuBusy && hasDiscoveredHosts;
-            }
-
-            if (this._coOpManualConnectItem != null)
-            {
-                this._coOpManualConnectItem.Enabled = !active && !this._coOpMenuBusy;
-            }
+            this._coOpConnectionMenu?.UpdateState(controller?.State ?? CoOpSessionState.Disconnected, this._coOpMenuBusy);
 
             if (this._coOpDisconnectItem != null)
             {
@@ -225,11 +198,7 @@ namespace ModularAudience.Forms
 
             int generation = ++this._coOpDiscoveryGeneration;
 
-            if (this._coOpHostComboBox != null)
-            {
-                this._coOpHostComboBox.Items.Clear();
-                this._coOpHostComboBox.Enabled = false;
-            }
+            this._coOpConnectionMenu?.SetHosts([]);
 
             this._coOpDiscoveryStatus = "Scanning local network...";
             this.UpdateCoOpMenuState();
@@ -242,18 +211,7 @@ namespace ModularAudience.Forms
                     return;
                 }
 
-                if (this._coOpHostComboBox != null)
-                {
-                    foreach (CoOpDiscoveredHost host in hosts)
-                    {
-                        this._coOpHostComboBox.Items.Add(host);
-                    }
-
-                    if (hosts.Count > 0)
-                    {
-                        this._coOpHostComboBox.SelectedIndex = 0;
-                    }
-                }
+                this._coOpConnectionMenu?.SetHosts(hosts);
 
                 this._coOpDiscoveryStatus = hosts.Count > 0
                     ? $"{hosts.Count} co-op host(s) found"
@@ -333,47 +291,44 @@ namespace ModularAudience.Forms
             }
         }
 
-        private async Task ConnectCoOpAsync(bool forceManual)
+        private async Task ConnectCoOpToAddressAsync()
         {
             CoOpUiController? controller = this._coOpController;
-            if (controller == null || this._coOpMenuBusy || controller.State == CoOpSessionState.Hosting)
+            if (controller == null || this._coOpMenuBusy || controller.IsSessionActive || this._coOpShutdownStarted)
             {
                 return;
             }
 
-            if (controller.State == CoOpSessionState.Connected)
+            string input = Microsoft.VisualBasic.Interaction.InputBox(
+                "Enter the co-op host address (for example 192.168.1.20:47823). Use its local IP address when both computers are on the same LAN or hotspot:",
+                "Connect co-op",
+                this._lastCoOpAddress);
+
+            if (string.IsNullOrWhiteSpace(input))
             {
-                await this.DisconnectCoOpAsync();
                 return;
             }
 
-            CoOpEndpoint endpoint;
-            if (!forceManual && this._coOpHostComboBox?.SelectedItem is CoOpDiscoveredHost discovered)
+            if (!CoOpEndpoint.TryParse(input, out CoOpEndpoint endpoint))
             {
-                endpoint = new CoOpEndpoint(discovered.Address, discovered.Port);
-            }
-            else
-            {
-                string input = Microsoft.VisualBasic.Interaction.InputBox(
-                    "Enter the co-op host address (for example 192.168.1.20:47823):",
+                MessageBox.Show(
+                    this,
+                    $"'{input}' is not a valid co-op address. Use host:port.",
                     "Connect co-op",
-                    this._lastCoOpAddress);
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
 
-                if (string.IsNullOrWhiteSpace(input))
-                {
-                    return;
-                }
+            await this.ConnectCoOpAsync(endpoint);
+        }
 
-                if (!CoOpEndpoint.TryParse(input, out endpoint))
-                {
-                    MessageBox.Show(
-                        this,
-                        $"'{input}' is not a valid co-op address. Use host:port.",
-                        "Connect co-op",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning);
-                    return;
-                }
+        private async Task ConnectCoOpAsync(CoOpEndpoint endpoint)
+        {
+            CoOpUiController? controller = this._coOpController;
+            if (controller == null || this._coOpMenuBusy || controller.IsSessionActive || this._coOpShutdownStarted)
+            {
+                return;
             }
 
             this._coOpMenuBusy = true;
@@ -388,7 +343,14 @@ namespace ModularAudience.Forms
             catch (Exception ex)
             {
                 LogManager.Log($"Connecting to co-op host {endpoint} failed.", ex);
-                WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Co-op connection failed", ex);
+                if (!this._coOpShutdownStarted)
+                {
+                    WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Co-op connection failed", ex);
+                    if (this._coOpConnectionMenu != null)
+                    {
+                        this._coOpConnectionMenu.Hosts.SelectedIndex = -1;
+                    }
+                }
             }
             finally
             {

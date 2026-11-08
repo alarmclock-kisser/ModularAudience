@@ -21,13 +21,13 @@ internal sealed record ApplicationRelease(long Number, ReleaseAsset Asset, IRead
         return number;
     }
 
-    internal static ApplicationRelease? NewerThan(GitHubRelease release, long runningRelease)
+    internal static ApplicationRelease? NewerThan(GitHubRelease release, long runningRelease, long? skipReleaseNumber = null)
     {
         if (runningRelease <= 0) throw new ArgumentOutOfRangeException(nameof(runningRelease));
-        if (!release.TagName.StartsWith(TagPrefix, StringComparison.Ordinal) ||
-            !TryParseNumber(release.TagName[TagPrefix.Length..], out long number))
+        if (skipReleaseNumber is <= 0) throw new ArgumentOutOfRangeException(nameof(skipReleaseNumber));
+        if (!TryParseTag(release.TagName, out long number))
             throw new InvalidDataException($"The latest GitHub release has an invalid tag: {release.TagName}");
-        if (number <= runningRelease) return null;
+        if (number <= runningRelease || (skipReleaseNumber.HasValue && number <= skipReleaseNumber.Value)) return null;
 
         var matches = release.Assets.Where(asset => asset.Name == AssetName).ToArray();
         if (matches.Length != 1 || matches[0].Size <= 0)
@@ -36,6 +36,13 @@ internal sealed record ApplicationRelease(long Number, ReleaseAsset Asset, IRead
         if (!string.Equals(matches[0].Url, expectedUrl, StringComparison.Ordinal))
             throw new InvalidDataException("The release executable has an unexpected download URL.");
         return new ApplicationRelease(number, matches[0], release.Assets);
+    }
+
+    internal static bool TryParseTag(string? tag, out long number)
+    {
+        number = 0;
+        return tag is not null && tag.StartsWith(TagPrefix, StringComparison.Ordinal) &&
+            TryParseNumber(tag[TagPrefix.Length..], out number);
     }
 
     private static bool TryParseNumber(string? value, out long number) =>

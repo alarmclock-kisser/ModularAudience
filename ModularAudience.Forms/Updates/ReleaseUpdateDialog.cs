@@ -8,26 +8,37 @@ internal sealed partial class ReleaseUpdateDialog : Form
     private readonly string targetPath;
     private readonly string originalHash;
     private readonly ReleaseUpdateSettingsStore settingsStore;
+    private readonly long currentRelease;
+    private readonly Func<CancellationToken, Task<ReleaseCommitHistory>>? loadHistory;
     private CancellationTokenSource? activeDownload;
     private bool closeWhenCancelled;
     private bool preferenceSaved;
     private bool installerCommitted;
 
     internal ReleaseUpdateDialog(long currentRelease, ApplicationRelease release, string targetPath,
-        string originalHash, ReleaseUpdateSettingsStore settingsStore)
+        string originalHash, ReleaseUpdateSettingsStore settingsStore,
+        Func<CancellationToken, Task<ReleaseCommitHistory>>? loadHistory = null)
     {
         this.release = release;
         this.targetPath = targetPath;
         this.originalHash = originalHash;
         this.settingsStore = settingsStore;
+        this.currentRelease = currentRelease;
+        this.loadHistory = loadHistory;
         InitializeComponent();
+        historyLabel.Text = $"Commit messages since build {currentRelease} (oldest build first)";
+        historyTextBox.Text = loadHistory is null
+            ? "Commit messages are unavailable in this context."
+            : "Loading commit messages from GitHub...";
+        this.Shown += this.History_Shown;
         messageLabel.Text = $"Release {release.Number} is available (installed: {currentRelease}).\n\n" +
-            "Download and install it? The application will close after verification. Start it again after installation.";
+            "Download and install it? The application will close after verification and restart automatically after installation.";
     }
 
     private async void Update_Click(object? sender, EventArgs e)
     {
         if (activeDownload is not null || !SavePreference()) return;
+        this.CancelHistoryLoad();
         using var cancellation = new CancellationTokenSource();
         activeDownload = cancellation;
         closeWhenCancelled = false;
@@ -87,6 +98,29 @@ internal sealed partial class ReleaseUpdateDialog : Form
         DialogResult = DialogResult.Cancel;
     }
 
+    private void Skip_Click(object? sender, EventArgs e)
+    {
+        if (activeDownload is not null || installerCommitted || dontAskCheckBox.Checked) return;
+        try
+        {
+            settingsStore.SkipThroughRelease(release.Number);
+            DialogResult = DialogResult.Ignore;
+        }
+        catch (Exception error) when (UpdateDiagnostics.IsExpected(error))
+        {
+            UpdateDiagnostics.ShowError(this, "Application update", "The skipped release could not be saved.", error);
+        }
+    }
+
+    private void DontAsk_CheckedChanged(object? sender, EventArgs e) => UpdateSkipAvailability();
+
+    private void UpdateSkipAvailability()
+    {
+        // Skipping one release and disabling all future prompts are distinct
+        // choices. Avoid saving conflicting preferences with a single click.
+        skipButton.Enabled = activeDownload is null && !installerCommitted && !dontAskCheckBox.Checked;
+    }
+
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         if (activeDownload is not null)
@@ -129,6 +163,7 @@ internal sealed partial class ReleaseUpdateDialog : Form
     private void SetDownloading(bool downloading)
     {
         updateButton.Enabled = !downloading;
+        UpdateSkipAvailability();
         dontAskCheckBox.Enabled = !downloading && !preferenceSaved;
         downloadProgressBar.Visible = downloading;
         laterButton.Enabled = true;

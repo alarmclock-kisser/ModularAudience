@@ -35,6 +35,7 @@ jobs:
       with:
         files: ./publish/ModularAudience.Forms.exe
         tag_name: release-${{ github.run_number }}
+        target_commitish: ${{ github.sha }}
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

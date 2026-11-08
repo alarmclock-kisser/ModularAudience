@@ -24,15 +24,18 @@ public sealed class CoOpRemoteCollection : IDisposable
         string name,
         Guid ownerPeerId,
         string ownerDisplayName,
-        string remoteCollectionsRoot)
+        string remoteCollectionsRoot,
+        bool followDefaultWorkingDirectory = false)
     {
         this.CollectionId = collectionId;
         this.Name = name;
         this.OwnerPeerId = ownerPeerId;
         this.OwnerDisplayName = ownerDisplayName;
 
-        string workingDirectory = Path.Combine(remoteCollectionsRoot, collectionId.ToString("N"));
-        this.Collection = new AudioCollection(workingDirectory);
+        // Mirrored audio belongs to the recipient. Its Export button must use
+        // the same Music/ModularAudience workspace as locally created audio,
+        // not a GUID-named folder in the transport's temporary directory.
+        this.Collection = followDefaultWorkingDirectory ? new AudioCollection() : new AudioCollection(remoteCollectionsRoot);
         this.Tracker = new CoOpCollectionTracker(this.Collection);
     }
 

@@ -8,6 +8,8 @@ using ModularAudience.Audio.Processors_V3;
 using ModularAudience.Forms.Helpers;
 using ModularAudience.Forms.Hotkeys;
 using ModularAudience.Forms.Modules.Dialogs;
+using ModularAudience.Forms.Updates;
+using ModularAudience.Forms.Settings;
 using ModularAudience.MidiController;
 using ModularAudience.MidiController.Models;
 using ModularAudience.Shared;
@@ -18,7 +20,7 @@ namespace ModularAudience.Forms
     {
         public static WindowMain? Instance { get; private set; }
 
-        public readonly AudioCollection AudioC = new();
+        public readonly AudioCollection AudioC;
 
         public float MasterLimiter => 1f - (float)this.vScrollBar_masterLimiter.Value / Math.Max(1, this.vScrollBar_masterLimiter.Maximum);
 
@@ -113,7 +115,6 @@ namespace ModularAudience.Forms
         private const int CollectionBaseMargin = 2;
         private static readonly Padding TrackViewScreenMargin = new(20, 20, 20, 20);
         private static readonly Size TrackViewSpacing = new(15, 12);
-        private bool suppressExportFormatEvent;
         private string lastImportFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
         internal bool StructuredImports => this.checkBox_structure.Checked;
 
@@ -159,6 +160,9 @@ namespace ModularAudience.Forms
 
         public WindowMain(RollingFileMemoryLogger logger, IServiceProvider serviceProvider)
         {
+            this._preferencesStore = new ApplicationPreferencesStore();
+            this._applicationPreferences = this.LoadInitialPreferences();
+            this.AudioC = new AudioCollection();
             Instance = this;
             this.InitializeComponent();
             this.InitializeThemeMenu();
@@ -221,12 +225,17 @@ namespace ModularAudience.Forms
                 }
             }
 
-            // Set build information timestamp from file last write time
+            // Published releases use their embedded GitHub build number, never
+            // the download/replacement timestamp or a cached settings value.
+            long? releaseNumber = null;
+            try { releaseNumber = ApplicationRelease.RunningReleaseNumber(); }
+            catch (InvalidDataException error) { LogManager.LogWarning(error.Message); }
             string buildPath = Environment.ProcessPath ?? AppContext.BaseDirectory;
-            string buildTimestamp = System.IO.File.GetLastWriteTime(buildPath).ToString("dd/MM/yyyy - HH:mm:ss");
-            this.label_currentlyEnqueued.Text = $"Build: {buildTimestamp}";
+            this.label_currentlyEnqueued.Text = WindowMainFormatHelpers.FormatBuildInformation(
+                releaseNumber, () => System.IO.File.GetLastWriteTime(buildPath));
 
             this.InitializeCoOp();
+            this.StartPreferencesMonitoring();
         }
 
         private void button_copyLog_Click(object? sender, EventArgs e)
@@ -462,6 +471,7 @@ namespace ModularAudience.Forms
             }
             if (!this._coOpShutdownCompleted)
             {
+                this.StopPreferencesMonitoring();
                 // Keep the UI context alive while the network session closes.
                 // Async FormClosing handlers otherwise let the form disappear
                 // before their first incomplete await has finished.
@@ -647,13 +657,6 @@ namespace ModularAudience.Forms
                 // Last resort: ensure process terminates (non-returning)
                 try { Environment.Exit(0); } catch { }
             }
-        }
-
-        private void comboBox_exportBits_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            GlobalExportBits = WindowMainFormatHelpers.ResolveBitSelection(
-                WindowMainFormatHelpers.NormalizeFormatExtension(this.comboBox_exportFormat.SelectedItem as string),
-                this.comboBox_exportBits.SelectedItem);
         }
 
         private void checkBox_oneBag_CheckedChanged(object sender, EventArgs e)

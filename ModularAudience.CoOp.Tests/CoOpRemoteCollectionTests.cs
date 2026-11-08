@@ -104,4 +104,58 @@ public sealed class CoOpRemoteCollectionTests
     {
         return new CoOpRemoteCollection(Guid.NewGuid(), "Shared collection", Guid.NewGuid(), "Owner", root);
     }
+
+    [TestMethod]
+    public void DefaultReceivedCollectionWorkspace_IsTheNormalMusicWorkspaceNotATemporaryCoOpCache()
+    {
+        var options = new CoOpSessionOptions();
+
+        Assert.AreEqual(AudioStoragePaths.WorkingDirectory, options.RemoteCollectionsRoot);
+        Assert.AreNotEqual(Path.Combine(Path.GetTempPath(), "ModularAudience", "CoOp"), options.RemoteCollectionsRoot);
+    }
+
+    [TestMethod]
+    public async Task ReceivedSamples_ExportToRecipientWorkspaceWithoutGuidOrOwnerTemporaryPaths()
+    {
+        await using var scope = new SessionTestScope();
+        using CoOpRemoteCollection remote = CreateRemote(scope.Root);
+        using AudioObj original = TestAudio.Create("Received sample", sampleCount: 128);
+        original.FilePath = Path.Combine(Path.GetTempPath(), "RemoteOwnerCache", "source.wav");
+        AudioObj received = remote.ApplyAdd(CoOpAudioSnapshotMapper.Capture(original))!;
+
+        string? exported = await remote.Collection.Exporter.ExportWavAsync(received, bitDepth: 16, writeBpmTag: false);
+
+        Assert.AreEqual(scope.Root, remote.Collection.WorkingDirectory);
+        Assert.AreEqual(Path.Combine(scope.Root, "_Exports"), remote.Collection.ExportPath);
+        Assert.AreEqual(Path.Combine(scope.Root, "_Recordings"), remote.Collection.RecordPath);
+        Assert.IsNotNull(exported);
+        Assert.AreEqual(remote.Collection.ExportPath, Path.GetDirectoryName(exported));
+        Assert.IsTrue(File.Exists(exported));
+        Assert.IsTrue(new FileInfo(exported).Length > 44);
+        Assert.IsFalse(exported.Contains(remote.CollectionId.ToString("N"), StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(exported.Contains("RemoteOwnerCache", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
+    public async Task DefaultMirrors_FollowChangedWorkspaceWhileExplicitSessionDirectoriesStayIndependent()
+    {
+        await using var scope = new SessionTestScope();
+        try
+        {
+            var defaults = new CoOpSessionOptions();
+            AudioStoragePaths.SetWorkingDirectory(Path.Combine(scope.Root, "First"));
+            using var mirror = new CoOpRemoteCollection(Guid.NewGuid(), "Shared", Guid.NewGuid(), "Owner", defaults.RemoteCollectionsRoot,
+                followDefaultWorkingDirectory: defaults.UsesDefaultWorkingDirectory);
+            using CoOpRemoteCollection custom = CreateRemote(Path.Combine(scope.Root, "Custom"));
+
+            string next = Path.Combine(scope.Root, "Next");
+            AudioStoragePaths.SetWorkingDirectory(next);
+
+            Assert.AreEqual(next, defaults.RemoteCollectionsRoot);
+            Assert.AreEqual(next, mirror.Collection.WorkingDirectory);
+            Assert.AreEqual(Path.Combine(next, "_Exports"), mirror.Collection.Exporter.ExportDirectory);
+            Assert.AreEqual(Path.Combine(scope.Root, "Custom"), custom.Collection.WorkingDirectory);
+        }
+        finally { AudioStoragePaths.SetWorkingDirectory(null); }
+    }
 }

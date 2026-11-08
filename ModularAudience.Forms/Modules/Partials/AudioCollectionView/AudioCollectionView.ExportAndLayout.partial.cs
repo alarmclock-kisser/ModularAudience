@@ -26,6 +26,9 @@ namespace ModularAudience.Forms
                     return;
                 }
 
+                string exportFolder = this.AudioC.ExportPath;
+                Directory.CreateDirectory(exportFolder);
+
                 if (ctrlDown && !shiftDown && selectedAudios.Count == 1)
                 {
                     AudioObj audio = selectedAudios[0];
@@ -33,11 +36,11 @@ namespace ModularAudience.Forms
 
                     using SaveFileDialog saveDialog = new()
                     {
-                        Filter = $"{WindowMain.GlobalExportFormat.ToUpperInvariant()} files|*{WindowMain.GlobalExportFormat}|All Files (*.*)|*.*",
+                        Filter = $"{WindowMain.GlobalExportFormat.ToUpperInvariant()} files|*.{WindowMain.GlobalExportFormat.TrimStart('.')}|All Files (*.*)|*.*",
                         DefaultExt = WindowMain.GlobalExportFormat,
                         FileName = defaultName,
                         AddExtension = true,
-                        InitialDirectory = Directory.Exists(this.AudioC.ExportPath) ? this.AudioC.ExportPath : Environment.GetFolderPath(Environment.SpecialFolder.MyMusic)
+                        InitialDirectory = exportFolder
                     };
 
                     if (saveDialog.ShowDialog(this) != DialogResult.OK)
@@ -65,9 +68,6 @@ namespace ModularAudience.Forms
                     return;
                 }
 
-                string exportFolder = this.AudioC.ExportPath;
-                Directory.CreateDirectory(exportFolder);
-
                 bool ctrlDownOnly = ctrlDown && !shiftDown;
                 bool ctrlShift = ctrlDown && shiftDown;
 
@@ -78,11 +78,11 @@ namespace ModularAudience.Forms
 
                     using SaveFileDialog saveDialog = new()
                     {
-                        Filter = $"{WindowMain.GlobalExportFormat.ToUpperInvariant()} files|*{WindowMain.GlobalExportFormat}|All Files (*.*)|*.*",
+                        Filter = $"{WindowMain.GlobalExportFormat.ToUpperInvariant()} files|*.{WindowMain.GlobalExportFormat.TrimStart('.')}|All Files (*.*)|*.*",
                         DefaultExt = WindowMain.GlobalExportFormat,
                         FileName = defaultName,
                         AddExtension = true,
-                        InitialDirectory = Directory.Exists(this.AudioC.ExportPath) ? this.AudioC.ExportPath : Environment.GetFolderPath(Environment.SpecialFolder.MyMusic)
+                        InitialDirectory = exportFolder
                     };
 
                     if (saveDialog.ShowDialog(this) != DialogResult.OK)
@@ -129,14 +129,14 @@ namespace ModularAudience.Forms
                 }
                 else if (!ctrlDown && (selectedAudios.Count > 1 || shiftDown))
                 {
-                    string folderName = this.BuildExportFolderName(exportFolder);
-                    exportFolder = Path.Combine(exportFolder, folderName);
+                    exportFolder = AudioCollectionViewHelpers.GetCollectionExportDirectory(exportFolder, this.Text);
                     Directory.CreateDirectory(exportFolder);
                 }
 
                 var tasks = selectedAudios.Select(a => AudioExporter.IsMp3Format(WindowMain.GlobalExportFormat)
                     ? this.AudioC.Exporter.ExportMp3Async(a, WindowMain.GlobalExportBits, Environment.ProcessorCount / 2, Path.Combine(exportFolder, AudioCollectionViewHelpers.SanitizePathSegment(a.Name) + ".mp3"))
-                    : this.AudioC.Exporter.ExportWavAsync(a, WindowMain.GlobalExportBits, exportFolder, writeBpmTag: true, customFilePath: Path.Combine(exportFolder, AudioCollectionViewHelpers.SanitizePathSegment(a.Name) + ".wav")));
+                    : this.AudioC.Exporter.ExportWavAsync(a, WindowMain.GlobalExportBits, exportFolder, writeBpmTag: true,
+                        customFilePath: Path.Combine(exportFolder, AudioCollectionViewHelpers.SanitizePathSegment(a.Name) + ".wav"), overwriteExisting: false));
                 await Task.WhenAll(tasks);
             }
             catch (Exception ex)

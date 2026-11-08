@@ -76,7 +76,8 @@ public sealed class CoOpDiscoveryClient : ICoOpDiscoveryClient
         var results = new Dictionary<Guid, CoOpDiscoveredHost>();
         using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)
         {
-            EnableBroadcast = true
+            EnableBroadcast = true,
+            Ttl = 1
         };
         socket.Bind(new IPEndPoint(IPAddress.Any, 0));
 
@@ -230,7 +231,7 @@ public sealed class CoOpDiscoveryResponder : IAsyncDisposable
             UdpClient? client = null;
             try
             {
-                client = new UdpClient(AddressFamily.InterNetwork) { ExclusiveAddressUse = true };
+                client = new UdpClient(AddressFamily.InterNetwork) { ExclusiveAddressUse = true, Ttl = 1 };
                 client.Client.Bind(new IPEndPoint(IPAddress.Any, candidate));
                 byte[] payload = JsonSerializer.SerializeToUtf8Bytes(this.response, JsonOptions);
                 this.clients.Add(client);

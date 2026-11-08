@@ -415,29 +415,32 @@ namespace ModularAudience.Forms
 
         private void button_browse_Click(object sender, EventArgs e)
         {
-            string workingDir = this.AudioC.WorkingDirectory;
-            if (!Directory.Exists(workingDir))
+            try
             {
-                using FolderBrowserDialog folderBrowserDialog = new()
+                string current = this.AudioC.WorkingDirectory;
+                string? selected = WorkingDirectoryBrowser.Browse(current, (ModifierKeys & Keys.Control) != 0,
+                    initial =>
+                    {
+                        using var dialog = new FolderBrowserDialog
+                        {
+                            Description = "Select the ModularAudience main audio directory (_Exports and _Recordings are created inside it)",
+                            UseDescriptionForTitle = true,
+                            SelectedPath = Directory.Exists(initial) ? initial : AudioStoragePaths.DefaultWorkingDirectory,
+                            ShowNewFolderButton = true
+                        };
+                        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.SelectedPath : null;
+                    },
+                    directory => System.Diagnostics.Process.Start(WorkingDirectoryBrowser.ExplorerStartInfo(directory))?.Dispose());
+                if (selected is not null)
                 {
-                    Description = "Select Working Directory for Audio Files",
-                    SelectedPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                    ShowNewFolderButton = true
-                };
-                if (folderBrowserDialog.ShowDialog() == DialogResult.OK)
-                {
-                    workingDir = folderBrowserDialog.SelectedPath;
-                    this.AudioC.WorkingDirectory = workingDir;
+                    string root = AudioStoragePaths.PrepareWorkingDirectory(selected);
+                    this.SaveApplicationPreference(() => this._preferencesStore.SetWorkingDirectory(root));
                 }
             }
-            else
+            catch (Exception error) when (IsPreferenceError(error) || error is System.ComponentModel.Win32Exception)
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo()
-                {
-                    FileName = workingDir,
-                    UseShellExecute = true,
-                    Verb = "open"
-                });
+                LogManager.Log("Changing or opening the audio directory failed.", error);
+                WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Audio directory", error);
             }
         }
 

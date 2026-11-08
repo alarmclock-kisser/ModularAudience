@@ -9,8 +9,10 @@ to collection windows.
 
 1. Right-click **Import** and select **Host co-op**. The application displays an
    address such as `192.168.1.20:47823`, which can also be copied from that menu.
-2. On another computer, right-click **Import**. The menu scans the LAN; select a
-   discovered host and **Connect co-op**, or use **Connect to address...**.
+2. On another computer, right-click **Import**. The menu scans the LAN; selecting
+   a discovered host in the combo box connects immediately. Alternatively, use
+   the single **Connect to address...** action for a host name or IP address.
+   Populating the combo box does not select or connect to a host automatically.
 3. Right-click a collection's track list and check **Share Collection**. Local
    shared collections and their remote mirrors have green window borders.
 
@@ -25,6 +27,34 @@ client. This also applies to collections originally shared by a client, and to
 audio newly created in another peer's collection. Track identity is retained;
 existing audio objects are updated in place. Pending outgoing transfers are
 shown grey with a clock icon.
+
+Receiving, editing, relaying, and retaining deleted tracks keep their samples
+only in application RAM (`float[]` plus in-memory synchronization snapshots).
+Co-op does not save temporary audio files or an on-disk sample cache. A received
+`FilePath` is metadata, not a local file that the receiver opens or creates.
+Audio files are written only by an explicit export/save action; merely creating
+the workspace's empty export/recording directories does not persist samples.
+
+## Audio exports and recordings
+
+Received collections use the same user-facing workspace as local collections:
+the Windows **Music** known folder, then `ModularAudience\_Exports` and
+`ModularAudience\_Recordings`. A co-op collection ID does not add a GUID-named
+subdirectory, and the sender's file paths do not determine the recipient's
+export destination. Temporary/AppData directories are not a default export
+fallback. Explicit custom working directories remain supported.
+
+If the main directory is changed with WindowMain's **[...]** folder picker,
+default co-op mirrors follow that application directory as well, including
+mirrors already open. The selected path is restored from application preferences
+on startup and shared with other local application instances; it is not sent to
+network peers. Explicit session working-directory overrides stay independent.
+
+Shift-exporting a collection reuses `_Exports\<Collection name>` on subsequent
+exports. Existing files are retained; new name collisions become `Sample (1)`,
+`Sample (2)`, and so on. This applies to WAV and MP3, including parallel exports.
+Previously created temporary export folders, numbered collection folders, and
+legacy `_Records` directories are not moved or deleted automatically.
 
 ## Retaining local control
 
@@ -71,6 +101,33 @@ shown grey with a clock icon.
 The host tries TCP ports **47823–47842**. Discovery uses one available UDP port
 in **47824–47828**; menu scans probe the entire range and de-duplicate responses.
 Different local host instances can use different ports.
+
+### Local networks and mobile hotspots
+
+Co-op uses direct TCP sockets between the clients and the selected host, not
+GitHub, HTTP proxies, cloud relays, or a WAN rendezvous service. Discovery uses
+the source IP of a local UDP reply, not a remote host's advertised Internet
+address. Probes and replies have an IP TTL of one; directed broadcasts target
+known non-tunnel local IPv4 subnets. The advertised host address prefers an
+active Ethernet/Wi-Fi adapter with a gateway over dedicated tunnel/PPP adapters
+and virtual adapters without a gateway.
+
+If a manually entered host name resolves to both on-subnet/loopback addresses
+and other addresses, connections are restricted to those local candidates.
+A failed local connection does not silently fall back to a public address.
+An explicitly entered public IP (or a name with no known local candidate) is
+still a direct connection to that requested endpoint and can use the Internet.
+The log reports the actual local and remote TCP endpoints for diagnosis.
+
+When both PCs and the host use their local addresses on the same hotspot, the
+traffic normally stays inside that Wi-Fi/LAN and does not traverse the mobile
+uplink or consume cellular data volume. For example, connect to the host's
+`192.168.43.x` address rather than its public Internet address. Windows still
+owns routing: VPN policies, unusual routes, guest/client isolation, or hotspot
+restrictions can alter/block local communication. The application does not
+change routes, bypass isolation, or guarantee a provider's billing behavior.
+GitHub update checks and release downloads are separate Internet traffic and
+can consume mobile data.
 
 Before hosting, Windows firewall preparation checks the named inbound TCP/UDP
 rules. If adding a missing rule without elevation fails, a `runas` operation

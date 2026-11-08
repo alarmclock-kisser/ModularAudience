@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.CoOp.Networking;
 
@@ -71,5 +72,24 @@ public sealed class CoOpDiscoveryTests
         cancellation.Cancel();
 
         await Assert.ThrowsAsync<OperationCanceledException>(async () => await discovery);
+    }
+
+    [TestMethod]
+    public async Task Discovery_ConnectAddressComesFromLocalPacketSourceNotAnAdvertisedWanAddress()
+    {
+        using var responder = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        int port = ((IPEndPoint)responder.Client.LocalEndPoint!).Port;
+        var client = new CoOpDiscoveryClient(port, 1, [IPAddress.Loopback]);
+        Task<IReadOnlyList<CoOpDiscoveredHost>> discovery = client.DiscoverAsync(TimeSpan.FromMilliseconds(250));
+        UdpReceiveResult probe = await responder.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(2));
+        byte[] response = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            PeerId = Guid.NewGuid(), DisplayName = "Local host", Port = 47823,
+            ProtocolVersion = CoOpDefaults.ProtocolVersion, Address = "203.0.113.25"
+        });
+        await responder.SendAsync(response, probe.RemoteEndPoint);
+
+        CoOpDiscoveredHost host = (await discovery).Single();
+        Assert.AreEqual("127.0.0.1", host.Address);
     }
 }

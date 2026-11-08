@@ -212,18 +212,23 @@ internal static class UpdateInstaller
 
     private static void CompleteInstallation(HelperOptions options)
     {
-        string? backupWarning = AtomicUpdateReplacement.Apply(
-            options.TargetPath, options.StagedPath, options.OriginalHash, options.UpdateHash);
-        var warnings = new List<string>();
-        if (backupWarning is not null) warnings.Add(backupWarning);
-        try { new ReleaseUpdateSettingsStore(options.SettingsPath).RecordInstalledRelease(options.ReleaseNumber); }
-        catch (Exception error) when (UpdateDiagnostics.IsExpected(error))
+        var installation = new ApplicationUpdateInstallation(options.TargetPath, options.StagedPath,
+            options.OriginalHash, options.UpdateHash, options.ReleaseNumber, options.SettingsPath);
+        ApplicationUpdateInstallationResult result = installation.Complete(UpdatedApplicationLauncher.Start);
+        string warnings = result.Warnings.Count > 0 ? "\n\n" + string.Join("\n\n", result.Warnings) : string.Empty;
+        if (!result.Restarted)
         {
-            warnings.Add($"The release number could not be saved to the update settings; it will be recorded on the next start.\n{error.Message}");
+            UpdateDiagnostics.ShowHelperResult(
+                $"Release {options.ReleaseNumber} was installed, but the updated application could not be started automatically.\n\n" +
+                $"Start it using your existing shortcut or this executable:\n{options.TargetPath}\n\n{result.RestartError}{warnings}",
+                warning: true, options.SettingsPath);
+            return;
         }
-        string message = $"Release {options.ReleaseNumber} was installed. Start ModularAudience again using your existing shortcut.";
-        if (warnings.Count > 0) message += "\n\n" + string.Join("\n\n", warnings);
-        UpdateDiagnostics.ShowHelperResult(message, warnings.Count > 0, options.SettingsPath);
+
+        // Successful updates are silent: the new application is already open.
+        // Non-fatal cleanup/settings warnings go to the log, not an OK dialog.
+        UpdateDiagnostics.WriteHelperLog($"Release {options.ReleaseNumber} was installed and restarted.{warnings}",
+            result.Warnings.Count > 0, options.SettingsPath);
     }
 
     private static HelperOptions ParseHelperArguments(string[] args)

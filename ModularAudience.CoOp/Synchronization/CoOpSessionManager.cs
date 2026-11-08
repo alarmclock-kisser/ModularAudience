@@ -226,10 +226,11 @@ public sealed class CoOpSessionManager : IAsyncDisposable
                 this.pendingWelcome = null;
                 this.hostPeer = new CoOpPeerInfo(welcome.PeerId, welcome.DisplayName);
                 this.state = CoOpSessionState.Connected;
-                this.sessionAddress = $"{host}:{port}";
+                this.sessionAddress = connection.RemoteEndPoint;
                 this.sessionPort = port;
                 this.RaiseStateChanged();
-                this.RaiseLog($"Connected to co-op host {welcome.DisplayName} ({host}:{port}).");
+                this.RaiseLog($"Connected to co-op host {welcome.DisplayName} ({host}:{port}). " +
+                    $"Direct TCP: {connection.LocalEndPoint} -> {connection.RemoteEndPoint}; no Internet relay.");
                 await this.SendAllLocalSharesAsync(cancellationToken);
                 return this.hostPeer;
             }, cancellationToken);
@@ -910,7 +911,8 @@ public sealed class CoOpSessionManager : IAsyncDisposable
             share.Name,
             share.OwnerPeerId,
             share.OwnerDisplayName,
-            this.options.RemoteCollectionsRoot);
+            this.options.RemoteCollectionsRoot,
+            this.options.UsesDefaultWorkingDirectory);
 
         collection.StateChanged += (_, _) =>
             this.RemoteCollectionStateChanged?.Invoke(this, new CoOpRemoteCollectionEventArgs(collection));

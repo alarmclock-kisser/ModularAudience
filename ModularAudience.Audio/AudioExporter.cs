@@ -8,7 +8,7 @@ namespace ModularAudience.Audio
     public class AudioExporter
     {
         // Fields
-        public string ExportDirectory { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CSharpSamplesCutter", "Breakbot404_Exports");
+        public string ExportDirectory { get; set; }
 
         public static readonly Dictionary<string, int[]> AvailableExportFormats = new()
         {
@@ -17,11 +17,11 @@ namespace ModularAudience.Audio
         };
 
         // Pfadbasierte Locks zur Vermeidung paralleler Zugriffe auf dieselbe Datei
-        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Threading.SemaphoreSlim> _pathLocks = new();
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Threading.SemaphoreSlim> _pathLocks = new(StringComparer.OrdinalIgnoreCase);
 
         private static async Task<IDisposable> AcquirePathLockAsync(string path)
         {
-            var sem = _pathLocks.GetOrAdd(path, _ => new System.Threading.SemaphoreSlim(1, 1));
+            var sem = _pathLocks.GetOrAdd(Path.GetFullPath(path), _ => new System.Threading.SemaphoreSlim(1, 1));
             await sem.WaitAsync().ConfigureAwait(false);
             return new Releaser(sem);
         }
@@ -42,34 +42,10 @@ namespace ModularAudience.Audio
             }
         }
 
-        // Sorgt für eindeutige Dateinamen, falls bereits vorhanden
-        private static string EnsureUniquePath(string path)
-        {
-            if (!File.Exists(path))
-            {
-                return path;
-            }
-
-            string dir = Path.GetDirectoryName(path)!;
-            string name = Path.GetFileNameWithoutExtension(path);
-            string ext = Path.GetExtension(path);
-            int i = 1;
-            string candidate;
-            do
-            {
-                candidate = Path.Combine(dir, $"{name} ({i}){ext}");
-                i++;
-            } while (File.Exists(candidate));
-            return candidate;
-        }
-
         // Ctor
         public AudioExporter(string? exportDirectory = null)
         {
-            if (!string.IsNullOrEmpty(exportDirectory))
-            {
-                this.ExportDirectory = exportDirectory;
-            }
+            this.ExportDirectory = string.IsNullOrWhiteSpace(exportDirectory) ? AudioStoragePaths.ExportDirectory : exportDirectory;
 
             if (!Directory.Exists(this.ExportDirectory))
             {
@@ -131,7 +107,7 @@ namespace ModularAudience.Audio
                 return null;
             }
 
-            string outFile = EnsureUniquePath(targetPath);
+            string outFile = targetPath;
 
             Stopwatch sw = Stopwatch.StartNew();
 
@@ -139,6 +115,8 @@ namespace ModularAudience.Audio
             {
                 using (await AcquirePathLockAsync(outFile))
                 {
+                    using var target = AudioExportFile.CreateUnique(outFile);
+                    outFile = target.FilePath;
                     await Task.Run(() =>
                     {
                         // Konvertiere float[] Samples zu short[] PCM-Daten
@@ -161,9 +139,10 @@ namespace ModularAudience.Audio
 
                         writer.Write(pcmBytes, 0, pcmBytes.Length);
                         writer.Flush();
-                        File.WriteAllBytes(outFile, ms.ToArray());
+                        target.Stream.Write(ms.ToArray());
                     });
 
+                    target.Complete();
                     sw.Stop();
                     audio["Mp3Export"] = sw.Elapsed.TotalMilliseconds;
 
@@ -197,7 +176,7 @@ namespace ModularAudience.Audio
             }
         }
 
-        public async Task<string?> ExportWavAsync(AudioObj audio, int bitDepth = 24, string? outDir = null, bool writeBpmTag = true, string? customFilePath = null)
+        public async Task<string?> ExportWavAsync(AudioObj audio, int bitDepth = 24, string? outDir = null, bool writeBpmTag = true, string? customFilePath = null, bool overwriteExisting = true)
         {
             if (audio.Data == null || audio.Data.Length == 0)
             {
@@ -244,11 +223,7 @@ namespace ModularAudience.Audio
                 return null;
             }
 
-            // Sichere eindeutige Zieldatei ermitteln (nur wenn keine customFilePath vorgegeben ist)
-            if (string.IsNullOrEmpty(customFilePath))
-            {
-                finalPath = EnsureUniquePath(finalPath);
-            }
+            bool uniqueName = string.IsNullOrEmpty(customFilePath) || !overwriteExisting;
 
             Stopwatch sw = Stopwatch.StartNew();
 
@@ -256,9 +231,11 @@ namespace ModularAudience.Audio
             {
                 using (await AcquirePathLockAsync(finalPath))
                 {
+                    using var target = uniqueName ? AudioExportFile.CreateUnique(finalPath) : AudioExportFile.Overwrite(finalPath);
+                    finalPath = target.FilePath;
                     await Task.Run(() =>
                     {
-                        using var writer = new WaveFileWriter(finalPath, new WaveFormat(audio.SampleRate, bitDepth, audio.Channels));
+                        using var writer = new WaveFileWriter(target.Stream, new WaveFormat(audio.SampleRate, bitDepth, audio.Channels));
 
                         // Konvertierung und Schreiben
                         if (bitDepth == 32)
@@ -304,6 +281,7 @@ namespace ModularAudience.Audio
                         }
                     });
 
+                    target.Complete();
                     sw.Stop();
                     audio["WavExport"] = sw.Elapsed.TotalMilliseconds;
 

@@ -38,6 +38,48 @@ public sealed class CoOpSessionTests
     }
 
     [TestMethod]
+    public async Task SharingAndEditing_KeepSamplesInRamUntilRecipientExplicitlyExports()
+    {
+        await using var scope = new SessionTestScope();
+        CoOpSessionManager host = scope.CreateManager("Host");
+        CoOpSessionManager client = scope.CreateManager("Client");
+        using AudioCollection collection = TestAudio.CreateCollection();
+        using AudioObj original = TestAudio.Create("RAM sample", sampleCount: 128);
+        original.FilePath = Path.Combine(scope.Root, "must-not-be-created.wav");
+        collection.Audios.Add(original);
+        CoOpHostInfo address = await host.StartHostingAsync();
+        await client.ConnectAsync("127.0.0.1", address.Port);
+        var added = NewCompletionSource<CoOpRemoteCollection>();
+        client.RemoteCollectionAdded += (_, e) => added.TrySetResult(e.Collection);
+        await host.ShareCollectionAsync(collection, "RAM only");
+        CoOpRemoteCollection remote = await added.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await TestAudio.WaitUntilAsync(() => remote.Collection[original.Id] != null);
+        CollectionAssert.AreEqual(original.Data, remote.Collection[original.Id]!.Data);
+        Assert.HasCount(0, Directory.GetFiles(scope.Root, "*", SearchOption.AllDirectories));
+
+        original.Name = "RAM sample updated";
+        original.Data = [0.1f, 0.2f, 0.3f];
+        original.Length = original.Data.Length;
+        await TestAudio.WaitUntilAsync(() => remote.Collection[original.Id]?.Name == original.Name);
+        CollectionAssert.AreEqual(original.Data, remote.Collection[original.Id]!.Data);
+        using AudioObj fromClient = TestAudio.Create("Created in RAM by client", sampleCount: 64);
+        remote.Collection.Audios.Add(fromClient);
+        await TestAudio.WaitUntilAsync(() => collection[fromClient.Id] != null);
+
+        collection.Audios.Remove(original);
+        await TestAudio.WaitUntilAsync(() => remote.IsDeleted(original.Id));
+        Assert.HasCount(0, Directory.GetFiles(scope.Root, "*", SearchOption.AllDirectories));
+        Assert.IsFalse(File.Exists(original.FilePath));
+
+        string? exported = await remote.Collection.Exporter.ExportWavAsync(remote.Collection[original.Id]!, 16, writeBpmTag: false);
+
+        Assert.IsNotNull(exported);
+        Assert.IsTrue(File.Exists(exported));
+        Assert.HasCount(1, Directory.GetFiles(scope.Root, "*", SearchOption.AllDirectories));
+        Assert.IsFalse(File.Exists(original.FilePath));
+    }
+
+    [TestMethod]
     public async Task HostChanges_PropagateAndLateJoinOmitsTombstones()
     {
         await using var scope = new SessionTestScope();

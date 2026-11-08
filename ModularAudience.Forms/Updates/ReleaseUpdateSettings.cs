@@ -8,6 +8,13 @@ internal sealed class ReleaseUpdateSettings
 {
     public bool AskToUpdate { get; set; } = true;
     public long? CurrentReleaseNumber { get; set; }
+    public long? SkipReleaseNumber { get; set; }
+
+    internal bool ShouldOfferRelease(long releaseNumber)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(releaseNumber);
+        return AskToUpdate && (!SkipReleaseNumber.HasValue || releaseNumber > SkipReleaseNumber.Value);
+    }
 }
 
 internal sealed class ReleaseUpdateSettingsStore
@@ -63,6 +70,24 @@ internal sealed class ReleaseUpdateSettingsStore
             if (!exists || settings.AskToUpdate != askToUpdate)
             {
                 settings.AskToUpdate = askToUpdate;
+                settings.SkipReleaseNumber = null;
+                SaveUnsafe(settings);
+            }
+            return true;
+        });
+    }
+
+    internal void SkipThroughRelease(long releaseNumber)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(releaseNumber);
+        WithLock(() =>
+        {
+            ReleaseUpdateSettings settings = LoadUnsafe();
+            // Concurrent instances must not lower a skip boundary saved by
+            // another update dialog. Only toggling AskToUpdate resets it.
+            if (!settings.SkipReleaseNumber.HasValue || releaseNumber > settings.SkipReleaseNumber.Value)
+            {
+                settings.SkipReleaseNumber = releaseNumber;
                 SaveUnsafe(settings);
             }
             return true;
@@ -90,6 +115,8 @@ internal sealed class ReleaseUpdateSettingsStore
             ?? throw new InvalidDataException("The update settings file is empty.");
         if (settings.CurrentReleaseNumber is <= 0)
             throw new InvalidDataException("CurrentReleaseNumber must be a positive release number or null.");
+        if (settings.SkipReleaseNumber is <= 0)
+            throw new InvalidDataException("SkipReleaseNumber must be a positive release number or null.");
         return settings;
     }
 
