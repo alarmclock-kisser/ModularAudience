@@ -343,7 +343,7 @@
             this.textBox_apiUrl.PlaceholderText = "OpenAI API Url...";
             this.textBox_apiUrl.Size = new Size(243, 23);
             this.textBox_apiUrl.TabIndex = 24;
-            this.textBox_apiUrl.Text = "http://127.0.0.1:8080";
+            this.textBox_apiUrl.Text = "http://127.0.0.1:9931";
             // 
             // pictureBox_beatMap
             // 

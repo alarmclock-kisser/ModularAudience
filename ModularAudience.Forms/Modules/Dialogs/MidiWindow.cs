@@ -10,6 +10,26 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private MidiFileData midiFile;
         private List<MidiTrackData> tracks;
         private AudioObj? customSample;
+        private AudioCollectionView? customCollection;
+        private readonly ContextMenuStrip customInstrumentMenu = new();
+        private sealed class CollectionSnapshot : IDisposable
+        {
+            public List<AudioObj> Samples { get; } = [];
+            public void Dispose() { foreach (var sample in Samples) sample.Dispose(); }
+        }
+        private CollectionSnapshot CaptureCustomCollection()
+        {
+            var snapshot = new CollectionSnapshot();
+            try
+            {
+                if (this.SelectedInstrument == MidiInstrument.CustomCollection && this.customCollection is { IsDisposed: false } view)
+                    foreach (var sample in view.AudioC.Audios)
+                        if (sample.Channels > 0 && sample.SampleRate > 0 && sample.Data.Length >= sample.Channels)
+                            snapshot.Samples.Add(sample.Clone());
+                return snapshot;
+            }
+            catch { snapshot.Dispose(); throw; }
+        }
         private readonly MidiSampleRenderCache sampleRenderCache = new();
         private AudioObj? previewAudio;
         private CancellationTokenSource? previewCts;
@@ -31,6 +51,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public MidiWindow(string? filePath, MidiFileData? midiFileData = null)
         {
             this.InitializeComponent();
+            this.components ??= new System.ComponentModel.Container();
+            this.components.Add(this.customInstrumentMenu);
             this.midiFile = midiFileData ?? MidiFileData.Load(filePath ?? throw new ArgumentNullException(nameof(filePath)));
             this.tracks = this.midiFile.Tracks.ToList();
             this.Text = $"MIDI Renderer - {Path.GetFileNameWithoutExtension(this.midiFile.FilePath)}";
@@ -38,7 +60,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_track.Value = 1;
             this.numericUpDown_bpm.Value = (decimal)Math.Clamp(this.midiFile.DefaultBpm, 20.0, 400.0);
             this.comboBox_instrument.Items.AddRange([
-            "Sine", "Saw", "Square", "Triangle", "Noise", "Pluck / Karplus-Strong", "Custom Sample"]);
+            "Sine", "Saw", "Square", "Triangle", "Noise", "Pluck / Karplus-Strong", "Custom Sample", "Custom Collection"]);
             this.comboBox_instrument.SelectedIndex = 0;
             this.comboBox_renderQuality.Items.AddRange(["Best", "Balanced", "Fast", "Draft"]);
             this.comboBox_renderQuality.SelectedIndex = (int)MidiRenderQuality.Balanced;
@@ -47,7 +69,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private MidiTrackData SelectedTrack => this.tracks[Math.Clamp((int)this.numericUpDown_track.Value - 1, 0, this.tracks.Count - 1)];
 
-        public MidiInstrument SelectedInstrument => (MidiInstrument)Math.Clamp(this.comboBox_instrument.SelectedIndex, 0, 6);
+        public MidiInstrument SelectedInstrument => (MidiInstrument)Math.Clamp(this.comboBox_instrument.SelectedIndex, 0, 7);
 
         public double PreviewBpm => (double)this.numericUpDown_bpm.Value;
 
@@ -117,10 +139,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
             MidiInstrument instrument = this.SelectedInstrument;
             double bpm = (double)this.numericUpDown_bpm.Value;
             using AudioObj? selectedCustomSample = this.customSample?.Clone();
+            using var collection = this.CaptureCustomCollection();
             MidiRenderQuality quality = this.SelectedRenderQuality;
             return await this.TrackMidiRenderAsync(
                 () => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, selectedCustomSample, cancellationToken: cancellationToken, pitchFrequency: pitchFrequency,
-                    previewQuality: true, progress: progress, renderQuality: quality, sampleCache: this.sampleRenderCache), cancellationToken);
+                    previewQuality: true, progress: progress, renderQuality: quality, sampleCache: this.sampleRenderCache,
+                    customCollection: collection.Samples), cancellationToken);
         }
 
         private static Rectangle NormalizeRectangle(Point first, Point second)
@@ -234,7 +258,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void comboBox_instrument_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            this.button_customInstrument.Enabled = this.SelectedInstrument == MidiInstrument.CustomSample;
+            this.button_customInstrument.Enabled = this.SelectedInstrument is MidiInstrument.CustomSample or MidiInstrument.CustomCollection;
             if (this.SelectedInstrument != MidiInstrument.CustomSample)
             {
                 this.customSample?.Dispose(); this.customSample = null;
@@ -243,7 +267,25 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void button_customInstrument_Click(object? sender, EventArgs e)
         {
-            ContextMenuStrip menu = new();
+            // Keep the menu alive through WinForms' item-click/close processing.
+            // The form's component container owns it and disposes it with the window.
+            ContextMenuStrip menu = this.customInstrumentMenu;
+            while (menu.Items.Count > 0) menu.Items[0].Dispose();
+            if (this.SelectedInstrument == MidiInstrument.CustomCollection)
+            {
+                foreach (var view in WindowMain.CollectionViews.Where(view => !view.IsDisposed))
+                {
+                    var selected = view;
+                    menu.Items.Add(new ToolStripMenuItem($"{view.Text} ({view.AudioC.Audios.Count} samples)", null, (_, _) =>
+                    {
+                        this.customCollection = selected;
+                        this.label_status.Text = $"Custom collection: {selected.Text}";
+                    }) { Enabled = view.AudioC.Audios.Any(s => s.Channels > 0 && s.SampleRate > 0 && s.Data.Length >= s.Channels) });
+                }
+                if (menu.Items.Count == 0) menu.Items.Add(new ToolStripMenuItem("No audio collections are currently open") { Enabled = false });
+                menu.Show(this.button_customInstrument, 0, this.button_customInstrument.Height);
+                return;
+            }
             foreach (AudioObj audio in WindowMain.CollectionViews.Where(view => !view.IsDisposed).SelectMany(view => view.AudioC.Audios).DistinctBy(audio => audio.Id))
             {
                 AudioObj selected = audio;
@@ -283,13 +325,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 int trackIndex = this.SelectedTrack.Index;
                 MidiRenderQuality quality = this.SelectedRenderQuality;
                 using AudioObj? sample = this.customSample?.Clone();
+                using var collection = this.CaptureCustomCollection();
                 Progress<double> progress = new(value => progressDialog?.Report(value));
                 progressDialog = new ProgressDialog("Rendering MIDI preview...", progress, ct: runCts.Token, cancellationSource: runCts, windowCloseDelay: 0.0d);
                 progressDialog.Show(this);
                 progressDialog.BringToFront();
                 AudioObj audio = await this.TrackMidiRenderAsync(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, sample,
                     cancellationToken: runCts.Token, pitchFrequency: midi.PitchFrequency, previewQuality: true, progress: progress,
-                    renderQuality: quality, sampleCache: this.sampleRenderCache), runCts.Token);
+                    renderQuality: quality, sampleCache: this.sampleRenderCache, customCollection: collection.Samples), runCts.Token);
                 if (runCts.IsCancellationRequested || this.closingMidiWindow) { audio.Dispose(); return; }
                 progressDialog.Complete();
                 this.previewAudio = audio;
@@ -333,6 +376,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 MidiInstrument instrument = this.SelectedInstrument;
                 double bpm = (double)this.numericUpDown_bpm.Value;
                 using AudioObj? customSample = this.customSample?.Clone();
+                using var collection = this.CaptureCustomCollection();
                 MidiRenderQuality quality = this.SelectedRenderQuality;
                 renderCts = new CancellationTokenSource();
                 this.saveRenderCts = renderCts;
@@ -341,7 +385,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 progressDialog.Show(this);
                 progressDialog.BringToFront();
                 AudioObj audio = await this.TrackMidiRenderAsync(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, cancellationToken: renderCts.Token, pitchFrequency: midi.PitchFrequency,
-                    progress: progress, renderQuality: quality, sampleCache: this.sampleRenderCache), renderCts.Token);
+                    progress: progress, renderQuality: quality, sampleCache: this.sampleRenderCache, customCollection: collection.Samples), renderCts.Token);
                 if (renderCts.IsCancellationRequested || this.closingMidiWindow) { audio.Dispose(); return; }
                 WindowMain.Instance?.PlaceRenderedAudio(audio);
                 progressDialog.Complete();
@@ -388,6 +432,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             MidiInstrument instrument = this.SelectedInstrument;
             double bpm = (double)this.numericUpDown_bpm.Value;
             using AudioObj? customSample = this.customSample?.Clone();
+            using var collection = this.CaptureCustomCollection();
             MidiRenderQuality quality = this.SelectedRenderQuality;
             CancellationTokenSource? runCts = null;
             try
@@ -395,7 +440,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 runCts = new CancellationTokenSource();
                 this.previewCts = runCts;
                 AudioObj audio = await this.TrackMidiRenderAsync(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, cancellationToken: runCts.Token, pitchFrequency: midi.PitchFrequency,
-                    previewQuality: true, renderQuality: quality, sampleCache: this.sampleRenderCache), runCts.Token);
+                    previewQuality: true, renderQuality: quality, sampleCache: this.sampleRenderCache, customCollection: collection.Samples), runCts.Token);
                 if (runCts.IsCancellationRequested || this.closingMidiWindow) { audio.Dispose(); return; }
                 this.previewAudio = audio;
                 this.timer_previewCaret.Start();

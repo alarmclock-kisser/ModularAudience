@@ -35,6 +35,47 @@ public sealed class BreakbeatAutoRerollTests
         [new(0, 0, 24), new(1, 0, 24), new(0, 600, 24)], initialGridResolution: 16);
 
     [STATestMethod]
+    public void NonLoopHearCountsCompletedPassesAndRerollsAtThresholdButNotOnCancel()
+    {
+        using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using var editor = Editor(sample);
+        Configure(editor, 0, 2, false, false);
+        var states = (IDictionary)Field(editor, "autoRerolls");
+        object state = states.Values.Cast<object>().Single();
+        long Count() => (long)state.GetType().GetField("CompletedLoops")!.GetValue(state)!;
+        Invoke(editor, "PrepareAutoRerollPlayback");
+        Invoke(editor, "CompleteNonLoopHear", false); Assert.AreEqual(0L, Count());
+        Invoke(editor, "CompleteNonLoopHear", true); Assert.AreEqual(1L, Count());
+        Invoke(editor, "PrepareAutoRerollPlayback"); Assert.AreEqual(1L, Count());
+        Invoke(editor, "CompleteNonLoopHear", true); Assert.AreEqual(0L, Count());
+        Assert.IsTrue(((List<BreakbeatPatternNote>)Field(editor, "notes")).Any(n => n.TrackIndex == 0));
+    }
+
+    [STATestMethod]
+    public void ManualPlacementDisablesOnlyItsTrackAndUndoRestoresReroll()
+    {
+        using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using var editor = Editor(sample);
+        Configure(editor, 0, 2, false, false); Configure(editor, 1, 3, false, false);
+        Invoke(editor, "CommitHistoryAction");
+        var grid = (Rectangle)Invoke(editor, "GetGridBounds")!;
+        var picture = (Control)Field(editor, "pictureBox_pattern");
+        Point point = new(grid.Left + grid.Width * 8 / 16 + 2, grid.Top + grid.Height / 4);
+        Invoke(editor, "pictureBox_pattern_MouseDown", picture, new MouseEventArgs(MouseButtons.Left, 1, point.X, point.Y, 0));
+        Invoke(editor, "pictureBox_pattern_MouseUp", picture, new MouseEventArgs(MouseButtons.Left, 1, point.X, point.Y, 0));
+        bool Enabled(int row)
+        {
+            var states = (IDictionary)Field(editor, "autoRerolls");
+            var samples = (List<AudioObj>)Field(editor, "samples");
+            object state = states[samples[row]]!;
+            object options = state.GetType().GetField("Options")!.GetValue(state)!;
+            return (bool)options.GetType().GetProperty("Enabled")!.GetValue(options)!;
+        }
+        Assert.IsFalse(Enabled(0)); Assert.IsTrue(Enabled(1));
+        Invoke(editor, "UndoEditorAction"); Assert.IsTrue(Enabled(0));
+    }
+
+    [STATestMethod]
     public void PerTrackIntervalsReplaceOnlySelectedLoopAndResetOnSelectionChange()
     {
         using var sample = new AudioObj { Data = Enumerable.Repeat(0.2f, 4800).ToArray(), SampleRate = 48000, Channels = 1 };

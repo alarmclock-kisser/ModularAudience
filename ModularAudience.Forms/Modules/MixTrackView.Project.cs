@@ -1,0 +1,102 @@
+using ModularAudience.Audio.Arrangement;
+
+namespace ModularAudience.Forms.Modules;
+
+public sealed partial class MixTrackView
+{
+    private readonly CheckBox autoSave = new() { Text = "Auto-save", AutoSize = true, Enabled = false };
+    private readonly System.Windows.Forms.Timer projectSaveTimer = new() { Interval = 300 };
+    private readonly System.Windows.Forms.Timer viewSaveTimer = new() { Interval = 250 };
+    private string? projectPath;
+    private Task projectSaveWork = Task.CompletedTask;
+    private (string Path, string State, MixSource[] Sources)? pendingProjectSave;
+    private int layoutLaneCount;
+    private double manualCaret;
+
+    private void AddEmptyTrack()
+    {
+        Arrangement.Lanes.Add(new() { Name = "Track " + (Arrangement.Lanes.Count + 1) }); Changed();
+    }
+    private void EnsureTrackLayout()
+    {
+        vertical.Maximum = Math.Max(0, Arrangement.Lanes.Count - 1);
+        vertical.Value = Math.Min(vertical.Value, vertical.Maximum);
+        if (Arrangement.Lanes.Count == layoutLaneCount) return;
+        layoutLaneCount = Arrangement.Lanes.Count;
+        if (layoutLaneCount == 0) return;
+        // All lanes use one shared pixel height. Grow the client area on insertion;
+        // if the screen is full, use the existing vertical scrollbar, never squeeze the new lane.
+        int extra = ClientSize.Height - canvas.ClientSize.Height;
+        int requested = extra + Ruler + layoutLaneCount * LaneHeight + 4;
+        int maximum = Screen.FromControl(this).WorkingArea.Height - (Height - ClientSize.Height) - 25;
+        automaticSizing = true;
+        try { if (requested > ClientSize.Height) ClientSize = new(ClientSize.Width, Math.Min(requested, Math.Max(MinimumSize.Height, maximum))); }
+        finally { previousClientHeight = ClientSize.Height; automaticSizing = false; }
+        canvas.Invalidate();
+    }
+    private void RestoreViewport()
+    {
+        vertical.Maximum = Math.Max(0, Arrangement.Lanes.Count - 1);
+        vertical.Value = Math.Clamp(Arrangement.Visual.FirstVisibleTrack, 0, vertical.Maximum);
+        int value = (int)Math.Clamp(Arrangement.Visual.HorizontalScrollSeconds * 100, 0, int.MaxValue - 200);
+        scroll.Maximum = Math.Max(scroll.Maximum, value + scroll.LargeChange);
+        scroll.Value = value;
+    }
+    private void JumpToManualCaret(bool reset)
+    {
+        if (reset) manualCaret = 0;
+        caret = manualCaret;
+        playback?.SetPosition((long)(caret * playback.SampleRate));
+        double width = Math.Max(1, canvas.Width - Header) / pixelsPerSecond;
+        if (caret < ViewStart || caret >= ViewStart + width)
+            scroll.Value = Math.Clamp((int)(caret * 100), 0, scroll.Maximum - scroll.LargeChange + 1);
+        canvas.Invalidate();
+    }
+    private void QueueProjectSave(bool force = false)
+    {
+        if (restoring || released || projectPath == null || (!Arrangement.AutoSave && !force)) return;
+        pendingProjectSave = (projectPath, Arrangement.Capture(), Arrangement.Lanes.SelectMany(l => l.Clips)
+            .Select(c => c.SourceId).Distinct().Select(id => Arrangement.Sources[id]).ToArray());
+        projectSaveTimer.Stop(); projectSaveTimer.Start();
+    }
+    private async Task FlushProjectSaveAsync()
+    {
+        if (!projectSaveWork.IsCompleted) { try { await projectSaveWork; } catch { } if (pendingProjectSave != null) await FlushProjectSaveAsync(); return; }
+        if (pendingProjectSave is not { } save) return;
+        pendingProjectSave = null;
+        projectSaveWork = MixProjectFile.SaveSnapshotAsync(save.Path, save.State, save.Sources);
+        try
+        {
+            await projectSaveWork;
+            if (!released && projectPath == save.Path && Arrangement.Capture() == save.State)
+            { dirty = false; status.Text = "Auto-saved project metadata; existing audio assets reused."; }
+        }
+        catch (Exception error) { if (!released) status.Text = "Auto-save failed: " + error.Message; }
+        if (pendingProjectSave != null && !released) { projectSaveTimer.Stop(); projectSaveTimer.Start(); }
+    }
+    private async Task SaveToPathAsync(string path, CancellationToken token = default)
+    {
+        projectSaveTimer.Stop(); await FlushProjectSaveAsync();
+        string state = Arrangement.Capture();
+        var sources = Arrangement.Lanes.SelectMany(l => l.Clips).Select(c => c.SourceId).Distinct().Select(id => Arrangement.Sources[id]).ToArray();
+        await MixProjectFile.SaveSnapshotAsync(path, state, sources, token);
+        projectPath = path; autoSave.Enabled = true;
+        dirty = Arrangement.Capture() != state;
+        status.Text = "Project saved — journal metadata and reusable Float32 assets.";
+        if (dirty) QueueProjectSave();
+    }
+    private async Task LoadFromPathAsync(string path, CancellationToken token = default)
+    {
+        projectSaveTimer.Stop(); await FlushProjectSaveAsync();
+        var loaded = await MixArrangement.LoadAsync(path, token);
+        StopPlayback(); CancelPastePreview(); clipboardHistory.Clear();
+        Arrangement.Sources.Clear(); wavePeaks.Clear();
+        foreach (var source in loaded.Sources) Arrangement.Sources[source.Key] = source.Value;
+        // Project loading begins a fresh undo session; assets from the previous project
+        // cannot be referenced by later undo operations.
+        undo.Clear(); redo.Clear(); projectPath = null;
+        Restore(loaded.Capture()); committed = Arrangement.Capture();
+        undo.Clear(); redo.Clear(); projectPath = path; autoSave.Enabled = true; dirty = false;
+        loaded.Dispose(); status.Text = "Project loaded.";
+    }
+}

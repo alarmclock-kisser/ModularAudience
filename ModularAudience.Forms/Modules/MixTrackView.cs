@@ -100,11 +100,14 @@ public sealed partial class MixTrackView : Form
         };
         Tool("− Zoom", () => Zoom(0.8)); Tool("+ Zoom", () => Zoom(1.25));
         Tool("View Settings…", ShowViewSettings);
-        Tool("+ Track", () => { Arrangement.Lanes.Add(new() { Name = "Track " + (Arrangement.Lanes.Count + 1) }); Changed(); });
+        Tool("+ Track", AddEmptyTrack);
         Tool("Undo", Undo); Tool("Redo", Redo);
         Tool("Save project…", async () => await SaveProjectAsync());
         Tool("Open project…", async () => await OpenProjectAsync());
-        Tool("Render → Collection", async () => await ExportAsync());
+        var renderButton = Tool("Render ...", async () => await ExportAsync());
+        renderButton.MouseUp += (_, e) => { if (e.Button == MouseButtons.Right) ShowRenderMenu(renderButton, e.Location); };
+        toolbar.Controls.Add(autoSave);
+        autoSave.CheckedChanged += (_, _) => { if (!restoring) { Arrangement.AutoSave = autoSave.Checked; Changed(); QueueProjectSave(force: true); } };
         Controls.Add(canvas); Controls.Add(vertical); Controls.Add(scroll); Controls.Add(status); Controls.Add(toolbar);
         bpm.ValueChanged += (_, _) =>
         {
@@ -120,7 +123,12 @@ public sealed partial class MixTrackView : Form
         division.SelectedIndexChanged += (_, _) => { if (!restoring) { Arrangement.SnapDivision = 1 << division.SelectedIndex; Changed(); } };
         snap.CheckedChanged += (_, _) => { if (!restoring) { Arrangement.Snap = snap.Checked; Changed(); } };
         loop.CheckedChanged += (_, _) => { if (!restoring) { Arrangement.Loop = loop.Checked; Changed(); } };
-        scroll.ValueChanged += (_, _) => canvas.Invalidate(); vertical.ValueChanged += (_, _) => canvas.Invalidate();
+        scroll.ValueChanged += (_, _) => { canvas.Invalidate(); if (!restoring) { Arrangement.Visual.HorizontalScrollSeconds = ViewStart; viewSaveTimer.Stop(); viewSaveTimer.Start(); } };
+        vertical.ValueChanged += (_, _) => { canvas.Invalidate(); if (!restoring) { Arrangement.Visual.FirstVisibleTrack = vertical.Value; viewSaveTimer.Stop(); viewSaveTimer.Start(); } };
+        viewSaveTimer.Tick += (_, _) => { viewSaveTimer.Stop(); Changed(); };
+        projectSaveTimer.Tick += async (_, _) => { projectSaveTimer.Stop(); await FlushProjectSaveAsync(); };
+        pasteHoldTimer.Tick += (_, _) => ShowClipboardHistory(); KeyUp += PasteKeyUp;
+        Deactivate += (_, _) => { pasteHoldTimer.Stop(); pasteHoldTracking = false; pasteKeyDown = false; };
         canvas.Paint += PaintTimeline; canvas.MouseDown += MouseDownTimeline; canvas.MouseMove += MouseMoveTimeline; canvas.MouseUp += MouseUpTimeline;
         canvas.MouseDoubleClick += (_, e) =>
         {
@@ -285,7 +293,7 @@ public sealed partial class MixTrackView : Form
     {
         if (restoring) return;
         string state = Arrangement.Capture();
-        if (state != committed) { undo.Push(committed); redo.Clear(); committed = state; dirty = true; Text = Arrangement.Name; }
+        if (state != committed) { undo.Push(committed); redo.Clear(); committed = state; dirty = true; Text = Arrangement.Name; QueueProjectSave(); }
         foreach (var clip in Arrangement.Lanes.SelectMany(l => l.Clips))
             if (clip.TempoMode != ClipTempoMode.Original && Arrangement.Sources.TryGetValue(clip.SourceId, out var source) && source.Bpm <= 0)
                 status.Text = "A tempo-matched clip has no source BPM. Right-click it → Set source BPM.";
@@ -299,6 +307,7 @@ public sealed partial class MixTrackView : Form
             else if (playback.LoopEnabled) playback.UpdateLoopFraction(0, playback.Data.LongLength, playback.Data.LongLength, false, false);
         }
         SchedulePreparation();
+        EnsureTrackLayout();
     }
     private void Restore(string state)
     {
@@ -310,7 +319,10 @@ public sealed partial class MixTrackView : Form
         LaneHeight = Arrangement.DisplayLaneHeight; preciseLaneHeight = LaneHeight;
         pixelsPerSecond = Arrangement.Visual.PixelsPerSecond;
         UpdateScrollModeControl();
-        ReconcileJoined(); Text = Arrangement.Name; canvas.Invalidate(); SchedulePreparation();
+        restoring = true;
+        try { autoSave.Checked = Arrangement.AutoSave; RestoreViewport(); }
+        finally { restoring = false; }
+        ReconcileJoined(); Text = Arrangement.Name; canvas.Invalidate(); SchedulePreparation(); EnsureTrackLayout(); QueueProjectSave(force: true);
     }
     private void Undo() { if (undo.Count > 0) { redo.Push(committed); Restore(undo.Pop()); } }
     private void Redo() { if (redo.Count > 0) { undo.Push(committed); Restore(redo.Pop()); } }
@@ -455,6 +467,7 @@ public sealed partial class MixTrackView : Form
             using var pen = new Pen(Color.LightGreen, 3); g.DrawLine(pen, 0, y, canvas.Width, y);
         }
         int cx = TimeX(caret); if (cx >= Header) { using var caretPen = new Pen(VisualColor(visual.Playhead)); g.DrawLine(caretPen, cx, 0, cx, canvas.Height); }
+        PaintPastePreview(g);
     }
     private Rectangle LaneButtonRect(int row, int button) => new(5 + button * 25,
         Ruler + (row - vertical.Value + 1) * LaneHeight - 25, 21, 21);
@@ -469,7 +482,7 @@ public sealed partial class MixTrackView : Form
         canvas.Invalidate();
     }
     private void ClearRangeSelection()
-    { selectedClips.Clear(); selectionFirstRow = selectionLastRow = -1; selectionStart = selectionEnd = 0; }
+    { selectedClips.Clear(); fullSelectedClips.Clear(); selectionFirstRow = selectionLastRow = -1; selectionStart = selectionEnd = 0; }
     private void UpdateRangeSelection(Point point)
     {
         selectionPointer = point;
@@ -478,9 +491,13 @@ public sealed partial class MixTrackView : Form
         selectionFirstRow = Math.Clamp(Math.Min(RowAt(down.Y), RowAt(point.Y)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
         selectionLastRow = Math.Clamp(Math.Max(RowAt(down.Y), RowAt(point.Y)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
         selectedClips.Clear();
+        fullSelectedClips.Clear();
+        selectedClips.UnionWith(additiveSelection);
+        if (selectingWhole) fullSelectedClips.UnionWith(additiveSelection);
         for (int row = selectionFirstRow; row <= selectionLastRow && row < Arrangement.Lanes.Count; row++)
             foreach (var clip in Arrangement.Lanes[row].Clips)
-                if (clip.Start < selectionEnd && clip.Start + Arrangement.ClipDuration(clip) > selectionStart) selectedClips.Add(clip.Id);
+                if (clip.Start < selectionEnd && clip.Start + Arrangement.ClipDuration(clip) > selectionStart)
+                { selectedClips.Add(clip.Id); if (selectingWhole) fullSelectedClips.Add(clip.Id); }
         status.Text = $"Selection: {selectionStart:0.000}–{selectionEnd:0.000}s; tracks {selectionFirstRow + 1}–{selectionLastRow + 1}; {selectedClips.Count} segments";
         canvas.Invalidate();
     }
@@ -525,12 +542,24 @@ public sealed partial class MixTrackView : Form
     private void MouseDownTimeline(object? sender, MouseEventArgs e)
     {
         canvas.Focus(); if (busy) return;
+        Guid? previousSelectedClip = selectedClip;
+        lastPointer = e.Location;
+        if (pastePreview) { if (e.Button == MouseButtons.Left && e.X >= Header && e.Y >= Ruler) PlacePastePreview(); else if (e.Button == MouseButtons.Right) CancelPastePreview(); return; }
         int row = RowAt(e.Y); selectedLane = row >= 0 && row < Arrangement.Lanes.Count ? Arrangement.Lanes[row].Id : null;
         selectedClip = row >= 0 && row < Arrangement.Lanes.Count
             ? Arrangement.Lanes[row].Clips.LastOrDefault(c => e.X >= Header && ClipRect(row, c).Contains(e.Location))?.Id : null;
         if (e.Button == MouseButtons.Right) { ShowMenu(e.Location); return; }
         if (e.Button != MouseButtons.Left) return;
         down = e.Location; dragBefore = Arrangement.Capture();
+        selectionAdditive = ModifierKeys.HasFlag(Keys.Control); selectingWhole = selectionAdditive;
+        additiveSelection.Clear();
+        if (selectionAdditive) additiveSelection.UnionWith(selectedClips);
+        if (selectionAdditive && previousSelectedClip is { } previousId) { selectedClips.Add(previousId); additiveSelection.Add(previousId); }
+        if (selectionAdditive && selectedClip is { } clicked && e.X >= Header && e.Y >= Ruler)
+        {
+            SelectWholeClip(clicked, true); additiveSelection.UnionWith(selectedClips);
+            dragMode = 5; canvas.Capture = true; return;
+        }
         if (row >= 0 && row < Arrangement.Lanes.Count)
         {
             var lane = Arrangement.Lanes[row];
@@ -546,7 +575,7 @@ public sealed partial class MixTrackView : Form
         if (e.Y < Ruler && e.X >= Header)
         {
             rulerOriginalLoopStart = Arrangement.LoopStart; rulerOriginalLoopEnd = Arrangement.LoopEnd;
-            caret = Arrangement.SnapTime(XTime(e.X), ModifierKeys.HasFlag(Keys.Shift)); dragMode = 4;
+            caret = manualCaret = Arrangement.SnapTime(XTime(e.X), ModifierKeys.HasFlag(Keys.Shift)); dragMode = 4;
         }
         else if (Clip is { } clip)
         {
@@ -557,11 +586,13 @@ public sealed partial class MixTrackView : Form
             if (dragMode != 5) ClearRangeSelection();
         }
         else if (e.X >= Header && row >= 0 && row < Arrangement.Lanes.Count) dragMode = 5;
-        if (dragMode == 5) { ClearRangeSelection(); selectedClip = null; UpdateRangeSelection(e.Location); }
+        if (dragMode == 5) { if (!selectionAdditive) ClearRangeSelection(); selectedClip = null; UpdateRangeSelection(e.Location); }
         canvas.Capture = dragMode != 0; canvas.Invalidate();
     }
     private void MouseMoveTimeline(object? sender, MouseEventArgs e)
     {
+        lastPointer = e.Location;
+        if (pastePreview) { canvas.Invalidate(); return; }
         if (dragMode == 0)
         {
             int row = RowAt(e.Y);
@@ -576,7 +607,7 @@ public sealed partial class MixTrackView : Form
                 ? LaneVolumeRect(row).Contains(e.Location) ? Cursors.Hand : Cursors.SizeNS : Cursors.Default;
             return;
         }
-        if (dragMode == 5) { UpdateRangeSelection(e.Location); return; }
+        if (dragMode == 5) { if (!selectionAdditive || Math.Abs(e.X - down.X) + Math.Abs(e.Y - down.Y) > 3) UpdateRangeSelection(e.Location); return; }
         if (dragMode == 6)
         {
             if (Math.Abs(e.Y - down.Y) < SystemInformation.DragSize.Height / 2) return;
@@ -728,8 +759,9 @@ public sealed partial class MixTrackView : Form
         foreach (var option in Arrangement.Lanes) combo.Items.Add(new LaneItem(option.Id, option.Name));
         combo.SelectedIndexChanged += (_, _) => { if (combo.SelectedItem is LaneItem item) { RemoveLane(item.Id); menu.Close(); } };
         remove.DropDownItems.Add(combo); menu.Items.Add(remove);
-        Item("Add empty track", () => { Arrangement.Lanes.Add(new()); Changed(); });
-        Item("Paste segment at playhead (Ctrl+V)", PasteClip, copiedClip != null);
+        Item("Add empty track", AddEmptyTrack);
+        Item("Copy selection (Ctrl+C)", CopySelection, SelectedParts().Count > 0);
+        Item("Paste preview (Ctrl+V)", StartPastePreview, clipboardHistory.Count > 0);
         if (Lane is { } targetLane)
         {
             var insert = new ToolStripMenuItem("Place source audio here");
@@ -751,6 +783,7 @@ public sealed partial class MixTrackView : Form
     private sealed record LaneItem(Guid Id, string Name) { public override string ToString() => Name; }
     private void DeleteSelectedRange()
     {
+        if (fullSelectedClips.Count > 0) { DeleteSelection(); return; }
         if (selectionFirstRow < 0 || selectionEnd <= selectionStart) return;
         for (int row = selectionFirstRow; row <= selectionLastRow && row < Arrangement.Lanes.Count; row++)
         {
@@ -779,26 +812,7 @@ public sealed partial class MixTrackView : Form
         }
         ClearRangeSelection(); selectedClip = null; Changed();
     }
-    private async Task ExportSelectedRangeAsync()
-    {
-        if (selectionFirstRow < 0 || selectionEnd <= selectionStart || busy) return;
-        var selected = new MixArrangement(); selected.Restore(Arrangement.Capture());
-        foreach (var pair in Arrangement.Sources) selected.Sources.Add(pair.Key, pair.Value);
-        selected.Lanes = selected.Lanes.Skip(selectionFirstRow).Take(selectionLastRow - selectionFirstRow + 1).ToList();
-        double start = selectionStart, end = selectionEnd;
-        await RunAsync(async token =>
-        {
-            using var whole = await MixRenderer.RenderAsync(selected, token);
-            int begin = (int)Math.Min(whole.Data.Length, Math.Round(start * whole.SampleRate) * whole.Channels);
-            int finish = (int)Math.Min(whole.Data.Length, Math.Round(end * whole.SampleRate) * whole.Channels);
-            if (finish <= begin) return;
-            var excerpt = new AudioObj { Name = Arrangement.Name + " - Selection", Data = whole.Data.AsSpan(begin, finish - begin).ToArray(),
-                SampleRate = whole.SampleRate, Channels = whole.Channels, Bpm = whole.Bpm, Length = finish - begin,
-                Duration = TimeSpan.FromSeconds((finish - begin) / (double)(whole.SampleRate * whole.Channels)), BitDepth = 32 };
-            new AudioCollectionView([excerpt], excerpt.Name).Show();
-        });
-        selected.Dispose();
-    }
+    private Task ExportSelectedRangeAsync() => ExportSelectionAsync();
     private void ShowSourcePicker(MixLane lane, double time, Point location)
     {
         var menu = new ContextMenuStrip();
@@ -815,16 +829,11 @@ public sealed partial class MixTrackView : Form
     }
     private void CopyClip()
     {
-        if (Clip != null) copiedClip = System.Text.Json.JsonSerializer.Deserialize<MixClip>(System.Text.Json.JsonSerializer.Serialize(Clip));
+        CopySelection();
     }
     private void PasteClip()
     {
-        if (copiedClip == null || !Arrangement.Sources.ContainsKey(copiedClip.SourceId)) return;
-        var lane = Lane;
-        if (lane == null) { lane = new MixLane { Name = copiedClip.Name }; Arrangement.Lanes.Add(lane); }
-        var copy = System.Text.Json.JsonSerializer.Deserialize<MixClip>(System.Text.Json.JsonSerializer.Serialize(copiedClip))!;
-        copy.Id = Guid.NewGuid(); copy.Start = Arrangement.SnapTime(caret, ModifierKeys.HasFlag(Keys.Shift)); lane.Clips.Add(copy);
-        selectedClip = copy.Id; selectedLane = lane.Id; Changed();
+        StartPastePreview();
     }
     private void RemoveLane(Guid id)
     {
@@ -983,7 +992,7 @@ public sealed partial class MixTrackView : Form
         using var dialog = new SaveFileDialog { Filter = "ModularAudience mix (*.mamix)|*.mamix", FileName = filename + ".mamix",
             InitialDirectory = directory, DefaultExt = "mamix", AddExtension = true };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        await RunAsync(async token => { await Arrangement.SaveAsync(dialog.FileName, token); dirty = false; status.Text = "Project saved with embedded Float32 audio."; });
+        await RunAsync(async token => await SaveToPathAsync(dialog.FileName, token));
     }
     internal async Task OpenProjectAsync()
     {
@@ -994,10 +1003,7 @@ public sealed partial class MixTrackView : Form
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         await RunAsync(async token =>
         {
-            var loaded = await MixArrangement.LoadAsync(dialog.FileName, token);
-            StopPlayback();
-            foreach (var source in loaded.Sources) if (!Arrangement.Sources.ContainsKey(source.Key)) Arrangement.Sources.Add(source.Key, source.Value);
-            Arrangement.Restore(loaded.Capture()); Changed(); Restore(Arrangement.Capture()); Text = Arrangement.Name; dirty = false;
+            await LoadFromPathAsync(dialog.FileName, token);
         });
     }
     public static string DefaultProjectsDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
@@ -1006,6 +1012,8 @@ public sealed partial class MixTrackView : Form
     {
         if (allowClose) return;
         e.Cancel = true; if (closing) return;
+        projectSaveTimer.Stop();
+        await FlushProjectSaveAsync();
         if (dirty && MessageBox.Show(this, "Close this mix? Unsaved arrangement changes will be lost.", "Close mix", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
         closing = true; operation?.Cancel();
         tempoDebounce.Stop();
@@ -1022,6 +1030,7 @@ public sealed partial class MixTrackView : Form
         liveUpdateCancellation?.Cancel();
         hueTimer.Dispose(); hueClock.Stop();
         tempoDebounce.Dispose();
+        projectSaveTimer.Dispose(); viewSaveTimer.Dispose(); pasteHoldTimer.Dispose();
         foreach (var view in joined.Values.Distinct())
             if (!view.IsDisposed && ReferenceEquals(view.JoinedMix, this)) { view.SetJoinedMix(null); if (!view.Disposing) view.Show(); }
         preparationCache.Dispose(); cachedMix?.Dispose(); cachedMix = null; wavePeaks.Clear(); Arrangement.Dispose();
@@ -1034,14 +1043,15 @@ public sealed partial class MixTrackView : Form
         if (keyData == (Keys.Control | Keys.Y)) { Redo(); return true; }
         if (ModularAudience.Forms.TextInputFocus.IsActive()) return base.ProcessCmdKey(ref msg, keyData);
         if (keyData == (Keys.Control | Keys.D)) { Duplicate(); return true; }
-        if (keyData == (Keys.Control | Keys.C)) { CopyClip(); return true; }
-        if (keyData == (Keys.Control | Keys.V)) { PasteClip(); return true; }
+        if (keyData == (Keys.Control | Keys.C)) { CopySelection(); return true; }
+        if (keyData == (Keys.Control | Keys.V)) { BeginPasteHold(); return true; }
         if (keyData == (Keys.Control | Keys.S)) { _ = SaveProjectAsync(); return true; }
         if (keyData == (Keys.Control | Keys.O)) { _ = OpenProjectAsync(); return true; }
         if (keyData == Keys.S) { Split(); return true; }
-        if (keyData == Keys.Delete && selectionFirstRow >= 0 && selectionEnd > selectionStart) { DeleteSelectedRange(); return true; }
-        if (keyData == Keys.Delete && Clip is { } clip) { Lane?.Clips.Remove(clip); Changed(); return true; }
+        if (keyData == Keys.Delete && (selectedClips.Count > 0 || Clip != null)) { DeleteSelection(); return true; }
+        if (keyData is Keys.Back or (Keys.Control | Keys.Back)) { JumpToManualCaret(keyData.HasFlag(Keys.Control)); return true; }
         if (keyData == Keys.Space) { _ = TogglePlayAsync(); return true; }
+        if (keyData == Keys.Escape && pastePreview) { CancelPastePreview(); return true; }
         if (keyData == Keys.Escape && dragBefore != null)
         {
             Arrangement.Restore(dragBefore); dragBefore = null; dragMode = 0; draggedLane = null; reorderTarget = -1;

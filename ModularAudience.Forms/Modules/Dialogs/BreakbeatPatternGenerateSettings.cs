@@ -12,6 +12,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
     /// </summary>
     internal sealed class BreakbeatGenerateOptions
     {
+        public string Preset { get; set; } = "- None -";
+        public int PresetIntensityPercent { get; set; } = 100;
+        public int PhraseBars { get; set; } = 4;
         public int DensityPercent { get; set; } = BreakbeatPatternGenerateSettings.DefaultDensityPercent;
         public int AmenFactorPercent { get; set; } = BreakbeatPatternGenerateSettings.DefaultAmenFactorPercent;
         public int MotifLengthSteps { get; set; } = BreakbeatPatternGenerateSettings.DefaultMotifLengthSteps;
@@ -115,6 +118,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public static BreakbeatGenerateOptions Normalize(BreakbeatGenerateOptions options)
         {
+            if (!BreakbeatTrackPresets.All.Any(p => p.Name == options.Preset)) options.Preset = "- None -";
+            options.PresetIntensityPercent = Math.Clamp(options.PresetIntensityPercent, 0, 100);
+            options.PhraseBars = Math.Clamp(options.PhraseBars, 1, 16);
             options.DensityPercent = Math.Clamp(options.DensityPercent, 0, 100);
             options.AmenFactorPercent = Math.Clamp(options.AmenFactorPercent, 0, 100);
             options.MotifLengthSteps = Math.Clamp(options.MotifLengthSteps, 1, 64);

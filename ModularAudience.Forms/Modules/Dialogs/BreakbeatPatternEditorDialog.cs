@@ -1304,6 +1304,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             this.drawingButton = e.Button;
+            this.rightClickDeleteActive = false;
             this.drawingRow = row;
             this.drawingStartColumn = column;
             if (e.Button == MouseButtons.Left)
@@ -1442,6 +1443,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 this.drawing = true;
                 this.drawingNote = newNote;
                 this.notes.Add(this.drawingNote);
+                this.DisableAutoRerollForManualNotes([this.drawingNote]);
             }
             else
             {
@@ -1571,6 +1573,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     this.UpdatePatternCursor(e.Location);
                 }
 
+                return;
+            }
+
+            if ((e.Button & this.drawingButton) == MouseButtons.None)
+            {
                 return;
             }
 
@@ -1706,6 +1713,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.deadGroupNotes.Clear();
             this.UpdateResizingNote(e.Location);
             this.drawing = false;
+            this.rightClickDeleteActive = false;
             bool wasResizeGesture = this.resizingNote is not null;
             bool didResize = wasResizeGesture && this.resizeChanged;
             BreakbeatPatternNote? clickedNote = wasResizeGesture ? this.resizeOriginalNote : null;
@@ -2518,6 +2526,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
             for (int row = rowStart; row <= rowEnd; row++)
             {
+                if (BreakbeatTrackPresets.Find(options) is { } preset)
+                {
+                    this.GeneratePresetRow(row, rowStart, rowEnd, colStart, colEnd, options, preset, rand, placed);
+                    continue;
+                }
                 int minimumDuration = BreakbeatGenerator_V2.GetMinimumNoteDurationTicks(
                     this.samples, row, (float)this.Bpm, this.currentResolution);
                 int segmentLength = Math.Max(1, options.MotifLengthSteps);
@@ -2543,7 +2556,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                             }
 
                             this.TryPlaceGeneratedNote(row, column, entry.LengthSteps, entry.PitchSemitones,
-                                entry.VolumePercent, minimumDuration, options, placed, rowStart, rowEnd);
+                                entry.VolumePercent, minimumDuration, options, placed, rowStart, rowEnd, rand);
                         }
 
                         continue;
@@ -2579,7 +2592,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                         float pitch = this.RollGeneratePitch(rand, options);
                         float volume = this.RollGenerateVolume(rand, options);
                         if (this.TryPlaceGeneratedNote(row, column, lengthSteps, pitch, volume,
-                            minimumDuration, options, placed, rowStart, rowEnd) && segment == 0)
+                            minimumDuration, options, placed, rowStart, rowEnd, rand) && segment == 0)
                         {
                             segmentMotif.Add(new GenerateMotifEntry(column - segmentBase, lengthSteps, pitch, volume));
                         }
@@ -2641,7 +2654,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             BreakbeatGenerateOptions options,
             List<BreakbeatPatternNote> placed,
             int rowStart,
-            int rowEnd)
+            int rowEnd,
+            Random? random = null)
         {
             int stepTicks = this.GetTicksPerStep();
             int patternEndTick = this.bars * BreakbeatGenerator_V2.PatternTicksPerBar;
@@ -2658,6 +2672,20 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             int targetTicks = Math.Min(Math.Max(1, lengthSteps) * stepTicks, remainingTicks);
+            // Checkboxes are eligible kinds, not a priority chain. Choose per note so
+            // hard-cut cannot swallow all short stretch/varispeed candidates.
+            var eligibleKinds = new List<int>();
+            if (options.AllowTruncated && targetTicks < minimumDurationTicks) eligibleKinds.Add(0);
+            if (options.AllowTimeStretch) eligibleKinds.Add(1);
+            if (options.AllowVarispeed) eligibleKinds.Add(2);
+            if (eligibleKinds.Count > 1)
+            {
+                int kind = eligibleKinds[(random ?? Random.Shared).Next(eligibleKinds.Count)];
+                options = options.Clone();
+                options.AllowTruncated = kind == 0;
+                options.AllowTimeStretch = kind == 1;
+                options.AllowVarispeed = kind == 2;
+            }
             BreakbeatPatternNote candidate = this.BuildGeneratedNote(
                 row, startTick, targetTicks,
                 minimumDurationTicks, remainingTicks, pitchSemitones, volumePercent, options);
@@ -2930,6 +2958,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 .ToList();
 
             this.notes.AddRange(placedNotes);
+            this.DisableAutoRerollForManualNotes(placedNotes);
             this.RegisterPatternNotesChanged(placedNotes.Select(note => (BreakbeatPatternNote?)note).ToArray());
             this.selectedNotes.Clear();
             this.deadGroupNotes.Clear();
@@ -3281,6 +3310,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
             this.notes.Add(note);
             this.deadGroupNotes.Clear();
+            this.DisableAutoRerollForManualNotes([note]);
             this.RegisterPatternNotesChanged(null, note);
             this.pictureBox_pattern.Invalidate();
             if (this.checkBox_preHear.Checked && this.hearCancellationTokenSource is null)
@@ -4818,6 +4848,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
                     await Task.Delay(10);
                 }
+                this.CompleteNonLoopHear(!cancellationTokenSource.IsCancellationRequested
+                    && !stopAtLoopBoundary && activeLoopSections.Length == 0 && !this.previewAudio.LoopEnabled);
             }
 
             catch (OperationCanceledException)

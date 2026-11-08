@@ -102,3 +102,36 @@ assets. Save/Open start in `<MyMusic>\ModularAudience\_Projects`, which is creat
 Projects are independent of original file paths/TrackViews. **Render → Collection** creates an AudioObj
 which can use the existing collection export workflow. The project keeps all sources used by undo
 history for the lifetime of the window; closing releases its owned buffers and waveform cache.
+# Clipboard, selection and rendering
+
+- Ctrl+C copies the current audio-range or whole-clip multiselection. History holds 50
+  deduplicated entries; recopying moves an entry to the top.
+- Tap Ctrl+V for a ghost preview at the pointer. Left-click places it, Esc/right-click cancels.
+  Hold Ctrl+V for 250 ms for clipboard history with waveform thumbnails. Up/Down selects;
+  Enter or click accepts and moves the entry to the top. Track/time offsets are retained.
+- Shift rectangle selection snaps to the grid. Ctrl rectangle selection selects entire
+  touched clips and adds to the existing selection. Ctrl-click adds a whole clip.
+- Render ... left-click renders the mix. Right-click offers Mix (one track), Separate
+  (per track), Render Track # and Selection (N). Selected ranges are cropped; whole
+  selected clips retain their complete audio. Explicit track renders ignore mute/solo
+  exclusion while retaining track gain and clip processing.
+- Backspace jumps to the last manually placed ruler caret; Ctrl+Backspace resets that
+  anchor and playback position to zero.
+
+# Project journal and Auto-save
+
+New .mamix projects use the MAMIXJ02 single-file append-only journal. Existing old ZIP
+projects are not compatible. Float32 audio assets are written once per immutable source
+ID. Further edits append only arrangement metadata snapshots; new audio sources append
+their PCM once. No repeated encoding/compression or full PCM scan occurs for existing
+assets. Metadata writes are coalesced with a 300 ms debounce and serialized off the UI
+thread. Undo/redo also schedules a save. The journal keeps prior records, so metadata
+history grows over time. Interrupted trailing records are ignored and truncated on the
+next save; the last complete snapshot remains loadable.
+
+Auto-save is unavailable until Save/Open establishes a project path. Its checked state
+is part of the project. Changing the checkbox saves that preference to the current file.
+Closing flushes pending saves. View options, lane height, horizontal zoom and horizontal/
+vertical viewport positions are stored and restored. Adding tracks grows the viewport
+when screen space allows; all lanes always share the same configured height, with a
+vertical scrollbar for overflow.

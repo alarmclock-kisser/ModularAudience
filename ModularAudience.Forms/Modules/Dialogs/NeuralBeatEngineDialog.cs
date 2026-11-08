@@ -26,6 +26,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private bool feedbackGiven;
         private bool isGenerating;
         private bool isPlaying;
+        private bool isTraining;
+        private bool isSessionIo;
+        private bool sessionLocked;
+        private bool closing;
+        private Task playbackTask = Task.CompletedTask;
 
         public NeuralBeatEngineDialog(IEnumerable<AudioObj>? audios = null)
         {
@@ -39,7 +44,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.listBox_samples.DataSource = this.Audios.Audios;
             this.listBox_samples.SelectedIndex = this.listBox_samples.Items.Count > 0 ? 0 : -1;
             this.numericUpDown_threadCount.Value = Math.Clamp(Environment.ProcessorCount, (int)this.numericUpDown_threadCount.Minimum, (int)this.numericUpDown_threadCount.Maximum);
-            alarmclockkisser.DragNDrop.Forms.ListBoxExtensions.Register_ListBox_DragNDrop(this.listBox_samples, false);
+            this.InitializeSessionControls();
 
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false, WindowMain.CurrentScreenId);
@@ -47,9 +52,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private BeatEngineConfig CreateConfig()
         {
-            if (this.Audios.Audios.Count < 2)
+            if (this.Audios.Audios.Count < 1)
             {
-                throw new InvalidOperationException("Add at least two samples before creating the engine.");
+                throw new InvalidOperationException("Add at least one sample before creating the engine.");
             }
 
             float minWeight = (float)this.numericUpDown_minWeight.Value;
@@ -77,13 +82,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async void button_generate_Click(object sender, EventArgs e)
         {
-            await this.GenerateSequenceAsync("root", createEngine: true);
+            await this.GenerateSequenceAsync(this.currentNodeId, createEngine: this.engine is null);
         }
 
         private async Task GenerateSequenceAsync(string nodeId, bool createEngine)
         {
+            if (this.isGenerating || this.isTraining || this.isSessionIo || this.closing) return;
             try
             {
+                if (this.engine is not null && !this.EnsureSessionCompatible()) return;
+                if (!this.PrepareSessionForGeneration(ref nodeId)) return;
+                this.SetGenerationControlsEnabled(false);
+                await this.StopPlaybackAsync();
                 this.CancelGeneration();
                 this.generationCancellationTokenSource = new CancellationTokenSource();
 
@@ -91,6 +101,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     this.engine = new AsyncBeatGraphEngine(this.CreateConfig());
                     this.currentNodeId = "root";
+                    this.sessionLocked = true;
+                    this.slotMetadata = this.CaptureSlots();
+                    nodeId = "root";
                 }
 
                 if (this.engine is null)
@@ -98,15 +111,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     throw new InvalidOperationException("Create the engine before generating a beat.");
                 }
 
-                this.SetGenerationControlsEnabled(false);
                 this.SetFeedbackEnabled(false);
                 this.feedbackGiven = false;
                 this.label_status.Text = "Generating sequence...";
                 this.currentPattern = await this.engine.GeneratePatternAsync(nodeId, null, this.generationCancellationTokenSource.Token);
                 this.currentNodeId = nodeId;
+                this.RefreshExplorer();
                 await this.RenderCurrentPatternAsync();
+                this.generationCancellationTokenSource.Token.ThrowIfCancellationRequested();
                 this.StartPlayback();
-                this.button_remix.Enabled = true;
+                this.UpdateSessionAvailability();
             }
             catch (OperationCanceledException)
             {
@@ -127,12 +141,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private void SetGenerationControlsEnabled(bool enabled)
         {
             this.isGenerating = !enabled;
-            this.button_generate.Enabled = !this.isGenerating && !this.isPlaying;
-            this.button_stop.Enabled = this.isGenerating || this.isPlaying;
+            this.UpdateSessionAvailability();
         }
 
         private void SetFeedbackEnabled(bool enabled)
         {
+            enabled = enabled && this.SessionCompatible && !this.isGenerating && !this.isTraining && !this.isSessionIo && !this.feedbackGiven;
             this.button_feedback0.Enabled = enabled;
             this.button_feedback25.Enabled = enabled;
             this.button_feedback50.Enabled = enabled;
@@ -156,7 +170,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.playbackCancellationTokenSource = new CancellationTokenSource();
             this.isPlaying = true;
             this.SetGenerationControlsEnabled(!this.isGenerating);
-            _ = this.PlayRenderedBeatAsync(this.renderedBeat, this.playbackCancellationTokenSource.Token);
+            this.playbackTask = this.PlayRenderedBeatAsync(this.renderedBeat, this.playbackCancellationTokenSource.Token);
         }
 
         private async Task PlayRenderedBeatAsync(AudioObj beat, CancellationToken cancellationToken)
@@ -169,6 +183,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                 TimeSpan duration = beat.Duration > TimeSpan.Zero ? beat.Duration : TimeSpan.FromSeconds(1);
                 await Task.Delay(duration, cancellationToken);
+                if (cancellationToken.IsCancellationRequested || this.closing) return;
                 this.SetFeedbackEnabled(true);
                 this.label_status.Text = this.checkBox_loopUntilFeedback.Checked
                     ? "Beat is looping. Choose feedback to train the engine."
@@ -232,6 +247,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private async Task StopPlaybackAsync()
         {
             this.StopPlayback();
+            await this.playbackTask;
             if (this.renderedBeat is not null)
             {
                 this.renderedBeat.LoopEnabled = false;
@@ -251,14 +267,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 return;
             }
+            if (this.isGenerating || this.isTraining || this.isSessionIo || this.feedbackGiven || !this.EnsureSessionCompatible()) return;
 
             try
             {
                 this.SetFeedbackEnabled(false);
                 this.feedbackGiven = true;
+                this.isTraining = true;
+                this.UpdateSessionAvailability();
                 await this.StopPlaybackAsync();
                 this.label_status.Text = $"Applying {feedbackValue:P0} feedback...";
                 await this.engine.ApplyFeedbackAsync(this.currentNodeId, this.currentPattern, feedbackValue);
+                this.isTraining = false;
+                this.RefreshExplorer();
                 this.button_generate.Enabled = true;
                 this.button_remix.Enabled = true;
 
@@ -276,6 +297,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Neural Beat Engine", ex);
             }
+            finally { this.isTraining = false; this.UpdateSessionAvailability(); }
         }
 
         private async void button_remix_Click(object sender, EventArgs e)
@@ -284,35 +306,51 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 return;
             }
+            if (this.isGenerating || this.isTraining || this.isSessionIo || !this.EnsureSessionCompatible()) return;
 
             try
             {
+                this.isTraining = true; this.UpdateSessionAvailability();
                 await this.StopPlaybackAsync();
                 this.button_remix.Enabled = false;
                 this.label_status.Text = "Creating remix node...";
                 string remixNodeId = await this.engine.CreateRemixNodeAsync(this.currentNodeId, (float)this.numericUpDown_mutation.Value);
+                this.isTraining = false;
                 await this.GenerateSequenceAsync(remixNodeId, createEngine: false);
             }
             catch (Exception ex)
             {
                 ModularAudience.Forms.Helpers.WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Neural Beat Engine", ex);
             }
+            finally { this.isTraining = false; this.UpdateSessionAvailability(); }
         }
 
-        private void NeuralBeatEngineDialog_FormClosing(object sender, FormClosingEventArgs e)
+        private async void NeuralBeatEngineDialog_FormClosing(object sender, FormClosingEventArgs e)
         {
-            this.CancelGeneration();
-            this.StopPlayback();
-            if (this.renderedBeat is not null)
+            if (this.closing) return;
+            e.Cancel = true;
+            if (this.isGenerating || this.isTraining || this.isSessionIo)
             {
-                this.renderedBeat.LoopEnabled = false;
-                _ = this.renderedBeat.StopAsync();
+                this.CancelGeneration();
+                this.label_status.Text = "Stopping current operation. Close again when it has finished.";
+                return;
             }
+            this.closing = true;
+            this.CancelGeneration();
+            await this.StopPlaybackAsync();
+            this.explorer?.Close();
+            this.currentPattern = null;
+            this.renderedBeat?.Dispose();
+            this.renderedBeat = null;
+            var engineToDispose = this.engine;
+            this.engine = null;
+            engineToDispose?.Dispose();
 
             Image? image = this.pictureBox_beatMap.Image;
             this.pictureBox_beatMap.Image = null;
             image?.Dispose();
             this.Audios.Dispose();
+            this.Close();
         }
 
         private async Task RenderCurrentPatternAsync()
@@ -323,15 +361,23 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             List<bool[]> pattern = this.currentPattern.ToList();
+            int stepsPerBeat = this.sessionLocked && this.engine is not null ? this.engine.Config.StepsPerBeat : (int)this.numericUpDown_stepsPerBeat.Value;
+            double duration = pattern[0].Length * 60d / (double)this.numericUpDown_bpm.Value / stepsPerBeat;
+            if (duration * 44100 * 2 * sizeof(float) > 512L * 1024 * 1024)
+                throw new InvalidOperationException("The rendered beat would exceed 512 MiB. Use fewer bars/steps or a faster BPM in a new session.");
             this.ShowBeatMap(pattern);
             this.label_status.Text = "Rendering beat audio...";
+            var previousBeat = this.renderedBeat;
             this.renderedBeat = await BreakbeatGenerator_V2.RenderBreakbeatAsync(
                 pattern,
                 this.Audios.Audios,
                 (float)this.numericUpDown_bpm.Value,
-                (int)this.numericUpDown_beatsPerBar.Value * (int)this.numericUpDown_stepsPerBeat.Value,
+                // RenderBreakbeat uses quarter-note BPM and a four-quarter reference bar.
+                // Grid duration must remain 60/BPM/StepsPerBeat even for 3/4, 7/8, etc.
+                4 * stepsPerBeat,
                 0f,
                 "NeuralBeat");
+            previousBeat?.Dispose();
 
             if (this.renderedBeat is null)
             {
@@ -341,7 +387,22 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.button_export.Enabled = true;
         }
 
+        private bool drawingBeatMap;
+
         private void ShowBeatMap(IReadOnlyList<bool[]> pattern)
+        {
+            if (this.drawingBeatMap) return;
+            this.drawingBeatMap = true;
+            try
+            {
+                this.RenderBeatMap(pattern);
+                if (this.pictureBox_beatMap.Parent is Panel viewport)
+                    this.pictureBox_beatMap.Bounds = viewport.ClientRectangle;
+            }
+            finally { this.drawingBeatMap = false; }
+        }
+
+        private void RenderBeatMap(IReadOnlyList<bool[]> pattern)
         {
             int width = Math.Max(1, this.pictureBox_beatMap.Width);
             int height = Math.Max(1, this.pictureBox_beatMap.Height);
@@ -388,12 +449,20 @@ namespace ModularAudience.Forms.Modules.Dialogs
             previous?.Dispose();
         }
 
-        private void removeToolStripMenuItem_Click(object sender, EventArgs e)
+        private async void removeToolStripMenuItem_Click(object sender, EventArgs e)
         {
+            if (!this.EditingAvailable) return;
             if (this.listBox_samples.SelectedItem is AudioObj selectedAudio)
             {
+                this.isSessionIo = true; this.UpdateSessionAvailability();
+                await this.StopPlaybackAsync();
                 this.Audios.Audios.Remove(selectedAudio);
+                selectedAudio.Dispose();
+                this.renderedBeat?.Dispose();
+                this.renderedBeat = null;
                 this.listBox_samples.SelectedIndex = this.listBox_samples.Items.Count > 0 ? 0 : -1;
+                this.isSessionIo = false;
+                this.UpdateSessionAvailability();
             }
         }
     }

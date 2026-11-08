@@ -26,6 +26,8 @@ public sealed class MixVisualOptions
     public bool ShowGrid { get; set; } = true;
     public double PixelsPerSecond { get; set; } = 90;
     public MixScrollMode ScrollMode { get; set; }
+    public double HorizontalScrollSeconds { get; set; }
+    public int FirstVisibleTrack { get; set; }
 }
 
 public sealed class MixSource
@@ -79,6 +81,7 @@ public sealed class MixArrangement : IDisposable
     public double LoopStart { get; set; }
     public double LoopEnd { get; set; } = 8;
     public bool Loop { get; set; }
+    public bool AutoSave { get; set; }
     public List<MixLane> Lanes { get; set; } = [];
     [System.Text.Json.Serialization.JsonIgnore] public Dictionary<Guid, MixSource> Sources { get; } = [];
     public double Duration => Lanes.SelectMany(l => l.Clips).Select(c => c.Start + ClipDuration(c)).DefaultIfEmpty(0).Max();
@@ -109,7 +112,7 @@ public sealed class MixArrangement : IDisposable
     {
         var state = JsonSerializer.Deserialize<MixArrangement>(json) ?? throw new InvalidDataException("Invalid arrangement.");
         Name = state.Name; Bpm = state.Bpm; SnapDivision = state.SnapDivision; Snap = state.Snap; DisplayLaneHeight = state.DisplayLaneHeight; Visual = state.Visual;
-        LoopStart = state.LoopStart; LoopEnd = state.LoopEnd; Loop = state.Loop; Lanes = state.Lanes;
+        LoopStart = state.LoopStart; LoopEnd = state.LoopEnd; Loop = state.Loop; AutoSave = state.AutoSave; Lanes = state.Lanes;
     }
     public void Validate()
     {
@@ -121,6 +124,8 @@ public sealed class MixArrangement : IDisposable
             || !double.IsFinite(Visual.HueSpeed) || Visual.HueSpeed is < -720 or > 720
             || !double.IsFinite(Visual.PixelsPerSecond) || Visual.PixelsPerSecond is < 8 or > 2000)
             throw new InvalidDataException("Invalid visual options.");
+        if (!double.IsFinite(Visual.HorizontalScrollSeconds) || Visual.HorizontalScrollSeconds < 0 || Visual.FirstVisibleTrack < 0)
+            throw new InvalidDataException("Invalid viewport position.");
         foreach (var property in typeof(MixVisualOptions).GetProperties().Where(p => p.PropertyType == typeof(string)))
         {
             string? color = property.GetValue(Visual) as string;
@@ -144,7 +149,9 @@ public sealed class MixArrangement : IDisposable
             }
         }
     }
-    public async Task SaveAsync(string path, CancellationToken token = default)
+    public Task SaveAsync(string path, CancellationToken token = default) => MixProjectFile.SaveAsync(path, this, token);
+    public static Task<MixArrangement> LoadAsync(string path, CancellationToken token = default) => MixProjectFile.LoadAsync(path, token);
+    private async Task SaveLegacyAsync(string path, CancellationToken token = default)
     {
         Validate();
         string metadata = Capture(); var sources = Sources.Values.ToArray();
@@ -174,7 +181,7 @@ public sealed class MixArrangement : IDisposable
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }
-    public static Task<MixArrangement> LoadAsync(string path, CancellationToken token = default) => Task.Run(() =>
+    private static Task<MixArrangement> LoadLegacyAsync(string path, CancellationToken token = default) => Task.Run(() =>
     {
         using var zip = ZipFile.OpenRead(path);
         using var reader = new StreamReader(zip.GetEntry("arrangement.json")?.Open() ?? throw new InvalidDataException("No arrangement metadata."));

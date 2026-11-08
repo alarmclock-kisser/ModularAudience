@@ -69,6 +69,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public BreakbeatGeneratorDialog(IEnumerable<AudioObj> samples)
         {
             this.InitializeComponent();
+            this.InitializeLlmSettings();
             this.Controls.Add(new Label { Text = "Pitch ±st", AutoSize = true, Location = new Point(170, 345) });
             this.Controls.Add(this.numeric_pitchRange);
             this.Controls.Add(new Label { Text = "Pitch %", AutoSize = true, Location = new Point(244, 345) });
@@ -623,12 +624,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 LogManager.Log("Generating Break-Beat via LLM.");
 
                 llmContent = await this.RequestBreakbeatFromLlmAsync(apiUrl, systemPrompt, llmUserPrompt);
+                if (this.IsDisposed || this.Disposing) return;
                 LogMultiline("LLM raw response", llmContent);
 
                 LlmBreakbeatParseResult parsed;
                 try
                 {
                     parsed = this.ParseLlmBreakbeat(llmContent, drumkit, this.Bars, this.Resolution);
+                    if (this.llmSettings.KeepContext && this.pendingLlmTurn is { } turn)
+                        this.llmContext.Remember(turn.Generation, turn.User, turn.Assistant);
+                    this.pendingLlmTurn = null;
                 }
                 catch (Exception ex)
                 {
@@ -650,6 +655,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             catch (TaskCanceledException ex)
             {
+                if (this.IsDisposed || this.Disposing) return;
                 string timeoutMessage = "LLM request timed out or was canceled." + Environment.NewLine + Environment.NewLine + ex.Message;
                 LogMultiline("LLM timeout", timeoutMessage);
                 this.ShowCopyableMessageBox("LLM Timeout", timeoutMessage + (string.IsNullOrWhiteSpace(llmContent) ? string.Empty : Environment.NewLine + Environment.NewLine + "Raw response:" + Environment.NewLine + llmContent));
@@ -663,12 +669,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     errorMessage += Environment.NewLine + Environment.NewLine + "Raw response:" + Environment.NewLine + llmContent;
                 }
 
-                this.ShowCopyableMessageBox("LLM Error", errorMessage);
+                if (!this.IsDisposed && !this.Disposing) this.ShowCopyableMessageBox("LLM Error", errorMessage);
             }
             finally
             {
-                this.UseWaitCursor = previousUseWaitCursor;
-                this.button_llm.Enabled = true;
+                this.pendingLlmTurn = null;
+                if (!this.IsDisposed && !this.Disposing)
+                {
+                    this.UseWaitCursor = previousUseWaitCursor;
+                    this.button_llm.Enabled = true;
+                }
             }
         }
 
@@ -865,45 +875,55 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async Task<string> RequestBreakbeatFromLlmAsync(string apiUrl, string systemPrompt, string userPrompt)
         {
+            this.pendingLlmTurn = null;
+            var generationSettings = this.CaptureLlmSettings();
+            int initialContextGeneration = this.llmContext.Generation;
             using var httpClient = CreateLlmHttpClient();
             httpClient.Timeout = Timeout.InfiniteTimeSpan;
 
             using var discoveryCancellationTokenSource = new CancellationTokenSource(LlmDiscoveryTimeout);
             (Uri modelsUri, string model) = await DiscoverWorkingModelAsync(httpClient, apiUrl, discoveryCancellationTokenSource.Token);
+            if (this.IsDisposed || this.Disposing) throw new TaskCanceledException("The generator window was closed.");
             Uri chatCompletionsUri = ReplaceEndpoint(modelsUri, "chat/completions");
 
             LogManager.Log($"LLM chat endpoint: {chatCompletionsUri}");
             LogManager.Log($"LLM model: {model}");
 
-            object[] messages =
-            [
-                new { role = "system", content = systemPrompt },
-                new { role = "user", content = userPrompt }
-            ];
+            bool keepContext = generationSettings.KeepContext && this.llmSettings.KeepContext
+                && initialContextGeneration == this.llmContext.Generation;
+            var messages = this.llmContext.Messages(chatCompletionsUri.AbsoluteUri + "|" + model,
+                systemPrompt, userPrompt, keepContext);
+            int contextGeneration = this.llmContext.Generation;
+            string CaptureReply(string reply)
+            {
+                if (keepContext && this.llmSettings.KeepContext && contextGeneration == this.llmContext.Generation
+                    && !this.IsDisposed && !this.Disposing)
+                    this.pendingLlmTurn = (contextGeneration, userPrompt, reply);
+                return reply;
+            }
 
             Dictionary<string, object?> payload = new()
             {
                 ["model"] = model,
-                ["temperature"] = Math.Clamp(0.20 + (this.Complexity * 0.60), 0.1, 1.0),
-                ["seed"] = this.Seed,
                 ["messages"] = messages,
                 ["response_format"] = new Dictionary<string, string>
                 {
                     ["type"] = "json_object"
                 }
             };
+            generationSettings.ApplyTo(payload);
 
             using var requestCancellationTokenSource = new CancellationTokenSource(LlmRequestTimeout);
 
             try
             {
-                return await SendChatCompletionRequestAsync(httpClient, chatCompletionsUri, payload, requestCancellationTokenSource.Token);
+                return CaptureReply(await SendChatCompletionRequestAsync(httpClient, chatCompletionsUri, payload, requestCancellationTokenSource.Token));
             }
-            catch (HttpRequestException)
+            catch (HttpRequestException error) when (payload.ContainsKey("response_format") && error.StatusCode is System.Net.HttpStatusCode.BadRequest or System.Net.HttpStatusCode.UnprocessableEntity)
             {
                 LogManager.Log("LLM endpoint rejected response_format=json_object. Retrying without response_format.");
                 payload.Remove("response_format");
-                return await SendChatCompletionRequestAsync(httpClient, chatCompletionsUri, payload, requestCancellationTokenSource.Token);
+                return CaptureReply(await SendChatCompletionRequestAsync(httpClient, chatCompletionsUri, payload, requestCancellationTokenSource.Token));
             }
             catch (OperationCanceledException ex) when (requestCancellationTokenSource.IsCancellationRequested)
             {
@@ -924,7 +944,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                throw new HttpRequestException($"LLM request failed with HTTP {(int)response.StatusCode}: {responseBody}");
+                throw new HttpRequestException($"LLM request failed with HTTP {(int)response.StatusCode}: {responseBody}", null, response.StatusCode);
             }
 
             using JsonDocument responseJson = JsonDocument.Parse(responseBody);

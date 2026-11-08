@@ -79,6 +79,38 @@ public sealed class BreakbeatPatternWindowTests
     }
 
     [STATestMethod]
+    public void LeftDragAfterErasingDrawsALongNoteWithoutDeletingTouchedNotes()
+    {
+        using var source = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using var editor = new BreakbeatPatternEditorDialog([new bool[16], new bool[16]], [source, source], ["Draw", "Keep"],
+            1, 16, 0, 120, [new(0, 0, 64), new(1, 256, 64)], initialGridResolution: 16);
+        Type type = typeof(BreakbeatPatternEditorDialog);
+        object? Call(string name, params object[] args) => type.GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(editor, args);
+        var picture = (Control)type.GetField("pictureBox_pattern", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(editor)!;
+        _ = editor.Handle; _ = picture.Handle;
+        Rectangle grid = (Rectangle)Call("GetGridBounds")!;
+        Point At(int row, double step) => new(grid.Left + (int)(grid.Width * step / 16), grid.Top + (int)(grid.Height * (row + 0.5) / 2));
+        void Mouse(string handler, MouseButtons button, Point point) => Call(handler, picture, new MouseEventArgs(button, 1, point.X, point.Y, 0));
+        var notes = (List<BreakbeatPatternNote>)type.GetField("notes", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(editor)!;
+        var keep = notes.Single(n => n.TrackIndex == 1);
+        Mouse("pictureBox_pattern_MouseDown", MouseButtons.Right, At(0, 0.5));
+        Mouse("pictureBox_pattern_MouseUp", MouseButtons.Right, At(0, 0.5));
+        Assert.HasCount(1, notes);
+        Mouse("pictureBox_pattern_MouseDown", MouseButtons.Left, At(0, 2.2));
+        Mouse("pictureBox_pattern_MouseMove", MouseButtons.Left, At(1, 4.5));
+        Mouse("pictureBox_pattern_MouseUp", MouseButtons.Left, At(1, 4.5));
+        Assert.IsTrue(notes.Contains(keep), "Left-drag must never retain the previous right-drag erase mode.");
+        var drawn = notes.Single(n => n.TrackIndex == 0);
+        Assert.AreEqual(128, drawn.StartTick);
+        Assert.AreEqual(192, drawn.DurationTicks);
+        Mouse("pictureBox_pattern_MouseMove", MouseButtons.None, At(1, 4.5));
+        Assert.IsTrue(notes.Contains(keep));
+        Call("UndoEditorAction");
+        Assert.HasCount(1, notes);
+        Assert.IsTrue(notes.Contains(keep));
+    }
+
+    [STATestMethod]
     public void RerollReplacesOnlyLastGeneratedNotesAndIsUndoableAndRemappable()
     {
         using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
@@ -182,7 +214,7 @@ public sealed class BreakbeatPatternWindowTests
         optionsType.GetProperty("Interleaved")!.SetValue(options, true);
         var placed = new List<BreakbeatPatternNote>();
         MethodInfo place = typeof(BreakbeatPatternEditorDialog).GetMethod("TryPlaceGeneratedNote", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        bool Place(int row, int column) => (bool)place.Invoke(editor, [row, column, 1, 0f, 100f, 1, options, placed, 1, 2])!;
+        bool Place(int row, int column) => (bool)place.Invoke(editor, [row, column, 1, 0f, 100f, 1, options, placed, 1, 2, null])!;
         Assert.IsTrue(Place(1, 0), "The full-bar note on unselected track 0 must not block generation.");
         Assert.IsFalse(Place(2, 0), "Selected tracks must still interleave with each other.");
         Assert.IsTrue(Place(2, 1), "The next non-overlapping step must remain available.");

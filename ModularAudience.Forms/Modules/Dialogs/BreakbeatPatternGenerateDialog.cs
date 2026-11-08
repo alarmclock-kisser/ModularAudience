@@ -32,17 +32,23 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private readonly CheckBox check_saveSolo = new() { Text = "Save new solo", AutoSize = true };
         private readonly bool autoReroll;
         private readonly ComboBox combo_applyFromTracks = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 340 };
+        private readonly ComboBox combo_preset = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+        private readonly NumericUpDown numeric_presetIntensity = new();
+        private readonly NumericUpDown numeric_phraseBars = new();
+        private bool applyingOptions;
 
         public BreakbeatPatternGenerateDialog(BreakbeatGenerateOptions options, TrackAutoRerollOptions? autoOptions = null)
         {
             this.autoReroll = autoOptions != null;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.StartPosition = FormStartPosition.CenterParent;
-            this.ClientSize = new Size(390, autoReroll ? 620 : 534);
+            this.ClientSize = new Size(440, autoReroll ? 710 : 624);
             this.MinimizeBox = false;
             this.MaximizeBox = false;
             this.ShowInTaskbar = false;
             this.Text = "Generate: Random Pattern";
+            Panel content = new() { Dock = DockStyle.Fill, AutoScroll = true };
+            this.Controls.Add(content);
 
             TableLayoutPanel grid = new()
             {
@@ -53,10 +59,15 @@ namespace ModularAudience.Forms.Modules.Dialogs
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62f));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38f));
-            this.Controls.Add(grid);
+            content.Controls.Add(grid);
 
             int row = 0;
             this.toolTip = new ToolTip();
+            this.combo_preset.Items.Add("- None -");
+            foreach (var preset in BreakbeatTrackPresets.All) this.combo_preset.Items.Add(preset);
+            this.combo_preset.SelectedIndex = Math.Max(0, BreakbeatTrackPresets.All.ToList().FindIndex(p => p.Name == options.Preset) + 1);
+            grid.Controls.Add(new Label { Text = "Pattern preset", AutoSize = true, Anchor = AnchorStyles.Left }, 0, row);
+            grid.Controls.Add(this.combo_preset, 1, row++);
             void AddNumeric(string label, NumericUpDown numeric, decimal value, decimal min, decimal max, decimal increment, int decimalPlaces, string tooltip)
             {
                 Label caption = new() { Text = label, AutoSize = true, Anchor = AnchorStyles.Left };
@@ -74,6 +85,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 row++;
             }
 
+            AddNumeric("Preset intensity (%)", this.numeric_presetIntensity, options.PresetIntensityPercent, 0, 100, 5, 0,
+                "0 = legacy random generation; 100 = strongest preset rhythm, pitch contour and dynamics. All option limits still apply.");
+            AddNumeric("Phrase length (bars)", this.numeric_phraseBars, options.PhraseBars, 1, 16, 1, 0,
+                "Preset phrase cycle, with an answer/fill in its last bar. Uses the existing selection; does not resize the song.");
+            this.numeric_presetIntensity.Enabled = this.numeric_phraseBars.Enabled = this.combo_preset.SelectedIndex > 0;
             AddNumeric("Density (%)", this.numeric_density, options.DensityPercent, 0, 100, 5, 0,
                 "Probability per enclosed cell to place a note.");
             AddNumeric("Amen break factor (%)", this.numeric_amen, options.AmenFactorPercent, 0, 100, 5, 0,
@@ -147,7 +163,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 applyAll.Click += (_, _) =>
                 {
                     this.ApplyForAll = true;
-                    this.DialogResult = DialogResult.OK;
+                this.DialogResult = DialogResult.OK;
                     this.Close();
                 };
                 stretchFlow.Controls.Add(applyAll);
@@ -160,7 +176,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.ClientSize = new Size(this.ClientSize.Width, this.ClientSize.Height + 100);
             }
             stretchGroup.Controls.Add(stretchFlow);
-            this.Controls.Add(stretchGroup);
+            content.Controls.Add(stretchGroup);
             stretchGroup.BringToFront();
 
             FlowLayoutPanel buttons = new()
@@ -178,9 +194,20 @@ namespace ModularAudience.Forms.Modules.Dialogs
             buttons.Controls.Add(ok);
             buttons.Controls.Add(reset);
             this.Controls.Add(buttons);
+            this.ClientSize = new Size(this.ClientSize.Width, Math.Min(this.ClientSize.Height, Screen.FromControl(this).WorkingArea.Height - 100));
 
             this.AcceptButton = ok;
             this.CancelButton = cancel;
+            ok.Click += (_, _) => this.Close();
+            cancel.Click += (_, _) => this.Close();
+            this.combo_preset.SelectedIndexChanged += (_, _) =>
+            {
+                bool active = this.combo_preset.SelectedItem is BreakbeatTrackPreset;
+                this.numeric_presetIntensity.Enabled = this.numeric_phraseBars.Enabled = active;
+                this.toolTip.SetToolTip(this.combo_preset, active ? ((BreakbeatTrackPreset)this.combo_preset.SelectedItem!).Description : "Legacy random generation; no preset processing.");
+                if (!this.applyingOptions && this.combo_preset.SelectedItem is BreakbeatTrackPreset preset)
+                    this.ApplyOptions(preset.Defaults(this.Options));
+            };
         }
 
         private readonly ToolTip toolTip;
@@ -218,6 +245,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private void ApplyOptions(BreakbeatGenerateOptions options)
         {
             options = BreakbeatPatternGenerateSettings.Normalize(options);
+            this.applyingOptions = true;
+            this.combo_preset.SelectedIndex = Math.Max(0, BreakbeatTrackPresets.All.ToList().FindIndex(p => p.Name == options.Preset) + 1);
+            this.numeric_presetIntensity.Value = options.PresetIntensityPercent;
+            this.numeric_phraseBars.Value = options.PhraseBars;
             this.numeric_density.Value = options.DensityPercent;
             this.numeric_amen.Value = options.AmenFactorPercent;
             this.numeric_motifLength.Value = options.MotifLengthSteps;
@@ -234,10 +265,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.check_varispeed.Checked = options.AllowVarispeed;
             this.check_truncated.Checked = options.AllowTruncated;
             this.check_interleaved.Checked = options.Interleaved;
+            this.applyingOptions = false;
         }
 
         public BreakbeatGenerateOptions Options => BreakbeatPatternGenerateSettings.Normalize(new BreakbeatGenerateOptions
         {
+            Preset = this.combo_preset.SelectedItem is BreakbeatTrackPreset preset ? preset.Name : "- None -",
+            PresetIntensityPercent = (int)this.numeric_presetIntensity.Value,
+            PhraseBars = (int)this.numeric_phraseBars.Value,
             DensityPercent = (int)this.numeric_density.Value,
             AmenFactorPercent = (int)this.numeric_amen.Value,
             MotifLengthSteps = (int)this.numeric_motifLength.Value,

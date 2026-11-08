@@ -33,6 +33,7 @@ public partial class BreakbeatPatternEditorDialog
     private AudioCollectionView? autoEnsembleCollection;
     private long autoVariation;
     private bool autoRerollClosing;
+    private BreakbeatPatternGenerateDialog? trackGenerateDialog;
     private readonly HashSet<string> savedEnsembleHashes = [];
 
     private Rectangle AutoToggleBounds(int row)
@@ -95,15 +96,39 @@ public partial class BreakbeatPatternEditorDialog
                 state.Options.Enabled = false;
             else
             {
-                using var dialog = new BreakbeatPatternGenerateDialog(state.Options.Generate.Clone(), state.Options);
+                if (this.trackGenerateDialog is { IsDisposed: false } existing)
+                {
+                    existing.Activate();
+                    return true;
+                }
+                var dialog = new BreakbeatPatternGenerateDialog(state.Options.Generate.Clone(), state.Options);
                 dialog.SetOtherTrackOptions(Enumerable.Range(0, this.samples.Count)
                     .Where(other => other != row && this.autoRerolls.ContainsKey(this.samples[other]))
                     .Select(other => (other + 1,
                         other < this.rowLabels.Count ? this.rowLabels[other] : this.samples[other].Name,
                         this.autoRerolls[this.samples[other]].Options)));
-                if (dialog.ShowDialog(this) != DialogResult.OK) return true;
-                if (dialog.ApplyForAll) this.ActivateAutoRerollForAll(dialog.AutoOptions);
-                else this.ActivateAutoReroll(row, dialog.AutoOptions);
+                this.trackGenerateDialog = dialog;
+                // Owned modeless window: only this editor is disabled, not every UI-thread window as with ShowDialog.
+                dialog.FormClosed += (_, _) =>
+                {
+                    this.trackGenerateDialog = null;
+                    if (this.IsDisposed || this.Disposing || this.autoRerollClosing) return;
+                    this.Enabled = true;
+                    if (dialog.DialogResult == DialogResult.OK && this.samples.Contains(sample))
+                    {
+                        this.ConfirmTrackGenerateOptions(this.samples.IndexOf(sample), dialog.AutoOptions, dialog.ApplyForAll);
+                        this.pictureBox_pattern.Invalidate();
+                        this.CommitHistoryAction();
+                    }
+                    this.Activate();
+                };
+                dialog.StartPosition = FormStartPosition.Manual;
+                dialog.Location = new Point(
+                    Math.Max(Screen.FromControl(this).WorkingArea.Left, this.Left + (this.Width - dialog.Width) / 2),
+                    Math.Max(Screen.FromControl(this).WorkingArea.Top, this.Top + (this.Height - dialog.Height) / 2));
+                dialog.Show(this);
+                this.Enabled = false;
+                return true;
             }
             this.pictureBox_pattern.Invalidate();
             this.CommitHistoryAction();
@@ -115,6 +140,21 @@ public partial class BreakbeatPatternEditorDialog
     {
         int[] sections = this.GetLoopSectionsSnapshot();
         return sections.Length > 0 ? sections : Enumerable.Range(0, this.bars * 4).ToArray();
+    }
+    private void ConfirmTrackGenerateOptions(int row, TrackAutoRerollOptions options, bool applyForAll)
+    {
+        int[] rows = applyForAll ? Enumerable.Range(0, this.samples.Count).ToArray() : [row];
+        foreach (int target in rows)
+        {
+            if (!this.autoRerolls.TryGetValue(this.samples[target], out var state))
+                this.autoRerolls[this.samples[target]] = state = new();
+            state.Options = options.Clone();
+            state.Options.Enabled = true;
+            state.CompletedLoops = 0;
+        }
+        // Confirming options is an explicit roll, including already populated tracks.
+        // Generate together so ensemble autosaves see one final shared state.
+        this.ApplyTrackAutoRerolls(rows, this.AutoRerollSections());
     }
     private void ActivateAutoReroll(int row, TrackAutoRerollOptions options)
     {
@@ -194,6 +234,23 @@ public partial class BreakbeatPatternEditorDialog
         if (elapsed <= 0) return;
         this.observedAutoLoopPass = loopPass;
         if (sections.Length == 0) return;
+        this.AdvanceAutoRerollCounters(elapsed, sections);
+    }
+    private void CompleteNonLoopHear(bool completed)
+    {
+        if (!completed || this.autoRerollClosing || this.IsDisposed || this.selectedLoopSections.Count > 0) return;
+        this.AdvanceAutoRerollCounters(1, Enumerable.Range(0, this.bars * 4).ToArray());
+    }
+    private void DisableAutoRerollForManualNotes(IEnumerable<BreakbeatPatternNote> placed)
+    {
+        if (this.automaticGeneration) return;
+        foreach (int row in placed.Select(n => n.TrackIndex).Distinct())
+            if (row >= 0 && row < this.samples.Count && this.autoRerolls.TryGetValue(this.samples[row], out var state))
+                state.Options.Enabled = false;
+        this.pictureBox_pattern.Invalidate();
+    }
+    private void AdvanceAutoRerollCounters(long elapsed, int[] sections)
+    {
         var due = new List<int>();
         for (int row = 0; row < this.samples.Count; row++)
         {

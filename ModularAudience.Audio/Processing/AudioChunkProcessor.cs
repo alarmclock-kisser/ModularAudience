@@ -40,7 +40,8 @@ namespace ModularAudience.Audio.Processing
                 return Task.FromResult<IEnumerable<float[]>>([]);
             }
 
-            int numChunks = Math.Max(1, ((audio.Data.Length - size) / step) + 1);
+            float[] sourceData = audio.Data;
+            int numChunks = Math.Max(1, ((sourceData.Length - size) / step) + 1);
             float[][] chunks = new float[numChunks][];
 
             Parallel.For(0, numChunks, new ParallelOptions
@@ -50,12 +51,10 @@ namespace ModularAudience.Audio.Processing
             {
                 int sourceOffset = i * step;
                 float[] chunk = new float[size];
-                Buffer.BlockCopy(
-                    src: audio.Data,
-                    srcOffset: sourceOffset * sizeof(float),
-                    dst: chunk,
-                    dstOffset: 0,
-                    count: size * sizeof(float));
+                // Pitching up can leave less than one FFT chunk. Preserve the
+                // available samples and zero-pad, just like GetChunksEnumerable.
+                int copyLength = Math.Min(size, sourceData.Length - sourceOffset);
+                Array.Copy(sourceData, sourceOffset, chunk, 0, copyLength);
                 chunks[i] = chunk;
             });
 

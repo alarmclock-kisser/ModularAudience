@@ -79,6 +79,7 @@ namespace ModularAudience.Forms
         public AudioCollectionView(IEnumerable<AudioObj> audios, string? title = null)
         {
             this.InitializeComponent();
+            this.InitializeSampleModeller();
             this.checkBox_autoPlay.Checked = sharedAutoPlayState ?? this.checkBox_autoPlay.Checked;
             this.checkBox_preview.Checked = sharedPreviewState ?? this.checkBox_preview.Checked;
             this.StartPosition = FormStartPosition.Manual;
@@ -1062,6 +1063,7 @@ namespace ModularAudience.Forms
             this.menuToolStripItem_addIndexToNames.Checked = this.AudioC.AddIndexToNames;
             this.menuToolStripItem_aggregateMixSelected.Enabled = selectedCount > 1;
             this.menuToolStripItem_timeStretchSelected.Enabled = hasAny;
+            this.sampleModellerItem.Enabled = hasSingle;
             this.menuToolStripItem_demucsSeparateSelected.Enabled = hasSingle;
             this.menuToolStripItem_sourceSeparateDemucs.Enabled = hasSingle;
             this.menuToolStripItem_sourceSeparateAnalog.Enabled = hasSingle;

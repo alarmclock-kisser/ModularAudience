@@ -409,7 +409,9 @@ public sealed class MixArrangementTests
         Assert.HasCount(2, lane.Clips);
         Assert.AreEqual(0.5, lane.Clips[0].SourceDuration);
         Assert.AreEqual(0.5, lane.Clips[1].SourceOffset);
-        Call("CopyClip"); Set("caret", 3d); Call("PasteClip"); Assert.HasCount(3, lane.Clips);
+        Call("CopyClip"); Set("lastPointer", new Point(460, 50)); Call("PasteClip");
+        Assert.HasCount(2, lane.Clips, "Paste begins a ghost preview and must not mutate until placed.");
+        Call("PlacePastePreview"); Assert.HasCount(3, lane.Clips);
         Call("Undo"); Assert.HasCount(2, window.Arrangement.Lanes[0].Clips);
         Call("Undo"); Assert.HasCount(1, window.Arrangement.Lanes[0].Clips);
         Assert.AreEqual(1d, window.Arrangement.Lanes[0].Clips[0].SourceDuration);
