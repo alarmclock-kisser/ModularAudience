@@ -5,6 +5,24 @@ namespace ModularAudience.Onnx;
 /// <summary>Idle sessions only. Taking a session transfers exclusive ownership to one dialog.</summary>
 public static class DemucsModelCache
 {
+    private static readonly SharedModelPool<OnnxService> Shared = new();
+    public static async Task<SharedModelPool<OnnxService>.Lease?> AcquireAsync(string path, DemucsLoadOptions options,
+        IEnumerable<string> directories, bool allowLoad, CancellationToken token = default)
+    {
+        string resource = Path.GetFullPath(path).ToUpperInvariant();
+        string key = Key(path, options);
+        var copy = JsonSerializer.Deserialize<DemucsLoadOptions>(JsonSerializer.Serialize(options))!;
+        string[] folders = directories.ToArray();
+        var lease = await Shared.AcquireAsync(resource, key, allowLoad ? () =>
+        {
+            var service = new OnnxService(folders, loadImmediately: false);
+            try { service.LoadModel(path, copy); return service; }
+            catch { service.Dispose(); throw; }
+        } : null, token).ConfigureAwait(false);
+        // Provider fallback/DirectML normalization must reuse the same native session.
+        if (lease?.Model.EffectiveOptions is { } effective) lease.AddAlias(Key(path, effective));
+        return lease;
+    }
     private sealed class Entry(OnnxService service, DateTime expires)
     {
         public readonly OnnxService Service = service;
@@ -20,6 +38,7 @@ public static class DemucsModelCache
     {
         var copy = JsonSerializer.Deserialize<DemucsLoadOptions>(JsonSerializer.Serialize(options))!;
         copy.NormalizeWorkers();
+        if (copy.UseDirectML) { copy.ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_SEQUENTIAL; copy.EnableMemoryPattern = false; }
         copy.SessionConfigEntries = copy.SessionConfigEntries.OrderBy(p => p.Key, StringComparer.Ordinal)
             .ToDictionary(p => p.Key, p => p.Value);
         var file = new FileInfo(Path.GetFullPath(modelPath));
@@ -67,6 +86,7 @@ public static class DemucsModelCache
 
     public static void Clear()
     {
+        Shared.ClearIdle();
         Entry[] entries;
         lock (Gate) { entries = Idle.Values.ToArray(); Idle.Clear(); }
         foreach (var entry in entries) { entry.Timer?.Dispose(); entry.Service.Dispose(); }

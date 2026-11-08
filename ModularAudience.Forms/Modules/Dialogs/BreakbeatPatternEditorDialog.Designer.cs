@@ -35,6 +35,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             button_settings = new Button();
             button_generate = new Button();
             button_remix = new Button();
+            button_roll = new Button();
             button_removeBar = new Button();
             button_addBar = new Button();
             checkBox_preHear = new CheckBox();
@@ -117,6 +118,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             toolTip_pattern.SetToolTip(button_clearAll, "Clear all notes on all tracks (undoable).");
             panel_controls.Controls.Add(button_clearAll);
             panel_controls.Controls.Add(button_remix);
+            panel_controls.Controls.Add(button_roll);
             panel_controls.Controls.Add(button_removeBar);
             panel_controls.Controls.Add(button_addBar);
             panel_controls.Controls.Add(checkBox_preHear);
@@ -183,14 +185,26 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             button_remix.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             button_remix.Enabled = false;
-            button_remix.Location = new Point(522, 14);
+            button_remix.Location = new Point(574, 14);
             button_remix.Name = "button_remix";
-            button_remix.Size = new Size(50, 25);
+            button_remix.Size = new Size(46, 25);
             button_remix.TabIndex = 12;
             button_remix.Text = "Remix";
             toolTip_pattern.SetToolTip(button_remix, "Derive a variation from the selected notes (needs 2+ selected notes; Ctrl+click skips the options dialog). The dialog's bottom checkbox switches between replacing the selection and copying the remix to the clipboard.");
             button_remix.UseVisualStyleBackColor = true;
             button_remix.Click += button_remix_Click;
+            //
+            // button_roll
+            //
+            button_roll.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            button_roll.Location = new Point(522, 14);
+            button_roll.Name = "button_roll";
+            button_roll.Size = new Size(48, 25);
+            button_roll.TabIndex = 13;
+            button_roll.Text = "Roll";
+            button_roll.UseVisualStyleBackColor = true;
+            toolTip_pattern.SetToolTip(button_roll, "Immediately reroll all enabled Auto-Reroll tracks in the selected loop range (or the whole pattern), and reset their counters.");
+            button_roll.Click += button_roll_Click;
             //
             // button_removeBar
             //
@@ -335,6 +349,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Button button_settings;
         private Button button_generate;
         private Button button_remix;
+        private Button button_roll;
         private Button button_save;
         private System.Windows.Forms.Timer timer_previewCaret;
         private System.Windows.Forms.Timer timer_pasteHold;

@@ -249,6 +249,17 @@ public partial class BreakbeatPatternEditorDialog
                 state.Options.Enabled = false;
         this.pictureBox_pattern.Invalidate();
     }
+    private void button_roll_Click(object? sender, EventArgs e)
+    {
+        if (this.saveInProgress || this.autoRerollClosing) return;
+        int[] rows = Enumerable.Range(0, this.samples.Count)
+            .Where(row => this.autoRerolls.TryGetValue(this.samples[row], out var state) && state.Options.Enabled)
+            .ToArray();
+        if (rows.Length == 0) return;
+        foreach (int row in rows) this.autoRerolls[this.samples[row]].CompletedLoops = 0;
+        this.ApplyTrackAutoRerolls(rows, this.AutoRerollSections());
+        this.pictureBox_pattern.Invalidate();
+    }
     private void AdvanceAutoRerollCounters(long elapsed, int[] sections)
     {
         var due = new List<int>();

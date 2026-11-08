@@ -25,10 +25,10 @@ jobs:
       run: dotnet restore
 
     - name: Build --Release
-      run: dotnet build ModularAudience.Forms/ModularAudience.Forms.csproj --configuration Release --no-restore
+      run: dotnet build ModularAudience.Forms/ModularAudience.Forms.csproj --configuration Release --no-restore -p:ReleaseNumber=${{ github.run_number }}
     
     - name: Publish
-      run: dotnet publish ModularAudience.Forms/ModularAudience.Forms.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfContained=true -p:IncludeNativeLibrariesForSelfExtract=true -o ./publish
+      run: dotnet publish ModularAudience.Forms/ModularAudience.Forms.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfContained=true -p:IncludeNativeLibrariesForSelfExtract=true -p:ReleaseNumber=${{ github.run_number }} -o ./publish
 
     - name: Create Release
       uses: softprops/action-gh-release@v1

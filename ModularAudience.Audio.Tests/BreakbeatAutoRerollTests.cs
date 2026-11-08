@@ -35,6 +35,34 @@ public sealed class BreakbeatAutoRerollTests
         [new(0, 0, 24), new(1, 0, 24), new(0, 600, 24)], initialGridResolution: 16);
 
     [STATestMethod]
+    public void RollButtonRerollsEnabledTracksTogetherResetsCountersAndSupportsUndo()
+    {
+        using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using var editor = Editor(sample);
+        Configure(editor, 0, 3, false, false); Configure(editor, 1, 4, false, false);
+        var samples = (List<AudioObj>)Field(editor, "samples");
+        var states = (IDictionary)Field(editor, "autoRerolls");
+        object first = states[samples[0]]!, second = states[samples[1]]!;
+        first.GetType().GetField("CompletedLoops")!.SetValue(first, 2L);
+        second.GetType().GetField("CompletedLoops")!.SetValue(second, 3L);
+        object secondOptions = second.GetType().GetField("Options")!.GetValue(second)!;
+        secondOptions.GetType().GetProperty("Enabled")!.SetValue(secondOptions, false);
+        Invoke(editor, "CommitHistoryAction");
+        var notes = (List<BreakbeatPatternNote>)Field(editor, "notes");
+        var before = notes.ToArray();
+        var roll = (Button)Field(editor, "button_roll");
+        var remix = (Button)Field(editor, "button_remix");
+        Assert.IsTrue(roll.Right <= remix.Left);
+        Invoke(editor, "button_roll_Click", roll, EventArgs.Empty);
+        Assert.AreEqual(0L, first.GetType().GetField("CompletedLoops")!.GetValue(first));
+        Assert.AreEqual(3L, second.GetType().GetField("CompletedLoops")!.GetValue(second));
+        Assert.IsTrue(before.Where(n => n.TrackIndex == 1).All(notes.Contains));
+        Assert.IsTrue(notes.Any(n => n.TrackIndex == 0 && !before.Contains(n)));
+        Invoke(editor, "UndoEditorAction");
+        CollectionAssert.AreEqual(before, notes.ToArray());
+    }
+
+    [STATestMethod]
     public void NonLoopHearCountsCompletedPassesAndRerollsAtThresholdButNotOnCancel()
     {
         using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };

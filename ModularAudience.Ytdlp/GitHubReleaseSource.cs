@@ -7,9 +7,11 @@ using System.Text.RegularExpressions;
 
 namespace ModularAudience.Ytdlp;
 
-internal sealed record ReleaseAsset(string Name, string Url, string? Digest, long Size);
+public sealed record ReleaseAsset(string Name, string Url, string? Digest, long Size);
 
-internal static partial class GitHubReleaseSource
+public sealed record GitHubRelease(string TagName, IReadOnlyList<ReleaseAsset> Assets);
+
+public static partial class GitHubReleaseSource
 {
     private const long MaximumAssetBytes = 768L * 1024 * 1024;
     private static readonly HttpClient Client = CreateClient();
@@ -26,10 +28,30 @@ internal static partial class GitHubReleaseSource
 
     internal static async Task<IReadOnlyList<ReleaseAsset>> GetAssetsAsync(string repository, CancellationToken token)
     {
-        var bytes = await ReadLimitedAsync($"https://api.github.com/repos/{repository}/releases/latest", 4 * 1024 * 1024, token);
-        using var document = JsonDocument.Parse(bytes);
+        using var document = JsonDocument.Parse(await GetReleaseBytesAsync(repository, token));
+        return ParseAssets(document.RootElement);
+    }
+
+    public static async Task<GitHubRelease> GetLatestReleaseAsync(string repository, CancellationToken token)
+    {
+        using var document = JsonDocument.Parse(await GetReleaseBytesAsync(repository, token));
+        if (document.RootElement.ValueKind != JsonValueKind.Object ||
+            !document.RootElement.TryGetProperty("tag_name", out var tag) ||
+            tag.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(tag.GetString()))
+            throw new InvalidDataException("The GitHub release does not have a valid tag.");
+        return new GitHubRelease(tag.GetString()!, ParseAssets(document.RootElement));
+    }
+
+    private static Task<byte[]> GetReleaseBytesAsync(string repository, CancellationToken token) =>
+        ReadLimitedAsync($"https://api.github.com/repos/{repository}/releases/latest", 4 * 1024 * 1024, token);
+
+    private static IReadOnlyList<ReleaseAsset> ParseAssets(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("assets", out var assetList) || assetList.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("The GitHub release does not have a valid asset list.");
         var assets = new List<ReleaseAsset>();
-        foreach (var asset in document.RootElement.GetProperty("assets").EnumerateArray())
+        foreach (var asset in assetList.EnumerateArray())
         {
             if (asset.ValueKind != JsonValueKind.Object ||
                 !asset.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String ||
@@ -47,7 +69,7 @@ internal static partial class GitHubReleaseSource
         return assets;
     }
 
-    internal static async Task<string> GetChecksumAsync(ReleaseAsset asset, IReadOnlyList<ReleaseAsset> assets,
+    public static async Task<string> GetChecksumAsync(ReleaseAsset asset, IReadOnlyList<ReleaseAsset> assets,
         CancellationToken token)
     {
         if (asset.Digest is { } digest && digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase)
@@ -78,7 +100,7 @@ internal static partial class GitHubReleaseSource
         throw new InvalidDataException($"No matching SHA256 checksum was found for {asset.Name}.");
     }
 
-    internal static async Task DownloadAsync(ReleaseAsset asset, string destination, string expectedHash,
+    public static async Task DownloadAsync(ReleaseAsset asset, string destination, string expectedHash,
         CancellationToken token, IProgress<string>? progress = null, IProgress<YtdlpDownloadProgress>? downloadProgress = null)
     {
         if (asset.Size <= 0 || asset.Size > MaximumAssetBytes)
@@ -99,7 +121,7 @@ internal static partial class GitHubReleaseSource
             throw new InvalidDataException($"SHA256 or size verification failed for {asset.Name}.");
     }
 
-    internal static async Task<string> HashAsync(string path, CancellationToken token)
+    public static async Task<string> HashAsync(string path, CancellationToken token)
     {
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
             81920, FileOptions.Asynchronous | FileOptions.SequentialScan);

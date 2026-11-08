@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using ModularAudience.Forms.Theming;
+using ModularAudience.Forms.Updates;
 
 namespace ModularAudience.Forms;
 
@@ -7,7 +9,7 @@ public partial class WindowMain
     private ThemeEditor? themeEditor;
     private void InitializeThemeMenu()
     {
-        var menu = new ContextMenuStrip(this.components);
+        var menu = this.contextMenuStrip_main;
         menu.Items.Add("Theme Editor…", null, (_, _) =>
         {
             if (this.themeEditor == null || this.themeEditor.IsDisposed) this.themeEditor = new ThemeEditor();
@@ -60,6 +62,54 @@ public partial class WindowMain
         // Show only for the form background, so existing child-control menus keep their behavior.
         this.MouseUp += (_, e) => { if (e.Button == MouseButtons.Right) { ThemeManager.Apply(menu); menu.Show(this, e.Location); } };
     }
+
+    private void contextMenuStrip_main_Opening(object? sender, CancelEventArgs e)
+    {
+        try
+        {
+            RefreshUpdateChecks(this.toolStripMenuItem_checkForUpdates, new ReleaseUpdateSettingsStore());
+        }
+        catch (Exception error) when (UpdateDiagnostics.IsExpected(error))
+        {
+            this.toolStripMenuItem_checkForUpdates.Enabled = false;
+            this.toolStripMenuItem_checkForUpdates.Checked = false;
+            this.toolStripMenuItem_checkForUpdates.Text = "Update Check Settings Unavailable";
+            UpdateDiagnostics.ShowError(this, "Application update", "The update preference could not be read.", error);
+        }
+    }
+
+    private void toolStripMenuItem_checkForUpdates_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            ToggleUpdateChecks(this.toolStripMenuItem_checkForUpdates, new ReleaseUpdateSettingsStore());
+        }
+        catch (Exception error) when (UpdateDiagnostics.IsExpected(error))
+        {
+            UpdateDiagnostics.ShowError(this, "Application update", "The update preference could not be saved.", error);
+        }
+    }
+
+    internal static void ToggleUpdateChecks(ToolStripMenuItem item, ReleaseUpdateSettingsStore settingsStore)
+    {
+        bool enabled = !item.Checked;
+        settingsStore.SetAskToUpdate(enabled);
+        SetUpdateMenuState(item, enabled);
+    }
+
+    internal static void RefreshUpdateChecks(ToolStripMenuItem item, ReleaseUpdateSettingsStore settingsStore)
+    {
+        bool enabled = settingsStore.LoadAndRecordRunningRelease(null).AskToUpdate;
+        item.Enabled = true;
+        SetUpdateMenuState(item, enabled);
+    }
+
+    private static void SetUpdateMenuState(ToolStripMenuItem item, bool enabled)
+    {
+        item.Checked = enabled;
+        item.Text = $"Check for Updates at Startup: {(enabled ? "On" : "Off")}";
+    }
+
     private sealed record SavedThemeItem(string Path)
     {
         public override string ToString() => System.IO.Path.GetFileNameWithoutExtension(Path);

@@ -5,6 +5,7 @@ using System.Windows.Forms;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ModularAudience.Audio;
+using ModularAudience.Forms.Updates;
 using ModularAudience.Shared;
 
 namespace ModularAudience.Forms
@@ -15,9 +16,15 @@ namespace ModularAudience.Forms
         /// The main entry point for the application.
         /// </summary>
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             ApplicationConfiguration.Initialize();
+
+            if (UpdateInstaller.IsHelperInvocation(args))
+            {
+                UpdateInstaller.RunHelper(args);
+                return;
+            }
 
             EnsureAppSettingsFile();
 
@@ -69,7 +76,9 @@ namespace ModularAudience.Forms
             TabNavigationDisabler.Install();
             Theming.ThemeManager.Install();
 
-            Application.Run(new WindowMain(logger, serviceProvider));
+            var window = new WindowMain(logger, serviceProvider);
+            window.Shown += async (_, _) => await ApplicationUpdater.CheckAtStartupAsync(window);
+            Application.Run(window);
         }
 
         private static void EnsureAppSettingsFile()

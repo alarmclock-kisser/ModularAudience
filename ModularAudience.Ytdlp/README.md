@@ -62,6 +62,16 @@ The verified managed installation is preferred. The client passes `--no-js-runti
 
 Namespace: `ModularAudience.Ytdlp`.
 
+### GitHubReleaseSource
+
+- `Task<GitHubRelease> GetLatestReleaseAsync(string repository, CancellationToken token)` returns the release tag and assets.
+- `Task<string> GetChecksumAsync(ReleaseAsset asset, IReadOnlyList<ReleaseAsset> assets, CancellationToken token)` resolves a SHA256 digest or checksum asset.
+- `Task DownloadAsync(ReleaseAsset asset, string destination, string expectedHash, CancellationToken token, IProgress<string>? progress = null, IProgress<YtdlpDownloadProgress>? downloadProgress = null)` streams and verifies an asset.
+- `Task<string> HashAsync(string path, CancellationToken token)` computes its SHA256.
+
+The same HTTPS host restrictions and download size limits described above apply
+to these methods.
+
 ### YtdlpBinaryManager
 
 - `YtdlpBinaryManager()`

@@ -2,12 +2,23 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Ytdlp;
 using System.Globalization;
 using System.Reflection;
+using System.Text.Json;
 
 namespace ModularAudience.Audio.Tests;
 
 [TestClass]
 public sealed class YtdlpRepairTests
 {
+    [TestMethod]
+    public void AssetParsingDoesNotRequireApplicationReleaseTags()
+    {
+        using var json = JsonDocument.Parse("""{"assets":[{"name":"yt-dlp.exe","browser_download_url":"https://github.com/yt-dlp/yt-dlp/releases/download/latest/yt-dlp.exe","size":10}]}""");
+        var parse = typeof(GitHubReleaseSource).GetMethod("ParseAssets", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var assets = (IReadOnlyList<ReleaseAsset>)parse.Invoke(null, [json.RootElement])!;
+        Assert.HasCount(1, assets);
+        Assert.AreEqual("yt-dlp.exe", assets[0].Name);
+    }
+
     [TestMethod]
     public void WavBitDepth_MapsToActualPcmCodecsAndRejectsUnsupportedDepths()
     {

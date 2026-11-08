@@ -26,6 +26,8 @@
     <Content Include="ModularAudience_favicon.ico" />
     <EmbeddedResource Include="appsettings.json" LogicalName="ModularAudience.Forms.appsettings.json" />
     <EmbeddedResource Include="BrowserBridge\*" LogicalName="ModularAudience.BrowserBridge.%(Filename)%(Extension)" />
+    <AssemblyMetadata Include="GitHubReleaseNumber" Value="$(ReleaseNumber)" Condition="'$(ReleaseNumber)' != ''" />
+    <InternalsVisibleTo Include="ModularAudience.Audio.Tests" />
   </ItemGroup>
 
   <ItemGroup>

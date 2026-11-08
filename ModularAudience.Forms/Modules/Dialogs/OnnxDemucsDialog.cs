@@ -26,6 +26,7 @@ public partial class OnnxDemucsDialog : Form
     private readonly NumericUpDown keepModelLoaded = new() { Name = "keepModelLoaded", Minimum = 0, Maximum = 86400, Value = 300, Increment = 30, Width = 120,
         AccessibleName = "Keep Model Loaded Seconds" };
     private string? loadedCacheKey;
+    private SharedModelPool<OnnxService>.Lease? modelLease;
     private readonly NumericUpDown cudaDevice = Number(0, 127);
     private readonly CheckBox cpuFallback = Check("Fall back to CPU if DirectML fails");
     private readonly CheckBox cpuOperators = Check("Allow CPU operators in DirectML graphs");
@@ -221,7 +222,7 @@ public partial class OnnxDemucsDialog : Form
             this.Onnx = await Task.Run(() => new OnnxService(this.settings.ModelDirectories, loadImmediately: false));
             this.RefreshModels();
             if (this.Onnx.ModelPaths.Count == 0) await this.BrowseModelsAsync();
-            bool reused = this.comboBox_models.SelectedItem is ModelItem selected && this.TryReuseModel(selected.Path, this.ReadOptions());
+            bool reused = this.comboBox_models.SelectedItem is ModelItem selected && await this.TryReuseModelAsync(selected.Path, this.ReadOptions());
             if (!reused) this.status.Text = warning ?? "Select a model and load options, then click Load model. No model is loaded yet.";
         }
         catch (Exception error) { this.ShowError("Unable to prepare Demucs", error); }
@@ -291,6 +292,18 @@ public partial class OnnxDemucsDialog : Form
     private void OptionsChanged()
     {
         if (this.initializing || this.busy) return;
+        if (this.Onnx?.IsOnline == true && this.comboBox_models.SelectedItem is ModelItem selected)
+        {
+            try
+            {
+                if (this.loadedCacheKey == DemucsModelCache.Key(selected.Path, this.ReadOptions()))
+                {
+                    this.loadedWithCurrentOptions = true; this.button_run.Enabled = true; this.load.Enabled = false;
+                    this.status.Text = "Ready — reusing the loaded model."; this.UpdateProviderControls(); return;
+                }
+            }
+            catch (ArgumentException) { }
+        }
         this.loadedWithCurrentOptions = false;
         this.button_run.Enabled = false;
         this.load.Enabled = this.comboBox_models.Items.Count > 0;
@@ -308,6 +321,7 @@ public partial class OnnxDemucsDialog : Form
                 : "Select a directory containing Demucs ONNX models.",
             UseDescriptionForTitle = true, ShowNewFolderButton = false
         };
+        browser.SelectedPath = this.ModelsBrowseDirectory();
         if (browser.ShowDialog(this) != DialogResult.OK) return;
         bool wasBusy = this.busy;
         this.SetBusy(true, "Scanning models directory…", loading: true);
@@ -349,10 +363,10 @@ public partial class OnnxDemucsDialog : Form
             this.settings.KeepModelLoadedSeconds = (int)this.keepModelLoaded.Value;
             this.settings.SelectedModel = model.Path;
             this.settings.Save();
-            if (this.TryReuseModel(model.Path, options)) return;
+            if (await this.TryReuseModelAsync(model.Path, options)) return;
             this.ReleaseModel();
-            this.Onnx = await Task.Run(() => new OnnxService(this.settings.ModelDirectories, loadImmediately: false));
-            await Task.Run(() => this.Onnx.LoadModel(model.Path, options));
+            this.modelLease = await DemucsModelCache.AcquireAsync(model.Path, options, this.settings.ModelDirectories, allowLoad: true);
+            this.Onnx = this.modelLease!.Model;
             this.ApplyEffectiveOptions(this.Onnx.EffectiveOptions!);
             this.loadedCacheKey = DemucsModelCache.Key(model.Path, this.Onnx.EffectiveOptions!);
             this.settings.Save();
@@ -382,7 +396,7 @@ public partial class OnnxDemucsDialog : Form
     private void SetBusy(bool value, string? message = null, bool loading = false)
     {
         this.busy = value;
-        this.load.Enabled = !value && this.comboBox_models.Items.Count > 0;
+        this.load.Enabled = !value && !this.loadedWithCurrentOptions && this.comboBox_models.Items.Count > 0;
         this.browse.Enabled = !value;
         this.button_run.Enabled = !value && this.loadedWithCurrentOptions && this.Onnx?.IsOnline == true;
         this.cancel.Enabled = value && !loading;
@@ -435,6 +449,11 @@ public partial class OnnxDemucsDialog : Form
             this.settings.Save();
             AudioCollectionView? collection = null;
             // MoveNextAsync is driven on the worker pool; publishing each complete stem returns to the UI.
+            var lease = this.modelLease ?? throw new InvalidOperationException("Load a Demucs model first.");
+            this.status.Text = "Waiting for the shared Demucs model…";
+            await lease.Operation.WaitAsync(this.cancellation.Token);
+            try
+            {
             await using var stems = this.Onnx.ExtractStemsSequentialAsync(this.OriginalAudio, selected, progress, this.cancellation.Token)
                 .GetAsyncEnumerator(this.cancellation.Token);
             while (await Task.Run(async () => await stems.MoveNextAsync()))
@@ -453,6 +472,8 @@ public partial class OnnxDemucsDialog : Form
                 this.status.Text = $"{name} ready — {completed}/{selected.Length} stem(s) extracted.\n{this.Onnx.FourierBackend}";
             }
             this.status.Text = $"Finished — {selected.Length} stem(s) extracted.\n{this.Onnx.FourierBackend}";
+            }
+            finally { lease.Operation.Release(); }
         }
         catch (OperationCanceledException) { this.status.Text = $"Separation cancelled — {completed} completed stem(s) kept."; }
         catch (Exception error) { this.ShowError("Demucs separation failed", error); }
@@ -498,7 +519,7 @@ public partial class OnnxDemucsDialog : Form
         base.OnFormClosed(e);
     }
 
-    private bool TryReuseModel(string path, DemucsLoadOptions options)
+    private async Task<bool> TryReuseModelAsync(string path, DemucsLoadOptions options)
     {
         string key = DemucsModelCache.Key(path, options);
         if (this.Onnx?.IsOnline == true && this.loadedCacheKey == key)
@@ -507,9 +528,11 @@ public partial class OnnxDemucsDialog : Form
             this.status.Text = $"Ready — model already loaded — {this.Onnx.ExecutionProvider}\n{this.Onnx.FourierBackend}";
             return true;
         }
-        OnnxService? cached = DemucsModelCache.Take(key);
-        if (cached == null) return false;
+        var acquired = await DemucsModelCache.AcquireAsync(path, options, this.settings.ModelDirectories, allowLoad: false);
+        if (acquired == null) return false;
         this.ReleaseModel();
+        this.modelLease = acquired;
+        OnnxService cached = acquired.Model;
         this.Onnx = cached;
         this.loadedCacheKey = key;
         this.ApplyEffectiveOptions(cached.EffectiveOptions!);
@@ -525,11 +548,26 @@ public partial class OnnxDemucsDialog : Form
     {
         var service = this.Onnx;
         this.Onnx = null;
-        string? key = this.loadedCacheKey;
         this.loadedCacheKey = null;
         if (service == null) return;
-        if (key != null && service.IsOnline)
-            DemucsModelCache.Return(key, service, TimeSpan.FromSeconds((double)this.keepModelLoaded.Value));
+        if (this.modelLease is { } lease)
+        {
+            this.modelLease = null;
+            lease.KeepAlive = TimeSpan.FromSeconds((double)this.keepModelLoaded.Value);
+            lease.Dispose();
+        }
         else service.Dispose();
+    }
+    private string ModelsBrowseDirectory()
+    {
+        if (this.comboBox_models.SelectedItem is ModelItem selected)
+        {
+            string? parent = Path.GetDirectoryName(Path.GetFullPath(selected.Path));
+            if (parent != null && Directory.Exists(parent)) return parent;
+        }
+        return this.settings.ModelDirectories.FirstOrDefault(Directory.Exists)
+            ?? this.Onnx?.ModelDirectories.FirstOrDefault(Directory.Exists)
+            ?? this.settings.ModelDirectories.FirstOrDefault()
+            ?? "D:/Models/Demucs";
     }
 }

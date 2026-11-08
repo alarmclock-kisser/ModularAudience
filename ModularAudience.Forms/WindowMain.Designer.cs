@@ -31,6 +31,9 @@
             components = new System.ComponentModel.Container();
             button_import = new Button();
             button_browse = new Button();
+            contextMenuStrip_main = new ContextMenuStrip(components);
+            toolStripMenuItem_checkForUpdates = new ToolStripMenuItem();
+            toolStripSeparator_updates = new ToolStripSeparator();
             contextMenuStrip_playlist = new ContextMenuStrip(components);
             toolStripMenuItem_playPause = new ToolStripMenuItem();
             toolStripMenuItem_prev = new ToolStripMenuItem();
@@ -92,6 +95,7 @@
             label_currentlyEnqueued = new Label();
             vScrollBar_masterLimiter = new VScrollBar();
             button_controller = new Button();
+            contextMenuStrip_main.SuspendLayout();
             contextMenuStrip_playlist.SuspendLayout();
             contextMenuStrip_random.SuspendLayout();
             contextMenuStrip_record.SuspendLayout();
@@ -122,6 +126,23 @@
             button_browse.Text = "[...]";
             button_browse.UseVisualStyleBackColor = true;
             button_browse.Click += button_browse_Click;
+            // 
+            // contextMenuStrip_main
+            // 
+            contextMenuStrip_main.Items.AddRange(new ToolStripItem[] { toolStripMenuItem_checkForUpdates, toolStripSeparator_updates });
+            contextMenuStrip_main.Name = "contextMenuStrip_main";
+            contextMenuStrip_main.Opening += contextMenuStrip_main_Opening;
+            // 
+            // toolStripMenuItem_checkForUpdates
+            // 
+            toolStripMenuItem_checkForUpdates.Checked = true;
+            toolStripMenuItem_checkForUpdates.Name = "toolStripMenuItem_checkForUpdates";
+            toolStripMenuItem_checkForUpdates.Text = "Check for Updates at Startup: On";
+            toolStripMenuItem_checkForUpdates.Click += toolStripMenuItem_checkForUpdates_Click;
+            // 
+            // toolStripSeparator_updates
+            // 
+            toolStripSeparator_updates.Name = "toolStripSeparator_updates";
             // 
             // contextMenuStrip_playlist
             // 
@@ -761,6 +782,7 @@
             MinimumSize = new Size(600, 365);
             Name = "WindowMain";
             Text = "ModularAudience (Main Control)";
+            contextMenuStrip_main.ResumeLayout(false);
             contextMenuStrip_playlist.ResumeLayout(false);
             contextMenuStrip_random.ResumeLayout(false);
             contextMenuStrip_record.ResumeLayout(false);
@@ -773,6 +795,9 @@
 
         private Button button_import;
         private Button button_browse;
+        private ContextMenuStrip contextMenuStrip_main;
+        private ToolStripMenuItem toolStripMenuItem_checkForUpdates;
+        private ToolStripSeparator toolStripSeparator_updates;
         private Button button_scanBpm;
         private TextBox textBox_scanBpmResult;
         private TextBox textBox_scanTimingResult;
