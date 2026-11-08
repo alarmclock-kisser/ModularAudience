@@ -24,8 +24,7 @@ public sealed class InstrumentSampleSynthDialog : Form
     private readonly Button hear = new() { Text = "Prehear", AutoSize = true }, create = new() { Text = "Create", AutoSize = true };
     private readonly System.Windows.Forms.Timer debounce = new() { Interval = 180 }, playbackTimer = new() { Interval = 40 };
     private readonly string[] noteNames = Enumerable.Range(12, 97).Select(InstrumentSampleSynth.NoteName).ToArray();
-    private static readonly (string Name, double Beats)[] Durations =
-    [ ("1/64", 0.0625), ("1/32", 0.125), ("1/16", 0.25), ("1/8", 0.5), ("1/4", 1), ("1/2", 2), ("1 Bar", 4), ("2 Bars", 8), ("4 Bars", 16) ];
+    private static readonly (string Name, double Beats)[] Durations = [.. InstrumentSynthSettings.KeyDurations];
     private readonly ToolTip tips = new();
     private AudioObj? audio;
     private AudioCollectionView? collection;

@@ -4,31 +4,106 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Drawing;
 
 namespace ModularAudience.Audio
 {
-    public partial class AudioObj
+    public partial class AudioObj : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler? PropertyChanged;
+
         // Core identity & metadata
-        public readonly Guid Id = Guid.NewGuid();
+        public Guid Id { get; init; } = Guid.NewGuid();
         public readonly DateTime CreatedAt = DateTime.UtcNow;
-        public string Name { get; set; } = string.Empty;
-        public string OriginalName { get; private set; } = string.Empty;
-        public string FilePath { get; set; } = string.Empty;
+
+        private string name = string.Empty;
+        public string Name
+        {
+            get => this.name;
+            set => this.SetContentField(ref this.name, value);
+        }
+
+        private string originalName = string.Empty;
+        public string OriginalName
+        {
+            get => this.originalName;
+            set => this.SetContentField(ref this.originalName, value);
+        }
+
+        private string filePath = string.Empty;
+        public string FilePath
+        {
+            get => this.filePath;
+            set => this.SetContentField(ref this.filePath, value);
+        }
 
         // Audio data & format
-        public float[] Data { get; set; } = [];
-        public int SampleRate { get; set; }
-        public double SampleRateFactor { get; set; } = 1.0;
-        public double ManualSampleRateFactor { get; set; } = 1.0;
-        public double SyncNudgeSampleRateFactor { get; set; } = 1.0;
+        private float[] data = [];
+        public float[] Data
+        {
+            get => this.data;
+            set => this.SetContentField(ref this.data, value);
+        }
+
+        private int sampleRate;
+        public int SampleRate
+        {
+            get => this.sampleRate;
+            set => this.SetContentField(ref this.sampleRate, value);
+        }
+
+        private double sampleRateFactor = 1.0;
+        public double SampleRateFactor
+        {
+            get => this.sampleRateFactor;
+            set => this.SetContentField(ref this.sampleRateFactor, value);
+        }
+
+        private double manualSampleRateFactor = 1.0;
+        public double ManualSampleRateFactor
+        {
+            get => this.manualSampleRateFactor;
+            set => this.SetContentField(ref this.manualSampleRateFactor, value);
+        }
+
+        private double syncNudgeSampleRateFactor = 1.0;
+        public double SyncNudgeSampleRateFactor
+        {
+            get => this.syncNudgeSampleRateFactor;
+            set => this.SetContentField(ref this.syncNudgeSampleRateFactor, value);
+        }
+
         public int AdjustedSampleRate => (int)(this.SampleRate * this.SampleRateFactor);
-        public int Channels { get; set; }
-        public int BitDepth { get; set; }
-        public long Length { get; set; }
-        public TimeSpan Duration { get; set; } = TimeSpan.Zero;
+
+        private int channels;
+        public int Channels
+        {
+            get => this.channels;
+            set => this.SetContentField(ref this.channels, value);
+        }
+
+        private int bitDepth;
+        public int BitDepth
+        {
+            get => this.bitDepth;
+            set => this.SetContentField(ref this.bitDepth, value);
+        }
+
+        private long length;
+        public long Length
+        {
+            get => this.length;
+            set => this.SetContentField(ref this.length, value);
+        }
+
+        private TimeSpan duration = TimeSpan.Zero;
+        public TimeSpan Duration
+        {
+            get => this.duration;
+            set => this.SetContentField(ref this.duration, value);
+        }
 
         public object? Tag { get; set; } = null;
 
@@ -36,14 +111,54 @@ namespace ModularAudience.Audio
 
 
         // Musical metadata
-        public float Bpm { get; set; }
-        public float ScannedBpm { get; set; }
-        public float Timing { get; set; } = 1.0f;
-        public float ScannedTiming { get; set; } = 1.0f;
-        public string Key { get; set; } = string.Empty;
-        public string ScannedKey { get; set; } = string.Empty;
+        private float bpm;
+        public float Bpm
+        {
+            get => this.bpm;
+            set => this.SetContentField(ref this.bpm, value);
+        }
 
-        public float Volume { get; set; } = 1.0f;
+        private float scannedBpm;
+        public float ScannedBpm
+        {
+            get => this.scannedBpm;
+            set => this.SetContentField(ref this.scannedBpm, value);
+        }
+
+        private float timing = 1.0f;
+        public float Timing
+        {
+            get => this.timing;
+            set => this.SetContentField(ref this.timing, value);
+        }
+
+        private float scannedTiming = 1.0f;
+        public float ScannedTiming
+        {
+            get => this.scannedTiming;
+            set => this.SetContentField(ref this.scannedTiming, value);
+        }
+
+        private string key = string.Empty;
+        public string Key
+        {
+            get => this.key;
+            set => this.SetContentField(ref this.key, value);
+        }
+
+        private string scannedKey = string.Empty;
+        public string ScannedKey
+        {
+            get => this.scannedKey;
+            set => this.SetContentField(ref this.scannedKey, value);
+        }
+
+        private float volume = 1.0f;
+        public float Volume
+        {
+            get => this.volume;
+            set => this.SetContentField(ref this.volume, value);
+        }
 
         // Playback & navigation state
         public bool Playing { get; protected set; }
@@ -52,14 +167,28 @@ namespace ModularAudience.Audio
         public event Action? PlayingChanged;
         public int ChunkSize { get; set; }
         public int OverlapSize { get; set; }
-        public double StretchFactor { get; set; } = 1.0;
+
+        private double stretchFactor = 1.0;
+        public double StretchFactor
+        {
+            get => this.stretchFactor;
+            set => this.SetContentField(ref this.stretchFactor, value);
+        }
+
         public long SkippedPositionBytes { get; protected set; }
         public long ScrollOffset { get; set; }
         public long StartingOffset { get; set; }
         public long SelectionStart { get; set; } = -1;
         public long SelectionEnd { get; set; } = -1;
         public int LastSamplesPerPixel { get; set; }
-        public string SampleTag { get; set; } = string.Empty;
+
+        private string sampleTag = string.Empty;
+        public string SampleTag
+        {
+            get => this.sampleTag;
+            set => this.SetContentField(ref this.sampleTag, value);
+        }
+
         public BindingList<AudioObj> PreviousSteps { get; } = [];
         public BindingList<AudioObj> NextSteps { get; } = [];
 
@@ -84,8 +213,19 @@ namespace ModularAudience.Audio
         public bool CanRedo => this.NextSteps.Count > 0;
 
         // Beat grid
-        public bool DrawBeatGrid { get; set; } = false;
-        public bool[] BeatGrid { get; set; } = [];
+        private bool drawBeatGrid;
+        public bool DrawBeatGrid
+        {
+            get => this.drawBeatGrid;
+            set => this.SetContentField(ref this.drawBeatGrid, value);
+        }
+
+        private bool[] beatGrid = [];
+        public bool[] BeatGrid
+        {
+            get => this.beatGrid;
+            set => this.SetContentField(ref this.beatGrid, value);
+        }
 
         // Metrics store
         public Dictionary<string, double> Metrics { get; } = [];
@@ -107,21 +247,41 @@ namespace ModularAudience.Audio
                 if (this.Metrics.ContainsKey(metric))
                 {
                     this.Metrics[metric] = value;
-                    return;
                 }
-
-                var key = this.Metrics.Keys.FirstOrDefault(k => k.Equals(metric, StringComparison.OrdinalIgnoreCase));
-                if (key != null)
+                else
                 {
-                    this.Metrics[key] = value;
-                    return;
+                    var key = this.Metrics.Keys.FirstOrDefault(k => k.Equals(metric, StringComparison.OrdinalIgnoreCase));
+                    if (key != null)
+                    {
+                        this.Metrics[key] = value;
+                    }
+                    else
+                    {
+                        string capitalizedMetric = metric.Length > 0
+                            ? char.ToUpper(metric[0], CultureInfo.InvariantCulture) + metric[1..].ToLowerInvariant()
+                            : metric;
+                        this.Metrics.Add(capitalizedMetric, value);
+                    }
                 }
 
-                string capitalizedMetric = metric.Length > 0
-                    ? char.ToUpper(metric[0], CultureInfo.InvariantCulture) + metric[1..].ToLowerInvariant()
-                    : metric;
-                this.Metrics.Add(capitalizedMetric, value);
+                this.NotifyContentChanged(nameof(this.Metrics));
             }
+        }
+
+        private void SetContentField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+        {
+            if (EqualityComparer<T>.Default.Equals(field, value))
+            {
+                return;
+            }
+
+            field = value;
+            this.NotifyContentChanged(propertyName);
+        }
+
+        private void NotifyContentChanged([CallerMemberName] string? propertyName = null)
+        {
+            this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
         public AudioObj()

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace ModularAudience.Audio.Synthesis;
 
 public enum SynthFamily { Keyboard, DrumSet, Woodwinds, Brass, PluckedStrings, BowedStrings, MalletsAndBells, Organ, SynthBassAndLead }
@@ -124,6 +126,11 @@ public static class InstrumentSynthCatalog
 
 public sealed class InstrumentSynthSettings
 {
+    public static IReadOnlyList<(string Name, double Beats)> KeyDurations { get; } =
+    [
+        ("1/64", 0.0625), ("1/32", 0.125), ("1/16", 0.25), ("1/8", 0.5),
+        ("1/4", 1), ("1/2", 2), ("1 Bar", 4), ("2 Bars", 8), ("4 Bars", 16)
+    ];
     public SynthFamily Family { get; set; }
     public int VoiceIndex { get; set; }
     public int KitIndex { get; set; }
@@ -158,6 +165,16 @@ public sealed class InstrumentSynthSettings
     public int Channels { get; set; } = 2;
     public double GateSeconds => 60 / Bpm * NoteBeats * DurationMultiplier;
     public string VoiceName => Family == SynthFamily.DrumSet ? $"{InstrumentSynthCatalog.DrumKits[KitIndex].Name} {Drum}" : InstrumentSynthCatalog.Voices(Family)[VoiceIndex].Name;
+    public string KeyDurationName
+    {
+        get
+        {
+            string name = $"{NoteBeats.ToString("0.###", CultureInfo.InvariantCulture)} beats";
+            foreach (var duration in KeyDurations)
+                if (Math.Abs(duration.Beats - NoteBeats) < 1e-9) { name = duration.Name; break; }
+            return DurationMultiplier switch { > 1.25 => name + " Dotted", < 0.8 => name + " Triplet", _ => name };
+        }
+    }
     public InstrumentSynthSettings Clone() => (InstrumentSynthSettings)MemberwiseClone();
     public void ApplyVoiceDefaults()
     {

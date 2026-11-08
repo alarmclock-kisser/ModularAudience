@@ -225,6 +225,8 @@ namespace ModularAudience.Forms
             string buildPath = Environment.ProcessPath ?? AppContext.BaseDirectory;
             string buildTimestamp = System.IO.File.GetLastWriteTime(buildPath).ToString("dd/MM/yyyy - HH:mm:ss");
             this.label_currentlyEnqueued.Text = $"Build: {buildTimestamp}";
+
+            this.InitializeCoOp();
         }
 
         private void button_copyLog_Click(object? sender, EventArgs e)
@@ -458,6 +460,27 @@ namespace ModularAudience.Forms
                 }
                 return;
             }
+            if (!this._coOpShutdownCompleted)
+            {
+                // Keep the UI context alive while the network session closes.
+                // Async FormClosing handlers otherwise let the form disappear
+                // before their first incomplete await has finished.
+                e.Cancel = true;
+                if (this._coOpShutdownStarted)
+                {
+                    return;
+                }
+
+                this._coOpShutdownStarted = true;
+                await this.ShutdownCoOpAsync();
+                this._coOpShutdownCompleted = true;
+                if (!this.IsDisposed && !this.Disposing)
+                {
+                    this.BeginInvoke((Action)this.Close);
+                }
+                return;
+            }
+
             this.StopSyncer();
             this.StopPausingSyncer();
             ResetCapsLockState();

@@ -89,6 +89,24 @@ public sealed class InstrumentSampleSynthTests
         Assert.ThrowsExactly<OperationCanceledException>(() => InstrumentSampleSynth.Render(drum, cts.Token));
     }
 
+    [TestMethod]
+    public void SampleNamesIncludeVoiceKeyDurationBpmAndPitchOffset()
+    {
+        var s = Short(SynthFamily.SynthBassAndLead); s.VoiceIndex = 0; s.ApplyVoiceDefaults();
+        s.MidiNote = 44; s.NoteBeats = 1; s.DurationMultiplier = 1; s.Bpm = 120; s.PitchSemitones = 0;
+        using (var straight = InstrumentSampleSynth.Render(s))
+            Assert.AreEqual("Sub Anchor · G#2 · 1/4 [120]", straight.Name);
+        s.DurationMultiplier = 1.5; s.Bpm = 137.5;
+        using (var dotted = InstrumentSampleSynth.Render(s))
+            Assert.AreEqual("Sub Anchor · G#2 · 1/4 Dotted [137.5]", dotted.Name);
+        s.DurationMultiplier = 2d / 3;
+        using (var triplet = InstrumentSampleSynth.Render(s))
+            Assert.AreEqual("Sub Anchor · G#2 · 1/4 Triplet [137.5]", triplet.Name);
+        s.DurationMultiplier = 1; s.NoteBeats = 4; s.PitchSemitones = 2;
+        using (var bar = InstrumentSampleSynth.Render(s))
+            Assert.AreEqual("Sub Anchor · G#2 +2 st · 1 Bar [137.5]", bar.Name);
+    }
+
     [STATestMethod]
     public void PreviewLoopsAndSwitchesToUpdatedSample()
     {
@@ -162,7 +180,7 @@ public sealed class InstrumentSampleSynthTests
             {
                 var audioCollection = (AudioCollection)typeof(AudioCollectionView).GetField("AudioC", flags)!.GetValue(collection)!;
                 Assert.HasCount(2, audioCollection.Audios);
-                Assert.AreNotEqual(audioCollection.Audios[0].Name, audioCollection.Audios[1].Name);
+                Assert.AreEqual(audioCollection.Audios[0].Name + " 2", audioCollection.Audios[1].Name);
                 Assert.AreEqual("Synthesized " + InstrumentSynthCatalog.FamilyName(family), collection.Text);
                 if (family == SynthFamily.DrumSet)
                 {

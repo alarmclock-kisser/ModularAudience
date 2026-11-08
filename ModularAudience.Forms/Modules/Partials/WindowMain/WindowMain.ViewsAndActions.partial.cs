@@ -157,6 +157,14 @@ namespace ModularAudience.Forms
                 audio.PlayingChanged += this.OnAudioPlayingChanged;
             }
 
+            // Property notifications already redraw the bound views. Only
+            // explicit ResetItem calls (which have no descriptor) need a sync
+            // refresh, for example after a BPM change.
+            if (e.ListChangedType == ListChangedType.ItemChanged && e.PropertyDescriptor != null)
+            {
+                return;
+            }
+
             this.RefreshActiveSyncerTracks();
         }
 

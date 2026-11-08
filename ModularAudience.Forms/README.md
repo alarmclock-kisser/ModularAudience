@@ -42,3 +42,11 @@ hour old.
 Releases published before the updater was added cannot update themselves.
 Install the first release containing the updater manually; later releases can
 then be installed through the dialog.
+
+## Co-op collections
+
+Right-click **Import** to host or join a co-op session. Right-click a collection's
+track list and check **Share Collection** to synchronize additions and edits
+between the host and all connected clients, including clients joining later.
+See [the co-op documentation](../ModularAudience.CoOp/README.md) for retention,
+firewall/UAC behavior, networking limits, and security considerations.

@@ -17,7 +17,8 @@ Each family opens a normal modeless window. Other application windows stay inter
   The delay is shared across all nine families, synchronized between open windows and
   restored from `%APPDATA%\ModularAudience\SampleSynthesizer\settings.json`.
 - Create adds a named AudioObj to this window's family collection without closing the editor.
-  Repeated names get a numeric suffix. Closed output collections are recreated on the next Create.
+  Names use `Instrument · Key · Key Duration [BPM]` (for example `Sub Anchor · G#2 · 1/4 [120]`);
+  repeated names get a numeric suffix. Closed output collections are recreated on the next Create.
 - Seed fixes noise/strike variation; New variation changes it. Render formats include mono/stereo
   at 22.05, 44.1, 48 and 96 kHz. Changing format stops the old preview so it cannot play at the wrong rate.
 

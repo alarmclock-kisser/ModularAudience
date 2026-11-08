@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace ModularAudience.Audio.Synthesis;
 
 /// <summary>Procedural instruments: modal keyboards/percussion, feedback strings and harmonic wind/reed voices.</summary>
@@ -63,7 +65,8 @@ public static class InstrumentSampleSynth
             Data = data, SampleRate = rate, Channels = channels, BitDepth = 32, Length = data.Length,
             Duration = TimeSpan.FromSeconds(frames / (double)rate), Bpm = (float)s.Bpm, Volume = 100
         };
-        result.Rename($"{s.VoiceName} · {note}{(s.PitchSemitones == 0 ? "" : $" {s.PitchSemitones:+0.##;-0.##} st")} · {s.Bpm:0.##} BPM");
+        string pitch = s.PitchSemitones == 0 ? "" : $" {s.PitchSemitones.ToString("+0.##;-0.##", CultureInfo.InvariantCulture)} st";
+        result.Rename($"{s.VoiceName} · {note}{pitch} · {s.KeyDurationName} [{s.Bpm.ToString("0.##", CultureInfo.InvariantCulture)}]");
         return result;
     }
 

@@ -22,7 +22,14 @@ namespace ModularAudience.Forms
         private static bool? sharedPreviewState;
         private static bool synchronizingSharedCheckboxes;
 
-        internal readonly AudioCollection AudioC = new();
+        internal readonly AudioCollection AudioC;
+        private readonly bool ownsAudioCollection;
+
+        private partial void InitializeCoOpMenu();
+        private partial void UpdateCoOpMenuState();
+        private partial void AdjustCoOpDrawItem(AudioObj audio, DrawItemEventArgs e, ref string nameText, ref Color textColor, ref int nameLeft);
+        private partial void NotifyCoOpClosing();
+        private partial bool CanShowCoOpMenu();
 
         internal IEnumerable<AudioObj> SelectedAudios => this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>();
 
@@ -77,7 +84,23 @@ namespace ModularAudience.Forms
         private static extern bool EmptyWorkingSet(IntPtr processHandle);
 
         public AudioCollectionView(IEnumerable<AudioObj> audios, string? title = null)
+            : this(new AudioCollection(), audios, title, ownsAudioCollection: true)
         {
+        }
+
+        internal AudioCollectionView(AudioCollection collection, string? title = null)
+            : this(collection, null, title, ownsAudioCollection: false)
+        {
+        }
+
+        private AudioCollectionView(
+            AudioCollection collection,
+            IEnumerable<AudioObj>? initialAudios,
+            string? title,
+            bool ownsAudioCollection)
+        {
+            this.AudioC = collection;
+            this.ownsAudioCollection = ownsAudioCollection;
             this.InitializeComponent();
             this.InitializeSampleModeller();
             this.checkBox_autoPlay.Checked = sharedAutoPlayState ?? this.checkBox_autoPlay.Checked;
@@ -101,19 +124,22 @@ namespace ModularAudience.Forms
 
             this.Text = title ?? ("Audio Collection #" + (WindowMain.CollectionViews.Where(cv => !cv.IsDisposed).Count()).ToString("D2"));
 
-            this.AudioC.Audios.RaiseListChangedEvents = false;
-            try
+            if (initialAudios != null)
             {
-                foreach (AudioObj audio in audios)
+                this.AudioC.Audios.RaiseListChangedEvents = false;
+                try
                 {
-                    this.AudioC.Audios.Add(audio);
+                    foreach (AudioObj audio in initialAudios)
+                    {
+                        this.AudioC.Audios.Add(audio);
+                    }
                 }
+                finally
+                {
+                    this.AudioC.Audios.RaiseListChangedEvents = true;
+                }
+                this.AudioC.Audios.ResetBindings();
             }
-            finally
-            {
-                this.AudioC.Audios.RaiseListChangedEvents = true;
-            }
-            this.AudioC.Audios.ResetBindings();
 
             this.listBox_audios.Items.Clear();
             this.listBox_audios.DataSource = this.AudioC.Audios;
@@ -144,6 +170,7 @@ namespace ModularAudience.Forms
             this.DoubleClick += this.Form_DoubleClick;
             alarmclockkisser.DragNDrop.Forms.ListBoxExtensions.Register_ListBox_DragNDrop(this.listBox_audios, true);
             this.listBox_audios.DrawItem += this.listBox_audios_DrawItem;
+            this.InitializeCoOpMenu();
 
 
             // Explicit DnD handlers to support inter-collection drag/drop
@@ -187,6 +214,7 @@ namespace ModularAudience.Forms
             }
 
             this.closeCleanupStarted = true;
+            this.NotifyCoOpClosing();
             this.FormClosing -= this.AudioCollectionView_FormClosing;
             this.waveformPreviewTimer.Stop();
             this.waveformPreviewTimer.Dispose();
@@ -209,13 +237,16 @@ namespace ModularAudience.Forms
                     LogManager.Log(ex);
                 }
 
-                try
+                if (this.ownsAudioCollection)
                 {
-                    this.AudioC.Dispose();
-                }
-                catch (Exception ex)
-                {
-                    LogManager.Log(ex);
+                    try
+                    {
+                        this.AudioC.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        LogManager.Log(ex);
+                    }
                 }
             });
         }
@@ -235,8 +266,10 @@ namespace ModularAudience.Forms
                     Color textColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected
                         ? Theming.ThemeManager.GetColor(this.listBox_audios, "SelectionForeColor", SystemColors.HighlightText)
                         : this.listBox_audios.ForeColor;
+                    int nameLeft = e.Bounds.Left + 2;
+                    this.AdjustCoOpDrawItem(audio, e, ref nameText, ref textColor, ref nameLeft);
                     // Zeichne Namen
-                    Rectangle nameRect = new(e.Bounds.Left + 2, e.Bounds.Top, e.Bounds.Width - 100, e.Bounds.Height);
+                    Rectangle nameRect = new(nameLeft, e.Bounds.Top, Math.Max(0, e.Bounds.Right - 98 - nameLeft), e.Bounds.Height);
                     TextRenderer.DrawText(e.Graphics, nameText, e.Font, nameRect, textColor, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
                     // Zeichne Dauer rechtsbündig
                     Rectangle durationRect = new(e.Bounds.Right - 98, e.Bounds.Top, 96, e.Bounds.Height);
@@ -287,6 +320,10 @@ namespace ModularAudience.Forms
                     {
                         this.listBox_audios.SelectedIndex = index;
                     }
+                }
+
+                if (index != ListBox.NoMatches || this.CanShowCoOpMenu())
+                {
                     this.listBox_audios.Focus();
                     this.UpdateContextMenuState();
                     this.contextMenuShowLocation = e.Location;
@@ -843,6 +880,13 @@ namespace ModularAudience.Forms
 
         private void Resize_Form_CollectionChanged(object? sender, EventArgs e)
         {
+            // Content edits do not change the number of rows. Ignoring them
+            // avoids repeated layout work while a track is being edited.
+            if (e is ListChangedEventArgs change && change.ListChangedType == ListChangedType.ItemChanged)
+            {
+                return;
+            }
+
             int maxFormHeight = this.GetAvailableWorkingAreaHeight();
             if (this.MaximumSize.Height != maxFormHeight)
             {
@@ -1040,7 +1084,7 @@ namespace ModularAudience.Forms
         private void contextMenuStrip_audios_Opening(object sender, CancelEventArgs e)
         {
             this.UpdateContextMenuState();
-            e.Cancel = this.GetContextAudios().Count == 0;
+            e.Cancel = this.GetContextAudios().Count == 0 && !this.CanShowCoOpMenu();
         }
 
         private void UpdateContextMenuState()
@@ -1121,6 +1165,7 @@ namespace ModularAudience.Forms
             this.menuToolStripItem_generateBreakbeatSwing6.Checked = Math.Abs(this.breakbeatSwing - 0.06f) < 0.001f;
             this.menuToolStripItem_generateBreakbeatSwing12.Checked = Math.Abs(this.breakbeatSwing - 0.12f) < 0.001f;
             this.menuToolStripItem_generateBreakbeatSwing18.Checked = Math.Abs(this.breakbeatSwing - 0.18f) < 0.001f;
+            this.UpdateCoOpMenuState();
         }
 
         private List<AudioObj> GetContextAudios()
