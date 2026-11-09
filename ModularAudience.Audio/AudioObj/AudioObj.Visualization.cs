@@ -776,7 +776,7 @@ namespace ModularAudience.Audio
             }
         }
 
-        private void InvalidateWaveformCache()
+        internal void InvalidateWaveformCache()
         {
             if (this._waveCacheStrip != null)
             {

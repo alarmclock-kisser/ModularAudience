@@ -1,5 +1,8 @@
 # Application updates
 
+For waveform editing effects, parameter-dialog conventions, Auto Tune presets,
+and **mandatory Ctrl+Z / Ctrl+Y undo/redo**, see [TrackView effects](Effects/README.md).
+
 The GitHub workflow publishes `ModularAudience.Forms.exe` with the existing
 `release-<run number>` tag. The same number is embedded in the executable, so
 the file name and existing shortcuts do not change.

@@ -115,6 +115,7 @@ namespace ModularAudience.Forms.Modules
             };
 
             this.sourceCollection = sourceCollection;
+            this.InitializeEffectsMenu();
 
             this.KeyPreview = true;
             this.KeyDown += this.TrackView_KeyDown;
@@ -192,6 +193,7 @@ namespace ModularAudience.Forms.Modules
 
             e.Cancel = true;
             this.closeCleanupStarted = true;
+            this.autoTuneDialog?.Close();
             this.LeaveCurrentMix();
             this.FormClosing -= this.TrackView_FormClosing;
 
