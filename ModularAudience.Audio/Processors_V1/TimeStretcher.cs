@@ -857,6 +857,13 @@ namespace ModularAudience.Audio.Processors_V1
         {
             maxWorkers = Math.Clamp(maxWorkers, 1, Environment.ProcessorCount);
 
+            // Compression (factor < 1.0) must NEVER use the slow expansion pipeline:
+            // it sounds metallic/warbling. Delegate to the fast legacy path instead.
+            if (factor < 1.0)
+            {
+                return await TimeStretchAllThreadsAsync(obj, chunkSize, overlap, factor, keepData, normalize, maxWorkers, progress, offload: false, channeled: false);
+            }
+
             float[] backupData = obj.Data;
             int sampleRate = obj.SampleRate;
             int channelCount = Math.Max(1, obj.Channels);
