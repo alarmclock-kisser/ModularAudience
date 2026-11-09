@@ -45,6 +45,7 @@ internal sealed class MixOptionsDialog : Form
         Check("Snap", state.Snap, v => state.Snap = v); Check("Show grid", state.Visual.ShowGrid, v => state.Visual.ShowGrid = v);
         Check("Hue cycle", state.Visual.HueCycle, v => state.Visual.HueCycle = v);
         Check("Waveforms", state.Visual.ShowWaveforms, v => state.Visual.ShowWaveforms = v); Check("Track colors", state.Visual.ColorTracks, v => state.Visual.ColorTracks = v);
+Check("Auto-adjust track height", state.Visual.AutoTrackHeight, v => state.Visual.AutoTrackHeight = v);
         fields.Controls.Add(flags, 0, (index + 1) / 2); fields.SetColumnSpan(flags, 4);
         var colors = new DataGridView { Dock = DockStyle.Fill, AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false,
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, SelectionMode = DataGridViewSelectionMode.CellSelect };

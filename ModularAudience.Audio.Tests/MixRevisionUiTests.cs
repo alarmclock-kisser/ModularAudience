@@ -122,7 +122,7 @@ public sealed class MixRevisionUiTests
         Drain((Task)Call(mix, "SaveToPathAsync", path, CancellationToken.None)!);
         Field<CheckBox>(mix, "autoSave").Checked = true; fixture.FlushSave();
         byte[] before = File.ReadAllBytes(path); int history = History(mix);
-        Call(mix, "Zoom", 1.7); Field<HScrollBar>(mix, "scroll").Value = -20;
+        Call(mix, "Zoom", 1.7); Field<HScrollBar>(mix, "scroll").Value = 0;
         Field<VScrollBar>(mix, "vertical").Value = 1;
         Click(Field<CheckBox>(mix, "autoScroll")); Field<CheckBox>(mix, "loop").Checked = true;
         Set(mix, "manualCaret", 0.5); Set(mix, "caret", 0.8); Call(mix, "JumpToManualCaret", false);
@@ -146,11 +146,11 @@ public sealed class MixRevisionUiTests
         var options = new MixArrangement(); options.Restore(mix.Arrangement.Capture()); options.Visual.Background = "#123456";
         options.Visual.PixelsPerSecond = 250; options.DisplayLaneHeight = 145;
         Call(mix, "PreviewViewOptions", options); Call(mix, "Changed"); Field<CheckBox>(mix, "snap").Checked = true;
-        Field<HScrollBar>(mix, "scroll").Value = -10;
+        Field<HScrollBar>(mix, "scroll").Value = 0;
         Assert.AreEqual(history, History(mix)); Call(mix, "Undo");
         Assert.AreEqual(1d, mix.Arrangement.Lanes[0].Gain); Assert.AreEqual("#123456", mix.Arrangement.Visual.Background);
         Assert.AreEqual(145, mix.Arrangement.DisplayLaneHeight); Assert.AreEqual(250d, Field<double>(mix, "pixelsPerSecond"));
-        Assert.IsTrue(mix.Arrangement.Snap); Assert.AreEqual(-10, Field<HScrollBar>(mix, "scroll").Value);
+        Assert.IsTrue(mix.Arrangement.Snap); Assert.AreEqual(0, Field<HScrollBar>(mix, "scroll").Value);
     }
 
     [STATestMethod]
@@ -164,7 +164,7 @@ public sealed class MixRevisionUiTests
         Call(mix, "MouseMoveTimeline", canvas, new MouseEventArgs(MouseButtons.Left, 0, 170, 40, 0));
         Call(mix, "MouseUpTimeline", canvas, new MouseEventArgs(MouseButtons.Left, 1, 170, 40, 0));
         Assert.IsLessThan(0d, clip.Start); if (snap) Assert.AreEqual(Math.Round(clip.Start / 0.25), clip.Start / 0.25, 1e-7);
-        double negative = clip.Start; Assert.IsLessThan(0, Field<HScrollBar>(mix, "scroll").Value);
+        double negative = clip.Start; Assert.AreEqual(0, Field<HScrollBar>(mix, "scroll").Value);
         Call(mix, "Undo"); Assert.AreEqual(0.1, mix.Arrangement.Lanes[0].Clips[0].Start, 1e-7);
         Call(mix, "Redo"); Assert.AreEqual(negative, mix.Arrangement.Lanes[0].Clips[0].Start, 1e-7); mix.Arrangement.Validate();
     }

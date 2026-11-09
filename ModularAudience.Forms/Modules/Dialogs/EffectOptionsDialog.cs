@@ -10,7 +10,8 @@ internal sealed record EffectDialogContext(AudioEffectEditSession Session, strin
     Func<AudioEffectResult, CancellationToken, Task> ApplyAsync, Func<Task>? BeforePreviewAsync = null,
     Func<(double Bpm, double ScannedBpm)>? ReadTrackTempo = null,
     string? ScopeDescription = null,
-    Func<AudioEffectSettings, AudioEffectExecutionOptions, IProgress<double>, CancellationToken, Task<AudioEffectResult>>? RenderAsync = null);
+    Func<AudioEffectSettings, AudioEffectExecutionOptions, IProgress<double>, CancellationToken, Task<AudioEffectResult>>? RenderAsync = null,
+    Action<Form, Form>? ShowChildDialog = null);
 
 internal sealed class EffectOptionsDialog : Form
 {
@@ -23,16 +24,17 @@ internal static class EffectDialogHost
     internal static Form Create(EffectDialogContext context) => context.Defaults.Effect switch
     {
         AudioEffectKind.PitchShift => new PitchShiftDialog(context),
-        AudioEffectKind.TimeStretch => new TimeStretchDialog(context),
+        AudioEffectKind.TimeStretch => new TimeStretchEffectDialog(context),
+        AudioEffectKind.VarispeedShift => new VarispeedShiftDialog(context),
         _ => new EffectOptionsDialog(context)
     };
 
-    internal static EffectOptionsEditor Attach(Form form, EffectDialogContext context)
+    internal static EffectOptionsEditor Attach(Form form, EffectDialogContext context, EffectPresetStore? store = null, IEffectPreviewPlayer? preview = null)
     {
-        var editor = new EffectOptionsEditor(context, () => { form.DialogResult = DialogResult.OK; form.Close(); }, form.Close);
+        var editor = new EffectOptionsEditor(context, () => { form.DialogResult = DialogResult.OK; form.Close(); }, form.Close, store, preview);
         form.Name = context.Defaults.Effect + "Dialog";
         form.Text = AudioEffectCatalog.Get(context.Defaults.Effect).Name + " — " + context.TrackName;
-        form.ClientSize = new Size(900, 650); form.MinimumSize = new Size(720, 460);
+        form.ClientSize = new Size(1000, 730); form.MinimumSize = new Size(720, 460);
         form.StartPosition = FormStartPosition.CenterParent;
         form.Controls.Add(editor); form.AcceptButton = editor.ApplyButton; form.CancelButton = editor.CancelButton;
         form.FormClosing += (_, _) => editor.CancelWork();
@@ -42,7 +44,7 @@ internal static class EffectDialogHost
 
 /// <summary>
 /// Shared modeless editor hosted in a per-effect window (including PitchShiftDialog
-/// and TimeStretchDialog). Rendering/preview/presets never mutate the editing target.
+/// and the dedicated TimeStretchEffectDialog/VarispeedShiftDialog). Rendering/preview/presets never mutate the editing target.
 /// </summary>
 internal sealed class EffectOptionsEditor : UserControl
 {
@@ -78,7 +80,7 @@ internal sealed class EffectOptionsEditor : UserControl
         this.store = store ?? new EffectPresetStore(context.Defaults.Effect);
         this.preview = preview ?? new EffectPreviewPlayer();
         AudioEffectDefinition definition = AudioEffectCatalog.Get(context.Defaults.Effect);
-        this.parameters = new EffectParameterEditor(definition, context.ReadTrackTempo);
+        this.parameters = new EffectParameterEditor(definition, context.ReadTrackTempo, context.ShowChildDialog);
         this.render = render ?? ((settings, report, token) =>
         {
             var execution = new AudioEffectExecutionOptions { MaximumThreads = (int)this.maxThreads.Value };

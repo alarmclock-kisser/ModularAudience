@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ModularAudience.Audio;
 using ModularAudience.Forms.Updates;
 using ModularAudience.Shared;
+using ModularAudience.Quantum.Extensions;
 
 namespace ModularAudience.Forms
 {
@@ -54,6 +55,7 @@ namespace ModularAudience.Forms
             var services = new ServiceCollection();
             services.AddSingleton<IRollingFileMemoryLogger>(logger);
             services.AddSingleton(logger);
+            services.AddQuantumPatterns();
 
             using var serviceProvider = services.BuildServiceProvider();
 

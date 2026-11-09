@@ -13,6 +13,8 @@ using ModularAudience.Forms.Settings;
 using ModularAudience.MidiController;
 using ModularAudience.MidiController.Models;
 using ModularAudience.Shared;
+using Microsoft.Extensions.DependencyInjection;
+using ModularAudience.Quantum.Abstractions;
 
 namespace ModularAudience.Forms
 {
@@ -21,6 +23,7 @@ namespace ModularAudience.Forms
         public static WindowMain? Instance { get; private set; }
 
         public readonly AudioCollection AudioC;
+        private readonly IQuantumPatternService? quantumPatternService;
 
         public float MasterLimiter => 1f - (float)this.vScrollBar_masterLimiter.Value / Math.Max(1, this.vScrollBar_masterLimiter.Maximum);
 
@@ -164,6 +167,7 @@ namespace ModularAudience.Forms
 
         public WindowMain(RollingFileMemoryLogger logger, IServiceProvider serviceProvider)
         {
+            this.quantumPatternService = serviceProvider.GetService<IQuantumPatternService>();
             this._preferencesStore = new ApplicationPreferencesStore();
             this._applicationPreferences = this.LoadInitialPreferences();
             this.AudioC = new AudioCollection();

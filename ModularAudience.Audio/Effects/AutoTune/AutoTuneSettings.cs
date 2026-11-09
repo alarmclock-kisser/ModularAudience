@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using ModularAudience.Audio.Effects.Curves;
 
 namespace ModularAudience.Audio.Effects.AutoTune;
 
@@ -44,6 +45,12 @@ public sealed record AutoTuneSettings
     public double OutputGainDb { get; init; }
     public double BoundaryFadeMilliseconds { get; init; } = 5;
     public bool ProtectPeak { get; init; } = true;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public EffectAutomationSettings? Automation { get; init; }
+    public AutoTuneSettings Copy() => this with { Automation = this.Automation?.Copy() };
+    public bool SoundEquals(AutoTuneSettings? other) => other is not null &&
+        (this with { Automation = null }) == (other with { Automation = null }) &&
+        (this.Automation is null ? other.Automation is null : this.Automation.SoundEquals(other.Automation));
 
     [JsonIgnore]
     public double MinimumNoteSeconds
@@ -95,6 +102,7 @@ public sealed record AutoTuneSettings
         Check(WetPercent, 0, 100, nameof(WetPercent));
         Check(OutputGainDb, -24, 12, nameof(OutputGainDb));
         Check(BoundaryFadeMilliseconds, 0, 100, nameof(BoundaryFadeMilliseconds));
+        this.Automation?.Validate(AutoTuneCurveTargets.All, key => AutoTuneCurveTargets.BaseValue(this, key));
     }
 
     private static void Check(double value, double minimum, double maximum, string name)

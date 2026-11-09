@@ -11,7 +11,8 @@ internal sealed record AutoTuneDialogContext(AudioEffectEditSession Session, str
     Func<float[], CancellationToken, Task> ApplyAsync, Func<Task>? BeforePreviewAsync = null,
     Func<(double Bpm, double ScannedBpm)>? ReadTrackTempo = null,
     string? ScopeDescription = null,
-    Func<AutoTuneSettings, AudioEffectExecutionOptions, IProgress<double>, CancellationToken, Task<AutoTuneResult>>? RenderAsync = null);
+    Func<AutoTuneSettings, AudioEffectExecutionOptions, IProgress<double>, CancellationToken, Task<AutoTuneResult>>? RenderAsync = null,
+    Action<Form, Form>? ShowChildDialog = null);
 
 /// <summary>Modeless parameter/preset editor. Preview and rendering never mutate the editing target.</summary>
 internal sealed class AutoTuneDialog : Form
@@ -20,7 +21,7 @@ internal sealed class AutoTuneDialog : Form
     private readonly AutoTunePresetStore store;
     private readonly IEffectPreviewPlayer preview;
     private readonly Func<AutoTuneSettings, IProgress<double>, CancellationToken, Task<AutoTuneResult>> render;
-    private readonly AutoTuneParameterEditor parameters = new() { Dock = DockStyle.Fill };
+    private readonly AutoTuneParameterEditor parameters;
     private ComboBox presets => this.presetBar.Presets;
     private TextBox presetName => this.presetBar.PresetName;
     private Button save => this.presetBar.SaveButton;
@@ -50,6 +51,7 @@ internal sealed class AutoTuneDialog : Form
         Func<AutoTuneSettings, IProgress<double>, CancellationToken, Task<AutoTuneResult>>? render = null)
     {
         this.context = context;
+        this.parameters = new(context.ShowChildDialog) { Dock = DockStyle.Fill };
         this.store = store ?? new AutoTunePresetStore();
         this.preview = preview ?? new EffectPreviewPlayer();
         this.render = render ?? ((settings, report, token) =>
@@ -61,7 +63,7 @@ internal sealed class AutoTuneDialog : Form
         });
         this.Name = "AutoTuneDialog";
         this.Text = "Auto Tune — " + context.TrackName;
-        this.ClientSize = new Size(860, 710);
+        this.ClientSize = new Size(1000, 760);
         this.MinimumSize = new Size(730, 580);
         this.StartPosition = FormStartPosition.CenterParent;
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(10), RowCount = 6, ColumnCount = 1 };
@@ -143,7 +145,7 @@ internal sealed class AutoTuneDialog : Form
         AutoTuneSettings settings;
         try { this.ValidateChildren(); settings = this.parameters.CaptureSettings(); settings.Validate(this.context.Session.SampleRate); }
         catch (Exception error) when (IsEffectError(error)) { this.status.Text = error.Message; return null; }
-        if (this.rendered is not null && this.renderedSettings == settings) return this.rendered;
+        if (this.rendered is not null && settings.SoundEquals(this.renderedSettings)) return this.rendered;
         int generation = this.revision;
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.lifetime.Token);
         this.active = cancellation; this.UpdateButtons(); this.progress.Value = 0;
@@ -160,7 +162,7 @@ internal sealed class AutoTuneDialog : Form
             if (this.disposed || generation != this.revision) return null;
             if (result.Samples.Length != this.context.Session.SampleCount || result.Samples.Any(value => !float.IsFinite(value)))
                 throw new InvalidOperationException("The effect must return the same number of finite samples.");
-            this.rendered = result; this.renderedSettings = settings;
+            this.rendered = result; this.renderedSettings = settings.Copy();
             this.progress.Value = this.progress.Maximum;
             this.status.Text = $"Ready. Voiced frames: {result.VoicedFrames}/{result.AnalyzedFrames}; corrected: {result.CorrectedFrames}. " +
                 "OK creates one undo step; Cancel leaves the track unchanged.";

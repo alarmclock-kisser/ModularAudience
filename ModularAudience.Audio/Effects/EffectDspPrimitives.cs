@@ -12,6 +12,11 @@ public static partial class AudioEffectProcessor
             this.z2 = input * this.b2 - output * this.a2;
             return output;
         }
+        internal void Reconfigure(Biquad coefficients)
+        {
+            this.b0 = coefficients.b0; this.b1 = coefficients.b1; this.b2 = coefficients.b2;
+            this.a1 = coefficients.a1; this.a2 = coefficients.a2;
+        }
 
         private static Biquad Create(double b0, double b1, double b2, double a0, double a1, double a2) =>
             new() { b0 = b0 / a0, b1 = b1 / a0, b2 = b2 / a0, a1 = a1 / a0, a2 = a2 / a0 };
@@ -64,9 +69,10 @@ public static partial class AudioEffectProcessor
     private sealed class AllPassDelay
     {
         private readonly double[] data;
-        private readonly double coefficient;
+        private double coefficient;
         private int position;
         internal AllPassDelay(int frames, double coefficient) { this.data = new double[Math.Max(1, frames)]; this.coefficient = coefficient; }
+        internal void SetCoefficient(double value) => this.coefficient = value;
         internal double Process(double input)
         {
             double delayed = this.data[this.position], output = delayed - this.coefficient * input;

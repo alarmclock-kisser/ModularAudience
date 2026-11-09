@@ -8,41 +8,41 @@ public static partial class AudioEffectProcessor
         if (settings.Effect == AudioEffectKind.DeEsser) return DeEss(source, settings, context);
         int frames = source.Length / context.Channels;
         float[] output = new float[source.Length];
-        double attack = Coefficient(settings["AttackMs"], context.Rate), release = Coefficient(settings["ReleaseMs"], context.Rate);
-        double envelope = 0, smoothedGainDb = settings.Effect == AudioEffectKind.Gate ? -settings["RangeDb"] : 0;
+        double envelope = 0, smoothedGainDb = settings.Effect == AudioEffectKind.Gate ? -context.Automation.Value("RangeDb", 0) : 0;
         int holdRemaining = 0;
         for (int frame = 0; frame < frames; frame++)
         {
             context.Check(frame, frames);
+            double attack = Coefficient(context.Automation.Value("AttackMs", frame), context.Rate), release = Coefficient(context.Automation.Value("ReleaseMs", frame), context.Rate);
             double peak = 0;
             for (int channel = 0; channel < context.Channels; channel++) peak = Math.Max(peak, Math.Abs(source[frame * context.Channels + channel]));
             double detectorCoefficient = peak > envelope ? attack : release;
             envelope = peak + detectorCoefficient * (envelope - peak);
-            double level = GainToDb(envelope), threshold = settings["ThresholdDb"], targetDb;
+            double level = GainToDb(envelope), threshold = context.Automation.Value("ThresholdDb", frame), targetDb;
             if (settings.Effect == AudioEffectKind.Compressor)
             {
-                double over = level - threshold, knee = settings["KneeDb"], slope = 1 / settings["Ratio"] - 1;
+                double over = level - threshold, knee = context.Automation.Value("KneeDb", frame), slope = 1 / context.Automation.Value("Ratio", frame) - 1;
                 targetDb = knee > 0 && Math.Abs(over) <= knee / 2
                     ? slope * Math.Pow(over + knee / 2, 2) / (2 * knee) : over > 0 ? slope * over : 0;
             }
             else if (settings.Effect == AudioEffectKind.Gate)
             {
-                if (level >= threshold) holdRemaining = (int)Math.Round(settings["HoldMs"] * context.Rate / 1000);
+                if (level >= threshold) holdRemaining = (int)Math.Round(context.Automation.Value("HoldMs", frame) * context.Rate / 1000);
                 bool open = level >= threshold || holdRemaining-- > 0;
-                targetDb = open ? 0 : -settings["RangeDb"];
+                targetDb = open ? 0 : -context.Automation.Value("RangeDb", frame);
             }
-            else targetDb = Math.Clamp((level - threshold) * (settings["Ratio"] - 1), -settings["RangeDb"], 0);
+            else targetDb = Math.Clamp((level - threshold) * (context.Automation.Value("Ratio", frame) - 1), -context.Automation.Value("RangeDb", frame), 0);
 
             // Opening an expander/gate uses attack, closing uses release. A
             // compressor instead attacks increasing gain reduction.
             bool attacking = settings.Effect == AudioEffectKind.Compressor ? targetDb < smoothedGainDb : targetDb > smoothedGainDb;
             double coefficient = attacking ? attack : release;
             smoothedGainDb = targetDb + coefficient * (smoothedGainDb - targetDb);
-            double gain = DbToGain(smoothedGainDb + (settings.Effect == AudioEffectKind.Compressor ? settings["MakeupDb"] : 0));
+            double gain = DbToGain(smoothedGainDb + (settings.Effect == AudioEffectKind.Compressor ? context.Automation.Value("MakeupDb", frame) : 0));
             for (int channel = 0; channel < context.Channels; channel++)
             {
                 int index = frame * context.Channels + channel;
-                output[index] = (float)MixSample(source[index], source[index] * gain, settings);
+                output[index] = (float)MixSample(source[index], source[index] * gain, context, frame);
             }
         }
         return new(output, context.Channels);
@@ -52,8 +52,7 @@ public static partial class AudioEffectProcessor
     {
         int frames = source.Length / context.Channels;
         int lookAhead = (int)Math.Round(settings["LookAheadMs"] * context.Rate / 1000);
-        double ceiling = DbToGain(settings["CeilingDb"]), drive = DbToGain(settings["InputGainDb"]);
-        double release = Coefficient(settings["ReleaseMs"], context.Rate), gain = 1;
+        double gain = 1;
         float[] output = new float[source.Length];
         // A monotonic deque gives a linked forward peak window in O(n), without
         // delaying or padding the returned audio.
@@ -63,11 +62,14 @@ public static partial class AudioEffectProcessor
         for (int frame = 0; frame < frames; frame++)
         {
             context.Check(frame, frames);
+            double ceiling = DbToGain(context.Automation.Value("CeilingDb", frame)), drive = DbToGain(context.Automation.Value("InputGainDb", frame));
+            double release = Coefficient(context.Automation.Value("ReleaseMs", frame), context.Rate);
             while (head != tail && positions[head] < frame) head = (head + 1) % capacity;
             while (next < frames && next <= (long)frame + lookAhead)
             {
                 double peak = 0;
-                for (int channel = 0; channel < context.Channels; channel++) peak = Math.Max(peak, Math.Abs(source[next * context.Channels + channel] * drive));
+                double futureDrive = DbToGain(context.Automation.Value("InputGainDb", next));
+                for (int channel = 0; channel < context.Channels; channel++) peak = Math.Max(peak, Math.Abs(source[next * context.Channels + channel] * futureDrive));
                 while (head != tail && peaks[(tail - 1 + capacity) % capacity] <= peak) tail = (tail - 1 + capacity) % capacity;
                 positions[tail] = next++; peaks[tail] = peak; tail = (tail + 1) % capacity;
             }
@@ -88,11 +90,18 @@ public static partial class AudioEffectProcessor
         float[] output = new float[source.Length]; var band = new double[channels];
         double bandwidth = settings["BandwidthOctaves"], q = 1 / (Math.Pow(2, bandwidth / 2) - Math.Pow(2, -bandwidth / 2));
         var filters = Enumerable.Range(0, channels).Select(_ => Biquad.BandPass(settings["FrequencyHz"], context.Rate, q)).ToArray();
-        double attack = Coefficient(settings["AttackMs"], context.Rate), release = Coefficient(settings["ReleaseMs"], context.Rate);
         double envelope = 0, reduction = 0;
         for (int frame = 0; frame < frames; frame++)
         {
             context.Check(frame, frames);
+            double attack = Coefficient(context.Automation.Value("AttackMs", frame), context.Rate), release = Coefficient(context.Automation.Value("ReleaseMs", frame), context.Rate);
+            if (context.Automation.Has("FrequencyHz") || context.Automation.Has("BandwidthOctaves"))
+            {
+                double currentBandwidth = context.Automation.Value("BandwidthOctaves", frame);
+                double currentQ = 1 / (Math.Pow(2, currentBandwidth / 2) - Math.Pow(2, -currentBandwidth / 2));
+                Biquad coefficients = Biquad.BandPass(context.Automation.Value("FrequencyHz", frame), context.Rate, currentQ);
+                for (int channel = 0; channel < channels; channel++) filters[channel].Reconfigure(coefficients);
+            }
             double detector = 0;
             for (int channel = 0; channel < channels; channel++)
             {
@@ -101,7 +110,7 @@ public static partial class AudioEffectProcessor
             }
             double coefficient = detector > envelope ? attack : release;
             envelope = detector + coefficient * (envelope - detector);
-            double targetDb = Math.Min(settings["MaximumReductionDb"], Math.Max(0, GainToDb(envelope) - settings["ThresholdDb"]) * (1 - 1 / settings["Ratio"]));
+            double targetDb = Math.Min(context.Automation.Value("MaximumReductionDb", frame), Math.Max(0, GainToDb(envelope) - context.Automation.Value("ThresholdDb", frame)) * (1 - 1 / context.Automation.Value("Ratio", frame)));
             coefficient = targetDb > reduction ? attack : release;
             reduction = targetDb + coefficient * (reduction - targetDb);
             double gain = DbToGain(-reduction);
@@ -109,7 +118,7 @@ public static partial class AudioEffectProcessor
             {
                 int index = frame * channels + channel;
                 double processed = settings.Choice("Mode") == 0 ? source[index] + band[channel] * (gain - 1) : source[index] * gain;
-                output[index] = (float)MixSample(source[index], processed, settings);
+                output[index] = (float)MixSample(source[index], processed, context, frame);
             }
         }
         return new(output, channels);

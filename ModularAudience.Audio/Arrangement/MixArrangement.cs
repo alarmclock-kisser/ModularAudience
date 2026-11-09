@@ -29,6 +29,7 @@ public sealed class MixVisualOptions
     public MixScrollMode ScrollMode { get; set; }
     public double HorizontalScrollSeconds { get; set; }
     public int FirstVisibleTrack { get; set; }
+    public bool AutoTrackHeight { get; set; }
 }
 
 public sealed class MixSource

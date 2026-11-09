@@ -479,7 +479,7 @@ namespace ModularAudience.Forms
             DrumRollEditor? editor = null;
             try
             {
-                editor = new(SelectedTracks.ToList());
+                editor = new(SelectedTracks.ToList(), this.quantumPatternService);
                 editor.Show();
             }
             catch (Exception ex)

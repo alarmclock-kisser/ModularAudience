@@ -3,6 +3,7 @@ using ModularAudience.Audio;
 using ModularAudience.Audio.Arrangement;
 using ModularAudience.Audio.Effects;
 using ModularAudience.Audio.Effects.AutoTune;
+using ModularAudience.Audio.Effects.Curves;
 using ModularAudience.Forms.Effects;
 using ModularAudience.Forms.Modules.Dialogs;
 
@@ -95,15 +96,18 @@ public sealed partial class MixTrackView
                         {
                             token.ThrowIfCancellationRequested(); MixEffectInput input = captured.Inputs[i];
                             var report = new SliceProgress(progress, i * 0.9 / captured.Inputs.Count, 0.9 / captured.Inputs.Count);
+                            EffectCurveRenderScope? curveScope = settings.Automation?.HasEnabledCurves == true
+                                ? await Task.Run(() => captured.CreateCurveScope(i, settings.Automation.Timing, token), token) : null;
+                            var run = execution with { CurveScope = curveScope };
                             AutoTuneResult result = await AutoTuneProcessor.ProcessAsync(input.Samples, MixEffectEditSession.SampleRate,
-                                input.Channels, settings, report, token, execution);
+                                input.Channels, settings, report, token, run);
                             results.Add(new(result.Samples, input.Channels)); analyzed += result.AnalyzedFrames; voiced += result.VoicedFrames;
                             corrected += result.CorrectedFrames; protection = Math.Min(protection, result.PeakProtectionGain);
                         }
                         using AudioObj preview = await captured.RenderPreviewAsync(results, token);
-                        token.ThrowIfCancellationRequested(); renderedBatch = results.ToArray(); renderedTuning = settings with { }; progress.Report(1);
+                        token.ThrowIfCancellationRequested(); renderedBatch = results.ToArray(); renderedTuning = settings.Copy(); progress.Report(1);
                         return new AutoTuneResult(preview.Data, analyzed, voiced, corrected, protection);
-                    });
+                    }, (child, parent) => this.windowGroup.Show(child, parent));
                 dialog = this.CreateMixAutoTuneDialog(context);
             }
             else
@@ -118,7 +122,7 @@ public sealed partial class MixTrackView
                         using AudioObj preview = await captured.RenderPreviewAsync(results, token);
                         token.ThrowIfCancellationRequested(); renderedBatch = results; renderedParameters = settings.Copy(); progress.Report(1);
                         return new AudioEffectResult(preview.Data, preview.Channels);
-                    });
+                    }, (child, parent) => this.windowGroup.Show(child, parent));
                 dialog = this.CreateMixEffectDialog(context);
             }
             this.mixEffectDialogs[effect] = dialog;
@@ -149,8 +153,11 @@ public sealed partial class MixTrackView
         {
             token.ThrowIfCancellationRequested();
             IProgress<double>? report = progress is null ? null : new SliceProgress(progress, i * 0.9 / inputs.Length, 0.9 / inputs.Length);
+            EffectCurveRenderScope? curveScope = settings.Automation?.HasEnabledCurves == true
+                ? await Task.Run(() => session.CreateCurveScope(i, settings.Automation.Timing, token), token) : null;
+            var run = execution with { CurveScope = curveScope };
             results[i] = await AudioEffectProcessor.ProcessAsync(inputs[i].Samples, MixEffectEditSession.SampleRate, inputs[i].Channels,
-                settings, report, token, execution);
+                settings, report, token, run);
         }
         return results;
     }

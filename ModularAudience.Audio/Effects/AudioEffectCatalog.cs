@@ -51,7 +51,7 @@ public static class AudioEffectCatalog
             ("fifth", "Perfect fifth — same length", [("Semitones", 7)]),
             ("slow-octave", "Tape octave down — double length", [("Semitones", -12), ("Method", 1)])),
         new(AudioEffectKind.TimeStretch, "Time & Speed", "Time Stretch",
-            "Changes duration without changing pitch. The existing TimeStretchDialog also supports its legacy batch/configuration workflows.", [
+            "Changes duration without changing pitch. Curve mode sweeps speed to Target BPM using continuous FFT-PV; the legacy batch/configuration dialog stays separate.", [
                 N("Factor", "Duration factor (2 = twice as long)", 0.125, 8, 1.25, 0.001),
                 C("Method", "Stretch algorithm", 0, "Continuous FFT-PV", "V1 chunk stretcher"),
                 C("FftSize", "FFT / chunk size", 3, "256", "512", "1024", "2048", "4096", "8192", "16384"),
@@ -59,6 +59,12 @@ public static class AudioEffectCatalog
                 B("PreservePeak", "Match original peak", true), B("TrimSilence", "Trim rendered edge silence", false)],
             ("half-speed", "Half speed — double length", [("Factor", 2), ("FftSize", 4)]),
             ("tighten", "Tighten to 80%", [("Factor", 0.8)])),
+        new(AudioEffectKind.VarispeedShift, "Time & Speed", "Varispeed Shift",
+            "Tape-style speed change: speed and pitch move together. Speed 2 = twice the BPM, one octave higher and half the duration. Curves interpolate speed continuously.", [
+                N("Speed", "Speed (× source BPM)", 0.125, 8, 1.25, 0.001),
+                N("OutputGainDb", "Output gain (dB)", -48, 24, 0, 0.1)],
+            ("half-speed", "Half speed — octave down", [("Speed", 0.5)]),
+            ("double-speed", "Double speed — octave up", [("Speed", 2)])),
         new(AudioEffectKind.RoomReverb, "Reverb & Space", "Room reverb", "Small, early-reflection-rich feedback-delay room.", Reverb(0.65, 20),
             ("studio", "Dry studio", [("DecaySeconds", 0.35), ("SizePercent", 65), ("WetPercent", 12), ("TailSeconds", 0.5)]),
             ("live-room", "Live drum room", [("DecaySeconds", 1.1), ("PreDelayMs", 7), ("WetPercent", 30), ("TailSeconds", 1.5)])),

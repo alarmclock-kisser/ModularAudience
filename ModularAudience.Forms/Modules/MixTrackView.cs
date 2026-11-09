@@ -63,6 +63,7 @@ public sealed partial class MixTrackView : Form
     private Point down;
     private string? dragBefore;
     private double originalStart, originalOffset, originalDuration, originalPointerTime;
+    private readonly Dictionary<Guid, double> dragOriginalStarts = [];
     private double rulerOriginalLoopStart, rulerOriginalLoopEnd;
     private int resizeOriginalLaneHeight;
     private const int Header = 190, Ruler = 30;
@@ -206,9 +207,16 @@ public sealed partial class MixTrackView : Form
             if (WindowState == FormWindowState.Minimized) return;
             if (!automaticSizing && previousClientHeight > 0 && Arrangement.Lanes.Count > 0)
             {
-                laneHeightCustomized = true;
-                preciseLaneHeight = Math.Clamp(preciseLaneHeight + (ClientSize.Height - previousClientHeight) / (double)Arrangement.Lanes.Count, 32, 600);
-                LaneHeight = (int)Math.Round(preciseLaneHeight);
+                if (Arrangement.Visual.AutoTrackHeight)
+                {
+                    ApplyAutoTrackHeight();
+                }
+                else
+                {
+                    laneHeightCustomized = true;
+                    preciseLaneHeight = Math.Clamp(preciseLaneHeight + (ClientSize.Height - previousClientHeight) / (double)Arrangement.Lanes.Count, 32, 600);
+                    LaneHeight = (int)Math.Round(preciseLaneHeight);
+                }
             }
             previousClientHeight = ClientSize.Height;
             canvas.Invalidate();
@@ -255,14 +263,22 @@ public sealed partial class MixTrackView : Form
             if (prepared == null || closing || released || view.IsDisposed) { Arrangement.Sources.Remove(input.Id); if (!view.IsDisposed) view.SetJoinedMix(view.JoinedMix); return; }
             source = prepared;
         }
+        this.AttachJoinedTrack(view, source);
+        this.FinishJoiningTracks();
+    }
+    private void AttachJoinedTrack(TrackView view, MixSource source)
+    {
         view.LeaveCurrentMix();
         foreach (var old in joined.Where(p => ReferenceEquals(p.Value, view)).Select(p => p.Key).ToArray()) joined.Remove(old);
-        Arrangement.Sources.Add(source.Id, source);
+        Arrangement.Sources.TryAdd(source.Id, source);
         var lane = new MixLane { Name = source.Name, Mute = view.Muted, Solo = view.Soloed };
         Arrangement.Lanes.Add(lane); Arrangement.AddClip(lane, source, 0); joined[lane.Id] = view;
         this.RememberJoinedOrigin(lane.Id, view);
         view.SetJoinedMix(this); view.Hide(); view.Settings.Hide();
         _ = view.OriginalAudio.StopAsync();
+    }
+    private void FinishJoiningTracks()
+    {
         Changed();
         automaticSizing = true;
         if (!laneHeightCustomized)
@@ -278,11 +294,12 @@ public sealed partial class MixTrackView : Form
         try { bpm.Value = (decimal)sourceBpm; }
         finally { restoring = false; }
     }
-    private async Task<PlaylistStretchSettings?> ConfigureImportStretchAsync(AudioObj audio)
+    private async Task<PlaylistStretchSettings?> ConfigureImportStretchAsync(AudioObj audio, bool matchMixTempo = false)
     {
         using var snapshot = audio.Clone();
         float sourceBpm = audio.Bpm > 0 ? audio.Bpm : audio.ScannedBpm;
         using var dialog = new TimeStretchDialog(null, [snapshot]) { IsConfigureMode = true };
+        if (matchMixTempo) { dialog.LimitConfigurationTarget((decimal)Arrangement.Bpm, (decimal)Arrangement.Bpm); }
         dialog.SetConfigurationTempo(sourceBpm, (float)Arrangement.Bpm);
         return await this.ShowMixDialogAsync(dialog) == DialogResult.OK ? dialog.ConfirmedSettings : null;
     }
@@ -321,6 +338,17 @@ public sealed partial class MixTrackView : Form
             else if (ReferenceEquals(pair.Value.JoinedMix, this)) { pair.Value.SetJoinedMix(null); pair.Value.Show(); }
         }
     }
+    private void ApplyAutoTrackHeight()
+    {
+        if (!Arrangement.Visual.AutoTrackHeight) return;
+        int count = Math.Max(1, Arrangement.Lanes.Count);
+        int available = canvas.ClientSize.Height - Ruler - 4;
+        if (available < count * 32) available = count * 32;
+        LaneHeight = Math.Clamp(available / count, 32, 600);
+        preciseLaneHeight = LaneHeight;
+        vertical.Value = 0;
+        vertical.Maximum = Math.Max(0, Arrangement.Lanes.Count - 1);
+    }
     private void Changed()
     {
         if (restoring) return;
@@ -349,6 +377,7 @@ public sealed partial class MixTrackView : Form
         bpm.Value = (decimal)Arrangement.Bpm; division.SelectedIndex = (int)Math.Log2(Arrangement.SnapDivision);
         snap.Checked = Arrangement.Snap; loop.Checked = Arrangement.Loop; restoring = false; dirty = true;
         LaneHeight = Arrangement.DisplayLaneHeight; preciseLaneHeight = LaneHeight;
+        if (Arrangement.Visual.AutoTrackHeight) ApplyAutoTrackHeight();
         pixelsPerSecond = Arrangement.Visual.PixelsPerSecond;
         UpdateScrollModeControl();
         restoring = true;
@@ -410,7 +439,8 @@ public sealed partial class MixTrackView : Form
         Arrangement.Visual = System.Text.Json.JsonSerializer.Deserialize<MixVisualOptions>(System.Text.Json.JsonSerializer.Serialize(options.Visual))!;
         Arrangement.DisplayLaneHeight = options.DisplayLaneHeight;
         Arrangement.Bpm = options.Bpm; Arrangement.SnapDivision = options.SnapDivision; Arrangement.Snap = options.Snap;
-        LaneHeight = options.DisplayLaneHeight; preciseLaneHeight = LaneHeight; pixelsPerSecond = options.Visual.PixelsPerSecond;
+        LaneHeight = options.DisplayLaneHeight; preciseLaneHeight = LaneHeight; if (options.Visual.AutoTrackHeight) ApplyAutoTrackHeight();
+        pixelsPerSecond = options.Visual.PixelsPerSecond;
         restoring = true;
         try { bpm.Value = (decimal)Arrangement.Bpm; division.SelectedIndex = (int)Math.Log2(Arrangement.SnapDivision); snap.Checked = Arrangement.Snap; }
         finally { restoring = false; }
@@ -486,6 +516,29 @@ public sealed partial class MixTrackView : Form
                 g.Restore(saved);
             }
             g.DrawLine(Pens.DimGray, 0, y + LaneHeight - 1, canvas.Width, y + LaneHeight - 1);
+        }
+        // Ghost outline on the hovered target lane while dragging clips onto another lane.
+        if (dragMode == 1 && Clip is { } dragged && Arrangement.Lanes.Count > 0)
+        {
+            int targetRow = Math.Clamp(RowAt(lastPointer.Y), 0, Arrangement.Lanes.Count - 1);
+            var group = dragOriginalStarts.Count > 0
+                ? Arrangement.Lanes.SelectMany(l => l.Clips).Where(c => dragOriginalStarts.ContainsKey(c.Id)).ToList()
+                : new List<MixClip> { dragged };
+            int draggedRow = Arrangement.Lanes.FindIndex(l => l.Clips.Contains(dragged));
+            if (targetRow != draggedRow)
+            {
+                using var ghostBrush = new SolidBrush(Color.FromArgb(45, VisualColor(visual.Clip)));
+                using var ghostPen = new Pen(Color.FromArgb(180, VisualColor(visual.SelectedClip))) { DashStyle = DashStyle.Dash };
+                foreach (var gc in group)
+                {
+                    int x = TimeX(gc.Start);
+                    int w = Math.Max(2, (int)Math.Round(Arrangement.ClipDuration(gc) * pixelsPerSecond));
+                    int y = Ruler + (targetRow - vertical.Value) * LaneHeight + 3;
+                    var rect = new Rectangle(x, y, w, LaneHeight - 7);
+                    g.FillRectangle(ghostBrush, Rectangle.Intersect(rect, new Rectangle(Header, Ruler, Math.Max(0, canvas.Width - Header), Math.Max(0, canvas.Height - Ruler))));
+                    g.DrawRectangle(ghostPen, rect);
+                }
+            }
         }
         if (selectionFirstRow >= 0 && selectionEnd > selectionStart)
         {
@@ -591,6 +644,14 @@ public sealed partial class MixTrackView : Form
         selectionAdditive = ModifierKeys.HasFlag(Keys.Control); selectingWhole = selectionAdditive;
         additiveSelection.Clear();
         if (selectionAdditive) additiveSelection.UnionWith(selectedClips);
+        // Ctrl+click on a segment that is already part of the multi-selection removes it again
+        // (toggle). The segment is not dragged afterwards.
+        if (selectionAdditive && selectedClip is { } toggled && selectedClips.Contains(toggled) && e.X >= Header && e.Y >= Ruler)
+        {
+            selectedClips.Remove(toggled); fullSelectedClips.Remove(toggled);
+            if (selectedClip == toggled) selectedClip = null;
+            canvas.Invalidate(); return;
+        }
         if (selectionAdditive && previousSelectedClip is { } previousId) { selectedClips.Add(previousId); additiveSelection.Add(previousId); }
         if (selectionAdditive && selectedClip is { } clicked && e.X >= Header && e.Y >= Ruler)
         {
@@ -620,6 +681,12 @@ public sealed partial class MixTrackView : Form
             // Only the title handle moves clips. Waveforms are for selecting audio regions.
             dragMode = e.Y < rect.Top + 21 ? (e.X - rect.Left < 7 ? 2 : rect.Right - e.X < 7 ? 3 : 1) : 5;
             originalStart = clip.Start; originalOffset = clip.SourceOffset; originalDuration = clip.SourceDuration;
+            dragOriginalStarts.Clear();
+            if (dragMode == 1 && selectedClips.Count > 1 && selectedClips.Contains(clip.Id))
+            {
+                foreach (var grouped in Arrangement.Lanes.SelectMany(l => l.Clips).Where(c => selectedClips.Contains(c.Id)))
+                    dragOriginalStarts[grouped.Id] = grouped.Start;
+            }
             if (dragMode != 5) ClearRangeSelection();
         }
         else if (e.X >= Header && row >= 0 && row < Arrangement.Lanes.Count) dragMode = 5;
@@ -664,7 +731,19 @@ public sealed partial class MixTrackView : Form
         {
             this.AutoPanClipDrag(e.X);
             double delta = XTime(e.X) - originalPointerTime, factor = Arrangement.Rate(c);
-            if (dragMode == 1) c.Start = Arrangement.SnapTime(originalStart + delta, ModifierKeys.HasFlag(Keys.Shift));
+            if (dragMode == 1)
+            {
+                c.Start = Arrangement.SnapTime(originalStart + delta, ModifierKeys.HasFlag(Keys.Shift));
+                if (dragOriginalStarts.Count > 0)
+                {
+                    foreach (var clip in Arrangement.Lanes.SelectMany(l => l.Clips).Where(cl => dragOriginalStarts.ContainsKey(cl.Id)).ToArray())
+                    {
+                        if (clip.Id == c.Id) continue;
+                        double groupStart = dragOriginalStarts.TryGetValue(clip.Id, out double gs) ? gs : clip.Start;
+                        clip.Start = Arrangement.SnapTime(groupStart + delta, ModifierKeys.HasFlag(Keys.Shift));
+                    }
+                }
+            }
             if (dragMode == 2)
             {
                 double start = Arrangement.SnapTime(originalStart + delta, ModifierKeys.HasFlag(Keys.Shift));
@@ -691,10 +770,21 @@ public sealed partial class MixTrackView : Form
         if (dragMode == 1 && Clip is { } clip)
         {
             int target = RowAt(e.Y);
-            var old = Arrangement.Lanes.FirstOrDefault(l => l.Clips.Contains(clip));
-            if (old != null && target >= 0 && target < Arrangement.Lanes.Count && old != Arrangement.Lanes[target])
-            { old.Clips.Remove(clip); Arrangement.Lanes[target].Clips.Add(clip); selectedLane = Arrangement.Lanes[target].Id; }
+            var group = dragOriginalStarts.Count > 0
+                ? Arrangement.Lanes.SelectMany(l => l.Clips).Where(c => dragOriginalStarts.ContainsKey(c.Id)).ToList()
+                : new List<MixClip> { clip };
+            if (target >= 0 && target < Arrangement.Lanes.Count)
+            {
+                foreach (var grouped in group)
+                {
+                    var oldLane = Arrangement.Lanes.FirstOrDefault(l => l.Clips.Contains(grouped));
+                    if (oldLane != null && oldLane != Arrangement.Lanes[target])
+                    { oldLane.Clips.Remove(grouped); Arrangement.Lanes[target].Clips.Add(grouped); }
+                }
+                selectedLane = Arrangement.Lanes[target].Id;
+            }
         }
+        dragOriginalStarts.Clear();
         bool rulerDrag = dragMode == 4;
         bool rangeDrag = dragMode == 5;
         dragMode = 0; canvas.Capture = false; dragBefore = null;
@@ -830,7 +920,24 @@ public sealed partial class MixTrackView : Form
             Item("Move track up", () => { int index = Arrangement.Lanes.IndexOf(lane); if (index > 0) { Arrangement.Lanes.RemoveAt(index); Arrangement.Lanes.Insert(index - 1, lane); Changed(); } });
             Item("Move track down", () => { int index = Arrangement.Lanes.IndexOf(lane); if (index + 1 < Arrangement.Lanes.Count) { Arrangement.Lanes.RemoveAt(index); Arrangement.Lanes.Insert(index + 1, lane); Changed(); } });
         }
-        var remove = new ToolStripMenuItem("Remove Track");
+        Item("Remove Track", () =>
+        {
+            // Direct click: remove the track under the context menu point and, when a
+            // multi-selection exists, every affected selected track too. Unlike the
+            // chooser below, this does not reopen the removed tracks as TrackViews.
+            var lanes = new HashSet<Guid>();
+            int row = RowAt(point.Y);
+            if (row >= 0 && row < Arrangement.Lanes.Count) lanes.Add(Arrangement.Lanes[row].Id);
+            foreach (var clipId in selectedClips)
+            {
+                var lane = Arrangement.Lanes.FirstOrDefault(l => l.Clips.Any(c => c.Id == clipId));
+                if (lane != null) lanes.Add(lane.Id);
+            }
+            if (lanes.Count == 0 && Lane is { } fallback) lanes.Add(fallback.Id);
+            RemoveTracks(lanes, openTrackView: false);
+            menu.Close();
+        });
+        var remove = new ToolStripMenuItem("Remove Track…");
         var combo = new ToolStripComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 250 };
         foreach (var option in Arrangement.Lanes) combo.Items.Add(new LaneItem(option.Id, option.Name));
         combo.SelectedIndexChanged += (_, _) => { if (combo.SelectedItem is LaneItem item) { RemoveLane(item.Id); menu.Close(); } };
@@ -911,9 +1018,15 @@ public sealed partial class MixTrackView : Form
     }
     private void RemoveLane(Guid id)
     {
+        RemoveTracks(new[] { id }, openTrackView: true);
+    }
+    private void RemoveTracks(IEnumerable<Guid> ids, bool openTrackView)
+    {
+        foreach (var id in ids.ToArray())
+        {
         var lane = Arrangement.Lanes.FirstOrDefault(l => l.Id == id);
-        if (lane == null) return;
-        if (!joined.ContainsKey(id) && lane.Clips.FirstOrDefault() is { } clip && Arrangement.Sources.TryGetValue(clip.SourceId, out var source))
+        if (lane == null) continue;
+        if (openTrackView && !joined.ContainsKey(id) && lane.Clips.FirstOrDefault() is { } clip && Arrangement.Sources.TryGetValue(clip.SourceId, out var source))
         {
             using var audio = new AudioObj { Name = source.Name, Data = source.Data, SampleRate = source.SampleRate, Channels = source.Channels,
                 Bpm = source.Bpm, Length = source.Data.Length, Duration = TimeSpan.FromSeconds(source.Duration) };
@@ -921,6 +1034,7 @@ public sealed partial class MixTrackView : Form
             joined[id].SetJoinedMix(this);
         }
         Arrangement.Lanes.Remove(lane); Changed();
+        }
     }
     private void Duplicate()
     {

@@ -1,5 +1,6 @@
 using System.Numerics;
 using MathNet.Numerics.Providers.FourierTransform;
+using ModularAudience.Audio.Effects.Curves;
 
 namespace ModularAudience.Audio.Effects.AutoTune;
 
@@ -7,7 +8,7 @@ namespace ModularAudience.Audio.Effects.AutoTune;
 internal static class AutoTunePhaseVocoder
 {
     internal static float[] Render(float[] source, int sampleRate, int channels, AutoTuneSettings settings,
-        AutoTuneCorrectionCurve curve, int maximumThreads, IProgress<double>? progress, CancellationToken token)
+        AutoTuneCorrectionCurve curve, int maximumThreads, IProgress<double>? progress, CancellationToken token, EffectAutomationEvaluator? automation = null)
     {
         int frames = source.Length / channels, size = settings.FftSize, hop = size / settings.Overlap, bins = size / 2 + 1;
         int lastCenter = frames + size / 2;
@@ -31,11 +32,13 @@ internal static class AutoTunePhaseVocoder
             double[] frequencies = new double[bins], mappedMagnitude = new double[bins], mappedFrequency = new double[bins];
             double[] mappedReal = new double[bins], mappedImaginary = new double[bins], prefix = new double[bins + 1];
             bool[] wasPresent = new bool[bins];
-            int envelopeRadius = Math.Max(1, (int)Math.Round(settings.FormantSmoothingHz * size / sampleRate));
             bool first = true;
             for (long center = 0; center <= lastCenter; center += hop)
             {
                 token.ThrowIfCancellationRequested();
+                int currentFrame = (int)Math.Min(center, frames - 1);
+                int envelopeRadius = Math.Max(1, (int)Math.Round((automation?.Value(nameof(settings.FormantSmoothingHz), currentFrame) ?? settings.FormantSmoothingHz) * size / sampleRate));
+                double formants = automation?.Value(nameof(settings.FormantPreservationPercent), currentFrame) ?? settings.FormantPreservationPercent;
                 for (int i = 0; i < size; i++)
                 {
                     long frame = center - size / 2 + i;
@@ -61,10 +64,10 @@ internal static class AutoTunePhaseVocoder
                     int target = (int)Math.Round(bin * ratio);
                     if (target >= bins) continue; // Discard above-Nyquist content instead of folding it.
                     double amplitude = magnitude[bin];
-                    if (settings.FormantPreservationPercent > 0)
+                    if (formants > 0)
                     {
                         double difference = Envelope(prefix, target, envelopeRadius, bins) - Envelope(prefix, bin, envelopeRadius, bins);
-                        amplitude *= Math.Clamp(Math.Exp(difference * settings.FormantPreservationPercent / 100), 0.25, 4);
+                        amplitude *= Math.Clamp(Math.Exp(difference * formants / 100), 0.25, 4);
                     }
                     mappedMagnitude[target] += amplitude;
                     mappedFrequency[target] += amplitude * frequencies[bin] * ratio;

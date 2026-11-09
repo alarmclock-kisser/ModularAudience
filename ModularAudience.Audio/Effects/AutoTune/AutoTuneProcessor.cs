@@ -1,4 +1,5 @@
 using ModularAudience.Audio.Processors_V4;
+using ModularAudience.Audio.Effects.Curves;
 
 namespace ModularAudience.Audio.Effects.AutoTune;
 
@@ -9,8 +10,13 @@ public static class AutoTuneProcessor
 {
     public static Task<AutoTuneResult> ProcessAsync(ReadOnlyMemory<float> samples, int sampleRate, int channels,
         AutoTuneSettings settings, IProgress<double>? progress = null, CancellationToken cancellationToken = default,
-        AudioEffectExecutionOptions? execution = null) =>
-        Task.Run(() => Process(samples, sampleRate, channels, settings, progress, cancellationToken, execution), cancellationToken);
+        AudioEffectExecutionOptions? execution = null)
+    {
+        ArgumentNullException.ThrowIfNull(settings); settings.Validate(sampleRate);
+        AutoTuneSettings snapshot = settings.Copy();
+        var options = execution is null ? null : execution with { CurveScope = execution.CurveScope?.Copy() };
+        return Task.Run(() => Process(samples, sampleRate, channels, snapshot, progress, cancellationToken, options), cancellationToken);
+    }
 
     public static AutoTuneResult Process(ReadOnlyMemory<float> samples, int sampleRate, int channels,
         AutoTuneSettings settings, IProgress<double>? progress = null, CancellationToken cancellationToken = default,
@@ -19,6 +25,7 @@ public static class AutoTuneProcessor
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(settings);
         settings.Validate(sampleRate);
+        settings = settings.Copy();
         execution ??= new AudioEffectExecutionOptions();
         execution.Validate();
         if (channels is < 1 or > 32 || samples.Length % channels != 0) throw new ArgumentException("Audio must contain complete frames with 1–32 channels.");
@@ -29,47 +36,61 @@ public static class AutoTuneProcessor
             if (!float.IsFinite(source[i])) throw new ArgumentException("Auto Tune requires finite audio samples.");
         }
         if (source.Length == 0) return new(source, 0, 0, 0, 1);
+        var automation = new EffectAutomationEvaluator(settings.Automation, AutoTuneCurveTargets.All, key => AutoTuneCurveTargets.BaseValue(settings, key),
+            source, channels, sampleRate, execution.CurveScope, cancellationToken);
         progress?.Report(0);
-        if (settings.IntensityPercent == 0 || settings.WetPercent == 0 || settings.MaximumCorrectionSemitones == 0)
-            return Finish(source, source, null, sampleRate, channels, settings, progress, cancellationToken);
+        if (settings.IntensityPercent == 0 && !automation.Has(nameof(settings.IntensityPercent)) ||
+            settings.WetPercent == 0 && !automation.Has(nameof(settings.WetPercent)) ||
+            settings.MaximumCorrectionSemitones == 0 && !automation.Has(nameof(settings.MaximumCorrectionSemitones)))
+            return Finish(source, source, null, sampleRate, channels, settings, automation, progress, cancellationToken);
 
         float[] mono = AnalysisSignal(source, channels, settings.AnalysisChannel, cancellationToken);
         int hop = Math.Max(1, (int)Math.Round(sampleRate * settings.AnalysisHopMilliseconds / 1000));
         PyinPitchFrame[] pitches = PyinPitchTracker.Track(mono, sampleRate, hop,
             settings.MinimumFrequencyHz, settings.MaximumFrequencyHz, execution.MaximumThreads, cancellationToken);
         progress?.Report(0.45);
-        AutoTuneCorrectionCurve curve = AutoTuneCurveBuilder.Build(mono, pitches, sampleRate, hop, settings, cancellationToken);
+        AutoTuneCorrectionCurve curve = AutoTuneCurveBuilder.Build(mono, pitches, sampleRate, hop, settings, cancellationToken, automation);
         progress?.Report(0.55);
         bool hasCorrection = curve.CorrectedFrames > 0 && curve.Semitones.Any(value => Math.Abs(value) > 1e-7);
         float[] shifted = hasCorrection
-            ? AutoTunePhaseVocoder.Render(source, sampleRate, channels, settings, curve, execution.MaximumThreads, progress, cancellationToken)
+            ? AutoTunePhaseVocoder.Render(source, sampleRate, channels, settings, curve, execution.MaximumThreads, progress, cancellationToken, automation)
             : source;
         return Finish(source, shifted, hasCorrection ? curve : curve with { WetEnvelope = new float[curve.WetEnvelope.Length] },
-            sampleRate, channels, settings, progress, cancellationToken);
+            sampleRate, channels, settings, automation, progress, cancellationToken);
     }
 
     private static AutoTuneResult Finish(float[] source, float[] shifted, AutoTuneCorrectionCurve? curve,
-        int sampleRate, int channels, AutoTuneSettings settings, IProgress<double>? progress, CancellationToken token)
+        int sampleRate, int channels, AutoTuneSettings settings, EffectAutomationEvaluator automation, IProgress<double>? progress, CancellationToken token)
     {
-        if (ReferenceEquals(source, shifted) && settings.OutputGainDb == 0)
+        if (ReferenceEquals(source, shifted) && settings.OutputGainDb == 0 && !automation.Has(nameof(settings.OutputGainDb)))
         {
             progress?.Report(1);
             return new(source, curve?.Semitones.Length ?? 0, curve?.VoicedFrames ?? 0, curve?.CorrectedFrames ?? 0, 1);
         }
         int frames = source.Length / channels;
         float[] mixed = new float[source.Length];
-        double gain = Math.Pow(10, settings.OutputGainDb / 20), peak = 0;
+        double peak = 0;
+        bool usedAmount = false, usedWet = false, usedGain = false;
         for (int frame = 0; frame < frames; frame++)
         {
             if ((frame & 2047) == 0) token.ThrowIfCancellationRequested();
-            double wet = settings.WetPercent / 100 * (curve?.WetAt(frame) ?? 0);
+            double wet = automation.Value(nameof(settings.WetPercent), frame) / 100 * (curve?.WetAt(frame) ?? 0);
+            double gain = Math.Pow(10, automation.Value(nameof(settings.OutputGainDb), frame) / 20);
+            double amount = automation.Value(EffectCurveTargets.Amount, frame) / 100;
+            usedAmount |= amount != 0; usedWet |= wet != 0; usedGain |= gain != 1;
             for (int channel = 0; channel < channels; channel++)
             {
                 int index = frame * channels + channel;
-                mixed[index] = (float)((source[index] + (shifted[index] - source[index]) * wet) * gain);
+                double effected = (source[index] + (shifted[index] - source[index]) * wet) * gain;
+                mixed[index] = (float)(source[index] + (effected - source[index]) * amount);
                 if (!float.IsFinite(mixed[index])) throw new ArithmeticException("Pitch correction produced non-finite output.");
                 peak = Math.Max(peak, Math.Abs(mixed[index]));
             }
+        }
+        if (!usedAmount || !usedGain && !usedWet)
+        {
+            progress?.Report(1);
+            return new(source, curve?.Semitones.Length ?? 0, curve?.VoicedFrames ?? 0, 0, 1);
         }
         double protection = settings.ProtectPeak && peak > 1 ? 1 / peak : 1;
         int fadeFrames = Math.Min(frames / 2, (int)Math.Round(sampleRate * settings.BoundaryFadeMilliseconds / 1000));

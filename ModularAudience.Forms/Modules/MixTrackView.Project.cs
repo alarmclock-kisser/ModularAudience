@@ -18,6 +18,7 @@ public sealed partial class MixTrackView
     }
     private void EnsureTrackLayout()
     {
+        if (Arrangement.Visual.AutoTrackHeight) ApplyAutoTrackHeight();
         vertical.Maximum = Math.Max(0, Arrangement.Lanes.Count - 1);
         vertical.Value = Math.Min(vertical.Value, vertical.Maximum);
         if (Arrangement.Lanes.Count == layoutLaneCount) return;
@@ -78,11 +79,17 @@ public sealed partial class MixTrackView
     private async Task SaveToPathAsync(string path, CancellationToken token = default)
     {
         projectSaveTimer.Stop(); await FlushProjectSaveAsync();
+        // Saving "with a name" makes that name the mix's current project name, so
+        // it shows up in the window title (and in the saved project data).
+        string baseName = Path.GetFileNameWithoutExtension(path);
+        if (!string.IsNullOrWhiteSpace(baseName)) Arrangement.Name = baseName.Trim();
         string state = Arrangement.CaptureProject();
         var sources = Arrangement.ProjectSources();
         await MixProjectFile.SaveSnapshotAsync(path, state, sources, token);
         projectPath = path; autoSave.Enabled = true;
-        dirty = Arrangement.CaptureProject() != state;
+        Text = Arrangement.Name;
+        committedProject = state;
+        dirty = false;
         status.Text = "Project saved — journal metadata and reusable Float32 assets.";
         if (dirty) QueueProjectSave();
     }

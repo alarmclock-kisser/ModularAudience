@@ -77,7 +77,7 @@ internal sealed class AutoTunePresetStore
             }
             ValidateName(name);
             int existing = presets.FindIndex(preset => !preset.IsBuiltIn && preset.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-            var saved = new AutoTunePreset(existing >= 0 ? presets[existing].Name : name, settings with { });
+            var saved = new AutoTunePreset(existing >= 0 ? presets[existing].Name : name, settings.Copy());
             if (existing >= 0) presets[existing] = saved;
             else
             {

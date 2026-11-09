@@ -15,7 +15,7 @@ public static class MixAudioHistory
     public static string Capture(MixArrangement mix) => JsonSerializer.Serialize(new State { Bpm = mix.Bpm, Lanes = mix.Lanes });
     public static string Key(MixArrangement mix) => JsonSerializer.Serialize(mix.Lanes.Where(lane => lane.Clips.Count > 0).OrderBy(lane => lane.Id).Select(lane => new
     {
-        lane.Id, lane.Gain, lane.Mute, lane.Solo, lane.AutoCrossfade,
+        lane.Id, lane.Gain, lane.AutoCrossfade,
         Clips = lane.Clips.OrderBy(clip => clip.Id).Select(clip => new
         {
             clip.Id, clip.SourceId, clip.Start, clip.SourceOffset, clip.SourceDuration, clip.Gain, clip.FadeIn, clip.FadeOut,
@@ -57,8 +57,9 @@ public static class MixAudioHistory
             if (!fromLanes.TryGetValue(id, out MixLane? old)) continue;
             MixLane? live = mix.Lanes.FirstOrDefault(lane => lane.Id == id); if (live is null) continue;
             if (old.Gain != value.Gain) live.Gain = value.Gain;
-            if (old.Mute != value.Mute) live.Mute = value.Mute;
-            if (old.Solo != value.Solo) live.Solo = value.Solo;
+            // Solo/Mute are intentionally kept out of undo/redo steps; they are
+            // persisted via the project file / auto-save instead. Undo/redo therefore
+            // preserves the current solo/mute state.
             if (old.AutoCrossfade != value.AutoCrossfade) live.AutoCrossfade = value.AutoCrossfade;
         }
         if (entry.RestoreTempo) mix.Bpm = to.Bpm;

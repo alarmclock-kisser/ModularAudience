@@ -3,6 +3,7 @@ using System.Reflection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio.Arrangement;
 using ModularAudience.Audio.Effects;
+using ModularAudience.Audio.Effects.Curves;
 using ModularAudience.Forms.Effects;
 using ModularAudience.Forms.Modules;
 using ModularAudience.Forms.Modules.Dialogs;
@@ -27,7 +28,7 @@ public sealed class MixEffectUiTests
         ToolStripMenuItem effects = audio.Items.OfType<ToolStripMenuItem>().Single(item => item.Name == "menuItem_applyEffects");
         using ToolStripMenuItem reference = EffectMenuFactory.CreateApplyMenu(_ => { });
         CollectionAssert.AreEqual(MenuNames(reference), MenuNames(effects));
-        Assert.AreEqual(36, effects.DropDownItems.OfType<ToolStripMenuItem>().Sum(group => group.DropDownItems.Count));
+        Assert.AreEqual(37, effects.DropDownItems.OfType<ToolStripMenuItem>().Sum(group => group.DropDownItems.Count));
         audio.Items.OfType<ToolStripMenuItem>().Single(item => item.Text == "Clear selection").PerformClick();
         using ContextMenuStrip cleared = fixture.Mix.CreateTimelineContextMenu(new Point(700, 300));
         Assert.AreEqual("mixGeneralContextMenu", cleared.Name);
@@ -109,6 +110,50 @@ public sealed class MixEffectUiTests
         Assert.AreEqual(0.3, fixture.Mix.Arrangement.Lanes[0].Clips.Single(clip => clip.Id == later.Id).Start, 1e-7);
         fixture.Key(Keys.Control | Keys.Y);
         Assert.AreEqual(0.36, fixture.Mix.Arrangement.Lanes[0].Clips.Single(clip => clip.Id == later.Id).Start, 1e-7);
+    }
+
+    [STATestMethod]
+    [DataRow(AudioEffectKind.TimeStretch, "Factor", 0.5)]
+    [DataRow(AudioEffectKind.VarispeedShift, "Speed", 2d)]
+    public void CurvedSpeedEffects_PreviewAndCommitBothLanesOnceAndSupportMixCtrlZY(AudioEffectKind effect, string key, double target)
+    {
+        using var fixture = new Fixture(); fixture.SelectBoth(); fixture.InstallDialogFactory();
+        int history = History(fixture.Mix); string before = fixture.Mix.Arrangement.Capture();
+        string beforeAudio = MixAudioHistory.Capture(fixture.Mix.Arrangement);
+        Drain(fixture.Mix.OpenMixEffectAsync(effect)); Assert.IsNotNull(fixture.Editor);
+        fixture.Editor.SetSettings(fixture.Editor.CurrentSettings.With((key, target)) with
+            { Automation = new() { Parameters = new() { [key] = new() { StartValue = 1 } }, Timing = new() { Scope = EffectCurveScope.AcrossSelection } } });
+        Drain(fixture.Editor.PrehearAsync()); Assert.AreEqual(before, fixture.Mix.Arrangement.Capture()); Assert.AreEqual(history, History(fixture.Mix));
+        Drain(fixture.Editor.AcceptEffectAsync()); Assert.AreEqual(history + 1, History(fixture.Mix)); Assert.AreEqual(1, fixture.RenderCount);
+        foreach (MixLane lane in fixture.Mix.Arrangement.Lanes)
+        {
+            MixSource source = fixture.Mix.Arrangement.Sources[lane.Clips.Single().SourceId];
+            Assert.AreEqual(Math.Round(4410 * Math.Log(2)) * 2, source.Data.Length, 2);
+            Assert.IsTrue(source.TempoRecipe!.Effect!.Automation!.Parameters[key].Enabled);
+        }
+        string afterAudio = MixAudioHistory.Capture(fixture.Mix.Arrangement); double mappedLoopEnd = fixture.Mix.Arrangement.LoopEnd;
+        fixture.Key(Keys.Control | Keys.Z); Assert.AreEqual(beforeAudio, MixAudioHistory.Capture(fixture.Mix.Arrangement));
+        Assert.AreEqual(mappedLoopEnd, fixture.Mix.Arrangement.LoopEnd, "Mix history intentionally preserves current navigation/loop preferences.");
+        fixture.Key(Keys.Control | Keys.Y); Assert.AreEqual(afterAudio, MixAudioHistory.Capture(fixture.Mix.Arrangement)); Assert.AreEqual(0.2f, fixture.Original.Data[100]);
+    }
+
+    [STATestMethod]
+    public void NestedCurveEditor_UsesMixLocalOwnershipBlockingMinimizeRestoreAndClose()
+    {
+        using var fixture = new Fixture(); fixture.SelectBoth(); fixture.InstallDialogFactory();
+        Drain(fixture.Mix.OpenMixEffectAsync(AudioEffectKind.Gain)); Assert.IsNotNull(fixture.Editor); Assert.IsNotNull(fixture.Opened);
+        var group = (MixWindowGroup)Get(fixture.Mix, "windowGroup")!;
+        Descendants(fixture.Editor).OfType<Button>().Single(button => button.Name == "GainDbEditCurve").PerformClick(); Application.DoEvents();
+        var curve = group.Windows.OfType<CurveEditorDialog>().Single();
+        Assert.AreSame(fixture.Opened, curve.Owner); Assert.IsFalse(curve.Modal); Assert.IsFalse(curve.ShowInTaskbar); Assert.IsFalse(curve.MinimizeBox);
+        Assert.IsFalse(fixture.Opened.Enabled); Assert.IsTrue(curve.Enabled);
+        fixture.Mix.WindowState = FormWindowState.Minimized; group.SynchronizeWindowState(); Application.DoEvents(); Assert.IsFalse(curve.Visible);
+        fixture.Mix.WindowState = FormWindowState.Normal; group.SynchronizeWindowState(); Application.DoEvents(); Assert.IsTrue(curve.Visible); Assert.IsTrue(curve.Enabled);
+        curve.AcceptCurve(); Application.DoEvents(); Assert.IsTrue(fixture.Opened.Enabled); Assert.AreEqual(1, group.Windows.Count);
+        Assert.IsTrue(fixture.Editor.CurrentSettings.Automation!.Parameters["GainDb"].Enabled);
+        Descendants(fixture.Editor).OfType<Button>().Single(button => button.Name == "GainDbEditCurve").PerformClick(); Application.DoEvents();
+        var next = group.Windows.OfType<CurveEditorDialog>().Single(); fixture.Mix.Dispose(); Application.DoEvents(); Assert.IsTrue(next.IsDisposed);
+        Assert.AreEqual(0.2f, fixture.Original.Data[100]);
     }
 
     [STATestMethod]

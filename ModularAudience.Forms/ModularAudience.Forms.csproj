@@ -26,6 +26,7 @@
     <Content Include="ModularAudience_favicon.ico" />
     <EmbeddedResource Include="appsettings.json" LogicalName="ModularAudience.Forms.appsettings.json" />
     <EmbeddedResource Include="BrowserBridge\*" LogicalName="ModularAudience.BrowserBridge.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Quantum\TranspileCircuit.py" LogicalName="ModularAudience.Quantum.TranspileCircuit.py" />
     <AssemblyMetadata Include="GitHubReleaseNumber" Value="$(ReleaseNumber)" Condition="'$(ReleaseNumber)' != ''" />
     <InternalsVisibleTo Include="ModularAudience.Audio.Tests" />
   </ItemGroup>
@@ -54,6 +55,7 @@
     <ProjectReference Include="..\ModularAudience.Llama\ModularAudience.Llama.csproj" />
     <ProjectReference Include="..\ModularAudience.MidiController\ModularAudience.MidiController.csproj" />
     <ProjectReference Include="..\ModularAudience.Onnx\ModularAudience.Onnx.csproj" />
+    <ProjectReference Include="..\ModularAudience.Quantum\ModularAudience.Quantum.csproj" />
     <ProjectReference Include="..\ModularAudience.Shared\ModularAudience.Shared.csproj" />
     <ProjectReference Include="..\ModularAudience.Ytdlp\ModularAudience.Ytdlp.csproj" />
   </ItemGroup>

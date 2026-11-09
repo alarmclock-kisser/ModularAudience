@@ -56,9 +56,11 @@ public sealed partial class MixTrackView
     }
     private void UpdateTimelineScrollBounds()
     {
-        double earliest = Arrangement.Lanes.SelectMany(lane => lane.Clips).Select(clip => clip.Start).DefaultIfEmpty(0).Min();
-        double margin = 480 / Arrangement.Bpm;
-        scroll.Minimum = (int)Math.Clamp(Math.Floor(Math.Min(0, earliest) * 100 - margin * 100), int.MinValue + 200, -1);
+        // The timeline never scrolls or displays negative time. Clips themselves may
+        // start before zero (their pre-zero part is cropped at render/playback), but
+        // the ruler and scroll viewport always begin at zero. This keeps the view
+        // anchored and makes partially-negative clips grabbable in the positive area.
+        scroll.Minimum = 0;
         scroll.Maximum = Math.Max(1000, (int)Math.Min(int.MaxValue - 200, Math.Ceiling(Arrangement.Duration * 100)) + 100);
     }
     private void AutoPanClipDrag(int x)
@@ -67,9 +69,11 @@ public sealed partial class MixTrackView
         int direction = x < Header + 8 ? -1 : x > canvas.Width - 12 ? 1 : 0;
         if (direction == 0) return;
         int amount = Math.Max(1, (int)Math.Round(600 / pixelsPerSecond));
-        if (direction < 0 && scroll.Value - amount <= scroll.Minimum) scroll.Minimum = Math.Max(int.MinValue + 200, scroll.Minimum - amount * 8);
+        // Never extend the viewport into negative time. Auto-pan stops at zero, but
+        // clips can still be dragged into the header area (x < Header) to gain a
+        // negative offset while the view itself stays at zero.
         if (direction > 0 && scroll.Value + amount >= scroll.Maximum - scroll.LargeChange) scroll.Maximum = Math.Min(int.MaxValue - 200, scroll.Maximum + amount * 8);
-        scroll.Value = Math.Clamp(scroll.Value + direction * amount, scroll.Minimum, scroll.Maximum - scroll.LargeChange + 1);
+        scroll.Value = Math.Clamp(scroll.Value + direction * amount, 0, scroll.Maximum - scroll.LargeChange + 1);
     }
 
     private void RememberJoinedOrigin(Guid lane, TrackView view)

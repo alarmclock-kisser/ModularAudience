@@ -1,4 +1,5 @@
 using ModularAudience.Audio.Effects.AutoTune;
+using ModularAudience.Audio.Effects.Curves;
 
 namespace ModularAudience.Forms.Effects;
 
@@ -6,6 +7,10 @@ internal sealed class AutoTuneParameterEditor : UserControl
 {
     private sealed record NumberField(NumericUpDown Control, Func<AutoTuneSettings, decimal> Read);
     private readonly Dictionary<string, NumberField> numbers = [];
+    private readonly Dictionary<string, CurveBindingControl> curves = new(StringComparer.Ordinal);
+    private readonly CurveTimingEditor timing = new();
+    private readonly Action<Form, Form>? showChildDialog;
+    private bool hadAutomation;
     private readonly ComboBox scale = Combo(), rootNote = Combo(), analysisChannel = Combo(), fftSize = Combo(), overlap = Combo();
     private readonly DomainUpDown noteLength = new() { ReadOnly = true, Width = 125, Wrap = false };
     private readonly CheckBox[] notes = new CheckBox[12];
@@ -14,10 +19,12 @@ internal sealed class AutoTuneParameterEditor : UserControl
     private readonly ToolTip tips = new() { IsParameterHelp = true };
     private bool syncing;
 
-    internal AutoTuneParameterEditor()
+    internal AutoTuneParameterEditor(Action<Form, Form>? showChildDialog = null)
     {
+        this.showChildDialog = showChildDialog;
         var tabs = new TabControl { Dock = DockStyle.Fill };
         FlowLayoutPanel tuning = Page(tabs, "Tuning / notes"), detection = Page(tabs, "Detection / quality"), output = Page(tabs, "Mix / output");
+        FlowLayoutPanel curveTiming = Page(tabs, "Curve timing"); curveTiming.Controls.Add(this.timing); this.timing.SettingsChanged += this.ChangedControl;
         this.Controls.Add(tabs);
         this.scale.Items.AddRange(Enum.GetValues<AutoTuneScale>().Cast<object>().ToArray());
         this.rootNote.Items.AddRange(["C", "C# / Db", "D", "D# / Eb", "E", "F", "F# / Gb", "G", "G# / Ab", "A", "A# / Bb", "B"]);
@@ -67,6 +74,8 @@ internal sealed class AutoTuneParameterEditor : UserControl
         Number(output, nameof(AutoTuneSettings.BoundaryFadeMilliseconds), "Selection-edge blend (ms)", 0, 100, 1, s => (decimal)s.BoundaryFadeMilliseconds, "Blend from original to processed samples at both region edges; nothing outside the region changes.");
         Number(output, nameof(AutoTuneSettings.FormantPreservationPercent), "Formant preservation (%)", 0, 100, 1, s => (decimal)s.FormantPreservationPercent, "Approximate spectral-envelope compensation, not voice separation. 0 disables it.");
         Number(output, nameof(AutoTuneSettings.FormantSmoothingHz), "Formant envelope bandwidth (Hz)", 50, 2500, 10, s => (decimal)s.FormantSmoothingHz, "Frequency smoothing used by the optional spectral-envelope compensation.");
+        var amount = new CurveBindingControl(AutoTuneCurveTargets.All.Single(target => target.Key == EffectCurveTargets.Amount), () => 100, this.showChildDialog);
+        this.curves.Add(EffectCurveTargets.Amount, amount); amount.SettingsChanged += this.ChangedControl; Field(output, "Effect amount (%)", amount);
         output.Controls.Add(this.protectPeak);
         this.protectPeak.CheckedChanged += this.ChangedControl;
         foreach (ComboBox combo in new[] { this.scale, this.rootNote, this.analysisChannel, this.fftSize, this.overlap }) combo.SelectedIndexChanged += this.ChangedControl;
@@ -96,7 +105,8 @@ internal sealed class AutoTuneParameterEditor : UserControl
             AnalysisHopMilliseconds = N(nameof(AutoTuneSettings.AnalysisHopMilliseconds)),
             WetPercent = N(nameof(AutoTuneSettings.WetPercent)), OutputGainDb = N(nameof(AutoTuneSettings.OutputGainDb)),
             VoicingFadeMilliseconds = N(nameof(AutoTuneSettings.VoicingFadeMilliseconds)), BoundaryFadeMilliseconds = N(nameof(AutoTuneSettings.BoundaryFadeMilliseconds)),
-            FormantPreservationPercent = N(nameof(AutoTuneSettings.FormantPreservationPercent)), FormantSmoothingHz = N(nameof(AutoTuneSettings.FormantSmoothingHz))
+            FormantPreservationPercent = N(nameof(AutoTuneSettings.FormantPreservationPercent)), FormantSmoothingHz = N(nameof(AutoTuneSettings.FormantSmoothingHz)),
+            Automation = this.CaptureAutomation()
         };
         settings.Validate();
         return settings;
@@ -108,6 +118,9 @@ internal sealed class AutoTuneParameterEditor : UserControl
         this.syncing = true;
         try
         {
+            this.hadAutomation = settings.Automation is not null;
+            this.timing.Apply(settings.Automation?.Timing ?? new());
+            foreach (var (key, curve) in this.curves) curve.Apply(settings.Automation?.Parameters.GetValueOrDefault(key));
             this.scale.SelectedItem = settings.Scale; this.rootNote.SelectedIndex = settings.RootNote;
             this.analysisChannel.SelectedItem = settings.AnalysisChannel; this.fftSize.SelectedItem = settings.FftSize; this.overlap.SelectedItem = settings.Overlap;
             this.noteLength.SelectedItem = settings.MinimumNoteLength; this.protectPeak.Checked = settings.ProtectPeak;
@@ -120,6 +133,12 @@ internal sealed class AutoTuneParameterEditor : UserControl
     }
 
     private double N(string name) => (double)this.numbers[name].Control.Value;
+    private EffectAutomationSettings? CaptureAutomation()
+    {
+        var bindings = this.curves.Where(pair => pair.Value.CaptureSettings() is not null).ToDictionary(pair => pair.Key, pair => pair.Value.CaptureSettings()!, StringComparer.Ordinal);
+        EffectCurveTiming clock = this.timing.CaptureSettings();
+        return bindings.Count > 0 || this.hadAutomation || clock != new EffectCurveTiming() ? new() { Parameters = bindings, Timing = clock } : null;
+    }
 
     private void ChangedControl(object? sender, EventArgs e)
     {
@@ -133,16 +152,22 @@ internal sealed class AutoTuneParameterEditor : UserControl
     {
         var control = new NumericUpDown { Name = key, Minimum = min, Maximum = max, Increment = step, DecimalPlaces = step < 1 ? 2 : 0, Width = 150 };
         this.numbers.Add(key, new(control, read));
-        Field(panel, label, control);
+        FlowLayoutPanel field = Field(panel, label, control);
+        EffectCurveTarget? target = AutoTuneCurveTargets.All.FirstOrDefault(target => target.Key == key);
+        if (target is not null)
+        {
+            var curve = new CurveBindingControl(target, () => this.N(key), this.showChildDialog); this.curves.Add(key, curve);
+            curve.SettingsChanged += this.ChangedControl; field.Controls.Add(curve);
+        }
         this.tips.SetToolTip(control, tip);
         control.ValueChanged += this.ChangedControl;
     }
 
-    private static void Field(FlowLayoutPanel panel, string label, Control control)
+    private static FlowLayoutPanel Field(FlowLayoutPanel panel, string label, Control control)
     {
-        var field = new FlowLayoutPanel { Width = 250, Height = 64, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = new Padding(6) };
-        field.Controls.Add(new Label { Text = label, Width = 244, Height = 30 });
-        field.Controls.Add(control); panel.Controls.Add(field);
+        var field = new FlowLayoutPanel { Width = 430, Height = 116, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = new Padding(6) };
+        field.Controls.Add(new Label { Text = label, Width = 420, Height = 30 });
+        field.Controls.Add(control); panel.Controls.Add(field); return field;
     }
 
     private static FlowLayoutPanel Page(TabControl tabs, string name)

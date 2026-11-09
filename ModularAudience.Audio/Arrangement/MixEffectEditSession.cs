@@ -3,11 +3,13 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using ModularAudience.Audio.Effects;
 using ModularAudience.Audio.Effects.AutoTune;
+using ModularAudience.Audio.Effects.Curves;
 
 namespace ModularAudience.Audio.Arrangement;
 
 public sealed record MixEffectRegion(Guid LaneId, double Start, double End, IReadOnlySet<Guid> ClipIds);
-public sealed record MixEffectInput(Guid LaneId, string Name, int Channels, ReadOnlyMemory<float> Samples);
+public sealed record MixEffectInput(Guid LaneId, string Name, int Channels, ReadOnlyMemory<float> Samples,
+    IReadOnlyList<EffectCurveSpan>? Segments = null);
 public sealed record MixEffectCommit(bool Changed, double NewDuration, IReadOnlyList<Guid> SelectedClipIds);
 
 /// <summary>
@@ -27,6 +29,9 @@ public sealed class MixEffectEditSession : IDisposable
     private readonly Dictionary<Guid, SourceStamp> stamps;
     private readonly Dictionary<Guid, RenderedClip> renderedClips = [];
     private MixEffectInput[] inputs = [];
+    private readonly object curveGate = new();
+    private EffectCurveTiming? cachedCurveTiming;
+    private EffectCurveRenderScope[] curveScopes = [];
     private bool disposed;
 
     private MixEffectEditSession(MixArrangement snapshot, string audioKey, MixEffectRegion[] regions, Dictionary<Guid, SourceStamp> stamps)
@@ -91,6 +96,7 @@ public sealed class MixEffectEditSession : IDisposable
             long samples = (long)frameCount * channels;
             if (samples > MaximumSamples || allocated + samples > MaximumSamples) throw new InvalidOperationException("The selected lane buffers exceed 512 MiB. Select a smaller region.");
             float[] input = new float[(int)samples]; allocated += samples;
+            var segments = new List<EffectCurveSpan>();
             foreach (MixClip clip in lane.Clips.Where(clip => lane.AutoCrossfade || region.ClipIds.Contains(clip.Id)))
             {
                 token.ThrowIfCancellationRequested();
@@ -103,6 +109,7 @@ public sealed class MixEffectEditSession : IDisposable
                 if (!region.ClipIds.Contains(clip.Id)) continue;
                 int offset = checked((int)Math.Round((clip.Start - this.Start) * SampleRate));
                 int first = Math.Max(0, -offset), last = Math.Min(data.Length / sourceChannels, frameCount - offset);
+                if (last > first) segments.Add(new(first + offset, last + offset));
                 for (int frame = first; frame < last; frame++)
                 {
                     if ((frame & 8191) == 0) token.ThrowIfCancellationRequested();
@@ -115,9 +122,32 @@ public sealed class MixEffectEditSession : IDisposable
                     }
                 }
             }
-            renderedInputs.Add(new(region.LaneId, lane.Name, channels, input));
+            renderedInputs.Add(new(region.LaneId, lane.Name, channels, input, EffectCurveClock.Normalize(segments, frameCount, mergeAdjacent: false)));
         }
         this.inputs = renderedInputs.ToArray(); token.ThrowIfCancellationRequested();
+    }
+
+    public EffectCurveRenderScope CreateCurveScope(int inputIndex, EffectCurveTiming timing, CancellationToken token = default)
+    {
+        lock (this.curveGate)
+        {
+            ObjectDisposedException.ThrowIf(this.disposed, this); timing.Validate(); token.ThrowIfCancellationRequested();
+            if (inputIndex < 0 || inputIndex >= this.inputs.Length) throw new ArgumentOutOfRangeException(nameof(inputIndex));
+            if (this.cachedCurveTiming != timing)
+            {
+                int frames = this.inputs[0].Samples.Length / this.inputs[0].Channels;
+                EffectCurveSpan[] shared = EffectCurveClock.Normalize(this.inputs.SelectMany(value => value.Segments ?? []), frames);
+                EffectCurveSpan[][]? audible = timing.IncludeSilence ? null : this.inputs.Select(input =>
+                    EffectCurveClock.FindAudibleSpans(input.Samples.Span, input.Channels, SampleRate, timing, token)).ToArray();
+                // Silence on one lane must not stop another simultaneous lane's shared clock. Analyze once per timing revision, off the UI thread.
+                EffectCurveSpan[]? sharedAudible = audible is not null && timing.Scope == EffectCurveScope.AcrossSelection
+                    ? EffectCurveClock.Normalize(audible.SelectMany(spans => spans), frames) : null;
+                this.curveScopes = this.inputs.Select((input, index) => new EffectCurveRenderScope(input.Segments?.ToArray() ?? [], shared,
+                    timing.Scope == EffectCurveScope.AcrossSelection ? sharedAudible : audible?[index])).ToArray();
+                this.cachedCurveTiming = timing with { };
+            }
+            return this.curveScopes[inputIndex].Copy();
+        }
     }
 
     public bool IsCurrent(MixArrangement target)
@@ -217,8 +247,12 @@ public sealed class MixEffectEditSession : IDisposable
             var effected = new MixSource { Name = effectName + " — " + input.Name, Data = (float[])result.Samples.Clone(), Channels = result.Channels,
                 SampleRate = SampleRate, Bpm = (float)(this.TempoBpm * (result.TempoMultiplier ?? 1)) };
             if (settings is not null || autoTune is not null)
+            {
+                EffectAutomationSettings? automation = settings?.Automation ?? autoTune?.Automation;
                 effected.TempoRecipe = MixTempoRecipe.Create(this.snapshot, this.snapshot.Lanes.Single(value => value.Id == region.LaneId),
-                    this.Start, this.End, region.ClipIds, effect: settings, autoTune: autoTune);
+                    this.Start, this.End, region.ClipIds, effect: settings, autoTune: autoTune,
+                    curveScope: automation?.HasEnabledCurves == true ? this.CreateCurveScope(index, automation.Timing) : null);
+            }
             staged.Sources.Add(effected.Id, effected); added.Add(effected);
             var replacement = new MixClip { Name = effected.Name, SourceId = effected.Id, Start = this.Start, SourceDuration = effected.Duration, HasRenderedEnvelope = true };
             clips.Add(replacement); selectedIds.Add(replacement.Id); lane.Clips = clips.OrderBy(clip => clip.Start).ToList();
@@ -258,5 +292,11 @@ public sealed class MixEffectEditSession : IDisposable
     }
     private static MixClip Clone(MixClip clip) => JsonSerializer.Deserialize<MixClip>(JsonSerializer.Serialize(clip))!;
     private static byte[] Hash(float[] data) => SHA256.HashData(MemoryMarshal.AsBytes(data.AsSpan()));
-    public void Dispose() { if (this.disposed) return; this.disposed = true; this.renderedClips.Clear(); this.inputs = []; this.snapshot.Dispose(); }
+    public void Dispose()
+    {
+        lock (this.curveGate)
+        {
+            if (this.disposed) return; this.disposed = true; this.renderedClips.Clear(); this.inputs = []; this.curveScopes = []; this.snapshot.Dispose();
+        }
+    }
 }

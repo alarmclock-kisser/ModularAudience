@@ -2,6 +2,11 @@
 
 ## Joining windows
 
+- AudioCollectionView → **Open as Multitrack View (N)** opens the selected tracks in list order,
+  each on its own lane at time zero. The first track sets the mix BPM. For later tracks with
+  differing known BPM, all TimeStretchDialog settings are collected sequentially before any
+  of those tracks are stretched. Their target is the first track's mix BPM; bag audio stays
+  untouched. Cancel leaves the first lane and discards the uncommitted remainder.
 - Ordinary TrackView's **Sync Playback** is now labeled **Sync** (its existing behavior remains).
 - **Join** copies the audio into a non-destructive arrangement and hides the original TrackView.
 - Right-click **Join** to create a new mix, choose an existing mix, or open a project.
@@ -71,7 +76,7 @@ There are now two distinct timeline context menus:
   settings, gain/solo/mute, track removal/reordering, adding/placing sources, paste,
   loop/fit/rename and undo/redo).
 - **Existing selection or an individually right-clicked segment**: the audio menu,
-  with **Apply Effect ...** and exactly the same nine groups / 36 effects as ordinary
+  with **Apply Effect ...** and exactly the same nine groups / 37 effects as ordinary
   TrackView. Existing range/whole-clip multiselections are not collapsed by a right
   click, including a right click in empty space. Clear selection or Escape returns
   to the general menu. Without a selection, the clicked clip becomes the target.
@@ -81,6 +86,25 @@ factory/user presets, Save/Load/Rename/Delete controls, RAM prehear/bypass/loop,
 worker budget and cancellation are shared with TrackView. Presets therefore work
 in both editors without duplicate stores. Convert to mono and Reverse are direct
 actions without dialogs.
+
+Time & Speed contains **Time Stretch ...** followed by **Varispeed Shift ...**.
+Time Stretch's Apply Effect window is the new `TimeStretchEffectDialog`, separate
+from the unchanged legacy/batch dialog. Varispeed deliberately couples pitch and
+speed. Both support independent parameter curves and Source/Target BPM helpers.
+
+All meaningful continuous effect options (including typed Auto Tune) have independent
+**Edit Curve ...** controls/toggles. The shared English curve editor offers equations,
+checkpoints, live plotting, oscillators and global shape-only JSON presets. Save is
+explicit; OK only activates the shape. Timing can restart per segment or use one
+selection-wide source-time curve, optionally skipping gap lengths and/or sustained
+silence. Simultaneous lanes share the union of selected time; overlapping clips are
+not counted twice. Empty selected lanes use the selected interval as their region.
+Skipping silence changes the curve clock, not the captured audio interval. Shared
+clock analysis is cancellable, off the UI thread and cached for Apply. Bounce recipes
+persist curve assignments/clock geometry for project and tempo round trips.
+Nested curve windows join this mix's existing window group (blocking, minimize/restore,
+ownership and close), without disabling unrelated windows. See `../Effects/README.md`
+for shape syntax, preset storage and intentionally fixed/unsupported options.
 
 ## Mix-local dialog scope
 

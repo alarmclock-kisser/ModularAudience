@@ -1043,10 +1043,13 @@ namespace ModularAudience.Forms
             this.menuToolStripItem_clone.Enabled = hasSingle;
             this.menuToolStripItem_editTags.Enabled = hasAny;
             this.menuToolStripItem_enqueuePlaylist.Enabled = hasAny;
+            this.menuToolStripItem_openMultitrack.Text = $"Open as Multitrack View ({selectedCount})";
+            this.menuToolStripItem_openMultitrack.Enabled = hasAny && !this.openingMultitrack;
             this.menuToolStripItem_editTags.Text = selectedCount > 1 ? "Edit Tags (Many)" : "Edit Tags";
             this.menuToolStripItem_splitEqualParts.Enabled = hasSingle;
             this.menuToolStripItem_generateBreakbeat.Enabled = selectedCount > 1;
             this.menuToolStripItem_generateBreakbeatRun.Enabled = selectedCount > 1;
+            this.quantumBeatEngineToolStripMenuItem.Enabled = selectedCount > 1;
             this.menuToolStripItem_atomize.Enabled = hasSingle;
             this.menuToolStripItem_atomizeRun.Enabled = hasSingle;
             this.menuToolStripItem_delete.Enabled = hasAny;

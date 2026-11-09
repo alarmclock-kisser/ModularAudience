@@ -38,6 +38,7 @@
             this.menuToolStripItem_clone = new ToolStripMenuItem();
             this.menuToolStripItem_editTags = new ToolStripMenuItem();
             this.menuToolStripItem_enqueuePlaylist = new ToolStripMenuItem();
+            this.menuToolStripItem_openMultitrack = new ToolStripMenuItem();
             this.menuToolStripItem_splitEqualParts = new ToolStripMenuItem();
             this.menuToolStripItem_splitEqualParts2 = new ToolStripMenuItem();
             this.menuToolStripItem_splitEqualParts4 = new ToolStripMenuItem();
@@ -82,6 +83,7 @@
             this.menuToolStripItem_generateBreakbeatSwing12 = new ToolStripMenuItem();
             this.menuToolStripItem_generateBreakbeatSwing18 = new ToolStripMenuItem();
             this.neuralFeedbackEngineToolStripMenuItem = new ToolStripMenuItem();
+            this.quantumBeatEngineToolStripMenuItem = new ToolStripMenuItem();
             this.menuToolStripItem_atomize = new ToolStripMenuItem();
             this.menuToolStripItem_atomizeRun = new ToolStripMenuItem();
             this.menuToolStripItem_atomizeSensitivity = new ToolStripMenuItem();
@@ -174,7 +176,7 @@
             // 
             // contextMenuStrip_audios
             // 
-            this.contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { this.menuToolStripItem_rename, this.menuToolStripItem_clone, this.menuToolStripItem_editTags, this.menuToolStripItem_enqueuePlaylist, this.menuToolStripItem_splitEqualParts, this.menuToolStripItem_generateBreakbeat, this.menuToolStripItem_atomize, this.menuToolStripItem_delete, this.menuToolStripItem_toNewCollection, this.menuToolStripItem_addIndexToNames, this.menuToolStripItem_aggregateMixSelected, this.menuToolStripItem_timeStretchSelected, this.menuToolStripItem_demucsSeparateSelected, this.menuToolStripItem_pinWindow, this.convertToMIDIToolStripMenuItem, this.menuToolStripItem_beatClickerGame, this.toolStripComboBox_orderBy });
+            this.contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { this.menuToolStripItem_rename, this.menuToolStripItem_clone, this.menuToolStripItem_editTags, this.menuToolStripItem_enqueuePlaylist, this.menuToolStripItem_openMultitrack, this.menuToolStripItem_splitEqualParts, this.menuToolStripItem_generateBreakbeat, this.menuToolStripItem_atomize, this.menuToolStripItem_delete, this.menuToolStripItem_toNewCollection, this.menuToolStripItem_addIndexToNames, this.menuToolStripItem_aggregateMixSelected, this.menuToolStripItem_timeStretchSelected, this.menuToolStripItem_demucsSeparateSelected, this.menuToolStripItem_pinWindow, this.convertToMIDIToolStripMenuItem, this.menuToolStripItem_beatClickerGame, this.toolStripComboBox_orderBy });
             this.contextMenuStrip_audios.Name = "contextMenuStrip_audios";
             this.contextMenuStrip_audios.Size = new Size(213, 339);
             this.contextMenuStrip_audios.Opening += this.contextMenuStrip_audios_Opening;
@@ -207,6 +209,14 @@
             this.menuToolStripItem_enqueuePlaylist.Size = new Size(212, 22);
             this.menuToolStripItem_enqueuePlaylist.Text = "Enqueue playlist";
             this.menuToolStripItem_enqueuePlaylist.Click += this.menuToolStripItem_enqueuePlaylist_Click;
+            //
+            // menuToolStripItem_openMultitrack
+            //
+            this.menuToolStripItem_openMultitrack.Enabled = false;
+            this.menuToolStripItem_openMultitrack.Name = "menuToolStripItem_openMultitrack";
+            this.menuToolStripItem_openMultitrack.Size = new Size(212, 22);
+            this.menuToolStripItem_openMultitrack.Text = "Open as Multitrack View (0)";
+            this.menuToolStripItem_openMultitrack.Click += this.menuToolStripItem_openMultitrack_Click;
             //
             // menuToolStripItem_splitEqualParts
             // 
@@ -252,7 +262,7 @@
             // 
             // menuToolStripItem_generateBreakbeat
             // 
-            this.menuToolStripItem_generateBreakbeat.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatRun, this.menuToolStripItem_generateBreakbeatBpm, this.menuToolStripItem_generateBreakbeatBars, this.menuToolStripItem_generateBreakbeatHits, this.menuToolStripItem_generateBreakbeatDensity, this.menuToolStripItem_generateBreakbeatComplexity, this.menuToolStripItem_generateBreakbeatResolution, this.menuToolStripItem_generateBreakbeatSwing, this.neuralFeedbackEngineToolStripMenuItem });
+            this.menuToolStripItem_generateBreakbeat.DropDownItems.AddRange(new ToolStripItem[] { this.menuToolStripItem_generateBreakbeatRun, this.menuToolStripItem_generateBreakbeatBpm, this.menuToolStripItem_generateBreakbeatBars, this.menuToolStripItem_generateBreakbeatHits, this.menuToolStripItem_generateBreakbeatDensity, this.menuToolStripItem_generateBreakbeatComplexity, this.menuToolStripItem_generateBreakbeatResolution, this.menuToolStripItem_generateBreakbeatSwing, this.neuralFeedbackEngineToolStripMenuItem, this.quantumBeatEngineToolStripMenuItem });
             this.menuToolStripItem_generateBreakbeat.Name = "menuToolStripItem_generateBreakbeat";
             this.menuToolStripItem_generateBreakbeat.Size = new Size(212, 22);
             this.menuToolStripItem_generateBreakbeat.Text = "Generate Breakbeat";
@@ -515,6 +525,12 @@
             this.neuralFeedbackEngineToolStripMenuItem.Size = new Size(213, 22);
             this.neuralFeedbackEngineToolStripMenuItem.Text = "Neural Feedback Engine ...";
             this.neuralFeedbackEngineToolStripMenuItem.Click += this.neuralFeedbackEngineToolStripMenuItem_Click;
+            //
+            // quantumBeatEngineToolStripMenuItem
+            //
+            this.quantumBeatEngineToolStripMenuItem.Name = "quantumBeatEngineToolStripMenuItem";
+            this.quantumBeatEngineToolStripMenuItem.Text = "Quantum Beat Engine (IBM®)";
+            this.quantumBeatEngineToolStripMenuItem.Click += this.quantumBeatEngineToolStripMenuItem_Click;
             // 
             // menuToolStripItem_atomize
             // 
@@ -763,6 +779,7 @@
         private ToolStripMenuItem menuToolStripItem_clone;
         private ToolStripMenuItem menuToolStripItem_editTags;
         private ToolStripMenuItem menuToolStripItem_enqueuePlaylist;
+        private ToolStripMenuItem menuToolStripItem_openMultitrack;
         private ToolStripMenuItem menuToolStripItem_splitEqualParts;
         private ToolStripMenuItem menuToolStripItem_splitEqualParts2;
         private ToolStripMenuItem menuToolStripItem_splitEqualParts4;
@@ -837,6 +854,7 @@
         private ToolStripMenuItem menuToolStripItem_createDebugLog;
         private ToolStripComboBox toolStripComboBox_beatClickerDifficulty;
         private ToolStripMenuItem neuralFeedbackEngineToolStripMenuItem;
+        private ToolStripMenuItem quantumBeatEngineToolStripMenuItem;
         private ToolTip toolTip_audios;
     }
 }

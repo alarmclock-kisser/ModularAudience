@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Diagnostics;
 using System.Runtime;
+using ModularAudience.Quantum.Abstractions;
 
 namespace ModularAudience.Forms.Modules
 {
@@ -80,8 +81,9 @@ namespace ModularAudience.Forms.Modules
         private bool initialPatternLoadCompleted = false;
 
 
-        public DrumRollEditor(IEnumerable<AudioObj>? samples = null)
+        public DrumRollEditor(IEnumerable<AudioObj>? samples = null, IQuantumPatternService? quantumService = null)
         {
+            this.quantumService = quantumService;
             this.InitializeComponent();
             this.KeyPreview = true;
             this.panel_pattern.Visible = false;
@@ -109,6 +111,7 @@ namespace ModularAudience.Forms.Modules
 
             this.AudioC.Audios.ListChanged += this.AudioC_Audios_ListChanged;
             this.InitializeRowContextMenu();
+            this.InitializeQuantumMenu();
 
             // Set min/max width
             this.MinimumSize = new Size(720, this.MinimumSize.Height);
@@ -230,6 +233,7 @@ namespace ModularAudience.Forms.Modules
 
         private void Form_Closing(object? sender, FormClosingEventArgs e)
         {
+            this.DisposeQuantumResources();
             this.StopPlayback();
             this.StopLaunchpadPlayback();
 
@@ -462,7 +466,7 @@ namespace ModularAudience.Forms.Modules
                         if (restoreStates != null && i < restoreStates.Count)
                         {
                             List<bool> source = restoreStates[i];
-                            int copyLength = Math.Min(hits, source.Count);
+                            int copyLength = Math.Min(totalSteps, source.Count);
                             for (int step = 0; step < copyLength; step++)
                             {
                                 steps[step] = source[step];
@@ -484,6 +488,7 @@ namespace ModularAudience.Forms.Modules
 
                 void ApplyRows()
                 {
+                    this.PruneQuantumPatterns(audioSnapshot, totalSteps);
                     this.patternRows.Clear();
                     this.patternRows.AddRange(rows);
                     this.Panels.Clear();
@@ -648,6 +653,7 @@ namespace ModularAudience.Forms.Modules
 
             foreach (int rowIndex in unlockedRows)
             {
+                this.ClearQuantumPattern(this.patternRows[rowIndex].Audio);
                 Array.Clear(this.patternRows[rowIndex].Steps, 0, this.patternRows[rowIndex].Steps.Length);
             }
 
@@ -850,7 +856,7 @@ namespace ModularAudience.Forms.Modules
                                 continue;
                             }
 
-                            var audio = this.AudioC.Audios[trackIdx];
+                            var audio = this.ResolveStepAudio(trackIdx, stepIndex % totalStepsNow);
                             try
                             {
                                 this.ScheduleAudioAt(audio, nextScheduledTime, cancellationToken, stepGain);
@@ -1212,6 +1218,7 @@ namespace ModularAudience.Forms.Modules
             int bars = this.Bars;
             int totalSteps = Math.Max(1, hits * bars);
             float bpm = this.Bpm;
+            float volume = this.Volume;
             int sampleRate = 44100;
             int channels = 2;
 
@@ -1226,6 +1233,8 @@ namespace ModularAudience.Forms.Modules
             var patternStates = this.CapturePatternButtonStates(); // List<List<bool>> - UI-thread
             bool interleavedPlayback = this.InterleavedPlaybackEnabled;
             var audioSnapshots = new List<(float[] Data, int Channels, int SampleRate)>();
+            var quantumSnapshots = new Dictionary<(int Track, int Step), (float[] Data, int Channels, int SampleRate)>();
+            var quantumCopies = new Dictionary<AudioObj, (float[] Data, int Channels, int SampleRate)>();
             int panelCount = this.patternRows.Count;
             for (int trackIdx = 0; trackIdx < panelCount; trackIdx++)
             {
@@ -1246,6 +1255,18 @@ namespace ModularAudience.Forms.Modules
                 float[] copy = new float[audio.Data.Length];
                 Array.Copy(audio.Data, copy, audio.Data.Length);
                 audioSnapshots.Add((copy, Math.Max(1, audio.Channels), audio.SampleRate > 0 ? audio.SampleRate : sampleRate));
+                if (this.quantumPatterns.TryGetValue(audio, out var quantumPattern))
+                {
+                    foreach (var (step, rendered) in quantumPattern.Samples)
+                    {
+                        if (!quantumCopies.TryGetValue(rendered, out var snapshot))
+                        {
+                            snapshot = (rendered.Data.ToArray(), rendered.Channels, rendered.SampleRate);
+                            quantumCopies.Add(rendered, snapshot);
+                        }
+                        quantumSnapshots.Add((trackIdx, step), snapshot);
+                    }
+                }
             }
 
             // Dauer / Samples berechnen
@@ -1285,7 +1306,8 @@ namespace ModularAudience.Forms.Modules
                             continue;
                         }
 
-                        var audioSnap = audioSnapshots[trackIdx];
+                        var audioSnap = quantumSnapshots.TryGetValue((trackIdx, step), out var quantumSnapshot)
+                            ? quantumSnapshot : audioSnapshots[trackIdx];
                         if (audioSnap.Data == null || audioSnap.Data.Length == 0)
                         {
                             continue;
@@ -1294,11 +1316,19 @@ namespace ModularAudience.Forms.Modules
                         int audioChannels = audioSnap.Channels > 0 ? audioSnap.Channels : 1;
                         float[] audioData = audioSnap.Data;
                         int audioLen = audioData.Length / audioChannels;
+                        double sourceFramesPerOutputFrame = audioSnap.SampleRate / (double)sampleRate;
+                        int outputFrames = (int)Math.Min(mix.Length / channels - stepStart,
+                            Math.Ceiling(audioLen / sourceFramesPerOutputFrame));
 
-                        for (int n = 0; n < audioLen; n++)
+                        for (int n = 0; n < outputFrames; n++)
                         {
                             int mixPos = (stepStart + n) * channels;
-                            int srcPos = n * audioChannels;
+                            // Respect the source rate just as the live resampling provider does.
+                            double sourcePosition = n * sourceFramesPerOutputFrame;
+                            int sourceFrame = Math.Min(audioLen - 1, (int)sourcePosition);
+                            int nextFrame = Math.Min(audioLen - 1, sourceFrame + 1);
+                            double fraction = sourcePosition - sourceFrame;
+                            int srcPos = sourceFrame * audioChannels;
                             if (mixPos + channels > mix.Length)
                             {
                                 break;
@@ -1306,8 +1336,11 @@ namespace ModularAudience.Forms.Modules
 
                             for (int c = 0; c < channels; c++)
                             {
-                                float sample = audioData[srcPos + (c % audioChannels)];
-                                mix[mixPos + c] += sample * this.Volume * stepGain;
+                                int sourceChannel = c % audioChannels;
+                                float first = audioData[srcPos + sourceChannel];
+                                float second = audioData[nextFrame * audioChannels + sourceChannel];
+                                float sample = (float)(first + (second - first) * fraction);
+                                mix[mixPos + c] += sample * volume * stepGain;
                             }
                         }
                     }
@@ -1666,6 +1699,7 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            this.ClearQuantumPattern(row.Audio);
             int hits = Math.Max(1, this.Hits);
             int totalSteps = this.TotalSteps;
             double density = this.GetRowDensity((double)this.numericUpDown_randomDensity.Value / 100d, (double)this.numericUpDown_randomVariation.Value / 100d);
@@ -1698,6 +1732,7 @@ namespace ModularAudience.Forms.Modules
             }
 
             AudioObj audio = this.patternRows[rowIndex].Audio;
+            this.ClearQuantumPattern(audio);
             List<List<bool>> states = this.CapturePatternButtonStates();
 
             var tv = new TrackView(audio)

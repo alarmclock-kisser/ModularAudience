@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ModularAudience.Audio.Effects;
 using ModularAudience.Audio.Effects.AutoTune;
+using ModularAudience.Audio.Effects.Curves;
 
 namespace ModularAudience.Audio.Arrangement;
 
@@ -18,12 +19,13 @@ public sealed class MixTempoRecipe
     public Guid? FrozenClipId { get; set; }
     public AudioEffectSettings? Effect { get; set; }
     public AutoTuneSettings? AutoTune { get; set; }
+    public EffectCurveRenderScope? CurveScope { get; set; }
 
     internal static MixTempoRecipe Create(MixArrangement snapshot, MixLane lane, double start, double end, IEnumerable<Guid> ids,
-        Guid? frozenClip = null, AudioEffectSettings? effect = null, AutoTuneSettings? autoTune = null) => new()
+        Guid? frozenClip = null, AudioEffectSettings? effect = null, AutoTuneSettings? autoTune = null, EffectCurveRenderScope? curveScope = null) => new()
     {
         Bpm = snapshot.Bpm, Lane = JsonSerializer.Deserialize<MixLane>(JsonSerializer.Serialize(lane))!, Start = start, End = end,
-        ClipIds = ids.ToArray(), FrozenClipId = frozenClip, Effect = effect?.Copy(), AutoTune = autoTune is null ? null : autoTune with { }
+        ClipIds = ids.ToArray(), FrozenClipId = frozenClip, Effect = effect?.Copy(), AutoTune = autoTune?.Copy(), CurveScope = curveScope?.Copy()
     };
 
     internal static IEnumerable<Guid> Dependencies(MixSource source) =>
@@ -39,5 +41,12 @@ public sealed class MixTempoRecipe
             (this.FrozenClipId is null && (this.Effect is null) == (this.AutoTune is null)))
             throw new InvalidDataException("Invalid tempo rendering recipe.");
         this.Effect?.Validate(); this.AutoTune?.Validate(MixEffectEditSession.SampleRate);
+        if (this.CurveScope is not null)
+        {
+            int frames = checked((int)Math.Round((this.End - this.Start) * MixEffectEditSession.SampleRate));
+            EffectCurveClock.Normalize(this.CurveScope.Segments, frames);
+            if (this.CurveScope.SelectionSegments is not null) EffectCurveClock.Normalize(this.CurveScope.SelectionSegments, frames);
+            if (this.CurveScope.AudibleSegments is not null) EffectCurveClock.Normalize(this.CurveScope.AudibleSegments, frames);
+        }
     }
 }

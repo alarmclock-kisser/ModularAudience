@@ -7,7 +7,7 @@ The waveform PictureBox context menu contains:
 ```text
 Apply Effect ...
   Pitch & Tuning       → Auto Tune ..., Pitch Shift ...
-  Time & Speed         → Time Stretch ...
+  Time & Speed         → Time Stretch ..., Varispeed Shift ...
   Reverb & Space       → Room / Hall / Plate / Spring / Chamber / Shimmer reverb ...
   Delay & Echo         → Single / Slapback / Ping-Pong / Multi-Tap delay ...
   Dynamics             → Compressor ..., Limiter ..., Gate ..., Expander ..., De-Esser ...
@@ -78,12 +78,13 @@ preserves unsaved sound edits. Factory entries cannot be renamed or deleted.
 Dropdown refresh preserves unsaved parameters. Max threads and preview switches
 are runtime controls, not preset sound parameters.
 
-`EffectOptionsEditor` provides the shared cancellable render, cached RAM preview,
+There are **37 effects** in the shared catalog. `EffectOptionsEditor` provides the shared cancellable render, cached RAM preview,
 bypass/loop comparison and single-commit lifecycle. Each window is modeless and
-owned by its editing window. `PitchShiftDialog` and the existing `TimeStretchDialog`
-have effect-mode constructors using this editor; their older batch and configure-only
-workflows remain available. Time Stretch also offers linked source/target BPM
-helpers; only the duration factor, not live source metadata, belongs to its preset.
+owned by its editing window. `PitchShiftDialog` uses this editor in effect mode.
+**TimeStretchEffectDialog is a new, separate Apply Effect window**; the existing
+`TimeStretchDialog` and its older batch/configure-only workflows are unchanged.
+`VarispeedShiftDialog` is the tape-style counterpart. Both offer linked source/target
+BPM helpers; presets save their duration factor/speed, not live source metadata.
 
 Pitch Shift explicitly selects the existing windowed-sinc resampler (duration
 changes by `2^(-semitones/12)`) or its existing phase-locked FFT-PV compensation
@@ -92,6 +93,157 @@ The vocoder streams successive spectra rather than storing every analysis window
 so working memory does not grow with window count. Time Stretch offers that same
 continuous phase-locked vocoder or isolated-per-channel legacy V1 chunk processing.
 Legacy V1 cancellation is checked around its non-cancellable processing pass.
+
+Varispeed Shift appears directly below Time Stretch in **Time & Speed**. It uses
+anti-aliased windowed-sinc resampling: speed 2 means twice the BPM, one octave up,
+and half the duration; speed 0.5 does the opposite. Unlike Time Stretch, it does
+not compensate pitch. A speed curve and an independent output-gain curve are available.
+
+## Independent parameter curves
+
+**35 of the 37 effects** support automation, including typed Auto Tune. Every
+supported continuous option has its own **Edit Curve ...** button, **Curve** toggle
+and equation/checkpoint summary beside it. Several options can be automated together.
+Opening or cancelling the child does not change the effect. **OK / Apply Curve**
+installs its edited copy; the toggle disables it without discarding the shape/range.
+Parameter/curve/timing changes cancel superseded work, stop prehear and invalidate
+the RAM render cache. Prehear and Apply use exactly the same settings snapshot.
+
+The modeless curve editor offers:
+
+- An equation text box with live validation and a PictureBox plot; or an editable
+  checkpoint table with **Add checkpoint**, row deletion, and Linear / Smooth /
+  Hold interpolation. Use 2–512 strictly ordered points, with first x=0 and last x=1.
+- **Start value**, **End value**, and **End follows current parameter**. The latter
+  is on by default, so changing a knob/Target BPM also updates the curve's target.
+  Positive parameter ranges can use logarithmic value interpolation instead of linear.
+  These are the values at **y=0 / y=1**, not necessarily at the first/last time sample:
+  oscillating or asymptotic shapes need not start at y=0 or finish at y=1.
+- Normalized source time `x` (alias `t`), from 0 to 1. The finite shape `y` is clamped
+  to 0–1, then mapped to the parameter range. This bounds oscillators/overshoot to
+  the configured endpoints; reversed endpoints give falling sweeps.
+- Constants `pi`, `e`; editable `f` (cycles), `p` (phase in cycles), and `a`, `b`,
+  `c`, `d` (shape parameters). Operators `+ - * / % ^`, parentheses and a bounded
+  arithmetic/function parser, **not executable scripting**. Decimal points are
+  required in equations/checkpoints; numeric controls follow the system number format.
+- `sin`, `cos`, `tan`, inverse/hyperbolic trig, `abs`, `sqrt`, `exp`, `log`/`ln`,
+  `log10`, `floor`, `ceil`, `round`, `sign`, `min`, `max`, `pow`, `clamp`,
+  `smoothstep(x)`, and `step(edge,x)`. Trig uses radians. Unknown code, excessive
+  nesting/complexity, NaN/infinity, poles and invalid roots/logs are rejected before
+  acceptance/saving; render-time evaluations are checked too.
+
+The **17 immutable built-ins** include linear rise/fall, logarithmic, exponential,
+power/ease in/out, smooth S-curve, sine/cosine, pole-free tangent, safe reciprocal
+decay (`1/(1+a*x)`, not singular `1/x` at x=0), triangle, sawtooth, square,
+decaying sine pulses, bell/swell and constant full amount. Oscillator examples:
+
+```text
+0.5 + 0.5*sin(2*pi*(f*x+p))
+exp(-a*x) * (0.5 + 0.5*cos(2*pi*(f*x+p)))
+```
+
+**Effect amount (%)** is an additional original/effected crossfade for effects
+whose sample timelines align. Individual parameter curves are actual DSP control,
+not repeated short independent effect renders: filter/delay/dynamics/LFO states
+are retained. Modulated LFO rates integrate phase instead of resetting it. Wet/dry
+and output gain can have their own curves. Wet/dry or effect-amount curves that are
+zero throughout the render bypass without inserting silent tails or redundant undo
+steps. Output gain still follows the existing wet-zero gain behavior. Normalize
+automates its global-peak-based gain, not a repeatedly re-analyzed local peak.
+Custom fade gain replaces the built-in
+fade shape/length and follows the selected curve clock.
+
+### Pitch, Time Stretch and Varispeed curves
+
+- Pitch starts at **0 semitones** and follows the configured semitone target by
+  default. FFT-PV renders a real variable pitch shift at the original frame count;
+  Resampling changes pitch and duration together. An optional output-gain curve
+  follows the corresponding source-time map.
+- Time Stretch starts at **1× source speed** and approaches Target BPM. Its curve
+  interpolates **speed**, not duration factor: source 120 → target 180 BPM means
+  speed 1→1.5; the factor at the midpoint is 1/1.25, not the midpoint of 1 and 2/3.
+  A continuous, phase-locked variable-analysis-hop FFT-PV preserves pitch. Curve mode
+  always uses that renderer, irrespective of the legacy constant-stretch Method.
+  FFT size and requested window overlap remain quality controls; the effective overlap
+  is increased when needed to keep analysis hops safe at the maximum configured speed.
+- Varispeed also interpolates speed, but deliberately moves pitch with it. All
+  channels use one integral time map. No crossfade between incompatible timelines
+  is offered as a misleading substitute for pitch/speed modulation.
+- Duration is the numerical integral of local duration factors in **source time**,
+  rounded to complete frames. Reaching Target BPM at the end does not imply that
+  the whole segment has that constant speed. For 1→1.5× linear speed, duration is
+  approximately `originalDuration * log(1.5)/0.5`.
+- Variable speed cannot be expressed as one uniform BPM multiplier. Such renders
+  retain their base/grid tempo reference, rather than tagging the entire audio with
+  the endpoint BPM. Constant Varispeed does provide its true uniform multiplier.
+  The existing edit-session selection/ripple/navigation mapping is retained; this
+  feature does not create a variable-tempo beat-grid map or a tempo-automation lane.
+
+### Curve timing and multiple segments
+
+**Curve timing** is shared by the enabled curves within one effect preset:
+
+- **Restart curve per segment**, or **One curve across selection**.
+- For a shared curve, optionally count the lengths of gaps between selected clips.
+- Separately include/exclude sustained silence, with an adjustable dBFS threshold
+  and minimum silence length. Single zero crossings do not pause the clock.
+- TrackView's track/selection is one region. MixTrackView supplies the frozen selected
+  clip intervals; overlapping clips on the same lane share a region, adjacent clips
+  can restart separately, and an empty selected lane uses its selected time region.
+  Simultaneous lanes share the **union of selected time**, not concatenated lane
+  durations. Shared silence detection uses any audible selected lane, avoiding
+  cancellation or one silent lane stopping the others' clock.
+- Skipping gaps/silence changes **curve time only**; it does not delete samples,
+  close gaps, reset DSP state, or silently change the captured editing scope. Appended
+  reverb/delay tails hold the last curve value. DSP and the clock stay channel-linked.
+
+### Shared shape presets and compatibility
+
+The curve selector has **Load / Save / Rename / Delete / Defaults** and refreshes
+other windows' changes without losing the current unsaved edit. Shape-only user
+presets live at:
+
+```text
+%APPDATA%\ModularAudience\Effects\CurvePresets.json
+```
+
+**Only Save writes this library.** OK activates a curve without saving it. Selecting
+a built-in clears the name field; saving a variant with a blank name allocates
+`Curve#1`, `Curve#2`, etc. Built-ins are always code-defined, cannot be overwritten,
+renamed or deleted, and remain usable if user JSON is malformed/locked. Same-named
+user curves are separate. Writes are atomically replaced under a cross-process mutex;
+invalid files are reported, never silently replaced. Rename never overwrites another
+user curve. Range, target parameter, toggles and timing are **not** shape-preset fields,
+so the same curve is usable for every compatible option/effect.
+
+Effect presets **do** persist all their independent curve assignments/ranges and
+timing. Old effect/Auto Tune JSON with no automation still loads unchanged; disabled
+curves follow the original DSP paths. Existing numeric effect IDs are unchanged;
+Varispeed Shift was appended as ID 36 and placed after Time Stretch only in menu order.
+Mix bounce recipes retain curves and captured shared-clock geometry across `.mamix`
+save/load and later tempo regeneration. Rendering/preview still write no audio files.
+
+### Deliberately fixed options / excluded actions
+
+- **Convert to mono** remains a discrete channel-layout conversion, not a fractional
+  channel count; **Reverse** remains a discrete frame-order operation, not a continuous
+  rate parameter. They remain immediate, undoable actions without curve dialogs.
+- Algorithm/waveform/profile/scale choices and booleans are not interpolated.
+  Structural values (tail length, FFT/window/overlap topology, voices/taps/harmonic
+  counts, limiter look-ahead, noise-profile capture duration, built-in fade length)
+  remain fixed for one render; they define buffers, analysis scope or topology rather
+  than a smooth control signal. Bit depth is a useful exception and is rounded to
+  actual quantizer steps. Other meaningful continuous controls are exposed per option.
+- Auto Tune's detector frequency range, analysis hop/FFT topology, musical duration/
+  tempo gate, and boundary-blend length are fixed analysis/boundary settings. Its
+  intensity, correction limit, tracking/retune/release, tuning, confidence/silence gate,
+  vibrato/formant and mix/output controls are individually automated.
+- Automating hum fundamental requires **Custom** mains frequency; automating the
+  spectral noise-floor level requires **Fixed spectral floor**. Incompatible modes
+  report a validation error rather than accepting an inaudible, ignored curve.
+- Abrupt equations/Hold/square shapes intentionally retain their discontinuities.
+  Extreme or fast modulation can produce clicks/spectral artifacts; use smooth shapes,
+  sensible ranges and Prehear. This is not a guarantee of artifact-free resynthesis.
 
 `AudioEffectProcessor` contains independent DSP routes:
 
@@ -293,7 +445,7 @@ effect metadata written to disk; sample processing and preview stay in RAM.
 ## Validation
 
 ```powershell
-dotnet test ModularAudience.Audio.Tests\ModularAudience.Audio.Tests.csproj --filter "FullyQualifiedName~AutoTune|FullyQualifiedName~AudioEffect|FullyQualifiedName~EffectPresetAndDialog|FullyQualifiedName~MixEffect|FullyQualifiedName~StructuredImport|FullyQualifiedName~ApplicationPreferences"
+dotnet test ModularAudience.Audio.Tests\ModularAudience.Audio.Tests.csproj --filter "FullyQualifiedName~AutoTune|FullyQualifiedName~AudioEffect|FullyQualifiedName~EffectCurve|FullyQualifiedName~CurvePresetAndDialog|FullyQualifiedName~EffectPresetAndDialog|FullyQualifiedName~MixEffect|FullyQualifiedName~StructuredImport|FullyQualifiedName~ApplicationPreferences"
 ```
 
 Tests cover actual pitch correction and intensity, duration and linked stereo,
@@ -308,3 +460,12 @@ UI defaults, malformed/locked-file fallback, and live track/preset BPM priority
 including invalid-value fallbacks and unchanged stored parameters.
 Automated UI tests use a fake audio device; subjective sound/device checks remain
 manual.
+
+Curve tests additionally cover every advertised scalar option's constant-curve DSP
+equivalence (including typed Auto Tune), simultaneous periodic curves for every
+supported effect, true sliding frequency/speed/duration, parser domains/precedence/
+limits, checkpoint interpolation, source-time clocks/gaps/silence/overlaps/empty lanes,
+shared-lane geometry, immutable factories/concurrent persistence, real preview painting,
+curve toggles/cache invalidation, the separate Time Stretch / Varispeed windows,
+TrackView/MixTrackView selection isolation and single-step undo/redo, and recipe/project/
+tempo round trips. These are deterministic signal/UI tests, not subjective listening tests.

@@ -1,3 +1,6 @@
+using ModularAudience.Audio.Effects.Curves;
+using System.Text.Json.Serialization;
+
 namespace ModularAudience.Audio.Effects;
 
 public enum AudioEffectKind
@@ -9,7 +12,9 @@ public enum AudioEffectKind
     Bitcrusher, SampleRateReducer, Overdrive, Saturation, TapeSaturation,
     Chorus, Flanger, Phaser, Tremolo,
     Gain, Normalize, FadeIn, FadeOut, StereoWidth, ConvertToMono, Reverse,
-    HumRemoval, NoiseReduction
+    HumRemoval, NoiseReduction,
+    // Append new values: numeric IDs in existing projects/presets must remain stable.
+    VarispeedShift
 }
 
 public enum EffectParameterKind { Number, Choice, Boolean }
@@ -27,10 +32,12 @@ public sealed record AudioEffectSettings
 {
     public required AudioEffectKind Effect { get; init; }
     public Dictionary<string, double> Parameters { get; init; } = new(StringComparer.Ordinal);
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public EffectAutomationSettings? Automation { get; init; }
     public double this[string key] => this.Parameters[key];
     public bool Flag(string key) => this[key] != 0;
     public int Choice(string key) => checked((int)this[key]);
-    public AudioEffectSettings Copy() => this with { Parameters = new(this.Parameters, StringComparer.Ordinal) };
+    public AudioEffectSettings Copy() => this with { Parameters = new(this.Parameters, StringComparer.Ordinal), Automation = this.Automation?.Copy() };
 
     public AudioEffectSettings With(params (string Key, double Value)[] changes)
     {
@@ -54,11 +61,17 @@ public sealed record AudioEffectSettings
         }
         if (this.Effect == AudioEffectKind.Phaser && this["MinimumHz"] >= this["MaximumHz"])
             throw new ArgumentException("The phaser's maximum frequency must be above its minimum frequency.");
+        this.Automation?.Validate(EffectCurveTargets.ForEffect(this.Effect), key => EffectCurveTargets.BaseValue(this, key));
+        if (this.Effect == AudioEffectKind.HumRemoval && this.Automation?.Parameters.TryGetValue("FrequencyHz", out var frequency) == true && frequency.Enabled && this.Choice("Mains") != 2)
+            throw new ArgumentException("Select Custom mains frequency to automate the hum-removal fundamental.");
+        if (this.Effect == AudioEffectKind.NoiseReduction && this.Automation?.Parameters.TryGetValue("NoiseFloorDb", out var floor) == true && floor.Enabled && this.Choice("Profile") != 2)
+            throw new ArgumentException("Select Fixed spectral floor to automate the noise-floor level.");
     }
 
     public bool SoundEquals(AudioEffectSettings? other) => other is not null && this.Effect == other.Effect &&
         this.Parameters.Count == other.Parameters.Count && this.Parameters.All(pair =>
-            other.Parameters.TryGetValue(pair.Key, out double value) && pair.Value == value);
+            other.Parameters.TryGetValue(pair.Key, out double value) && pair.Value == value) &&
+        (this.Automation is null ? other.Automation is null : this.Automation.SoundEquals(other.Automation));
 }
 
 public sealed record AudioEffectResult(float[] Samples, int Channels, double? TempoMultiplier = null);

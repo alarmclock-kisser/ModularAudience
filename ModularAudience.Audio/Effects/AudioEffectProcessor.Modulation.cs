@@ -6,22 +6,30 @@ public static partial class AudioEffectProcessor
     {
         int channels = context.Channels, frames = source.Length / channels;
         float[] output = new float[source.Length];
-        double rate = settings["RateHz"], stereoPhase = settings["StereoPhase"] * Math.PI / 180;
+        double accumulatedPhase = 0;
+        double Phase(int frame)
+        {
+            if (!context.Automation.Has("RateHz")) return frame * 2 * Math.PI * settings["RateHz"] / context.Rate;
+            double value = accumulatedPhase;
+            accumulatedPhase = (accumulatedPhase + 2 * Math.PI * context.Automation.Value("RateHz", frame) / context.Rate) % (2 * Math.PI * 100);
+            return value;
+        }
         if (settings.Effect == AudioEffectKind.Tremolo)
         {
             for (int frame = 0; frame < frames; frame++)
             {
                 context.Check(frame, frames);
+                double basePhase = Phase(frame), stereoPhase = context.Automation.Value("StereoPhase", frame) * Math.PI / 180;
                 for (int channel = 0; channel < channels; channel++)
                 {
-                    double phase = frame * 2 * Math.PI * rate / context.Rate + (channel % 2) * stereoPhase;
+                    double phase = basePhase + (channel % 2) * stereoPhase;
                     double wave = settings.Choice("Waveform") switch
                     {
                         1 => 2 / Math.PI * Math.Asin(Math.Sin(phase)), 2 => Math.Sin(phase) >= 0 ? 1 : -1, _ => Math.Sin(phase)
                     };
-                    double gain = 1 - settings["DepthPercent"] / 100 * (wave + 1) / 2;
+                    double gain = 1 - context.Automation.Value("DepthPercent", frame) / 100 * (wave + 1) / 2;
                     int index = frame * channels + channel;
-                    output[index] = (float)MixSample(source[index], source[index] * gain, settings);
+                    output[index] = (float)MixSample(source[index], source[index] * gain, context, frame);
                 }
             }
         }
@@ -33,13 +41,16 @@ public static partial class AudioEffectProcessor
             for (int frame = 0; frame < frames; frame++)
             {
                 context.Check(frame, frames);
+                double basePhase = Phase(frame), stereoPhase = context.Automation.Value("StereoPhase", frame) * Math.PI / 180;
+                double minimum = context.Automation.Value("MinimumHz", frame), maximum = context.Automation.Value("MaximumHz", frame);
+                if (minimum >= maximum) throw new ArgumentException("The automated phaser maximum must remain above its minimum frequency.");
                 for (int channel = 0; channel < channels; channel++)
                 {
-                    double phase = frame * 2 * Math.PI * rate / context.Rate + (channel % 2) * stereoPhase;
+                    double phase = basePhase + (channel % 2) * stereoPhase;
                     double t = (1 + Math.Sin(phase)) / 2;
-                    double hz = settings["MinimumHz"] * Math.Pow(settings["MaximumHz"] / settings["MinimumHz"], t);
+                    double hz = minimum * Math.Pow(maximum / minimum, t);
                     int index = frame * channels + channel;
-                    double signal = source[index] + feedback[channel] * settings["FeedbackPercent"] / 100;
+                    double signal = source[index] + feedback[channel] * context.Automation.Value("FeedbackPercent", frame) / 100;
                     for (int stage = 0; stage < stages; stage++)
                     {
                         double f = ClampFrequency(hz * Math.Pow(1.13, stage - stages / 2d), context.Rate);
@@ -48,32 +59,35 @@ public static partial class AudioEffectProcessor
                         states[channel][stage] = signal - a * y; signal = y;
                     }
                     feedback[channel] = signal;
-                    output[index] = (float)MixSample(source[index], signal, settings);
+                    output[index] = (float)MixSample(source[index], signal, context, frame);
                 }
             }
         }
         else
         {
             bool chorus = settings.Effect == AudioEffectKind.Chorus;
-            double baseDelay = settings["DelayMs"] * context.Rate / 1000, depth = settings["DepthMs"] * context.Rate / 1000;
+            double maximumDelay = context.Automation.Maximum("DelayMs") * context.Rate / 1000,
+                maximumDepth = context.Automation.Maximum("DepthMs") * context.Rate / 1000;
             int voices = chorus ? settings.Choice("Voices") : 1;
-            var lines = Enumerable.Range(0, channels).Select(_ => new DelayLine((int)Math.Ceiling(baseDelay + depth * 2) + 4)).ToArray();
+            var lines = Enumerable.Range(0, channels).Select(_ => new DelayLine((int)Math.Ceiling(maximumDelay + maximumDepth * 2) + 4)).ToArray();
             for (int frame = 0; frame < frames; frame++)
             {
                 context.Check(frame, frames);
+                double basePhase = Phase(frame), stereoPhase = context.Automation.Value("StereoPhase", frame) * Math.PI / 180;
+                double baseDelay = context.Automation.Value("DelayMs", frame) * context.Rate / 1000, depth = context.Automation.Value("DepthMs", frame) * context.Rate / 1000;
                 for (int channel = 0; channel < channels; channel++)
                 {
                     double wet = 0;
                     for (int voice = 0; voice < voices; voice++)
                     {
-                        double phase = frame * 2 * Math.PI * rate * (chorus ? 1 + voice * 0.07 : 1) / context.Rate +
+                        double phase = basePhase * (chorus ? 1 + voice * 0.07 : 1) +
                             (channel % 2) * stereoPhase + voice * 2 * Math.PI / voices;
                         double delay = baseDelay + depth * (1 + Math.Sin(phase));
                         wet += lines[channel].Read(Math.Max(1, delay)) / voices;
                     }
                     int index = frame * channels + channel;
-                    lines[channel].Write(source[index] + (chorus ? 0 : wet * settings["FeedbackPercent"] / 100));
-                    output[index] = (float)MixSample(source[index], wet, settings);
+                    lines[channel].Write(source[index] + (chorus ? 0 : wet * context.Automation.Value("FeedbackPercent", frame) / 100));
+                    output[index] = (float)MixSample(source[index], wet, context, frame);
                 }
             }
         }

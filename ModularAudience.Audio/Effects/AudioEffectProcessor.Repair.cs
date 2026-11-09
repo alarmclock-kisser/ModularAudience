@@ -8,7 +8,8 @@ public static partial class AudioEffectProcessor
     private static AudioEffectResult RemoveHum(float[] source, AudioEffectSettings settings, RenderContext context)
     {
         double fundamental = settings.Choice("Mains") switch { 0 => 50, 1 => 60, _ => settings["FrequencyHz"] };
-        int harmonics = Math.Min(settings.Choice("Harmonics"), (int)Math.Floor(context.Rate * 0.45 / fundamental));
+        bool automatedFrequency = context.Automation.Has("FrequencyHz");
+        int harmonics = automatedFrequency ? settings.Choice("Harmonics") : Math.Min(settings.Choice("Harmonics"), (int)Math.Floor(context.Rate * 0.45 / fundamental));
         var filters = Enumerable.Range(0, context.Channels).Select(_ => Enumerable.Range(1, harmonics)
             .Select(harmonic => Biquad.Notch(fundamental * harmonic, context.Rate, settings["Q"])).ToArray()).ToArray();
         var dc = Enumerable.Range(0, context.Channels).Select(_ => Biquad.HighPass(15, context.Rate)).ToArray();
@@ -16,12 +17,20 @@ public static partial class AudioEffectProcessor
         for (int frame = 0; frame < source.Length / context.Channels; frame++)
         {
             context.Check(frame, source.Length / context.Channels);
+            double currentFundamental = automatedFrequency ? context.Automation.Value("FrequencyHz", frame) : fundamental;
+            if (automatedFrequency || context.Automation.Has("Q"))
+                for (int harmonic = 0; harmonic < harmonics; harmonic++)
+                {
+                    Biquad coefficients = Biquad.Notch(currentFundamental * (harmonic + 1), context.Rate, context.Automation.Value("Q", frame));
+                    for (int channel = 0; channel < context.Channels; channel++) filters[channel][harmonic].Reconfigure(coefficients);
+                }
             for (int channel = 0; channel < context.Channels; channel++)
             {
                 int index = frame * context.Channels + channel; double value = source[index];
                 if (settings.Flag("RemoveDc")) value = dc[channel].Process(value);
-                for (int harmonic = 0; harmonic < harmonics; harmonic++) value = filters[channel][harmonic].Process(value);
-                output[index] = (float)MixSample(source[index], value, settings);
+                for (int harmonic = 0; harmonic < harmonics; harmonic++)
+                    if (currentFundamental * (harmonic + 1) <= context.Rate * 0.45) value = filters[channel][harmonic].Process(value);
+                output[index] = (float)MixSample(source[index], value, context, frame);
             }
         }
         return new(output, context.Channels);
@@ -30,7 +39,7 @@ public static partial class AudioEffectProcessor
     private static AudioEffectResult ReduceNoise(float[] source, AudioEffectSettings settings, RenderContext context)
     {
         int channels = context.Channels, frames = source.Length / channels;
-        if (settings["AmountPercent"] == 0 || settings["ReductionDb"] == 0) return new(source, channels);
+        if (settings["AmountPercent"] == 0 && !context.Automation.Has("AmountPercent") || settings["ReductionDb"] == 0 && !context.Automation.Has("ReductionDb")) return new(source, channels);
         int size = 1024 << settings.Choice("FftSize"), hop = size / 4, bins = size / 2 + 1;
         int windowCount = (int)Math.Ceiling(frames / (double)hop) + 1;
         double[] window = Enumerable.Range(0, size).Select(i => 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / size)).ToArray();
@@ -94,11 +103,14 @@ public static partial class AudioEffectProcessor
         // timing and edges. A shared gain spectrum keeps stereo phase/coherence.
         var accumulated = new double[source.Length]; var weights = new double[frames];
         var previousGain = Enumerable.Repeat(1d, bins).ToArray(); var targets = new double[bins];
-        double minimumGain = DbToGain(-settings["ReductionDb"]), amount = settings["AmountPercent"] / 100;
-        double smoothing = settings["SmoothingPercent"] / 100;
         for (int index = 0; index < windowCount; index++)
         {
             Analyze(index); context.Progress?.Report(index / (double)windowCount);
+            int center = Math.Clamp(index * hop, 0, frames - 1);
+            double minimumGain = DbToGain(-context.Automation.Value("ReductionDb", center)), amount = context.Automation.Value("AmountPercent", center) / 100;
+            double smoothing = context.Automation.Value("SmoothingPercent", center) / 100;
+            if (settings.Choice("Profile") == 2 && context.Automation.Has("NoiseFloorDb"))
+                Array.Fill(profile, Math.Pow(DbToGain(context.Automation.Value("NoiseFloorDb", center)), 2) * windowEnergy);
             for (int bin = 0; bin < bins; bin++)
             {
                 double power = 0;
@@ -134,7 +146,7 @@ public static partial class AudioEffectProcessor
             {
                 int i = frame * channels + channel;
                 double clean = weights[frame] > 1e-12 ? accumulated[i] / weights[frame] : source[i];
-                output[i] = (float)MixSample(source[i], clean, settings);
+                output[i] = (float)MixSample(source[i], clean, context, frame);
             }
         }
         return new(output, channels);

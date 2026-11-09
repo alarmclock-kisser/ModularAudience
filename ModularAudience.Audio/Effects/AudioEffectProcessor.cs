@@ -1,4 +1,5 @@
 using ModularAudience.Audio.Processors_V1;
+using ModularAudience.Audio.Effects.Curves;
 
 namespace ModularAudience.Audio.Effects;
 
@@ -15,7 +16,7 @@ public static partial class AudioEffectProcessor
         settings.Validate();
         if (sampleRate <= 0 || channels <= 0 || channels > 64 || input.IsEmpty || input.Length % channels != 0 || input.Length > MaximumOutputSamples)
             throw new ArgumentException("Effects require a valid sample rate and non-empty, complete audio frames.");
-        var options = execution ?? new AudioEffectExecutionOptions();
+        var options = execution is null ? new AudioEffectExecutionOptions() : execution with { CurveScope = execution.CurveScope?.Copy() };
         options.Validate();
         AudioEffectSettings snapshot = settings.Copy();
         return Task.Run(async () =>
@@ -27,21 +28,36 @@ public static partial class AudioEffectProcessor
                 if ((i & 65535) == 0) cancellationToken.ThrowIfCancellationRequested();
                 if (!float.IsFinite(source[i])) throw new ArgumentException("Effects require finite input samples.");
             }
-            var context = new RenderContext(sampleRate, channels, options.MaximumThreads, progress, cancellationToken);
+            var context = new RenderContext(sampleRate, channels, options.MaximumThreads, progress, cancellationToken)
+            {
+                Automation = new(snapshot.Automation, EffectCurveTargets.ForEffect(snapshot.Effect), key => EffectCurveTargets.BaseValue(snapshot, key),
+                    source, channels, sampleRate, options.CurveScope, cancellationToken)
+            };
             AudioEffectResult result;
-            if (snapshot.Parameters.TryGetValue("WetPercent", out double wet) && wet == 0)
+            if (context.Automation.IsConstant(EffectCurveTargets.Amount, 0) ||
+                snapshot.Parameters.ContainsKey("WetPercent") && context.Automation.IsConstant("WetPercent", 0))
                 result = new(source, channels); // Bypass must not append a silent tail.
             else if (snapshot.Effect == AudioEffectKind.PitchShift)
             {
-                double ratio = Math.Pow(2, snapshot["Semitones"] / 12);
-                EnsureLength(source.Length / channels / ratio, channels);
-                using var audio = new AudioObj { Data = source, Channels = channels, SampleRate = sampleRate };
-                using var shifted = await PitchShifter.CreatePitchShiftAsync(audio, (float)snapshot["Semitones"],
-                    snapshot.Choice("Method") == 0, progress, options.MaximumThreads, cancellationToken).ConfigureAwait(false);
-                result = new(shifted.Data, channels, snapshot.Choice("Method") == 1 ? ratio : null);
+                if (context.Automation.Has("Semitones")) result = CurvePitch(source, snapshot, context);
+                else
+                {
+                    double ratio = Math.Pow(2, snapshot["Semitones"] / 12);
+                    EnsureLength(source.Length / channels / ratio, channels);
+                    using var audio = new AudioObj { Data = source, Channels = channels, SampleRate = sampleRate };
+                    using var shifted = await PitchShifter.CreatePitchShiftAsync(audio, (float)snapshot["Semitones"],
+                        snapshot.Choice("Method") == 0, progress, options.MaximumThreads, cancellationToken).ConfigureAwait(false);
+                    result = new(shifted.Data, channels, snapshot.Choice("Method") == 1 ? ratio : null);
+                    if (snapshot.Choice("Method") == 1) context.SourceAtOutput = frame => frame * ratio;
+                }
             }
             else if (snapshot.Effect == AudioEffectKind.TimeStretch)
-                result = await StretchAsync(source, snapshot, context).ConfigureAwait(false);
+                result = context.Automation.Has("Factor") ? CurveStretch(source, snapshot, context) : await StretchAsync(source, snapshot, context).ConfigureAwait(false);
+            else if (snapshot.Effect == AudioEffectKind.VarispeedShift)
+            {
+                result = ResampleSpeed(source, frame => context.Automation.Value("Speed", frame), context);
+                if (!context.Automation.Has("Speed")) result = result with { TempoMultiplier = snapshot["Speed"] };
+            }
             else
                 result = snapshot.Effect switch
                 {
@@ -56,12 +72,30 @@ public static partial class AudioEffectProcessor
                     AudioEffectKind.NoiseReduction => ReduceNoise(source, snapshot, context),
                     _ => Utility(source, snapshot, context)
                 };
-            double gain = snapshot.Parameters.TryGetValue("OutputGainDb", out double db) ? DbToGain(db) : 1;
-            for (int i = 0; i < result.Samples.Length; i++)
+            bool outputGain = snapshot.Parameters.ContainsKey("OutputGainDb"), amountCurve = context.Automation.Has(EffectCurveTargets.Amount);
+            bool usedAmount = false, usedOutputGain = false;
+            for (int frame = 0; frame < result.Samples.Length / result.Channels; frame++)
             {
-                if ((i & 65535) == 0) cancellationToken.ThrowIfCancellationRequested();
-                if (gain != 1) result.Samples[i] = (float)(result.Samples[i] * gain);
-                if (!float.IsFinite(result.Samples[i])) throw new ArithmeticException("The effect produced non-finite audio. Reduce its drive or gain.");
+                if ((frame & 8191) == 0) cancellationToken.ThrowIfCancellationRequested();
+                double sourceFrame = context.SourceAtOutput(frame);
+                double gain = outputGain ? DbToGain(context.Automation.Value("OutputGainDb", sourceFrame)) : 1;
+                usedOutputGain |= gain != 1;
+                double amount = amountCurve ? context.Automation.Value(EffectCurveTargets.Amount, sourceFrame) / 100 : 1;
+                usedAmount |= amount != 0;
+                for (int channel = 0; channel < result.Channels; channel++)
+                {
+                    int i = frame * result.Channels + channel;
+                    double effected = result.Samples[i] * gain;
+                    double dry = frame < source.Length / channels && channel < channels ? source[frame * channels + channel] : 0;
+                    result.Samples[i] = (float)(amount == 1 ? effected : dry + (effected - dry) * amount);
+                    if (!float.IsFinite(result.Samples[i])) throw new ArithmeticException("The effect produced non-finite audio. Reduce its drive or gain.");
+                }
+            }
+            if (amountCurve && !usedAmount) result = new(source, channels);
+            else if (context.Automation.Has("WetPercent") && !context.UsedWetMix)
+            {
+                if (!usedOutputGain) result = new(source, channels); // Preserve even signed-zero samples in an exact bypass.
+                else if (result.Samples.Length > source.Length) result = result with { Samples = result.Samples.AsSpan(0, source.Length).ToArray() };
             }
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(1);
@@ -71,6 +105,9 @@ public static partial class AudioEffectProcessor
 
     private sealed record RenderContext(int Rate, int Channels, int MaximumThreads, IProgress<double>? Progress, CancellationToken Token)
     {
+        internal required EffectAutomationEvaluator Automation { get; init; }
+        internal Func<double, double> SourceAtOutput { get; set; } = static frame => frame;
+        internal bool UsedWetMix { get; set; }
         internal void Check(int frame, int total)
         {
             if ((frame & 1023) != 0) return;
@@ -90,7 +127,12 @@ public static partial class AudioEffectProcessor
     private static double GainToDb(double gain) => 20 * Math.Log10(Math.Max(1e-12, gain));
     private static double Coefficient(double milliseconds, int rate) => Math.Exp(-1 / (Math.Max(0.001, milliseconds) * 0.001 * rate));
     private static double ClampFrequency(double hz, int rate) => Math.Clamp(hz, Math.Min(1, rate * 0.01), rate * 0.45);
-    private static double MixSample(double dry, double wet, AudioEffectSettings settings) => dry + (wet - dry) * settings["WetPercent"] / 100;
+    private static double MixSample(double dry, double wet, RenderContext context, double frame)
+    {
+        double amount = context.Automation.Value("WetPercent", frame) / 100;
+        context.UsedWetMix |= amount != 0;
+        return dry + (wet - dry) * amount;
+    }
 
     private static AudioEffectResult Utility(float[] source, AudioEffectSettings settings, RenderContext context)
     {
@@ -116,8 +158,11 @@ public static partial class AudioEffectProcessor
                 }
                 break;
             case AudioEffectKind.Gain:
-                double gain = DbToGain(settings["GainDb"]);
-                for (int i = 0; i < source.Length; i++) { context.Check(i, source.Length); output[i] = (float)(source[i] * gain); }
+                for (int frame = 0; frame < frames; frame++)
+                {
+                    context.Check(frame, frames); double gain = DbToGain(context.Automation.Value("GainDb", frame));
+                    for (int channel = 0; channel < channels; channel++) output[frame * channels + channel] = (float)(source[frame * channels + channel] * gain);
+                }
                 break;
             case AudioEffectKind.Normalize:
                 var means = new double[channels]; var peaks = new double[channels];
@@ -136,10 +181,10 @@ public static partial class AudioEffectProcessor
                         peaks[channel] = Math.Max(peaks[channel], Math.Abs(source[frame * channels + channel] - means[channel]));
                 }
                 if (!settings.Flag("IndependentChannels")) Array.Fill(peaks, peaks.Max());
-                double target = DbToGain(settings["TargetDb"]);
                 for (int frame = 0; frame < frames; frame++)
                 {
                     context.Check(frame, frames);
+                    double target = DbToGain(context.Automation.Value("TargetDb", frame));
                     for (int channel = 0; channel < channels; channel++)
                         output[frame * channels + channel] = peaks[channel] > 1e-12
                             ? (float)((source[frame * channels + channel] - means[channel]) * target / peaks[channel]) : 0;
@@ -157,22 +202,28 @@ public static partial class AudioEffectProcessor
                     {
                         1 => Math.Sin(t * Math.PI / 2), 2 => t * t * (3 - 2 * t), 3 => (Math.Exp(t * 5) - 1) / (Math.Exp(5) - 1), _ => t
                     };
+                    if (context.Automation.Has(EffectCurveTargets.FadeEnvelope)) envelope = context.Automation.Value(EffectCurveTargets.FadeEnvelope, frame);
                     for (int channel = 0; channel < channels; channel++) output[frame * channels + channel] = (float)(source[frame * channels + channel] * envelope);
                 }
                 break;
             case AudioEffectKind.StereoWidth:
                 source.CopyTo(output, 0);
-                double width = settings["WidthPercent"] / 100;
                 var bassFilters = Enumerable.Range(0, channels / 2).Select(_ => Biquad.LowPass(ClampFrequency(settings["MonoBassHz"], context.Rate), context.Rate)).ToArray();
                 for (int frame = 0; frame < frames; frame++)
                 {
                     context.Check(frame, frames);
+                    double width = context.Automation.Value("WidthPercent", frame) / 100, monoBass = context.Automation.Value("MonoBassHz", frame);
+                    if (context.Automation.Has("MonoBassHz"))
+                    {
+                        Biquad coefficients = Biquad.LowPass(ClampFrequency(monoBass, context.Rate), context.Rate);
+                        for (int pair = 0; pair < bassFilters.Length; pair++) bassFilters[pair].Reconfigure(coefficients);
+                    }
                     for (int channel = 0; channel + 1 < channels; channel += 2)
                     {
                         int index = frame * channels + channel;
                         double mid = (source[index] + (double)source[index + 1]) * 0.5;
                         double side = (source[index] - (double)source[index + 1]) * 0.5;
-                        if (settings["MonoBassHz"] > 0) side -= bassFilters[channel / 2].Process(side);
+                        if (monoBass > 0) side -= bassFilters[channel / 2].Process(side);
                         output[index] = (float)(mid + side * width); output[index + 1] = (float)(mid - side * width);
                     }
                 }
@@ -186,6 +237,7 @@ public static partial class AudioEffectProcessor
     {
         int inputFrames = source.Length / context.Channels;
         int targetFrames = EnsureLength(inputFrames * settings["Factor"], context.Channels);
+        context.SourceAtOutput = frame => frame / settings["Factor"];
         if (targetFrames == inputFrames && !settings.Flag("TrimSilence")) return new(source, context.Channels);
         int fftSize = 256 << settings.Choice("FftSize");
         float[] output;

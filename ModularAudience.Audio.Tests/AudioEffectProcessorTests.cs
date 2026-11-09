@@ -24,7 +24,7 @@ public sealed class AudioEffectProcessorTests
     [TestMethod]
     public void Catalog_HasEveryRequestedEffectAndValidDistinctFactoryProfiles()
     {
-        Assert.AreEqual(36, AudioEffectCatalog.All.Count);
+        Assert.AreEqual(37, AudioEffectCatalog.All.Count);
         Assert.AreEqual(9, AudioEffectCatalog.All.Select(effect => effect.Group).Distinct().Count());
         CollectionAssert.AreEquivalent(Enum.GetValues<AudioEffectKind>(), AudioEffectCatalog.All.Select(effect => effect.Kind).ToArray());
         foreach (AudioEffectDefinition definition in AudioEffectCatalog.All.Where(effect => effect.Kind != AudioEffectKind.AutoTune))

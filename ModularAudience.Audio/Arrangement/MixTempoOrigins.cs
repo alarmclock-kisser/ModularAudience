@@ -1,6 +1,7 @@
 using ModularAudience.Audio.Processing;
 using ModularAudience.Audio.Effects;
 using ModularAudience.Audio.Effects.AutoTune;
+using ModularAudience.Audio.Effects.Curves;
 using System.Text.Json;
 
 namespace ModularAudience.Audio.Arrangement;
@@ -104,6 +105,22 @@ public static class MixTempoOrigins
             [new MixEffectRegion(lane.Id, start, end, recipe.ClipIds.ToHashSet())], token).ConfigureAwait(false);
         MixEffectInput input = session.Inputs.Single();
         var execution = new AudioEffectExecutionOptions { MaximumThreads = Math.Clamp(settings?.Threads ?? AudioEffectExecutionOptions.DefaultMaximumThreads, 1, Environment.ProcessorCount) };
+        var automation = recipe.Effect?.Automation ?? recipe.AutoTune?.Automation;
+        if (automation?.HasEnabledCurves == true)
+        {
+            if (recipe.CurveScope is null) execution = execution with { CurveScope = session.CreateCurveScope(0, automation.Timing, token) };
+            else
+            {
+                int frames = input.Samples.Length / input.Channels;
+                double scale = frames / Math.Max(1, Math.Round((recipe.End - recipe.Start) * MixEffectEditSession.SampleRate));
+                EffectCurveSpan[] Resize(IReadOnlyList<EffectCurveSpan> spans) => spans
+                    .Select(span => new EffectCurveSpan(Math.Clamp((int)Math.Round(span.Start * scale), 0, frames), Math.Clamp((int)Math.Round(span.End * scale), 0, frames)))
+                    .Where(span => span.End > span.Start).ToArray();
+                execution = execution with { CurveScope = new(Resize(recipe.CurveScope.Segments),
+                    recipe.CurveScope.SelectionSegments is null ? null : Resize(recipe.CurveScope.SelectionSegments),
+                    recipe.CurveScope.AudibleSegments is null ? null : Resize(recipe.CurveScope.AudibleSegments)) };
+            }
+        }
         if (recipe.Effect is not null)
             return await AudioEffectProcessor.ProcessAsync(input.Samples, MixEffectEditSession.SampleRate, input.Channels, recipe.Effect,
                 cancellationToken: token, execution: execution).ConfigureAwait(false);

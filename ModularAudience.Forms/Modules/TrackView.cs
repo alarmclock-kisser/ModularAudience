@@ -101,6 +101,11 @@ namespace ModularAudience.Forms.Modules
         private readonly int designerWaveWidth;
 
         public TrackView(AudioObj audio, AudioCollection? sourceCollection = null)
+            : this(audio, sourceCollection, showOnCreate: true)
+        {
+        }
+
+        internal TrackView(AudioObj audio, AudioCollection? sourceCollection, bool showOnCreate)
         {
             this.InitializeComponent();
             Hints.HintContent.Apply(this.toolTip_trackView, this, Hints.HintContent.Track);
@@ -183,7 +188,14 @@ namespace ModularAudience.Forms.Modules
 
             WindowMain.TrackViews.Add(this);
 
-            this.Show();
+            if (showOnCreate) { this.Show(); }
+            else
+            {
+                // Close must take the normal FormClosing cleanup path even before a
+                // batch-imported window has ever been shown (timers, audio, registry).
+                _ = this.Handle;
+                this.frameTimer.Stop();
+            }
         }
 
         private async void TrackView_FormClosing(object? sender, FormClosingEventArgs e)
