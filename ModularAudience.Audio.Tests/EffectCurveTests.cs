@@ -41,8 +41,8 @@ public sealed class EffectCurveTests
     [DataRow("step(0.5,x)", 0.5, 1d)]
     [DataRow("abs(-x)+floor(0.9)+ceil(0.1)/4", 0.25, 0.5)]
     [DataRow("pow(x,2)+(5%2)/4", 0.5, 0.5)]
-    [DataRow("2*x-0.5", 0d, 0d)]
-    [DataRow("2*x-0.5", 1d, 1d)]
+    [DataRow("2*x-0.5", 0d, -0.5d)]
+    [DataRow("2*x-0.5", 1d, 1.5d)]
     public void Equations_RespectPrecedenceFunctionsAndClamping(string expression, double x, double expected) =>
         Assert.AreEqual(expected, new EffectCurve { Equation = expression }.Compile().At(x), 1e-10);
 

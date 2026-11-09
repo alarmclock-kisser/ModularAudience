@@ -50,11 +50,26 @@ public static class InstrumentSampleSynth
                     }
                 }
                 double tailFade = Math.Min(1, (frames - i) / Math.Max(1d, rate * 0.01));
-                value *= tailFade;
+                // Short fade-in avoids start clicks when the attack is (near) zero.
+                double fadeIn = Math.Min(1, t / 0.003);
+                value *= tailFade * fadeIn;
                 data[i * channels + c] = double.IsFinite(value) ? (float)Math.Clamp(value, -8, 8) : 0;
                 peak = Math.Max(peak, Math.Abs(data[i * channels + c]));
             }
         }
+        // Remove DC offset so low/deep voices do not accumulate a one-sided bias that
+        // clips or clicks on playback (common with FM/bass voices).
+        for (int c = 0; c < channels; c++)
+        {
+            double sum = 0; int count = 0;
+            for (int i = c; i < data.Length; i += channels) { sum += data[i]; count++; }
+            if (count == 0) continue;
+            float mean = (float)(sum / count);
+            for (int i = c; i < data.Length; i += channels) data[i] -= mean;
+        }
+        // Recompute peak after DC removal.
+        peak = 0;
+        for (int i = 0; i < data.Length; i++) peak = Math.Max(peak, Math.Abs(data[i]));
         // Attenuate only: retain attack/sustain and character differences, never amplify near-silent tails.
         double level = s.GainPercent / 100 * (peak > 0.95 ? 0.95 / peak : 1);
         for (int i = 0; i < data.Length; i++)
@@ -77,7 +92,9 @@ public static class InstrumentSampleSynth
     }
     private static double Envelope(InstrumentSynthSettings s, double t)
     {
-        double attack = s.AttackMs / 1000;
+        // A zero (or near-zero) attack produces an instant full-amplitude step -> click.
+        // Enforce a tiny minimum attack so the envelope always ramps from silence.
+        double attack = Math.Max(s.AttackMs / 1000.0, 0.005);
         double held = Math.Max(0, Math.Min(t, s.GateSeconds) - attack);
         double sustain = s.SustainPercent / 100;
         double decay = Math.Exp(-held / Math.Max(0.01, s.DecaySeconds));

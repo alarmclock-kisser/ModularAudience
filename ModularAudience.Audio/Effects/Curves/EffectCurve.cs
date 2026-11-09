@@ -7,7 +7,7 @@ public enum EffectCurveMode { Equation, Checkpoints }
 public enum EffectCurveInterpolation { Linear, Smooth, Hold }
 public sealed record EffectCurvePoint(double X, double Y);
 
-/// <summary>A portable, effect-independent shape. Both axes are normalized; finite overshoot is clamped to 0..1.</summary>
+/// <summary>A portable, effect-independent shape. x is normalized to 0..1; y may extend beyond 0..1 to reach parameter extremes or negative values.</summary>
 public sealed record EffectCurve
 {
     public EffectCurveMode Mode { get; init; }
@@ -54,8 +54,8 @@ public sealed record EffectCurve
         else
         {
             EffectCurvePoint[] points = this.Points.Select(point => point with { }).ToArray();
-            double first = Math.Clamp(points[0].Y, 0, 1);
-            constant = points.All(point => Math.Clamp(point.Y, 0, 1) == first);
+            double first = points[0].Y;
+            constant = points.All(point => point.Y == first);
             EffectCurveInterpolation interpolation = this.Interpolation;
             evaluate = x =>
             {
@@ -88,6 +88,6 @@ public sealed class CompiledEffectCurve
         double value = this.evaluate(Math.Clamp(x, 0, 1));
         if (!double.IsFinite(value) || Math.Abs(value) > 1e12)
             throw new ArgumentException($"The curve is undefined or excessively large near x={x.ToString("G8", CultureInfo.InvariantCulture)}. Avoid poles, division by zero and invalid logarithms/roots.");
-        return Math.Clamp(value, 0, 1);
+        return value;
     }
 }

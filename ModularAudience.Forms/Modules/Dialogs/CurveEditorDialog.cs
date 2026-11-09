@@ -44,7 +44,7 @@ internal sealed class CurveEditorDialog : Form
         root.RowStyles.Add(new(SizeType.Absolute, 245)); root.RowStyles.Add(new(SizeType.Percent, 100));
         root.RowStyles.Add(new(SizeType.Absolute, 48)); root.RowStyles.Add(new(SizeType.AutoSize)); root.RowStyles.Add(new(SizeType.AutoSize));
         root.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(950, 0), Text =
-            "x (or t) is normalized source time, 0–1. y is a normalized shape, clamped to 0–1 before mapping to the parameter range.\n" +
+            "x (or t) is normalized source time, 0–1. y is a (possibly negative) shape value; it is mapped to the parameter range and clamped to that range, not to 0–1.\n" +
             (target.InterpolateSpeed ? "Time Stretch interpolates SPEED, not duration: 1× starts at source BPM; the end follows Target BPM. Curves always use continuous FFT-PV." :
             "Each option has its own independent curve. Multiple curves can be active together.") }, 0, 0);
         root.Controls.Add(this.presets, 0, 1);
@@ -75,7 +75,7 @@ internal sealed class CurveEditorDialog : Form
             "min(v1,v2), max(v1,v2), pow(v,p), clamp(v,min,max), smoothstep(x), step(edge,x). Trig uses radians.\n" +
             "Examples: 0.5+0.5*sin(2*pi*(f*x+p)); x^a; exp(-a*x). Undefined arithmetic/poles are rejected, not silently repaired." }, 0, 2);
         equationPage.Controls.Add(equationLayout);
-        this.points.Columns.Add("X", "x — position (0–1)"); this.points.Columns.Add("Y", "y — amount (0–1)");
+        this.points.Columns.Add("X", "x — position (0–1)"); this.points.Columns.Add("Y", "y — shape (may be negative)");
         this.interpolation.Items.AddRange(["Linear", "Smooth S-curve", "Hold / steps"]); this.interpolation.SelectedIndex = 0;
         var pointActions = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true };
         Button add = new() { Name = "addCurvePoint", Text = "Add checkpoint", AutoSize = true }, remove = new() { Name = "removeCurvePoint", Text = "Remove selected", AutoSize = true };
@@ -234,10 +234,22 @@ internal sealed class CurveEditorDialog : Form
         using var grid = new Pen(Color.FromArgb(65, 72, 81)); using var line = new Pen(Color.DeepSkyBlue, 2);
         for (int i = 0; i <= 4; i++) { float t = i / 4f; g.DrawLine(grid, area.Left, area.Top + area.Height * t, area.Right, area.Top + area.Height * t);
             g.DrawLine(grid, area.Left + area.Width * t, area.Top, area.Left + area.Width * t, area.Bottom); }
-        g.DrawString("1", this.Font, Brushes.Gainsboro, 18, area.Top - 6); g.DrawString("0", this.Font, Brushes.Gainsboro, 18, area.Bottom - 8);
+        double minY = 0, maxY = 1;
+        if (this.plotted is not null && this.plotted.Length > 0)
+        {
+            minY = this.plotted.Min(); maxY = this.plotted.Max();
+            if (maxY - minY < 0.1) { minY -= 0.5; maxY += 0.5; }
+            minY = Math.Floor(minY * 2) / 2; maxY = Math.Ceiling(maxY * 2) / 2;
+            if (maxY - minY < 0.5) { minY -= 0.5; maxY += 0.5; }
+        }
+        double range = Math.Max(0.0001, maxY - minY);
+        for (int i = 0; i <= 4; i++) { float t = i / 4f; float yy = area.Top + area.Height * t; g.DrawLine(grid, area.Left, yy, area.Right, yy);
+            float xx = area.Left + area.Width * t; g.DrawLine(grid, xx, area.Top, xx, area.Bottom);
+            double val = maxY - range * t; g.DrawString(val.ToString("G3", CultureInfo.InvariantCulture), this.Font, Brushes.Gainsboro, 2, yy - 6); }
         g.DrawString("x = 0", this.Font, Brushes.Gainsboro, area.Left, area.Bottom + 3); g.DrawString("x = 1", this.Font, Brushes.Gainsboro, area.Right - 40, area.Bottom + 3);
-        g.DrawString("Normalized curve (0–1)", this.Font, Brushes.Gainsboro, area.Left, 2);
-        if (this.plotted is not null) g.DrawLines(line, this.plotted.Select((y, i) => new PointF(area.Left + area.Width * i / (this.plotted.Length - 1), area.Bottom - area.Height * (float)y)).ToArray());
+        g.DrawString("Curve shape (y may be negative)", this.Font, Brushes.Gainsboro, area.Left, 2);
+        if (this.plotted is not null) g.DrawLines(line, this.plotted.Select((y, i) => new PointF(area.Left + area.Width * i / (this.plotted.Length - 1),
+            (float)(area.Bottom - area.Height * (y - minY) / range))).ToArray());
     }
     protected override void Dispose(bool disposing) { if (disposing) { this.tips.Dispose(); this.equation.Font.Dispose(); } base.Dispose(disposing); }
 }
