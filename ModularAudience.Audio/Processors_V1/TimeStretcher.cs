@@ -49,6 +49,11 @@ namespace ModularAudience.Audio.Processors_V1
                             adjustBpm: true);
             }
 
+            // INVARIANT (do not change): compression (factor < 1.0, "faster/shorter") MUST
+            // use the normal V1 fast pipeline below. TimeStretchSlowAsync is the *expansion*
+            // (factor >= 1.5, "slower/longer") pipeline and sounds metallic/warbling when
+            // applied to compression. Routing factor < 1.0 into SlowAsync caused audible
+            // artifacts; the guard in TimeStretchSlowAsync enforces this at runtime too.
             // Restore the original routing: compression (< 1) uses the normal V1
             // paths below, honoring channeled/worker selection. Slow is for expansion.
                     if (factor >= 1.5)

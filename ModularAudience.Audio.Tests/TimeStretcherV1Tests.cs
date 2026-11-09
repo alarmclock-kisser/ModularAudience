@@ -8,6 +8,24 @@ namespace ModularAudience.Audio.Tests
     public sealed class TimeStretcherV1Tests
     {
         [TestMethod]
+        public async Task CompressionBelowOneNeverUsesSlowPipeline()
+        {
+            // Regression guard: factor < 1.0 (compression/faster) must run the fast
+            // legacy pipeline and never TimeStretchSlowAsync (which sounds metallic).
+            const int sampleRate = 44100;
+            using var audio = new AudioObj
+            {
+                Data = Enumerable.Range(0, sampleRate * 2).Select(i => 0.3f * MathF.Sin(2 * MathF.PI * 440 * i / sampleRate)).ToArray(),
+                SampleRate = sampleRate, Channels = 1, Bpm = 100
+            };
+            await TimeStretcher.TimeStretchAllThreadsAsync(audio, 8192, 0.5f, 0.5,
+                normalize: 0.8f, maxWorkers: Environment.ProcessorCount, channeled: false);
+            Assert.IsTrue(audio.Metrics.Keys.Any(key => key.Equals("chunk", StringComparison.OrdinalIgnoreCase)),
+                "Compression (factor < 1.0) must run the legacy fast pipeline, not TimeStretchSlowAsync.");
+            Assert.IsTrue(audio.Data.All(float.IsFinite));
+        }
+
+        [TestMethod]
         public async Task CompressionPointSevenUsesLegacyFastPipeline()
         {
             const int sampleRate = 44100;
