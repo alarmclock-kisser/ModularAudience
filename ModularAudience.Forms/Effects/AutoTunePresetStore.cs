@@ -97,6 +97,18 @@ internal sealed class AutoTunePresetStore
         return removed;
     });
 
+    internal AutoTunePreset Rename(string oldName, string requestedName) => this.WithLock(() =>
+    {
+        string name = requestedName.Trim(); ValidateName(name);
+        List<AutoTunePreset> presets = this.Read();
+        int index = presets.FindIndex(preset => !preset.IsBuiltIn && preset.Name.Equals(oldName, StringComparison.OrdinalIgnoreCase));
+        if (index < 0) throw new KeyNotFoundException("The selected user preset no longer exists.");
+        if (presets.Where((_, position) => position != index).Any(preset => !preset.IsBuiltIn && preset.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("A user preset already has that name. Rename never overwrites another preset.");
+        AutoTunePreset renamed = presets[index] with { Name = name }; presets[index] = renamed;
+        this.Write(presets); return renamed;
+    });
+
     private List<AutoTunePreset> Read()
     {
         if (!File.Exists(this.FilePath)) return [];

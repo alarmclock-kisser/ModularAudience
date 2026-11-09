@@ -14,6 +14,8 @@ internal sealed record ApplicationPreferences
     public int ExportBits { get; init; } = 16;
     public string? WorkingDirectory { get; init; }
     public float LogFontSize { get; init; } = DefaultLogFontSize;
+    public bool KeepStructure { get; init; } = true;
+    public bool AllInOneBag { get; init; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalSettings { get; init; }

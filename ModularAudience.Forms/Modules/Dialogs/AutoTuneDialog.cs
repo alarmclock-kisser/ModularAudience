@@ -9,7 +9,9 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 
 internal sealed record AutoTuneDialogContext(AudioEffectEditSession Session, string TrackName, AutoTuneSettings Defaults,
     Func<float[], CancellationToken, Task> ApplyAsync, Func<Task>? BeforePreviewAsync = null,
-    Func<(double Bpm, double ScannedBpm)>? ReadTrackTempo = null);
+    Func<(double Bpm, double ScannedBpm)>? ReadTrackTempo = null,
+    string? ScopeDescription = null,
+    Func<AutoTuneSettings, AudioEffectExecutionOptions, IProgress<double>, CancellationToken, Task<AutoTuneResult>>? RenderAsync = null);
 
 /// <summary>Modeless parameter/preset editor. Preview and rendering never mutate the editing target.</summary>
 internal sealed class AutoTuneDialog : Form
@@ -19,14 +21,10 @@ internal sealed class AutoTuneDialog : Form
     private readonly IEffectPreviewPlayer preview;
     private readonly Func<AutoTuneSettings, IProgress<double>, CancellationToken, Task<AutoTuneResult>> render;
     private readonly AutoTuneParameterEditor parameters = new() { Dock = DockStyle.Fill };
-    private readonly ComboBox presets = new()
-    {
-        Name = "autoTunePresets", Width = 270, DropDownWidth = 540, MaxDropDownItems = 20,
-        DropDownStyle = ComboBoxStyle.DropDownList
-    };
-    private readonly TextBox presetName = new() { Name = "presetName", Width = 170, PlaceholderText = "Preset name (optional)" };
-    private readonly Button save = new() { Name = "savePreset", Text = "Save", AutoSize = true };
-    private readonly Button delete = new() { Name = "deletePreset", Text = "Delete", AutoSize = true };
+    private ComboBox presets => this.presetBar.Presets;
+    private TextBox presetName => this.presetBar.PresetName;
+    private Button save => this.presetBar.SaveButton;
+    private Button delete => this.presetBar.DeleteButton;
     private readonly Button prehear = new() { Name = "prehear", Text = "Prehear", AutoSize = true };
     private readonly Button accept = new() { Name = "acceptEffect", Text = "OK / Apply", AutoSize = true };
     private readonly CheckBox dry = new() { Text = "Prehear original (bypass)", AutoSize = true };
@@ -38,7 +36,7 @@ internal sealed class AutoTuneDialog : Form
     };
     private readonly ProgressBar progress = new() { Width = 180, Maximum = 1000 };
     private readonly Label status = new() { Dock = DockStyle.Fill, AutoEllipsis = true, Text = "Ready. Prehear does not change the track." };
-    private readonly FlowLayoutPanel presetBar = new() { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
+    private readonly EffectPresetBar presetBar = new("autoTunePresets");
     private readonly System.Windows.Forms.Timer playbackTimer = new() { Interval = 60 };
     private readonly ToolTip presetTips = new();
     private readonly CancellationTokenSource lifetime = new();
@@ -54,9 +52,13 @@ internal sealed class AutoTuneDialog : Form
         this.context = context;
         this.store = store ?? new AutoTunePresetStore();
         this.preview = preview ?? new EffectPreviewPlayer();
-        this.render = render ?? ((settings, report, token) => AutoTuneProcessor.ProcessAsync(context.Session.Input,
-            context.Session.SampleRate, context.Session.Channels, settings, report, token,
-            new AudioEffectExecutionOptions { MaximumThreads = (int)this.maxThreads.Value }));
+        this.render = render ?? ((settings, report, token) =>
+        {
+            var execution = new AudioEffectExecutionOptions { MaximumThreads = (int)this.maxThreads.Value };
+            return context.RenderAsync is null ? AutoTuneProcessor.ProcessAsync(context.Session.Input,
+                context.Session.SampleRate, context.Session.Channels, settings, report, token, execution)
+                : context.RenderAsync(settings, execution, report, token);
+        });
         this.Name = "AutoTuneDialog";
         this.Text = "Auto Tune — " + context.TrackName;
         this.ClientSize = new Size(860, 710);
@@ -69,17 +71,15 @@ internal sealed class AutoTuneDialog : Form
         root.RowStyles.Add(new(SizeType.Absolute, 44)); root.RowStyles.Add(new(SizeType.AutoSize));
         double start = context.Session.StartSample / (double)(context.Session.SampleRate * context.Session.Channels);
         double seconds = context.Session.SampleCount / (double)(context.Session.SampleRate * context.Session.Channels);
+        string scope = context.ScopeDescription ?? $"{(context.Session.IsSelection ? "Selection" : "Whole track")}: {start:F3}s–{start + seconds:F3}s, " +
+            $"{context.Session.SampleRate} Hz / {context.Session.Channels} ch (snapshot taken when opened).";
         root.Controls.Add(new Label
         {
             AutoSize = true, MaximumSize = new Size(810, 0), Text =
-                $"{(context.Session.IsSelection ? "Selection" : "Whole track")}: {start:F3}s–{start + seconds:F3}s, " +
-                $"{context.Session.SampleRate} Hz / {context.Session.Channels} ch (snapshot taken when opened).\n" +
+                scope + "\n" +
                 "Monophonic voice/melody correction, not polyphonic separation. Preview uses the source sample rate."
         }, 0, 0);
-        this.presetBar.Controls.Add(new Label { Text = "Presets", AutoSize = true, Margin = new Padding(3, 7, 3, 0) });
-        this.presetBar.Controls.AddRange([this.presets, this.presetName, this.save, this.delete]);
-        var defaults = new Button { Text = "Defaults", AutoSize = true };
-        this.presetBar.Controls.Add(defaults);
+        Button defaults = this.presetBar.DefaultsButton;
         root.Controls.Add(this.presetBar, 0, 1);
         root.Controls.Add(this.parameters, 0, 2);
         var hearBar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
@@ -96,22 +96,12 @@ internal sealed class AutoTuneDialog : Form
         this.maxThreads.ValueChanged += (_, _) => this.InvalidateResult();
         this.save.Click += (_, _) => this.PresetAction(this.SavePreset);
         this.delete.Click += (_, _) => this.PresetAction(this.DeletePreset);
+        this.presetBar.LoadButton.Click += (_, _) => this.PresetAction(this.LoadSelectedPreset);
+        this.presetBar.RenameButton.Click += (_, _) => this.PresetAction(this.RenamePreset);
         defaults.Click += (_, _) => this.ApplySettingsWithTrackTempo(this.context.Defaults);
         this.presets.SelectedIndexChanged += (_, _) =>
         {
-            if (!this.refreshingPresets && this.presets.SelectedItem is AutoTunePreset selected) this.PresetAction(() =>
-            {
-                AutoTunePreset preset = selected.IsBuiltIn ? selected : this.store.Load(selected.Name);
-                // Saving an edited default must create a user variant, never
-                // overwrite an existing user preset that happens to share its name.
-                this.presetName.Text = preset.IsBuiltIn ? string.Empty : preset.Name;
-                this.ApplySettingsWithTrackTempo(preset.Parameters);
-                string? description = AutoTuneBuiltInPresets.Description(preset.BuiltInId);
-                this.presetTips.SetToolTip(this.presets, description ?? "Your saved Auto Tune preset.");
-                this.status.Text = preset.IsBuiltIn
-                    ? $"Default: {preset.Name}. {description} Save with a new name (or blank for Preset#N) to keep your variant."
-                    : "Loaded preset: " + preset.Name;
-            });
+            if (!this.refreshingPresets) this.PresetAction(this.LoadSelectedPreset);
             this.UpdateButtons();
         };
         this.presets.DropDown += (_, _) => this.PresetAction(() => this.RefreshPresets(this.presets.SelectedItem as AutoTunePreset));
@@ -241,6 +231,26 @@ internal sealed class AutoTuneDialog : Form
         this.status.Text = "Preset deleted; parameters reset to defaults.";
     }
 
+    internal void LoadSelectedPreset()
+    {
+        if (this.presets.SelectedItem is not AutoTunePreset selected) return;
+        AutoTunePreset preset = selected.IsBuiltIn ? selected : this.store.Load(selected.Name);
+        this.presetName.Text = preset.IsBuiltIn ? string.Empty : preset.Name;
+        this.ApplySettingsWithTrackTempo(preset.Parameters);
+        string? description = AutoTuneBuiltInPresets.Description(preset.BuiltInId);
+        this.presetTips.SetToolTip(this.presets, description ?? "Your saved Auto Tune preset.");
+        this.status.Text = preset.IsBuiltIn
+            ? $"Default: {preset.Name}. {description} Save with a new name (or blank for Preset#N) to keep your variant."
+            : "Loaded preset: " + preset.Name;
+    }
+
+    internal void RenamePreset()
+    {
+        if (this.presets.SelectedItem is not AutoTunePreset { IsBuiltIn: false } selected) return;
+        AutoTunePreset renamed = this.store.Rename(selected.Name, this.presetName.Text);
+        this.presetName.Text = renamed.Name; this.RefreshPresets(renamed); this.status.Text = "Renamed preset: " + renamed.Name;
+    }
+
     private void RefreshPresets(AutoTunePreset? selected)
     {
         this.refreshingPresets = true;
@@ -278,8 +288,8 @@ internal sealed class AutoTuneDialog : Form
         if (this.disposed) return;
         bool busy = this.active is not null;
         this.accept.Enabled = this.prehear.Enabled = !busy;
-        this.save.Enabled = !busy;
-        this.delete.Enabled = !busy && this.presets.SelectedItem is AutoTunePreset { IsBuiltIn: false };
+        this.presetBar.UpdateState(busy, this.presets.SelectedItem is AutoTunePreset,
+            this.presets.SelectedItem is AutoTunePreset { IsBuiltIn: false });
         this.parameters.Enabled = this.presetBar.Enabled = !this.committing;
         this.maxThreads.Enabled = !this.committing;
     }

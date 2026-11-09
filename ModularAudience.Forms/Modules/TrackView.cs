@@ -193,7 +193,7 @@ namespace ModularAudience.Forms.Modules
 
             e.Cancel = true;
             this.closeCleanupStarted = true;
-            this.autoTuneDialog?.Close();
+            this.CloseEffectWindows();
             this.LeaveCurrentMix();
             this.FormClosing -= this.TrackView_FormClosing;
 
@@ -2919,7 +2919,7 @@ namespace ModularAudience.Forms.Modules
             {
                 this.OriginalAudio.Undo();
                 LogManager.Log($"Undo: AudioObj.Data reverted in '{this.OriginalAudio.Name}'");
-                this.ClearSelectionMarkers();
+                this.SynchronizeEffectSelectionMarkers();
                 this.RecalculateLoopFraction();
                 this.ApplyLoopFractionToAudio();
                 this.AlignViewToCurrentPosition();
@@ -2938,7 +2938,7 @@ namespace ModularAudience.Forms.Modules
             {
                 this.OriginalAudio.Redo();
                 LogManager.Log($"Redo: AudioObj.Data restored in '{this.OriginalAudio.Name}'");
-                this.ClearSelectionMarkers();
+                this.SynchronizeEffectSelectionMarkers();
                 this.RecalculateLoopFraction();
                 this.ApplyLoopFractionToAudio();
                 this.AlignViewToCurrentPosition();

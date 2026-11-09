@@ -1,12 +1,22 @@
-# TrackView effects and Auto Tune
+# TrackView effects
 
 ## Menu and dialog convention — also for future effects
 
 The waveform PictureBox context menu contains:
 
 ```text
-Apply Effects ...
-  Auto Tune ...
+Apply Effect ...
+  Pitch & Tuning       → Auto Tune ..., Pitch Shift ...
+  Time & Speed         → Time Stretch ...
+  Reverb & Space       → Room / Hall / Plate / Spring / Chamber / Shimmer reverb ...
+  Delay & Echo         → Single / Slapback / Ping-Pong / Multi-Tap delay ...
+  Dynamics             → Compressor ..., Limiter ..., Gate ..., Expander ..., De-Esser ...
+  Distortion & Lo-Fi   → Bitcrusher ..., Sample Rate reducer ..., Overdrive ...,
+                        Saturation ..., Tape saturation ...
+  Modulation           → Chorus ..., Flanger ..., Phaser ..., Tremolo ...
+  Stereo & Utility     → Gain ..., Normalize ..., Fade in ..., Fade out ...,
+                        Stereo width ..., Convert to mono, Reverse
+  Noise & Repair       → Hum removal ..., Noise reduction ...
 ```
 
 New effect entries belong in this submenu. Use `EffectMenuFactory.Create`:
@@ -14,8 +24,12 @@ an effect that opens a parameter window must end with **` ...`** (space plus
 three dots); an immediate effect without parameters must not. Parameter forms
 may be named `...Dialog`, but open them with **`Show(owner)`**, not `ShowDialog`.
 They must remain modeless and close/cancel their work when their TrackView closes.
-The existing normalize/fade/trim commands are legacy commands and are not moved
-or redesigned as part of this first effect.
+The existing normalize/fade/trim shortcuts remain available as legacy commands.
+`AudioEffectCatalog` and `EffectMenuFactory.CreateApplyMenu` define this hierarchy
+once, including the distinction between parameterized and immediate actions.
+MixTrackView's audio-selection/segment menu uses the same factory and dialogs;
+its empty-space menu remains separate. See `Modules/MixTrackView.md` for lane-local
+range/gap processing, non-destructive asset replacement and mix-level undo history.
 
 Keep DSP, parameter/preset persistence, preview playback, and TrackView wiring
 separate. Reuse the edit-session and menu infrastructure rather than placing
@@ -47,8 +61,86 @@ processing loops or file-store code in the TrackView event handler.
 - TrackView remains an editing clone: the normal **Apply / Ctrl+S** operation
   commits it back to its source collection (and therefore to co-op if shared).
 
-For future duration-changing effects, define selection/loop/position mapping
-explicitly and test undo/redo of both samples and metadata before adding them.
+Duration-changing effects **splice**, not overwrite: prefix + rendered region +
+unchanged suffix. Following audio ripples by the exact frame delta. Selection,
+navigation, playback position, loops and beat-grid positions are mapped piecewise
+(before = fixed, inside = scaled, after = shifted), frame-aligned. History retains
+samples, channel format, length/duration, selection, loop/navigation state, beat
+grid and musical metadata. Whole-track time changes adapt known BPM tags; local
+changes do not pretend that the entire track now has a different uniform tempo.
+
+## Shared effect dialogs and DSP
+
+All parameter effects use the same preset bar: selector (loads immediately),
+**Load**, name field, **Save**, **Rename**, **Delete**, **Defaults**. Rename requires
+a selected user preset and a new name, never overwrites another user preset, and
+preserves unsaved sound edits. Factory entries cannot be renamed or deleted.
+Dropdown refresh preserves unsaved parameters. Max threads and preview switches
+are runtime controls, not preset sound parameters.
+
+`EffectOptionsEditor` provides the shared cancellable render, cached RAM preview,
+bypass/loop comparison and single-commit lifecycle. Each window is modeless and
+owned by its editing window. `PitchShiftDialog` and the existing `TimeStretchDialog`
+have effect-mode constructors using this editor; their older batch and configure-only
+workflows remain available. Time Stretch also offers linked source/target BPM
+helpers; only the duration factor, not live source metadata, belongs to its preset.
+
+Pitch Shift explicitly selects the existing windowed-sinc resampler (duration
+changes by `2^(-semitones/12)`) or its existing phase-locked FFT-PV compensation
+(exact original frame count). Cancellation and a worker limit reach both paths.
+The vocoder streams successive spectra rather than storing every analysis window,
+so working memory does not grow with window count. Time Stretch offers that same
+continuous phase-locked vocoder or isolated-per-channel legacy V1 chunk processing.
+Legacy V1 cancellation is checked around its non-cancellable processing pass.
+
+`AudioEffectProcessor` contains independent DSP routes:
+
+- Six algorithmic reverbs: differently tuned orthogonal feedback-delay tanks,
+  early reflections, diffusion/damping, plate modulation, dispersive spring
+  all-passes, and real dual-read-head pitch-shift feedback for shimmer. These are
+  algorithmic models, not measured impulse responses or hardware emulations.
+- Filtered feedback delays, stereo-pair cross-feedback ping-pong and rhythmically
+  spaced multi-taps. **Append tail (s)** explicitly sets the inserted tail length;
+  zero crops to the original region. Wet zero bypasses without appending silence.
+- Linked-channel compressor/gate/expander, offline look-ahead **sample-peak**
+  limiter, and band-detected split-band/wideband de-esser. Not true-peak or LUFS tools.
+- Four quantizers in Bitcrusher's combo (round, truncate, mu-law, noise-shaped),
+  optional deterministic TPDF dither, sample/hold or linear rate reduction,
+  oversampled clipping/saturation, and tape bias/memory/wow.
+- Fractional-delay chorus/flanger, cascaded all-pass phaser and waveform-selectable
+  amplitude tremolo. Stereo width processes pairs, leaving odd extra channels intact.
+- Peak normalization (optionally per-channel / DC removal), gain, four fade curves,
+  all-channel averaging and frame-wise reverse. Whole-track mono conversion yields
+  one channel. A selected mono conversion duplicates the mono average on existing
+  channels, because channel format cannot change in the middle of a track.
+- Mains/harmonic notch filtering and linked STFT spectral noise subtraction.
+  Noise profiles use quietest frames, a noise-only lead-in, or a fixed spectral
+  floor. Stationary-noise reduction is not source separation; a contaminated noise
+  profile can attenuate wanted sound. Frequency parameters clamp below Nyquist at
+  render time, keeping presets portable between source rates.
+
+No implicit clipping/normalization is applied to arbitrary effects: use the limiter
+when a deliberate drive/feedback/gain combination needs a ceiling. Rendered arrays
+are bounded to 512 MiB per effect; overly large results fail rather than truncate
+the track. Processing and preview never export temporary audio files.
+
+Each new parameterized effect has at least three distinct built-in profiles plus
+persistent user presets at `%APPDATA%\ModularAudience\Effects\<EffectKind>Presets.json`.
+They use complete schema-validated settings and stable factory IDs. Stores seed
+missing built-ins without overwriting existing values, lock across processes,
+write atomically, isolate effects and report malformed files without replacing them.
+Auto Tune keeps its existing typed JSON format and factory catalog below.
+
+## Import preferences
+
+`%APPDATA%\ModularAudience\application-settings.json` persists `KeepStructure`
+(default true) and `AllInOneBag` (default false) immediately on checkbox changes;
+startup and cross-instance refresh restore them without writing them back.
+Structured import collections remember a normalized **full source directory**,
+independent of editable captions or later track file paths. Repeated imports append
+to the matching live local collection (even if it was renamed or emptied); identical
+folder names under different parents remain separate. Closed/remote collections
+are not reused. Failed loads cannot shift later files into the wrong source folder.
 
 ## Auto Tune parameters
 
@@ -201,7 +293,7 @@ effect metadata written to disk; sample processing and preview stay in RAM.
 ## Validation
 
 ```powershell
-dotnet test ModularAudience.Audio.Tests\ModularAudience.Audio.Tests.csproj --filter "FullyQualifiedName~AutoTune|FullyQualifiedName~AudioEffectEditSession"
+dotnet test ModularAudience.Audio.Tests\ModularAudience.Audio.Tests.csproj --filter "FullyQualifiedName~AutoTune|FullyQualifiedName~AudioEffect|FullyQualifiedName~EffectPresetAndDialog|FullyQualifiedName~MixEffect|FullyQualifiedName~StructuredImport|FullyQualifiedName~ApplicationPreferences"
 ```
 
 Tests cover actual pitch correction and intensity, duration and linked stereo,

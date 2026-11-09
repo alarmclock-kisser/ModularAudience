@@ -49,6 +49,10 @@ internal sealed class ApplicationPreferencesStore
 
     internal ApplicationPreferences SetLogFontSize(float size) => this.Update(settings => settings with { LogFontSize = size });
 
+    internal ApplicationPreferences SetKeepStructure(bool enabled) => this.Update(settings => settings with { KeepStructure = enabled });
+
+    internal ApplicationPreferences SetAllInOneBag(bool enabled) => this.Update(settings => settings with { AllInOneBag = enabled });
+
     private ApplicationPreferences Update(Func<ApplicationPreferences, ApplicationPreferences> change) => this.WithLock(() =>
     {
         ApplicationPreferences settings = change(this.Read()).Normalize();

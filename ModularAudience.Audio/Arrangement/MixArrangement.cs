@@ -55,6 +55,10 @@ public sealed class MixClip
     public double FadeIn { get; set; }
     public double FadeOut { get; set; }
     public ClipTempoMode TempoMode { get; set; }
+    // Effect-region bounces already contain the original clip envelope and
+    // overlap crossfades. Do not apply a second automatic envelope to them.
+    [System.ComponentModel.Browsable(false)]
+    public bool HasRenderedEnvelope { get; set; }
 }
 
 public sealed class MixLane

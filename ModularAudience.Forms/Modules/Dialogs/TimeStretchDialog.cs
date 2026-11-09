@@ -50,6 +50,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private static float LastInitialBpm = 120f;
         private const decimal DefaultInitialBpm = 120m;
 
+        // Reuse this dialog for selection-aware effects, without passing a live
+        // AudioObj to either in-place legacy stretcher. Existing batch and
+        // configure-only constructors/workflows below are unchanged.
+        internal TimeStretchDialog(EffectDialogContext context)
+        {
+            EffectDialogHost.Attach(this, context);
+        }
+
         public TimeStretchDialog(TrackView? trackView = null, IEnumerable<AudioObj>? audios = null, IEnumerable<string>? filePaths = null)
         {
             this.InitializeComponent();

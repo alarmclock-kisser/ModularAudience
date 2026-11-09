@@ -30,6 +30,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private float Semitones => (float)this.numericUpDown_semitones.Value;
         private double Percent => (double)this.numericUpDown_percent.Value;
 
+        // The collection/batch constructor below remains available. TrackView's
+        // destructive effect mode uses the common preset/preview/commit editor.
+        internal PitchShiftDialog(EffectDialogContext context)
+        {
+            EffectDialogHost.Attach(this, context);
+            this.Disposed += (_, _) => this.AudioC.Dispose();
+        }
+
 
 
 

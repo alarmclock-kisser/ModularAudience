@@ -19,6 +19,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Label label_renderQuality;
         private ComboBox comboBox_renderQuality;
         private Button button_fromImage;
+        private Button button_merge;
+        private ContextMenuStrip contextMenuStrip_save;
+        private ContextMenuStrip contextMenuStrip_export;
+        private ToolStripMenuItem renderCurrentPageToolStripMenuItem;
+        private ToolStripMenuItem exportCurrentPageToolStripMenuItem;
+        private ToolStripMenuItem exportMergedToolStripMenuItem;
 
         protected override void Dispose(bool disposing)
         {
@@ -47,6 +53,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.comboBox_renderQuality = new ComboBox();
             this.button_fromImage = new Button();
             this.button_export = new Button();
+            this.button_merge = new Button();
+            this.contextMenuStrip_save = new ContextMenuStrip(this.components);
+            this.contextMenuStrip_export = new ContextMenuStrip(this.components);
+            this.renderCurrentPageToolStripMenuItem = new ToolStripMenuItem();
+            this.exportCurrentPageToolStripMenuItem = new ToolStripMenuItem();
+            this.exportMergedToolStripMenuItem = new ToolStripMenuItem();
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_midi).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_track).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_bpm).BeginInit();
@@ -87,6 +99,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_track.Size = new Size(58, 23);
             this.numericUpDown_track.TabIndex = 2;
             this.numericUpDown_track.Value = new decimal(new int[] { 1, 0, 0, 0 });
+            this.toolTip_midi.SetToolTip(this.numericUpDown_track, "Select a MIDI page. Merged, when present, is the last page.");
             this.numericUpDown_track.ValueChanged += this.numericUpDown_track_ValueChanged;
             // 
             // label_bpm
@@ -151,11 +164,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_save
             // 
             this.button_save.Anchor =  AnchorStyles.Bottom | AnchorStyles.Right;
+            this.button_save.ContextMenuStrip = this.contextMenuStrip_save;
             this.button_save.Location = new Point(682, 582);
             this.button_save.Name = "button_save";
             this.button_save.Size = new Size(130, 30);
             this.button_save.TabIndex = 9;
             this.button_save.Text = "Save";
+            this.toolTip_midi.SetToolTip(this.button_save, "Render all original MIDI pages to one audio object.\r\nRight-click to render only the current page (including Merged).");
             this.button_save.Click += this.button_save_Click;
             // 
             // label_status
@@ -202,16 +217,43 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_export
             // 
             this.button_export.Anchor =  AnchorStyles.Bottom | AnchorStyles.Right;
+            this.button_export.ContextMenuStrip = this.contextMenuStrip_export;
             this.button_export.Location = new Point(682, 546);
             this.button_export.Name = "button_export";
             this.button_export.Size = new Size(130, 30);
             this.button_export.TabIndex = 11;
             this.button_export.Text = "Export";
+            this.toolTip_midi.SetToolTip(this.button_export, "Export all original MIDI pages as separate tracks.\r\nRight-click to export the current page or merge all original pages into one track.");
             this.button_export.Click += this.button_export_Click;
-            // 
+            //
+            // button_merge
+            //
+            this.button_merge.Location = new Point(12, 547);
+            this.button_merge.Name = "button_merge";
+            this.button_merge.Size = new Size(98, 23);
+            this.button_merge.TabIndex = 14;
+            this.button_merge.Text = "Merge";
+            this.button_merge.UseVisualStyleBackColor = true;
+            this.button_merge.Click += this.button_merge_Click;
+            //
+            // MIDI output context menus
+            //
+            this.contextMenuStrip_save.Items.Add(this.renderCurrentPageToolStripMenuItem);
+            this.contextMenuStrip_export.Items.AddRange([this.exportCurrentPageToolStripMenuItem, this.exportMergedToolStripMenuItem]);
+            this.renderCurrentPageToolStripMenuItem.Name = "renderCurrentPageToolStripMenuItem";
+            this.renderCurrentPageToolStripMenuItem.Text = "Render this MIDI page only";
+            this.renderCurrentPageToolStripMenuItem.Click += this.renderCurrentPageToolStripMenuItem_Click;
+            this.exportCurrentPageToolStripMenuItem.Name = "exportCurrentPageToolStripMenuItem";
+            this.exportCurrentPageToolStripMenuItem.Text = "Export this MIDI page only";
+            this.exportCurrentPageToolStripMenuItem.Click += this.exportCurrentPageToolStripMenuItem_Click;
+            this.exportMergedToolStripMenuItem.Name = "exportMergedToolStripMenuItem";
+            this.exportMergedToolStripMenuItem.Text = "Export as single MIDI page (merge)";
+            this.exportMergedToolStripMenuItem.Click += this.exportMergedToolStripMenuItem_Click;
+            //
             // MidiWindow
             // 
             this.ClientSize = new Size(824, 624);
+            this.Controls.Add(this.button_merge);
             this.Controls.Add(this.button_export);
             this.Controls.Add(this.button_fromImage);
             this.Controls.Add(this.comboBox_renderQuality);

@@ -14,6 +14,14 @@ public partial class WindowMain
     private LogListZoomController? _logZoom;
     private bool _applyingPreferences;
 
+    private void InitializeImportPreferences()
+    {
+        // Restore before imports can run. Applying a preference must not write it back.
+        this.checkBox_structure.CheckedChanged += (_, _) => this.SaveApplicationPreference(
+            () => this._preferencesStore.SetKeepStructure(this.checkBox_structure.Checked));
+        this.ApplyApplicationPreferences(this._applicationPreferences);
+    }
+
     private ApplicationPreferences LoadInitialPreferences()
     {
         ApplicationPreferences settings;
@@ -102,6 +110,9 @@ public partial class WindowMain
             GlobalExportFormat = settings.ExportFormat.TrimStart('.');
             GlobalExportBits = settings.ExportBits;
             this._logZoom?.Apply(settings.LogFontSize);
+            this.checkBox_structure.Checked = settings.KeepStructure;
+            this.checkBox_oneBag.Checked = settings.AllInOneBag;
+            this.button_newBag.Enabled = !settings.AllInOneBag;
             this._applicationPreferences = settings;
             this.UpdateWorkingDirectoryToolTip();
         }

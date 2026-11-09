@@ -291,7 +291,7 @@ namespace ModularAudience.Audio.Processors_V1
             return results.Where(r => r != null).ToList();
         }
 
-        public static async Task<AudioObj> CreatePitchShiftWithoutTimestretchAsync(AudioObj sample, float semitoneDelta = 1.0f, IProgress<double>? progress = null, int? maxWorkers = null)
+        public static async Task<AudioObj> CreatePitchShiftWithoutTimestretchAsync(AudioObj sample, float semitoneDelta = 1.0f, IProgress<double>? progress = null, int? maxWorkers = null, CancellationToken cancellationToken = default)
         {
             if (sample == null)
             {
@@ -302,7 +302,7 @@ namespace ModularAudience.Audio.Processors_V1
             using var resampled = await PitchShiftOneAsync(sample, semitoneDelta, new Progress<double>(p =>
             {
                 progress?.Report(Math.Clamp(p * 0.5, 0.0, 1.0)); // first half
-            }), maxWorkers).ConfigureAwait(false);
+            }), maxWorkers, cancellationToken).ConfigureAwait(false);
 
             // 2) Time-stretch resampled back to original frame count
             int originalFrames = (int)Math.Max(0, (sample.Data?.LongLength ?? 0) / Math.Max(1, sample.Channels));
@@ -324,7 +324,7 @@ namespace ModularAudience.Audio.Processors_V1
                 {
                     // map second half of progress (0.0..1.0) to 0.5..1.0 portion
                     progress?.Report(Math.Clamp(0.5 + p * 0.5, 0.0, 1.0));
-                }));
+                }), cancellationToken: cancellationToken);
                 stretchedData = MatchPeakLevel(sample.Data, stretchedData);
             }
 
@@ -346,10 +346,11 @@ namespace ModularAudience.Audio.Processors_V1
             return result;
         }
 
-        private static Task<AudioObj> PitchShiftOneAsync(AudioObj sample, float semitones, IProgress<double>? progress = null, int? maxWorkers = null)
+        private static Task<AudioObj> PitchShiftOneAsync(AudioObj sample, float semitones, IProgress<double>? progress = null, int? maxWorkers = null, CancellationToken cancellationToken = default)
         {
             return Task.Run(() =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (sample == null)
                 {
                     throw new ArgumentNullException(nameof(sample));
@@ -378,11 +379,8 @@ namespace ModularAudience.Audio.Processors_V1
 
                 long outputFrames = Math.Max(1L, (long)Math.Round(inputFrames / pitchFactor));
 
-                const long MaxFrames = 20_000_000;
-                if (outputFrames > MaxFrames)
-                {
-                    outputFrames = MaxFrames;
-                }
+                if (outputFrames * channels > 134_217_728)
+                    throw new ArgumentOutOfRangeException(nameof(semitones), "Pitch-shift output exceeds 512 MiB; use a smaller selection.");
 
                 var inChannels = new float[channels][];
                 for (int c = 0; c < channels; c++)
@@ -392,6 +390,7 @@ namespace ModularAudience.Audio.Processors_V1
 
                 for (long f = 0; f < inputFrames; f++)
                 {
+                    if ((f & 65535) == 0) cancellationToken.ThrowIfCancellationRequested();
                     for (int c = 0; c < channels; c++)
                     {
                         long srcIndex = f * channels + c;
@@ -418,7 +417,7 @@ namespace ModularAudience.Audio.Processors_V1
                 long processed = 0;
                 object progLock = new();
 
-                Parallel.For(0, ranges.Length, new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism }, pi =>
+                Parallel.For(0, ranges.Length, new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism, CancellationToken = cancellationToken }, pi =>
                 {
                     var r = ranges[pi];
                     long start = r.start;
@@ -426,6 +425,7 @@ namespace ModularAudience.Audio.Processors_V1
 
                     for (long outFrame = start; outFrame < end; outFrame++)
                     {
+                        if ((outFrame & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
                         double srcPos = outFrame * (inputFrames / (double)outputFrames);
                         long srcIndexFloor = (long)Math.Floor(srcPos);
                         double frac = srcPos - srcIndexFloor;
@@ -531,13 +531,27 @@ namespace ModularAudience.Audio.Processors_V1
                 progress?.Report(1.0);
 
                 return clone;
-            });
+            }, cancellationToken);
         }
 
         public static Task<AudioObj> CreatePitchShiftAsync(AudioObj sample, float semitones,
-            bool useFftPv = true, IProgress<double>? progress = null) => useFftPv
-                ? CreatePitchShiftWithoutTimestretchAsync(sample, semitones, progress)
-                : PitchShiftOneAsync(sample, semitones, progress);
+            bool useFftPv = true, IProgress<double>? progress = null, int? maxWorkers = null, CancellationToken cancellationToken = default) => useFftPv
+                ? CreatePitchShiftWithoutTimestretchAsync(sample, semitones, progress, maxWorkers, cancellationToken)
+                : PitchShiftOneAsync(sample, semitones, progress, maxWorkers, cancellationToken);
+
+        /// <summary>The same continuous, phase-locked vocoder used by duration-preserving pitch shifting.</summary>
+        public static float[] StretchPhaseVocoder(float[] data, int channels, int targetFrames, int fftSize = 2048,
+            double overlap = 0.875, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(data);
+            if (channels <= 0 || data.Length == 0 || data.Length % channels != 0 || targetFrames < 1 ||
+                fftSize < 256 || fftSize > 16384 || (fftSize & (fftSize - 1)) != 0 || !double.IsFinite(overlap) || overlap < 0.5 || overlap > 0.95)
+                throw new ArgumentException("Invalid phase-vocoder format, frame count or window settings.");
+            if ((long)targetFrames * channels > 134_217_728) throw new ArgumentOutOfRangeException(nameof(targetFrames));
+            cancellationToken.ThrowIfCancellationRequested();
+            if (targetFrames == data.Length / channels) return (float[])data.Clone();
+            return PhaseVocoderTimeStretch(data, channels, data.Length / channels, targetFrames, progress, fftSize, overlap, cancellationToken);
+        }
 
         // Phase vocoder time-stretch: operates on interleaved float[] data
         private static float[] MatchPeakLevel(float[]? reference, float[] output)
@@ -587,7 +601,8 @@ namespace ModularAudience.Audio.Processors_V1
             return output;
         }
 
-        private static float[] PhaseVocoderTimeStretch(float[] data, int channels, int inputFrames, int targetFrames, IProgress<double>? progress = null)
+        private static float[] PhaseVocoderTimeStretch(float[] data, int channels, int inputFrames, int targetFrames, IProgress<double>? progress = null,
+            int fftSize = 2048, double overlap = 0.875, CancellationToken cancellationToken = default)
         {
             if (channels <= 0)
             {
@@ -608,6 +623,7 @@ namespace ModularAudience.Audio.Processors_V1
 
             for (int f = 0; f < inputFrames; f++)
             {
+                if ((f & 65535) == 0) cancellationToken.ThrowIfCancellationRequested();
                 for (int c = 0; c < channels; c++)
                 {
                     inChannels[c][f] = data[f * channels + c];
@@ -618,13 +634,15 @@ namespace ModularAudience.Audio.Processors_V1
 
             for (int c = 0; c < channels; c++)
             {
-                outChannels[c] = PhaseVocoderStretchChannel(inChannels[c], inputFrames, targetFrames, progress == null ? null : new Progress<double>(p => progress.Report(p)));
+                cancellationToken.ThrowIfCancellationRequested();
+                outChannels[c] = PhaseVocoderStretchChannel(inChannels[c], inputFrames, targetFrames, progress, fftSize, overlap, cancellationToken);
             }
 
             // Interleave back
             var outData = new float[(long)targetFrames * channels];
             for (int f = 0; f < targetFrames; f++)
             {
+                if ((f & 65535) == 0) cancellationToken.ThrowIfCancellationRequested();
                 for (int c = 0; c < channels; c++)
                 {
                     outData[f * channels + c] = outChannels[c].Length > f ? outChannels[c][f] : 0f;
@@ -636,16 +654,17 @@ namespace ModularAudience.Audio.Processors_V1
         }
 
         // Stretch a single channel using phase vocoder
-        private static float[] PhaseVocoderStretchChannel(float[] input, int inputFrames, int targetFrames, IProgress<double>? progress = null)
+        private static float[] PhaseVocoderStretchChannel(float[] input, int inputFrames, int targetFrames, IProgress<double>? progress = null,
+            int fftSize = 2048, double overlap = 0.875, CancellationToken cancellationToken = default)
         {
             // Parameters
-            int N = 2048; // window size (power of two)
+            int N = fftSize; // window size (power of two)
             if (N > inputFrames)
             {
                 N = 1 << (int)Math.Ceiling(Math.Log2(Math.Max(256, inputFrames)));
             }
 
-            int Ha = N / 8; // denser overlap improves phase continuity during pitch correction
+            int Ha = Math.Max(1, (int)Math.Round(N * (1 - overlap)));
 
             double stretchRatio = (double)targetFrames / Math.Max(1, inputFrames);
             double HsD = Ha * stretchRatio; // synthesis hop (may be fractional)
@@ -656,48 +675,18 @@ namespace ModularAudience.Audio.Processors_V1
             int center = N / 2;
             int frames = (int)Math.Ceiling(inputFrames / (double)Ha) + 1;
 
-            // pad input to fit
-            int padded = (frames - 1) * Ha + N;
-            var x = new double[padded];
-            for (int i = 0; i < padded; i++)
-            {
-                int source = i - center;
-                x[i] = source >= 0 && source < inputFrames ? input[source] : 0.0;
-            }
-
-            // Prepare arrays
-            var magnitudes = new double[frames][];
-            var phases = new double[frames][];
-
-            // fft buffers
+            // Stream analysis/synthesis one window at a time. Keeping every
+            // frame's spectrum made whole-track effects consume gigabytes even
+            // though the phase algorithm only needs the immediately previous one.
+            var mag = new double[N / 2 + 1];
+            var ph = new double[N / 2 + 1];
+            var prevPhases = new double[N / 2 + 1];
+            var lockedPhases = new double[N / 2 + 1];
+            var peaks = new List<int>(N / 2);
             Complex[] fftBuf = new Complex[N];
-
-            for (int m = 0; m < frames; m++)
-            {
-                int pos = m * Ha;
-                for (int n = 0; n < N; n++)
-                {
-                    double v = x[pos + n] * window[n];
-                    fftBuf[n] = new Complex(v, 0.0);
-                }
-
-                Fourier.Forward(fftBuf, FourierOptions.Matlab);
-
-                magnitudes[m] = new double[N / 2 + 1];
-                phases[m] = new double[N / 2 + 1];
-                for (int k = 0; k <= N / 2; k++)
-                {
-                    var c = fftBuf[k];
-                    magnitudes[m][k] = c.Magnitude;
-                    phases[m][k] = Math.Atan2(c.Imaginary, c.Real);
-                }
-
-                progress?.Report(m / (double)frames * 0.2); // small report
-            }
 
             // Phase vocoder processing
             var synthesisPhases = new double[N / 2 + 1];
-            var prevPhases = phases[0];
 
             // angular frequencies
             double[] omega = new double[N / 2 + 1];
@@ -716,8 +705,19 @@ namespace ModularAudience.Audio.Processors_V1
 
             for (int m = 0; m < frames; m++)
             {
-                double[] mag = magnitudes[m];
-                double[] ph = phases[m];
+                cancellationToken.ThrowIfCancellationRequested();
+                int pos = m * Ha - center;
+                for (int n = 0; n < N; n++)
+                {
+                    int source = pos + n;
+                    fftBuf[n] = new Complex((source >= 0 && source < inputFrames ? input[source] : 0) * window[n], 0);
+                }
+                Fourier.Forward(fftBuf, FourierOptions.Matlab);
+                for (int k = 0; k <= N / 2; k++)
+                {
+                    mag[k] = fftBuf[k].Magnitude;
+                    ph[k] = Math.Atan2(fftBuf[k].Imaginary, fftBuf[k].Real);
+                }
 
                 if (m == 0)
                 {
@@ -728,7 +728,6 @@ namespace ModularAudience.Audio.Processors_V1
                 }
                 else
                 {
-                    int prev = m - 1;
                     double[] prevPh = prevPhases;
 
                     // phase advance
@@ -741,13 +740,12 @@ namespace ModularAudience.Audio.Processors_V1
                         synthesisPhases[k] += trueFreq * (outPos - previousOutPos);
                     }
 
-                    prevPhases = ph;
                 }
 
                 // Identity phase locking: keep neighboring bins coherent around spectral peaks.
                 // Independent free-running bins otherwise make harmonics sound smeared/"phasier".
-                var lockedPhases = (double[])synthesisPhases.Clone();
-                var peaks = new List<int>();
+                synthesisPhases.CopyTo(lockedPhases, 0);
+                peaks.Clear();
                 for (int k = 1; k < N / 2; k++)
                     if (mag[k] > mag[k - 1] && mag[k] >= mag[k + 1]) peaks.Add(k);
                 if (peaks.Count > 0)
@@ -761,6 +759,7 @@ namespace ModularAudience.Audio.Processors_V1
                         lockedPhases[k] = synthesisPhases[peak] + WrapPhase(ph[k] - ph[peak]);
                     }
                 }
+                ph.CopyTo(prevPhases, 0);
 
                 // Construct complex spectrum for synthesis
                 for (int k = 0; k <= N / 2; k++)
@@ -792,7 +791,7 @@ namespace ModularAudience.Audio.Processors_V1
                 outPos = (int)Math.Round(++synthesisTime * HsD);
 
                 // progress
-                progress?.Report(0.2 + m / (double)frames * 0.7);
+                progress?.Report(m / (double)frames * 0.95);
             }
 
             // Remove centered-analysis latency and normalize the actual overlap at each sample.
@@ -800,6 +799,7 @@ namespace ModularAudience.Audio.Processors_V1
             int trim = center;
             for (int i = 0; i < targetFrames; i++)
             {
+                if ((i & 65535) == 0) cancellationToken.ThrowIfCancellationRequested();
                 int index = i + trim;
                 if (index < y.Length && weights[index] > 1e-10)
                 {

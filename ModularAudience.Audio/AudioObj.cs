@@ -399,7 +399,7 @@ namespace ModularAudience.Audio
             // Invalidate redo stack (new action)
             ClearSteps(this.NextSteps);
             // push current snapshot to previous steps
-            this.PreviousSteps.Add(this.Clone());
+            this.PreviousSteps.Add(this.CreateHistorySnapshot());
         }
 
         public bool Undo()
@@ -412,7 +412,7 @@ namespace ModularAudience.Audio
             try
             {
                 // save current state for redo
-                this.NextSteps.Add(this.Clone());
+                this.NextSteps.Add(this.CreateHistorySnapshot());
 
                 // take last snapshot
                 var snapshot = this.PreviousSteps[^1];
@@ -422,7 +422,7 @@ namespace ModularAudience.Audio
                 }
 
                 // apply snapshot and remove it from previous steps
-                this.ApplyStateFrom(snapshot);
+                this.ApplyStateFrom(snapshot, restoreEditorState: true);
                 this.PreviousSteps.RemoveAt(this.PreviousSteps.Count - 1);
                 snapshot.Dispose();
 
@@ -444,7 +444,7 @@ namespace ModularAudience.Audio
             try
             {
                 // save current state back into previous steps (undo stack)
-                this.PreviousSteps.Add(this.Clone());
+                this.PreviousSteps.Add(this.CreateHistorySnapshot());
 
                 // get redo state (last in NextSteps)
                 var redoState = this.NextSteps[^1];
@@ -454,7 +454,7 @@ namespace ModularAudience.Audio
                     return false;
                 }
 
-                this.ApplyStateFrom(redoState);
+                this.ApplyStateFrom(redoState, restoreEditorState: true);
                 redoState.Dispose();
                 return true;
             }
@@ -467,7 +467,7 @@ namespace ModularAudience.Audio
         public async Task CreateUndoStepAsync()
         {
             ClearSteps(this.NextSteps);
-            this.PreviousSteps.Add(await this.CloneAsync().ConfigureAwait(false));
+            this.PreviousSteps.Add(await Task.Run(this.CreateHistorySnapshot).ConfigureAwait(false));
         }
 
         public async Task<bool> UndoAsync()
@@ -479,7 +479,7 @@ namespace ModularAudience.Audio
 
             try
             {
-                this.NextSteps.Add(await this.CloneAsync().ConfigureAwait(false));
+                this.NextSteps.Add(await Task.Run(this.CreateHistorySnapshot).ConfigureAwait(false));
 
                 var snapshot = this.PreviousSteps[^1];
                 if (snapshot == null)
@@ -487,7 +487,7 @@ namespace ModularAudience.Audio
                     return false;
                 }
 
-                this.ApplyStateFrom(snapshot);
+                this.ApplyStateFrom(snapshot, restoreEditorState: true);
                 this.PreviousSteps.RemoveAt(this.PreviousSteps.Count - 1);
                 snapshot.Dispose();
                 return true;
@@ -507,7 +507,7 @@ namespace ModularAudience.Audio
 
             try
             {
-                this.PreviousSteps.Add(await this.CloneAsync().ConfigureAwait(false));
+                this.PreviousSteps.Add(await Task.Run(this.CreateHistorySnapshot).ConfigureAwait(false));
 
                 var redoState = this.NextSteps[^1];
                 this.NextSteps.RemoveAt(this.NextSteps.Count - 1);
@@ -516,7 +516,7 @@ namespace ModularAudience.Audio
                     return false;
                 }
 
-                this.ApplyStateFrom(redoState);
+                this.ApplyStateFrom(redoState, restoreEditorState: true);
                 redoState.Dispose();
                 return true;
             }
@@ -533,7 +533,21 @@ namespace ModularAudience.Audio
         }
 
         // Internal helper - applies state from source snapshot to THIS instance
-        private void ApplyStateFrom(AudioObj source)
+        private AudioObj CreateHistorySnapshot()
+        {
+            AudioObj snapshot = this.Clone();
+            snapshot.Key = this.Key; snapshot.SampleTag = this.SampleTag;
+            snapshot.ChunkSize = this.ChunkSize; snapshot.OverlapSize = this.OverlapSize; snapshot.StretchFactor = this.StretchFactor;
+            snapshot.SelectionStart = this.SelectionStart; snapshot.SelectionEnd = this.SelectionEnd;
+            snapshot.ScrollOffset = this.ScrollOffset; snapshot.StartingOffset = this.StartingOffset;
+            snapshot.LoopEnabled = this.LoopEnabled; snapshot.LoopFraction = this.LoopFraction;
+            snapshot.loopFractionStartSamples = this.loopFractionStartSamples; snapshot.loopFractionEndSamples = this.loopFractionEndSamples;
+            snapshot.SetPosition(this.Position);
+            foreach (var pair in this.Metrics) snapshot.Metrics[pair.Key] = pair.Value;
+            return snapshot;
+        }
+
+        private void ApplyStateFrom(AudioObj source, bool restoreEditorState = false)
         {
             this.Name = source.Name;
 
@@ -548,9 +562,30 @@ namespace ModularAudience.Audio
             this.Timing = source.Timing;
             this.Volume = source.Volume;
 
-            // selection should be reset after applying a snapshot (like in collection)
-            this.SelectionStart = -1;
-            this.SelectionEnd = -1;
+            if (restoreEditorState)
+            {
+                this.OriginalName = source.OriginalName; this.FilePath = source.FilePath;
+                this.ScannedBpm = source.ScannedBpm; this.ScannedTiming = source.ScannedTiming; this.ScannedKey = source.ScannedKey;
+                this.Key = source.Key; this.SampleTag = source.SampleTag;
+                this.SampleRateFactor = source.SampleRateFactor; this.ManualSampleRateFactor = source.ManualSampleRateFactor;
+                this.SyncNudgeSampleRateFactor = source.SyncNudgeSampleRateFactor;
+                this.ChunkSize = source.ChunkSize; this.OverlapSize = source.OverlapSize; this.StretchFactor = source.StretchFactor;
+                this.SelectionStart = source.SelectionStart; this.SelectionEnd = source.SelectionEnd;
+                this.ScrollOffset = source.ScrollOffset; this.StartingOffset = source.StartingOffset;
+                this.DrawBeatGrid = source.DrawBeatGrid; this.BeatGrid = (bool[])source.BeatGrid.Clone();
+                this.Metrics.Clear(); foreach (var pair in source.Metrics) this.Metrics[pair.Key] = pair.Value;
+                this.UpdateLoopFraction(source.loopFractionStartSamples, source.loopFractionEndSamples,
+                    source.loopFractionEndSamples - source.loopFractionStartSamples, source.LoopEnabled, adjustPosition: false);
+                this.LoopFraction = source.LoopFraction;
+                this.SetPosition(source.Position);
+                this.InvalidateWaveformCache();
+            }
+            else
+            {
+                // Replacement/collection workflows retain their existing selection-reset convention.
+                this.SelectionStart = -1;
+                this.SelectionEnd = -1;
+            }
 
             // IMPORTANT: Do NOT overwrite PreviousSteps or NextSteps here.
             // They belong to the live object and should remain intact.

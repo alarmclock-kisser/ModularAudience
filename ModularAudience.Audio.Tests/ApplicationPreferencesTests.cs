@@ -18,6 +18,8 @@ public sealed class ApplicationPreferencesTests
         Assert.AreEqual(16, settings.ExportBits);
         Assert.IsNull(settings.WorkingDirectory);
         Assert.AreEqual(8f, settings.LogFontSize);
+        Assert.IsTrue(settings.KeepStructure);
+        Assert.IsFalse(settings.AllInOneBag);
         Assert.IsTrue(File.Exists(files.Path));
     }
 
@@ -29,6 +31,8 @@ public sealed class ApplicationPreferencesTests
         files.Store.SetExport(".mp3", 320);
         files.Store.SetWorkingDirectory(directory);
         files.Store.SetLogFontSize(13f);
+        files.Store.SetKeepStructure(false);
+        files.Store.SetAllInOneBag(true);
 
         ApplicationPreferences settings = new ApplicationPreferencesStore(files.Path).Load();
 
@@ -36,6 +40,8 @@ public sealed class ApplicationPreferencesTests
         Assert.AreEqual(320, settings.ExportBits);
         Assert.AreEqual(directory, settings.WorkingDirectory);
         Assert.AreEqual(13f, settings.LogFontSize);
+        Assert.IsFalse(settings.KeepStructure);
+        Assert.IsTrue(settings.AllInOneBag);
     }
 
     [TestMethod]
@@ -48,13 +54,17 @@ public sealed class ApplicationPreferencesTests
         await Task.WhenAll(
             Task.Run(() => new ApplicationPreferencesStore(files.Path).SetExport(".mp3", 256)),
             Task.Run(() => new ApplicationPreferencesStore(files.Path).SetWorkingDirectory(directory)),
-            Task.Run(() => new ApplicationPreferencesStore(files.Path).SetLogFontSize(15f)));
+            Task.Run(() => new ApplicationPreferencesStore(files.Path).SetLogFontSize(15f)),
+            Task.Run(() => new ApplicationPreferencesStore(files.Path).SetKeepStructure(false)),
+            Task.Run(() => new ApplicationPreferencesStore(files.Path).SetAllInOneBag(true)));
 
         ApplicationPreferences settings = files.Store.Load();
         Assert.AreEqual(".mp3", settings.ExportFormat);
         Assert.AreEqual(256, settings.ExportBits);
         Assert.AreEqual(directory, settings.WorkingDirectory);
         Assert.AreEqual(15f, settings.LogFontSize);
+        Assert.IsFalse(settings.KeepStructure);
+        Assert.IsTrue(settings.AllInOneBag);
     }
 
     [TestMethod]

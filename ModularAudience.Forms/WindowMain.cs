@@ -169,6 +169,7 @@ namespace ModularAudience.Forms
             this.AudioC = new AudioCollection();
             Instance = this;
             this.InitializeComponent();
+            this.InitializeImportPreferences();
             this.InitializeScanControls();
             this.InitializeThemeMenu();
             this.Tag = this.Text;
@@ -674,6 +675,8 @@ namespace ModularAudience.Forms
         private void checkBox_oneBag_CheckedChanged(object sender, EventArgs e)
         {
             this.button_newBag.Enabled = !this.checkBox_oneBag.Checked;
+
+            this.SaveApplicationPreference(() => this._preferencesStore.SetAllInOneBag(this.checkBox_oneBag.Checked));
 
             if (this.checkBox_oneBag.Checked)
             {

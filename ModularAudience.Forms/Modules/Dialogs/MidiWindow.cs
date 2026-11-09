@@ -56,15 +56,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.midiFile = midiFileData ?? MidiFileData.Load(filePath ?? throw new ArgumentNullException(nameof(filePath)));
             this.tracks = this.midiFile.Tracks.ToList();
             this.Text = $"MIDI Renderer - {Path.GetFileNameWithoutExtension(this.midiFile.FilePath)}";
-            this.numericUpDown_track.Maximum = Math.Max(1, this.tracks.Count);
-            this.numericUpDown_track.Value = 1;
             this.numericUpDown_bpm.Value = (decimal)Math.Clamp(this.midiFile.DefaultBpm, 20.0, 400.0);
             this.comboBox_instrument.Items.AddRange([
             "Sine", "Saw", "Square", "Triangle", "Noise", "Pluck / Karplus-Strong", "Custom Sample", "Custom Collection"]);
             this.comboBox_instrument.SelectedIndex = 0;
             this.comboBox_renderQuality.Items.AddRange(["Best", "Balanced", "Fast", "Draft"]);
             this.comboBox_renderQuality.SelectedIndex = (int)MidiRenderQuality.Balanced;
-            this.label_status.Text = $"Tracks: {this.tracks.Count}, Notes: {this.tracks.Sum(track => track.Notes.Count)}";
+            this.RefreshMidiPages(1);
         }
 
         private MidiTrackData SelectedTrack => this.tracks[Math.Clamp((int)this.numericUpDown_track.Value - 1, 0, this.tracks.Count - 1)];
@@ -77,9 +75,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void pictureBox_midi_Paint(object? sender, PaintEventArgs e)
         {
-            MidiTrackData track = this.SelectedTrack;
             e.Graphics.SmoothingMode = SmoothingMode.HighQuality;
             e.Graphics.Clear(Color.FromArgb(24, 24, 28));
+            if (this.tracks.Count == 0) return;
+            MidiTrackData track = this.SelectedTrack;
             int left = 38;
             int top = 12;
             int width = Math.Max(1, this.pictureBox_midi.ClientSize.Width - left - 12);
@@ -168,8 +167,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void pictureBox_midi_MouseDown(object? sender, MouseEventArgs e)
         {
-            if (e.Button != MouseButtons.Left)
+            if (e.Button != MouseButtons.Left || this.tracks.Count == 0)
             {
+                return;
+            }
+
+            if (ReferenceEquals(this.SelectedTrack, this.mergedTrack))
+            {
+                this.label_status.Text = "Merged is generated from the selected pages. Edit the original MIDI pages to update it.";
                 return;
             }
 
@@ -252,7 +257,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
             return colors[Math.Abs(channel) % colors.Length];
         }
 
-        private void numericUpDown_track_ValueChanged(object? sender, EventArgs e) => this.pictureBox_midi.Invalidate();
+        private void numericUpDown_track_ValueChanged(object? sender, EventArgs e)
+        {
+            this.previewCts?.Cancel();
+            this.UpdateMergeButton();
+            this.pictureBox_midi.Invalidate();
+        }
 
         private void numericUpDown_bpm_ValueChanged(object? sender, EventArgs e) => this.label_status.Text = $"BPM: {this.numericUpDown_bpm.Value:0.00}";
 
@@ -310,6 +320,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
+            if (this.tracks.Count == 0) return;
+
             CancellationTokenSource? runCts = null;
             ProgressDialog? progressDialog = null;
             try
@@ -321,8 +333,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.previewCts = runCts;
                 MidiInstrument instrument = this.SelectedInstrument;
                 double bpm = (double)this.numericUpDown_bpm.Value;
-                var midi = this.midiFile;
-                int trackIndex = this.SelectedTrack.Index;
+                MidiFileData midi = this.CreateOutputMidi(currentPageOnly: true);
+                int trackIndex = midi.Tracks[0].Index;
                 MidiRenderQuality quality = this.SelectedRenderQuality;
                 using AudioObj? sample = this.customSample?.Clone();
                 using var collection = this.CaptureCustomCollection();
@@ -365,14 +377,26 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async void button_save_Click(object? sender, EventArgs e)
         {
+            await this.SaveAudioAsync(currentPageOnly: false);
+        }
+
+        private async void renderCurrentPageToolStripMenuItem_Click(object? sender, EventArgs e)
+        {
+            await this.SaveAudioAsync(currentPageOnly: true);
+        }
+
+        private async Task SaveAudioAsync(bool currentPageOnly)
+        {
+            if (!this.button_save.Enabled || this.closingMidiWindow || this.tracks.Count == 0) return;
             ProgressDialog? progressDialog = null;
             CancellationTokenSource? renderCts = null;
             try
             {
                 this.button_save.Enabled = false;
-                this.label_status.Text = "Rendering MIDI...";
-                MidiFileData midi = this.midiFile;
-                int trackIndex = this.SelectedTrack.Index;
+                string renderMessage = currentPageOnly ? "Rendering current MIDI page..." : "Rendering all MIDI pages...";
+                this.label_status.Text = renderMessage;
+                MidiFileData midi = this.CreateOutputMidi(currentPageOnly, merge: true);
+                int trackIndex = midi.Tracks[0].Index;
                 MidiInstrument instrument = this.SelectedInstrument;
                 double bpm = (double)this.numericUpDown_bpm.Value;
                 using AudioObj? customSample = this.customSample?.Clone();
@@ -381,7 +405,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 renderCts = new CancellationTokenSource();
                 this.saveRenderCts = renderCts;
                 Progress<double> progress = new(value => progressDialog?.Report(value));
-                progressDialog = new ProgressDialog("Rendering MIDI...", progress, ct: renderCts.Token, cancellationSource: renderCts);
+                progressDialog = new ProgressDialog(renderMessage, progress, ct: renderCts.Token, cancellationSource: renderCts);
                 progressDialog.Show(this);
                 progressDialog.BringToFront();
                 AudioObj audio = await this.TrackMidiRenderAsync(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, cancellationToken: renderCts.Token, pitchFrequency: midi.PitchFrequency,
@@ -497,26 +521,38 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public void ApplyEdit(MidiFileData midiFileData)
         {
             this.midiFile = midiFileData;
-            this.tracks = this.midiFile.Tracks.ToList();
-            this.numericUpDown_track.Maximum = Math.Max(1, this.tracks.Count);
-            this.numericUpDown_track.Value = 1;
+            this.previewCts?.Cancel();
             this.numericUpDown_bpm.Value = (decimal)Math.Clamp(this.midiFile.DefaultBpm, 20.0, 400.0);
-            this.label_status.Text = $"Tracks: {this.tracks.Count}, Notes: {this.tracks.Sum(track => track.Notes.Count)}";
-            this.label_status.Enabled = false;
-            this.pictureBox_midi.Invalidate();
-
+            this.RefreshMidiPages((int)this.numericUpDown_track.Value);
         }
 
         private async void button_export_Click(object sender, EventArgs e)
         {
-            // SFD at MyMusic for MIDI file (*mid) export
+            await this.ExportMidiAsync(currentPageOnly: false);
+        }
+
+        private async void exportCurrentPageToolStripMenuItem_Click(object? sender, EventArgs e)
+        {
+            await this.ExportMidiAsync(currentPageOnly: true);
+        }
+
+        private async void exportMergedToolStripMenuItem_Click(object? sender, EventArgs e)
+        {
+            await this.ExportMidiAsync(currentPageOnly: false, merge: true);
+        }
+
+        private async Task ExportMidiAsync(bool currentPageOnly, bool merge = false)
+        {
+            if (!this.button_export.Enabled || this.closingMidiWindow || this.tracks.Count == 0) return;
+            MidiFileData midi = this.CreateOutputMidi(currentPageOnly, merge);
+            string suffix = currentPageOnly ? $"_page_{this.numericUpDown_track.Value}" : merge ? "_merged" : "_exported";
             using SaveFileDialog sfd = new()
             {
                 Title = "Export MIDI File",
                 Filter = "MIDI Files (*.mid)|*.mid",
                 DefaultExt = "mid",
                 AddExtension = true,
-                FileName = Path.GetFileNameWithoutExtension(this.midiFile.FilePath) + "_exported.mid"
+                FileName = Path.GetFileNameWithoutExtension(midi.FilePath) + suffix + ".mid"
             };
 
             if (sfd.ShowDialog(this) == DialogResult.OK)
@@ -525,7 +561,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 {
                     this.button_export.Enabled = false;
                     this.label_status.Text = "Exporting MIDI...";
-                    string? exportedPath = await this.midiFile.ExportAsync(sfd.FileName);
+                    string? exportedPath = await midi.ExportAsync(sfd.FileName);
+                    if (exportedPath == null) throw new IOException("The MIDI file could not be exported. See the log for details.");
                     this.label_status.Text = $"MIDI exported to {exportedPath}";
                 }
                 catch (Exception ex)
@@ -535,7 +572,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 }
                 finally
                 {
-                    this.button_export.Enabled = true;
+                    if (!this.IsDisposed) this.button_export.Enabled = true;
                 }
             }
         }
@@ -588,6 +625,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                         midi = viewDlg.GeneratedMidiFile;
                     }
 
+                    this.mergedTrackIndices.Clear();
                     this.ApplyEdit(midi);
                     this.label_status.Text = $"MIDI imported from {ofd.FileName}";
                 }

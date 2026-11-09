@@ -545,10 +545,12 @@ public sealed partial class MixTrackView : Form
         Guid? previousSelectedClip = selectedClip;
         lastPointer = e.Location;
         if (pastePreview) { if (e.Button == MouseButtons.Left && e.X >= Header && e.Y >= Ruler) PlacePastePreview(); else if (e.Button == MouseButtons.Right) CancelPastePreview(); return; }
+        // A right click must not collapse an existing range/multiselection or
+        // silently retarget it to the segment/empty space under the pointer.
+        if (e.Button == MouseButtons.Right) { ShowMenu(e.Location); return; }
         int row = RowAt(e.Y); selectedLane = row >= 0 && row < Arrangement.Lanes.Count ? Arrangement.Lanes[row].Id : null;
         selectedClip = row >= 0 && row < Arrangement.Lanes.Count
             ? Arrangement.Lanes[row].Clips.LastOrDefault(c => e.X >= Header && ClipRect(row, c).Contains(e.Location))?.Id : null;
-        if (e.Button == MouseButtons.Right) { ShowMenu(e.Location); return; }
         if (e.Button != MouseButtons.Left) return;
         down = e.Location; dragBefore = Arrangement.Capture();
         selectionAdditive = ModifierKeys.HasFlag(Keys.Control); selectingWhole = selectionAdditive;
@@ -714,24 +716,50 @@ public sealed partial class MixTrackView : Form
     }
     private void ShowMenu(Point point)
     {
-        var menu = new ContextMenuStrip();
+        this.timelineContextMenu?.Close();
+        var menu = this.CreateTimelineContextMenu(point); this.timelineContextMenu = menu;
+        menu.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(this.timelineContextMenu, menu)) this.timelineContextMenu = null;
+            if (!IsDisposed && !Disposing && IsHandleCreated) BeginInvoke((Action)menu.Dispose);
+            else menu.Dispose();
+        };
+        menu.Show(canvas, point);
+    }
+    internal ContextMenuStrip CreateTimelineContextMenu(Point point)
+    {
+        if (!this.HasAudioEffectSelection)
+        {
+            int row = RowAt(point.Y);
+            selectedLane = row >= 0 && row < Arrangement.Lanes.Count ? Arrangement.Lanes[row].Id : null;
+            selectedClip = row >= 0 && row < Arrangement.Lanes.Count ? Arrangement.Lanes[row].Clips.LastOrDefault(clip =>
+                point.X >= Header && ClipRect(row, clip).Contains(point))?.Id : null;
+        }
+        return this.HasAudioEffectSelection ? this.CreateAudioContextMenu() : this.CreateGeneralContextMenu(point);
+    }
+    private ContextMenuStrip CreateAudioContextMenu()
+    {
+        var menu = new ContextMenuStrip { Name = "mixAudioContextMenu", ShowItemToolTips = true };
         void Item(string text, Action action, bool enabled = true) { var item = new ToolStripMenuItem(text) { Enabled = enabled }; item.Click += (_, _) => action(); menu.Items.Add(item); }
         Item("Undo (Ctrl+Z)", Undo, undo.Count > 0); Item("Redo (Ctrl+Y)", Redo, redo.Count > 0);
-        Item("View Settings…", ShowViewSettings);
+        ToolStripMenuItem effects = ModularAudience.Forms.Effects.EffectMenuFactory.CreateApplyMenu(this.OpenMixEffect);
+        effects.Enabled = !busy && !closing && !this.mixEffectOpening; menu.Items.Add(effects);
+        menu.Items.Add(new ToolStripSeparator());
         if (selectionFirstRow >= 0 && selectionEnd > selectionStart)
         {
             Item("Set loop to selection", () => { Arrangement.LoopStart = selectionStart; Arrangement.LoopEnd = selectionEnd; Changed(); });
             Item("Delete selected audio range", DeleteSelectedRange);
-            Item("Render selected range → Collection", async () => await ExportSelectedRangeAsync());
-            Item("Clear selection", () => { ClearRangeSelection(); canvas.Invalidate(); });
+            Item("Render selected range → Collection", async () => await ExportSelectedRangeAsync(), SelectedParts().Count > 0);
         }
-        if (Clip is { } clip)
+        else Item("Render selection → Collection", async () => await ExportSelectionAsync(), SelectedParts().Count > 0);
+        Item("Copy selection (Ctrl+C)", CopySelection, SelectedParts().Count > 0);
+        Item("Delete selection (Delete)", DeleteSelection, SelectedParts().Count > 0);
+        Item("Clear selection", this.ClearAudioEffectSelection);
+        if (Clip is { } clip && SelectedParts().Count <= 1)
         {
             Item("Clip properties…", () => EditProperties(clip));
             Item("Split at playhead (S)", Split);
             Item("Duplicate (Ctrl+D)", Duplicate);
-            Item("Copy segment (Ctrl+C)", CopyClip);
-            Item("Delete segment (Delete)", () => { Lane?.Clips.Remove(clip); Changed(); });
             foreach (var mode in Enum.GetValues<ClipTempoMode>()) Item("Tempo: " + mode, () => { clip.TempoMode = mode; Changed(); });
             Item("Set source BPM…", () =>
             {
@@ -746,6 +774,14 @@ public sealed partial class MixTrackView : Form
             });
             Item("Align start to nearest beat", () => { double beat = 60 / Arrangement.Bpm; clip.Start = Math.Round(clip.Start / beat) * beat; Changed(); });
         }
+        return menu;
+    }
+    private ContextMenuStrip CreateGeneralContextMenu(Point point)
+    {
+        var menu = new ContextMenuStrip { Name = "mixGeneralContextMenu" };
+        void Item(string text, Action action, bool enabled = true) { var item = new ToolStripMenuItem(text) { Enabled = enabled }; item.Click += (_, _) => action(); menu.Items.Add(item); }
+        Item("Undo (Ctrl+Z)", Undo, undo.Count > 0); Item("Redo (Ctrl+Y)", Redo, redo.Count > 0);
+        Item("View Settings…", ShowViewSettings);
         if (Lane is { } lane)
         {
             Item("Track properties (gain / solo / mute / crossfade)…", () => EditProperties(lane));
@@ -760,7 +796,6 @@ public sealed partial class MixTrackView : Form
         combo.SelectedIndexChanged += (_, _) => { if (combo.SelectedItem is LaneItem item) { RemoveLane(item.Id); menu.Close(); } };
         remove.DropDownItems.Add(combo); menu.Items.Add(remove);
         Item("Add empty track", AddEmptyTrack);
-        Item("Copy selection (Ctrl+C)", CopySelection, SelectedParts().Count > 0);
         Item("Paste preview (Ctrl+V)", StartPastePreview, clipboardHistory.Count > 0);
         if (Lane is { } targetLane)
         {
@@ -777,8 +812,7 @@ public sealed partial class MixTrackView : Form
         Item("Select loop range…", () => EditLoop());
         Item("Fit arrangement horizontally", () => { pixelsPerSecond = Math.Clamp((canvas.Width - Header - 24) / Math.Max(1, Arrangement.Duration), 8, 2000); Arrangement.Visual.PixelsPerSecond = pixelsPerSecond; scroll.Value = 0; Changed(); });
         Item("Rename mix…", RenameMix);
-        menu.Closed += (_, _) => { if (!IsDisposed) BeginInvoke((Action)menu.Dispose); };
-        menu.Show(canvas, point);
+        return menu;
     }
     private sealed record LaneItem(Guid Id, string Name) { public override string ToString() => Name; }
     private void DeleteSelectedRange()
@@ -950,7 +984,7 @@ public sealed partial class MixTrackView : Form
         playbackGeneration++;
         liveUpdateTimer.Stop();
         clock.Stop(); var audio = playback; playback = null;
-        if (audio != null) { caret = audio.CurrentTime.TotalSeconds; _ = FinishPlaybackAsync(audio, playbackWork); }
+        if (audio != null) { caret = audio.CurrentTime.TotalSeconds; this.playbackStopWork = FinishPlaybackAsync(audio, playbackWork); }
         play.Text = "Play";
     }
     private void ApplyPlaybackLoop(AudioObj audio)
@@ -1016,6 +1050,7 @@ public sealed partial class MixTrackView : Form
         await FlushProjectSaveAsync();
         if (dirty && MessageBox.Show(this, "Close this mix? Unsaved arrangement changes will be lost.", "Close mix", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
         closing = true; operation?.Cancel();
+        this.CloseMixEffectWindows();
         tempoDebounce.Stop();
         liveUpdateTimer.Stop(); liveUpdateCancellation?.Cancel();
         try { await renderWork; await liveUpdateWork; } catch { }
@@ -1026,7 +1061,7 @@ public sealed partial class MixTrackView : Form
     private void Error(Exception ex) { status.Text = ex.Message; MessageBox.Show(this, ex.Message, "Mix editor", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     private void ReleaseResources()
     {
-        if (released) return; released = true; open.Remove(this); operation?.Cancel(); StopPlayback(); clock.Dispose(); liveUpdateTimer.Dispose();
+        if (released) return; released = true; this.CloseMixEffectWindows(); this.timelineContextMenu?.Dispose(); open.Remove(this); operation?.Cancel(); StopPlayback(); clock.Dispose(); liveUpdateTimer.Dispose();
         liveUpdateCancellation?.Cancel();
         hueTimer.Dispose(); hueClock.Stop();
         tempoDebounce.Dispose();
@@ -1057,7 +1092,7 @@ public sealed partial class MixTrackView : Form
             Arrangement.Restore(dragBefore); dragBefore = null; dragMode = 0; draggedLane = null; reorderTarget = -1;
             canvas.Capture = false; RefreshPreparedMixer(); canvas.Invalidate(); return true;
         }
-        if (keyData == Keys.Escape && selectionFirstRow >= 0) { ClearRangeSelection(); canvas.Invalidate(); return true; }
+        if (keyData == Keys.Escape && this.HasAudioEffectSelection) { this.ClearAudioEffectSelection(); return true; }
         return base.ProcessCmdKey(ref msg, keyData);
     }
     private sealed class Canvas : Control

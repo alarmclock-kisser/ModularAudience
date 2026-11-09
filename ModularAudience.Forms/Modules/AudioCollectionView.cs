@@ -25,6 +25,18 @@ namespace ModularAudience.Forms
         internal readonly AudioCollection AudioC;
         private readonly bool ownsAudioCollection;
 
+        // Identity is the full source directory, never the editable caption or a track's
+        // (potentially changed) FilePath. Remote/mirrored collections are not import targets.
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        internal string? ImportDirectoryPath { get; private set; }
+
+        internal bool CanAppendImportedAudio => this.ownsAudioCollection && !this.closeCleanupStarted &&
+            !this.IsDisposed && !this.Disposing;
+
+        internal void RememberImportDirectory(string directory) => this.ImportDirectoryPath =
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
+
         private partial void InitializeCoOpMenu();
         private partial void UpdateCoOpMenuState();
         private partial void AdjustCoOpDrawItem(AudioObj audio, DrawItemEventArgs e, ref string nameText, ref Color textColor, ref int nameLeft);

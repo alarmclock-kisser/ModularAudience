@@ -79,7 +79,7 @@ public static class MixRenderer
                 ct.ThrowIfCancellationRequested(); int frames = data.Length / sourceChannels;
                 int start = (int)Math.Round(c.Start * rate);
                 double crossfadeIn = 0, crossfadeOut = 0;
-                if (job.Lane.AutoCrossfade)
+                if (job.Lane.AutoCrossfade && !c.HasRenderedEnvelope)
                     foreach (var other in job.Lane.Clips.Where(o => o.Id != c.Id))
                     {
                         double otherEnd = other.Start + snapshot.ClipDuration(other);
@@ -118,6 +118,7 @@ public static class MixRenderer
     }
     private static float[] Resample(float[] data, int channels, double sourceRate, int rate)
     {
+        if (sourceRate == rate) return (float[])data.Clone();
         int frames = data.Length / channels;
         var resampler = new NAudio.Dsp.WdlResampler();
         resampler.SetMode(true, 0, true, sinc_size: 64, sinc_interpsize: 16); resampler.SetFeedMode(false); resampler.SetRates(sourceRate, rate);
@@ -136,5 +137,51 @@ public static class MixRenderer
             if (written == 0) break; outputPosition += written * channels;
         }
         return result;
+    }
+
+    /// <summary>
+    /// Render one complete clip at the mix clock, retaining every source channel
+    /// and baking clip gain/fades/crossfades, but never lane gain/mute/solo.
+    /// Rendering the complete clip before cropping preserves its existing fade
+    /// position and phase-vocoder context at effect-selection boundaries.
+    /// </summary>
+    internal static async Task<float[]> RenderClipForEffectAsync(MixArrangement arrangement, MixLane lane, MixClip clip, CancellationToken token)
+    {
+        const int rate = 44100;
+        MixSource source = arrangement.Sources[clip.SourceId]; int channels = source.Channels;
+        int begin = checked((int)Math.Min(source.Data.LongLength / channels, Math.Round(clip.SourceOffset * source.SampleRate)) * channels);
+        int count = checked((int)Math.Min((source.Data.LongLength - begin) / channels, Math.Round(clip.SourceDuration * source.SampleRate)) * channels);
+        float[] data = source.Data.AsSpan(begin, count).ToArray();
+        double factor = arrangement.Rate(clip);
+        data = Resample(data, channels, source.SampleRate * factor, rate);
+        token.ThrowIfCancellationRequested();
+        if (clip.TempoMode == ClipTempoMode.TimeStretch && Math.Abs(factor - 1) > 0.00001 && data.Length > 0)
+        {
+            using var input = new AudioObj { Data = data, Channels = channels, SampleRate = rate };
+            using var shifted = await PitchShifter.CreatePitchShiftAsync(input, (float)(-12 * Math.Log2(factor)),
+                useFftPv: true, maxWorkers: 1, cancellationToken: token).ConfigureAwait(false);
+            data = shifted.Data;
+        }
+        int frames = data.Length / channels;
+        double crossfadeIn = 0, crossfadeOut = 0;
+        if (lane.AutoCrossfade && !clip.HasRenderedEnvelope)
+            foreach (MixClip other in lane.Clips.Where(other => other.Id != clip.Id))
+            {
+                double otherEnd = other.Start + arrangement.ClipDuration(other);
+                if (other.Start < clip.Start && otherEnd > clip.Start) crossfadeIn = Math.Max(crossfadeIn, otherEnd - clip.Start);
+                if (other.Start > clip.Start && other.Start < clip.Start + frames / (double)rate)
+                    crossfadeOut = Math.Max(crossfadeOut, clip.Start + frames / (double)rate - other.Start);
+            }
+        for (int frame = 0; frame < frames; frame++)
+        {
+            if ((frame & 8191) == 0) token.ThrowIfCancellationRequested();
+            double time = frame / (double)rate, duration = frames / (double)rate, gain = clip.Gain;
+            if (clip.FadeIn > 0) gain *= Math.Clamp(time / clip.FadeIn, 0, 1);
+            if (clip.FadeOut > 0) gain *= Math.Clamp((duration - time) / clip.FadeOut, 0, 1);
+            if (crossfadeIn > 0) gain *= Math.Clamp(time / crossfadeIn, 0, 1);
+            if (crossfadeOut > 0) gain *= Math.Clamp((duration - time) / crossfadeOut, 0, 1);
+            for (int channel = 0; channel < channels; channel++) data[frame * channels + channel] = (float)(data[frame * channels + channel] * gain);
+        }
+        return data;
     }
 }

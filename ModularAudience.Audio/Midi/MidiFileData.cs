@@ -71,6 +71,32 @@ public sealed class MidiFileData
         return new MidiFileData(this.FilePath, this.TicksPerQuarterNote, this.DefaultBpm, this.Tracks, pitchFrequency);
     }
 
+    public MidiFileData SelectTracks(IEnumerable<int> trackIndices)
+    {
+        ArgumentNullException.ThrowIfNull(trackIndices);
+        HashSet<int> selectedIndices = trackIndices.ToHashSet();
+        List<MidiTrackData> selectedTracks = this.Tracks
+            .Where(track => selectedIndices.Contains(track.Index))
+            .Select(CloneTrack)
+            .ToList();
+        if (selectedTracks.Count != selectedIndices.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(trackIndices), "A selected MIDI track does not exist.");
+        }
+
+        return new MidiFileData(this.FilePath, this.TicksPerQuarterNote, this.DefaultBpm, selectedTracks, this.PitchFrequency);
+    }
+
+    public MidiFileData MergeTracks(string trackName = "Merged", int trackIndex = 0)
+    {
+        MidiTrackData mergedTrack = new() { Index = trackIndex, Name = trackName, LengthTicks = this.LengthTicks };
+        mergedTrack.Notes.AddRange(this.Tracks.SelectMany(track => track.Notes)
+            .OrderBy(note => note.StartTick)
+            .ThenBy(note => note.Channel)
+            .ThenBy(note => note.NoteNumber));
+        return new MidiFileData(this.FilePath, this.TicksPerQuarterNote, this.DefaultBpm, [mergedTrack], this.PitchFrequency);
+    }
+
     private MidiFileData(string filePath, int ticksPerQuarterNote, double defaultBpm, IReadOnlyList<MidiTrackData> tracks, double pitchFrequency = 440.0)
     {
         this.FilePath = filePath;

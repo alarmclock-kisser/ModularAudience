@@ -728,10 +728,10 @@ namespace ModularAudience.Forms
             }
 
             var loaded = (await this.AudioC.LoadManyAsync(validPaths)).ToList();
-            var pairs = validPaths
-                .Select((p, i) => (Path: Path.GetFullPath(p), Audio: i < loaded.Count ? loaded[i] : null))
-                .Where(x => x.Audio != null)
-                .Select(x => (x.Path, Audio: x.Audio!))
+            // LoadManyAsync omits failed files. Zipping its compacted results
+            // with requested indices assigned later tracks to the wrong folder.
+            var pairs = loaded.OfType<AudioObj>()
+                .Select(audio => (Path: Path.GetFullPath(audio.FilePath), Audio: audio))
                 .ToList();
 
             var importedAudios = pairs.Select(x => x.Audio!).ToList();
@@ -764,7 +764,8 @@ namespace ModularAudience.Forms
                     var pairs = importedPairs;
                     if (this.AllInOneBag)
                     {
-                        var targetView = CollectionViews.LastOrDefault(cv => cv != null && !cv.IsDisposed);
+                        var targetView = CollectionViews.FirstOrDefault(cv => cv.CanAppendImportedAudio && cv.Visible)
+                            ?? CollectionViews.FirstOrDefault(cv => cv.CanAppendImportedAudio);
                         if (targetView == null)
                         {
                             targetView = new AudioCollectionView([]);
@@ -781,31 +782,7 @@ namespace ModularAudience.Forms
 
                     else if (this.StructuredImports)
                     {
-                        var groups = pairs.GroupBy(x => Path.GetDirectoryName(x.Path) ?? string.Empty);
-                        foreach (var g in groups)
-                        {
-                            var audios = g.Select(x => x.Audio).ToList();
-                            if (audios.Count == 0)
-                            {
-                                continue;
-                            }
-
-                            var newView = new AudioCollectionView(audios);
-                            string folderName = Path.GetFileName(g.Key);
-                            if (string.IsNullOrWhiteSpace(folderName))
-                            {
-                                folderName = g.Key;
-                            }
-
-                            try { newView.Rename(folderName); } catch { }
-                            int num = GetCollectionNumber(newView);
-                            foreach (var audio in audios)
-                            {
-                                AudioCollectionTags[audio.Id] = num;
-                            }
-
-                            newView.Show();
-                        }
+                        PlaceStructuredImports(pairs);
                     }
                     else
                     {
@@ -870,6 +847,30 @@ namespace ModularAudience.Forms
         {
             ArgumentNullException.ThrowIfNull(audio);
             this.PlaceImportedAudios([($"MIDI:{audio.Name}", audio)], [audio]);
+        }
+
+        internal static string GetImportDirectory(string filePath) => Path.TrimEndingDirectorySeparator(
+            Path.GetFullPath(Path.GetDirectoryName(filePath) ?? Environment.CurrentDirectory));
+
+        internal static void PlaceStructuredImports(IEnumerable<(string Path, AudioObj Audio)> pairs)
+        {
+            foreach (var group in pairs.GroupBy(pair => GetImportDirectory(pair.Path), StringComparer.OrdinalIgnoreCase))
+            {
+                var target = CollectionViews.FirstOrDefault(view => view.CanAppendImportedAudio && view.ImportDirectoryPath is not null &&
+                    string.Equals(view.ImportDirectoryPath, group.Key, StringComparison.OrdinalIgnoreCase));
+                bool created = target is null;
+                target ??= new AudioCollectionView([]);
+                target.RememberImportDirectory(group.Key);
+                string folderName = Path.GetFileName(group.Key);
+                if (created) target.Rename(string.IsNullOrWhiteSpace(folderName) ? group.Key : folderName);
+                int number = GetCollectionNumber(target);
+                foreach (var (_, audio) in group)
+                {
+                    target.AudioC.Audios.Add(audio);
+                    AudioCollectionTags[audio.Id] = number;
+                }
+                target.Show();
+            }
         }
 
     }

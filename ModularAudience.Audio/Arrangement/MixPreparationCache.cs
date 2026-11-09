@@ -15,13 +15,13 @@ public sealed class MixPreparationCache : IDisposable
         mix.Bpm,
         Lanes = mix.Lanes.OrderBy(l => l.Id).Select(l => new { l.Id, l.Gain, l.Mute, l.Solo, l.AutoCrossfade,
             Clips = l.Clips.OrderBy(c => c.Id).Select(c => new { c.Id, c.SourceId, c.Start, c.SourceOffset, c.SourceDuration,
-                c.Gain, c.FadeIn, c.FadeOut, c.TempoMode }) })
+                c.Gain, c.FadeIn, c.FadeOut, c.TempoMode, c.HasRenderedEnvelope }) })
     });
     private static string LaneKey(MixArrangement mix, MixLane lane) => JsonSerializer.Serialize(new
     {
         mix.Bpm, lane.AutoCrossfade,
         Clips = lane.Clips.OrderBy(c => c.Id).Select(c => new { c.Id, c.SourceId, c.Start, c.SourceOffset, c.SourceDuration,
-            c.Gain, c.FadeIn, c.FadeOut, c.TempoMode,
+            c.Gain, c.FadeIn, c.FadeOut, c.TempoMode, c.HasRenderedEnvelope,
             Source = new { mix.Sources[c.SourceId].SampleRate, mix.Sources[c.SourceId].Channels, mix.Sources[c.SourceId].Bpm } })
     });
     public async Task PrepareAsync(MixArrangement mix, CancellationToken token = default)

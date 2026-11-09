@@ -142,6 +142,20 @@ public sealed class AutoTuneDialogTests
     }
 
     [STATestMethod]
+    public void ExplicitLoadAndRename_UseTheSharedPresetUiWithoutChangingAudio()
+    {
+        using var fixture = new DialogFixture(); fixture.Store.Save("Detailed", AutoTunePresetStoreTests.DetailedSettings);
+        using AutoTuneDialog dialog = fixture.Dialog();
+        ComboBox presets = Descendants(dialog).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets");
+        presets.SelectedItem = UserPreset(presets, "Detailed"); dialog.SetSettings(new AutoTuneSettings()); dialog.LoadSelectedPreset();
+        Assert.AreEqual(AutoTunePresetStoreTests.DetailedSettings, dialog.CurrentSettings);
+        Descendants(dialog).OfType<TextBox>().Single(control => control.Name == "presetName").Text = "Renamed";
+        dialog.RenamePreset();
+        Assert.AreEqual(AutoTunePresetStoreTests.DetailedSettings, fixture.Store.Load("Renamed").Parameters);
+        Assert.ThrowsExactly<KeyNotFoundException>(() => fixture.Store.Load("Detailed")); Assert.IsFalse(fixture.Audio.CanUndo);
+    }
+
+    [STATestMethod]
     public void MaxThreads_IsCpuLimitedAndIndependentOfPresetLoadAndDelete()
     {
         using var fixture = new DialogFixture();
@@ -374,8 +388,9 @@ public sealed class AutoTuneDialogTests
                     Task.FromResult(new AutoTuneResult(context.Session.Input.ToArray().Select(value => value * 2).ToArray(), 1, 1, 1, 1)));
             };
             var menu = (ContextMenuStrip)typeof(TrackView).GetField("contextMenu_waveform", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(view)!;
-            ToolStripMenuItem effects = menu.Items.OfType<ToolStripMenuItem>().Single(item => item.Text == "Apply Effects ...");
-            ToolStripMenuItem autoTune = effects.DropDownItems.OfType<ToolStripMenuItem>().Single(item => item.Text == "Auto Tune ...");
+            ToolStripMenuItem effects = menu.Items.OfType<ToolStripMenuItem>().Single(item => item.Text == "Apply Effect ...");
+            ToolStripMenuItem tuning = effects.DropDownItems.OfType<ToolStripMenuItem>().Single(item => item.Text == "Pitch && Tuning");
+            ToolStripMenuItem autoTune = tuning.DropDownItems.OfType<ToolStripMenuItem>().Single(item => item.Text == "Auto Tune ...");
 
             autoTune.PerformClick();
             Application.DoEvents();
