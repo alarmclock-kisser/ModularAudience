@@ -35,17 +35,23 @@ namespace ModularAudience.Audio.Tests
                 var original = scope.Create(new float[] { 0.1f, 0.2f, 0.3f }, 44100, 1);
                 original.Name = "Original";
                 original.Volume = 0.5f;
+                original.Bpm = 125.5f;
+                original.ScannedBpm = 133.25f;
 
-                var clone = original.Clone();
+                using var clone = original.Clone();
 
                 // A clone is a new audio object and therefore has its own id.
                 Assert.AreNotEqual(original.Id, clone.Id);
                 Assert.AreEqual(original.Name, clone.Name);
                 Assert.AreEqual(original.Volume, clone.Volume);
+                Assert.AreEqual(original.Bpm, clone.Bpm);
+                Assert.AreEqual(original.ScannedBpm, clone.ScannedBpm);
                 Assert.AreEqual(original.SampleRate, clone.SampleRate);
                 Assert.AreEqual(original.Data.Length, clone.Data.Length);
                 Assert.AreNotSame(original.Data, clone.Data); // Data should be cloned
                 Assert.AreNotSame(original, clone);
+                clone.ScannedBpm = 91;
+                Assert.AreEqual(133.25f, original.ScannedBpm);
             }
         }
 

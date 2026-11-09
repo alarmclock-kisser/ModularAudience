@@ -346,6 +346,7 @@ namespace ModularAudience.Audio
                 Length = this.Length,
                 Duration = this.Duration,
                 Bpm = this.Bpm,
+                ScannedBpm = this.ScannedBpm,
                 DrawBeatGrid = this.DrawBeatGrid,
                 BeatGrid = (bool[])this.BeatGrid.Clone(),
                 Timing = this.Timing,

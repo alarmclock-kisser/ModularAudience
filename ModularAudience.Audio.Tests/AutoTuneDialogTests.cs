@@ -56,12 +56,76 @@ public sealed class AutoTuneDialogTests
         using AutoTuneDialog dialog = fixture.Dialog();
         ComboBox presets = Descendants(dialog).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets");
 
-        presets.SelectedItem = "Detailed";
+        presets.SelectedItem = UserPreset(presets, "Detailed");
         Assert.AreEqual(AutoTunePresetStoreTests.DetailedSettings, dialog.CurrentSettings);
         dialog.DeletePreset();
 
         Assert.AreEqual(fixture.Defaults, dialog.CurrentSettings);
         Assert.HasCount(0, fixture.Store.List());
+        Assert.AreEqual(AutoTuneBuiltInPresets.All.Count, presets.Items.OfType<AutoTunePreset>().Count(preset => preset.IsBuiltIn));
+        Assert.IsFalse(fixture.Audio.CanUndo);
+    }
+
+    [STATestMethod]
+    [DataRow(128.5f, 150.25f, 128.5, 128.5)]
+    [DataRow(0f, 150.25f, 150.25, 150.25)]
+    [DataRow(401f, 150.25f, 150.25, 150.25)]
+    [DataRow(0f, 0f, 135.5, 120d)]
+    public void SelectingUserAndBuiltInPresets_AdaptsOnlyTempoToTrackWithoutChangingSavedValues(
+        float bpm, float scannedBpm, double expectedUserTempo, double expectedBuiltInTempo)
+    {
+        using var fixture = new DialogFixture();
+        fixture.Audio.Bpm = bpm; fixture.Audio.ScannedBpm = scannedBpm;
+        float[] before = (float[])fixture.Audio.Data.Clone();
+        AutoTuneSettings user = AutoTunePresetStoreTests.DetailedSettings;
+        fixture.Store.Save("Detailed", user);
+        using AutoTuneDialog dialog = fixture.Dialog();
+        string savedJson = File.ReadAllText(fixture.Store.FilePath);
+        ComboBox presets = Descendants(dialog).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets");
+        NumericUpDown threads = Descendants(dialog).OfType<NumericUpDown>().Single(control => control.Name == "maxThreads");
+        threads.Value = Environment.ProcessorCount;
+
+        presets.SelectedItem = UserPreset(presets, "Detailed");
+        Assert.AreEqual(user with { TempoBpm = expectedUserTempo }, dialog.CurrentSettings);
+        AutoTunePreset soft = presets.Items.OfType<AutoTunePreset>().Single(preset => preset.BuiltInId == "soft");
+        presets.SelectedItem = soft;
+        Assert.AreEqual(soft.Parameters with { TempoBpm = expectedBuiltInTempo }, dialog.CurrentSettings);
+
+        Assert.AreEqual(savedJson, File.ReadAllText(fixture.Store.FilePath));
+        CollectionAssert.AreEqual(before, fixture.Audio.Data);
+        Assert.AreEqual(bpm, fixture.Audio.Bpm);
+        Assert.AreEqual(scannedBpm, fixture.Audio.ScannedBpm);
+        Assert.AreEqual((decimal)Environment.ProcessorCount, threads.Value);
+        Assert.IsFalse(fixture.Audio.CanUndo);
+        Assert.IsFalse(fixture.Audio.CanRedo);
+    }
+
+    [STATestMethod]
+    public void PresetTempo_ReadsCurrentTrackMetadataOnEverySelectionAndStillAllowsManualEdits()
+    {
+        using var fixture = new DialogFixture();
+        fixture.Audio.Bpm = 128.5f; fixture.Audio.ScannedBpm = 150.25f;
+        fixture.Store.Save("Detailed", AutoTunePresetStoreTests.DetailedSettings);
+        using AutoTuneDialog dialog = fixture.Dialog();
+        ComboBox presets = Descendants(dialog).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets");
+        Assert.AreEqual(128.5, dialog.CurrentSettings.TempoBpm);
+        presets.SelectedItem = UserPreset(presets, "Detailed");
+        Assert.AreEqual(128.5, dialog.CurrentSettings.TempoBpm);
+        dialog.SetSettings(dialog.CurrentSettings with { TempoBpm = 93.75 });
+        Assert.AreEqual(93.75, dialog.CurrentSettings.TempoBpm);
+
+        fixture.Audio.Bpm = 0;
+        presets.SelectedItem = presets.Items.OfType<AutoTunePreset>().Single(preset => preset.BuiltInId == "soft");
+        Assert.AreEqual(150.25, dialog.CurrentSettings.TempoBpm);
+        fixture.Audio.Bpm = 172.5f;
+        presets.SelectedItem = UserPreset(presets, "Detailed");
+        Assert.AreEqual(172.5, dialog.CurrentSettings.TempoBpm);
+        fixture.Audio.Bpm = fixture.Audio.ScannedBpm = 0;
+        presets.SelectedItem = presets.Items.OfType<AutoTunePreset>().Single(preset => preset.BuiltInId == "soft");
+        Assert.AreEqual(120d, dialog.CurrentSettings.TempoBpm);
+        presets.SelectedItem = UserPreset(presets, "Detailed");
+        Assert.AreEqual(135.5, dialog.CurrentSettings.TempoBpm);
+        Assert.AreEqual(AutoTunePresetStoreTests.DetailedSettings, fixture.Store.Load("Detailed").Parameters);
         Assert.IsFalse(fixture.Audio.CanUndo);
     }
 
@@ -74,7 +138,7 @@ public sealed class AutoTuneDialogTests
         dialog.SavePreset();
 
         Assert.AreEqual("Preset#1", fixture.Store.List().Single().Name);
-        Assert.AreEqual("Preset#1", Descendants(dialog).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets").SelectedItem);
+        Assert.AreEqual("Preset#1", ((AutoTunePreset)Descendants(dialog).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets").SelectedItem!).Name);
     }
 
     [STATestMethod]
@@ -88,10 +152,128 @@ public sealed class AutoTuneDialogTests
         Assert.AreEqual((decimal)Math.Max(1, Environment.ProcessorCount / 2), threads.Value);
         threads.Value = Environment.ProcessorCount;
 
-        Descendants(dialog).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets").SelectedItem = "Detailed";
+        ComboBox presets = Descendants(dialog).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets");
+        presets.SelectedItem = UserPreset(presets, "Detailed");
         Assert.AreEqual((decimal)Environment.ProcessorCount, threads.Value);
         dialog.DeletePreset();
         Assert.AreEqual((decimal)Environment.ProcessorCount, threads.Value);
+        presets.SelectedItem = presets.Items.OfType<AutoTunePreset>().Single(preset => preset.BuiltInId == "soft");
+        Assert.AreEqual((decimal)Environment.ProcessorCount, threads.Value);
+        dialog.SavePreset();
+        Assert.AreEqual((decimal)Environment.ProcessorCount, threads.Value);
+        Button reset = Descendants(dialog).OfType<Button>().Single(control => control.Text == "Defaults");
+        typeof(Button).GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(reset, [EventArgs.Empty]);
+        Assert.AreEqual(fixture.Defaults, dialog.CurrentSettings);
+        Assert.AreEqual((decimal)Environment.ProcessorCount, threads.Value);
+    }
+
+    [STATestMethod]
+    public void SelectingEachBuiltIn_LoadsEveryParameterWithoutChangingAudioHistoryOrThreads()
+    {
+        using var fixture = new DialogFixture();
+        float[] before = (float[])fixture.Audio.Data.Clone();
+        using AutoTuneDialog dialog = fixture.Dialog();
+        ComboBox presets = Descendants(dialog).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets");
+        NumericUpDown threads = Descendants(dialog).OfType<NumericUpDown>().Single(control => control.Name == "maxThreads");
+        threads.Value = Environment.ProcessorCount;
+
+        foreach (AutoTuneBuiltInPreset definition in AutoTuneBuiltInPresets.All)
+        {
+            presets.SelectedItem = presets.Items.OfType<AutoTunePreset>().Single(preset => preset.BuiltInId == definition.Id);
+
+            Assert.AreEqual(definition.Parameters, dialog.CurrentSettings, definition.Id);
+            Assert.AreEqual((decimal)Environment.ProcessorCount, threads.Value, definition.Id);
+        }
+
+        CollectionAssert.AreEqual(before, fixture.Audio.Data);
+        Assert.IsFalse(fixture.Audio.CanUndo);
+        Assert.IsFalse(fixture.Audio.CanRedo);
+    }
+
+    [STATestMethod]
+    public void BuiltInPresets_AreAlwaysShownAndSavingAVariantDoesNotOverwriteSameNamedUserPreset()
+    {
+        using var fixture = new DialogFixture();
+        fixture.Store.Save("Soft", AutoTunePresetStoreTests.DetailedSettings);
+        using AutoTuneDialog dialog = fixture.Dialog();
+        ComboBox presets = Descendants(dialog).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets");
+        Assert.AreEqual(AutoTuneBuiltInPresets.All.Count, presets.Items.OfType<AutoTunePreset>().Count(preset => preset.IsBuiltIn));
+
+        AutoTunePreset soft = presets.Items.OfType<AutoTunePreset>().Single(preset => preset.BuiltInId == "soft");
+        presets.SelectedItem = soft;
+        Assert.AreEqual(soft.Parameters, dialog.CurrentSettings);
+        Assert.IsFalse(Descendants(dialog).OfType<Button>().Single(control => control.Name == "deletePreset").Enabled);
+        Assert.AreEqual(string.Empty, Descendants(dialog).OfType<TextBox>().Single(control => control.Name == "presetName").Text);
+        dialog.DeletePreset();
+        Assert.AreEqual(soft.Parameters, dialog.CurrentSettings, "Delete must not remove or reset a selected default.");
+
+        dialog.SetSettings(soft.Parameters with { IntensityPercent = 45 });
+        dialog.SavePreset();
+
+        Assert.AreEqual(AutoTunePresetStoreTests.DetailedSettings, fixture.Store.Load("Soft").Parameters);
+        Assert.AreEqual(45d, fixture.Store.Load("Preset#1").Parameters.IntensityPercent);
+        Assert.AreEqual(soft.Parameters, fixture.Store.ListAvailable().Single(preset => preset.BuiltInId == "soft").Parameters);
+        Assert.IsFalse(fixture.Audio.CanUndo);
+    }
+
+    [STATestMethod]
+    public void MalformedUserFile_DoesNotHideOrPreventLoadingDefaults()
+    {
+        using var fixture = new DialogFixture();
+        File.WriteAllText(fixture.Store.FilePath, "{broken JSON");
+        using AutoTuneDialog dialog = fixture.Dialog();
+        ComboBox presets = Descendants(dialog).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets");
+
+        presets.SelectedItem = presets.Items.OfType<AutoTunePreset>().Single(preset => preset.BuiltInId == "soft");
+
+        Assert.AreEqual(AutoTuneBuiltInPresets.All.Single(definition => definition.Id == "soft").Parameters, dialog.CurrentSettings);
+        Assert.AreEqual("{broken JSON", File.ReadAllText(fixture.Store.FilePath));
+    }
+
+    [STATestMethod]
+    public void LockedPresetFile_StillOffersDefaultsAndUsersWithoutReplacingTheFile()
+    {
+        using var fixture = new DialogFixture();
+        fixture.Store.Save("My Voice", AutoTunePresetStoreTests.DetailedSettings);
+        string before = File.ReadAllText(fixture.Store.FilePath);
+        using var locked = new FileStream(fixture.Store.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using AutoTuneDialog dialog = fixture.Dialog();
+        ComboBox presets = Descendants(dialog).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets");
+        Assert.AreEqual(AutoTuneBuiltInPresets.All.Count + 1, presets.Items.Count);
+
+        presets.SelectedItem = presets.Items.OfType<AutoTunePreset>().Single(preset => preset.BuiltInId == "medium");
+        Assert.AreEqual(AutoTuneBuiltInPresets.All.Single(definition => definition.Id == "medium").Parameters, dialog.CurrentSettings);
+        presets.SelectedItem = UserPreset(presets, "My Voice");
+        Assert.AreEqual(AutoTunePresetStoreTests.DetailedSettings, dialog.CurrentSettings);
+        Assert.AreEqual(before, File.ReadAllText(fixture.Store.FilePath));
+        Assert.HasCount(1, Directory.GetFiles(Path.GetDirectoryName(fixture.Store.FilePath)!));
+    }
+
+    [STATestMethod]
+    public void DropdownRefresh_PreservesOriginSelectionAndUnsavedParameterChanges()
+    {
+        using var fixture = new DialogFixture();
+        fixture.Store.Save("Soft", AutoTunePresetStoreTests.DetailedSettings);
+        using AutoTuneDialog dialog = fixture.Dialog();
+        ComboBox presets = Descendants(dialog).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets");
+        MethodInfo refresh = typeof(ComboBox).GetMethod("OnDropDown", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        presets.SelectedItem = presets.Items.OfType<AutoTunePreset>().Single(preset => preset.BuiltInId == "soft");
+        AutoTuneSettings variant = dialog.CurrentSettings with { IntensityPercent = 43 };
+        dialog.SetSettings(variant);
+        fixture.Store.Save("Other window", new());
+
+        refresh.Invoke(presets, [EventArgs.Empty]);
+
+        Assert.AreEqual("soft", ((AutoTunePreset)presets.SelectedItem!).BuiltInId);
+        Assert.AreEqual(variant, dialog.CurrentSettings);
+        Assert.IsNotNull(UserPreset(presets, "Other window"));
+
+        presets.SelectedItem = UserPreset(presets, "Soft");
+        refresh.Invoke(presets, [EventArgs.Empty]);
+
+        Assert.IsFalse(((AutoTunePreset)presets.SelectedItem!).IsBuiltIn);
+        Assert.AreEqual(AutoTunePresetStoreTests.DetailedSettings, dialog.CurrentSettings);
+        Assert.IsTrue(Descendants(dialog).OfType<Button>().Single(control => control.Name == "deletePreset").Enabled);
     }
 
     [STATestMethod]
@@ -173,7 +355,12 @@ public sealed class AutoTuneDialogTests
     public void TrackViewMenu_OpensModelessForSelection_AndControlZYUndoRedoEffect()
     {
         using var fixture = new DialogFixture();
-        using var audio = new AudioObj { Data = [1, 2, 3, 4, 5, 6, 7, 8], Channels = 2, SampleRate = 8000, Length = 8, Name = "Selection" };
+        fixture.Store.Save("Detailed", AutoTunePresetStoreTests.DetailedSettings);
+        using var audio = new AudioObj
+        {
+            Data = [1, 2, 3, 4, 5, 6, 7, 8], Channels = 2, SampleRate = 8000, Length = 8, Name = "Selection",
+            Bpm = 401, ScannedBpm = 131.25f
+        };
         using var view = new TrackView(audio);
         AutoTuneDialog? opened = null;
         AutoTuneDialogContext? captured = null;
@@ -199,6 +386,13 @@ public sealed class AutoTuneDialogTests
             Assert.IsNotNull(captured);
             Assert.IsTrue(captured.Session.IsSelection);
             Assert.AreEqual(4, captured.Session.SampleCount);
+            Assert.AreEqual(131.25, captured.Defaults.TempoBpm);
+            ComboBox presets = Descendants(opened).OfType<ComboBox>().Single(control => control.Name == "autoTunePresets");
+            presets.SelectedItem = presets.Items.OfType<AutoTunePreset>().Single(preset => preset.BuiltInId == "soft");
+            Assert.AreEqual(131.25, opened.CurrentSettings.TempoBpm);
+            view.OriginalAudio.Bpm = 147.5f;
+            presets.SelectedItem = UserPreset(presets, "Detailed");
+            Assert.AreEqual(147.5, opened.CurrentSettings.TempoBpm, "The modeless dialog must reread the current TrackView metadata.");
             Drain(opened.AcceptEffectAsync());
             CollectionAssert.AreEqual(new float[] { 1, 2, 6, 8, 10, 12, 7, 8 }, view.OriginalAudio.Data);
             Assert.AreEqual(1, view.OriginalAudio.PreviousSteps.Count);
@@ -226,6 +420,9 @@ public sealed class AutoTuneDialogTests
         }
     }
 
+    private static AutoTunePreset UserPreset(ComboBox combo, string name) => combo.Items.OfType<AutoTunePreset>()
+        .Single(preset => !preset.IsBuiltIn && preset.Name == name);
+
     private static void Drain(Task task)
     {
         var watch = Stopwatch.StartNew();
@@ -252,7 +449,7 @@ public sealed class AutoTuneDialogTests
             var context = new AutoTuneDialogContext(session, "Test", this.Defaults, (samples, token) =>
             {
                 token.ThrowIfCancellationRequested(); session.Apply(this.Audio, samples); return Task.CompletedTask;
-            });
+            }, ReadTrackTempo: () => (this.Audio.Bpm, this.Audio.ScannedBpm));
             return new AutoTuneDialog(context, this.Store, this.Preview, render ?? ((_, _, token) =>
             {
                 token.ThrowIfCancellationRequested(); this.RenderCount++;

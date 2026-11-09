@@ -32,10 +32,9 @@ public partial class TrackView
         try
         {
             AudioEffectEditSession session = AudioEffectEditSession.Capture(this.OriginalAudio);
-            double bpm = this.OriginalAudio.Bpm > 0 ? this.OriginalAudio.Bpm : this.OriginalAudio.ScannedBpm;
             var defaults = new AutoTuneSettings
             {
-                TempoBpm = double.IsFinite(bpm) && bpm is >= 20 and <= 400 ? bpm : 120,
+                TempoBpm = AutoTuneTempoResolver.Resolve(this.OriginalAudio.Bpm, this.OriginalAudio.ScannedBpm),
                 MaximumFrequencyHz = Math.Min(1200, session.SampleRate * 0.4)
             };
             var context = new AutoTuneDialogContext(session, this.OriginalAudio.Name, defaults,
@@ -56,7 +55,8 @@ public partial class TrackView
                         LogManager.Log($"Auto Tune applied to {(session.IsSelection ? "selection" : "track")} in '{this.OriginalAudio.Name}' (Ctrl+Z / Ctrl+Y available).");
                     }
                 },
-                () => this.StopPlaybackAsync(preserveManualRate: true));
+                () => this.StopPlaybackAsync(preserveManualRate: true),
+                ReadTrackTempo: () => (this.OriginalAudio.Bpm, this.OriginalAudio.ScannedBpm));
             var dialog = this.CreateAutoTuneDialog(context);
             this.autoTuneDialog = dialog;
             dialog.FormClosed += (_, _) => { if (ReferenceEquals(this.autoTuneDialog, dialog)) this.autoTuneDialog = null; };

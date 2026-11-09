@@ -116,18 +116,83 @@ Presets are a UTF-8 JSON array at:
 %APPDATA%\ModularAudience\Effects\AutoTunePresets.json
 ```
 
-Each element contains `Name` and the complete typed `Parameters` object. Selecting
-a name in the combo box immediately loads its parameter controls. **Save**
-creates a new named preset or updates that name case-insensitively. With a blank
-name it chooses the first unused `Preset#N`, checking under the same cross-process
-mutex as the write. Clear the name field to create another generic preset.
-Execution worker limits and the preview-only loop/bypass switches are not sound
-parameters and are not written into the preset.
+Each element contains `Name` and the complete typed `Parameters` object. Default
+entries additionally contain a stable `BuiltInId`, for example `"soft"` or
+`"vocals-natural"`; user entries omit this property. Legacy arrays containing only
+`Name` and `Parameters` remain compatible. Worker limits and the preview-only
+loop/bypass switches are not sound parameters and are not written into the preset.
 
-**Delete** removes only the selected entry, clears the name/selection, and resets
-all controls to the dialog's defaults (including the opening track's BPM when
-available). It never modifies the audio or undo/redo stacks. Opening the preset
-dropdown refreshes entries saved by another window or instance.
+The selector always offers the catalog below, marked **`[Default]`** and ordered
+before user presets. Missing default IDs are added to the existing JSON array
+under the same cross-process mutex used for saving. Once all defaults are present,
+reopening does not rewrite the file or duplicate entries. Seeding preserves
+existing user parameters and even manually edited default parameters. A user
+preset named `Soft` remains separate from `[Default] Soft`. If the file cannot
+be read or seeded, the error is shown
+and the code-defined defaults remain usable without replacing the original file.
+
+Selecting an entry immediately loads its saved parameter values, then adapts
+**Tempo BPM** to the current track metadata for both user and built-in presets:
+
+1. `AudioObj.Bpm`
+2. `AudioObj.ScannedBpm`
+3. The selected preset's `TempoBpm`
+4. 120 BPM
+
+Each candidate must be finite and within the supported **20–400 BPM** range;
+missing/invalid values fall through rather than being clamped. Metadata is read
+again on every selection, even if it changed after the modeless window opened.
+TrackView's editing clone retains `ScannedBpm` from its source AudioObj as well.
+Only the parameter controls are adapted: preset JSON, catalog values, track
+metadata, samples, undo/redo history, and Max threads are not modified by loading.
+Tempo remains manually editable after loading; it is not forced again during
+preview/apply or a dropdown refresh. Opening/resetting the dialog uses the same
+tempo fallback with the dialog defaults as the preset starting point.
+
+**Save** creates a user preset or updates an existing user name case-insensitively;
+it never overwrites a default entry. Selecting a default clears the name field so
+an edited variant does not accidentally overwrite a same-named user preset.
+Enter a name to keep a variant, or leave it blank for the first unused `Preset#N`.
+Generic names are allocated under the write mutex. Clear the name field to
+create another generic preset.
+
+**Delete** is disabled for defaults. For a selected user preset it removes only
+that entry, clears the name/selection, and resets sound controls to the dialog's
+opening defaults with current track-tempo fallback, but leaves Max
+threads unchanged. Preset operations never modify audio or undo/redo stacks.
+Opening the dropdown refreshes entries saved by another window or instance.
+
+### Built-in starting points
+
+| Preset | Intensity | Retune | Distinguishing parameters / use |
+| --- | ---: | ---: | --- |
+| Soft | 35% | 150 ms | 80% vibrato preservation, 8-cent dead zone, 85% wet; subtle stabilization. |
+| Medium | 65% | 70 ms | 45% vibrato preservation, 4-cent dead zone; balanced correction. |
+| Strong | 100% | 12 ms | 5% vibrato preservation, no dead zone, `1/128` minimum notes; firm correction. |
+| Vocals - Natural Lead | 70% | 85 ms | 85% vibrato and 80% formant preservation, 4096 FFT; expressive solo vocals. |
+| Vocals - Pop Tight | 100% | 22 ms | 30% vibrato and 85% formant preservation; tight modern lead vocals. |
+| Vocals - Hard Robotic | 100% | 0 ms | No vibrato preservation/smoothing, `1/128` minimum notes, 1024 FFT; deliberate hard snapping. |
+| Vocals - Low Voice | 80% | 65 ms | 50–500 Hz detection, 4096 FFT, 90% formant preservation. |
+| Vocals - High Voice | 75% | 65 ms | 140–2200 Hz detection, 70% vibrato and 80% formant preservation. |
+| Instrument - Bass | 90% | 50 ms | 30–400 Hz detection, 8192 FFT, 0.82 confidence gate; sustained monophonic bass. |
+| Instrument - Guitar Lead | 65% | 65 ms | 70% vibrato preservation, 70–1500 Hz detection, gentle attack crossfade; single-note leads. |
+| Instrument - Bowed / Wind | 60% | 110 ms | 95% vibrato preservation, `1/16` minimum notes, 4096 FFT; expressive solo instruments. |
+| Ensemble - Unison Only | 25% | 200 ms | 45% wet, 0.5-semitone correction limit, 0.9 confidence gate; very cautious shared correction. |
+| Creative - C Minor Snap | 100% | 0 ms | C natural minor, no vibrato or formant preservation, 1024 FFT; obvious scale snapping. |
+
+These are starting points, not instrument recognition. All use chromatic tuning
+except **Creative - C Minor Snap**. All store A4 = 440 Hz, 120 BPM, linked
+Strongest-channel analysis, 0 dB output gain, and enabled peak protection. Loading
+uses the track-tempo fallback above; key/scale and detection range are not
+automatically adapted. Check these values for the actual recording, especially
+when no usable track tempo is known. Descriptions appear in the status area and
+selector tooltip. Max threads remains an independent runtime choice.
+
+**Ensemble - Unison Only does not tune individual choir voices or chords.** It
+only attempts a conservative shared curve for predominantly unison material;
+compare against dry audio and bypass it when the detected pitch is unreliable.
+Very low bass detection and larger FFTs cost more CPU/memory. Formant preservation
+is approximate, and no preset guarantees artifact-free results for every source.
 
 Writes use a same-directory temporary JSON file and atomic replacement. Invalid
 files are reported instead of silently overwritten. Preset JSON is the only
@@ -143,5 +208,11 @@ Tests cover actual pitch correction and intensity, duration and linked stereo,
 bypass/gating, edge blending, peak/formant processing, settings validation,
 selection isolation, stale-source rejection, undo/redo including TrackView's
 Ctrl+Z / Ctrl+Y dispatch, modeless UI/preview/cancellation, parameter round trips,
-and atomic preset persistence with concurrent generic-name allocation. Automated
-UI tests use a fake audio device; subjective sound/device checks remain manual.
+and atomic preset persistence with concurrent generic-name allocation. Catalog
+tests cover distinct/valid profiles, legacy migration, idempotent/concurrent
+default seeding, same-name user/default isolation, restoration of missing defaults,
+preservation of existing values and unsaved controls on dropdown refresh, protected
+UI defaults, malformed/locked-file fallback, and live track/preset BPM priority
+including invalid-value fallbacks and unchanged stored parameters.
+Automated UI tests use a fake audio device; subjective sound/device checks remain
+manual.
