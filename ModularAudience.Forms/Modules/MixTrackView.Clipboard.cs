@@ -98,7 +98,7 @@ public sealed partial class MixTrackView
         if (!pasteHoldTracking) return;
         pasteHoldTracking = false; pasteHoldTimer.Stop(); StartPastePreview(); e.Handled = true;
     }
-    private void ShowClipboardHistory()
+    private async void ShowClipboardHistory()
     {
         pasteHoldTimer.Stop(); if (!pasteHoldTracking) return; pasteHoldTracking = false;
         if (clipboardHistory.Count == 0) return;
@@ -137,7 +137,7 @@ public sealed partial class MixTrackView
         dialog.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { Accept(); e.Handled = true; } else if (e.KeyCode == Keys.Escape) dialog.Close(); };
         Rectangle work = Screen.GetWorkingArea(this); Point pointer = Cursor.Position;
         dialog.Location = new(Math.Clamp(pointer.X - 60, work.Left, Math.Max(work.Left, work.Right - dialog.Width)), Math.Clamp(pointer.Y - 60, work.Top, Math.Max(work.Top, work.Bottom - dialog.Height)));
-        if (dialog.ShowDialog(this) != DialogResult.OK || list.SelectedItem is not ClipboardEntry chosen) return;
+        if (await this.ShowMixDialogAsync(dialog) != DialogResult.OK || list.SelectedItem is not ClipboardEntry chosen) return;
         clipboardHistory.Remove(chosen); clipboardHistory.Insert(0, chosen); StartPastePreview();
     }
     private void SelectWholeClip(Guid id, bool additive)

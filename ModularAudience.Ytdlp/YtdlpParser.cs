@@ -81,7 +81,7 @@ public static partial class YtdlpParser
         return null;
     }
 
-    public static IReadOnlyList<YtdlpVideo> ParseVideos(string json, int maxResults = 50, bool includeChannels = false)
+    public static IReadOnlyList<YtdlpVideo> ParseVideos(string json, int maxResults = 50, bool includeChannels = false, bool includePlaylists = false)
     {
         ValidateMaxResults(maxResults);
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 64 });
@@ -93,16 +93,20 @@ public static partial class YtdlpParser
         {
             foreach (var entry in entries.EnumerateArray())
             {
-                var video = ParseVideo(entry) ?? (includeChannels ? ParseChannel(entry) : null);
+                var video = ParseEntry(entry);
                 if (video is not null)
                     result.Add(video);
                 if (result.Count == maxResults)
                     break;
             }
         }
-        else if (ParseVideo(root) is { } video)
+        else if (ParseEntry(root) is { } video)
             result.Add(video);
         return result.AsReadOnly();
+
+        YtdlpVideo? ParseEntry(JsonElement entry) => ParseVideo(entry)
+            ?? (includeChannels ? ParseChannel(entry) : null)
+            ?? (includePlaylists ? ParsePlaylist(entry) : null);
     }
 
     public static YtdlpVideo? ParseVideo(JsonElement entry)
@@ -112,6 +116,9 @@ public static partial class YtdlpParser
         var id = Text(entry, "id");
         if (id is null || !VideoIdPattern().IsMatch(id))
             return null;
+        if (Text(entry, "ie_key") is "YoutubeTab" or "YoutubePlaylist") return null;
+        foreach (string key in new[] { "url", "webpage_url" })
+            if (Uri.TryCreate(Text(entry, key), UriKind.Absolute, out var url) && url.AbsolutePath == "/playlist") return null;
         var duration = Number(entry, "duration");
         return new YtdlpVideo
         {
@@ -138,6 +145,43 @@ public static partial class YtdlpParser
             Uploader = Text(entry, "channel") ?? Text(entry, "uploader") ?? string.Empty,
             Url = $"https://www.youtube.com/channel/{id}/videos", ThumbnailUrl = Thumbnail(entry), Description = Text(entry, "description") };
     }
+
+    private static YtdlpVideo? ParsePlaylist(JsonElement entry)
+    {
+        if (entry.ValueKind != JsonValueKind.Object) return null;
+        // A search hit must identify a playlist URL, not merely have a non-video ID.
+        // In particular, never turn a search/channel container into a playlist hit.
+        foreach (string key in new[] { "url", "webpage_url", "original_url" })
+        {
+            string? value = Text(entry, key);
+            if (value is null) continue;
+            try
+            {
+                Uri url = ValidateYoutubeUrl(value);
+                if (url.AbsolutePath != "/playlist") continue;
+                string id = QueryValue(url, "list")!;
+                return new YtdlpVideo
+                {
+                    IsPlaylist = true, Id = id, Title = Text(entry, "title") ?? id, Url = url.AbsoluteUri,
+                    Uploader = Text(entry, "uploader") ?? Text(entry, "channel") ?? string.Empty,
+                    ChannelUrl = ParseChannelUrl(entry), ThumbnailUrl = Thumbnail(entry),
+                    PlaylistCount = Integer(entry, "playlist_count") ?? Integer(entry, "n_entries") ?? Integer(entry, "video_count"),
+                    Description = Text(entry, "description")
+                };
+            }
+            catch (ArgumentException) { }
+        }
+        return null;
+    }
+
+    public static bool MatchesResultType(YtdlpVideo result, YtdlpResultType resultType) => resultType switch
+    {
+        YtdlpResultType.All => true,
+        YtdlpResultType.Videos => result.IsVideo,
+        YtdlpResultType.Playlists => result.IsPlaylist,
+        YtdlpResultType.Channels => result.IsChannel,
+        _ => throw new ArgumentOutOfRangeException(nameof(resultType))
+    };
 
     private static string? ParseChannelUrl(JsonElement entry)
     {

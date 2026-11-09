@@ -62,7 +62,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             content.Controls.Add(grid);
 
             int row = 0;
-            this.toolTip = new ToolTip();
+            this.toolTip = new ToolTip { IsParameterHelp = true };
             this.combo_preset.Items.Add("- None -");
             foreach (var preset in BreakbeatTrackPresets.All) this.combo_preset.Items.Add(preset);
             this.combo_preset.SelectedIndex = Math.Max(0, BreakbeatTrackPresets.All.ToList().FindIndex(p => p.Name == options.Preset) + 1);

@@ -16,11 +16,14 @@ public sealed partial class MixTrackView : Form
     private readonly Dictionary<Guid, TrackView> joined = [];
     private readonly Stack<string> undo = new(), redo = new();
     private string committed = "";
+    private string committedAudioKey = "", committedProject = "";
+    private readonly MixWindowGroup windowGroup;
     private bool restoring, busy, closing, allowClose, dirty;
     private readonly Canvas canvas = new() { Dock = DockStyle.Fill, AllowDrop = true, TabStop = true };
+    private readonly ToolTip interactionHints = new();
     private readonly HScrollBar scroll = new() { Dock = DockStyle.Bottom, Minimum = 0, Maximum = 100000, LargeChange = 100 };
     private readonly VScrollBar vertical = new() { Dock = DockStyle.Right, Minimum = 0, Maximum = 100, LargeChange = 1 };
-    private readonly NumericUpDown bpm = new() { Minimum = 10, Maximum = 400, Value = 120, DecimalPlaces = 1, Width = 70 };
+    private readonly NumericUpDown bpm = new() { Minimum = 10, Maximum = 400, Value = 120, DecimalPlaces = 4, Width = 95 };
     private readonly ComboBox division = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 65 };
     private readonly CheckBox snap = new() { Text = "Snap", AutoSize = true };
     private readonly CheckBox loop = new() { Text = "Loop", AutoSize = true };
@@ -59,9 +62,8 @@ public sealed partial class MixTrackView : Form
     private int dragMode; // 1 move, 2 left trim, 3 right trim, 4 ruler, 5 range, 6 reorder, 7 gain
     private Point down;
     private string? dragBefore;
-    private double originalStart, originalOffset, originalDuration;
+    private double originalStart, originalOffset, originalDuration, originalPointerTime;
     private double rulerOriginalLoopStart, rulerOriginalLoopEnd;
-    private bool resizeHeightGesture;
     private int resizeOriginalLaneHeight;
     private const int Header = 190, Ruler = 30;
     private int LaneHeight = 100;
@@ -70,7 +72,7 @@ public sealed partial class MixTrackView : Form
     private bool automaticSizing;
     private int previousClientHeight;
     private double ViewStart => scroll.Value / 100.0;
-    private double XTime(int x) => Math.Max(0, ViewStart + (x - Header) / pixelsPerSecond);
+    private double XTime(int x) => ViewStart + (x - Header) / pixelsPerSecond;
     private int TimeX(double time) => Header + (int)Math.Round((time - ViewStart) * pixelsPerSecond);
     private int RowAt(int y) => y < Ruler ? -1 : (y - Ruler) / LaneHeight + vertical.Value;
     private MixClip? Clip => Arrangement.Lanes.SelectMany(l => l.Clips).FirstOrDefault(c => c.Id == selectedClip);
@@ -78,6 +80,8 @@ public sealed partial class MixTrackView : Form
 
     public MixTrackView()
     {
+        this.windowGroup = new MixWindowGroup(this);
+        this.InitializeLiveMixer();
         Name = "MixTrackView"; Arrangement.Name = "Mix " + (open.Count + 1); Text = Arrangement.Name;
         ClientSize = new Size(1100, 360); MinimumSize = new Size(700, 260); StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.Sizable;
@@ -88,7 +92,22 @@ public sealed partial class MixTrackView : Form
         var toolbar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true };
         toolbar.Controls.Add(play); play.Click += async (_, _) => await TogglePlayAsync();
         Button Tool(string name, Action action)
-        { var b = new Button { Text = name, AutoSize = true }; b.Click += (_, _) => action(); toolbar.Controls.Add(b); return b; }
+        {
+            var b = new Button { Text = name, AutoSize = true }; b.Click += (_, _) => action(); toolbar.Controls.Add(b);
+            this.interactionHints.SetToolTip(b, name switch
+            {
+                "Stop" => "Stop the mix transport and return its caret to the beginning. Source samples and clip positions are unchanged.",
+                "Render ..." => "Render the audible arrangement. Right-click for additional render scopes, including individual tracks. Muting, clip gain and effects are included in audio rendering.",
+                "Save project…" => "Save the non-destructive arrangement, sources, clip edits and mixer settings as a project. This is separate from rendering a final audio file.",
+                "Open project…" => "Open a saved mix project. Source audio and arrangement settings are restored together; use Render for a finished audio object.",
+                "View Settings…" => "Configure timeline appearance and display options. Display changes do not alter source audio.",
+                "+ Track" => "Add an empty arrangement lane. Drop audio into it, or double-click its empty timeline area to choose an open source.",
+                "Undo" => "Undo the most recent arrangement edit. Display-only navigation does not rewrite audio.",
+                "Redo" => "Reapply an undone arrangement edit. A new edit starts a new history branch.",
+                _ => "Change timeline magnification without changing clip timing or source audio."
+            });
+            return b;
+        }
         Tool("Stop", () => { operation?.Cancel(); StopPlayback(); caret = 0; canvas.Invalidate(); });
         toolbar.Controls.Add(new Label { Text = "BPM", AutoSize = true, Margin = new Padding(3, 8, 3, 3) }); toolbar.Controls.Add(bpm);
         division.Items.AddRange(new object[] { "1/1", "1/2", "1/4", "1/8", "1/16", "1/32", "1/64" }); division.SelectedIndex = 3;
@@ -96,7 +115,7 @@ public sealed partial class MixTrackView : Form
         autoScroll.Click += (_, _) =>
         {
             Arrangement.Visual.ScrollMode = (MixScrollMode)(((int)Arrangement.Visual.ScrollMode + 1) % 3);
-            UpdateScrollModeControl(); Changed();
+            UpdateScrollModeControl(); canvas.Invalidate();
         };
         Tool("− Zoom", () => Zoom(0.8)); Tool("+ Zoom", () => Zoom(1.25));
         Tool("View Settings…", ShowViewSettings);
@@ -109,6 +128,13 @@ public sealed partial class MixTrackView : Form
         toolbar.Controls.Add(autoSave);
         autoSave.CheckedChanged += (_, _) => { if (!restoring) { Arrangement.AutoSave = autoSave.Checked; Changed(); QueueProjectSave(force: true); } };
         Controls.Add(canvas); Controls.Add(vertical); Controls.Add(scroll); Controls.Add(status); Controls.Add(toolbar);
+        this.interactionHints.SetToolTip(canvas, "Mix timeline: drop audio to create clips; drag clips to move them and their edges to trim. Drag the ruler to set a loop. Shift enables temporary snapping; Ctrl+wheel zooms. Right-click a clip or empty space for context-specific actions.");
+        this.interactionHints.SetToolTip(play, "Play or pause the mix on its shared transport. All lanes follow one clock; non-destructive edits leave source audio intact.");
+        this.interactionHints.SetToolTip(bpm, "Mix tempo. Changes are applied after the tempo edit debounce and use the arrangement's tempo handling; original source audio remains available.");
+        this.interactionHints.SetToolTip(snap, "Snap clip edits to the selected musical grid. Shift temporarily enables snapping during a gesture.");
+        this.interactionHints.SetToolTip(division, "Musical grid division for snap operations. A finer division permits smaller timing changes without altering the source recording.");
+        this.interactionHints.SetToolTip(loop, "Repeat the ruler's selected time range during mix playback. Drag the ruler to change the loop boundaries.");
+        this.interactionHints.SetToolTip(autoScroll, "Cycle the timeline's playback-follow modes. This changes scrolling behavior, not audio timing or clip positions.");
         bpm.ValueChanged += (_, _) =>
         {
             if (restoring) return;
@@ -122,14 +148,18 @@ public sealed partial class MixTrackView : Form
         };
         division.SelectedIndexChanged += (_, _) => { if (!restoring) { Arrangement.SnapDivision = 1 << division.SelectedIndex; Changed(); } };
         snap.CheckedChanged += (_, _) => { if (!restoring) { Arrangement.Snap = snap.Checked; Changed(); } };
-        loop.CheckedChanged += (_, _) => { if (!restoring) { Arrangement.Loop = loop.Checked; Changed(); } };
-        scroll.ValueChanged += (_, _) => { canvas.Invalidate(); if (!restoring) { Arrangement.Visual.HorizontalScrollSeconds = ViewStart; viewSaveTimer.Stop(); viewSaveTimer.Start(); } };
-        vertical.ValueChanged += (_, _) => { canvas.Invalidate(); if (!restoring) { Arrangement.Visual.FirstVisibleTrack = vertical.Value; viewSaveTimer.Stop(); viewSaveTimer.Start(); } };
-        viewSaveTimer.Tick += (_, _) => { viewSaveTimer.Stop(); Changed(); };
+        loop.CheckedChanged += (_, _) => { if (!restoring) { Arrangement.Loop = loop.Checked; UpdateTransportLoop(); } };
+        scroll.ValueChanged += (_, _) => { canvas.Invalidate(); Arrangement.Visual.HorizontalScrollSeconds = ViewStart; };
+        vertical.ValueChanged += (_, _) => { canvas.Invalidate(); Arrangement.Visual.FirstVisibleTrack = vertical.Value; };
         projectSaveTimer.Tick += async (_, _) => { projectSaveTimer.Stop(); await FlushProjectSaveAsync(); };
         pasteHoldTimer.Tick += (_, _) => ShowClipboardHistory(); KeyUp += PasteKeyUp;
         Deactivate += (_, _) => { pasteHoldTimer.Stop(); pasteHoldTracking = false; pasteKeyDown = false; };
         canvas.Paint += PaintTimeline; canvas.MouseDown += MouseDownTimeline; canvas.MouseMove += MouseMoveTimeline; canvas.MouseUp += MouseUpTimeline;
+        canvas.MouseCaptureChanged += (_, _) =>
+        {
+            if (!canvas.Capture && dragMode == 7 && !closing && !released)
+            { dragMode = 0; dragBefore = null; Changed(); }
+        };
         canvas.MouseDoubleClick += (_, e) =>
         {
             if (busy || e.Button != MouseButtons.Left || e.X < Header) return;
@@ -159,28 +189,27 @@ public sealed partial class MixTrackView : Form
         hueTimer.Start();
         FormClosing += CloseMix;
         FormClosed += (_, _) => ReleaseResources();
-        committed = Arrangement.Capture(); open.Add(this);
+        committed = MixAudioHistory.Capture(Arrangement); committedAudioKey = MixAudioHistory.Key(Arrangement);
+        committedProject = Arrangement.CaptureProject(); open.Add(this);
         previousClientHeight = ClientSize.Height;
-        ResizeBegin += (_, _) => { resizeHeightGesture = true; resizeOriginalLaneHeight = LaneHeight; };
+        ResizeBegin += (_, _) => { resizeOriginalLaneHeight = LaneHeight; };
         ResizeEnd += (_, _) =>
         {
-            resizeHeightGesture = false;
             if (resizeOriginalLaneHeight != LaneHeight)
             {
                 laneHeightCustomized = true;
-                Arrangement.DisplayLaneHeight = LaneHeight;
-                Changed();
+                canvas.Invalidate();
             }
         };
         SizeChanged += (_, _) =>
         {
+            if (WindowState == FormWindowState.Minimized) return;
             if (!automaticSizing && previousClientHeight > 0 && Arrangement.Lanes.Count > 0)
             {
                 laneHeightCustomized = true;
                 preciseLaneHeight = Math.Clamp(preciseLaneHeight + (ClientSize.Height - previousClientHeight) / (double)Arrangement.Lanes.Count, 32, 600);
                 LaneHeight = (int)Math.Round(preciseLaneHeight);
             }
-            if (!automaticSizing && !resizeHeightGesture) Arrangement.DisplayLaneHeight = LaneHeight;
             previousClientHeight = ClientSize.Height;
             canvas.Invalidate();
         };
@@ -193,7 +222,7 @@ public sealed partial class MixTrackView : Form
     }
     private async Task JoinAsync(TrackView view)
     {
-        if (busy || closing || released) { view.SetJoinedMix(view.JoinedMix); return; }
+        if (busy || closing || released || this.windowGroup.IsBlocked) { view.SetJoinedMix(view.JoinedMix); return; }
         var existing = joined.FirstOrDefault(p => ReferenceEquals(p.Value, view) && Arrangement.Lanes.Any(l => l.Id == p.Key));
         if (existing.Value != null) { Show(); Activate(); return; }
         float sourceBpm = view.OriginalAudio.Bpm > 0 ? view.OriginalAudio.Bpm : view.OriginalAudio.ScannedBpm;
@@ -201,12 +230,12 @@ public sealed partial class MixTrackView : Form
         if (firstTrack) InitializeTempoFromFirstTrack(sourceBpm);
         ClipTempoMode? tempo = ClipTempoMode.Original;
         if (!firstTrack && float.IsFinite(sourceBpm) && sourceBpm > 0 && Math.Abs(sourceBpm - Arrangement.Bpm) > 0.1)
-            tempo = ChooseTempo(sourceBpm);
+            tempo = await ChooseTempoAsync(sourceBpm);
         if (tempo == null) { view.SetJoinedMix(view.JoinedMix); return; }
         PlaylistStretchSettings? stretchSettings = null;
         if (tempo == ClipTempoMode.TimeStretch)
         {
-            stretchSettings = ConfigureImportStretch(view.OriginalAudio);
+            stretchSettings = await ConfigureImportStretchAsync(view.OriginalAudio);
             if (stretchSettings == null) { view.SetJoinedMix(view.JoinedMix); return; }
         }
         MixSource source;
@@ -218,10 +247,12 @@ public sealed partial class MixTrackView : Form
             using var snapshot = view.OriginalAudio.Clone();
             var input = new MixSource { Name = snapshot.Name, Data = snapshot.Data, SampleRate = snapshot.SampleRate,
                 Channels = snapshot.Channels, Bpm = sourceBpm };
+            Arrangement.Sources.Add(input.Id, input);
             MixSource? prepared = null;
             Show(); status.Text = $"Importing: {tempo.Value} to {Arrangement.Bpm:0.##} BPM…";
-            await RunAsync(async token => prepared = await MixRenderer.PrepareSourceAsync(input, stretchSettings?.TargetBpm ?? Arrangement.Bpm, tempo.Value, token, stretchSettings));
-            if (prepared == null || closing || released || view.IsDisposed) { if (!view.IsDisposed) view.SetJoinedMix(view.JoinedMix); return; }
+            await RunAsync(async token => prepared = await MixTempoOrigins.PrepareAsync(Arrangement, input, stretchSettings?.TargetBpm ?? Arrangement.Bpm,
+                Arrangement.Bpm, tempo.Value, stretchSettings, token));
+            if (prepared == null || closing || released || view.IsDisposed) { Arrangement.Sources.Remove(input.Id); if (!view.IsDisposed) view.SetJoinedMix(view.JoinedMix); return; }
             source = prepared;
         }
         view.LeaveCurrentMix();
@@ -229,6 +260,7 @@ public sealed partial class MixTrackView : Form
         Arrangement.Sources.Add(source.Id, source);
         var lane = new MixLane { Name = source.Name, Mute = view.Muted, Solo = view.Soloed };
         Arrangement.Lanes.Add(lane); Arrangement.AddClip(lane, source, 0); joined[lane.Id] = view;
+        this.RememberJoinedOrigin(lane.Id, view);
         view.SetJoinedMix(this); view.Hide(); view.Settings.Hide();
         _ = view.OriginalAudio.StopAsync();
         Changed();
@@ -246,15 +278,15 @@ public sealed partial class MixTrackView : Form
         try { bpm.Value = (decimal)sourceBpm; }
         finally { restoring = false; }
     }
-    private PlaylistStretchSettings? ConfigureImportStretch(AudioObj audio)
+    private async Task<PlaylistStretchSettings?> ConfigureImportStretchAsync(AudioObj audio)
     {
         using var snapshot = audio.Clone();
         float sourceBpm = audio.Bpm > 0 ? audio.Bpm : audio.ScannedBpm;
         using var dialog = new TimeStretchDialog(null, [snapshot]) { IsConfigureMode = true };
         dialog.SetConfigurationTempo(sourceBpm, (float)Arrangement.Bpm);
-        return dialog.ShowDialog(this.Visible ? this : null) == DialogResult.OK ? dialog.ConfirmedSettings : null;
+        return await this.ShowMixDialogAsync(dialog) == DialogResult.OK ? dialog.ConfirmedSettings : null;
     }
-    private ClipTempoMode? ChooseTempo(float sourceBpm)
+    private async Task<ClipTempoMode?> ChooseTempoAsync(float sourceBpm)
     {
         using var dialog = new Form { Text = "Join track — tempo matching", ClientSize = new Size(540, 145),
             FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent };
@@ -267,7 +299,7 @@ public sealed partial class MixTrackView : Form
             var button = new Button { Text = choice.Item1, AutoSize = true, Height = 30 };
             button.Click += (_, _) => { result = choice.Item2; dialog.DialogResult = DialogResult.OK; dialog.Close(); }; buttons.Controls.Add(button);
         }
-        dialog.Controls.Add(text); dialog.Controls.Add(buttons); dialog.ShowDialog(this.Visible ? this : null); return result;
+        dialog.Controls.Add(text); dialog.Controls.Add(buttons); await this.ShowMixDialogAsync(dialog); return result;
     }
     public void Detach(TrackView view)
     {
@@ -292,20 +324,19 @@ public sealed partial class MixTrackView : Form
     private void Changed()
     {
         if (restoring) return;
-        string state = Arrangement.Capture();
-        if (state != committed) { undo.Push(committed); redo.Clear(); committed = state; dirty = true; Text = Arrangement.Name; QueueProjectSave(); }
+        string state = MixAudioHistory.Capture(Arrangement), key = MixAudioHistory.Key(Arrangement);
+        if (key != committedAudioKey) { undo.Push(MixAudioHistory.Create(committed, state)); redo.Clear(); }
+        committed = state; committedAudioKey = key;
+        string project = Arrangement.CaptureProject();
+        if (project != committedProject) { committedProject = project; dirty = true; Text = Arrangement.Name; QueueProjectSave(); }
         foreach (var clip in Arrangement.Lanes.SelectMany(l => l.Clips))
             if (clip.TempoMode != ClipTempoMode.Original && Arrangement.Sources.TryGetValue(clip.SourceId, out var source) && source.Bpm <= 0)
                 status.Text = "A tempo-matched clip has no source BPM. Right-click it → Set source BPM.";
         ReconcileJoined();
         vertical.Maximum = Math.Max(0, Arrangement.Lanes.Count - 1); vertical.Value = Math.Min(vertical.Value, vertical.Maximum);
-        scroll.Maximum = Math.Max(1000, (int)Math.Min(int.MaxValue - 100, Math.Ceiling(Arrangement.Duration * 100)) + 100);
+        this.UpdateTimelineScrollBounds();
         canvas.Invalidate();
-        if (playback != null)
-        {
-            if (Arrangement.Loop) ApplyPlaybackLoop(playback);
-            else if (playback.LoopEnabled) playback.UpdateLoopFraction(0, playback.Data.LongLength, playback.Data.LongLength, false, false);
-        }
+        this.UpdateTransportLoop();
         SchedulePreparation();
         EnsureTrackLayout();
     }
@@ -313,7 +344,8 @@ public sealed partial class MixTrackView : Form
     {
         tempoDebounce.Stop();
         ClearRangeSelection();
-        Arrangement.Restore(state); committed = state; restoring = true;
+        Arrangement.Restore(state); committed = MixAudioHistory.Capture(Arrangement); committedAudioKey = MixAudioHistory.Key(Arrangement);
+        committedProject = Arrangement.CaptureProject(); restoring = true;
         bpm.Value = (decimal)Arrangement.Bpm; division.SelectedIndex = (int)Math.Log2(Arrangement.SnapDivision);
         snap.Checked = Arrangement.Snap; loop.Checked = Arrangement.Loop; restoring = false; dirty = true;
         LaneHeight = Arrangement.DisplayLaneHeight; preciseLaneHeight = LaneHeight;
@@ -324,12 +356,12 @@ public sealed partial class MixTrackView : Form
         finally { restoring = false; }
         ReconcileJoined(); Text = Arrangement.Name; canvas.Invalidate(); SchedulePreparation(); EnsureTrackLayout(); QueueProjectSave(force: true);
     }
-    private void Undo() { if (undo.Count > 0) { redo.Push(committed); Restore(undo.Pop()); } }
-    private void Redo() { if (redo.Count > 0) { undo.Push(committed); Restore(redo.Pop()); } }
+    private void Undo() { if (undo.Count > 0) { string edit = undo.Pop(); MixAudioHistory.Apply(Arrangement, edit, undo: true); redo.Push(edit); this.RefreshAfterHistory(); } }
+    private void Redo() { if (redo.Count > 0) { string edit = redo.Pop(); MixAudioHistory.Apply(Arrangement, edit, undo: false); undo.Push(edit); this.RefreshAfterHistory(); } }
     private void Zoom(double factor)
     {
         pixelsPerSecond = Math.Clamp(pixelsPerSecond * factor, 8, 2000);
-        Arrangement.Visual.PixelsPerSecond = pixelsPerSecond; Changed();
+        canvas.Invalidate();
     }
     private Color VisualColor(string value) => ThemeFiles.ParseColor(value);
     private Color ClipColor(string value, int row)
@@ -349,11 +381,13 @@ public sealed partial class MixTrackView : Form
     }
     private async void ShowViewSettings()
     {
-        if (busy) return;
+        if (busy || this.windowGroup.IsBlocked) return;
         tempoDebounce.Stop();
         string before = Arrangement.Capture();
-        using var dialog = new MixOptionsDialog(Arrangement, PreviewViewOptions);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
+        using var dialog = new MixOptionsDialog(Arrangement, PreviewViewOptions, this.PickMixColorAsync);
+        DialogResult answer = await this.ShowMixDialogAsync(dialog);
+        if (closing || released) return;
+        if (answer == DialogResult.OK)
         {
             double oldBpm = System.Text.Json.JsonSerializer.Deserialize<MixArrangement>(before)!.Bpm;
             double targetBpm = dialog.Options.Bpm;
@@ -477,9 +511,10 @@ public sealed partial class MixTrackView : Form
         if (row < 0 || row >= Arrangement.Lanes.Count) return;
         Rectangle bounds = LaneVolumeRect(row);
         Arrangement.Lanes[row].Gain = Math.Clamp((x - bounds.Left) / (double)bounds.Width * 2, 0, 2);
-        RefreshPreparedMixer();
         status.Text = $"{Arrangement.Lanes[row].Name}: {Arrangement.Lanes[row].Gain:P0} (slider: 0–200%)";
-        canvas.Invalidate();
+        canvas.Invalidate(new Rectangle(0, bounds.Top - LaneHeight + 25, Header, LaneHeight));
+        if (canvas.IsHandleCreated) canvas.Update();
+        this.RequestLiveGainMix();
     }
     private void ClearRangeSelection()
     { selectedClips.Clear(); fullSelectedClips.Clear(); selectionFirstRow = selectionLastRow = -1; selectionStart = selectionEnd = 0; }
@@ -552,7 +587,7 @@ public sealed partial class MixTrackView : Form
         selectedClip = row >= 0 && row < Arrangement.Lanes.Count
             ? Arrangement.Lanes[row].Clips.LastOrDefault(c => e.X >= Header && ClipRect(row, c).Contains(e.Location))?.Id : null;
         if (e.Button != MouseButtons.Left) return;
-        down = e.Location; dragBefore = Arrangement.Capture();
+        down = e.Location; originalPointerTime = XTime(e.X); dragBefore = Arrangement.Capture();
         selectionAdditive = ModifierKeys.HasFlag(Keys.Control); selectingWhole = selectionAdditive;
         additiveSelection.Clear();
         if (selectionAdditive) additiveSelection.UnionWith(selectedClips);
@@ -622,18 +657,19 @@ public sealed partial class MixTrackView : Form
         if (dragMode == 7) { SetLaneGain(Arrangement.Lanes.FindIndex(l => l.Id == selectedLane), e.X); return; }
         if (dragMode == 4)
         {
-            Arrangement.LoopStart = Arrangement.SnapTime(Math.Min(XTime(down.X), XTime(e.X)), ModifierKeys.HasFlag(Keys.Shift));
-            Arrangement.LoopEnd = Arrangement.SnapTime(Math.Max(XTime(down.X), XTime(e.X)), ModifierKeys.HasFlag(Keys.Shift));
+            Arrangement.LoopStart = Math.Max(0, Arrangement.SnapTime(Math.Min(XTime(down.X), XTime(e.X)), ModifierKeys.HasFlag(Keys.Shift)));
+            Arrangement.LoopEnd = Math.Max(0, Arrangement.SnapTime(Math.Max(XTime(down.X), XTime(e.X)), ModifierKeys.HasFlag(Keys.Shift)));
         }
         else if (Clip is { } c && Arrangement.Sources.TryGetValue(c.SourceId, out var s))
         {
-            double delta = (e.X - down.X) / pixelsPerSecond, factor = Arrangement.Rate(c);
+            this.AutoPanClipDrag(e.X);
+            double delta = XTime(e.X) - originalPointerTime, factor = Arrangement.Rate(c);
             if (dragMode == 1) c.Start = Arrangement.SnapTime(originalStart + delta, ModifierKeys.HasFlag(Keys.Shift));
             if (dragMode == 2)
             {
                 double start = Arrangement.SnapTime(originalStart + delta, ModifierKeys.HasFlag(Keys.Shift));
                 double offset = Math.Clamp(originalOffset + (start - originalStart) * factor, 0, originalOffset + originalDuration - 0.001);
-                c.Start = Math.Max(0, originalStart + (offset - originalOffset) / factor); c.SourceOffset = offset; c.SourceDuration = originalDuration - offset + originalOffset;
+                c.Start = originalStart + (offset - originalOffset) / factor; c.SourceOffset = offset; c.SourceDuration = originalDuration - offset + originalOffset;
             }
             if (dragMode == 3)
             {
@@ -668,7 +704,7 @@ public sealed partial class MixTrackView : Form
             if (playback != null) playback.SetPosition((long)(caret * playback.SampleRate));
             canvas.Invalidate(); return;
         }
-        if (!rangeDrag) Changed();
+        if (rulerDrag) this.UpdateTransportLoop(); else if (!rangeDrag) Changed();
         draggedLane = null; reorderTarget = -1; reorderMoved = false;
         canvas.Cursor = Cursors.Default;
     }
@@ -683,7 +719,7 @@ public sealed partial class MixTrackView : Form
     }
     private async void DropAudio(object? sender, DragEventArgs e)
     {
-        if (busy) return; Point p = canvas.PointToClient(new Point(e.X, e.Y)); int row = RowAt(p.Y);
+        if (busy || this.windowGroup.IsBlocked) return; Point p = canvas.PointToClient(new Point(e.X, e.Y)); int row = RowAt(p.Y);
         var audios = Dragged(e.Data); double start = Arrangement.SnapTime(XTime(p.X), (e.KeyState & 4) != 0);
         foreach (var audio in audios)
         {
@@ -692,18 +728,20 @@ public sealed partial class MixTrackView : Form
             float sourceBpm = audio.Bpm > 0 ? audio.Bpm : audio.ScannedBpm;
             ClipTempoMode? mode = ClipTempoMode.Original;
             if (!firstTrack && float.IsFinite(sourceBpm) && sourceBpm > 0 && Math.Abs(sourceBpm - Arrangement.Bpm) > 0.1)
-                mode = ChooseTempo(sourceBpm);
+                mode = await ChooseTempoAsync(sourceBpm);
             if (mode == null) continue;
-            PlaylistStretchSettings? stretchSettings = mode == ClipTempoMode.TimeStretch ? ConfigureImportStretch(audio) : null;
+            PlaylistStretchSettings? stretchSettings = mode == ClipTempoMode.TimeStretch ? await ConfigureImportStretchAsync(audio) : null;
             if (mode == ClipTempoMode.TimeStretch && stretchSettings == null) continue;
             var source = new MixSource { Name = audio.Name, Data = (float[])audio.Data.Clone(), SampleRate = audio.SampleRate,
                 Channels = audio.Channels, Bpm = sourceBpm };
             if (mode != ClipTempoMode.Original)
             {
+                MixSource original = source; Arrangement.Sources.Add(original.Id, original);
                 MixSource? prepared = null;
                 status.Text = $"Importing: {mode} to {Arrangement.Bpm:0.##} BPM…";
-                await RunAsync(async token => prepared = await MixRenderer.PrepareSourceAsync(source, stretchSettings?.TargetBpm ?? Arrangement.Bpm, mode.Value, token, stretchSettings));
-                if (prepared == null || closing || released) break;
+                await RunAsync(async token => prepared = await MixTempoOrigins.PrepareAsync(Arrangement, original, stretchSettings?.TargetBpm ?? Arrangement.Bpm,
+                    Arrangement.Bpm, mode.Value, stretchSettings, token));
+                if (prepared == null || closing || released) { Arrangement.Sources.Remove(original.Id); break; }
                 source = prepared;
             }
             Arrangement.Sources.Add(source.Id, source);
@@ -747,7 +785,7 @@ public sealed partial class MixTrackView : Form
         menu.Items.Add(new ToolStripSeparator());
         if (selectionFirstRow >= 0 && selectionEnd > selectionStart)
         {
-            Item("Set loop to selection", () => { Arrangement.LoopStart = selectionStart; Arrangement.LoopEnd = selectionEnd; Changed(); });
+            Item("Set loop to selection", () => { Arrangement.LoopStart = Math.Max(0, selectionStart); Arrangement.LoopEnd = Math.Max(0, selectionEnd); this.UpdateTransportLoop(); });
             Item("Delete selected audio range", DeleteSelectedRange);
             Item("Render selected range → Collection", async () => await ExportSelectedRangeAsync(), SelectedParts().Count > 0);
         }
@@ -757,18 +795,20 @@ public sealed partial class MixTrackView : Form
         Item("Clear selection", this.ClearAudioEffectSelection);
         if (Clip is { } clip && SelectedParts().Count <= 1)
         {
-            Item("Clip properties…", () => EditProperties(clip));
+            Item("Clip properties…", async () => await EditPropertiesAsync(clip));
             Item("Split at playhead (S)", Split);
             Item("Duplicate (Ctrl+D)", Duplicate);
             foreach (var mode in Enum.GetValues<ClipTempoMode>()) Item("Tempo: " + mode, () => { clip.TempoMode = mode; Changed(); });
-            Item("Set source BPM…", () =>
+            Item("Set source BPM…", async () =>
             {
                 var source = Arrangement.Sources[clip.SourceId];
-                string? value = Prompt("Source BPM (0 = unknown)", source.Bpm.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                string? value = await PromptAsync("Source BPM (0 = unknown)", source.Bpm.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 if (float.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float parsed) && float.IsFinite(parsed) && parsed is >= 0 and <= 400)
                 {
                     // Copy source metadata so undo does not mutate an older snapshot's asset.
-                    var copy = new MixSource { Name = source.Name, Data = source.Data, SampleRate = source.SampleRate, Channels = source.Channels, Bpm = parsed };
+                    var copy = new MixSource { Name = source.Name, Data = source.Data, SampleRate = source.SampleRate, Channels = source.Channels, Bpm = parsed,
+                        TempoOriginId = source.TempoOriginId, TempoOriginScale = source.TempoOriginScale,
+                        TempoOriginBpm = source.TempoOriginBpm, TempoRecipe = source.TempoRecipe };
                     Arrangement.Sources.Add(copy.Id, copy); clip.SourceId = copy.Id; Changed();
                 }
             });
@@ -784,7 +824,7 @@ public sealed partial class MixTrackView : Form
         Item("View Settings…", ShowViewSettings);
         if (Lane is { } lane)
         {
-            Item("Track properties (gain / solo / mute / crossfade)…", () => EditProperties(lane));
+            Item("Track properties (gain / solo / mute / crossfade)…", async () => await EditPropertiesAsync(lane));
             Item(lane.Mute ? "Unmute track" : "Mute track", () => { lane.Mute = !lane.Mute; Changed(); });
             Item(lane.Solo ? "Unsolo track" : "Solo track", () => { lane.Solo = !lane.Solo; Changed(); });
             Item("Move track up", () => { int index = Arrangement.Lanes.IndexOf(lane); if (index > 0) { Arrangement.Lanes.RemoveAt(index); Arrangement.Lanes.Insert(index - 1, lane); Changed(); } });
@@ -810,7 +850,7 @@ public sealed partial class MixTrackView : Form
             insert.DropDownItems.Add(sources); menu.Items.Add(insert);
         }
         Item("Select loop range…", () => EditLoop());
-        Item("Fit arrangement horizontally", () => { pixelsPerSecond = Math.Clamp((canvas.Width - Header - 24) / Math.Max(1, Arrangement.Duration), 8, 2000); Arrangement.Visual.PixelsPerSecond = pixelsPerSecond; scroll.Value = 0; Changed(); });
+        Item("Fit arrangement horizontally", () => { pixelsPerSecond = Math.Clamp((canvas.Width - Header - 24) / Math.Max(1, Arrangement.Duration), 8, 2000); scroll.Value = 0; canvas.Invalidate(); });
         Item("Rename mix…", RenameMix);
         return menu;
     }
@@ -898,27 +938,29 @@ public sealed partial class MixTrackView : Form
         copy.Id = Guid.NewGuid(); copy.Start = split; copy.SourceOffset += left; copy.SourceDuration -= left; copy.FadeIn = 0;
         clip.SourceDuration = left; clip.FadeOut = 0; Lane.Clips.Add(copy); Changed();
     }
-    private bool EditProperties(object value)
+    private async Task<bool> EditPropertiesAsync(object value)
     {
         string before = Arrangement.Capture();
         using var form = new Form { Text = "Arrangement properties", Size = new Size(430, 500), StartPosition = FormStartPosition.CenterParent };
         var grid = new PropertyGrid { Dock = DockStyle.Fill, SelectedObject = value, ToolbarVisible = false };
         var ok = new Button { Text = "Apply", Dock = DockStyle.Bottom, DialogResult = DialogResult.OK };
         form.Controls.Add(grid); form.Controls.Add(ok); form.AcceptButton = ok;
-        if (form.ShowDialog(this) != DialogResult.OK) { Arrangement.Restore(before); canvas.Invalidate(); return false; }
-        try { Arrangement.Validate(); Changed(); return true; } catch (Exception ex) { Arrangement.Restore(before); Error(ex); return false; }
+        DialogResult answer = await this.ShowMixDialogAsync(form);
+        if (closing || released) return false;
+        if (answer != DialogResult.OK) { Arrangement.Restore(before); canvas.Invalidate(); return false; }
+        try { Arrangement.Validate(); Changed(); return true; } catch (Exception ex) { Arrangement.Restore(before); await this.ErrorAsync(ex); return false; }
     }
-    private void EditLoop()
+    private async void EditLoop()
     {
         var range = new LoopRange { Start = Arrangement.LoopStart, End = Arrangement.LoopEnd };
-        if (EditProperties(range) && double.IsFinite(range.End) && double.IsFinite(range.Start) && range.End > range.Start && range.Start >= 0)
-        { Arrangement.LoopStart = range.Start; Arrangement.LoopEnd = range.End; Changed(); }
+        if (await EditPropertiesAsync(range) && double.IsFinite(range.End) && double.IsFinite(range.Start) && range.End > range.Start && range.Start >= 0)
+        { Arrangement.LoopStart = range.Start; Arrangement.LoopEnd = range.End; this.UpdateTransportLoop(); }
     }
     private sealed class LoopRange { public double Start { get; set; } public double End { get; set; } }
-    private void RenameMix()
+    private async void RenameMix()
     {
         if (busy || closing) return;
-        string? text = Prompt("Mix / project name", Arrangement.Name);
+        string? text = await PromptAsync("Mix / project name", Arrangement.Name);
         if (string.IsNullOrWhiteSpace(text)) return;
         Arrangement.Name = text.Trim();
         Text = Arrangement.Name;
@@ -945,11 +987,11 @@ public sealed partial class MixTrackView : Form
     {
         get { var parameters = base.CreateParams; parameters.Style |= 0x00010000 | 0x00040000; return parameters; }
     }
-    private static string? Prompt(string title, string initial)
+    private async Task<string?> PromptAsync(string title, string initial)
     {
         using var form = new Form { Text = title, ClientSize = new Size(350, 80), StartPosition = FormStartPosition.CenterParent };
         var text = new TextBox { Text = initial, Dock = DockStyle.Top }; var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Dock = DockStyle.Bottom };
-        form.Controls.Add(text); form.Controls.Add(ok); form.AcceptButton = ok; return form.ShowDialog() == DialogResult.OK ? text.Text : null;
+        form.Controls.Add(text); form.Controls.Add(ok); form.AcceptButton = ok; return await this.ShowMixDialogAsync(form) == DialogResult.OK ? text.Text : null;
     }
     private async Task TogglePlayAsync()
     {
@@ -960,6 +1002,7 @@ public sealed partial class MixTrackView : Form
             long generation = ++playbackGeneration;
             SchedulePreparation();
             await liveUpdateWork;
+            await this.FlushLiveGainMixAsync();
             if (cachedMix == null || cachedMixState != MixPreparationCache.AudioKey(Arrangement))
             {
                 status.Text = "Audio preparation is still pending or failed. Check the status and retry.";
@@ -1007,7 +1050,7 @@ public sealed partial class MixTrackView : Form
         var source = operation;
         try { renderWork = action(source.Token); await renderWork; }
         catch (OperationCanceledException) { if (!IsDisposed) status.Text = "Cancelled."; }
-        catch (Exception ex) { if (!IsDisposed && !closing) Error(ex); else LogManager.Log(ex); }
+        catch (Exception ex) { if (!IsDisposed && !closing) await this.ErrorAsync(ex); else LogManager.Log(ex); }
         finally { busy = false; source.Dispose(); if (ReferenceEquals(operation, source)) operation = null; }
     }
     private async Task ExportAsync() => await RunAsync(async token =>
@@ -1020,59 +1063,76 @@ public sealed partial class MixTrackView : Form
     private async Task SaveProjectAsync()
     {
         if (busy) return;
-        string directory = DefaultProjectsDirectory;
-        Directory.CreateDirectory(directory);
-        string filename = string.Concat(Arrangement.Name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
-        using var dialog = new SaveFileDialog { Filter = "ModularAudience mix (*.mamix)|*.mamix", FileName = filename + ".mamix",
-            InitialDirectory = directory, DefaultExt = "mamix", AddExtension = true };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        await RunAsync(async token => await SaveToPathAsync(dialog.FileName, token));
+        try
+        {
+            string directory = DefaultProjectsDirectory;
+            Directory.CreateDirectory(directory);
+            string filename = string.Concat(Arrangement.Name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+            using var dialog = new SaveFileDialog { Filter = "ModularAudience mix (*.mamix)|*.mamix", FileName = filename + ".mamix",
+                InitialDirectory = directory, DefaultExt = "mamix", AddExtension = true };
+            if (await this.ShowMixFileDialogAsync(dialog, "Save mix project") != DialogResult.OK) return;
+            await RunAsync(async token => await SaveToPathAsync(dialog.FileName, token));
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception error) { await this.ErrorAsync(error); }
     }
     internal async Task OpenProjectAsync()
     {
         if (busy) return;
-        string directory = DefaultProjectsDirectory;
-        Directory.CreateDirectory(directory);
-        using var dialog = new OpenFileDialog { Filter = "ModularAudience mix (*.mamix)|*.mamix", InitialDirectory = directory };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        await RunAsync(async token =>
+        try
         {
-            await LoadFromPathAsync(dialog.FileName, token);
-        });
+            string directory = DefaultProjectsDirectory;
+            Directory.CreateDirectory(directory);
+            using var dialog = MixProjectMenu.CreateOpenDialog();
+            if (await this.ShowMixFileDialogAsync(dialog, "Open mix project") != DialogResult.OK) return;
+            await RunAsync(async token =>
+            {
+                await LoadFromPathAsync(dialog.FileName, token);
+            });
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception error) { await this.ErrorAsync(error); }
     }
-    public static string DefaultProjectsDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
-        "ModularAudience", "_Projects");
+    public static string DefaultProjectsDirectory => Path.Combine(AudioStoragePaths.WorkingDirectory, "_Projects");
     private async void CloseMix(object? sender, FormClosingEventArgs e)
     {
         if (allowClose) return;
         e.Cancel = true; if (closing) return;
         projectSaveTimer.Stop();
         await FlushProjectSaveAsync();
-        if (dirty && MessageBox.Show(this, "Close this mix? Unsaved arrangement changes will be lost.", "Close mix", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+        if (dirty && await this.windowGroup.AskAsync("Close this mix? Unsaved arrangement changes will be lost.", "Close mix", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
         closing = true; operation?.Cancel();
         this.CloseMixEffectWindows();
+        this.windowGroup.Dispose();
         tempoDebounce.Stop();
         liveUpdateTimer.Stop(); liveUpdateCancellation?.Cancel();
         try { await renderWork; await liveUpdateWork; } catch { }
         StopPlayback();
-        foreach (var view in joined.Values.Distinct()) if (!view.IsDisposed && ReferenceEquals(view.JoinedMix, this)) { view.SetJoinedMix(null); view.Show(); }
+        this.RestoreJoinedWindowsOnClose();
         allowClose = true; Close();
     }
-    private void Error(Exception ex) { status.Text = ex.Message; MessageBox.Show(this, ex.Message, "Mix editor", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+    private async Task ErrorAsync(Exception error)
+    {
+        LogManager.Log("Mix editor failed.", error);
+        if (released || closing || IsDisposed) return;
+        status.Text = error.Message;
+        if (!this.windowGroup.IsBlocked) await this.windowGroup.AskAsync(error.Message, "Mix editor", MessageBoxButtons.OK);
+    }
     private void ReleaseResources()
     {
-        if (released) return; released = true; this.CloseMixEffectWindows(); this.timelineContextMenu?.Dispose(); open.Remove(this); operation?.Cancel(); StopPlayback(); clock.Dispose(); liveUpdateTimer.Dispose();
+        if (released) return; released = true; this.CloseMixEffectWindows(); this.windowGroup.Dispose(); this.CancelLiveGainMix(); this.timelineContextMenu?.Dispose(); open.Remove(this); operation?.Cancel(); StopPlayback(); clock.Dispose(); liveUpdateTimer.Dispose();
+        this.interactionHints.Dispose();
         liveUpdateCancellation?.Cancel();
         hueTimer.Dispose(); hueClock.Stop();
         tempoDebounce.Dispose();
-        projectSaveTimer.Dispose(); viewSaveTimer.Dispose(); pasteHoldTimer.Dispose();
-        foreach (var view in joined.Values.Distinct())
-            if (!view.IsDisposed && ReferenceEquals(view.JoinedMix, this)) { view.SetJoinedMix(null); if (!view.Disposing) view.Show(); }
+        projectSaveTimer.Dispose(); pasteHoldTimer.Dispose();
+        this.RestoreJoinedWindowsOnClose();
         preparationCache.Dispose(); cachedMix?.Dispose(); cachedMix = null; wavePeaks.Clear(); Arrangement.Dispose();
     }
     protected override void Dispose(bool disposing) { if (disposing) ReleaseResources(); base.Dispose(disposing); }
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
+        if (this.windowGroup.IsBlocked) return true;
         if (busy && keyData != Keys.Space && keyData != Keys.Escape) return base.ProcessCmdKey(ref msg, keyData);
         if (keyData == (Keys.Control | Keys.Z)) { Undo(); return true; }
         if (keyData == (Keys.Control | Keys.Y)) { Redo(); return true; }

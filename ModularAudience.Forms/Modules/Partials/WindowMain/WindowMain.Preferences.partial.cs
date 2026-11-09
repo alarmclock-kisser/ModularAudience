@@ -37,6 +37,7 @@ public partial class WindowMain
             LogManager.LogWarning($"The saved audio directory is unavailable; using the default Music directory. {error.Message}");
             AudioStoragePaths.SetWorkingDirectory(null);
         }
+        Hints.HintPolicy.SetEnabled(settings.EnableToolTips);
         return settings;
     }
 
@@ -113,6 +114,8 @@ public partial class WindowMain
             this.checkBox_structure.Checked = settings.KeepStructure;
             this.checkBox_oneBag.Checked = settings.AllInOneBag;
             this.button_newBag.Enabled = !settings.AllInOneBag;
+            Hints.HintPolicy.SetEnabled(settings.EnableToolTips);
+            if (this.enableToolTipsMenuItem is { } item) item.Checked = settings.EnableToolTips;
             this._applicationPreferences = settings;
             this.UpdateWorkingDirectoryToolTip();
         }

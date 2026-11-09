@@ -14,22 +14,7 @@ public static class MixRenderer
             token.ThrowIfCancellationRequested();
             if (mode == ClipTempoMode.TimeStretch && stretchSettings != null)
             {
-                using var input = new AudioObj { Data = (float[])source.Data.Clone(), Channels = source.Channels, SampleRate = source.SampleRate,
-                    Length = source.Data.Length, Duration = TimeSpan.FromSeconds(source.Duration), Bpm = source.Bpm };
-                double durationFactor = source.Bpm / targetBpm;
-                if (stretchSettings.UseV2)
-                    await global::TimeStretcher_V2.Timestretch_V2Async(input, durationFactor,
-                        stretchSettings.AutoChunking ? null : stretchSettings.ChunkSize,
-                        stretchSettings.AutoChunking ? null : stretchSettings.Overlap, null, token).ConfigureAwait(false);
-                else
-                {
-                    var result = await TimeStretcher.TimeStretchAllThreadsAsync(input, stretchSettings.ChunkSize,
-                        stretchSettings.Overlap, durationFactor, false, 1, Math.Clamp(stretchSettings.Threads, 1, Environment.ProcessorCount),
-                        null, stretchSettings.Offload, stretchSettings.Channeled).ConfigureAwait(false);
-                    if (!ReferenceEquals(result, input)) input.ReplaceWith(result, disposeSource: true);
-                }
-                token.ThrowIfCancellationRequested();
-                return new MixSource { Name = source.Name, Data = input.Data, Channels = input.Channels, SampleRate = input.SampleRate, Bpm = (float)targetBpm };
+                return await PrepareConfiguredAsync(source, targetBpm, stretchSettings, token).ConfigureAwait(false);
             }
             float[] data = Resample(source.Data, source.Channels, source.SampleRate * factor, 44100);
             if (mode == ClipTempoMode.TimeStretch && Math.Abs(factor - 1) > 0.00001)
@@ -42,6 +27,39 @@ public static class MixRenderer
             token.ThrowIfCancellationRequested();
             return new MixSource { Name = source.Name, Data = data, Channels = source.Channels, SampleRate = 44100, Bpm = (float)targetBpm };
         }, token);
+
+    private static async Task<MixSource> PrepareConfiguredAsync(MixSource source, double targetBpm, PlaylistStretchSettings settings, CancellationToken token)
+    {
+        int frames = source.Data.Length / source.Channels;
+        if (frames == 0) return new MixSource { Name = source.Name, Data = [], Channels = source.Channels, SampleRate = source.SampleRate, Bpm = (float)targetBpm };
+        double factor = source.Bpm / targetBpm, requested = Math.Max(1, Math.Round(frames * factor));
+        if (!double.IsFinite(requested) || requested * source.Channels > 134_217_728) throw new InvalidOperationException("The stretched source exceeds 512 MiB.");
+        int targetFrames = (int)requested; float[] output = new float[checked(targetFrames * source.Channels)];
+        for (int channel = 0; channel < source.Channels; channel++)
+        {
+            token.ThrowIfCancellationRequested(); var mono = new float[frames];
+            for (int frame = 0; frame < frames; frame++) mono[frame] = source.Data[frame * source.Channels + channel];
+            using var input = new AudioObj { Data = mono, Channels = 1, SampleRate = source.SampleRate, Length = mono.Length, Bpm = source.Bpm };
+            if (settings.UseV2)
+                await global::TimeStretcher_V2.Timestretch_V2Async(input, factor,
+                    settings.AutoChunking ? null : settings.ChunkSize, settings.AutoChunking ? null : settings.Overlap, null, token).ConfigureAwait(false);
+            else
+            {
+                var result = await TimeStretcher.TimeStretchAllThreadsAsync(input, settings.ChunkSize, settings.Overlap, factor,
+                    false, 0, Math.Clamp(settings.Threads, 1, Environment.ProcessorCount), null, settings.Offload, settings.Channeled).ConfigureAwait(false);
+                if (!ReferenceEquals(result, input)) input.ReplaceWith(result, disposeSource: true);
+            }
+            token.ThrowIfCancellationRequested();
+            for (int frame = 0; frame < Math.Min(targetFrames, input.Data.Length); frame++) output[frame * source.Channels + channel] = input.Data[frame];
+        }
+        // The legacy V2 routine is scalar, not interleaved-stereo DSP. Isolating
+        // channels above prevents channel scrambling and odd sample counts.
+        // One linked level correction retains the source's stereo balance.
+        double before = source.Data.Max(value => Math.Abs((double)value)), after = output.Max(value => Math.Abs((double)value));
+        if (before > 0 && after > 1e-12)
+            for (int i = 0; i < output.Length; i++) { if ((i & 65535) == 0) token.ThrowIfCancellationRequested(); output[i] = (float)(output[i] * before / after); }
+        return new MixSource { Name = source.Name, Data = output, Channels = source.Channels, SampleRate = source.SampleRate, Bpm = (float)targetBpm };
+    }
 
     public static Task<AudioObj> RenderAsync(MixArrangement arrangement, CancellationToken token = default, IProgress<double>? progress = null,
         bool normalizeOutput = true)
@@ -56,7 +74,8 @@ public static class MixRenderer
             if (totalFrames * channels > int.MaxValue) throw new InvalidOperationException("The mix exceeds the RAM audio buffer limit.");
             float[] output = new float[checked((int)totalFrames * channels)];
             bool solo = snapshot.Lanes.Any(l => l.Solo);
-            var jobs = snapshot.Lanes.Where(l => !l.Mute && (!solo || l.Solo)).SelectMany(l => l.Clips.Select(c => (Lane: l, Clip: c))).ToArray();
+            var jobs = snapshot.Lanes.Where(l => !l.Mute && (!solo || l.Solo)).SelectMany(l => l.Clips
+                .Where(c => c.Start + snapshot.ClipDuration(c) > 0).Select(c => (Lane: l, Clip: c))).ToArray();
             int done = 0;
             // Track transformations run in parallel, summation is protected and gain stays floating point.
             object gate = new();
@@ -77,7 +96,7 @@ public static class MixRenderer
                 }
                 else data = Resample(data, sourceChannels, s.SampleRate * factor, rate);
                 ct.ThrowIfCancellationRequested(); int frames = data.Length / sourceChannels;
-                int start = (int)Math.Round(c.Start * rate);
+                long start = (long)Math.Round(c.Start * rate);
                 double crossfadeIn = 0, crossfadeOut = 0;
                 if (job.Lane.AutoCrossfade && !c.HasRenderedEnvelope)
                     foreach (var other in job.Lane.Clips.Where(o => o.Id != c.Id))
@@ -89,7 +108,7 @@ public static class MixRenderer
                     }
                 lock (gate)
                 {
-                    for (int f = 0; f < frames && start + f < totalFrames; f++)
+                    for (int f = (int)Math.Min(frames, Math.Max(0, -start)); f < frames && start + f < totalFrames; f++)
                     {
                         if ((f & 8191) == 0) ct.ThrowIfCancellationRequested();
                         double t = f / (double)rate, duration = frames / (double)rate;
@@ -104,7 +123,7 @@ public static class MixRenderer
                             double sample = 0; int contributors = 0;
                             for (int sc = sourceChannels == 1 ? 0 : ch; sc < sourceChannels; sc += sourceChannels == 1 ? 1 : 2)
                             { sample += data[f * sourceChannels + sc]; contributors++; }
-                            output[(start + f) * channels + ch] += (float)(sample / Math.Max(1, contributors) * gain);
+                            output[(int)(start + f) * channels + ch] += (float)(sample / Math.Max(1, contributors) * gain);
                         }
                     }
                     progress?.Report(++done / (double)Math.Max(1, jobs.Length));

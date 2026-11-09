@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using ModularAudience.Audio.Effects;
+using ModularAudience.Audio.Effects.AutoTune;
 
 namespace ModularAudience.Audio.Arrangement;
 
@@ -45,7 +46,7 @@ public sealed class MixEffectEditSession : IDisposable
         ArgumentNullException.ThrowIfNull(arrangement); ArgumentNullException.ThrowIfNull(regions);
         MixEffectRegion[] targets = regions.Select(region => region with { ClipIds = region.ClipIds.ToHashSet() }).ToArray();
         if (targets.Length == 0 || targets.Select(region => region.LaneId).Distinct().Count() != targets.Length ||
-            targets.Any(region => !double.IsFinite(region.Start) || !double.IsFinite(region.End) || region.Start < 0 || region.End <= region.Start ||
+            targets.Any(region => !double.IsFinite(region.Start) || !double.IsFinite(region.End) || region.End <= region.Start ||
                 !arrangement.Lanes.Any(lane => lane.Id == region.LaneId))) throw new ArgumentException("Select one or more valid audio regions.");
         double start = Math.Round(targets.Min(region => region.Start) * SampleRate) / SampleRate;
         double end = Math.Round(targets.Max(region => region.End) * SampleRate) / SampleRate;
@@ -55,7 +56,9 @@ public sealed class MixEffectEditSession : IDisposable
         var snapshot = new MixArrangement(); snapshot.Restore(arrangement.Capture());
         foreach (var pair in arrangement.Sources)
             snapshot.Sources.Add(pair.Key, new MixSource { Id = pair.Key, Name = pair.Value.Name, Data = pair.Value.Data,
-                SampleRate = pair.Value.SampleRate, Channels = pair.Value.Channels, Bpm = pair.Value.Bpm });
+                SampleRate = pair.Value.SampleRate, Channels = pair.Value.Channels, Bpm = pair.Value.Bpm,
+                TempoOriginId = pair.Value.TempoOriginId, TempoOriginScale = pair.Value.TempoOriginScale,
+                TempoOriginBpm = pair.Value.TempoOriginBpm, TempoRecipe = pair.Value.TempoRecipe });
         var capturedSources = arrangement.Sources.ToDictionary(pair => pair.Key, pair => pair.Value);
         return Task.Run(async () =>
         {
@@ -168,7 +171,8 @@ public sealed class MixEffectEditSession : IDisposable
         }, token);
     }
 
-    public MixEffectCommit Apply(MixArrangement target, IReadOnlyList<AudioEffectResult> processed, string effectName)
+    public MixEffectCommit Apply(MixArrangement target, IReadOnlyList<AudioEffectResult> processed, string effectName,
+        AudioEffectSettings? settings = null, AutoTuneSettings? autoTune = null)
     {
         ObjectDisposedException.ThrowIf(this.disposed, this); this.ValidateResults(processed);
         if (!this.IsCurrent(target)) throw new InvalidOperationException("The mix audio changed while the effect window was open. Reopen the effect for the current selection.");
@@ -212,6 +216,9 @@ public sealed class MixEffectEditSession : IDisposable
             }
             var effected = new MixSource { Name = effectName + " — " + input.Name, Data = (float[])result.Samples.Clone(), Channels = result.Channels,
                 SampleRate = SampleRate, Bpm = (float)(this.TempoBpm * (result.TempoMultiplier ?? 1)) };
+            if (settings is not null || autoTune is not null)
+                effected.TempoRecipe = MixTempoRecipe.Create(this.snapshot, this.snapshot.Lanes.Single(value => value.Id == region.LaneId),
+                    this.Start, this.End, region.ClipIds, effect: settings, autoTune: autoTune);
             staged.Sources.Add(effected.Id, effected); added.Add(effected);
             var replacement = new MixClip { Name = effected.Name, SourceId = effected.Id, Start = this.Start, SourceDuration = effected.Duration, HasRenderedEnvelope = true };
             clips.Add(replacement); selectedIds.Add(replacement.Id); lane.Clips = clips.OrderBy(clip => clip.Start).ToList();
@@ -228,6 +235,10 @@ public sealed class MixEffectEditSession : IDisposable
         RenderedClip rendered = this.renderedClips[clip.Id];
         var source = new MixSource { Name = clip.Name + " — frozen envelope", Data = rendered.Samples, Channels = rendered.Channels,
             SampleRate = SampleRate, Bpm = (float)this.TempoBpm };
+        MixLane lane = this.snapshot.Lanes.Single(value => value.Clips.Any(value => value.Id == clip.Id));
+        if (this.snapshot.ClipDuration(clip) > 0)
+            source.TempoRecipe = MixTempoRecipe.Create(this.snapshot, lane, clip.Start, clip.Start + this.snapshot.ClipDuration(clip),
+                [clip.Id], frozenClip: clip.Id);
         staged.Sources.Add(source.Id, source); added.Add(source);
         return new MixClip { Id = clip.Id, Name = clip.Name, SourceId = source.Id, Start = clip.Start,
             SourceDuration = source.Duration, HasRenderedEnvelope = true };

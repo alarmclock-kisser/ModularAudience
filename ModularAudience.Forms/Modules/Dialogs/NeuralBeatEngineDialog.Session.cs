@@ -308,7 +308,7 @@ public partial class NeuralBeatEngineDialog
 
     private void InitializeOptionToolTips()
     {
-        optionToolTips = new ToolTip(components) { ShowAlways = true, AutoPopDelay = 20000, InitialDelay = 350, ReshowDelay = 100 };
+        optionToolTips = new ToolTip(components) { IsParameterHelp = true, ShowAlways = true, AutoPopDelay = 20000, InitialDelay = 350, ReshowDelay = 100 };
         Explain(label_bars, numericUpDown_bars, "Number of bars in each pattern. More bars create a longer grid and more weights. Fixed for an existing session; Reset to change.");
         Explain(label_beatsPerBar, numericUpDown_beatsPerBar, "Beats in each bar (for example 3 or 4). Changes the musical grouping and total grid length. Fixed for an existing session.");
         Explain(label_stepsPerBeat, numericUpDown_stepsPerBeat, "Grid subdivisions per beat: 2 gives eighth notes, 4 gives sixteenth notes. Higher values allow finer rhythms and cost more memory. Fixed for an existing session.");

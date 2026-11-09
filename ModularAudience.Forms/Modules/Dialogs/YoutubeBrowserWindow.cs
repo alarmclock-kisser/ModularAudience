@@ -33,6 +33,7 @@ public partial class YoutubeBrowserWindow : Form
         InitializeComponent();
         RestoreSettings();
         InitializeSearchHistory();
+        Hints.HintPolicy.RegisterPopup(this, this.HideThumbnailPopup);
         client.ProgressChanged += Client_ProgressChanged;
         RefreshAvailability();
     }
@@ -49,7 +50,7 @@ public partial class YoutubeBrowserWindow : Form
 
     private void Update_Click(object? sender, EventArgs e)
     {
-        if (busy || browsing || closing || IsDisposed || resourcesReleased) return;
+        if (busy || browsing || playlistEnqueueCancellation is not null || closing || IsDisposed || resourcesReleased) return;
         if (EnsureBinaryDirectory()) StartToolUpdateCheck();
     }
 
@@ -78,7 +79,7 @@ public partial class YoutubeBrowserWindow : Form
 
     private void TryStartPendingUpdateCheck()
     {
-        if (!pendingUpdateCheck || !checkForUpdates.Checked || busy || browsing || closing || IsDisposed || resourcesReleased) return;
+        if (!pendingUpdateCheck || !checkForUpdates.Checked || busy || browsing || playlistEnqueueCancellation is not null || closing || IsDisposed || resourcesReleased) return;
         pendingUpdateCheck = false;
         Update_Click(this, EventArgs.Empty);
     }
@@ -99,6 +100,7 @@ public partial class YoutubeBrowserWindow : Form
         browseCancellation?.Cancel();
         dateCancellation?.Cancel();
         cancelButton.Enabled = false;
+        playlistEnqueueCancellation?.Cancel();
         statusLabel.Text = "Cancelling; waiting for active processing and cleanup...";
     }
 
@@ -108,19 +110,19 @@ public partial class YoutubeBrowserWindow : Form
         bool available = CanBrowse;
         queryPanel.Enabled = available;
         optionsGroup.Enabled = available;
-        updateButton.Enabled = !busy && !browsing && !closing;
-        toolsFolderButton.Enabled = !busy && !browsing && !closing;
-        cancelButton.Enabled = !closing && (browsing || busy && operationCancellation?.IsCancellationRequested == false);
+        updateButton.Enabled = !busy && !browsing && !closing && playlistEnqueueCancellation is null;
+        toolsFolderButton.Enabled = updateButton.Enabled;
+        cancelButton.Enabled = !closing && (browsing || playlistEnqueueCancellation is not null || busy && operationCancellation?.IsCancellationRequested == false);
         downloadButton.Enabled = CanEnqueueDownloads && SelectedVideos().Any(video => !video.IsChannel);
-        relatedButton.Enabled = available && SelectedVideo() is { IsChannel: false };
+        relatedButton.Enabled = available && SelectedVideo() is { IsVideo: true };
         uploaderButton.Enabled = relatedButton.Enabled && !string.IsNullOrWhiteSpace(SelectedVideo()?.Uploader);
         openButton.Enabled = !closing && resultsList.SelectedItems.Count == 1;
         copyButton.Enabled = !closing && resultsList.SelectedItems.Count > 0;
-        metadataButton.Enabled = available && SelectedVideo() is { IsChannel: false };
+        metadataButton.Enabled = available && SelectedVideo() is { IsVideo: true };
         showRelatedButton.Enabled = metadataButton.Enabled;
         operationProgress.Visible = busy || activeBatch is not null;
         UpdateOptionAvailability();
-        if (pendingUpdateCheck && !updateCheckScheduled && !busy && !browsing && !closing && IsHandleCreated)
+        if (pendingUpdateCheck && !updateCheckScheduled && !busy && !browsing && !closing && playlistEnqueueCancellation is null && IsHandleCreated)
         {
             updateCheckScheduled = true;
             BeginInvoke((Action)(() =>
@@ -203,6 +205,7 @@ public partial class YoutubeBrowserWindow : Form
         if (closing) return;
         closing = true;
         HideThumbnailPopup();
+        playlistEnqueueCancellation?.Cancel();
         browseCancellation?.Cancel();
         operationCancellation?.Cancel();
         dateCancellation?.Cancel();
@@ -214,6 +217,7 @@ public partial class YoutubeBrowserWindow : Form
             await Task.Yield();
             await operation;
             await Task.WhenAll(browseTasks.ToArray());
+            await Task.WhenAll(playlistEnqueueTasks.ToArray());
             await Task.WhenAll(dateTasks.ToArray());
             await Task.WhenAll(previewTasks.ToArray());
         }
@@ -233,6 +237,7 @@ public partial class YoutubeBrowserWindow : Form
     {
         if (resourcesReleased) return;
         resourcesReleased = true;
+        playlistEnqueueCancellation?.Cancel();
         searchHistoryMenu?.Dispose();
         searchHistoryMenu = null;
         HideThumbnailPopup();

@@ -5,17 +5,19 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 public partial class YoutubeBrowserWindow
 {
     private sealed record ResultsPage(YtdlpVideo[] Videos, string Query, int Limit, string Summary,
-        int SortColumn, bool Descending, string[] SelectedIds, int TopIndex);
+        int SortColumn, bool Descending, string[] SelectedIds, int TopIndex, YtdlpResultType ResultType);
 
     private readonly List<ResultsPage> resultsHistory = [];
     private int historyPosition = -1;
     private string displayedQuery = string.Empty;
     private int displayedLimit = 30;
+    private YtdlpResultType displayedResultType;
 
     private ResultsPage CaptureResultsPage() => new(
         resultsList.Items.Cast<ListViewItem>().Select(row => (YtdlpVideo)row.Tag!).ToArray(),
         displayedQuery, displayedLimit, resultsSummary.Text, sortColumn, sortDescending,
-        SelectedVideos().Select(video => video.Id).ToArray(), resultsList.TopItem?.Index ?? 0);
+        SelectedVideos().Select(video => video.Id).ToArray(), resultsList.TopItem?.Index ?? 0,
+        displayedResultType);
 
     private void PublishResults(IReadOnlyList<YtdlpVideo> videos, string query, string summary, bool recommendationOrder = false)
     {
@@ -26,6 +28,7 @@ public partial class YoutubeBrowserWindow
         PopulateResults(videos);
         displayedQuery = query;
         displayedLimit = (int)resultLimit.Value;
+        displayedResultType = (YtdlpResultType)Math.Max(0, resultTypeCombo.SelectedIndex);
         resultsSummary.Text = summary + (videos.Count < displayedLimit ? " | YouTube returned fewer usable videos than requested." : "");
         resultsHistory.Add(CaptureResultsPage());
         if (resultsHistory.Count > 50) resultsHistory.RemoveAt(0);
@@ -48,6 +51,10 @@ public partial class YoutubeBrowserWindow
         displayedQuery = queryText.Text = page.Query;
         displayedLimit = page.Limit;
         resultLimit.Value = page.Limit;
+        displayedResultType = page.ResultType;
+        restoringResultType = true;
+        try { resultTypeCombo.SelectedIndex = (int)displayedResultType; }
+        finally { restoringResultType = false; }
         PopulateResults(page.Videos);
         resultsSummary.Text = page.Summary;
         var selected = page.SelectedIds.ToHashSet(StringComparer.Ordinal);

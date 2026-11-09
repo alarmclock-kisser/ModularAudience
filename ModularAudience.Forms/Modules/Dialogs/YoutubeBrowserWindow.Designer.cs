@@ -18,6 +18,7 @@ partial class YoutubeBrowserWindow
     private ListView downloadJobsList = null!;
     private GroupBox optionsGroup = null!;
     private TextBox queryText = null!;
+    private ComboBox resultTypeCombo = null!;
     private NumericUpDown resultLimit = null!;
     private ListView resultsList = null!;
     private Label resultsSummary = null!;
@@ -157,9 +158,18 @@ partial class YoutubeBrowserWindow
         var searchField = new Panel { Dock = DockStyle.Fill, Height = 29, Margin = Padding.Empty };
         var historyButton = new Button { Text = "▼", Name = "searchHistoryButton", Width = 25, Dock = DockStyle.Right,
             AccessibleName = "Show local search history", TabStop = false };
+        resultTypeCombo = new ComboBox
+        {
+            Name = "resultTypeCombo", DropDownStyle = ComboBoxStyle.DropDownList, Width = 96,
+            Dock = DockStyle.Right, AccessibleName = "Search result types"
+        };
+        resultTypeCombo.Items.AddRange(["All", "Videos", "Playlists", "Channels"]);
+        resultTypeCombo.SelectedIndex = 0;
+        resultTypeCombo.SelectedIndexChanged += ResultType_Changed;
         historyButton.Click += (_, _) => ShowSearchHistory();
         searchField.Controls.Add(queryText);
         searchField.Controls.Add(historyButton);
+        searchField.Controls.Add(resultTypeCombo);
         queryPanel.Controls.Add(searchField, 0, 0);
         queryPanel.Controls.Add(limitPanel, 1, 0);
         queryPanel.Controls.Add(searchButton, 2, 0);
@@ -168,6 +178,12 @@ partial class YoutubeBrowserWindow
         searchButton.Click += Search_Click;
         playlistButton.Click += Playlist_Click;
         rootLayout.Controls.Add(queryPanel, 0, 1);
+        var hints = new ToolTip(components!);
+        hints.SetToolTip(queryText, "Search YouTube by words or paste a supported HTTPS video/playlist/channel URL. Enter starts the search. Use the arrow beside this field to recall up to 32 real search queries.");
+        hints.SetToolTip(resultTypeCombo, "Filter word searches to All, Videos, Playlists or Channels. A change refreshes the current word search; opening a playlist/channel still shows its videos.");
+        hints.SetToolTip(resultLimit, "Maximum word-search or channel results. Explicit playlist navigation and playlist download enqueue expand the full playlist independently of this search limit.");
+        hints.SetToolTip(searchButton, "Search or open the query. Results appear as each entry arrives; starting another search cancels the previous one.");
+        hints.SetToolTip(playlistButton, "Open the supported YouTube URL entered in the search field. Playlist search hits can also be opened with a double-click.");
     }
 
     private void InitializeResultsPanel()
@@ -295,18 +311,19 @@ partial class YoutubeBrowserWindow
 
     private void InitializeColumnsMenu()
     {
-        columnsMenu = new ContextMenuStrip(components);
+        columnsMenu = new ContextMenuStrip(components!);
         var enqueueItem = new ToolStripMenuItem("Download enqueue");
         enqueueItem.Click += DownloadEnqueue_Click;
         var openItem = new ToolStripMenuItem("Open in browser (no download)");
         var copyItem = new ToolStripMenuItem("Copy selected URLs");
         var relatedItem = new ToolStripMenuItem("Show related / next-up");
         var channelItem = new ToolStripMenuItem("Navigate to Channel");
+        var playlistItem = new ToolStripMenuItem("Navigate to Playlist", null, NavigateToPlaylist_Click);
         channelItem.Click += NavigateToChannel_Click;
         relatedItem.Click += ShowRelated_Click;
         openItem.Click += Open_Click;
         copyItem.Click += Copy_Click;
-        columnsMenu.Items.AddRange([enqueueItem, openItem, relatedItem, copyItem, channelItem, new ToolStripSeparator()]);
+        columnsMenu.Items.AddRange([enqueueItem, openItem, relatedItem, copyItem, channelItem, playlistItem, new ToolStripSeparator()]);
         string[] titles = ["Title", "Uploader", "Duration", "Views", "ID", "URL", "Upload Date"];
         columnMenuItems = new ToolStripMenuItem[titles.Length];
         for (int index = 0; index < titles.Length; index++)
@@ -325,8 +342,17 @@ partial class YoutubeBrowserWindow
             enqueueItem.Enabled = CanEnqueueDownloads && SelectedVideos().Any(video => !video.IsChannel);
             openItem.Enabled = !closing && SelectedVideo() is not null;
             copyItem.Enabled = !closing && resultsList.SelectedItems.Count > 0;
-            relatedItem.Enabled = CanBrowse && SelectedVideo() is { IsChannel: false };
-            channelItem.Enabled = CanBrowse && SelectedVideo() is not null;
+            relatedItem.Enabled = CanBrowse && SelectedVideo() is { IsVideo: true };
+            channelItem.Enabled = CanBrowse && SelectedVideo() is { } selected && (!selected.IsPlaylist || selected.ChannelUrl is not null);
+            playlistItem.Enabled = CanBrowse && SelectedVideo() is { IsPlaylist: true };
+        };
+        resultsList.MouseDown += (_, e) =>
+        {
+            if (e.Button != MouseButtons.Right) return;
+            var item = resultsList.GetItemAt(e.X, e.Y);
+            if (item is null || item.Selected) return;
+            resultsList.SelectedItems.Clear();
+            item.Selected = true;
         };
     }
 
@@ -355,7 +381,7 @@ partial class YoutubeBrowserWindow
         AddDesignerField(numbers, "Wait (s)", cooldownSeconds);
         waitForBpmCheck = new CheckBox
         {
-            Text = "wait for BPM tag", AutoSize = true, Margin = new Padding(3, 6, 3, 0),
+            Text = "Wait for BPM tag", AutoSize = true, Margin = new Padding(3, 6, 3, 0),
             AccessibleName = "Wait for a BPM tag until the maximum Wait seconds elapse"
         };
         waitForBpmCheck.CheckedChanged += WaitForBpm_CheckedChanged;
@@ -375,6 +401,17 @@ partial class YoutubeBrowserWindow
         rootLayout.Controls.Add(optionsGroup, 0, 3);
         saveCheck.CheckedChanged += Options_Changed;
         formatCombo.SelectedIndexChanged += Options_Changed;
+        var help = new ToolTip(components!) { IsParameterHelp = true };
+        help.SetToolTip(formatCombo, "Converted download format: WAV is uncompressed PCM, MP3 is lossy compressed audio. The quality field remembers separate settings for each format.");
+        help.SetToolTip(audioQuality, "PCM bit depth for WAV or bitrate in kbps for MP3. The up arrow increases quality. Higher settings use more space and cannot restore detail absent from YouTube's source.");
+        help.SetToolTip(cooldownSeconds, "Maximum wait after download/conversion before RAM import. With Wait for BPM tag enabled, a detected BPM tag ends the wait early; timeout still permits import.");
+        help.SetToolTip(waitForBpmCheck, "Wait for an external BPM tagger before importing. Enabling this multiplies the current wait by four; disabling divides it by four. This does not perform an extra download.");
+        help.SetToolTip(maxDurationMinutes, "Maximum allowed video duration for each download. Longer items are rejected by the downloader rather than silently trimmed.");
+        help.SetToolTip(maxSizeMiB, "Maximum permitted downloaded/converted file size per item in MiB. A failed limit check is reported for that job.");
+        help.SetToolTip(maxParallelDownloadsNumber, "Maximum concurrent download jobs. Audio processing/import is serialized separately; increasing parallelism can increase network load and temporary disk use.");
+        help.SetToolTip(ipVersionCombo, "Network address family used for YouTube requests. Automatic follows normal resolution; IPv4 or IPv6 forces that family without disabling TLS verification.");
+        help.SetToolTip(proxyModeCombo, "Use the environment/default proxy, a direct connection, or an explicit HTTP(S) proxy. Explicit mode requires a valid proxy URL; credentials are not stored here.");
+        help.SetToolTip(saveCheck, "Keep the original converted audio on disk in the output folder. Any time stretch is applied only to the RAM audio object, not the saved original.");
     }
 
     private void InitializeNetworkRow(TableLayoutPanel parent)
@@ -399,7 +436,7 @@ partial class YoutubeBrowserWindow
 
     private void InitializeDownloadJobsMenu()
     {
-        var menu = new ContextMenuStrip(components);
+        var menu = new ContextMenuStrip(components!);
         var cancel = new ToolStripMenuItem("Cancel selected", null, CancelJobs_Click);
         var retry = new ToolStripMenuItem("Retry selected", null, RetryJobs_Click);
         var delete = new ToolStripMenuItem("Delete selected", null, DeleteJobs_Click);

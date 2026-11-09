@@ -25,6 +25,9 @@ public partial class YoutubeBrowserWindow
         var video = SelectedVideo();
         descriptionText.Text = video is { IsChannel: true }
             ? $"Channel: {video.Title}{Environment.NewLine}{video.Url}{Environment.NewLine}{Environment.NewLine}Double-click to browse this channel's videos."
+            : video is { IsPlaylist: true }
+            ? $"Playlist: {video.Title}{Environment.NewLine}{video.PlaylistCount?.ToString() ?? "Unknown number of"} videos" +
+              $"{Environment.NewLine}{video.Url}{Environment.NewLine}{Environment.NewLine}Double-click to browse this playlist. Right-click to enqueue all its videos."
             : video is null
             ? $"{resultsList.SelectedItems.Count} selected. Select one video to view its available metadata."
             : $"{video.Title}{Environment.NewLine}Uploader: {video.Uploader}{Environment.NewLine}" +

@@ -52,6 +52,7 @@ internal sealed class ApplicationPreferencesStore
     internal ApplicationPreferences SetKeepStructure(bool enabled) => this.Update(settings => settings with { KeepStructure = enabled });
 
     internal ApplicationPreferences SetAllInOneBag(bool enabled) => this.Update(settings => settings with { AllInOneBag = enabled });
+    internal ApplicationPreferences SetEnableToolTips(bool enabled) => this.Update(settings => settings with { EnableToolTips = enabled });
 
     private ApplicationPreferences Update(Func<ApplicationPreferences, ApplicationPreferences> change) => this.WithLock(() =>
     {

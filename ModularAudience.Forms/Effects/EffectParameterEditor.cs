@@ -6,7 +6,7 @@ internal sealed class EffectParameterEditor : UserControl
 {
     private readonly AudioEffectDefinition definition;
     private readonly Dictionary<string, Control> fields = new(StringComparer.Ordinal);
-    private readonly ToolTip tips = new();
+    private readonly ToolTip tips = new() { IsParameterHelp = true };
     private readonly Func<(double Bpm, double ScannedBpm)>? readTempo;
     private readonly NumericUpDown? sourceTempo, targetTempo;
     private bool syncing;

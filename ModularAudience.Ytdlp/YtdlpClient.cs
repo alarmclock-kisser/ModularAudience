@@ -16,22 +16,53 @@ public sealed partial class YtdlpClient
     public YtdlpNetworkOptions NetworkOptions { get; set; } = new();
     public YtdlpBrowserSession? MetadataSession { get; set; }
 
-    public Task<IReadOnlyList<YtdlpVideo>> SearchAsync(string query, int maxResults, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<YtdlpVideo>> SearchAsync(string query, int maxResults, CancellationToken cancellationToken,
+        YtdlpResultType resultType = YtdlpResultType.All) =>
+        CollectMetadataAsync(this.SearchStreamAsync(query, maxResults, cancellationToken, resultType), cancellationToken);
+
+    public IAsyncEnumerable<YtdlpVideo> SearchStreamAsync(string query, int maxResults, CancellationToken cancellationToken,
+        YtdlpResultType resultType = YtdlpResultType.All)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(query);
         YtdlpParser.ValidateMaxResults(maxResults);
-        if (query.Length > 500 || query.Any(char.IsControl))
-            throw new ArgumentException("Search queries must contain at most 500 characters and no control characters.", nameof(query));
-        // Search pages can contain playlists/unavailable entries which are not usable video rows.
+        string target = CreateSearchUrl(query, resultType);
         int fetchCount = Math.Min(YtdlpParser.MaximumResults + 25, maxResults + 25);
-        return ReadMetadataAsync("https://www.youtube.com/results?search_query=" + Uri.EscapeDataString(query.Trim()), maxResults, cancellationToken, fetchCount);
+        return ReadMetadataStreamAsync(target, maxResults, cancellationToken, resultType, fetchCount);
     }
 
     public Task<IReadOnlyList<YtdlpVideo>> BrowseAsync(string youtubeUrl, int maxResults,
         CancellationToken cancellationToken)
     {
+        return CollectMetadataAsync(this.BrowseStreamAsync(youtubeUrl, maxResults, cancellationToken), cancellationToken);
+    }
+
+    public IAsyncEnumerable<YtdlpVideo> BrowseStreamAsync(string youtubeUrl, int maxResults, CancellationToken cancellationToken)
+    {
         YtdlpParser.ValidateMaxResults(maxResults);
-        return ReadMetadataAsync(YtdlpParser.ValidateYoutubeUrl(youtubeUrl).AbsoluteUri, maxResults, cancellationToken);
+        return ReadMetadataStreamAsync(YtdlpParser.ValidateYoutubeUrl(youtubeUrl).AbsoluteUri, maxResults, cancellationToken,
+            YtdlpResultType.Videos);
+    }
+
+    public IAsyncEnumerable<YtdlpVideo> BrowsePlaylistStreamAsync(string youtubeUrl, CancellationToken cancellationToken)
+    {
+        Uri url = YtdlpParser.ValidateYoutubeUrl(youtubeUrl);
+        if (url.AbsolutePath != "/playlist") throw new ArgumentException("A YouTube playlist URL is required.", nameof(youtubeUrl));
+        // Explicit playlist actions cover every playable video, independent of the search limit.
+        return ReadMetadataStreamAsync(url.AbsoluteUri, null, cancellationToken, YtdlpResultType.Videos);
+    }
+
+    public static string CreateSearchUrl(string query, YtdlpResultType resultType)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(query);
+        if (query.Length > 500 || query.Any(char.IsControl))
+            throw new ArgumentException("Search queries must contain at most 500 characters and no control characters.", nameof(query));
+        string? filter = resultType switch
+        {
+            YtdlpResultType.All => null, YtdlpResultType.Videos => "EgIQAQ==",
+            YtdlpResultType.Playlists => "EgIQAw==", YtdlpResultType.Channels => "EgIQAg==",
+            _ => throw new ArgumentOutOfRangeException(nameof(resultType))
+        };
+        return "https://www.youtube.com/results?search_query=" + Uri.EscapeDataString(query.Trim())
+            + (filter is null ? string.Empty : "&sp=" + Uri.EscapeDataString(filter));
     }
 
     public async Task<YtdlpVideo> GetVideoMetadataAsync(YtdlpVideo video, CancellationToken token)
@@ -48,25 +79,6 @@ public sealed partial class YtdlpClient
             var json = await YtdlpProcess.RunAsync(manager.YtdlpPath, arguments, job, progress, false, token, MetadataSession?.CookieContents);
             return YtdlpParser.ParseVideos(json, 1).SingleOrDefault()
                 ?? throw new InvalidDataException("No video metadata was returned.");
-        }
-        finally { YtdlpBinaryManager.DeleteStaging(job); }
-    }
-
-    private async Task<IReadOnlyList<YtdlpVideo>> ReadMetadataAsync(string target, int maxResults, CancellationToken token, int? fetchCount = null)
-    {
-        var progress = CreateProgress(null);
-        await EnsureAvailableAsync(progress, token);
-        var arguments = CommonArguments();
-        MetadataSession?.AddArguments(arguments);
-        arguments.AddRange(["--dump-single-json", "--flat-playlist", "--skip-download", "--yes-playlist",
-            "--playlist-end", (fetchCount ?? maxResults).ToString(CultureInfo.InvariantCulture), "--", target]);
-        var job = CreateJobDirectory();
-        try
-        {
-            var json = await YtdlpProcess.RunAsync(manager.YtdlpPath, arguments, job, progress, false, token, MetadataSession?.CookieContents);
-            var videos = YtdlpParser.ParseVideos(json, maxResults, includeChannels: true);
-            progress.Report($"Loaded {videos.Count} YouTube video entries.");
-            return videos;
         }
         finally { YtdlpBinaryManager.DeleteStaging(job); }
     }
@@ -183,6 +195,7 @@ public sealed partial class YtdlpClient
 
     private static string ValidateVideo(YtdlpVideo video)
     {
+        if (!video.IsVideo) throw new ArgumentException("Select a video; playlists must first be expanded into their individual videos.", nameof(video));
         var uri = YtdlpParser.ValidateYoutubeUrl(video.Url);
         var expected = "https://www.youtube.com/watch?v=" + video.Id;
         if (string.IsNullOrEmpty(video.Id) || uri.AbsoluteUri.Split('&')[0] != expected)

@@ -95,6 +95,8 @@ namespace ModularAudience.Forms
             var menu = new ContextMenuStrip();
             menu.Items.AddRange(
             [
+                ModularAudience.Forms.Modules.Dialogs.MixProjectMenu.CreateItem(),
+                new ToolStripSeparator(),
                 this._coOpHostItem,
                 this._coOpConnectionMenu.ConnectToAddress,
                 this._coOpConnectionMenu.Hosts,

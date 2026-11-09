@@ -105,7 +105,7 @@ public sealed class MixArrangementTests
     }
 
     [STATestMethod]
-    public void TrackDragUsesReleasePositionAndWholeGestureIsOneUndoStep()
+    public void TrackDragUsesReleasePositionWithoutCreatingAnAudioUndoStep()
     {
         using var mix = new MixTrackView();
         mix.Arrangement.Lanes.AddRange([new() { Name = "One" }, new() { Name = "Two" }, new() { Name = "Three" }]);
@@ -120,7 +120,7 @@ public sealed class MixArrangementTests
         Call("MouseUpTimeline", canvas, new MouseEventArgs(MouseButtons.Left, 1, 80, 320, 0));
         CollectionAssert.AreEqual(new[] { "Two", "Three", "One" }, mix.Arrangement.Lanes.Select(l => l.Name).ToArray());
         Call("Undo");
-        CollectionAssert.AreEqual(new[] { "One", "Two", "Three" }, mix.Arrangement.Lanes.Select(l => l.Name).ToArray());
+        CollectionAssert.AreEqual(new[] { "Two", "Three", "One" }, mix.Arrangement.Lanes.Select(l => l.Name).ToArray());
     }
 
     [STATestMethod]
@@ -206,7 +206,7 @@ public sealed class MixArrangementTests
         void Set(string name, object value) => type.GetField(name, flags)!.SetValue(mix, value);
         Call("Changed"); Call("MoveLane", one.Id, 2); Call("Changed");
         Assert.AreEqual("Two", mix.Arrangement.Lanes[0].Name);
-        Call("Undo"); Assert.AreEqual("One", mix.Arrangement.Lanes[0].Name);
+        Assert.AreEqual("Two", mix.Arrangement.Lanes[0].Name, "Track ordering is project metadata, not audio history.");
         var slider = (Rectangle)Call("LaneVolumeRect", 0)!;
         Call("SetLaneGain", 0, slider.Left + slider.Width / 4); Call("Changed");
         Assert.AreEqual(0.5, mix.Arrangement.Lanes[0].Gain, 0.02);
@@ -322,7 +322,8 @@ public sealed class MixArrangementTests
     public void JoinRemoveAndUndoRestoreOriginalTrackViewVisibility()
     {
         using var source = new AudioObj { Name = "Join test", Data = new float[4410], SampleRate = 44100, Channels = 1, Bpm = 95 };
-        using var view = new TrackView(source);
+        using var collection = new ModularAudience.Forms.AudioCollectionView([source]);
+        using var view = new TrackView(source, collection.AudioC);
         using var mix = new MixTrackView();
         mix.Join(view);
         Assert.AreEqual(95d, mix.Arrangement.Bpm, "The first joined track must set mix BPM without a stretch prompt.");
@@ -363,7 +364,7 @@ public sealed class MixArrangementTests
     }
 
     [STATestMethod]
-    public void MixViewSettingsPreviewAndUndoRestoreColorsHeightAndGrid()
+    public void MixViewSettingsRemainOutsideAudioUndoHistory()
     {
         using var window = new MixTrackView();
         var options = new MixArrangement(); options.Restore(window.Arrangement.Capture());
@@ -376,8 +377,8 @@ public sealed class MixArrangementTests
         Assert.AreEqual("#112233", window.Arrangement.Visual.Background);
         Assert.AreEqual(160, window.Arrangement.DisplayLaneHeight); Assert.AreEqual(95d, window.Arrangement.Bpm);
         type.GetMethod("Undo", flags)!.Invoke(window, null);
-        Assert.AreEqual("#1D2026", window.Arrangement.Visual.Background);
-        Assert.AreEqual(100, window.Arrangement.DisplayLaneHeight); Assert.AreEqual(120d, window.Arrangement.Bpm);
+        Assert.AreEqual("#112233", window.Arrangement.Visual.Background);
+        Assert.AreEqual(160, window.Arrangement.DisplayLaneHeight); Assert.AreEqual(95d, window.Arrangement.Bpm);
     }
 
     [TestMethod]

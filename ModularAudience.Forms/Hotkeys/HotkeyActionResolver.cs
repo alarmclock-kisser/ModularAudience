@@ -447,7 +447,7 @@ namespace ModularAudience.Forms.Hotkeys
             }
 
             Control? sourceControl = ResolveControl(owner, target.ControlPath);
-            ContextMenuStrip? menu = ResolveContextMenu(owner, sourceControl, target.ContextMenuName);
+            System.Windows.Forms.ContextMenuStrip? menu = ResolveContextMenu(owner, sourceControl, target.ContextMenuName);
             if (menu == null)
             {
                 System.Diagnostics.Debug.WriteLine(
@@ -554,7 +554,7 @@ namespace ModularAudience.Forms.Hotkeys
                     }
 
                     Control? sourceControl = ResolveControl(menuOwner, target.ControlPath);
-                    ContextMenuStrip? menu = ResolveContextMenu(
+                    System.Windows.Forms.ContextMenuStrip? menu = ResolveContextMenu(
                         menuOwner,
                         sourceControl,
                         target.ContextMenuName);
@@ -895,12 +895,12 @@ namespace ModularAudience.Forms.Hotkeys
             return item is not ToolStripDropDownItem dropDownItem || !dropDownItem.HasDropDownItems;
         }
 
-        private static ContextMenuStrip? ResolveContextMenu(
+        private static System.Windows.Forms.ContextMenuStrip? ResolveContextMenu(
             Form owner,
             Control? sourceControl,
             string menuName)
         {
-            ContextMenuStrip? candidate = sourceControl?.ContextMenuStrip;
+            System.Windows.Forms.ContextMenuStrip? candidate = sourceControl?.ContextMenuStrip;
             if (MatchesMenuName(candidate, menuName))
             {
                 return candidate;
@@ -925,12 +925,12 @@ namespace ModularAudience.Forms.Hotkeys
                 foreach (FieldInfo field in owner.GetType().GetFields(
                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
                 {
-                    if (!typeof(ContextMenuStrip).IsAssignableFrom(field.FieldType))
+                    if (!typeof(System.Windows.Forms.ContextMenuStrip).IsAssignableFrom(field.FieldType))
                     {
                         continue;
                     }
 
-                    candidate = field.GetValue(owner) as ContextMenuStrip;
+                    candidate = field.GetValue(owner) as System.Windows.Forms.ContextMenuStrip;
                     if (MatchesMenuName(candidate, menuName))
                     {
                         return candidate;
@@ -946,7 +946,7 @@ namespace ModularAudience.Forms.Hotkeys
             return null;
         }
 
-        private static bool MatchesMenuName(ContextMenuStrip? menu, string menuName)
+        private static bool MatchesMenuName(System.Windows.Forms.ContextMenuStrip? menu, string menuName)
         {
             if (menu == null)
             {
@@ -970,7 +970,7 @@ namespace ModularAudience.Forms.Hotkeys
         }
 
         private static ToolStripItem? ResolveMenuItem(
-            ContextMenuStrip menu,
+            System.Windows.Forms.ContextMenuStrip menu,
             List<HotkeyMenuItemPathSegment> path)
         {
             if (path == null || path.Count == 0)
@@ -1101,7 +1101,7 @@ namespace ModularAudience.Forms.Hotkeys
                 root = root.OwnerItem;
             }
 
-            return (root.Owner as ContextMenuStrip)?.Name ?? string.Empty;
+            return (root.Owner as System.Windows.Forms.ContextMenuStrip)?.Name ?? string.Empty;
         }
 
         private static string GetMenuItemDisplayName(ToolStripItem item)

@@ -47,7 +47,8 @@ public sealed class MixEditorExtensionTests
             using (var file = new FileStream(path, FileMode.Append)) file.Write(new byte[] { 1, 200, 200, 200, 200, 0, 0, 0, 0, 7 });
             using var loaded = await MixArrangement.LoadAsync(path);
             Assert.AreEqual(0.6, loaded.Lanes[0].Gain); Assert.IsTrue(loaded.AutoSave);
-            Assert.AreEqual(147, loaded.DisplayLaneHeight); Assert.AreEqual(12.5, loaded.Visual.HorizontalScrollSeconds);
+            Assert.AreEqual(147, loaded.DisplayLaneHeight); Assert.AreEqual(0d, loaded.Visual.HorizontalScrollSeconds);
+            Assert.AreEqual(0, loaded.Visual.FirstVisibleTrack);
             Assert.AreEqual(170d, loaded.Visual.PixelsPerSecond);
             CollectionAssert.AreEqual(source.Data, loaded.Sources[source.Id].Data);
             lane.Gain = 0.4; await mix.SaveAsync(path);

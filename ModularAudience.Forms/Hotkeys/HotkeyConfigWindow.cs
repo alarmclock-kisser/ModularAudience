@@ -30,7 +30,7 @@ namespace ModularAudience.Forms.Hotkeys
         private readonly Label _labelNudgingSyncerHotkey;
         private readonly CheckBox _checkBoxPausingSyncerKeyboardSpecific;
         private readonly CheckBox _checkBoxNudgingSyncerKeyboardSpecific;
-        private readonly ToolTip _syncerToolTip = new();
+        private readonly ToolTip _syncerToolTip = new() { IsParameterHelp = true };
         private bool _refreshingSyncerHotkeys;
         private bool _updatingKeyboardProfiles;
         private bool _refreshingBindings;

@@ -11,7 +11,7 @@ internal sealed class AutoTuneParameterEditor : UserControl
     private readonly CheckBox[] notes = new CheckBox[12];
     private readonly CheckBox protectPeak = new() { Text = "Peak protection (attenuate only)", AutoSize = true };
     private readonly GroupBox customNotes = new() { Text = "Allowed notes (Custom scale only; absolute C–B pitch classes)", Height = 88 };
-    private readonly ToolTip tips = new();
+    private readonly ToolTip tips = new() { IsParameterHelp = true };
     private bool syncing;
 
     internal AutoTuneParameterEditor()

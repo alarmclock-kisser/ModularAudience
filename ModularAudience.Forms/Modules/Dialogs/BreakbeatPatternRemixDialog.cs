@@ -51,7 +51,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.ShowInTaskbar = false;
             this.Text = "Remix: Derive Selection";
 
-            this.toolTip = new ToolTip();
+            this.toolTip = new ToolTip { IsParameterHelp = true };
+            this.Disposed += (_, _) => this.toolTip.Dispose();
 
             TableLayoutPanel grid = new()
             {

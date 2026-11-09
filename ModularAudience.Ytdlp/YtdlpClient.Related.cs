@@ -3,13 +3,18 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Runtime.CompilerServices;
 
 namespace ModularAudience.Ytdlp;
 
 public sealed partial class YtdlpClient
 {
-    public async Task<IReadOnlyList<YtdlpVideo>> GetRelatedVideosAsync(YtdlpVideo video, int maxResults,
-        CancellationToken cancellationToken)
+    public Task<IReadOnlyList<YtdlpVideo>> GetRelatedVideosAsync(YtdlpVideo video, int maxResults,
+        CancellationToken cancellationToken) =>
+        CollectMetadataAsync(this.GetRelatedVideosStreamAsync(video, maxResults, cancellationToken), cancellationToken);
+
+    public async IAsyncEnumerable<YtdlpVideo> GetRelatedVideosStreamAsync(YtdlpVideo video, int maxResults,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         string url = ValidateVideo(video);
         YtdlpParser.ValidateMaxResults(maxResults);
@@ -43,18 +48,18 @@ public sealed partial class YtdlpClient
         using var pageRequest = new HttpRequestMessage(HttpMethod.Get, url + "&hl=en");
         string html = await ReadRelatedResponseAsync(http, pageRequest, cancellationToken);
         using var initial = YoutubeRelatedParser.ExtractInitialData(html);
-        var results = new List<YtdlpVideo>();
+        int count = 0;
         var seen = new HashSet<string>(StringComparer.Ordinal) { video.Id };
         string? continuation = null;
         if (initial is not null)
-            Add(initial.RootElement);
+            foreach (var related in ReadPage(initial.RootElement)) yield return related;
 
         string version = Regex.Match(html, "\"INNERTUBE_CLIENT_VERSION\"\\s*:\\s*\"([^\"]+)\"").Groups[1].Value;
         string visitor = Regex.Match(html, "\"VISITOR_DATA\"\\s*:\\s*\"([^\"]+)\"").Groups[1].Value;
         var usedTokens = new HashSet<string>(StringComparer.Ordinal);
-        for (int page = 0; results.Count < maxResults && version.Length > 0 && page < YtdlpParser.MaximumResults; page++)
+        for (int page = 0; count < maxResults && version.Length > 0 && page < YtdlpParser.MaximumResults; page++)
         {
-            if (results.Count > 0 && continuation is null) break;
+            if (count > 0 && continuation is null) break;
             if (continuation is not null && !usedTokens.Add(continuation)) break;
             var payload = new Dictionary<string, object?>
             {
@@ -70,18 +75,20 @@ public sealed partial class YtdlpClient
             request.Headers.Referrer = new Uri(url);
             string json = await ReadRelatedResponseAsync(http, request, cancellationToken);
             using var next = JsonDocument.Parse(json);
-            Add(next.RootElement);
-            progress.Report($"Loaded {results.Count}/{maxResults} related videos; loading further recommendations...");
+            foreach (var related in ReadPage(next.RootElement)) yield return related;
+            progress.Report($"Loaded {count}/{maxResults} related videos; loading further recommendations...");
             if (continuation is null) break;
         }
-        if (results.Count == 0)
+        if (count == 0)
             throw new InvalidDataException("YouTube returned no related / next-up videos for this video. Recommendations may be unavailable for this session.");
-        return results.AsReadOnly();
-
-        void Add(JsonElement root)
+        IEnumerable<YtdlpVideo> ReadPage(JsonElement root)
         {
             foreach (var related in YoutubeRelatedParser.Parse(root, maxResults, out continuation))
-                if (seen.Add(related.Id) && results.Count < maxResults) results.Add(related);
+                if (count < maxResults && seen.Add(related.Id))
+                {
+                    count++;
+                    yield return related;
+                }
         }
     }
 

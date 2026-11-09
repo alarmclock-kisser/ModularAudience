@@ -35,7 +35,7 @@ public sealed class YoutubeBrowserResponsiveTests
             window.PerformLayout();
             Assert.IsTrue(root.Bottom <= root.Parent!.ClientSize.Height,
                 $"Root bottom {root.Bottom} exceeds visible client height {root.Parent!.ClientSize.Height} at {size}.");
-            foreach (string name in new[] { "queryText", "resultLimit", "resultsList", "thumbnailCheck", "descriptionText", "metadataButton", "formatCombo", "audioQuality", "saveCheck", "outputDirectory", "folderButton", "cooldownSeconds", "maxDurationMinutes", "maxSizeMiB", "maxParallelDownloadsNumber", "stretchCheck", "stretchConfigButton", "ipVersionCombo", "proxyModeCombo", "proxyText", "downloadButton", "relatedButton", "updateButton", "cancelButton", "activityLog", "statusLabel", "elapsedLabel", "etaLabel" })
+            foreach (string name in new[] { "queryText", "resultTypeCombo", "resultLimit", "resultsList", "thumbnailCheck", "descriptionText", "metadataButton", "formatCombo", "audioQuality", "saveCheck", "outputDirectory", "folderButton", "cooldownSeconds", "maxDurationMinutes", "maxSizeMiB", "maxParallelDownloadsNumber", "stretchCheck", "stretchConfigButton", "ipVersionCombo", "proxyModeCombo", "proxyText", "downloadButton", "relatedButton", "updateButton", "cancelButton", "activityLog", "statusLabel", "elapsedLabel", "etaLabel" })
             {
                 var control = Field<Control>(window, name);
                 var location = Point.Empty;
@@ -70,6 +70,8 @@ public sealed class YoutubeBrowserResponsiveTests
         Assert.IsTrue(Field<SplitContainer>(window, "mainSplit").Panel2Collapsed);
         Assert.IsFalse(Field<GroupBox>(window, "optionsGroup").Visible);
         Assert.IsTrue(list.Width > 300 && list.Height >= 100, $"Mini table {list.Size}; root {root.Size}");
+        Assert.IsTrue(Field<ComboBox>(window, "resultTypeCombo").Width >= 80);
+        Assert.IsTrue(Field<TextBox>(window, "queryText").Width >= 80, "The result filter must leave a usable search field in mini layout.");
         window.Size = new Size(1180, 820);
         window.PerformLayout();
         Assert.IsFalse(Field<SplitContainer>(window, "mainSplit").Panel2Collapsed);

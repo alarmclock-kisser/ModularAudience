@@ -34,7 +34,7 @@ public partial class YoutubeBrowserWindow
 
     private void ToolsFolder_Click(object? sender, EventArgs e)
     {
-        if (busy || closing) return;
+        if (busy || browsing || playlistEnqueueCancellation is not null || closing) return;
         if (ChooseToolsFolder()) InitializeToolsForSelectedPolicy();
     }
 

@@ -10,7 +10,7 @@ internal sealed class MixOptionsDialog : Form
     private readonly Action<MixArrangement> preview;
     private bool initializing;
     internal MixArrangement Options => state;
-    public MixOptionsDialog(MixArrangement arrangement, Action<MixArrangement> preview)
+    public MixOptionsDialog(MixArrangement arrangement, Action<MixArrangement> preview, Func<Color, Task<Color?>>? pickColor = null)
     {
         this.preview = preview;
         state = new(); state.Restore(arrangement.Capture());
@@ -76,12 +76,15 @@ internal sealed class MixOptionsDialog : Form
             catch (FormatException error) { row.ErrorText = error.Message; }
         }
         colors.CellEndEdit += (_, e) => { if (!initializing && e.RowIndex >= 0) Store(colors.Rows[e.RowIndex]); };
-        colors.CellClick += (_, e) =>
+        colors.CellClick += async (_, e) =>
         {
             if (e.RowIndex < 0 || e.ColumnIndex != 2) return;
             var row = colors.Rows[e.RowIndex];
-            using var dialog = new ColorDialog { FullOpen = true, Color = ThemeFiles.ParseColor((string)typeof(MixVisualOptions).GetProperty(row.Cells[0].Value!.ToString()!)!.GetValue(state.Visual)!) };
-            if (dialog.ShowDialog(this) == DialogResult.OK) { row.Cells[1].Value = ThemeFiles.FormatColor(dialog.Color); Store(row); }
+            Color initial = ThemeFiles.ParseColor((string)typeof(MixVisualOptions).GetProperty(row.Cells[0].Value!.ToString()!)!.GetValue(state.Visual)!);
+            Color? chosen;
+            if (pickColor is not null) chosen = await pickColor(initial);
+            else { using var dialog = new ColorDialog { FullOpen = true, Color = initial }; chosen = dialog.ShowDialog(this) == DialogResult.OK ? dialog.Color : null; }
+            if (chosen is Color color) { row.Cells[1].Value = ThemeFiles.FormatColor(color); Store(row); }
         };
         RefreshColors();
         var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };

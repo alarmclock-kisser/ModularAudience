@@ -25,7 +25,7 @@ public sealed class InstrumentSampleSynthDialog : Form
     private readonly System.Windows.Forms.Timer debounce = new() { Interval = 180 }, playbackTimer = new() { Interval = 40 };
     private readonly string[] noteNames = Enumerable.Range(12, 97).Select(InstrumentSampleSynth.NoteName).ToArray();
     private static readonly (string Name, double Beats)[] Durations = [.. InstrumentSynthSettings.KeyDurations];
-    private readonly ToolTip tips = new();
+    private readonly ToolTip tips = new() { IsParameterHelp = true };
     private AudioObj? audio;
     private AudioCollectionView? collection;
     private CancellationTokenSource? rendering;
@@ -136,6 +136,14 @@ public sealed class InstrumentSampleSynthDialog : Form
         savedPresets.SelectedIndexChanged += (_, _) => { if (savedPresets.SelectedItem is string name) presetName.Text = name; };
         tips.SetToolTip(presetName, "Save creates or updates this named preset. Rename renames the selected preset to this name.");
         root.Controls.Add(top, 0, 0); root.Controls.Add(presetBar, 0, 1); root.Controls.Add(picture, 0, 2); root.Controls.Add(parameters, 0, 3); root.Controls.Add(bottom, 0, 4); Controls.Add(root);
+        tips.SetToolTip(voice, "Choose the instrument voice within this family. Changing it loads voice-specific sound defaults; subsequent parameter changes customize the new voice.");
+        tips.SetToolTip(kit, "Choose the drum-set character. Drum type selects the actual kick, snare, cymbal or other percussion voice within that set.");
+        tips.SetToolTip(drum, "Percussion instrument to synthesize. Its characteristic base pitch and excitation remain type-specific; Pitch adds a relative tuning offset.");
+        tips.SetToolTip(note, "Fundamental MIDI key for this single synthesized note. Duration and envelope control its gate and tail; this is not a repeating MIDI phrase.");
+        tips.SetToolTip(articulation, "Straight uses the selected note length. Dotted multiplies it by 1.5; Triplet multiplies it by 2/3. BPM converts the resulting musical length to seconds.");
+        tips.SetToolTip(format, "Sample rate and mono/stereo channel layout of the generated audio object. Filtering is limited below the selected rate's Nyquist frequency.");
+        tips.SetToolTip(loop, "Repeat the single-note sample during prehear. This is an audition option; Create still produces one note plus its release tail.");
+        tips.SetToolTip(savedPresets, "Saved presets for this synthesizer family. Select a name, then Load preset to restore its sound parameters; presets are stored in AppData.");
         Shown += (_, _) => FitInitialParameterHeight(parameters);
         voice.SelectedIndexChanged += (_, _) =>
         {

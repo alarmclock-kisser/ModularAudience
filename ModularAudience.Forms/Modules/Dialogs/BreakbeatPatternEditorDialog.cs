@@ -3576,6 +3576,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void UpdatePitchTooltipHover(Point pointer)
         {
+            if (!Hints.HintPolicy.Enabled) { this.pictureBox_pattern_MouseLeave(this, EventArgs.Empty); return; }
             BreakbeatPatternNote? note = null;
             if (!this.drawing && !this.rowReorderActive && !this.selectingNotes && !this.pastePreviewActive)
             {

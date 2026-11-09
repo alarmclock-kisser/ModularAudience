@@ -53,10 +53,10 @@ public sealed class YoutubeBrowserRepairTests
         var format = Field<ComboBox>(window, "formatCombo");
         var quality = Field<DomainUpDown>(window, "audioQuality");
         format.SelectedIndex = 0;
-        CollectionAssert.AreEqual(new[] { "8", "16", "24", "32" }, quality.Items.Cast<string>().ToArray());
+        CollectionAssert.AreEqual(new[] { "32", "24", "16", "8" }, quality.Items.Cast<string>().ToArray());
         quality.SelectedItem = "24";
         format.SelectedIndex = 1;
-        CollectionAssert.AreEqual(new[] { "64", "96", "128", "192", "256", "320" }, quality.Items.Cast<string>().ToArray());
+        CollectionAssert.AreEqual(new[] { "320", "256", "192", "128", "96", "64" }, quality.Items.Cast<string>().ToArray());
         quality.SelectedItem = "256";
         format.SelectedIndex = 0;
         Assert.AreEqual("24", quality.SelectedItem);

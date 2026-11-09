@@ -37,6 +37,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.MidiEditSelection = midiEditSelection;
             this.sourceMidiWindow = sourceMidiWindow;
             this.InitializeComponent();
+            Hints.HintContent.Apply(this.toolTip_editor, this, Hints.HintContent.MidiEditor);
             this.numericUpDown_pitchFrequency.Value = (decimal)Math.Clamp(midiEditSelection.MidiFile.PitchFrequency, 1.0, 1000.0);
             long defaultViewLength = this.DefaultViewLengthTicks;
             long initialViewLength = Math.Max(this.GetRequiredEditorLength(), defaultViewLength);

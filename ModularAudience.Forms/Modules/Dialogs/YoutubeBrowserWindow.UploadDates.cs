@@ -19,7 +19,7 @@ public partial class YoutubeBrowserWindow
         UpdateResultRowsPreservingInteraction(() =>
         {
             foreach (ListViewItem row in resultsList.Items)
-                if (row.Tag is YtdlpVideo { IsChannel: false, UploadDate: null }) row.SubItems[6].Text = "Loading...";
+                if (row.Tag is YtdlpVideo { IsVideo: true, UploadDate: null }) row.SubItems[6].Text = "Loading...";
         });
         var lookupClient = new YtdlpClient(binaryManager)
         {
@@ -48,7 +48,7 @@ public partial class YoutubeBrowserWindow
         Func<YtdlpVideo, CancellationToken, Task<DateOnly?>> provider, int generation, CancellationToken token)
     {
         using var slots = new SemaphoreSlim(4);
-        await Task.WhenAll(videos.Where(video => !video.IsChannel && video.UploadDate is null).GroupBy(video => video.Id)
+        await Task.WhenAll(videos.Where(video => video.IsVideo && video.UploadDate is null).GroupBy(video => video.Id)
             .Select(group => LoadUploadDateAsync(group.First(), provider, slots, generation, token)));
         // Keep the user's viewport stable during enrichment, even when the date column
         // was selected earlier. Explicit header clicks can sort the completed dates.

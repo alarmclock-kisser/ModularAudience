@@ -105,7 +105,7 @@ public partial class YoutubeBrowserWindow
         bool mp3 = formatCombo.SelectedIndex == 1;
         audioQuality.SelectedItemChanged -= AudioQuality_Changed;
         audioQuality.Items.Clear();
-        int[] values = mp3 ? [64, 96, 128, 192, 256, 320] : [8, 16, 24, 32];
+        int[] values = mp3 ? [320, 256, 192, 128, 96, 64] : [32, 24, 16, 8];
         foreach (int value in values) audioQuality.Items.Add(value.ToString(System.Globalization.CultureInfo.InvariantCulture));
         audioQuality.SelectedItem = (mp3 ? mp3Bitrate : wavBitDepth).ToString(System.Globalization.CultureInfo.InvariantCulture);
         audioQualityLabel.Text = mp3 ? "kbps" : "PCM bits";

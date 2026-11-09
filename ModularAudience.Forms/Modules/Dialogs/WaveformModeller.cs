@@ -9,6 +9,8 @@ public sealed class WaveformModeller : Form
     private WaveformSettings settings = new();
     private readonly TextBox equation = new() { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, Height = 85 };
     private readonly Plot plot = new() { Dock = DockStyle.Fill };
+    private readonly ToolTip parameterHelp = new() { IsParameterHelp = true };
+    private readonly ToolTip interactionHints = new();
     private readonly Label status = new() { Dock = DockStyle.Bottom, Height = 35, AutoEllipsis = true };
     private readonly TextBox name = new() { Width = 180, Text = "Modelled waveform" };
     private readonly NumericUpDown frequency = Number(0.1m, 20000, 220, 0.1m);
@@ -96,6 +98,22 @@ public sealed class WaveformModeller : Form
         tools.Controls.Add(new Label { Text = "Draw: left mouse. x = phase 0…1; tau = 2*pi. Live audio uses smoothed updates and Nyquist-limited tables.", AutoSize = true, MaximumSize = new Size(480, 0) });
         root.Controls.Add(toolbar, 0, 0); root.Controls.Add(equation, 0, 1); root.Controls.Add(options, 0, 2);
         root.Controls.Add(plot, 0, 3); root.Controls.Add(tools, 0, 4); root.Controls.Add(status, 0, 5); Controls.Add(root);
+        parameterHelp.SetToolTip(equation, "Define one periodic cycle with x/phase from 0 to 1. tau = 2*pi. Use decimal dots; implicit multiplication and functions such as sin, tanh, min, max and clamp are supported. Invalid equations retain the last valid sound.");
+        parameterHelp.SetToolTip(frequency, "Cycle repetition rate in hertz; this sets the fundamental pitch. Harmonics above Nyquist are limited when creating playback/render tables.");
+        parameterHelp.SetToolTip(gain, "Final output amplitude as a percentage. Lower this to leave headroom; normalization of the cycle is controlled separately.");
+        parameterHelp.SetToolTip(duration, "Length of the rendered audio object in seconds. Live prehear is a continuous oscillator and is not shortened by this setting.");
+        parameterHelp.SetToolTip(phase, "Initial phase offset measured in cycles. One complete cycle is 1; phase changes the starting point of the waveform, not its frequency.");
+        parameterHelp.SetToolTip(harmonics, "Number of Fourier harmonics used to turn a drawing into an editable equation. More harmonics preserve sharper detail but may add high-frequency content.");
+        parameterHelp.SetToolTip(attack, "Fade-in duration of rendered audio in milliseconds. Use a short attack to reduce an abrupt start click.");
+        parameterHelp.SetToolTip(release, "Fade-out duration of rendered audio in milliseconds. This softens the end of the selected output duration.");
+        parameterHelp.SetToolTip(rate, "Sample rate of the rendered audio object. Higher rates increase the Nyquist limit and output size; they do not change the oscillator's fundamental frequency.");
+        parameterHelp.SetToolTip(channels, "Number of output channels in the rendered audio object. Increasing channel count also increases its memory and file size.");
+        parameterHelp.SetToolTip(normalize, "Scale the periodic cycle to a bounded reference peak before applying output level. Disable to retain relative amplitudes specified by the equation or drawing.");
+        parameterHelp.SetToolTip(dc, "Remove the cycle's constant (DC) offset before playback/rendering. This centers asymmetric equations without changing their repetition rate.");
+        parameterHelp.SetToolTip(name, "Name assigned to newly rendered audio objects. Saving a waveform stores its editable settings, not an already rendered recording.");
+        parameterHelp.SetToolTip(presets, "Load a starting equation. Subsequent parameter edits and drawing can be undone/redone; rendering creates a separate audio object.");
+        interactionHints.SetToolTip(plot, "Draw one cycle with the left mouse button. The horizontal axis is phase 0 to 1; the vertical axis is amplitude. Drawing is converted to a Fourier equation using Draw harmonics.");
+        interactionHints.SetToolTip(hear, "Start or stop the continuous live oscillator. Valid edits crossfade into playback without restarting the current phase.");
         equation.TextChanged += (_, _) => { if (!editing) { drawn = null; QueueUpdate(); } };
         foreach (var n in new[] { frequency, gain, duration, phase, harmonics, attack, release, channels }) n.ValueChanged += (_, _) => QueueUpdate();
         rate.SelectedIndexChanged += (_, _) => QueueUpdate(); normalize.CheckedChanged += (_, _) => QueueUpdate(); dc.CheckedChanged += (_, _) => QueueUpdate();
@@ -257,7 +275,7 @@ public sealed class WaveformModeller : Form
     }
     protected override void Dispose(bool disposing)
     {
-        if (disposing && !disposedResources) { disposedResources = true; debounce.Dispose(); StopHear(); renderCancellation?.Cancel(); }
+        if (disposing && !disposedResources) { disposedResources = true; parameterHelp.Dispose(); interactionHints.Dispose(); debounce.Dispose(); StopHear(); renderCancellation?.Cancel(); }
         base.Dispose(disposing);
     }
     private sealed class Plot : Control { public Plot() { DoubleBuffered = true; SetStyle(ControlStyles.ResizeRedraw, true); } }

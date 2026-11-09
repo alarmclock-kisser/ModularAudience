@@ -50,8 +50,8 @@ public sealed partial class MixTrackView
 
     internal async Task OpenMixEffectAsync(AudioEffectKind effect)
     {
-        if (busy || closing || released || this.mixEffectOpening) return;
         if (this.mixEffectDialogs.TryGetValue(effect, out Form? existing) && !existing.IsDisposed) { existing.Activate(); return; }
+        if (busy || closing || released || this.mixEffectOpening || this.windowGroup.IsBlocked) return;
         MixEffectEditSession? session = null; bool ownedByDialog = false;
         this.mixEffectOpening = true;
         try
@@ -69,13 +69,15 @@ public sealed partial class MixTrackView
             if (!definition.OpensOptions)
             {
                 AudioEffectResult[] results = await this.RenderMixEffectAsync(captured, definition.CreateDefaults(), new(), null, lifetime);
-                await this.CommitMixEffectAsync(captured, results, definition.Name, wasRange, lifetime);
+                await this.CommitMixEffectAsync(captured, results, definition.Name, wasRange, lifetime, definition.CreateDefaults());
                 return;
             }
             using AudioObj originalPreview = await captured.RenderPreviewAsync(token: lifetime);
             lifetime.ThrowIfCancellationRequested();
             AudioEffectEditSession previewSession = AudioEffectEditSession.Capture(originalPreview);
             AudioEffectResult[]? renderedBatch = null;
+            AudioEffectSettings? renderedParameters = null;
+            AutoTuneSettings? renderedTuning = null;
             string scope = $"Mix selection: {captured.Start:F3}s–{captured.End:F3}s; {captured.Inputs.Count} lane(s), including silence between segments.\n" +
                 "Each lane is processed separately. Clip gain/fades are rendered; track gain/mute/solo remain editable. Preview auditions the selected lanes.";
             Form dialog;
@@ -84,7 +86,7 @@ public sealed partial class MixTrackView
                 var context = new AutoTuneDialogContext(previewSession, Arrangement.Name + " — selection",
                     new AutoTuneSettings { TempoBpm = AutoTuneTempoResolver.Resolve(captured.TempoBpm, 0) },
                     (_, token) => this.CommitMixEffectAsync(captured, renderedBatch ?? throw new InvalidOperationException("Render the effect before applying."),
-                        definition.Name, wasRange, token),
+                        definition.Name, wasRange, token, autoTune: renderedTuning),
                     this.StopMixForEffectAsync, () => (Arrangement.Bpm, 0), scope,
                     async (settings, execution, progress, token) =>
                     {
@@ -99,7 +101,7 @@ public sealed partial class MixTrackView
                             corrected += result.CorrectedFrames; protection = Math.Min(protection, result.PeakProtectionGain);
                         }
                         using AudioObj preview = await captured.RenderPreviewAsync(results, token);
-                        token.ThrowIfCancellationRequested(); renderedBatch = results.ToArray(); progress.Report(1);
+                        token.ThrowIfCancellationRequested(); renderedBatch = results.ToArray(); renderedTuning = settings with { }; progress.Report(1);
                         return new AutoTuneResult(preview.Data, analyzed, voiced, corrected, protection);
                     });
                 dialog = this.CreateMixAutoTuneDialog(context);
@@ -108,13 +110,13 @@ public sealed partial class MixTrackView
             {
                 var context = new EffectDialogContext(previewSession, Arrangement.Name + " — selection", definition.CreateDefaults(),
                     (_, token) => this.CommitMixEffectAsync(captured, renderedBatch ?? throw new InvalidOperationException("Render the effect before applying."),
-                        definition.Name, wasRange, token),
+                        definition.Name, wasRange, token, renderedParameters),
                     this.StopMixForEffectAsync, () => (Arrangement.Bpm, 0), scope,
                     async (settings, execution, progress, token) =>
                     {
                         AudioEffectResult[] results = await this.RenderMixEffectAsync(captured, settings, execution, progress, token);
                         using AudioObj preview = await captured.RenderPreviewAsync(results, token);
-                        token.ThrowIfCancellationRequested(); renderedBatch = results; progress.Report(1);
+                        token.ThrowIfCancellationRequested(); renderedBatch = results; renderedParameters = settings.Copy(); progress.Report(1);
                         return new AudioEffectResult(preview.Data, preview.Channels);
                     });
                 dialog = this.CreateMixEffectDialog(context);
@@ -125,7 +127,7 @@ public sealed partial class MixTrackView
                 if (this.mixEffectDialogs.GetValueOrDefault(effect) == dialog) this.mixEffectDialogs.Remove(effect);
                 captured.Dispose();
             };
-            dialog.Show(this); ownedByDialog = true;
+            this.windowGroup.Show(dialog); ownedByDialog = true;
             this.status.Text = definition.Name + ": selected audio captured. Preview and presets do not edit the mix.";
         }
         catch (OperationCanceledException) { }
@@ -159,14 +161,14 @@ public sealed partial class MixTrackView
     }
 
     private async Task CommitMixEffectAsync(MixEffectEditSession session, IReadOnlyList<AudioEffectResult> results, string effectName,
-        bool wasRange, CancellationToken token)
+        bool wasRange, CancellationToken token, AudioEffectSettings? settings = null, AutoTuneSettings? autoTune = null)
     {
         token.ThrowIfCancellationRequested();
         if (closing || released) throw new OperationCanceledException(token);
         if (busy) throw new InvalidOperationException("Finish the current mix operation before applying this effect.");
         await this.StopMixForEffectAsync(); token.ThrowIfCancellationRequested();
         if (closing || released) throw new OperationCanceledException(token);
-        MixEffectCommit edit = session.Apply(Arrangement, results, effectName);
+        MixEffectCommit edit = session.Apply(Arrangement, results, effectName, settings, autoTune);
         if (!edit.Changed) { this.status.Text = "Effect bypass/no-op: mix and undo history unchanged."; return; }
         this.liveUpdateCancellation?.Cancel();
         this.caret = session.MapTime(this.caret, edit.NewDuration); this.manualCaret = session.MapTime(this.manualCaret, edit.NewDuration);

@@ -26,10 +26,12 @@ namespace ModularAudience.Forms.Modules
             this.StartPosition = FormStartPosition.Manual;
             this.BackColor = Color.White; // Hintergrund weiß
             this.Opacity = 0.97;
+            Hints.HintPolicy.RegisterPopup(this, this.Hide);
         }
 
         public void ShowWaveform(Bitmap bmp, Point location)
         {
+            if (!Hints.HintPolicy.Enabled) { bmp.Dispose(); return; }
             this.ReplaceImage(bmp);
             this.Size = new Size(bmp.Width, bmp.Height);
             this.pictureBox_waveform.Size = new Size(bmp.Width, bmp.Height);
@@ -40,6 +42,7 @@ namespace ModularAudience.Forms.Modules
 
         public void ShowConcatenatedWaveforms(IList<Bitmap> bitmaps, Point location)
         {
+            if (!Hints.HintPolicy.Enabled) { foreach (Bitmap bitmap in bitmaps) bitmap.Dispose(); return; }
             if (bitmaps.Count == 0)
             {
                 return;

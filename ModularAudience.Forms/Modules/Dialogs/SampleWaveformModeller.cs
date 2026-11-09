@@ -19,6 +19,8 @@ public sealed class SampleWaveformModeller : Form
     private readonly ComboBox effectKind = new() { Width = 160, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ListBox chain = new() { Dock = DockStyle.Fill };
     private readonly PropertyGrid properties = new() { Dock = DockStyle.Fill, HelpVisible = true, ToolbarVisible = false };
+    private readonly ToolTip parameterHelp = new() { IsParameterHelp = true };
+    private readonly ToolTip interactionHints = new();
     private readonly WavePlot plot = new() { Dock = DockStyle.Fill };
     private readonly WavePlot spectrum = new() { Dock = DockStyle.Bottom, Height = 135 };
     private double[] spectrumDb = [];
@@ -124,6 +126,21 @@ public sealed class SampleWaveformModeller : Form
         effectsPanel.Controls.Add(addbar, 0, 0); effectsPanel.Controls.Add(chain, 0, 1); effectsPanel.Controls.Add(chainbar, 0, 2); effectsPanel.Controls.Add(properties, 0, 3);
         body.Panel2.Controls.Add(effectsPanel);
         root.Controls.Add(toolbar, 0, 0); root.Controls.Add(presetbar, 0, 1); root.Controls.Add(body, 0, 2); root.Controls.Add(status, 0, 3); Controls.Add(root);
+        parameterHelp.SetToolTip(zoom, "Horizontal waveform magnification. Zoom in to edit individual samples; zooming only changes the view and does not resample the audio.");
+        parameterHelp.SetToolTip(vertical, "Vertical waveform display scale. This is visual magnification, not audio gain; add a gain/envelope effect to change loudness.");
+        parameterHelp.SetToolTip(selectionStart, "Beginning of the active range as a percentage of the original sample duration. New effects added to selection use this range; start must precede end.");
+        parameterHelp.SetToolTip(selectionEnd, "End of the active range as a percentage of the original sample duration. Use range copies these boundaries into the currently selected effect.");
+        parameterHelp.SetToolTip(drawChannel, "One-based audio channel used for direct waveform and envelope drawing. Other channels remain unchanged by that drawing stroke.");
+        parameterHelp.SetToolTip(gesture, "Select range drags a time selection. Draw waveform edits sample values at high zoom; Draw envelope creates a relative volume curve from 0 to 2 on the selected channel.");
+        parameterHelp.SetToolTip(effectKind, "Effect type inserted by Add to selection. Effects run top-to-bottom on the original sample; select an effect in the chain to edit its properties.");
+        parameterHelp.SetToolTip(properties, "Properties of the selected effect. The help pane describes individual parameters. Edits are validated and rerender the chain without replacing the collection source until Save.");
+        parameterHelp.SetToolTip(presetName, "Name for the complete effect-chain preset. Save preset creates/updates it in AppData; loading a preset restores its chain for the current editing session.");
+        parameterHelp.SetToolTip(bypass, "A/B comparison: audition the original sample without committing the currently modelled effect chain. Switch off to hear the processed version again.");
+        parameterHelp.SetToolTip(loop, "Repeat the active audition range. This controls prehear only and does not append repetitions to saved sample data.");
+        interactionHints.SetToolTip(plot, "Waveform editing surface. Choose a gesture above, then left-drag. Mouse wheel zooms around the pointer; the scrollbar pans. Draw waveform requires enough zoom to distinguish individual samples.");
+        interactionHints.SetToolTip(spectrum, "Logarithmic spectrum from 20 Hz to Nyquist. Click to add a peak EQ: horizontal position selects frequency; vertical position selects gain from +24 to -24 dB.");
+        interactionHints.SetToolTip(save, "Save replaces this collection sample and closes the modeller. Ctrl+Save adds a named variation to the same collection and keeps the editor open. Undo/redo remains local to this session.");
+        Disposed += (_, _) => { parameterHelp.Dispose(); interactionHints.Dispose(); };
         chain.SelectedIndexChanged += (_, _) => properties.SelectedObject = chain.SelectedItem;
         properties.PropertyValueChanged += (_, _) => Safe(() =>
         {

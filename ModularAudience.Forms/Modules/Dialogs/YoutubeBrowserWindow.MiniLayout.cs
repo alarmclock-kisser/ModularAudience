@@ -148,7 +148,7 @@ public partial class YoutubeBrowserWindow
 
     private async void Results_MouseMove(object? sender, MouseEventArgs e)
     {
-        if (!miniLayout || !thumbnailCheck.Checked || closing || !ContainsFocus) { HideThumbnailPopup(); return; }
+        if (!Hints.HintPolicy.Enabled || !miniLayout || !thumbnailCheck.Checked || closing || !ContainsFocus) { HideThumbnailPopup(); return; }
         if (resultsList.GetItemAt(e.X, e.Y)?.Tag is not ModularAudience.Ytdlp.YtdlpVideo video)
         { HideThumbnailPopup(); return; }
         if (hoveredThumbnailId == video.Id) return;
@@ -171,9 +171,9 @@ public partial class YoutubeBrowserWindow
             try
             {
                 await Task.Delay(350, source.Token);
-                if (hoveredThumbnailId != video.Id || !miniLayout || closing) return;
+                if (!Hints.HintPolicy.Enabled || hoveredThumbnailId != video.Id || !miniLayout || closing) return;
                 using var preview = await YoutubeThumbnailLoader.LoadAsync(thumbnailClient, video, _ => { }, source.Token);
-                if (hoveredThumbnailId != video.Id || !miniLayout || closing || resourcesReleased || !ContainsFocus) return;
+                if (!Hints.HintPolicy.Enabled || hoveredThumbnailId != video.Id || !miniLayout || closing || resourcesReleased || !ContainsFocus) return;
                 var point = resultsList.PointToScreen(new Point(e.X + 20, e.Y + 20));
                 var bounds = Screen.FromPoint(point).WorkingArea;
                 point.X = Math.Clamp(point.X, bounds.Left, Math.Max(bounds.Left, bounds.Right - preview.Width));

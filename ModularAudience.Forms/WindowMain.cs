@@ -169,7 +169,10 @@ namespace ModularAudience.Forms
             this.AudioC = new AudioCollection();
             Instance = this;
             this.InitializeComponent();
+            this.components!.Add(this.limiterToolTip);
+            Hints.HintContent.Apply(this.toolTip_playlist, this, Hints.HintContent.Main);
             this.InitializeImportPreferences();
+            this.InitializeHintMenu();
             this.InitializeScanControls();
             this.InitializeThemeMenu();
             this.Tag = this.Text;
@@ -804,7 +807,7 @@ namespace ModularAudience.Forms
                 // WÃ¤hrend des Scrollens/Haltens -> Tooltip updaten und an der Maus positionieren
 
                 // Tipp: HÃ¤ng direkt deine Einheit dran (z.B. dB oder %), das liest sich im UI besser
-                string hintText = $"Limiter: {this.MasterLimiter} dB";
+                string hintText = $"Master output: {this.MasterLimiter:P0} (linear gain limit; source audio unchanged)";
 
                 // Position berechnen, damit der Tooltip genau neben dem Thumb an der Maus schwebt
                 // (x + 20 damit er nicht direkt unter dem Mauszeiger klebt und flackert)

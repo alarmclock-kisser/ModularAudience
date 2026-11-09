@@ -30,7 +30,7 @@ public partial class BreakbeatGeneratorDialog
                 PublishLlmSettings();
                 llmSettingsTimer.Stop(); llmSettingsTimer.Start();
             };
-        var menu = new ContextMenuStrip(components!);
+        var menu = new ContextMenuStrip(components!) { IsParameterHelp = true };
         foreach (var definition in BreakbeatLlmSettings.Definitions)
         {
             var parameter = llmSettings.Parameters[definition.Key];

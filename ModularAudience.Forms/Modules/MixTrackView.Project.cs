@@ -6,7 +6,6 @@ public sealed partial class MixTrackView
 {
     private readonly CheckBox autoSave = new() { Text = "Auto-save", AutoSize = true, Enabled = false };
     private readonly System.Windows.Forms.Timer projectSaveTimer = new() { Interval = 300 };
-    private readonly System.Windows.Forms.Timer viewSaveTimer = new() { Interval = 250 };
     private string? projectPath;
     private Task projectSaveWork = Task.CompletedTask;
     private (string Path, string State, MixSource[] Sources)? pendingProjectSave;
@@ -38,7 +37,8 @@ public sealed partial class MixTrackView
     {
         vertical.Maximum = Math.Max(0, Arrangement.Lanes.Count - 1);
         vertical.Value = Math.Clamp(Arrangement.Visual.FirstVisibleTrack, 0, vertical.Maximum);
-        int value = (int)Math.Clamp(Arrangement.Visual.HorizontalScrollSeconds * 100, 0, int.MaxValue - 200);
+        this.UpdateTimelineScrollBounds();
+        int value = (int)Math.Clamp(Arrangement.Visual.HorizontalScrollSeconds * 100, scroll.Minimum, int.MaxValue - 200);
         scroll.Maximum = Math.Max(scroll.Maximum, value + scroll.LargeChange);
         scroll.Value = value;
     }
@@ -49,14 +49,15 @@ public sealed partial class MixTrackView
         playback?.SetPosition((long)(caret * playback.SampleRate));
         double width = Math.Max(1, canvas.Width - Header) / pixelsPerSecond;
         if (caret < ViewStart || caret >= ViewStart + width)
-            scroll.Value = Math.Clamp((int)(caret * 100), 0, scroll.Maximum - scroll.LargeChange + 1);
+            scroll.Value = Math.Clamp((int)(caret * 100), scroll.Minimum, scroll.Maximum - scroll.LargeChange + 1);
         canvas.Invalidate();
     }
     private void QueueProjectSave(bool force = false)
     {
         if (restoring || released || projectPath == null || (!Arrangement.AutoSave && !force)) return;
-        pendingProjectSave = (projectPath, Arrangement.Capture(), Arrangement.Lanes.SelectMany(l => l.Clips)
-            .Select(c => c.SourceId).Distinct().Select(id => Arrangement.Sources[id]).ToArray());
+        string state = Arrangement.CaptureProject();
+        if (pendingProjectSave is { } pending && pending.Path == projectPath && pending.State == state) return;
+        pendingProjectSave = (projectPath, state, Arrangement.ProjectSources().ToArray());
         projectSaveTimer.Stop(); projectSaveTimer.Start();
     }
     private async Task FlushProjectSaveAsync()
@@ -68,7 +69,7 @@ public sealed partial class MixTrackView
         try
         {
             await projectSaveWork;
-            if (!released && projectPath == save.Path && Arrangement.Capture() == save.State)
+            if (!released && projectPath == save.Path && Arrangement.CaptureProject() == save.State)
             { dirty = false; status.Text = "Auto-saved project metadata; existing audio assets reused."; }
         }
         catch (Exception error) { if (!released) status.Text = "Auto-save failed: " + error.Message; }
@@ -77,11 +78,11 @@ public sealed partial class MixTrackView
     private async Task SaveToPathAsync(string path, CancellationToken token = default)
     {
         projectSaveTimer.Stop(); await FlushProjectSaveAsync();
-        string state = Arrangement.Capture();
-        var sources = Arrangement.Lanes.SelectMany(l => l.Clips).Select(c => c.SourceId).Distinct().Select(id => Arrangement.Sources[id]).ToArray();
+        string state = Arrangement.CaptureProject();
+        var sources = Arrangement.ProjectSources();
         await MixProjectFile.SaveSnapshotAsync(path, state, sources, token);
         projectPath = path; autoSave.Enabled = true;
-        dirty = Arrangement.Capture() != state;
+        dirty = Arrangement.CaptureProject() != state;
         status.Text = "Project saved — journal metadata and reusable Float32 assets.";
         if (dirty) QueueProjectSave();
     }
@@ -95,7 +96,7 @@ public sealed partial class MixTrackView
         // Project loading begins a fresh undo session; assets from the previous project
         // cannot be referenced by later undo operations.
         undo.Clear(); redo.Clear(); projectPath = null;
-        Restore(loaded.Capture()); committed = Arrangement.Capture();
+        Restore(loaded.Capture()); committed = MixAudioHistory.Capture(Arrangement); committedAudioKey = MixAudioHistory.Key(Arrangement);
         undo.Clear(); redo.Clear(); projectPath = path; autoSave.Enabled = true; dirty = false;
         loaded.Dispose(); status.Text = "Project loaded.";
     }

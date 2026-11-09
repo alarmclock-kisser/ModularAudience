@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 
 namespace ModularAudience.Audio.Arrangement;
 
@@ -37,6 +38,12 @@ public sealed class MixSource
     public int SampleRate { get; set; } = 44100;
     public int Channels { get; set; } = 2;
     public float Bpm { get; set; }
+    /// <summary>Immutable pre-tempo asset. Null denotes an independent original/edit baseline.</summary>
+    public Guid? TempoOriginId { get; set; }
+    /// <summary>Original seconds per second in this cached tempo rendering.</summary>
+    public double TempoOriginScale { get; set; } = 1;
+    public float TempoOriginBpm { get; set; }
+    public MixTempoRecipe? TempoRecipe { get; set; }
     [System.Text.Json.Serialization.JsonIgnore] public float[] Data { get; set; } = [];
     public double Duration => Data.Length / (double)(Math.Max(1, Channels) * Math.Max(1, SampleRate));
 }
@@ -88,13 +95,13 @@ public sealed class MixArrangement : IDisposable
     public bool AutoSave { get; set; }
     public List<MixLane> Lanes { get; set; } = [];
     [System.Text.Json.Serialization.JsonIgnore] public Dictionary<Guid, MixSource> Sources { get; } = [];
-    public double Duration => Lanes.SelectMany(l => l.Clips).Select(c => c.Start + ClipDuration(c)).DefaultIfEmpty(0).Max();
+    public double Duration => Math.Max(0, Lanes.SelectMany(l => l.Clips).Select(c => c.Start + ClipDuration(c)).DefaultIfEmpty(0).Max());
     public double Rate(MixClip clip) => clip.TempoMode != ClipTempoMode.Original && Sources.TryGetValue(clip.SourceId, out var s)
         && s.Bpm > 0 && float.IsFinite(s.Bpm) ? Math.Clamp(Bpm / s.Bpm, 0.05, 20) : 1;
     public double ClipDuration(MixClip clip) => clip.SourceDuration / Rate(clip);
     public double SnapTime(double seconds, bool shift = false) => Snap || shift
-        ? Math.Max(0, Math.Round(seconds / (240.0 / Bpm / SnapDivision), MidpointRounding.AwayFromZero) * (240.0 / Bpm / SnapDivision))
-        : Math.Max(0, seconds);
+        ? Math.Round(seconds / (240.0 / Bpm / SnapDivision), MidpointRounding.AwayFromZero) * (240.0 / Bpm / SnapDivision)
+        : seconds;
     public MixSource AddSource(AudioObj audio)
     {
         if (audio.SampleRate <= 0 || audio.Channels <= 0 || audio.Data.Length % audio.Channels != 0)
@@ -107,11 +114,43 @@ public sealed class MixArrangement : IDisposable
     public MixClip AddClip(MixLane lane, MixSource source, double start, double offset, double duration)
     {
         offset = Math.Clamp(offset, 0, source.Duration);
-        var clip = new MixClip { SourceId = source.Id, Name = source.Name, Start = Math.Max(0, start),
+        var clip = new MixClip { SourceId = source.Id, Name = source.Name, Start = start,
             SourceOffset = offset, SourceDuration = Math.Clamp(duration, 0, source.Duration - offset) };
         lane.Clips.Add(clip); return clip;
     }
     public string Capture() => JsonSerializer.Serialize(this);
+    private static readonly JsonSerializerOptions ProjectJson = CreateProjectJson();
+    public string CaptureProject() => JsonSerializer.Serialize(this, ProjectJson);
+    public static string SanitizeProjectState(string state) =>
+        (JsonSerializer.Deserialize<MixArrangement>(state) ?? throw new InvalidDataException("Invalid arrangement.")).CaptureProject();
+
+    private static JsonSerializerOptions CreateProjectJson()
+    {
+        var resolver = new DefaultJsonTypeInfoResolver();
+        resolver.Modifiers.Add(type =>
+        {
+            string[] omitted = type.Type == typeof(MixArrangement) ? [nameof(Loop), nameof(LoopStart), nameof(LoopEnd)] :
+                type.Type == typeof(MixVisualOptions) ? [nameof(MixVisualOptions.ScrollMode), nameof(MixVisualOptions.HorizontalScrollSeconds), nameof(MixVisualOptions.FirstVisibleTrack)] : [];
+            foreach (var property in type.Properties.Where(property => omitted.Contains(property.Name)).ToArray()) type.Properties.Remove(property);
+        });
+        return new JsonSerializerOptions { TypeInfoResolver = resolver };
+    }
+
+    /// <summary>Active assets plus their transitive pristine tempo origins, for self-contained project saves.</summary>
+    public IReadOnlyList<MixSource> ProjectSources()
+    {
+        var result = new Dictionary<Guid, MixSource>();
+        void Add(Guid id, HashSet<Guid> path)
+        {
+            if (!path.Add(id)) throw new InvalidDataException("Cyclic tempo origin references.");
+            if (!Sources.TryGetValue(id, out MixSource? source)) throw new InvalidDataException("Missing tempo origin audio.");
+            foreach (Guid dependency in MixTempoRecipe.Dependencies(source))
+                if (!result.ContainsKey(dependency)) Add(dependency, path);
+            result.TryAdd(id, source); path.Remove(id);
+        }
+        foreach (Guid id in Lanes.SelectMany(lane => lane.Clips).Select(clip => clip.SourceId).Distinct()) Add(id, []);
+        return result.Values.ToArray();
+    }
     public void Restore(string json)
     {
         var state = JsonSerializer.Deserialize<MixArrangement>(json) ?? throw new InvalidDataException("Invalid arrangement.");
@@ -128,7 +167,7 @@ public sealed class MixArrangement : IDisposable
             || !double.IsFinite(Visual.HueSpeed) || Visual.HueSpeed is < -720 or > 720
             || !double.IsFinite(Visual.PixelsPerSecond) || Visual.PixelsPerSecond is < 8 or > 2000)
             throw new InvalidDataException("Invalid visual options.");
-        if (!double.IsFinite(Visual.HorizontalScrollSeconds) || Visual.HorizontalScrollSeconds < 0 || Visual.FirstVisibleTrack < 0)
+        if (!double.IsFinite(Visual.HorizontalScrollSeconds) || Visual.FirstVisibleTrack < 0)
             throw new InvalidDataException("Invalid viewport position.");
         foreach (var property in typeof(MixVisualOptions).GetProperties().Where(p => p.PropertyType == typeof(string)))
         {
@@ -141,13 +180,19 @@ public sealed class MixArrangement : IDisposable
         foreach (var s in Sources.Values)
             if (s.SampleRate is < 1000 or > 768000 || s.Channels is < 1 or > 64 || s.Data.Length % s.Channels != 0 || s.Data.Any(v => !float.IsFinite(v)))
                 throw new InvalidDataException("Invalid source audio.");
+        foreach (var s in Sources.Values)
+            if (!double.IsFinite(s.TempoOriginScale) || s.TempoOriginScale <= 0 || !float.IsFinite(s.TempoOriginBpm) || s.TempoOriginBpm < 0 ||
+                s.TempoOriginId is Guid origin && (origin == s.Id || !Sources.ContainsKey(origin)))
+                throw new InvalidDataException("Invalid or missing tempo origin.");
+        foreach (var s in Sources.Values) s.TempoRecipe?.Validate(this.Sources);
+        _ = ProjectSources();
         foreach (var lane in Lanes)
         {
             if (!double.IsFinite(lane.Gain) || lane.Gain is < 0 or > 4) throw new InvalidDataException("Invalid track gain.");
             foreach (var c in lane.Clips)
             {
                 if (!Sources.TryGetValue(c.SourceId, out var s) || !Enum.IsDefined(c.TempoMode)
-                    || new[] { c.Start, c.SourceOffset, c.SourceDuration, c.Gain, c.FadeIn, c.FadeOut }.Any(v => !double.IsFinite(v) || v < 0)
+                    || !double.IsFinite(c.Start) || new[] { c.SourceOffset, c.SourceDuration, c.Gain, c.FadeIn, c.FadeOut }.Any(v => !double.IsFinite(v) || v < 0)
                     || c.Gain > 4 || c.SourceOffset + c.SourceDuration > s.Duration + 0.0001)
                     throw new InvalidDataException("Invalid audio segment.");
             }

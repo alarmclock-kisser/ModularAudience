@@ -358,7 +358,7 @@
             this.toolTip_beatMap.InitialDelay = 0;
             this.toolTip_beatMap.ReshowDelay = 0;
             this.toolTip_beatMap.ShowAlways = true;
-            this.toolTip_beatMap.SetToolTip(this.pictureBox_beatMap, "Double-click to open the Pattern Editor.");
+            this.toolTip_beatMap.SetToolTip(this.pictureBox_beatMap, "Preview the generated beat pattern. Double-click to open the Pattern Editor for note placement, sample lanes, loop ranges and variations. Editing the pattern does not modify the source samples.");
             this.pictureBox_beatMap.MouseEnter += this.pictureBox_beatMap_MouseEnter;
             this.pictureBox_beatMap.MouseLeave += this.pictureBox_beatMap_MouseLeave;
             this.pictureBox_beatMap.MouseDoubleClick += this.pictureBox_beatMap_MouseDoubleClick;

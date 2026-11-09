@@ -152,20 +152,20 @@ public partial class YoutubeBrowserWindow
         ++dateGeneration;
         string query = queryText.Text.Trim();
         int limit = (int)resultLimit.Value;
+        var resultType = (YtdlpResultType)Math.Max(0, resultTypeCombo.SelectedIndex);
         StartBrowseOperation("Loading YouTube metadata...", async token =>
         {
             if (string.IsNullOrWhiteSpace(query)) throw new ArgumentException("Enter search words or a YouTube URL.");
             bool isUrl = requirePlaylistUrl || (!forceSearch && LooksLikeUrl(query));
             AppendLog(isUrl ? "Opening YouTube URL..." : $"Searching YouTube for '{query}' (up to {limit} results)...");
             RememberSearch(query);
-            var videos = isUrl
-                ? await client.BrowseAsync(YtdlpParser.ValidateYoutubeUrl(query).AbsoluteUri, limit, token)
-                : await (searchProvider?.Invoke(query, limit, token) ?? client.SearchAsync(query, limit, token));
-            token.ThrowIfCancellationRequested();
-            PublishResults(videos, query, $"{videos.Count}/{limit} result(s) loaded");
-            StartUploadDates(videos);
-            browsingTabs.SelectedTab = resultsTab;
-            AppendLog($"Loaded {videos.Count} result(s). Related results are searches, not personal recommendations.");
+            var stream = isUrl ? client.BrowseStreamAsync(YtdlpParser.ValidateYoutubeUrl(query).AbsoluteUri, limit, token)
+                : searchStreamProvider?.Invoke(query, limit, resultType, token)
+                    ?? (searchProvider is not null ? StreamListAsync(searchProvider(query, limit, token), token)
+                        : client.SearchStreamAsync(query, limit, token, resultType));
+            int count = await StreamResultsAsync(stream, query, count => $"{count}/{limit} result(s) loaded", token,
+                resultType: isUrl ? YtdlpResultType.All : resultType, maxResults: limit);
+            AppendLog($"Loaded {count} result(s). Related results are searches, not personal recommendations.");
         });
     }
 
@@ -184,9 +184,7 @@ public partial class YoutubeBrowserWindow
             originalResultOrder.Clear();
             foreach (var video in videos)
             {
-                var row = new ListViewItem(video.IsChannel ? "[Channel] " + video.Title : video.Title) { Tag = video };
-                row.SubItems.AddRange([video.Uploader, video.IsChannel ? "" : FormatDuration(video.DurationSeconds),
-                    video.IsChannel ? "" : video.ViewCount?.ToString("N0") ?? "Unknown", video.Id, video.Url, video.IsChannel ? "" : FormatUploadDate(video.UploadDate)]);
+                var row = CreateResultRow(video);
                 resultsList.Items.Add(row);
                 originalResultOrder[row] = originalResultOrder.Count;
             }
@@ -212,17 +210,12 @@ public partial class YoutubeBrowserWindow
         DownloadSelected(showDownloads: true);
     }
 
-    private bool CanEnqueueDownloads => !closing && binariesReady &&
+    private bool CanEnqueueDownloads => !closing && binariesReady && playlistEnqueueCancellation is null &&
         (!busy || activeBatch is { PendingQueue: not null, Settled: false } batch && !batch.Source.IsCancellationRequested);
 
     private void DownloadEnqueue_Click(object? sender, EventArgs e)
     {
         if (!CanEnqueueDownloads) return;
-        if (busy && activeBatch is { } batch)
-        {
-            EnqueueDownloadVideos(batch, SelectedVideos().Where(video => !video.IsChannel).ToArray());
-            return;
-        }
         DownloadSelected(showDownloads: false);
     }
 
@@ -231,7 +224,7 @@ public partial class YoutubeBrowserWindow
         if (batch.PendingQueue is null || batch.Source.IsCancellationRequested) return;
         var queued = new List<DownloadJob>();
         var existing = batch.Jobs.Where(job => !job.Terminal).Select(job => job.Video.Id).ToHashSet(StringComparer.Ordinal);
-        foreach (var video in videos)
+        foreach (var video in videos.Where(video => video.IsVideo))
         {
             if (!existing.Add(video.Id)) continue;
             var row = new ListViewItem(video.Title);
@@ -250,9 +243,26 @@ public partial class YoutubeBrowserWindow
 
     private void DownloadSelected(bool showDownloads)
     {
-        if (busy || closing || !binariesReady) return;
-        var videos = SelectedVideos().Where(video => !video.IsChannel).ToArray();
+        if (!CanEnqueueDownloads) return;
+        var selected = SelectedVideos().Where(video => !video.IsChannel).ToArray();
+        if (selected.Any(video => video.IsPlaylist))
+        {
+            StartPlaylistEnqueue(selected, showDownloads);
+            return;
+        }
+        QueueDownloadVideos(selected, showDownloads);
+    }
+
+    private void QueueDownloadVideos(YtdlpVideo[] videos, bool showDownloads)
+    {
+        if (!CanEnqueueDownloads) return;
+        videos = videos.Where(video => video.IsVideo).DistinctBy(video => video.Id).ToArray();
         if (videos.Length == 0) return;
+        if (busy && activeBatch is { } batch)
+        {
+            EnqueueDownloadVideos(batch, videos);
+            return;
+        }
         YtdlpDownloadOptions options;
         try { options = CaptureDownloadOptions(); }
         catch (ArgumentException error) { ReportError("Invalid download settings", error); return; }

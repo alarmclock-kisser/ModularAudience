@@ -10,7 +10,7 @@ internal static class YoutubeThumbnailLoader
 
     internal static IEnumerable<Uri> Candidates(YtdlpVideo video)
     {
-        if (video.IsChannel)
+        if (!video.IsVideo)
         {
             if (video.ThumbnailUrl is not null) yield return ValidateUrl(video.ThumbnailUrl);
             yield break;

@@ -38,7 +38,7 @@ internal sealed class AutoTuneDialog : Form
     private readonly Label status = new() { Dock = DockStyle.Fill, AutoEllipsis = true, Text = "Ready. Prehear does not change the track." };
     private readonly EffectPresetBar presetBar = new("autoTunePresets");
     private readonly System.Windows.Forms.Timer playbackTimer = new() { Interval = 60 };
-    private readonly ToolTip presetTips = new();
+    private readonly ToolTip presetTips = new() { IsParameterHelp = true };
     private readonly CancellationTokenSource lifetime = new();
     private CancellationTokenSource? active;
     private AutoTuneSettings? renderedSettings;

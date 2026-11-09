@@ -115,8 +115,9 @@ namespace ModularAudience.Forms
 
         private void Register_ListBox_Log_ToolTip()
         {
-            _logToolTip = new ToolTip
+            _logToolTip = new ToolTip(this.components)
             {
+                AlwaysAvailable = true,
                 AutoPopDelay = 30000,
                 InitialDelay = 300,
                 ReshowDelay = 100,

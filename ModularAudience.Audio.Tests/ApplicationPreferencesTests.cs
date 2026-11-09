@@ -20,6 +20,7 @@ public sealed class ApplicationPreferencesTests
         Assert.AreEqual(8f, settings.LogFontSize);
         Assert.IsTrue(settings.KeepStructure);
         Assert.IsFalse(settings.AllInOneBag);
+        Assert.IsTrue(settings.EnableToolTips);
         Assert.IsTrue(File.Exists(files.Path));
     }
 
@@ -33,6 +34,7 @@ public sealed class ApplicationPreferencesTests
         files.Store.SetLogFontSize(13f);
         files.Store.SetKeepStructure(false);
         files.Store.SetAllInOneBag(true);
+        files.Store.SetEnableToolTips(false);
 
         ApplicationPreferences settings = new ApplicationPreferencesStore(files.Path).Load();
 
@@ -42,6 +44,7 @@ public sealed class ApplicationPreferencesTests
         Assert.AreEqual(13f, settings.LogFontSize);
         Assert.IsFalse(settings.KeepStructure);
         Assert.IsTrue(settings.AllInOneBag);
+        Assert.IsFalse(settings.EnableToolTips);
     }
 
     [TestMethod]
@@ -56,13 +59,15 @@ public sealed class ApplicationPreferencesTests
             Task.Run(() => new ApplicationPreferencesStore(files.Path).SetWorkingDirectory(directory)),
             Task.Run(() => new ApplicationPreferencesStore(files.Path).SetLogFontSize(15f)),
             Task.Run(() => new ApplicationPreferencesStore(files.Path).SetKeepStructure(false)),
-            Task.Run(() => new ApplicationPreferencesStore(files.Path).SetAllInOneBag(true)));
+            Task.Run(() => new ApplicationPreferencesStore(files.Path).SetAllInOneBag(true)),
+            Task.Run(() => new ApplicationPreferencesStore(files.Path).SetEnableToolTips(false)));
 
         ApplicationPreferences settings = files.Store.Load();
         Assert.AreEqual(".mp3", settings.ExportFormat);
         Assert.AreEqual(256, settings.ExportBits);
         Assert.AreEqual(directory, settings.WorkingDirectory);
         Assert.AreEqual(15f, settings.LogFontSize);
+        Assert.IsFalse(settings.EnableToolTips);
         Assert.IsFalse(settings.KeepStructure);
         Assert.IsTrue(settings.AllInOneBag);
     }

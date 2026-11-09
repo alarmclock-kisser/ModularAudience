@@ -258,6 +258,7 @@ namespace ModularAudience.Forms.Modules
         public LoopControl()
         {
             this.InitializeComponent();
+            Hints.HintContent.Apply(this.toolTip_playlistTracks, this, Hints.HintContent.Loops);
 
             this.Fill_ComboBox_Drops();
 
@@ -619,7 +620,7 @@ namespace ModularAudience.Forms.Modules
 
                 copy.Click += this.LoopButton_Click;
 
-                string tooltipText = $"Loop {buttonLabels[i]}.\nShift+click: wait for the next beat-grid point before setting.\nCtrl+click: set loop fraction on all tracks.";
+                string tooltipText = $"Loop {buttonLabels[i]} on the focused row. Click again to toggle an already matching loop off.\nShift+click: wait for the next beat-grid point.\nCtrl+click: target checked active rows; no checked targets means no action.";
                 this.toolTip_playlistTracks.SetToolTip(copy, tooltipText);
 
                 this.panel_buttons.Controls.Add(copy);

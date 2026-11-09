@@ -55,7 +55,7 @@ public partial class YoutubeBrowserWindow
         if (this.searchHistory?.Entries.Count is not > 0) return;
         // Keep the dropdown alive until the browser is disposed. Disposing from Closed
         // destroys its native handle while ToolStrip is still finishing dismissal.
-        var menu = this.searchHistoryMenu ??= new ContextMenuStrip { ShowImageMargin = false };
+        var menu = this.searchHistoryMenu ??= new ContextMenuStrip { ShowImageMargin = false, AutoSize = true };
         while (menu.Items.Count > 0)
         {
             var oldItem = menu.Items[0];

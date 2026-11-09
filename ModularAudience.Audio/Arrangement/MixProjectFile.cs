@@ -26,12 +26,14 @@ public static class MixProjectFile
     public static Task SaveAsync(string path, MixArrangement mix, CancellationToken token = default)
     {
         // Capture on the caller's thread; subsequent UI changes cannot affect this save.
-        string state = mix.Capture();
-        var sources = mix.Lanes.SelectMany(l => l.Clips).Select(c => c.SourceId).Distinct().Select(id => mix.Sources[id]).ToArray();
+        string state = mix.CaptureProject();
+        var sources = mix.ProjectSources();
         return SaveSnapshotAsync(path, state, sources, token);
     }
     public static async Task SaveSnapshotAsync(string path, string state, IReadOnlyList<MixSource> sources, CancellationToken token = default)
     {
+        // Even callers passing a live/legacy snapshot cannot persist transport or viewport state.
+        state = MixArrangement.SanitizeProjectState(state);
         path = Path.GetFullPath(path); var gate = Locks.GetOrAdd(path, _ => new(1, 1));
         await gate.WaitAsync(token).ConfigureAwait(false);
         try
@@ -43,6 +45,8 @@ public static class MixProjectFile
                 Index index;
                 if (!Indices.TryGetValue(path, out index!) || file.Length != index.Length)
                     index = Scan(file, token);
+                var previous = index.State is null ? null : JsonSerializer.Deserialize<Snapshot>(index.State);
+                if (previous?.Arrangement == state && previous.Sources.Order().SequenceEqual(sources.Select(source => source.Id).Order())) return;
                 // Discard any interrupted record before appending the next complete transaction.
                 file.SetLength(index.Length); file.Position = index.Length;
                 using var writer = new BinaryWriter(file, Encoding.UTF8, true);
@@ -54,6 +58,7 @@ public static class MixProjectFile
                         || source.Data.Length % source.Channels != 0 || source.Data.Any(v => !float.IsFinite(v)))
                         throw new InvalidDataException("Invalid source audio.");
                     byte[] metadata = JsonSerializer.SerializeToUtf8Bytes(source);
+                    if (metadata.Length > 16 * 1024 * 1024) throw new InvalidDataException("Project asset metadata exceeds 16 MiB.");
                     long length = 4L + metadata.Length + source.Data.LongLength * 4;
                     writer.Write((byte)1); writer.Write(length); writer.Write(metadata.Length); writer.Write(metadata);
                     long offset = file.Position;
@@ -64,7 +69,9 @@ public static class MixProjectFile
                         Buffer.BlockCopy(source.Data, i * 4, buffer, 0, count * 4); writer.Write(buffer, 0, count * 4);
                     }
                     writer.Write(Footer);
-                    index.Assets.Add(source.Id, (new MixSource { Id = source.Id, Name = source.Name, SampleRate = source.SampleRate, Channels = source.Channels, Bpm = source.Bpm }, offset, source.Data.Length));
+                    index.Assets.Add(source.Id, (new MixSource { Id = source.Id, Name = source.Name, SampleRate = source.SampleRate, Channels = source.Channels,
+                        Bpm = source.Bpm, TempoOriginId = source.TempoOriginId, TempoOriginScale = source.TempoOriginScale,
+                        TempoOriginBpm = source.TempoOriginBpm, TempoRecipe = source.TempoRecipe }, offset, source.Data.Length));
                     index.Length = file.Position;
                 }
                 token.ThrowIfCancellationRequested();
@@ -94,7 +101,7 @@ public static class MixProjectFile
             if (type == 1)
             {
                 int size = reader.ReadInt32();
-                if (size <= 0 || size > length - 4 || size > 1024 * 1024) throw new InvalidDataException("Invalid project asset metadata.");
+                if (size <= 0 || size > length - 4 || size > 16 * 1024 * 1024) throw new InvalidDataException("Invalid project asset metadata.");
                 var source = JsonSerializer.Deserialize<MixSource>(reader.ReadBytes(size)) ?? throw new InvalidDataException("Invalid source.");
                 long count = (length - 4 - size) / 4;
                 if ((length - 4 - size) % 4 != 0 || count > int.MaxValue) throw new InvalidDataException("Invalid project audio size.");
@@ -120,7 +127,7 @@ public static class MixProjectFile
                 using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                 var index = Scan(file, token);
                 var snapshot = JsonSerializer.Deserialize<Snapshot>(index.State ?? throw new InvalidDataException("No complete project snapshot."))!;
-                var mix = new MixArrangement(); mix.Restore(snapshot.Arrangement);
+                var mix = new MixArrangement(); mix.Restore(MixArrangement.SanitizeProjectState(snapshot.Arrangement));
                 foreach (var id in snapshot.Sources)
                 {
                     token.ThrowIfCancellationRequested();

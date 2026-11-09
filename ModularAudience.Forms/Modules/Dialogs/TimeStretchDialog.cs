@@ -28,6 +28,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public PlaylistStretchSettings? ConfirmedSettings { get; private set; }
 
         public bool ConfirmedUsedV2 { get; private set; }
+        internal void LimitConfigurationTarget(decimal minimum, decimal maximum)
+        {
+            this.numericUpDown_targetBpm.Minimum = minimum;
+            this.numericUpDown_targetBpm.Maximum = maximum;
+        }
         public void SetConfigurationTempo(float sourceBpm, float targetBpm)
         {
             this.numericUpDown_initialBpm.Value = Math.Clamp((decimal)sourceBpm, this.numericUpDown_initialBpm.Minimum, this.numericUpDown_initialBpm.Maximum);

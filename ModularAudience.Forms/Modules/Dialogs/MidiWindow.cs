@@ -51,6 +51,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public MidiWindow(string? filePath, MidiFileData? midiFileData = null)
         {
             this.InitializeComponent();
+            Hints.HintContent.Apply(this.toolTip_midi, this, Hints.HintContent.Midi);
             this.components ??= new System.ComponentModel.Container();
             this.components.Add(this.customInstrumentMenu);
             this.midiFile = midiFileData ?? MidiFileData.Load(filePath ?? throw new ArgumentNullException(nameof(filePath)));

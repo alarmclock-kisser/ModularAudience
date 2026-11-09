@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace ModularAudience.Forms.Modules.Dialogs;
 
@@ -21,7 +22,14 @@ public sealed class YoutubeSearchHistory
             if (this.entries.Count == MaximumEntries) break;
         }
     }
-    private static string Clean(string? query) => new((query ?? "").Trim().Where(c => !char.IsControl(c)).Take(4096).ToArray());
+    private static string Clean(string? query)
+    {
+        string value = new((query ?? "").Trim().Where(c => !char.IsControl(c)).Take(4096).ToArray());
+        // Older UI tests accidentally wrote their Size.ToString() + handler names to
+        // the real history. These are test artifacts, never placeholder suggestions.
+        return Regex.IsMatch(value, @"^\{Width=\d+,\s*Height=\d+\}(?:Search_Click|Query_KeyDown)$",
+            RegexOptions.CultureInvariant) ? string.Empty : value;
+    }
     public void Add(string query)
     {
         string value = Clean(query);

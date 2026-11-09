@@ -16,6 +16,7 @@ internal sealed record ApplicationPreferences
     public float LogFontSize { get; init; } = DefaultLogFontSize;
     public bool KeepStructure { get; init; } = true;
     public bool AllInOneBag { get; init; }
+    public bool EnableToolTips { get; init; } = true;
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalSettings { get; init; }

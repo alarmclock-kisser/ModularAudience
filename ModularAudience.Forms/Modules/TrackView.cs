@@ -30,6 +30,7 @@ namespace ModularAudience.Forms.Modules
         public readonly AudioObj OriginalAudio;
         private readonly AudioCollection? sourceCollection;
         private readonly Guid sourceAudioId;
+        internal Guid SourceAudioId => this.sourceAudioId;
         internal AudioCollection? SourceCollection
         {
             get
@@ -102,6 +103,7 @@ namespace ModularAudience.Forms.Modules
         public TrackView(AudioObj audio, AudioCollection? sourceCollection = null)
         {
             this.InitializeComponent();
+            Hints.HintContent.Apply(this.toolTip_trackView, this, Hints.HintContent.Track);
             this.InitializeJoinControls();
             this.SetupBeatGridDivisionMenus();
             this.StartPosition = FormStartPosition.Manual;

@@ -16,8 +16,18 @@ internal static class YtdlpProcess
             workingDirectory, progress, reportOutput, cancellation, cookieContents), progress, token);
     }
 
+    internal static Task<string> RunStreamingAsync(string executable, IEnumerable<string> arguments,
+        string workingDirectory, IProgress<string>? progress, Func<string, CancellationToken, ValueTask> outputLine,
+        CancellationToken token, string? cookieContents = null)
+    {
+        var capturedArguments = arguments.ToArray();
+        return YtdlpRetryPolicy.ExecuteAsync((_, cancellation) => RunOnceAsync(executable, capturedArguments,
+            workingDirectory, progress, false, cancellation, cookieContents, outputLine), progress, token);
+    }
+
     private static async Task<string> RunOnceAsync(string executable, IEnumerable<string> arguments,
-        string workingDirectory, IProgress<string>? progress, bool reportOutput, CancellationToken token, string? cookieContents)
+        string workingDirectory, IProgress<string>? progress, bool reportOutput, CancellationToken token, string? cookieContents,
+        Func<string, CancellationToken, ValueTask>? outputLine = null)
     {
         token.ThrowIfCancellationRequested();
         var start = new ProcessStartInfo(executable)
@@ -37,7 +47,9 @@ internal static class YtdlpProcess
         if (!process.Start())
             throw new InvalidOperationException("Unable to start yt-dlp.");
         using var cancellation = token.Register(() => Kill(process));
-        var stdout = ReadAsync(process.StandardOutput, false, reportOutput ? progress : null, process, token);
+        var stdout = outputLine is null
+            ? ReadAsync(process.StandardOutput, false, reportOutput ? progress : null, process, token)
+            : ReadOutputLinesAsync(process.StandardOutput, outputLine, process, token);
         var stderr = ReadAsync(process.StandardError, true, progress, process, token);
         try
         {
@@ -63,6 +75,41 @@ internal static class YtdlpProcess
             token.ThrowIfCancellationRequested();
             throw;
         }
+    }
+
+    private static async Task<string> ReadOutputLinesAsync(StreamReader reader,
+        Func<string, CancellationToken, ValueTask> outputLine, Process process, CancellationToken token)
+    {
+        try
+        {
+            // Metadata is raw JSON, not a truncated/redacted diagnostic message. Bound each
+            // line, but do not retain the entire output of potentially large playlists.
+            const int maximumLineCharacters = 1024 * 1024;
+            var line = new StringBuilder();
+            var buffer = new char[4096];
+            int count;
+            while ((count = await reader.ReadAsync(buffer.AsMemory(), token)) > 0)
+            {
+                for (int index = 0; index < count; index++)
+                {
+                    char character = buffer[index];
+                    if (character is '\r' or '\n')
+                    {
+                        if (line.Length > 0) await outputLine(line.ToString(), token);
+                        line.Clear();
+                    }
+                    else
+                    {
+                        if (line.Length >= maximumLineCharacters)
+                            throw new InvalidDataException("A yt-dlp metadata entry exceeded the allowed size.");
+                        line.Append(character);
+                    }
+                }
+            }
+            if (line.Length > 0) await outputLine(line.ToString(), token);
+            return string.Empty;
+        }
+        catch { Kill(process); throw; }
     }
 
     private static async Task<string> ReadAsync(StreamReader reader, bool keepTail, IProgress<string>? progress,

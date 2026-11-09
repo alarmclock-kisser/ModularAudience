@@ -14,7 +14,7 @@ public sealed partial class MixTrackView
         if (preparationCache.CanMix(Arrangement))
         {
             liveUpdateCancellation?.Cancel(); requestedPreparation = key;
-            RefreshPreparedMixer(); return;
+            liveUpdateWork = this.RefreshPreparedMixerAsync(); return;
         }
         liveUpdateCancellation?.Cancel();
         var source = new CancellationTokenSource(); liveUpdateCancellation = source;
@@ -34,7 +34,7 @@ public sealed partial class MixTrackView
                 source.Token.ThrowIfCancellationRequested();
                 await preparationCache.PrepareAsync(snapshot, source.Token);
                 source.Token.ThrowIfCancellationRequested();
-                if (!released && !closing && requestedPreparation == key) RefreshPreparedMixer();
+                if (!released && !closing && requestedPreparation == key) await this.RefreshPreparedMixerAsync();
             }
             catch (OperationCanceledException) { }
             catch (Exception error) { if (!released && !closing) { status.Text = "Preparation failed: " + error.Message; LogManager.Log(error); } }
@@ -47,12 +47,11 @@ public sealed partial class MixTrackView
         }
     }
 
-    private void RefreshPreparedMixer()
+    private void RefreshPreparedMixer() => _ = this.RefreshPreparedMixerAsync();
+
+    private void InstallPreparedMixer(float[] data, string key)
     {
-        if (released || closing || !preparationCache.CanMix(Arrangement)) return;
-        string key = MixPreparationCache.AudioKey(Arrangement);
-        float[]? reuse = cachedMix?.Data;
-        float[] data = preparationCache.Mix(Arrangement, reuse);
+        if (released || closing) return;
         var replacement = new AudioObj { Name = Arrangement.Name, Data = data, Channels = 2, SampleRate = 44100,
             Length = data.Length, Duration = TimeSpan.FromSeconds(data.Length / 88200.0), Bpm = (float)Arrangement.Bpm };
         if (playback != null && !ReferenceEquals(playback.Data, data))

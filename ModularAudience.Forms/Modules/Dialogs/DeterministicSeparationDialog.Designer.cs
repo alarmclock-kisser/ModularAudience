@@ -71,7 +71,7 @@ namespace ModularAudience.Forms
             this.button_restoreSettings = new Button();
             this.button_cancel = new Button();
             this.button_close = new Button();
-            this.toolTip_settings = new ToolTip(this.components);
+            this.toolTip_settings = new ToolTip(this.components) { IsParameterHelp = true };
             this.tabControl_advanced = new TabControl();
             this.tabPage_ensemble = new TabPage();
             this.flowLayoutPanel_ensemble = new TableLayoutPanel();

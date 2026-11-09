@@ -73,7 +73,7 @@ public partial class YoutubeBrowserWindow
 
     private void Metadata_Click(object? sender, EventArgs e)
     {
-        if (SelectedVideo() is not { IsChannel: false } video) return;
+        if (SelectedVideo() is not { IsVideo: true } video) return;
         StartBrowseOperation("Loading selected-video metadata...", async token =>
         {
             var metadata = await client.GetVideoMetadataAsync(video, token);
@@ -93,18 +93,16 @@ public partial class YoutubeBrowserWindow
 
     private void ShowRelated_Click(object? sender, EventArgs e)
     {
-        if (!CanBrowse || SelectedVideo() is not { IsChannel: false } video) return;
+        if (!CanBrowse || SelectedVideo() is not { IsVideo: true } video) return;
         int limit = (int)resultLimit.Value;
         dateCancellation?.Cancel();
         ++dateGeneration;
         StartBrowseOperation("Loading related / next-up videos...", async token =>
         {
-            var videos = await client.GetRelatedVideosAsync(video, limit, token);
-            token.ThrowIfCancellationRequested();
             // Recommendation order puts next-up first; clear any previous table sorting.
-            PublishResults(videos, queryText.Text, $"{videos.Count}/{limit} related / next-up video(s) for: {video.Title}", recommendationOrder: true);
-            browsingTabs.SelectedTab = resultsTab;
-            StartUploadDates(videos);
+            await StreamResultsAsync(client.GetRelatedVideosStreamAsync(video, limit, token), queryText.Text,
+                count => $"{count}/{limit} related / next-up video(s) for: {video.Title}", token,
+                recommendationOrder: true, resultType: YtdlpResultType.Videos, maxResults: limit);
             AppendLog($"Loaded YouTube recommendations for: {video.Title}. Recommendations can differ from a signed-in browser.");
         });
     }
