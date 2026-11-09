@@ -25,9 +25,13 @@ public partial class YoutubeBrowserWindow : Form
     private bool pendingUpdateCheck;
     private bool updateCheckScheduled;
     private Func<CancellationToken, Task>? updateToolsProvider;
+    private readonly string? settingsPath;
 
-    public YoutubeBrowserWindow(Action<AudioObj> importAudio)
+    public YoutubeBrowserWindow(Action<AudioObj> importAudio) : this(importAudio, null) { }
+
+    internal YoutubeBrowserWindow(Action<AudioObj> importAudio, string? settingsPath)
     {
+        this.settingsPath = settingsPath;
         this.importAudio = importAudio ?? throw new ArgumentNullException(nameof(importAudio));
         client = new YtdlpClient(binaryManager);
         InitializeComponent();

@@ -39,6 +39,19 @@ namespace ModularAudience.Audio
             set => this.SetContentField(ref this.filePath, value);
         }
 
+        private string lastExportPath = string.Empty;
+        /// <summary>The actual path of the most recent successful export; does not replace the original FilePath.</summary>
+        public string LastExportPath
+        {
+            get => this.lastExportPath;
+            internal set
+            {
+                this.lastExportPath = value;
+                // Overwriting the same file is still a new successful export/version.
+                this.NotifyContentChanged(nameof(this.LastExportPath));
+            }
+        }
+
         // Audio data & format
         private float[] data = [];
         public float[] Data
@@ -195,6 +208,8 @@ namespace ModularAudience.Audio
         // Playback infrastructure
         private readonly AudioPlaybackService playback = new();
         private bool disposed;
+
+        public bool IsDisposed => this.disposed;
         public bool LoopEnabled { get; set; }
         private bool playbackLoopApplied;
         private long playbackLoopStartBytes;

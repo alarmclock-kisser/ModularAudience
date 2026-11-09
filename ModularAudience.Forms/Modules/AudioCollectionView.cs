@@ -240,6 +240,7 @@ namespace ModularAudience.Forms
             this.AudioC.Audios.ListChanged -= this.Resize_Form_CollectionChanged;
 
             WindowMain.CollectionViews.Remove(this);
+            WindowMain.Instance?.RefreshPlaylistAudioReferences();
             if (ReferenceEquals(WindowMain.LastSelectedCollectionView, this))
             {
                 WindowMain.LastSelectedCollectionView = null;
@@ -826,6 +827,12 @@ namespace ModularAudience.Forms
 
         private void Resize_Form_CollectionChanged(object? sender, EventArgs e)
         {
+            if (e is ListChangedEventArgs membershipChange && membershipChange.ListChangedType != ListChangedType.ItemChanged &&
+                this.IsHandleCreated && !this.closeCleanupStarted)
+            {
+                // Defer until a move/merge has attached the objects to their destination collection.
+                this.BeginInvoke((Action)(() => WindowMain.Instance?.RefreshPlaylistAudioReferences()));
+            }
             // Content edits do not change the number of rows. Ignoring them
             // avoids repeated layout work while a track is being edited.
             if (e is ListChangedEventArgs change && change.ListChangedType == ListChangedType.ItemChanged)
@@ -1035,6 +1042,7 @@ namespace ModularAudience.Forms
             this.menuToolStripItem_rename.Enabled = hasSingle;
             this.menuToolStripItem_clone.Enabled = hasSingle;
             this.menuToolStripItem_editTags.Enabled = hasAny;
+            this.menuToolStripItem_enqueuePlaylist.Enabled = hasAny;
             this.menuToolStripItem_editTags.Text = selectedCount > 1 ? "Edit Tags (Many)" : "Edit Tags";
             this.menuToolStripItem_splitEqualParts.Enabled = hasSingle;
             this.menuToolStripItem_generateBreakbeat.Enabled = selectedCount > 1;
@@ -1172,6 +1180,30 @@ namespace ModularAudience.Forms
 
             using TagEditorDialog tagEditor = new(toEdit);
             tagEditor.ShowDialog(this);
+        }
+
+        private void menuToolStripItem_enqueuePlaylist_Click(object? sender, EventArgs e)
+        {
+            List<AudioObj> selected = this.GetContextAudios();
+            if (selected.Count == 0 ||
+                WindowMain.Instance is not { IsDisposed: false, Disposing: false } main)
+            {
+                return;
+            }
+
+            try
+            {
+                main.EnqueuePlaylistAudiosNext(selected);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log($"Enqueue playlist failed: {ex.Message}");
+                if (!this.IsDisposed && !this.Disposing)
+                {
+                    MessageBox.Show(this, "Could not enqueue the selected tracks: " + ex.Message,
+                        "Enqueue playlist", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
         }
 
         private async Task TriggerAutoPlayAsync(AudioObj audio, bool toggleSameTrack = false)

@@ -8,6 +8,8 @@ public partial class YoutubeBrowserWindow
 {
     private IProgress<string>? currentProgress;
     private bool batchWaitForBpmTag;
+    private bool downloadBatchRunning;
+    private Func<YtdlpVideo, YtdlpDownloadOptions, CancellationToken, Task<YtdlpDownloadResult>>? downloadProvider = null;
     private Func<string, int, CancellationToken, Task<IReadOnlyList<YtdlpVideo>>>? searchProvider;
 
     private void StartOperation(string message, Func<CancellationToken, Task> action, bool isBatch = false)
@@ -16,6 +18,7 @@ public partial class YoutubeBrowserWindow
         try { client.NetworkOptions = CaptureNetworkOptions(); }
         catch (ArgumentException error) { ReportError("Invalid network settings", error); return; }
         busy = true;
+        downloadBatchRunning = isBatch;
         activeBatch = null;
         toolTransfer = null;
         operationGeneration++;
@@ -81,6 +84,7 @@ public partial class YoutubeBrowserWindow
             operationCancellation = null;
             source.Dispose();
             busy = false;
+            downloadBatchRunning = false;
             RefreshAvailability();
         }
     }
@@ -148,6 +152,11 @@ public partial class YoutubeBrowserWindow
     private void Search(bool requirePlaylistUrl, bool forceSearch = false)
     {
         if (!CanBrowse) return;
+        if (!requirePlaylistUrl && !forceSearch && displayedChannel is { } channel && queryText.Text.Trim() == "Channel :: " + channel.Name)
+        {
+            RefreshChannel(channel);
+            return;
+        }
         dateCancellation?.Cancel();
         ++dateGeneration;
         string query = queryText.Text.Trim();
@@ -159,6 +168,12 @@ public partial class YoutubeBrowserWindow
             bool isUrl = requirePlaylistUrl || (!forceSearch && LooksLikeUrl(query));
             AppendLog(isUrl ? "Opening YouTube URL..." : $"Searching YouTube for '{query}' (up to {limit} results)...");
             RememberSearch(query);
+            if (isUrl && YtdlpParser.IsChannelUrl(query))
+            {
+                SetResultType(YtdlpResultType.All);
+                await LoadChannelResultsAsync(new(YtdlpParser.ValidateYoutubeUrl(query).AbsoluteUri, query), YtdlpResultType.All, token);
+                return;
+            }
             var stream = isUrl ? client.BrowseStreamAsync(YtdlpParser.ValidateYoutubeUrl(query).AbsoluteUri, limit, token)
                 : searchStreamProvider?.Invoke(query, limit, resultType, token)
                     ?? (searchProvider is not null ? StreamListAsync(searchProvider(query, limit, token), token)
@@ -335,7 +350,7 @@ public partial class YoutubeBrowserWindow
     }
 
     private async Task RunImportJobAsync(DownloadBatch batch, DownloadJob job, YtdlpDownloadOptions options,
-        TimeSpan cooldown, PlaylistStretchSettings? stretch, SemaphoreSlim importGate, CancellationToken token)
+        TimeSpan cooldown, PlaylistStretchSettings? stretch, SemaphoreSlim importGate, CancellationToken token, Action releaseDownloadSlot)
     {
         using var jobCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
         job.Cancellation = jobCancellation;
@@ -348,7 +363,8 @@ public partial class YoutubeBrowserWindow
         RefreshJob(job);
         try
         {
-            await ImportOneAsync(batch, job, options, cooldown, stretch, importGate, token);
+            var retries = new YtdlpRetryBudget(batch.MaxRetries);
+            await ImportOneAsync(batch, job, options, cooldown, stretch, importGate, token, releaseDownloadSlot, retries);
             job.Status = "Completed";
             AppendLog($"Imported: {job.Video.Title}");
             LogManager.LogSuccess($"YouTube browser: imported audio [{job.Video.Id}].");
@@ -367,28 +383,55 @@ public partial class YoutubeBrowserWindow
     }
 
     private async Task ImportOneAsync(DownloadBatch batch, DownloadJob job, YtdlpDownloadOptions options,
-        TimeSpan cooldown, PlaylistStretchSettings? stretch, SemaphoreSlim importGate, CancellationToken token)
+        TimeSpan cooldown, PlaylistStretchSettings? stretch, SemaphoreSlim importGate, CancellationToken token,
+        Action releaseDownloadSlot, YtdlpRetryBudget retries)
     {
         var jobClient = new YtdlpClient(binaryManager);
         if (connectedSession is not null && options.BrowserSession is null)
             options = options with { BrowserSession = connectedSession };
-        var text = CreateJobTextProgress(batch, job, audio: false);
-        var typed = CreateDownloadProgress(batch, job);
-        var result = await jobClient.DownloadAsync(job.Video, options, text, token, typed);
+        var result = await retries.RunAsync(cancellation =>
+        {
+            var text = CreateJobTextProgress(batch, job, audio: false);
+            var typed = CreateDownloadProgress(batch, job);
+            return downloadProvider?.Invoke(job.Video, options, cancellation)
+                ?? jobClient.DownloadAsync(job.Video, options, text, cancellation, typed);
+        }, token, (attempt, error) => AutomaticJobRetry(job, retries, attempt, error, networkStage: true),
+            _ => !job.HandedOff && !job.CancelRequested);
         job.NetworkStage = false;
         job.DownloadFinished = true;
-        await ImportDownloadedAsync(batch, job, result, cooldown, stretch, importGate, token);
+        releaseDownloadSlot();
+        await ImportDownloadedAsync(batch, job, result, cooldown, stretch, importGate, token, retries);
+    }
+
+    private void AutomaticJobRetry(DownloadJob job, YtdlpRetryBudget budget, int attempt, Exception error, bool networkStage)
+    {
+        job.Attempt++; // Ignore callbacks queued by a previous attempt.
+        job.Latest = null;
+        job.NetworkStage = networkStage;
+        job.DownloadFinished = !networkStage;
+        job.AudioStage = false;
+        job.LastLog = null;
+        job.Status = $"Retry {attempt}/{budget.MaxRetries}: {(networkStage ? "download / convert" : "audio import")}";
+        RefreshJob(job);
+        AppendLog($"[{job.Index + 1}] {job.Video.Title}: {job.Status}; unchanged options. {error.Message}");
     }
 
     private async Task ImportDownloadedAsync(DownloadBatch batch, DownloadJob job, YtdlpDownloadResult result,
-        TimeSpan cooldown, PlaylistStretchSettings? stretch, SemaphoreSlim importGate, CancellationToken token)
+        TimeSpan cooldown, PlaylistStretchSettings? stretch, SemaphoreSlim importGate, CancellationToken token, YtdlpRetryBudget retries)
     {
         Exception? processingError = null;
         try
         {
             await using (result)
             {
-                try { await CooldownAndImportAsync(batch, job, result, cooldown, stretch, importGate, token); }
+                try
+                {
+                    // Retry import against the same downloaded file. Downloading again
+                    // would collide with saved output and lose an external tagger's work.
+                    await retries.RunAsync(cancellation => CooldownAndImportAsync(batch, job, result, cooldown, stretch, importGate, cancellation), token,
+                        (attempt, error) => AutomaticJobRetry(job, retries, attempt, error, networkStage: false),
+                        _ => !job.HandedOff && !job.CancelRequested);
+                }
                 catch (Exception error) { processingError = error; throw; }
                 finally
                 {
@@ -410,19 +453,27 @@ public partial class YoutubeBrowserWindow
     private async Task CooldownAndImportAsync(DownloadBatch batch, DownloadJob job, YtdlpDownloadResult result,
         TimeSpan cooldown, PlaylistStretchSettings? stretch, SemaphoreSlim importGate, CancellationToken token)
     {
-        job.Status = batchWaitForBpmTag ? "Waiting for BPM tag" : "Cooldown";
-        job.CooldownDeadline = job.Clock.Elapsed + cooldown;
+        bool unlimited = batchWaitForBpmTag && cooldown == TimeSpan.Zero;
+        job.Status = unlimited ? "Waiting for BPM tag (no time limit)" : batchWaitForBpmTag ? "Waiting for BPM tag" : "Cooldown";
+        job.WaitingForBpmWithoutLimit = unlimited;
+        job.BpmTagTimedOut = false;
+        job.CooldownDeadline = unlimited ? null : job.Clock.Elapsed + cooldown;
+        float? taggedBpm = null;
         RefreshJob(job);
         try
         {
             if (batchWaitForBpmTag)
             {
-                bool tagged = await YoutubeAudioImporter.WaitForBpmTagAsync(result.FilePath, cooldown, token);
-                AppendLog(tagged ? $"BPM tag detected: {job.Video.Title}" : $"BPM tag wait timed out; importing: {job.Video.Title}");
+                taggedBpm = await YoutubeAudioImporter.WaitForBpmValueAsync(result.FilePath, cooldown, token);
+                job.BpmTagTimedOut = taggedBpm is null;
+                string message = taggedBpm is { } bpm ? $"BPM tag detected ({bpm:0.###}): {job.Video.Title}"
+                    : $"Warning: BPM tag wait timed out after {cooldown.TotalSeconds:0.###} s; importing without an awaited BPM tag: {job.Video.Title}. Increase Wait (s), or set 0 to wait until tagged.";
+                AppendLog(message);
+                if (job.BpmTagTimedOut) LogManager.LogWarning(message);
             }
             else await Task.Delay(cooldown, token);
         }
-        finally { job.CooldownDeadline = null; }
+        finally { job.CooldownDeadline = null; job.WaitingForBpmWithoutLimit = false; }
         job.Status = "Waiting for audio import";
         RefreshJob(job);
         await importGate.WaitAsync(token);
@@ -433,7 +484,7 @@ public partial class YoutubeBrowserWindow
             RefreshJob(job);
             var progress = CreateJobTextProgress(batch, job, audio: true);
             var audio = await YoutubeAudioImporter.ImportAsync(result.FilePath, job.Video.Title,
-                result.IsTemporary, TimeSpan.Zero, stretch, progress, token);
+                result.IsTemporary, TimeSpan.Zero, stretch, progress, token, taggedBpm);
             TransferAudio(job, audio, token);
         }
         finally

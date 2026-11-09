@@ -10,12 +10,14 @@ public partial class YoutubeBrowserWindow
 
     private void ResultType_Changed(object? sender, EventArgs e)
     {
-        if (restoringSettings || restoringResultType || !CanBrowse || historyPosition < 0) return;
+        if (restoringSettings || restoringResultType || !CanBrowse) return;
         string query = queryText.Text.Trim();
-        // Refresh an existing word search immediately, but never reinterpret a channel
-        // or playlist's navigation heading (or a URL) as a new search query.
-        if (query != displayedQuery || query.Length == 0 || LooksLikeUrl(query)
-            || query.StartsWith("Channel :: ", StringComparison.Ordinal) || query.StartsWith("Playlist :: ", StringComparison.Ordinal)) return;
+        if (displayedChannel is { } channel && query == "Channel :: " + channel.Name)
+        {
+            RefreshChannel(channel);
+            return;
+        }
+        if (query.Length == 0 || query.StartsWith("Playlist :: ", StringComparison.Ordinal)) return;
         Search(false);
     }
 
@@ -35,12 +37,13 @@ public partial class YoutubeBrowserWindow
 
     private async Task<int> StreamResultsAsync(IAsyncEnumerable<YtdlpVideo> stream, string query,
         Func<int, string> summary, CancellationToken token, bool recommendationOrder = false,
-        YtdlpResultType resultType = YtdlpResultType.All, int? maxResults = null, Action<int>? countChanged = null)
+        YtdlpResultType resultType = YtdlpResultType.All, int? maxResults = null, Action<int>? countChanged = null, ChannelContext? channel = null)
     {
         token.ThrowIfCancellationRequested();
         dateCancellation?.Cancel();
         ++dateGeneration;
         PublishResults([], query, "Loading results...", recommendationOrder);
+        displayedChannel = channel;
         resultsSummary.Text = "Loading results...";
         var seen = new HashSet<(bool Channel, bool Playlist, string Id)>();
         int count = 0;

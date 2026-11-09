@@ -52,6 +52,9 @@ public sealed class AudioCollectionExportTests
             exporter.ExportWavAsync(audio, 16, folder, writeBpmTag: false, customFilePath: requested, overwriteExisting: false)));
 
         CollectionAssert.AreEquivalent(new[] { "Kick (1).wav", "Kick (2).wav", "Kick (3).wav" }, paths.Select(Path.GetFileName).ToArray());
+        Assert.AreEqual(paths[0], first.LastExportPath);
+        Assert.AreEqual(paths[1], second.LastExportPath);
+        Assert.AreEqual(paths[2], third.LastExportPath);
         Assert.AreEqual("existing audio must remain untouched", File.ReadAllText(requested));
         foreach (string? path in paths)
         {
@@ -62,6 +65,7 @@ public sealed class AudioCollectionExportTests
 
         string? repeated = await exporter.ExportWavAsync(first, 16, folder, writeBpmTag: false, customFilePath: requested, overwriteExisting: false);
         Assert.AreEqual("Kick (4).wav", Path.GetFileName(repeated));
+        Assert.AreEqual(repeated, first.LastExportPath);
         Assert.HasCount(1, Directory.GetDirectories(files.Directory));
     }
 
@@ -79,6 +83,8 @@ public sealed class AudioCollectionExportTests
             exporter.ExportMp3Async(audio, bitrate: 128, maxWorkers: 1, outDir: requested, writeBpmTag: false)));
 
         Assert.IsTrue(paths.All(path => path is not null), "The MP3 encoder must produce both exports.");
+        Assert.AreEqual(paths[0], first.LastExportPath);
+        Assert.AreEqual(paths[1], second.LastExportPath);
         CollectionAssert.AreEquivalent(new[] { "Kick (1).mp3", "Kick (2).mp3" }, paths.Select(Path.GetFileName).ToArray());
         Assert.AreEqual("existing mp3", File.ReadAllText(requested));
         Assert.IsTrue(paths.All(path => new FileInfo(path!).Length > 0));

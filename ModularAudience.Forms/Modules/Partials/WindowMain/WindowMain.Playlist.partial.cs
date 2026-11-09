@@ -80,7 +80,8 @@ namespace ModularAudience.Forms
         private void InitPlaylist()
         {
             this._playlist.CountdownEnabledProvider = () => PlaylistCountdownEnabled;
-            this._playlist.AutoEnqueuePathProvider = SelectRandomPlaylistPath;
+            this._playlist.AutoEnqueuePathProvider = original =>
+                SelectRandomPlaylistPath(original == null ? null : this._playlist.GetTrackFilePath(original));
 
             this._playlist.TrackChanged += () =>
             {
@@ -100,6 +101,7 @@ namespace ModularAudience.Forms
             };
 
             this._playlist.BeforeTrackPlay = this.PreprocessPlaylistTrackAsync;
+            this._playlist.BeforeAudioTrackPlay = this.PreprocessPlaylistAudioAsync;
             this._playlist.CrossfadeDurationProvider = () => CrossfadeDurationSeconds;
             this._playlist.ResolvePlaybackBpm = this.ResolvePlaylistPlaybackBpm;
             this._playlist.CrossfadeStartedAsync = this.HandlePlaylistCrossfadeStartedAsync;
@@ -295,6 +297,28 @@ namespace ModularAudience.Forms
         internal AudioObj? GetPlaylistPrimaryAudio()
         {
             return this._playlist.PrimaryAudioObj;
+        }
+
+        internal int EnqueuePlaylistAudiosNext(IEnumerable<AudioObj> audios)
+        {
+            if (this.IsDisposed || this.Disposing)
+            {
+                return 0;
+            }
+
+            int added = this._playlist.EnqueueAudioNext(audios);
+            this._playlistActivityStarted = true;
+            LogManager.Log($"Playlist: {added} selected track(s) added next.");
+            this.UpdatePlaylistUI();
+            this.UpdatePlaylistHoverTitle();
+            return added;
+        }
+
+        internal void RefreshPlaylistAudioReferences()
+        {
+            this._playlist.RemoveUnavailableAudioReferences(CollectionViews
+                .Where(view => !view.IsDisposed && !view.Disposing)
+                .SelectMany(view => view.AudioC.Audios).Select(audio => audio.Id));
         }
 
         internal IReadOnlyList<AudioObj> GetActivePlaylistAudios()
@@ -520,10 +544,7 @@ namespace ModularAudience.Forms
             }
 
             // Open TimeStretchDialog in configure-only mode with a dummy audio
-            using var dlg = new TimeStretchDialog(filePaths: this._playlist.GetQueueSnapshot().FilePaths)
-            {
-                IsConfigureMode = true
-            };
+            using var dlg = this.CreatePlaylistStretchDialog();
 
             if (dlg.ShowDialog(this) != DialogResult.OK || dlg.ConfirmedSettings == null)
             {
@@ -535,6 +556,14 @@ namespace ModularAudience.Forms
             string method = dlg.ConfirmedUsedV2 ? "V2" : "V1";
             this.toolStripMenuItem_timestretchEach.Text = $"\u23F1 Timestretch each [{this._playlistStretchSettings.TargetBpm:F0} BPM, {method}]";
             LogManager.Log($"Playlist auto-timestretch enabled: target {this._playlistStretchSettings.TargetBpm:F0} BPM via Stretch {method}.");
+        }
+
+        internal TimeStretchDialog CreatePlaylistStretchDialog()
+        {
+            PlaylistQueueSnapshot snapshot = this._playlist.GetQueueSnapshot();
+            return new TimeStretchDialog(audios: this._playlist.GetQueuedAudioReferences(),
+                filePaths: snapshot.FilePaths.Select(this._playlist.GetTrackFilePath)
+                    .OfType<string>().Where(File.Exists).ToArray()) { IsConfigureMode = true };
         }
 
         /// <summary>
@@ -554,71 +583,14 @@ namespace ModularAudience.Forms
             WindowMainStaticHelpers.InvokeIfRequired(Instance, this.UpdatePlaylistUI);
             try
             {
-                // Load audio from disk
-                var audio = new AudioObj(path, load: true);
+                // Only disk-backed queue entries use this file preprocessor.
+                using var audio = new AudioObj(path, load: true);
                 if (audio.Data == null || audio.Data.Length == 0)
                 {
                     return null;
                 }
 
-                // Resolve initial BPM: tag first, then scan
-                float initialBpm = audio.Bpm > 0 ? audio.Bpm : audio.ScannedBpm;
-                if (initialBpm <= 0)
-                {
-                    initialBpm = (float)await BeatScanner.ScanBpmAsync(audio).ConfigureAwait(false);
-                    audio.ScannedBpm = initialBpm;
-                }
-
-                if (initialBpm <= 0)
-                {
-                    return null; // cannot stretch without initial BPM
-                }
-
-                double stretchFactor = settings.Fixed
-                    ? (double)settings.StretchFactor
-                    : initialBpm / (double)settings.TargetBpm;
-
-                // Guard: half/double tempo if way off
-                if (stretchFactor < 0.5)
-                {
-                    stretchFactor *= 2.0;
-                }
-
-                ct.ThrowIfCancellationRequested();
-
-                if (settings.UseV2)
-                {
-                    int? chunkSize = settings.AutoChunking ? null : (int?)settings.ChunkSize;
-                    float? overlap = settings.AutoChunking ? null : (float?)settings.Overlap;
-
-                    float preRms = PlaylistNormalizer.MeasureRms(audio.Data);
-                    await TimeStretcher_V2.Timestretch_V2Async(
-                        audio, stretchFactor, chunkSize, overlap,
-                        progress: null, ct).ConfigureAwait(false);
-                    PlaylistNormalizer.ApplyRmsGain(audio.Data, preRms);
-                }
-                else
-                {
-                    float preRms = PlaylistNormalizer.MeasureRms(audio.Data);
-                    await TimeStretcher.TimeStretchAllThreadsAsync(
-                        audio,
-                        settings.ChunkSize,
-                        settings.Overlap,
-                        stretchFactor,
-                        keepData: false,
-                        normalize: 1.0f,
-                        maxWorkers: settings.Threads,
-                        progress: null,
-                        offload: settings.Offload, channeled: settings.Channeled).ConfigureAwait(false);
-                    PlaylistNormalizer.ApplyRmsGain(audio.Data, preRms);
-                }
-
-                if (settings.Trim)
-                {
-                    await BeatGridFinder.TrimSilenceAsync(audio).ConfigureAwait(false);
-                }
-
-                ct.ThrowIfCancellationRequested();
+                if (!await StretchPlaylistAudioAsync(audio, settings, ct).ConfigureAwait(false)) { return null; }
 
                 // Write stretched audio to a temp WAV file using NAudio (keep original name)
                 string origName = Path.GetFileNameWithoutExtension(path);
@@ -630,7 +602,6 @@ namespace ModularAudience.Forms
                     using var writer = new NAudio.Wave.WaveFileWriter(tempFile, wf);
                     writer.WriteSamples(audio.Data, 0, audio.Data.Length);
                 }, ct).ConfigureAwait(false);
-                audio.Dispose();
                 return tempFile;
             }
             catch (OperationCanceledException)
@@ -647,6 +618,73 @@ namespace ModularAudience.Forms
                 this._isPreprocessingTrack = false;
                 WindowMainStaticHelpers.InvokeIfRequired(Instance, this.UpdatePlaylistUI);
             }
+        }
+
+        private async Task<AudioObj?> PreprocessPlaylistAudioAsync(AudioObj source, CancellationToken ct)
+        {
+            PlaylistStretchSettings? settings = this._playlistStretchSettings;
+            if (settings == null) { return null; }
+
+            // Only a destructive effect needs a working copy. The queue retains the original
+            // reference, and normal RAM playback uses that very object without copying/exporting.
+            AudioObj? working = null;
+            this._isPreprocessingTrack = true;
+            WindowMainStaticHelpers.InvokeIfRequired(Instance, this.UpdatePlaylistUI);
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+                working = source.Clone();
+                if (!await StretchPlaylistAudioAsync(working, settings, ct).ConfigureAwait(false)) { return null; }
+                AudioObj result = working;
+                working = null;
+                return result;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                LogManager.Log($"Playlist stretch error for '{source.Name}': {ex.Message}");
+                return null;
+            }
+            finally
+            {
+                working?.Dispose();
+                this._isPreprocessingTrack = false;
+                WindowMainStaticHelpers.InvokeIfRequired(Instance, this.UpdatePlaylistUI);
+            }
+        }
+
+        private static async Task<bool> StretchPlaylistAudioAsync(AudioObj audio, PlaylistStretchSettings settings, CancellationToken ct)
+        {
+            float initialBpm = audio.Bpm > 0 ? audio.Bpm : audio.ScannedBpm;
+            if (initialBpm <= 0)
+            {
+                initialBpm = (float)await BeatScanner.ScanBpmAsync(audio).ConfigureAwait(false);
+                audio.ScannedBpm = initialBpm;
+            }
+            if (initialBpm <= 0) { return false; }
+
+            double stretchFactor = settings.Fixed ? settings.StretchFactor : initialBpm / (double)settings.TargetBpm;
+            if (stretchFactor < 0.5) { stretchFactor *= 2.0; }
+            ct.ThrowIfCancellationRequested();
+            float preRms = PlaylistNormalizer.MeasureRms(audio.Data);
+            if (settings.UseV2)
+            {
+                await TimeStretcher_V2.Timestretch_V2Async(audio, stretchFactor,
+                    settings.AutoChunking ? null : settings.ChunkSize,
+                    settings.AutoChunking ? null : settings.Overlap, progress: null, ct).ConfigureAwait(false);
+            }
+            else
+            {
+                await TimeStretcher.TimeStretchAllThreadsAsync(audio, settings.ChunkSize, settings.Overlap, stretchFactor,
+                    keepData: false, normalize: 1.0f, maxWorkers: settings.Threads, progress: null,
+                    offload: settings.Offload, channeled: settings.Channeled).ConfigureAwait(false);
+            }
+            PlaylistNormalizer.ApplyRmsGain(audio.Data, preRms);
+            if (settings.Trim) { await BeatGridFinder.TrimSilenceAsync(audio).ConfigureAwait(false); }
+            ct.ThrowIfCancellationRequested();
+            audio.Bpm = initialBpm;
+            audio.StretchFactor = settings.TargetBpm / (double)initialBpm;
+            return true;
         }
 
         // â”€â”€ Tooltip (MouseHover) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -674,7 +712,7 @@ namespace ModularAudience.Forms
             for (int i = 0; i < Math.Min(paths.Count, 30); i++)
             {
                 string path = paths[i];
-                string name = Path.GetFileNameWithoutExtension(path);
+                string name = this._playlist.GetTrackDisplayName(path);
                 if (name.Length > 32)
                 {
                     name = name[..29] + "\u2026";
@@ -778,7 +816,7 @@ namespace ModularAudience.Forms
         {
             string current = this.GetCurrentPlaylistTrackTitle(snapshot) ?? "None";
             string next = string.IsNullOrWhiteSpace(snapshot.NextPath)
-                ? "None" : Path.GetFileNameWithoutExtension(snapshot.NextPath);
+                ? "None" : this._playlist.GetTrackDisplayName(snapshot.NextPath);
             return $"Current: {current}\nNext up: {next}\nQueue total: {snapshot.FilePaths.Count} track(s)";
         }
 
@@ -829,11 +867,11 @@ namespace ModularAudience.Forms
             return $"{stateIcon} {posStr} / {durStr} | {name} [{bpmStr}] | {chStr} {srStr} kHz {bits} bits";
         }
 
-        private static string? GetCurrentPlaylistTrackName(PlaylistQueueSnapshot snapshot)
+        private string? GetCurrentPlaylistTrackName(PlaylistQueueSnapshot snapshot)
         {
             if (!string.IsNullOrWhiteSpace(snapshot.OriginalCurrentPath))
             {
-                return Path.GetFileNameWithoutExtension(snapshot.OriginalCurrentPath);
+                return this._playlist.GetTrackDisplayName(snapshot.OriginalCurrentPath);
             }
 
             string? path = snapshot.CurrentPath;
@@ -878,9 +916,13 @@ namespace ModularAudience.Forms
         // â”€â”€ Metadata cache â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private (TimeSpan Duration, float Bpm, int Channels, int SampleRate, int BitDepth) GetOrFetchMeta(string path)
         {
+            if (!string.Equals(this._playlist.GetTrackFilePath(path), path, StringComparison.OrdinalIgnoreCase))
+            {
+                return this._playlist.GetTrackMetadata(path);
+            }
             if (!this._playlistMetaCache.TryGetValue(path, out var meta))
             {
-                try { meta = PlaylistEngine.ReadMetadata(path); } catch { }
+                try { meta = this._playlist.GetTrackMetadata(path); } catch { }
                 this._playlistMetaCache[path] = meta;
             }
             return meta;
@@ -983,7 +1025,7 @@ namespace ModularAudience.Forms
             }
 
             TimeSpan now = DateTime.UtcNow - this._trackLogRecordStart.Value;
-            string trackId = Path.GetFileNameWithoutExtension(filePath);
+            string trackId = this._playlist.GetTrackDisplayName(filePath);
 
             TrackLogEntry? entry = this._trackLog.LastOrDefault(e =>
                 e.TrackId == trackId && e.End == null);
@@ -1041,7 +1083,7 @@ namespace ModularAudience.Forms
 
             foreach (string endedPath in this._trackLogActivePaths.Except(activePaths, StringComparer.OrdinalIgnoreCase).ToList())
             {
-                string endedTrackId = Path.GetFileNameWithoutExtension(endedPath);
+                string endedTrackId = this._playlist.GetTrackDisplayName(endedPath);
                 TrackLogEntry? last = this._trackLog.LastOrDefault(e =>
                     e.TrackId == endedTrackId &&
                     e.End == null);
@@ -1057,7 +1099,7 @@ namespace ModularAudience.Forms
                 this._trackLog.Add(new TrackLogEntry
                 {
                     Start = now,
-                    TrackId = Path.GetFileNameWithoutExtension(startedPath)
+                    TrackId = this._playlist.GetTrackDisplayName(startedPath)
                 });
             }
 
@@ -1086,7 +1128,7 @@ namespace ModularAudience.Forms
                 {
                     StartUtc = now,
                     Path = startedPath,
-                    TrackId = Path.GetFileNameWithoutExtension(startedPath)
+                    TrackId = this._playlist.GetTrackDisplayName(startedPath)
                 });
             }
 

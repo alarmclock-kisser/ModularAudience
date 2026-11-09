@@ -7,7 +7,7 @@ public partial class YoutubeBrowserWindow
     private readonly HashSet<Task> browseTasks = [];
     private bool browsing;
     private static readonly TimeSpan BrowseTimeout = TimeSpan.FromSeconds(90);
-    private bool CanBrowse => !closing && binariesReady && (!busy || activeBatch is not null);
+    private bool CanBrowse => !closing && binariesReady && (!busy || downloadBatchRunning || activeBatch is not null);
 
     private void StartBrowseOperation(string message, Func<CancellationToken, Task> action)
     {
@@ -83,12 +83,15 @@ public partial class YoutubeBrowserWindow
 
     private Func<string, int, CancellationToken, Task<IReadOnlyList<ModularAudience.Ytdlp.YtdlpVideo>>>? channelVideosProvider;
     private Func<ModularAudience.Ytdlp.YtdlpVideo, CancellationToken, Task<ModularAudience.Ytdlp.YtdlpVideo>>? channelMetadataProvider;
+    private sealed record ChannelContext(string Url, string Name);
+    private ChannelContext? displayedChannel;
+    private Func<string, int, ModularAudience.Ytdlp.YtdlpResultType, CancellationToken, IAsyncEnumerable<ModularAudience.Ytdlp.YtdlpVideo>>? channelResultsProvider = null;
 
     private void NavigateToChannel_Click(object? sender, EventArgs e)
     {
         if (!CanBrowse || SelectedVideo() is not { } video) return;
         if (video.IsPlaylist && string.IsNullOrWhiteSpace(video.ChannelUrl)) return;
-        int limit = (int)resultLimit.Value;
+        SetResultType(ModularAudience.Ytdlp.YtdlpResultType.All);
         StartBrowseOperation("Loading channel videos...", async token =>
         {
             var metadata = video;
@@ -98,12 +101,34 @@ public partial class YoutubeBrowserWindow
             if (string.IsNullOrWhiteSpace(url)) throw new InvalidOperationException("YouTube did not provide a channel URL for this video.");
             url = ModularAudience.Ytdlp.YtdlpParser.ValidateYoutubeUrl(url).AbsoluteUri;
             string name = metadata.IsChannel ? metadata.Title : metadata.Uploader;
-            string query = "Channel :: " + name;
-            queryText.Text = query;
-            var stream = channelVideosProvider is not null ? StreamListAsync(channelVideosProvider(url, limit, token), token)
-                : client.BrowseStreamAsync(url, limit, token);
-            await StreamResultsAsync(stream, query, count => $"{count}/{limit} videos from {name}", token,
-                recommendationOrder: true, resultType: ModularAudience.Ytdlp.YtdlpResultType.Videos, maxResults: limit);
+            await LoadChannelResultsAsync(new(url, name), ModularAudience.Ytdlp.YtdlpResultType.All, token);
         });
+    }
+
+    private void SetResultType(ModularAudience.Ytdlp.YtdlpResultType type)
+    {
+        restoringResultType = true;
+        try { resultTypeCombo.SelectedIndex = (int)type; }
+        finally { restoringResultType = false; }
+    }
+
+    private void RefreshChannel(ChannelContext channel)
+    {
+        var type = (ModularAudience.Ytdlp.YtdlpResultType)Math.Max(0, resultTypeCombo.SelectedIndex);
+        StartBrowseOperation($"Loading channel {type.ToString().ToLowerInvariant()}...", token => LoadChannelResultsAsync(channel, type, token));
+    }
+
+    private async Task LoadChannelResultsAsync(ChannelContext channel, ModularAudience.Ytdlp.YtdlpResultType type, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (closing || resourcesReleased) return;
+        int limit = (int)resultLimit.Value;
+        string query = "Channel :: " + channel.Name;
+        queryText.Text = query;
+        var stream = channelResultsProvider?.Invoke(channel.Url, limit, type, token)
+            ?? (channelVideosProvider is not null ? StreamListAsync(channelVideosProvider(channel.Url, limit, token), token)
+                : client.BrowseChannelStreamAsync(channel.Url, limit, token, type));
+        await StreamResultsAsync(stream, query, count => $"{count}/{limit} {type.ToString().ToLowerInvariant()} results from {channel.Name}", token,
+            recommendationOrder: true, resultType: type, maxResults: limit, channel: channel);
     }
 }

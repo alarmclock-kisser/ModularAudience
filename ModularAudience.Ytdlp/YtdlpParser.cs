@@ -48,10 +48,14 @@ public static partial class YtdlpParser
         var segments = uri.AbsolutePath.Trim('/').Split('/');
         if (host != "youtu.be" &&
             ((segments[0] == "channel" && segments.Length is 2 or 3 && Regex.IsMatch(segments[1], "^UC[A-Za-z0-9_-]{22}$") &&
-              (segments.Length == 2 || segments[2] == "videos")) ||
+              (segments.Length == 2 || IsChannelTab(segments[2]))) ||
              (segments.Length is 1 or 2 && segments[0].StartsWith('@') && Regex.IsMatch(segments[0], "^@[\\p{L}\\p{N}_.-]+$") &&
-              (segments.Length == 1 || segments[1] == "videos"))))
-            return new Uri("https://www.youtube.com/" + (segments[0] == "channel" ? "channel/" + segments[1] : segments[0]) + "/videos");
+               (segments.Length == 1 || IsChannelTab(segments[1])))))
+        {
+            string tab = segments[0] == "channel" ? segments.Length == 3 ? segments[2] : "videos"
+                : segments.Length == 2 ? segments[1] : "videos";
+            return new Uri("https://www.youtube.com/" + (segments[0] == "channel" ? "channel/" + segments[1] : segments[0]) + "/" + tab);
+        }
         var videoId = host == "youtu.be" && segments.Length == 1 ? segments[0] : null;
         if (host != "youtu.be" && segments.Length == 2 && segments[0] is "shorts" or "live" or "embed")
             videoId = segments[1];
@@ -69,6 +73,14 @@ public static partial class YtdlpParser
 
     private static bool IsPlaylistId(string? value) =>
         value is { Length: >= 2 and <= 200 } && PlaylistIdPattern().IsMatch(value);
+
+    private static bool IsChannelTab(string value) => value is "videos" or "playlists" or "channels" or "featured" or "shorts" or "streams";
+
+    public static bool IsChannelUrl(string url)
+    {
+        Uri canonical = ValidateYoutubeUrl(url);
+        return canonical.AbsolutePath.StartsWith("/channel/", StringComparison.Ordinal) || canonical.AbsolutePath.StartsWith("/@", StringComparison.Ordinal);
+    }
 
     private static string? QueryValue(Uri uri, string name)
     {

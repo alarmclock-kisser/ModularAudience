@@ -8,7 +8,10 @@ public partial class YoutubeBrowserWindow
 {
     private async Task<bool> ExecuteWithRecoveryAsync(Func<CancellationToken, Task> action, CancellationToken token)
     {
-        try { await action(token); return true; }
+        int retries = (int)retryCountNumber.Value;
+        Task Attempts(CancellationToken cancellation) => new YtdlpRetryBudget(retries).RunAsync(action, cancellation,
+            (attempt, error) => AppendLog($"Automatic retry {attempt}/{retries}, unchanged options: {error.Message}"));
+        try { await Attempts(token); return true; }
         catch (YtdlpProcessException error)
         {
             LogManager.LogError($"YouTube browser: request failed before recovery. {error}");
@@ -23,7 +26,7 @@ public partial class YoutubeBrowserWindow
                 client.NetworkOptions = recovered.Network;
                 client.MetadataSession = recovered.BrowserSession;
                 await WaitForRecoveryWindowAsync([error], token);
-                await action(token);
+                await Attempts(token);
                 return true;
             }
             catch (YtdlpProcessException cookieError) when (cookieError.FailureKind == YtdlpFailureKind.BrowserCookies)
@@ -33,7 +36,7 @@ public partial class YoutubeBrowserWindow
                 var corrected = YtdlpRecoveryRules.Apply(cookieError.FailureKind, alternative, recovered);
                 client.NetworkOptions = corrected.Network;
                 client.MetadataSession = corrected.BrowserSession;
-                await action(token);
+                await Attempts(token);
                 return true;
             }
             finally { client.NetworkOptions = originalNetwork; client.MetadataSession = connectedSession ?? originalSession; }
@@ -78,16 +81,18 @@ public partial class YoutubeBrowserWindow
         using var queueChanged = new SemaphoreSlim(0);
         batch.PendingQueue = queue;
         batch.QueueChanged = queueChanged;
+        RefreshAvailability();
         try
         {
-            await YtdlpBatchRunner.RunQueueAsync(queue, maxParallel,
-                (job, cancellation) => RunImportJobAsync(batch, job, options, cooldown, stretch, importGate, cancellation), token, queueChanged);
+            await YtdlpBatchRunner.RunPipelineQueueAsync(queue, maxParallel,
+                (job, releaseDownloadSlot, cancellation) => RunImportJobAsync(batch, job, options, cooldown, stretch, importGate, cancellation, releaseDownloadSlot), token, queueChanged);
         }
         finally
         {
             batch.PendingQueue = null;
             batch.QueueChanged = null;
             batch.Settled = true;
+            RefreshAvailability();
         }
     }
 
@@ -145,6 +150,8 @@ public partial class YoutubeBrowserWindow
         job.NetworkStage = false;
         job.AudioStage = false;
         job.CooldownDeadline = null;
+        job.BpmTagTimedOut = false;
+        job.WaitingForBpmWithoutLimit = false;
         job.LastLog = null;
         job.LastLogTimestamp = 0;
         job.LastProgressTimestamp = 0;

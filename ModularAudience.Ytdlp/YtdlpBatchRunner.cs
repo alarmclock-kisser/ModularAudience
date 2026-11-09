@@ -6,6 +6,72 @@ public static class YtdlpBatchRunner
 {
     public const int MaximumParallelism = 8;
 
+    /// <summary>
+    /// A slot covers the first phase only. The callback releases it after conversion,
+    /// while its BPM wait/import/cleanup remains awaited as part of the same job.
+    /// Queue mutations must run on the caller's synchronization context.
+    /// </summary>
+    public static async Task RunPipelineQueueAsync<T>(Queue<T> queue, int maxParallelism,
+        Func<T, Action, CancellationToken, Task> processItem, CancellationToken cancellationToken,
+        SemaphoreSlim? queueChanged = null)
+    {
+        ArgumentNullException.ThrowIfNull(queue);
+        ArgumentNullException.ThrowIfNull(processItem);
+        if (maxParallelism is < 1 or > MaximumParallelism) throw new ArgumentOutOfRangeException(nameof(maxParallelism));
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var ownWake = queueChanged is null ? new SemaphoreSlim(0) : null;
+        SemaphoreSlim wake = queueChanged ?? ownWake!;
+        var running = new List<Task>();
+        int firstPhase = 0;
+        try
+        {
+            while (queue.Count > 0 || running.Count > 0)
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                while (wake.Wait(0)) { }
+                foreach (Task completed in running.Where(task => task.IsCompleted).ToArray())
+                {
+                    running.Remove(completed);
+                    await completed;
+                }
+                while (queue.Count > 0 && Volatile.Read(ref firstPhase) < maxParallelism)
+                {
+                    Interlocked.Increment(ref firstPhase);
+                    running.Add(RunJobAsync(queue.Dequeue()));
+                }
+                if (running.Count == 0) continue;
+                using var wakeCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token);
+                Task wakeTask = wake.WaitAsync(wakeCancellation.Token);
+                Task finished = await Task.WhenAny(running.Append(wakeTask));
+                if (finished == wakeTask) { await wakeTask; continue; }
+                await wakeCancellation.CancelAsync();
+                try { await wakeTask; } catch (OperationCanceledException) when (wakeCancellation.IsCancellationRequested) { }
+                running.Remove(finished);
+                await finished;
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        catch
+        {
+            await cancellation.CancelAsync();
+            try { await Task.WhenAll(running); } catch { }
+            throw;
+        }
+
+        async Task RunJobAsync(T item)
+        {
+            int released = 0;
+            void ReleaseFirstPhase()
+            {
+                if (Interlocked.Exchange(ref released, 1) != 0) return;
+                Interlocked.Decrement(ref firstPhase);
+                wake.Release();
+            }
+            try { await processItem(item, ReleaseFirstPhase, cancellation.Token); }
+            finally { ReleaseFirstPhase(); }
+        }
+    }
+
     /// <summary>Processes a queue which the caller may append to on the same synchronization context while work is running.</summary>
     public static async Task RunQueueAsync<T>(Queue<T> queue, int maxParallelism,
         Func<T, CancellationToken, Task> processItem, CancellationToken cancellationToken,

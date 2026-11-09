@@ -65,6 +65,27 @@ public sealed partial class YtdlpClient
             + (filter is null ? string.Empty : "&sp=" + Uri.EscapeDataString(filter));
     }
 
+    public IAsyncEnumerable<YtdlpVideo> BrowseChannelStreamAsync(string youtubeUrl, int maxResults,
+        CancellationToken cancellationToken, YtdlpResultType resultType = YtdlpResultType.All)
+    {
+        YtdlpParser.ValidateMaxResults(maxResults);
+        return ReadMetadataStreamAsync(CreateChannelBrowseUrl(youtubeUrl, resultType), maxResults, cancellationToken, resultType);
+    }
+
+    public static string CreateChannelBrowseUrl(string youtubeUrl, YtdlpResultType resultType)
+    {
+        Uri url = YtdlpParser.ValidateYoutubeUrl(youtubeUrl);
+        if (!YtdlpParser.IsChannelUrl(url.AbsoluteUri)) throw new ArgumentException("A YouTube channel URL is required.", nameof(youtubeUrl));
+        string tab = resultType switch
+        {
+            YtdlpResultType.All => "featured", YtdlpResultType.Videos => "videos",
+            YtdlpResultType.Playlists => "playlists", YtdlpResultType.Channels => "channels",
+            _ => throw new ArgumentOutOfRangeException(nameof(resultType))
+        };
+        string path = url.GetLeftPart(UriPartial.Path);
+        return path[..path.LastIndexOf('/')] + "/" + tab;
+    }
+
     public async Task<YtdlpVideo> GetVideoMetadataAsync(YtdlpVideo video, CancellationToken token)
     {
         var url = ValidateVideo(video);

@@ -68,6 +68,7 @@ namespace ModularAudience.Audio.Processing
         /// <summary>Capture queue paths and current UI metadata without exposing the mutable queue.</summary>
         public PlaylistQueueSnapshot GetQueueSnapshot()
         {
+            this.PruneAudioReferences();
             lock (this._lock)
             {
                 return new PlaylistQueueSnapshot(
@@ -180,7 +181,7 @@ namespace ModularAudience.Audio.Processing
         private bool CanEnqueuePreparedTrackLocked(PreparedPlaylistTrack prepared)
         {
             AudioObj audio = prepared.Audio;
-            if (audio == null || audio.Playing || audio.Paused ||
+            if (audio == null || audio.Playing || audio.Paused || !this.IsPreparedSourceCurrentLocked(prepared) ||
                 string.IsNullOrWhiteSpace(prepared.OriginalPath) ||
                 this._banlist.Contains(NormalizePathForKey(prepared.OriginalPath)) ||
                 this.IsProtectedQueuePathLocked(prepared.OriginalPath) ||

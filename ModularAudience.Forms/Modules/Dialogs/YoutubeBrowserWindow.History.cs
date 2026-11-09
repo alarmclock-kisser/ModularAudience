@@ -5,7 +5,7 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 public partial class YoutubeBrowserWindow
 {
     private sealed record ResultsPage(YtdlpVideo[] Videos, string Query, int Limit, string Summary,
-        int SortColumn, bool Descending, string[] SelectedIds, int TopIndex, YtdlpResultType ResultType);
+        int SortColumn, bool Descending, string[] SelectedIds, int TopIndex, YtdlpResultType ResultType, ChannelContext? Channel);
 
     private readonly List<ResultsPage> resultsHistory = [];
     private int historyPosition = -1;
@@ -17,7 +17,7 @@ public partial class YoutubeBrowserWindow
         resultsList.Items.Cast<ListViewItem>().Select(row => (YtdlpVideo)row.Tag!).ToArray(),
         displayedQuery, displayedLimit, resultsSummary.Text, sortColumn, sortDescending,
         SelectedVideos().Select(video => video.Id).ToArray(), resultsList.TopItem?.Index ?? 0,
-        displayedResultType);
+        displayedResultType, displayedChannel);
 
     private void PublishResults(IReadOnlyList<YtdlpVideo> videos, string query, string summary, bool recommendationOrder = false)
     {
@@ -27,6 +27,7 @@ public partial class YoutubeBrowserWindow
         if (recommendationOrder) sortColumn = -1;
         PopulateResults(videos);
         displayedQuery = query;
+        displayedChannel = null;
         displayedLimit = (int)resultLimit.Value;
         displayedResultType = (YtdlpResultType)Math.Max(0, resultTypeCombo.SelectedIndex);
         resultsSummary.Text = summary + (videos.Count < displayedLimit ? " | YouTube returned fewer usable videos than requested." : "");
@@ -52,6 +53,7 @@ public partial class YoutubeBrowserWindow
         displayedLimit = page.Limit;
         resultLimit.Value = page.Limit;
         displayedResultType = page.ResultType;
+        displayedChannel = page.Channel;
         restoringResultType = true;
         try { resultTypeCombo.SelectedIndex = (int)displayedResultType; }
         finally { restoringResultType = false; }

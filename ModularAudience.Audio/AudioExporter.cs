@@ -165,6 +165,7 @@ namespace ModularAudience.Audio
                     float fileSizeMb = new FileInfo(outFile).Length / (1024f * 1024f);
 
                     LogCollection.Log($"Exported {audio.Name} to {outFile} ({fileSizeMb:F2} MB)");
+                    audio.LastExportPath = outFile;
                 }
 
                 return outFile;
@@ -303,6 +304,7 @@ namespace ModularAudience.Audio
                     float fileSizeMb = new FileInfo(finalPath).Length / (1024f * 1024f);
 
                     LogCollection.Log($"Exported {audio.Name} to {finalPath} ({fileSizeMb:F2} MB)");
+                    audio.LastExportPath = finalPath;
                 }
 
                 return finalPath;

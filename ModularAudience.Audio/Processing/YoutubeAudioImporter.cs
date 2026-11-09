@@ -9,6 +9,11 @@ namespace ModularAudience.Audio.Processing
     public static class YoutubeAudioImporter
     {
         public static async Task<bool> WaitForBpmTagAsync(string filePath, TimeSpan maximumWait,
+            CancellationToken cancellationToken) =>
+            await WaitForBpmValueAsync(filePath, maximumWait, cancellationToken).ConfigureAwait(false) is not null;
+
+        /// <summary>Zero means no timeout. Cancellation always stops polling.</summary>
+        public static async Task<float?> WaitForBpmValueAsync(string filePath, TimeSpan maximumWait,
             CancellationToken cancellationToken)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
@@ -20,9 +25,14 @@ namespace ModularAudience.Audio.Processing
                 cancellationToken.ThrowIfCancellationRequested();
                 float? bpm = await Task.Run(() => ReadSharedBpmTag(filePath), cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
-                if (bpm is > 0 && float.IsFinite(bpm.Value)) return true;
+                if (bpm is > 0 && float.IsFinite(bpm.Value)) return bpm;
+                if (maximumWait == TimeSpan.Zero)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
                 var remaining = maximumWait - clock.Elapsed;
-                if (remaining <= TimeSpan.Zero) return false;
+                if (remaining <= TimeSpan.Zero) return null;
                 await Task.Delay(remaining < TimeSpan.FromMilliseconds(250) ? remaining : TimeSpan.FromMilliseconds(250),
                     cancellationToken).ConfigureAwait(false);
             }
@@ -34,15 +44,18 @@ namespace ModularAudience.Audio.Processing
             {
                 // No duration/audio scanning and no exclusive reader while an external tagger works.
                 using var file = TagLib.File.Create(new SharedTagFile(filePath), TagLib.ReadStyle.None);
-                if (file.Tag.BeatsPerMinute > 0) return file.Tag.BeatsPerMinute;
                 if (file.GetTag(TagLib.TagTypes.Id3v2, false) is TagLib.Id3v2.Tag id3)
                 {
-                    string? text = TagLib.Id3v2.TextInformationFrame.Get(id3, "TBPM", false)?.Text.FirstOrDefault()
-                        ?? TagLib.Id3v2.UserTextInformationFrame.Get(id3, "BPM", false)?.Text.FirstOrDefault();
-                    if (float.TryParse(text?.Replace(',', '.'), System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out float bpm) && float.IsFinite(bpm) && bpm > 0)
-                        return bpm;
+                    foreach (string? text in new[]
+                    {
+                        TagLib.Id3v2.TextInformationFrame.Get(id3, "TBPM", false)?.Text.FirstOrDefault(),
+                        TagLib.Id3v2.UserTextInformationFrame.Get(id3, "BPM", false)?.Text.FirstOrDefault()
+                    })
+                        if (float.TryParse(text?.Replace(',', '.'), System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out float bpm) && float.IsFinite(bpm) && bpm > 0)
+                            return bpm;
                 }
+                if (file.Tag.BeatsPerMinute > 0) return file.Tag.BeatsPerMinute;
             }
             // Partial tags and temporary write locks are expected while the external tagger saves.
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or TagLib.CorruptFileException or TagLib.UnsupportedFormatException) { }
@@ -65,9 +78,10 @@ namespace ModularAudience.Audio.Processing
         public static async Task<AudioObj> ImportAsync(
             string filePath, string title, bool temporary, TimeSpan cooldown,
             PlaylistStretchSettings? stretchSettings, IProgress<string>? progress,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken, float? taggedBpm = null)
         {
             ValidateArguments(filePath, title, cooldown, stretchSettings);
+            if (taggedBpm is { } value && !IsValidBpm(value)) throw new ArgumentOutOfRangeException(nameof(taggedBpm));
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report("Waiting for the import cooldown.");
             await Task.Delay(cooldown, cancellationToken).ConfigureAwait(false);
@@ -87,6 +101,9 @@ namespace ModularAudience.Audio.Processing
                 if (temporary) audio.FilePath = string.Empty;
                 cancellationToken.ThrowIfCancellationRequested();
                 RequireAudioData(audio);
+                // Keep the exact value observed before import, even if an external tagger
+                // is replacing the file's metadata while AudioObj reads it again.
+                if (taggedBpm is { } observed) audio.Bpm = observed;
                 audio.Rename(title);
                 if (stretchSettings != null)
                 {

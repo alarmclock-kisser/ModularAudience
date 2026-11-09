@@ -16,7 +16,7 @@ public partial class YoutubeBrowserWindow
         restoringSettings = true;
         try
         {
-            var settings = YoutubeBrowserSettings.Load(out settingsWarning);
+            var settings = YoutubeBrowserSettings.Load(out settingsWarning, this.settingsPath);
             configuredBinariesPath = settings.YTDownloaderBinariesPath;
             checkForUpdates.Checked = settings.CheckForUpdates;
             Size = new Size(settings.Width, settings.Height);
@@ -42,6 +42,7 @@ public partial class YoutubeBrowserWindow
             maxDurationMinutes.Value = settings.MaxDurationMinutes;
             maxSizeMiB.Value = settings.MaxSizeMiB;
             maxParallelDownloadsNumber.Value = settings.MaxParallelDownloads;
+            retryCountNumber.Value = settings.MaxRetries;
             stretchSettings = settings.Stretch;
             stretchCheck.Checked = settings.StretchEnabled;
             for (int index = 0; index < columnMenuItems.Length; index++)
@@ -77,8 +78,9 @@ public partial class YoutubeBrowserWindow
                 WaitForBpmTag = waitForBpmCheck.Checked,
                 MaxDurationMinutes = (int)maxDurationMinutes.Value, MaxSizeMiB = (int)maxSizeMiB.Value,
                 MaxParallelDownloads = (int)maxParallelDownloadsNumber.Value,
+                MaxRetries = (int)retryCountNumber.Value,
                 StretchEnabled = stretchCheck.Checked, Stretch = stretchSettings
-            }.Save();
+            }.Save(this.settingsPath);
         }
         catch (Exception error)
         {

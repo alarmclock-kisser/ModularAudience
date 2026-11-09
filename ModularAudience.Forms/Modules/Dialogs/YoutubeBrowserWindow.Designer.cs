@@ -42,6 +42,7 @@ partial class YoutubeBrowserWindow
     private NumericUpDown maxDurationMinutes = null!;
     private NumericUpDown maxSizeMiB = null!;
     private NumericUpDown maxParallelDownloadsNumber = null!;
+    private NumericUpDown retryCountNumber = null!;
     private CheckBox stretchCheck = null!;
     private Button stretchConfigButton = null!;
     private Label stretchLabel = null!;
@@ -180,7 +181,7 @@ partial class YoutubeBrowserWindow
         rootLayout.Controls.Add(queryPanel, 0, 1);
         var hints = new ToolTip(components!);
         hints.SetToolTip(queryText, "Search YouTube by words or paste a supported HTTPS video/playlist/channel URL. Enter starts the search. Use the arrow beside this field to recall up to 32 real search queries.");
-        hints.SetToolTip(resultTypeCombo, "Filter word searches to All, Videos, Playlists or Channels. A change refreshes the current word search; opening a playlist/channel still shows its videos.");
+        hints.SetToolTip(resultTypeCombo, "Changing this repeats the current search automatically. In Channel :: view the filter applies to that channel (for example its playlists). New channel views start on All.");
         hints.SetToolTip(resultLimit, "Maximum word-search or channel results. Explicit playlist navigation and playlist download enqueue expand the full playlist independently of this search limit.");
         hints.SetToolTip(searchButton, "Search or open the query. Results appear as each entry arrives; starting another search cancels the previous one.");
         hints.SetToolTip(playlistButton, "Open the supported YouTube URL entered in the search field. Playlist search hits can also be opened with a double-click.");
@@ -255,7 +256,7 @@ partial class YoutubeBrowserWindow
         {
             Name = "downloadJobsList", AccessibleName = "Download jobs", Dock = DockStyle.Fill,
             View = View.Details, OwnerDraw = true, FullRowSelect = true, HideSelection = false,
-            MultiSelect = true, UseCompatibleStateImageBehavior = false, Margin = Padding.Empty
+            MultiSelect = true, UseCompatibleStateImageBehavior = false, ShowItemToolTips = true, Margin = Padding.Empty
         };
         downloadJobsList.Columns.AddRange([
             new ColumnHeader { Text = "Title", Width = 320 }, new ColumnHeader { Text = "Phase", Width = 190 },
@@ -374,6 +375,9 @@ partial class YoutubeBrowserWindow
         maxSizeMiB = DesignerNumber(1, 16384, 512, "Maximum download size in MiB");
         maxParallelDownloadsNumber = DesignerNumber(1, YtdlpBatchRunner.MaximumParallelism, 2, "Max parallel downloads");
         maxParallelDownloadsNumber.Name = "maxParallelDownloadsNumber";
+        retryCountNumber = DesignerNumber(0, YtdlpRetryBudget.MaximumRetries, 2, "Additional automatic retry attempts per job");
+        retryCountNumber.Name = "retryCountNumber";
+        retryCountNumber.ValueChanged += (_, _) => { if (!restoringSettings) SaveSettings(); };
         numbers.Controls.Add(saveCheck);
         AddDesignerField(numbers, "Format", formatCombo);
         numbers.Controls.Add(audioQualityLabel);
@@ -382,12 +386,13 @@ partial class YoutubeBrowserWindow
         waitForBpmCheck = new CheckBox
         {
             Text = "Wait for BPM tag", AutoSize = true, Margin = new Padding(3, 6, 3, 0),
-            AccessibleName = "Wait for a BPM tag until the maximum Wait seconds elapse"
+            AccessibleName = "Wait for a BPM tag; zero Wait seconds means no time limit"
         };
         waitForBpmCheck.CheckedChanged += WaitForBpm_CheckedChanged;
         numbers.Controls.Add(waitForBpmCheck);
         AddDesignerField(numbers, "Minutes", maxDurationMinutes);
         AddDesignerField(numbers, "MiB", maxSizeMiB);
+        AddDesignerField(numbers, "Retries", retryCountNumber);
         AddDesignerField(numbers, "Parallel", maxParallelDownloadsNumber);
         layout.Controls.Add(numbers, 0, 0);
         InitializeDirectoryRow(layout);
@@ -404,11 +409,12 @@ partial class YoutubeBrowserWindow
         var help = new ToolTip(components!) { IsParameterHelp = true };
         help.SetToolTip(formatCombo, "Converted download format: WAV is uncompressed PCM, MP3 is lossy compressed audio. The quality field remembers separate settings for each format.");
         help.SetToolTip(audioQuality, "PCM bit depth for WAV or bitrate in kbps for MP3. The up arrow increases quality. Higher settings use more space and cannot restore detail absent from YouTube's source.");
-        help.SetToolTip(cooldownSeconds, "Maximum wait after download/conversion before RAM import. With Wait for BPM tag enabled, a detected BPM tag ends the wait early; timeout still permits import.");
+        help.SetToolTip(cooldownSeconds, "Wait after conversion before RAM import. 0 + Wait for BPM tag: wait without a time limit until a valid tag arrives or you cancel. 0 without that checkbox: import immediately. Positive values are a maximum tag wait; timeout permits import with an explicit warning.");
         help.SetToolTip(waitForBpmCheck, "Wait for an external BPM tagger before importing. Enabling this multiplies the current wait by four; disabling divides it by four. This does not perform an extra download.");
         help.SetToolTip(maxDurationMinutes, "Maximum allowed video duration for each download. Longer items are rejected by the downloader rather than silently trimmed.");
         help.SetToolTip(maxSizeMiB, "Maximum permitted downloaded/converted file size per item in MiB. A failed limit check is reported for that job.");
-        help.SetToolTip(maxParallelDownloadsNumber, "Maximum concurrent download jobs. Audio processing/import is serialized separately; increasing parallelism can increase network load and temporary disk use.");
+        help.SetToolTip(retryCountNumber, "Additional automatic attempts before showing failure/recovery UI. 0 disables these retries. Attempts retain the same options; cancellation and errors after audio handoff are never retried automatically. Running batches keep their captured retry count.");
+        help.SetToolTip(maxParallelDownloadsNumber, "Maximum concurrent downloads plus conversion. Once conversion finishes, the slot is released: BPM-tag waits, cooldown and serialized audio import do not count toward this limit.");
         help.SetToolTip(ipVersionCombo, "Network address family used for YouTube requests. Automatic follows normal resolution; IPv4 or IPv6 forces that family without disabling TLS verification.");
         help.SetToolTip(proxyModeCombo, "Use the environment/default proxy, a direct connection, or an explicit HTTP(S) proxy. Explicit mode requires a valid proxy URL; credentials are not stored here.");
         help.SetToolTip(saveCheck, "Keep the original converted audio on disk in the output folder. Any time stretch is applied only to the RAM audio object, not the saved original.");

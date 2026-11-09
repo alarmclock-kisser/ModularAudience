@@ -42,6 +42,45 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public async Task ZeroTagWaitWaitsUntilTaggedAndPreservesTheObservedValueDuringImport()
+        {
+            string path = NewWavPath();
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try
+            {
+                WriteWav(path, [0, 8192, -8192, 0]);
+                Task<float?> waiting = YoutubeAudioImporter.WaitForBpmValueAsync(path, TimeSpan.Zero, cancellation.Token);
+                await Task.Delay(350);
+                Assert.IsFalse(waiting.IsCompleted, "Zero with tag waiting enabled is not an immediate timeout.");
+                Assert.IsTrue(AudioObj.WriteBpmTagToFile(path, 133.75f));
+                float? observed = await waiting;
+                Assert.AreEqual(133.75f, observed);
+                Assert.IsTrue(AudioObj.WriteBpmTagToFile(path, null));
+                using var audio = await YoutubeAudioImporter.ImportAsync(path, "Observed BPM", false, TimeSpan.Zero,
+                    null, null, cancellation.Token, observed);
+                Assert.AreEqual(133.75f, audio.Bpm, "The awaited value must not be lost when metadata changes before the file is loaded again.");
+            }
+            finally { cancellation.Cancel(); File.Delete(path); }
+        }
+
+        [TestMethod]
+        public async Task ZeroTagWaitWithoutATagRemainsCancellable()
+        {
+            string path = NewWavPath();
+            using var cancellation = new CancellationTokenSource();
+            try
+            {
+                WriteWav(path, [0, 8192, -8192, 0]);
+                Task<float?> waiting = YoutubeAudioImporter.WaitForBpmValueAsync(path, TimeSpan.Zero, cancellation.Token);
+                await Task.Delay(100);
+                Assert.IsFalse(waiting.IsCompleted);
+                cancellation.Cancel();
+                await Assert.ThrowsAsync<OperationCanceledException>(() => waiting.WaitAsync(TimeSpan.FromSeconds(2)));
+            }
+            finally { cancellation.Cancel(); File.Delete(path); }
+        }
+
+        [TestMethod]
         public void CalculateStretchFactor_SlowerActualSourceBpm_ReturnsPointEight()
         {
             double factor = YoutubeAudioImporter.CalculateStretchFactor(100f, 125f);

@@ -32,6 +32,8 @@ public partial class YoutubeBrowserWindow
         public bool CancelRequested { get; set; }
         public CancellationTokenSource? Cancellation { get; set; }
         public TimeSpan? CooldownDeadline { get; set; }
+        public bool BpmTagTimedOut { get; set; }
+        public bool WaitingForBpmWithoutLimit { get; set; }
         public string? LastLog { get; set; }
         public long LastLogTimestamp { get; set; }
     }
@@ -45,6 +47,7 @@ public partial class YoutubeBrowserWindow
         public int Generation { get; } = generation;
         public bool Cancelled { get; set; }
         public bool Settled { get; set; }
+        public int MaxRetries { get; set; }
     }
 
     private DownloadBatch InitializeBatch(YtdlpVideo[] videos) => InitializeRetryBatch(videos, null);
@@ -67,7 +70,7 @@ public partial class YoutubeBrowserWindow
             }
         }
         finally { downloadJobsList.EndUpdate(); }
-        var batch = new DownloadBatch(jobs, operationCancellation!, operationGeneration);
+        var batch = new DownloadBatch(jobs, operationCancellation!, operationGeneration) { MaxRetries = (int)retryCountNumber.Value };
         activeBatch = batch;
         if (showDownloadsOnBatchStart) browsingTabs.SelectedTab = downloadsTab;
         showDownloadsOnBatchStart = true;
@@ -75,6 +78,7 @@ public partial class YoutubeBrowserWindow
         operationProgress.Value = 0;
         operationProgress.AccessibleName = "Completed jobs, including failed and cancelled jobs";
         RefreshBatchProgress(batch);
+        RefreshAvailability();
         return batch;
     }
 
@@ -177,6 +181,7 @@ public partial class YoutubeBrowserWindow
         job.NetworkStage = false;
         job.AudioStage = false;
         job.CooldownDeadline = null;
+        job.WaitingForBpmWithoutLimit = false;
         job.Status = status;
         job.Clock.Stop();
         RefreshJob(job);
@@ -210,6 +215,8 @@ public partial class YoutubeBrowserWindow
         batchProgressLabel.Text = $"Completed: {completed}/{batch.Jobs.Length} | Downloading: {downloading} | Failed: {failed}";
         if (batch.Cancelled || batch.Source.IsCancellationRequested)
             etaLabel.Text = "Batch ETA (estimate): cancelled";
+        else if (batch.Jobs.Any(job => !job.Terminal && job.WaitingForBpmWithoutLimit))
+            etaLabel.Text = "Batch ETA: waiting for BPM tag (no time limit)";
         else
         {
             var eta = CalculateBatchEta(operationClock.Elapsed, completed, batch.Jobs.Length);
@@ -267,11 +274,14 @@ public partial class YoutubeBrowserWindow
     private void RefreshJob(DownloadJob job)
     {
         if (IsDisposed || resourcesReleased) return;
-        job.Row.SubItems[1].Text = job.Status;
+        job.Row.SubItems[1].Text = job.Status == "Completed" && job.BpmTagTimedOut ? "Completed (BPM tag timed out)" : job.Status;
+        job.Row.ToolTipText = job.BpmTagTimedOut
+            ? "The configured BPM-tag wait expired. This item was imported without a confirmed tag. A zero wait with Wait for BPM tag enabled waits until tagged or cancelled."
+            : job.Error?.Message ?? job.Video.Title;
         job.Row.SubItems[2].Text = DownloadText(job);
         job.Row.SubItems[3].Text = job.Started ? FormatClock(job.Clock.Elapsed) : "--";
         var eta = JobEta(job);
-        job.Row.SubItems[4].Text = eta is { } remaining ? FormatClock(remaining) : "Unknown";
+        job.Row.SubItems[4].Text = job.WaitingForBpmWithoutLimit ? "Until BPM tag / cancel" : eta is { } remaining ? FormatClock(remaining) : "Unknown";
         job.Row.SubItems[5].Text = JobSpeed(job);
         job.Row.SubItems[6].Text = job.Latest is { } progress ? TransferText(progress) : "--";
         downloadJobsList.Invalidate(job.Row.Bounds);

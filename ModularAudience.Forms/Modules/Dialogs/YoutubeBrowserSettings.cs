@@ -30,6 +30,7 @@ internal sealed class YoutubeBrowserSettings
     public int MaxDurationMinutes { get; set; } = 30;
     public int MaxSizeMiB { get; set; } = 512;
     public int MaxParallelDownloads { get; set; } = 2;
+    public int MaxRetries { get; set; } = 2;
     public bool StretchEnabled { get; set; }
     public PlaylistStretchSettings? Stretch { get; set; }
 
@@ -40,15 +41,16 @@ internal sealed class YoutubeBrowserSettings
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "ModularAudience", "youtube-settings.json");
 
-    internal static YoutubeBrowserSettings Load(out string? warning)
+    internal static YoutubeBrowserSettings Load(out string? warning, string? filePath = null)
     {
         warning = null;
+        string path = filePath ?? SettingsPath;
         try
         {
-            if (!File.Exists(SettingsPath)) return new();
-            if (new FileInfo(SettingsPath).Length > 65536)
+            if (!File.Exists(path)) return new();
+            if (new FileInfo(path).Length > 65536)
                 throw new InvalidDataException("The settings file exceeds 64 KiB.");
-            var settings = JsonSerializer.Deserialize<YoutubeBrowserSettings>(File.ReadAllText(SettingsPath))
+            var settings = JsonSerializer.Deserialize<YoutubeBrowserSettings>(File.ReadAllText(path))
                 ?? throw new InvalidDataException("The settings file is empty.");
             if (settings.Normalize()) warning = "Warning: Invalid YouTube settings were reset to safe values.";
             return settings;
@@ -80,6 +82,7 @@ internal sealed class YoutubeBrowserSettings
         MaxDurationMinutes = Math.Clamp(MaxDurationMinutes, 1, 1440);
         MaxSizeMiB = Math.Clamp(MaxSizeMiB, 1, 16384);
         MaxParallelDownloads = Math.Clamp(MaxParallelDownloads, 1, YtdlpBatchRunner.MaximumParallelism);
+        MaxRetries = Math.Clamp(MaxRetries, 0, YtdlpRetryBudget.MaximumRetries);
         Format = Format == "mp3" ? "mp3" : "wav";
         if (VisibleColumns is { Length: 6 }) VisibleColumns = [.. VisibleColumns, true];
         if (VisibleColumns is not { Length: 7 }) VisibleColumns = [true, true, true, true, false, false, true];
@@ -110,10 +113,10 @@ internal sealed class YoutubeBrowserSettings
         value.ChunkSize is >= 128 and <= 65536 && (value.ChunkSize & (value.ChunkSize - 1)) == 0 &&
         float.IsFinite(value.Overlap) && value.Overlap is >= 0 and <= 0.9f && value.Threads > 0;
 
-    internal void Save()
+    internal void Save(string? filePath = null)
     {
         Normalize();
-        string path = SettingsPath;
+        string path = filePath ?? SettingsPath;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try

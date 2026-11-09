@@ -55,7 +55,7 @@ namespace ModularAudience.Audio.Processing
         private bool CanCommitPreparedStartLocked(PreparedPlaylistTrack prepared,
             PreparedPlaylistTrack? current, CancellationToken ct, QueuedPreparedStart? request)
         {
-            if (ct.IsCancellationRequested || this._disposed || this.IsPaused ||
+            if (ct.IsCancellationRequested || this._disposed || this.IsPaused || !this.IsPreparedSourceCurrentLocked(prepared) ||
                 !this.IsPlaying || this._skipRequested)
             {
                 return false;
@@ -119,7 +119,7 @@ namespace ModularAudience.Audio.Processing
                         this.ReserveQueueHeadLocked(prepared.OriginalPath);
                         this.ApplyCurrentTrackState(prepared);
                         this._startingPreparedTrack = null;
-                        prepared.Audio.Volume = 100f;
+                        if (prepared.OwnsAudio) { prepared.Audio.Volume = 100f; }
                         prepared.Audio.SetPlaybackVolume(volume);
                         committed = true;
                     }
@@ -246,7 +246,7 @@ namespace ModularAudience.Audio.Processing
                 }
             }
             // Start validation requires cache ownership, which was detached under the lock.
-            try { prepared.Audio.Dispose(); } catch { }
+            DisposePreparedAudio(prepared);
             this.DeleteTempFile(prepared.TempPath);
         }
 

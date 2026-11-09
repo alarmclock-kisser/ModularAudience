@@ -28,6 +28,46 @@ MP3 offers 64/96/128/192/256/320 kbps. WAV offers actual 8/16/24/32-bit PCM via 
 
 Thumbnail loading prefers YouTube's canonical HTTPS JPEG endpoint instead of flat-metadata WebP/AVIF URLs unsupported by GDI+. A trusted metadata URL is a fallback. The loader checks byte signatures, size and dimensions and reports unsupported encodings explicitly; redirects and untrusted image hosts remain disabled.
 
+### Channel filtering and the download/import pipeline
+
+The result-type selector immediately repeats the current word search or channel
+view. A channel view keeps its URL as navigation state (also in back/forward
+history), not as a string to search globally. New channel views start on **All**;
+Videos, Playlists and Channels select that channel's corresponding public tab.
+YouTube can omit tabs or content for an individual channel/session.
+
+The Forms **Parallel** limit covers download **and conversion/publication only**.
+The first-phase slot is released before BPM polling, cooldown, serialized audio
+import and cleanup. More files than the parallel limit can therefore await BPM
+tags. The batch still awaits all those jobs, accepts further queued downloads,
+and keeps search controls enabled even during asynchronous batch initialization.
+Temporary disk use is consequently **not** bounded by the parallel value alone.
+
+| Wait (s) | Wait for BPM tag | Behavior before import |
+| --- | --- | --- |
+| 0 | Off | No added cooldown; import as soon as the serial import gate is available. |
+| 0 | On | Poll until a valid positive BPM tag arrives, without a time limit. |
+| Positive | Off | Wait that many seconds after conversion. |
+| Positive | On | Poll up to that many seconds. On timeout, import with an explicit per-item warning. |
+
+Each job has its own BPM wait and cancellation token. Failure of another download
+does not release that wait. Unlimited waits remain cancellable per item, via
+Cancel, and when closing the window; cancellation awaits active cleanup. An
+observed BPM value (including fractional ID3 values) is passed into audio import
+so a concurrent metadata rewrite cannot turn a successfully awaited value into
+zero. The numeric value is applied before optional time stretching.
+
+**Retries** is a persisted count of additional operation/job attempts (0–10,
+default 2) in `%AppData%/ModularAudience/youtube-settings.json`. A running batch
+keeps its captured value. One budget is shared across a job's download and import
+phases; an import retry reuses the already downloaded file rather than publishing
+a second copy or discarding an external tagger's work. Only after exhaustion is
+the existing failure/assisted-recovery UI shown. Cancellation and errors after
+audio has been handed off are never automatically replayed. Routes, trust and
+browser-session options are unchanged by these retries; explicit assisted
+recovery still requires consent for any such change. The lower-level yt-dlp and
+bounded transient-process retries below remain separate from this UI budget.
+
 ## Network routing and connection failures
 
 `YtdlpClient.NetworkOptions` applies to metadata requests; `YtdlpDownloadOptions.Network` captures each download's routing. `YtdlpNetworkOptions.IpVersion` defaults to `Automatic`. `ProxyUrl = null` preserves inherited/default discovery, an empty string explicitly disables proxies, and a nonempty HTTP(S) URL explicitly selects an authorized proxy. Credentials in URLs are rejected. No automatic IP/proxy/security workaround is applied. These settings affect yt-dlp, not the GitHub installer or thumbnail HTTP client.
@@ -42,7 +82,7 @@ Certificate-chain failures and HTTP 503 responses receive distinct explanations.
 
 Reported `Retry-After` seconds and HTTP dates are respected. Waits over 30 seconds or malformed waits are not automatically retried or offered for immediate assisted recovery. HTTP 429, TLS errors, refused connections, browser-cookie failures and access restrictions are not automatically retried by the outer policy.
 
-The Forms browser waits for all active batch jobs and cleanup before showing a single copyable recovery dialog. Only matching, terminal process failures that have not been handed to the audio collection are eligible. Successful imports and cleanup/import failures are never repeated. There is at most one assisted recovery pass per operation; callbacks from earlier passes cannot overwrite current progress. Search/metadata requests use the same recovery dialog. Explicit recovery may select a fresh-URL retry, IPv4 for connection failures, system certificate trust for certificate-chain failures, or an authorized browser session for authentication failures. Options are scoped to this operation and not persisted.
+The Forms browser waits for all active batch jobs and cleanup before showing a single copyable recovery dialog, after the configured UI retry budget. Only matching, terminal process failures that have not been handed to the audio collection are eligible for assisted recovery. Successful imports and post-handoff cleanup failures are never repeated; pre-handoff import failures can use the remaining automatic budget against the same file. There is at most one assisted recovery pass per operation; callbacks from earlier passes cannot overwrite current progress. Search/metadata requests use the same recovery dialog. Explicit recovery may select a fresh-URL retry, IPv4 for connection failures, system certificate trust for certificate-chain failures, or an authorized browser session for authentication failures. Options are scoped to this operation and not persisted.
 
 System trust passes `--compat-options no-certifi` to use the runtime's normal system CA trust instead of the bundled certifi CA list. TLS verification remains enabled; no certificate is silently accepted or installed. Browser sessions do not fix certificate errors, refused TCP connections or upstream HTTP 503 responses.
 
@@ -84,6 +124,8 @@ to these methods.
 - `event EventHandler<string>? ProgressChanged`
 - `Task<IReadOnlyList<YtdlpVideo>> SearchAsync(string query, int maxResults, CancellationToken cancellationToken)`
 - `Task<IReadOnlyList<YtdlpVideo>> BrowseAsync(string youtubeUrl, int maxResults, CancellationToken cancellationToken)`
+- `IAsyncEnumerable<YtdlpVideo> BrowseChannelStreamAsync(string youtubeUrl, int maxResults, CancellationToken token, YtdlpResultType resultType = YtdlpResultType.All)`
+- `string CreateChannelBrowseUrl(string youtubeUrl, YtdlpResultType resultType)` validates and selects a channel tab without a global search.
 - `Task<YtdlpDownloadResult> DownloadAsync(YtdlpVideo video, YtdlpDownloadOptions options, IProgress<string>? progress, CancellationToken cancellationToken, IProgress<YtdlpDownloadProgress>? downloadProgress = null)`
 
 The status event receives process diagnostics and service messages for all client operations. Downloads also report to the supplied `IProgress<string>`. Event handlers run on the producing thread; marshal to the UI if needed. Use nonthrowing handlers. No logging dependency is introduced. Process stderr is read concurrently with stdout; the error tail is limited to 16 Ki characters and captured stdout to 16 Mi characters. Nonzero exit codes include stderr diagnostics in the thrown exception. Cancellation kills the process tree, including conversion subprocesses.
@@ -118,6 +160,15 @@ Downloads request actual yt-dlp progress at one-second intervals, without simula
 
 - `public const int MaximumParallelism = 8`
 - `public static Task RunAsync<T>(IReadOnlyList<T> items, int maxParallelism, Func<T, CancellationToken, Task> processItem, CancellationToken cancellationToken)`
+- `RunPipelineQueueAsync<T>(Queue<T> queue, int maxParallelism, Func<T, Action, CancellationToken, Task> processItem, CancellationToken token, SemaphoreSlim? queueChanged = null)`
+
+`RunPipelineQueueAsync` is used by the Forms download browser. Its callback's
+idempotent `Action` releases the download/conversion slot; the callback itself
+continues until tag waiting, import and cleanup finish. The queue stays open while
+post-download callbacks remain active, so late enqueues can occupy newly free
+slots. All callbacks are drained on cancellation/error. Handle expected per-job
+failures in the callback when other jobs should continue. The following complete-
+callback worker semantics apply to the older `RunAsync` API, not this pipeline API.
 
 Parallelism must be 1–8. The runner creates at most `min(items.Count, maxParallelism)` asynchronous workers, never a task per item. Workers yield initially and preserve the caller's synchronization context; without a context, normal async scheduling applies. Keep the input list unchanged until the returned task completes. Synchronous CPU work within callbacks still blocks the caller's context.
 
