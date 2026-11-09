@@ -28,6 +28,10 @@ namespace ModularAudience.Forms.Hotkeys
         private readonly Button _buttonNudgingSyncerHotkey;
         private readonly Label _labelPausingSyncerHotkey;
         private readonly Label _labelNudgingSyncerHotkey;
+        private readonly CheckBox _checkBoxPausingSyncerKeyboardSpecific;
+        private readonly CheckBox _checkBoxNudgingSyncerKeyboardSpecific;
+        private readonly ToolTip _syncerToolTip = new();
+        private bool _refreshingSyncerHotkeys;
         private bool _updatingKeyboardProfiles;
         private bool _refreshingBindings;
         private bool _capturingPausingSyncer;
@@ -45,8 +49,8 @@ namespace ModularAudience.Forms.Hotkeys
             this.Text = "Control - Hotkeys";
             this.Name = "HotkeyConfigWindow";
             this.StartPosition = FormStartPosition.CenterParent;
-            this.ClientSize = new Size(920, 560);
-            this.MinimumSize = new Size(820, 470);
+            this.ClientSize = new Size(920, 590);
+            this.MinimumSize = new Size(820, 500);
             this.ShowInTaskbar = false;
             this.MinimizeBox = false;
             this.FormBorderStyle = FormBorderStyle.Sizable;
@@ -219,7 +223,7 @@ namespace ModularAudience.Forms.Hotkeys
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48f));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 124f));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 80f));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 108f));
 
             Panel bottomPanel = new()
             {
@@ -265,24 +269,63 @@ namespace ModularAudience.Forms.Hotkeys
             bottomPanel.Controls.Add(this._labelHint);
             bottomPanel.Controls.Add(this._labelStatus);
 
-            Panel syncerPanel = new()
+            TableLayoutPanel syncerPanel = new()
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(12, 4, 12, 4)
+                Padding = new Padding(12, 4, 12, 8),
+                ColumnCount = 4,
+                RowCount = 3
             };
+            syncerPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 184f));
+            syncerPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            syncerPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 184f));
+            syncerPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            syncerPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28f));
+            syncerPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26f));
+            syncerPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
             Label syncerLabel = new()
             {
                 AutoSize = true,
-                Location = new Point(12, 8),
-                Text = "Syncer Hotkeys (global, not per-keyboard):",
+                Dock = DockStyle.Fill,
+                Text = "Syncer Hotkeys (shown for every keyboard profile):",
                 Font = new Font(this.Font, FontStyle.Bold)
+            };
+
+            this._checkBoxPausingSyncerKeyboardSpecific = new CheckBox
+            {
+                Name = "checkBox_pausingSyncerKeyboardSpecific",
+                Dock = DockStyle.Fill,
+                AutoEllipsis = true,
+                Margin = new Padding(4, 0, 8, 0)
+            };
+            this._checkBoxPausingSyncerKeyboardSpecific.CheckedChanged += (_, _) =>
+            {
+                if (!this._refreshingSyncerHotkeys)
+                {
+                    this._manager.UpdatePausingSyncerKeyboardSpecific(this._checkBoxPausingSyncerKeyboardSpecific.Checked);
+                }
+            };
+
+            this._checkBoxNudgingSyncerKeyboardSpecific = new CheckBox
+            {
+                Name = "checkBox_nudgingSyncerKeyboardSpecific",
+                Dock = DockStyle.Fill,
+                AutoEllipsis = true,
+                Margin = new Padding(4, 0, 0, 0)
+            };
+            this._checkBoxNudgingSyncerKeyboardSpecific.CheckedChanged += (_, _) =>
+            {
+                if (!this._refreshingSyncerHotkeys)
+                {
+                    this._manager.UpdateNudgingSyncerKeyboardSpecific(this._checkBoxNudgingSyncerKeyboardSpecific.Checked);
+                }
             };
 
             this._buttonPausingSyncerHotkey = new Button
             {
-                Location = new Point(12, 34),
-                Size = new Size(180, 28),
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 2, 4, 2),
                 Text = "Set Pausing Syncer Hotkey",
                 UseVisualStyleBackColor = true
             };
@@ -291,8 +334,8 @@ namespace ModularAudience.Forms.Hotkeys
             this._labelPausingSyncerHotkey = new Label
             {
                 AutoSize = false,
-                Location = new Point(200, 34),
-                Size = new Size(250, 28),
+                Dock = DockStyle.Fill,
+                Margin = new Padding(4, 2, 8, 2),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BorderStyle = BorderStyle.FixedSingle,
                 Padding = new Padding(6, 0, 6, 0)
@@ -300,8 +343,8 @@ namespace ModularAudience.Forms.Hotkeys
 
             this._buttonNudgingSyncerHotkey = new Button
             {
-                Location = new Point(460, 34),
-                Size = new Size(180, 28),
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 2, 4, 2),
                 Text = "Set Nudging Syncer Hotkey",
                 UseVisualStyleBackColor = true
             };
@@ -310,18 +353,21 @@ namespace ModularAudience.Forms.Hotkeys
             this._labelNudgingSyncerHotkey = new Label
             {
                 AutoSize = false,
-                Location = new Point(650, 34),
-                Size = new Size(250, 28),
+                Dock = DockStyle.Fill,
+                Margin = new Padding(4, 2, 0, 2),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BorderStyle = BorderStyle.FixedSingle,
                 Padding = new Padding(6, 0, 6, 0)
             };
 
-            syncerPanel.Controls.Add(syncerLabel);
-            syncerPanel.Controls.Add(this._buttonPausingSyncerHotkey);
-            syncerPanel.Controls.Add(this._labelPausingSyncerHotkey);
-            syncerPanel.Controls.Add(this._buttonNudgingSyncerHotkey);
-            syncerPanel.Controls.Add(this._labelNudgingSyncerHotkey);
+            syncerPanel.Controls.Add(syncerLabel, 0, 0);
+            syncerPanel.SetColumnSpan(syncerLabel, 4);
+            syncerPanel.Controls.Add(this._checkBoxPausingSyncerKeyboardSpecific, 1, 1);
+            syncerPanel.Controls.Add(this._checkBoxNudgingSyncerKeyboardSpecific, 3, 1);
+            syncerPanel.Controls.Add(this._buttonPausingSyncerHotkey, 0, 2);
+            syncerPanel.Controls.Add(this._labelPausingSyncerHotkey, 1, 2);
+            syncerPanel.Controls.Add(this._buttonNudgingSyncerHotkey, 2, 2);
+            syncerPanel.Controls.Add(this._labelNudgingSyncerHotkey, 3, 2);
 
             root.Controls.Add(keyboardPanel, 0, 0);
             root.Controls.Add(this._grid, 0, 1);
@@ -928,6 +974,7 @@ namespace ModularAudience.Forms.Hotkeys
             this._registerBlinkTimer.Stop();
             this._registerBlinkTimer.Tick -= this.RegisterBlinkTimer_Tick;
             this._registerBlinkTimer.Dispose();
+            this._syncerToolTip.Dispose();
             this._manager.Changed -= this.Manager_Changed;
             this._manager.KeyboardsChanged -= this.Manager_KeyboardsChanged;
             if (ReferenceEquals(_openWindow, this))
@@ -979,6 +1026,30 @@ namespace ModularAudience.Forms.Hotkeys
 
             this._labelPausingSyncerHotkey.Text = pausing.IsEmpty ? "Not set" : pausing.GetDisplay();
             this._labelNudgingSyncerHotkey.Text = nudging.IsEmpty ? "Not set" : nudging.GetDisplay();
+            this._refreshingSyncerHotkeys = true;
+            try
+            {
+                this.UpdateSyncerKeyboardCheckBox(this._checkBoxPausingSyncerKeyboardSpecific, pausing);
+                this.UpdateSyncerKeyboardCheckBox(this._checkBoxNudgingSyncerKeyboardSpecific, nudging);
+            }
+            finally
+            {
+                this._refreshingSyncerHotkeys = false;
+            }
+        }
+
+        private void UpdateSyncerKeyboardCheckBox(CheckBox checkBox, HotkeyCombo combo)
+        {
+            bool hasKeyboard = !string.IsNullOrWhiteSpace(combo.KeyboardHardwareId);
+            checkBox.Text = hasKeyboard
+                ? $"Keyboard # {HotkeyKeyboardIds.GetShortDisplay(combo.KeyboardHardwareId)}-specific"
+                : "Keyboard-specific (register a key)";
+            checkBox.Enabled = hasKeyboard && !this._manager.IsCapturing;
+            checkBox.Checked = combo.IsKeyboardSpecific;
+            this._syncerToolTip.SetToolTip(checkBox, hasKeyboard
+                ? $"{combo.KeyboardDisplayName}\n{combo.KeyboardHardwareId}\n" +
+                  "Checked: only this keyboard triggers the syncer. Unchecked: the hotkey works on every keyboard."
+                : "Register a hotkey on the desired physical keyboard first.");
         }
 
         private sealed class KeyboardScopeItem

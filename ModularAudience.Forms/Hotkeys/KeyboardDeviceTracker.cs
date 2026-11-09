@@ -29,10 +29,12 @@ namespace ModularAudience.Forms.Hotkeys
         private readonly object _sync = new();
         private readonly Dictionary<Keys, RawKeyEvent> _pendingKeyDowns = [];
         private readonly Dictionary<IntPtr, KeyboardDeviceInfo> _deviceCache = [];
+        private readonly KeyboardInputState _keyState = new();
         private readonly RawInputWindow _window;
         private bool _disposed;
 
         public event Action? KeyboardsChanged;
+        public event Action<KeyboardKeyEvent>? KeyChanged;
 
         public KeyboardDeviceTracker()
         {
@@ -130,7 +132,7 @@ namespace ModularAudience.Forms.Hotkeys
 
         public string? TakeKeyboardId(Keys key)
         {
-            key &= Keys.KeyCode;
+            key = HotkeyFormatter.NormalizeKey(key);
             lock (this._sync)
             {
                 if (!this._pendingKeyDowns.TryGetValue(key, out RawKeyEvent rawEvent))
@@ -183,11 +185,6 @@ namespace ModularAudience.Forms.Hotkeys
                     return;
                 }
 
-                if ((input.Keyboard.Flags & RidKeyBreak) != 0)
-                {
-                    return;
-                }
-
                 Keys key = (Keys)input.Keyboard.VKey;
                 if (key == Keys.None || input.Keyboard.VKey == 0xFF)
                 {
@@ -198,7 +195,22 @@ namespace ModularAudience.Forms.Hotkeys
                     }
                 }
 
-                key = HotkeyFormatter.NormalizeKey(key);
+                // Raw Input reports Shift generically. Resolve its scan code before
+                // storing state so two held Shift keys are released independently.
+                if (key == Keys.ShiftKey)
+                {
+                    key = (Keys)MapVirtualKey(input.Keyboard.MakeCode, MapVkScToVkEx);
+                }
+                else if (key == Keys.ControlKey)
+                {
+                    key = (input.Keyboard.Flags & 0x02) != 0 ? Keys.RControlKey : Keys.LControlKey;
+                }
+                else if (key == Keys.Menu)
+                {
+                    key = (input.Keyboard.Flags & 0x02) != 0 ? Keys.RMenu : Keys.LMenu;
+                }
+
+                key &= Keys.KeyCode;
                 if (key == Keys.None)
                 {
                     return;
@@ -210,10 +222,18 @@ namespace ModularAudience.Forms.Hotkeys
                     return;
                 }
 
+                bool isDown = (input.Keyboard.Flags & RidKeyBreak) == 0;
+                KeyboardKeyEvent keyEvent;
                 lock (this._sync)
                 {
-                    this._pendingKeyDowns[key] = new RawKeyEvent(device.HardwareId, DateTime.UtcNow);
+                    keyEvent = this._keyState.Update(key, isDown, device.HardwareId);
+                    if (isDown)
+                    {
+                        this._pendingKeyDowns[keyEvent.Key] = new RawKeyEvent(device.HardwareId, DateTime.UtcNow);
+                    }
                 }
+
+                this.KeyChanged?.Invoke(keyEvent);
             }
             finally
             {
@@ -226,6 +246,8 @@ namespace ModularAudience.Forms.Hotkeys
             lock (this._sync)
             {
                 this._deviceCache.Clear();
+                this._keyState.Clear();
+                this._pendingKeyDowns.Clear();
             }
 
             this.KeyboardsChanged?.Invoke();
@@ -428,6 +450,7 @@ namespace ModularAudience.Forms.Hotkeys
             {
                 this._pendingKeyDowns.Clear();
                 this._deviceCache.Clear();
+                this._keyState.Clear();
             }
         }
 

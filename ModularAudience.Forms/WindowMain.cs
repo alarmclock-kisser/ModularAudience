@@ -66,8 +66,10 @@ namespace ModularAudience.Forms
         }
 
         internal static readonly BindingList<AudioCollectionView> CollectionViews = [];
+        internal static AudioCollectionView? LastSelectedCollectionView { get; set; }
         internal static int TotalTracks => CollectionViews.Sum(cv => cv.AudioCount);
-        internal static IEnumerable<AudioObj> SelectedTracks => CollectionViews.Where(cv => !cv.IsDisposed).SelectMany(cv => cv.SelectedAudios);
+        internal static IEnumerable<AudioObj> SelectedTracks => CollectionViews
+            .Where(cv => !cv.IsDisposed && !cv.Disposing).SelectMany(cv => cv.SelectedAudios);
         internal static IEnumerable<TrackView> PlayingTrackViews => TrackViews.Where(tv => tv.OriginalAudio.PlayerPlaying);
         internal static bool IsAnyTrackPlaying => PlayingTrackViews.Any();
         internal static IEnumerable<TrackView> SyncedTrackViews => TrackViews.Where(tv => tv.Synced);
@@ -82,6 +84,7 @@ namespace ModularAudience.Forms
         private bool _nudgingActive;
         private bool _pausingActive;
         private bool _pausingHotkeyPressed;
+        private readonly SyncerHotkeyState _syncerHotkeyState = new();
         private GlobalKeyMessageFilter? _keyFilter;
         private MidiControllerService? _midiService;
         private MidiCommandMapper? _midiMapper;
@@ -144,6 +147,7 @@ namespace ModularAudience.Forms
 
         internal void SuppressPausingSyncerForLoopControl()
         {
+            this._syncerHotkeyState.ClearPausing();
             this._pausingHotkeyPressed = false;
             if (this._pausingActive)
             {
@@ -206,7 +210,9 @@ namespace ModularAudience.Forms
             AudioRecorder.RecordingStopped += this.OnAudioRecorderStopped;
             _ = AudioRecorder.StartRollingBufferAsync();
 
-            HotkeyManager.Initialize();
+            HotkeyManager hotkeyManager = HotkeyManager.Initialize();
+            hotkeyManager.SyncerKeyChanged += this.SyncerKeyChanged;
+            hotkeyManager.KeyboardsChanged += this.SyncerKeyboardsChanged;
             this._keyFilter = new GlobalKeyMessageFilter();
             this._keyFilter.KeyChanged += this.GlobalKeyChanged;
             Application.AddMessageFilter(this._keyFilter);
@@ -495,6 +501,11 @@ namespace ModularAudience.Forms
             this.StopPausingSyncer();
             ResetCapsLockState();
             this.DisposePlaylist();
+            if (HotkeyManager.Instance is HotkeyManager hotkeyManager)
+            {
+                hotkeyManager.SyncerKeyChanged -= this.SyncerKeyChanged;
+                hotkeyManager.KeyboardsChanged -= this.SyncerKeyboardsChanged;
+            }
             HotkeyManager.Shutdown();
             if (this._keyFilter != null)
             {

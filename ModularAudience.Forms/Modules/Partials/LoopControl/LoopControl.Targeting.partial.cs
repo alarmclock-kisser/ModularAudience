@@ -20,17 +20,13 @@ namespace ModularAudience.Forms.Modules
         {
             get
             {
-                var tv = SelectedTrackView;
-                if (tv != null && !this.checkedListBox_playlistTracks.ContainsFocus)
-                    return tv;
+                if (this.playlistSelectionOwnsTarget && this.FocusedPlaylistAudio is AudioObj playlistAudio)
+                {
+                    // Null is meaningful: this selected audio need not have an open view.
+                    return FindTrackView(playlistAudio);
+                }
 
-                if (FocusedPlaylistAudio != null)
-                    return FindTrackView(FocusedPlaylistAudio);
-
-                if (this.checkedListBox_playlistTracks.SelectedItem is PlaylistTargetItem sel)
-                    return FindTrackView(sel.Audio);
-
-                return null;
+                return SelectedTrackView ?? (this.FocusedPlaylistAudio is AudioObj audio ? FindTrackView(audio) : null);
             }
         }
 

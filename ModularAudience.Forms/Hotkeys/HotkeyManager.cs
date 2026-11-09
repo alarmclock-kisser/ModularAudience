@@ -44,6 +44,7 @@ namespace ModularAudience.Forms.Hotkeys
         private readonly HashSet<Keys> _pressedKeys = [];
         private readonly Dictionary<Keys, HotkeyBinding> _activeWheelBindings = [];
         private readonly Dictionary<Keys, string> _keyHardwareIds = [];
+        private readonly HashSet<Keys> _syncerCaptureKeys = [];
 
         private CaptureStage _stage;
         private Keys _capturedKey = Keys.None;
@@ -71,6 +72,7 @@ namespace ModularAudience.Forms.Hotkeys
         public event Action? Changed;
 
         public event Action? KeyboardsChanged;
+        internal event Action<KeyboardKeyEvent>? SyncerKeyChanged;
 
         public string StatusText { get; private set; } = "No hotkey is being registered.";
 
@@ -91,6 +93,7 @@ namespace ModularAudience.Forms.Hotkeys
             this._settings = new HotkeySettingsManager();
             this._deviceTracker = new KeyboardDeviceTracker();
             this._deviceTracker.KeyboardsChanged += this.DeviceTracker_KeyboardsChanged;
+            this._deviceTracker.KeyChanged += this.DeviceTracker_KeyChanged;
             this._keyboardFilter = new KeyboardMessageFilter(this);
             this._mouseFilter = new MouseMessageFilter(this);
             this._mouseHookProc = this.MouseHookCallback;
@@ -135,6 +138,7 @@ namespace ModularAudience.Forms.Hotkeys
             try { Application.RemoveMessageFilter(manager._mouseFilter); } catch { }
             try { manager.RemoveMouseHook(); } catch { }
             try { manager._deviceTracker.KeyboardsChanged -= manager.DeviceTracker_KeyboardsChanged; } catch { }
+            try { manager._deviceTracker.KeyChanged -= manager.DeviceTracker_KeyChanged; } catch { }
             try { manager._deviceTracker.Dispose(); } catch { }
         }
 
@@ -229,6 +233,8 @@ namespace ModularAudience.Forms.Hotkeys
             this._capturedKey = Keys.None;
             this._capturedModifiers = HotkeyModifiers.None;
             this._pendingHotkeyModifierKey = Keys.None;
+            this._pendingSyncerModifierKey = Keys.None;
+            this._pendingSyncerModifiers = HotkeyModifiers.None;
             this._pendingKeyboardHardwareId = HotkeyKeyboardIds.Normalize(hardwareId);
             this._pendingKeyboardDisplayName = displayName ?? string.Empty;
 
@@ -253,7 +259,9 @@ namespace ModularAudience.Forms.Hotkeys
                 : string.IsNullOrWhiteSpace(displayName)
                     ? HotkeyKeyboardIds.GetShortDisplay(this._pendingKeyboardHardwareId)
                     : displayName;
-            this.SetStatus($"Press the new hotkey for {scope} (a single modifier like Ctrl is allowed, Esc to cancel)...");
+            this.SetStatus(this.IsSyncerCaptureActive
+                ? $"Press the {displayName} hotkey on the keyboard to register (Esc to cancel)..."
+                : $"Press the new hotkey for {scope} (a single modifier like Ctrl is allowed, Esc to cancel)...");
         }
 
         public void BeginReRegister(HotkeyBinding binding)
@@ -271,6 +279,7 @@ namespace ModularAudience.Forms.Hotkeys
             this._pendingHotkeyModifierKey = Keys.None;
             this._pendingKeyboardHardwareId = string.Empty;
             this._pendingKeyboardDisplayName = string.Empty;
+            this._syncerCaptureMode = SyncerHotkeyCaptureMode.None;
             this._stage = CaptureStage.AwaitingHotkey;
             this.SetStatus($"Press a new hotkey for \"{binding.ActionName}\" (a single modifier is allowed, Esc to cancel)...");
         }
@@ -362,15 +371,99 @@ namespace ModularAudience.Forms.Hotkeys
                 $"{unitsPerWheelTick} units per wheel tick.");
         }
 
-        public void UpdatePausingSyncerHotkey(Keys key, HotkeyModifiers modifiers)        {
-            this._settings.PausingSyncerHotkey = new HotkeyCombo { Key = key, Modifiers = modifiers };
+        public void UpdatePausingSyncerHotkey(
+            Keys key, HotkeyModifiers modifiers, string? hardwareId = null, string? displayName = null)
+        {
+            this._settings.PausingSyncerHotkey = CreateSyncerHotkey(
+                this.PausingSyncerHotkey, key, modifiers, hardwareId, displayName);
             this.SetStatus($"Pausing Syncer hotkey set to {HotkeyFormatter.FormatCombo(key, modifiers)}.");
         }
 
-        public void UpdateNudgingSyncerHotkey(Keys key, HotkeyModifiers modifiers)
+        public void UpdateNudgingSyncerHotkey(
+            Keys key, HotkeyModifiers modifiers, string? hardwareId = null, string? displayName = null)
         {
-            this._settings.NudgingSyncerHotkey = new HotkeyCombo { Key = key, Modifiers = modifiers };
+            this._settings.NudgingSyncerHotkey = CreateSyncerHotkey(
+                this.NudgingSyncerHotkey, key, modifiers, hardwareId, displayName);
             this.SetStatus($"Nudging Syncer hotkey set to {HotkeyFormatter.FormatCombo(key, modifiers)}.");
+        }
+
+        internal static HotkeyCombo CreateSyncerHotkey(
+            HotkeyCombo previous, Keys key, HotkeyModifiers modifiers, string? hardwareId, string? displayName)
+        {
+            return new HotkeyCombo
+            {
+                Key = key,
+                Modifiers = modifiers,
+                KeyboardHardwareId = hardwareId ?? previous.KeyboardHardwareId,
+                KeyboardDisplayName = displayName ?? previous.KeyboardDisplayName,
+                IsKeyboardSpecific = string.IsNullOrWhiteSpace(previous.KeyboardHardwareId) || previous.IsKeyboardSpecific
+            };
+        }
+
+        public void UpdatePausingSyncerKeyboardSpecific(bool keyboardSpecific)
+        {
+            HotkeyCombo combo = this.PausingSyncerHotkey;
+            combo.IsKeyboardSpecific = keyboardSpecific;
+            this._settings.PausingSyncerHotkey = combo;
+            this.SetStatus("Pausing Syncer keyboard scope updated.");
+        }
+
+        public void UpdateNudgingSyncerKeyboardSpecific(bool keyboardSpecific)
+        {
+            HotkeyCombo combo = this.NudgingSyncerHotkey;
+            combo.IsKeyboardSpecific = keyboardSpecific;
+            this._settings.NudgingSyncerHotkey = combo;
+            this.SetStatus("Nudging Syncer keyboard scope updated.");
+        }
+
+        private void DeviceTracker_KeyChanged(KeyboardKeyEvent keyEvent)
+        {
+            if (keyEvent.IsDown)
+            {
+                this._keyHardwareIds[keyEvent.Key] = keyEvent.HardwareId;
+            }
+            else
+            {
+                this._syncerCaptureKeys.Remove(keyEvent.Key);
+            }
+
+            bool foreground = IsApplicationForeground();
+            // Releases must still stop an existing hold after switching to another app
+            // or starting registration. Never start a syncer from background Raw Input.
+            if (!keyEvent.IsDown || (foreground && !this.IsCapturing))
+            {
+                this.SyncerKeyChanged?.Invoke(keyEvent);
+            }
+
+            if (!foreground || !this.IsSyncerCaptureActive)
+            {
+                return;
+            }
+
+            if (keyEvent.IsDown)
+            {
+                this._syncerCaptureKeys.Add(keyEvent.Key);
+                if (keyEvent.Key == Keys.Escape)
+                {
+                    this.CancelCapture();
+                }
+                else if (!keyEvent.IsRepeat)
+                {
+                    this.HandleSyncerHotkeyKeyDown(keyEvent);
+                }
+            }
+            else
+            {
+                this.HandleSyncerHotkeyKeyUp(keyEvent);
+            }
+        }
+
+        private static bool IsApplicationForeground()
+        {
+            IntPtr foreground = GetForegroundWindow();
+            return foreground != IntPtr.Zero
+                && GetWindowThreadProcessId(foreground, out uint processId) != 0
+                && processId == (uint)Environment.ProcessId;
         }
 
         /// <summary>
@@ -378,31 +471,38 @@ namespace ModularAudience.Forms.Hotkeys
         /// immediately, but on their key release, so that combinations consisting of several
         /// modifiers (e.g. "Ctrl + Shift") can be captured independently of the press order.
         /// </summary>
-        private bool HandleSyncerHotkeyKeyDown(Keys key)
+        private bool HandleSyncerHotkeyKeyDown(KeyboardKeyEvent keyEvent)
         {
+            Keys key = keyEvent.Key;
+            HotkeyCombo previous = this._syncerCaptureMode == SyncerHotkeyCaptureMode.PausingSyncer
+                ? this.PausingSyncerHotkey : this.NudgingSyncerHotkey;
+            HotkeyModifiers modifiers = string.IsNullOrWhiteSpace(previous.KeyboardHardwareId) || previous.IsKeyboardSpecific
+                ? keyEvent.Modifiers : keyEvent.AllKeyboardModifiers;
             if (IsModifierKey(key))
             {
                 this._pendingSyncerModifierKey = HotkeyFormatter.NormalizeKey(key);
-                this._pendingSyncerModifiers = HotkeyActionResolver.GetCurrentModifiers()
-                    & ~HotkeyFormatter.GetInherentModifier(key);
+                this._pendingKeyboardHardwareId = keyEvent.HardwareId;
+                this._pendingSyncerModifiers = modifiers & ~HotkeyFormatter.GetInherentModifier(key);
                 return false;
             }
 
             this._pendingSyncerModifierKey = Keys.None;
             this.CompleteSyncerHotkeyCapture(
                 key,
-                HotkeyActionResolver.GetCurrentModifiers() & ~HotkeyFormatter.GetInherentModifier(key));
+                modifiers & ~HotkeyFormatter.GetInherentModifier(key),
+                keyEvent.HardwareId);
             return true;
         }
 
-        private bool HandleSyncerHotkeyKeyUp(Keys key)
+        private bool HandleSyncerHotkeyKeyUp(KeyboardKeyEvent keyEvent)
         {
             if (this._pendingSyncerModifierKey == Keys.None)
             {
                 return false;
             }
 
-            if (HotkeyFormatter.NormalizeKey(key) != this._pendingSyncerModifierKey)
+            if (HotkeyFormatter.NormalizeKey(keyEvent.Key) != this._pendingSyncerModifierKey
+                || !HotkeyKeyboardIds.Same(keyEvent.HardwareId, this._pendingKeyboardHardwareId))
             {
                 return false;
             }
@@ -410,13 +510,16 @@ namespace ModularAudience.Forms.Hotkeys
             Keys capturedKey = this._pendingSyncerModifierKey;
             HotkeyModifiers capturedModifiers = this._pendingSyncerModifiers;
             this._pendingSyncerModifierKey = Keys.None;
-            this.CompleteSyncerHotkeyCapture(capturedKey, capturedModifiers);
+            this.CompleteSyncerHotkeyCapture(capturedKey, capturedModifiers, keyEvent.HardwareId);
             return true;
         }
 
-        private void CompleteSyncerHotkeyCapture(Keys key, HotkeyModifiers modifiers)
+        private void CompleteSyncerHotkeyCapture(Keys key, HotkeyModifiers modifiers, string hardwareId)
         {
             SyncerHotkeyCaptureMode mode = this._syncerCaptureMode;
+            string displayName = this._deviceTracker.GetConnectedKeyboards()
+                .FirstOrDefault(profile => HotkeyKeyboardIds.Same(profile.HardwareId, hardwareId))?.DisplayName
+                ?? HotkeyKeyboardIds.GetShortDisplay(hardwareId);
 
             // Reset the capture state before persisting, because persisting raises the
             // "Changed" event and the config window resets its buttons when the capture ended.
@@ -431,10 +534,10 @@ namespace ModularAudience.Forms.Hotkeys
             switch (mode)
             {
                 case SyncerHotkeyCaptureMode.PausingSyncer:
-                    this.UpdatePausingSyncerHotkey(key, modifiers);
+                    this.UpdatePausingSyncerHotkey(key, modifiers, hardwareId, displayName);
                     break;
                 case SyncerHotkeyCaptureMode.NudgingSyncer:
-                    this.UpdateNudgingSyncerHotkey(key, modifiers);
+                    this.UpdateNudgingSyncerHotkey(key, modifiers, hardwareId, displayName);
                     break;
             }
         }
@@ -447,6 +550,11 @@ namespace ModularAudience.Forms.Hotkeys
                 return false;
             }
 
+            if (this._syncerCaptureKeys.Contains(key))
+            {
+                return true;
+            }
+
             if (this._stage == CaptureStage.AwaitingHotkey)
             {
                 if (key == Keys.Escape)
@@ -457,7 +565,9 @@ namespace ModularAudience.Forms.Hotkeys
 
                 if (this._syncerCaptureMode != SyncerHotkeyCaptureMode.None)
                 {
-                    return this.HandleSyncerHotkeyKeyDown(key);
+                    // Raw Input captures the key and its actual keyboard together.
+                    // A legacy WM_KEYDOWN cannot identify a physical keyboard.
+                    return true;
                 }
 
                 if (IsModifierKey(key))
@@ -557,10 +667,15 @@ namespace ModularAudience.Forms.Hotkeys
             this._pressedKeys.Remove(key);
             this._activeWheelBindings.Remove(key);
 
+            if (this._syncerCaptureKeys.Remove(key))
+            {
+                return true;
+            }
+
             if (this._stage == CaptureStage.AwaitingHotkey
                 && this._syncerCaptureMode != SyncerHotkeyCaptureMode.None)
             {
-                return this.HandleSyncerHotkeyKeyUp(key);
+                return true;
             }
 
             if (this._stage == CaptureStage.AwaitingHotkey
@@ -1380,7 +1495,7 @@ namespace ModularAudience.Forms.Hotkeys
                     screenPoint);
 
                 string actionName = this.MakeUniqueActionName(
-                    HotkeyActionResolver.BuildActionName(owner, control, gesture, actionModifiers));
+                    HotkeyActionResolver.BuildActionName(owner, control, gesture, actionModifiers, target));
 
                 HotkeyBinding binding = new()
                 {
@@ -1495,6 +1610,12 @@ namespace ModularAudience.Forms.Hotkeys
         [DllImport("user32.dll")]
         private static extern uint GetMessagePos();
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
         private sealed class KeyboardMessageFilter : IMessageFilter
         {
             private readonly HotkeyManager _manager;
@@ -1520,7 +1641,7 @@ namespace ModularAudience.Forms.Hotkeys
 
                 if (message.Msg == WM_KEYUP || message.Msg == WM_SYSKEYUP)
                 {
-                    this._manager.HandleKeyUp(key);
+                    return this._manager.HandleKeyUp(key);
                 }
 
                 return false;

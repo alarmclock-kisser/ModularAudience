@@ -151,6 +151,8 @@ namespace ModularAudience.Forms.Hotkeys
         public string OwnerTitle { get; set; } = string.Empty;
         public int? TrackViewId { get; set; }
         public bool UseLastFocusedTrackView { get; set; }
+        public bool UseCollectionSelection { get; set; }
+        public int? CollectionItemIndex { get; set; }
         public List<HotkeyControlPathSegment> ControlPath { get; set; } = [];
         public string ContextMenuName { get; set; } = string.Empty;
         public List<HotkeyMenuItemPathSegment> MenuItemPath { get; set; } = [];
@@ -190,18 +192,41 @@ namespace ModularAudience.Forms.Hotkeys
 
     public sealed class HotkeySettingsFile
     {
-        public int Version { get; set; } = 3;
+        public int Version { get; set; } = 4;
         public List<HotkeyBinding> Bindings { get; set; } = [];
-        public HotkeyCombo PausingSyncerHotkey { get; set; } = new() { Key = Keys.ShiftKey, Modifiers = HotkeyModifiers.None };
-        public HotkeyCombo NudgingSyncerHotkey { get; set; } = new() { Key = Keys.CapsLock, Modifiers = HotkeyModifiers.None };
+        public HotkeyCombo PausingSyncerHotkey { get; set; } = new() { Key = Keys.ShiftKey, IsKeyboardSpecific = false };
+        public HotkeyCombo NudgingSyncerHotkey { get; set; } = new() { Key = Keys.CapsLock, IsKeyboardSpecific = false };
     }
 
     public sealed class HotkeyCombo
     {
         public Keys Key { get; set; } = Keys.None;
         public HotkeyModifiers Modifiers { get; set; } = HotkeyModifiers.None;
+        public string KeyboardHardwareId { get; set; } = string.Empty;
+        public string KeyboardDisplayName { get; set; } = string.Empty;
+        public bool IsKeyboardSpecific { get; set; } = true;
 
+        [JsonIgnore]
         public bool IsEmpty => (this.Key & Keys.KeyCode) == Keys.None;
+
+        public bool Matches(KeyboardKeyEvent keyEvent)
+        {
+            if (this.IsEmpty || HotkeyFormatter.NormalizeKey(keyEvent.Key) != HotkeyFormatter.NormalizeKey(this.Key))
+            {
+                return false;
+            }
+
+            if (this.IsKeyboardSpecific && (string.IsNullOrWhiteSpace(this.KeyboardHardwareId)
+                || !HotkeyKeyboardIds.Same(this.KeyboardHardwareId, keyEvent.HardwareId)))
+            {
+                return false;
+            }
+
+            HotkeyModifiers modifiers = this.IsKeyboardSpecific
+                ? keyEvent.Modifiers
+                : keyEvent.AllKeyboardModifiers;
+            return (modifiers & ~HotkeyFormatter.GetInherentModifier(this.Key)) == this.Modifiers;
+        }
 
         public string GetDisplay()
         {

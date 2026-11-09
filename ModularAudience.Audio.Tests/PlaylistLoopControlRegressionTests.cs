@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio.Processing;
 using ModularAudience.Forms;
+using ModularAudience.Forms.Hotkeys;
 using ModularAudience.Forms.Modules;
 using System.Collections;
 using System.Diagnostics;
@@ -153,6 +154,70 @@ namespace ModularAudience.Audio.Tests
                 update.Invoke(dialog, null);
                 Assert.AreEqual("1/2", multiplier.SelectedItem);
             });
+        }
+
+        [STATestMethod]
+        public void PlaylistOnlySelectionSurvivesRefreshAndControlFocusWithOtherTrackViewsOpen()
+        {
+            using AudioTestScope scope = new();
+            AudioObj playlistOnly = scope.Create(new float[64000]);
+            TrackView first = new(scope.Create(new float[64000]));
+            TrackView last = new(scope.Create(new float[64000]));
+            LoopControl? previousLoopControl = WindowMain.LoopControlWindow;
+            try
+            {
+                WithPlaylist([playlistOnly, first.OriginalAudio, last.OriginalAudio], (dialog, list) =>
+                {
+                    WindowMain.LoopControlWindow = dialog;
+                    Assert.AreSame(last, WindowMain.LastSelectedTrackView);
+                    Click(list, TextPoint(list, 0));
+                    Field<NumericUpDown>(dialog, "numericUpDown_jump").Focus();
+                    Assert.IsFalse(list.ContainsFocus, "The selected row must remain the target after a control gets focus.");
+
+                    dialog.SynchronizeTrackSelection();
+                    dialog.RefreshPlaylistTargetsNow();
+                    PumpMessages(TimeSpan.FromMilliseconds(650));
+                    Assert.AreEqual(0, list.SelectedIndex, "Neither periodic refresh nor stale TrackView selection may steal the row.");
+                    Assert.AreSame(playlistOnly, typeof(LoopControl).GetProperty(
+                        "OriginalAudio", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dialog));
+
+                    ClickLoop(dialog, 0.5f, control: false);
+                    PumpMessages(TimeSpan.FromMilliseconds(300));
+                    Assert.IsTrue(playlistOnly.LoopEnabled);
+                    Assert.IsFalse(first.OriginalAudio.LoopEnabled);
+                    Assert.IsFalse(last.OriginalAudio.LoopEnabled);
+                    Assert.AreEqual(0, list.SelectedIndex, "Deferred auto-refocus must not select an unrelated TrackView.");
+
+                    Assert.IsTrue(dialog.NudgePlaylistRateByUnits(0, 25, false));
+                    PumpMessages(TimeSpan.FromMilliseconds(300));
+                    Assert.IsTrue(playlistOnly.ManualSampleRateFactor > 1.0f);
+                    Assert.AreEqual(1.0, last.OriginalAudio.ManualSampleRateFactor, 0.000001);
+                    Assert.AreEqual(0, list.SelectedIndex);
+
+                    // A real interaction with the previously selected TrackView should
+                    // still switch the target, even though its object reference is unchanged.
+                    last.Activate();
+                    last.Focus();
+                    typeof(TrackView).GetMethod("SetAsLastSelected", BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .Invoke(last, null);
+                    Assert.AreEqual(2, list.SelectedIndex);
+                    Assert.AreSame(last.OriginalAudio, typeof(LoopControl).GetProperty(
+                        "OriginalAudio", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dialog));
+                }, allowTrackViews: true);
+            }
+            finally
+            {
+                WindowMain.LoopControlWindow = previousLoopControl;
+                first.Close();
+                last.Close();
+                Stopwatch watch = Stopwatch.StartNew();
+                while ((!first.IsDisposed || !last.IsDisposed) && watch.Elapsed < TimeSpan.FromSeconds(5))
+                {
+                    Application.DoEvents();
+                    Thread.Sleep(1);
+                }
+                Assert.IsTrue(first.IsDisposed && last.IsDisposed);
+            }
         }
 
         [STATestMethod]
@@ -415,6 +480,7 @@ namespace ModularAudience.Audio.Tests
             audio.StretchFactor = 1.5;
             WithPlaylist([audio], (_, list) =>
             {
+                using SyntheticMouseMoveScope mouseInput = new(list);
                 CultureInfo previousCulture = CultureInfo.CurrentCulture;
                 try
                 {
@@ -682,12 +748,16 @@ namespace ModularAudience.Audio.Tests
             Assert.AreEqual(1.0, audio.SampleRateFactor, 0.000001);
         }
 
-        private static void WithPlaylist(AudioObj[] audios, Action<LoopControl, CheckedListBox> verify)
+        private static void WithPlaylist(AudioObj[] audios, Action<LoopControl, CheckedListBox> verify, bool allowTrackViews = false)
         {
+            using WinFormsTestContext uiContext = new();
             Assert.AreEqual(ApartmentState.STA, Thread.CurrentThread.GetApartmentState());
             Assert.IsNull(WindowMain.Instance, "Tests must not construct WindowMain.");
-            Assert.IsNull(typeof(WindowMain).GetField("_lastSelectedTrackView", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null));
-            Assert.AreEqual(0, ((ICollection)typeof(WindowMain).GetField("TrackViews", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!).Count);
+            if (!allowTrackViews)
+            {
+                Assert.IsNull(typeof(WindowMain).GetField("_lastSelectedTrackView", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null));
+                Assert.AreEqual(0, ((ICollection)typeof(WindowMain).GetField("TrackViews", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!).Count);
+            }
             using PlaylistEngine engine = new();
             using LoopControl dialog = new();
             using Timer refreshTimer = Field<Timer>(dialog, "playlistTargetsTimer");
@@ -707,7 +777,7 @@ namespace ModularAudience.Audio.Tests
                 CheckedListBox list = Control<CheckedListBox>(dialog, "checkedListBox_playlistTracks");
                 Assert.AreEqual(audios.Length, list.Items.Count);
                 WithControlKey(false, () => verify(dialog, list));
-                Assert.IsFalse(Application.OpenForms.Cast<Form>().Any(form => form is WindowMain or TrackView));
+                Assert.IsFalse(Application.OpenForms.Cast<Form>().Any(form => form is WindowMain || (!allowTrackViews && form is TrackView)));
             }
             finally
             {
@@ -724,6 +794,8 @@ namespace ModularAudience.Audio.Tests
             WindowMain shell = (WindowMain)RuntimeHelpers.GetUninitializedObject(typeof(WindowMain));
             GC.SuppressFinalize(shell);
             typeof(WindowMain).GetField("_playlist", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(shell, engine);
+            typeof(WindowMain).GetField("_syncerHotkeyState", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(shell, new SyncerHotkeyState());
             return shell;
         }
 
@@ -828,6 +900,22 @@ namespace ModularAudience.Audio.Tests
 
         private static T Field<T>(object instance, string name) =>
             (T)instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance)!;
+
+        private sealed class SyntheticMouseMoveScope : IMessageFilter, IDisposable
+        {
+            private readonly IntPtr handle;
+
+            internal SyntheticMouseMoveScope(Control control)
+            {
+                this.handle = control.Handle;
+                Application.AddMessageFilter(this);
+            }
+
+            // These tests send their own drag coordinates with SendMessage. While
+            // pumping the timer, queued desktop cursor moves must not move that drag.
+            public bool PreFilterMessage(ref Message message) => message.HWnd == this.handle && message.Msg == MouseMove;
+            public void Dispose() => Application.RemoveMessageFilter(this);
+        }
 
         [DllImport("user32.dll")]
         private static extern IntPtr SendMessage(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam);

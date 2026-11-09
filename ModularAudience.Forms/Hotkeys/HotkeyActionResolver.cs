@@ -35,6 +35,9 @@ namespace ModularAudience.Forms.Hotkeys
         private static readonly MethodInfo? ScrollBarOnScrollMethod = typeof(ScrollBar).GetMethod(
             "OnScroll",
             BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly MethodInfo? ControlOnClickMethod = typeof(Control).GetMethod(
+            "OnClick",
+            BindingFlags.Instance | BindingFlags.NonPublic);
 
         [DllImport("user32.dll")]
         private static extern short GetAsyncKeyState(int vKey);
@@ -99,12 +102,15 @@ namespace ModularAudience.Forms.Hotkeys
                 RelativeY = Math.Clamp(clientPoint.Y / (float)height, 0f, 1f)
             };
 
-            if (owner is TrackView trackView)
+            if (owner is AudioCollectionView && control is ListBox listBox
+                && string.Equals(control.Name, "listBox_audios", StringComparison.Ordinal)
+                && gesture == HotkeyMouseGesture.LeftDoubleClick)
             {
-                target.TrackViewId = trackView.TrackViewId;
-                target.UseLastFocusedTrackView = true;
+                int index = listBox.IndexFromPoint(clientPoint);
+                target.CollectionItemIndex = index >= 0 ? index : null;
             }
 
+            ApplyOwnerScope(target, owner);
             return target;
         }
 
@@ -133,12 +139,7 @@ namespace ModularAudience.Forms.Hotkeys
                 RelativeY = Math.Clamp(clientPoint.Y / (float)height, 0f, 1f)
             };
 
-            if (owner is TrackView trackView)
-            {
-                target.TrackViewId = trackView.TrackViewId;
-                target.UseLastFocusedTrackView = true;
-            }
-
+            ApplyOwnerScope(target, owner);
             return target;
         }
 
@@ -161,12 +162,7 @@ namespace ModularAudience.Forms.Hotkeys
                 RelativeY = increment ? 0.25f : 0.75f
             };
 
-            if (owner is TrackView trackView)
-            {
-                target.TrackViewId = trackView.TrackViewId;
-                target.UseLastFocusedTrackView = true;
-            }
-
+            ApplyOwnerScope(target, owner);
             return target;
         }
 
@@ -185,35 +181,92 @@ namespace ModularAudience.Forms.Hotkeys
                 ScrollTickDistance = ComputeDefaultScrollTickDistance(scrollBar)
             };
 
-            if (owner is TrackView trackView)
-            {
-                target.TrackViewId = trackView.TrackViewId;
-                target.UseLastFocusedTrackView = true;
-            }
-
+            ApplyOwnerScope(target, owner);
             return target;
         }
+
+        private static void ApplyOwnerScope(HotkeyActionTarget target, Form owner)
+        {
+            TrackView? trackView = owner as TrackView ?? ((owner as TrackViewSettings)?.Owner as TrackView);
+            if (trackView != null)
+            {
+                target.TrackViewId = trackView.TrackViewId;
+            }
+
+            NormalizeTarget(target);
+        }
+
+        internal static bool IsCollectionTarget(HotkeyActionTarget target) =>
+            IsOwnerTypeName(target.OwnerType, typeof(AudioCollectionView));
+
+        internal static void NormalizeTarget(HotkeyActionTarget target)
+        {
+            if (target.TrackViewId.HasValue && (IsOwnerTypeName(target.OwnerType, typeof(TrackView))
+                || IsOwnerTypeName(target.OwnerType, typeof(TrackViewSettings))))
+            {
+                target.UseLastFocusedTrackView = false;
+                target.OwnerTitle = string.Empty;
+            }
+
+            if (IsCollectionTarget(target))
+            {
+                target.OwnerTitle = string.Empty;
+                target.UseCollectionSelection = target.ActionKind == HotkeyActionKinds.ContextMenuItem
+                    && IsCollectionSelectionMenuPath(target.MenuItemPath);
+            }
+        }
+
+        private static bool IsCollectionSelectionMenuPath(List<HotkeyMenuItemPathSegment> path)
+        {
+            if (path.Count == 0)
+            {
+                return false;
+            }
+
+            HotkeyMenuItemPathSegment root = path[0];
+            // These are collection/window settings, not operations on selected audio.
+            return root.Name is not ("menuToolStripItem_addIndexToNames" or "menuToolStripItem_pinWindow")
+                && !(string.IsNullOrWhiteSpace(root.Name)
+                    && (root.Text.Contains("Share Collection", StringComparison.OrdinalIgnoreCase)
+                        || root.Text.Contains("Unshare Collection", StringComparison.OrdinalIgnoreCase)));
+        }
+
+        private static bool IsOwnerTypeName(string ownerType, Type type) =>
+            string.Equals(ownerType, type.FullName, StringComparison.Ordinal)
+            || string.Equals(ownerType, type.Name, StringComparison.Ordinal);
 
         public static string BuildActionName(
             Form owner,
             Control control,
             HotkeyMouseGesture gesture,
-            HotkeyModifiers actionModifiers)
+            HotkeyModifiers actionModifiers,
+            HotkeyActionTarget? target = null)
         {
             string ownerName = GetOwnerDisplayName(owner);
-            string controlName = GetControlDisplayName(control, owner);
+            string controlName = target?.CollectionItemIndex is int index
+                ? $"Track item #{index}"
+                : GetControlDisplayName(control, owner);
+            string separator = owner is AudioCollectionView ? " -> " : " - ";
 
             if (gesture == HotkeyMouseGesture.LeftClick && actionModifiers == HotkeyModifiers.None)
             {
-                return $"{ownerName} - {controlName}";
+                return $"{ownerName}{separator}{controlName}";
             }
 
             string gestureText = HotkeyFormatter.FormatGesture(gesture, actionModifiers);
-            return $"{ownerName} - {controlName} [{gestureText}]";
+            return $"{ownerName}{separator}{controlName} [{gestureText}]";
         }
 
         public static string BuildContextMenuItemActionName(Form owner, ToolStripItem item)
         {
+            if (owner is AudioCollectionView)
+            {
+                string scope = IsCollectionSelectionMenuPath(BuildMenuItemPath(item))
+                    ? "AudioCollectionView(s) Selection"
+                    : GetOwnerDisplayName(owner);
+                return $"{scope} -> {GetMenuItemDisplayName(item)}";
+            }
+
             return $"{GetOwnerDisplayName(owner)} - {GetMenuItemDisplayName(item)}";
         }
 
@@ -326,6 +379,14 @@ namespace ModularAudience.Forms.Hotkeys
                 return false;
             }
 
+            if (owner is AudioCollectionView collection && target.CollectionItemIndex is int itemIndex
+                && target.Gesture == HotkeyMouseGesture.LeftDoubleClick)
+            {
+                // Item positions are stable actions, independent of scrolling, resizing,
+                // the cursor position and the name of the audio currently at that position.
+                return collection.TryOpenTrackItem(itemIndex);
+            }
+
             if (control is UpDownBase upDown
                 && target.Gesture == HotkeyMouseGesture.LeftClick
                 && IsSpinnerClick(upDown, target.RelativeX))
@@ -392,6 +453,11 @@ namespace ModularAudience.Forms.Hotkeys
                 System.Diagnostics.Debug.WriteLine(
                     $"Hotkeys: context menu '{target.ContextMenuName}' was not found for '{target.OwnerType}'.");
                 return false;
+            }
+
+            if (owner is AudioCollectionView collection)
+            {
+                collection.UpdateContextMenuState();
             }
 
             ToolStripItem? item = ResolveMenuItem(menu, target.MenuItemPath);
@@ -1071,6 +1137,34 @@ namespace ModularAudience.Forms.Hotkeys
 
         public static Form? ResolveOwner(HotkeyActionTarget target)
         {
+            if (IsCollectionTarget(target))
+            {
+                List<AudioCollectionView> collections = WindowMain.CollectionViews
+                    .Where(view => !view.IsDisposed && !view.Disposing).ToList();
+                if (Form.ActiveForm is AudioCollectionView activeCollection && collections.Contains(activeCollection))
+                {
+                    return activeCollection;
+                }
+
+                if (WindowMain.LastSelectedCollectionView is AudioCollectionView lastCollection
+                    && collections.Contains(lastCollection))
+                {
+                    return lastCollection;
+                }
+
+                return collections.LastOrDefault(view => view.Visible) ?? collections.LastOrDefault();
+            }
+
+            bool isTrackView = IsOwnerTypeName(target.OwnerType, typeof(TrackView));
+            bool isTrackSettings = IsOwnerTypeName(target.OwnerType, typeof(TrackViewSettings));
+            if (target.TrackViewId.HasValue && (isTrackView || isTrackSettings))
+            {
+                TrackView? indexed = WindowMain.TrackViews.FirstOrDefault(view =>
+                    !view.IsDisposed && !view.Disposing && view.TrackViewId == target.TrackViewId.Value);
+                // An absent index is not permission to execute on a different TrackView.
+                return isTrackSettings ? indexed?.Settings : indexed;
+            }
+
             if (target.UseLastFocusedTrackView)
             {
                 TrackView? lastTrackView = WindowMain.LastSelectedTrackView;
@@ -1109,17 +1203,6 @@ namespace ModularAudience.Forms.Hotkeys
                 .Cast<Form>()
                 .Where(form => !form.IsDisposed && !form.Disposing && IsOwnerType(form, target.OwnerType))
                 .ToList();
-
-            if (target.TrackViewId.HasValue)
-            {
-                TrackView? exact = matches
-                    .OfType<TrackView>()
-                    .FirstOrDefault(form => form.TrackViewId == target.TrackViewId.Value);
-                if (exact != null)
-                {
-                    return exact;
-                }
-            }
 
             Form? active = Form.ActiveForm;
             if (active != null && matches.Contains(active))
@@ -1279,6 +1362,12 @@ namespace ModularAudience.Forms.Hotkeys
 
         private static string GetOwnerDisplayName(Form owner)
         {
+            if (owner is TrackViewSettings { Owner: TrackView settingsTrack })
+            {
+                int trackViewId = settingsTrack.TrackViewId;
+                return "Track View #" + trackViewId.ToString("D2") + " Settings";
+            }
+
             if (owner is TrackView trackView)
             {
                 int trackViewId = trackView.TrackViewId;
@@ -1293,6 +1382,11 @@ namespace ModularAudience.Forms.Hotkeys
             if (owner is LoopControl)
             {
                 return "Loop Control";
+            }
+
+            if (owner is AudioCollectionView)
+            {
+                return "AudioCollectionView (current/last focused)";
             }
 
             if (!string.IsNullOrWhiteSpace(owner.Text))
@@ -1461,6 +1555,23 @@ namespace ModularAudience.Forms.Hotkeys
             SetKeyboardState(actionState);
             try
             {
+                // Native mouse messages alone do not reliably click WinForms buttons
+                // when the real cursor is elsewhere or another window is in front.
+                if (target.Gesture == HotkeyMouseGesture.LeftClick)
+                {
+                    if (control is IButtonControl button)
+                    {
+                        button.PerformClick();
+                        return;
+                    }
+
+                    if (control is CheckBox or RadioButton && ControlOnClickMethod != null)
+                    {
+                        ControlOnClickMethod.Invoke(control, [EventArgs.Empty]);
+                        return;
+                    }
+                }
+
                 switch (target.Gesture)
                 {
                     case HotkeyMouseGesture.LeftDoubleClick:

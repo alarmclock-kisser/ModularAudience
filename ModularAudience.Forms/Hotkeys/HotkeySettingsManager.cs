@@ -21,15 +21,19 @@ namespace ModularAudience.Forms.Hotkeys
         private string _settingsPath;
         private readonly object _lock = new();
         private List<HotkeyBinding> _bindings = [];
-        private HotkeyCombo _pausingSyncerHotkey = new() { Key = Keys.ShiftKey, Modifiers = HotkeyModifiers.None };
-        private HotkeyCombo _nudgingSyncerHotkey = new() { Key = Keys.CapsLock, Modifiers = HotkeyModifiers.None };
+        private HotkeyCombo _pausingSyncerHotkey = new() { Key = Keys.ShiftKey, IsKeyboardSpecific = false };
+        private HotkeyCombo _nudgingSyncerHotkey = new() { Key = Keys.CapsLock, IsKeyboardSpecific = false };
 
-        public HotkeySettingsManager()
+        public HotkeySettingsManager() : this(null)
         {
-            this._fallbackSettingsPath = Path.Combine(
+        }
+
+        internal HotkeySettingsManager(string? settingsPath)
+        {
+            this._fallbackSettingsPath = settingsPath ?? Path.Combine(
                 AppContext.BaseDirectory,
                 "hotkeys.json");
-            this._settingsPath = ResolveSettingsPath(this._fallbackSettingsPath);
+            this._settingsPath = settingsPath ?? ResolveSettingsPath(this._fallbackSettingsPath);
             this._bindings = this.LoadCore();
         }
 
@@ -43,14 +47,14 @@ namespace ModularAudience.Forms.Hotkeys
             {
                 lock (this._lock)
                 {
-                    return this._pausingSyncerHotkey;
+                    return NormalizeSyncerHotkey(this._pausingSyncerHotkey);
                 }
             }
             set
             {
                 lock (this._lock)
                 {
-                    this._pausingSyncerHotkey = value ?? new HotkeyCombo { Key = Keys.ShiftKey, Modifiers = HotkeyModifiers.None };
+                    this._pausingSyncerHotkey = NormalizeSyncerHotkey(value ?? new HotkeyCombo { Key = Keys.ShiftKey });
                     this.SaveCore();
                 }
                 this.Changed?.Invoke();
@@ -63,14 +67,14 @@ namespace ModularAudience.Forms.Hotkeys
             {
                 lock (this._lock)
                 {
-                    return this._nudgingSyncerHotkey;
+                    return NormalizeSyncerHotkey(this._nudgingSyncerHotkey);
                 }
             }
             set
             {
                 lock (this._lock)
                 {
-                    this._nudgingSyncerHotkey = value ?? new HotkeyCombo { Key = Keys.CapsLock, Modifiers = HotkeyModifiers.None };
+                    this._nudgingSyncerHotkey = NormalizeSyncerHotkey(value ?? new HotkeyCombo { Key = Keys.CapsLock });
                     this.SaveCore();
                 }
                 this.Changed?.Invoke();
@@ -212,14 +216,27 @@ namespace ModularAudience.Forms.Hotkeys
         {
             lock (this._lock)
             {
-                return this._bindings
+                IEnumerable<HotkeyKeyboardProfile> bindingProfiles = this._bindings
                     .Where(binding => !binding.IsUniversal)
-                    .GroupBy(binding => HotkeyKeyboardIds.Normalize(binding.KeyboardHardwareId))
+                    .Select(binding => new HotkeyKeyboardProfile
+                    {
+                        HardwareId = binding.KeyboardHardwareId,
+                        DisplayName = binding.KeyboardDisplayName
+                    });
+                IEnumerable<HotkeyKeyboardProfile> syncerProfiles = new[] { this._pausingSyncerHotkey, this._nudgingSyncerHotkey }
+                    .Where(combo => !string.IsNullOrWhiteSpace(combo.KeyboardHardwareId))
+                    .Select(combo => new HotkeyKeyboardProfile
+                    {
+                        HardwareId = combo.KeyboardHardwareId,
+                        DisplayName = combo.KeyboardDisplayName
+                    });
+                return bindingProfiles.Concat(syncerProfiles)
+                    .GroupBy(profile => HotkeyKeyboardIds.Normalize(profile.HardwareId))
                     .Select(group => new HotkeyKeyboardProfile
                     {
                         HardwareId = group.Key,
                         DisplayName = group
-                            .Select(binding => binding.KeyboardDisplayName)
+                            .Select(profile => profile.DisplayName)
                             .LastOrDefault(name => !string.IsNullOrWhiteSpace(name))
                             ?? HotkeyKeyboardIds.GetShortDisplay(group.Key)
                     })
@@ -476,6 +493,8 @@ namespace ModularAudience.Forms.Hotkeys
                     OwnerTitle = source.Target.OwnerTitle,
                     TrackViewId = source.Target.TrackViewId,
                     UseLastFocusedTrackView = source.Target.UseLastFocusedTrackView,
+                    UseCollectionSelection = source.Target.UseCollectionSelection,
+                    CollectionItemIndex = source.Target.CollectionItemIndex,
                     ControlPath = source.Target.ControlPath
                         .Select(segment => new HotkeyControlPathSegment
                         {
@@ -546,11 +565,11 @@ namespace ModularAudience.Forms.Hotkeys
 
                 if (file.PausingSyncerHotkey != null)
                 {
-                    this._pausingSyncerHotkey = file.PausingSyncerHotkey;
+                    this._pausingSyncerHotkey = NormalizeSyncerHotkey(file.PausingSyncerHotkey);
                 }
                 if (file.NudgingSyncerHotkey != null)
                 {
-                    this._nudgingSyncerHotkey = file.NudgingSyncerHotkey;
+                    this._nudgingSyncerHotkey = NormalizeSyncerHotkey(file.NudgingSyncerHotkey);
                 }
 
                 foreach (HotkeyBinding binding in file.Bindings)
@@ -580,6 +599,23 @@ namespace ModularAudience.Forms.Hotkeys
 
                     binding.Target.ControlPath ??= [];
                     binding.Target.MenuItemPath ??= [];
+
+                    string previousTitle = binding.Target.OwnerTitle;
+                    HotkeyActionResolver.NormalizeTarget(binding.Target);
+                    if (file.Version < 4 && HotkeyActionResolver.IsCollectionTarget(binding.Target))
+                    {
+                        if (binding.Target.UseCollectionSelection)
+                        {
+                            binding.ActionName = "AudioCollectionView(s) Selection -> " + string.Join(" > ",
+                                binding.Target.MenuItemPath.Select(segment => segment.Text));
+                        }
+                        else if (!string.IsNullOrEmpty(previousTitle)
+                            && binding.ActionName.StartsWith(previousTitle + " - ", StringComparison.Ordinal))
+                        {
+                            binding.ActionName = "AudioCollectionView (current/last focused) -> "
+                                + binding.ActionName[(previousTitle.Length + 3)..];
+                        }
+                    }
                 }
 
                 return file.Bindings;
@@ -633,6 +669,21 @@ namespace ModularAudience.Forms.Hotkeys
 
             System.Diagnostics.Debug.WriteLine(
                 $"Hotkeys: could not save settings to '{this._settingsPath}'.");
+        }
+
+        private static HotkeyCombo NormalizeSyncerHotkey(HotkeyCombo combo)
+        {
+            string hardwareId = HotkeyKeyboardIds.Normalize(combo.KeyboardHardwareId);
+            return new HotkeyCombo
+            {
+                Key = HotkeyFormatter.NormalizeKey(combo.Key),
+                Modifiers = combo.Modifiers,
+                KeyboardHardwareId = hardwareId,
+                KeyboardDisplayName = combo.KeyboardDisplayName ?? string.Empty,
+                // Older JSON files have no device identity. Keep their defaults usable
+                // until a key is registered on a physical keyboard for the first time.
+                IsKeyboardSpecific = hardwareId.Length > 0 && combo.IsKeyboardSpecific
+            };
         }
 
         private static bool TryWriteSettings(string path, string json)

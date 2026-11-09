@@ -102,6 +102,7 @@ namespace ModularAudience.Forms
             this.AudioC = collection;
             this.ownsAudioCollection = ownsAudioCollection;
             this.InitializeComponent();
+            this.InitializeHotkeyFocusTracking();
             this.InitializeSampleModeller();
             this.checkBox_autoPlay.Checked = sharedAutoPlayState ?? this.checkBox_autoPlay.Checked;
             this.checkBox_preview.Checked = sharedPreviewState ?? this.checkBox_preview.Checked;
@@ -225,6 +226,10 @@ namespace ModularAudience.Forms
             this.AudioC.Audios.ListChanged -= this.Resize_Form_CollectionChanged;
 
             WindowMain.CollectionViews.Remove(this);
+            if (ReferenceEquals(WindowMain.LastSelectedCollectionView, this))
+            {
+                WindowMain.LastSelectedCollectionView = null;
+            }
 
             _ = Task.Run(async () =>
             {
@@ -768,11 +773,8 @@ namespace ModularAudience.Forms
             int clickedIndex = this.listBox_audios.IndexFromPoint(this.listBox_audios.PointToClient(Cursor.Position));
             if (clickedIndex != ListBox.NoMatches)
             {
-                this.listBox_audios.SelectedIndex = clickedIndex;
-                if (this.listBox_audios.Items[clickedIndex] is AudioObj selectedAudio)
-                {
-                    _ = new TrackView(selectedAudio, this.AudioC);
-                }
+                await this.OpenTrackItemAsync(clickedIndex).ConfigureAwait(false);
+                return;
             }
             else
             {
@@ -1017,7 +1019,7 @@ namespace ModularAudience.Forms
             e.Cancel = this.GetContextAudios().Count == 0 && !this.CanShowCoOpMenu();
         }
 
-        private void UpdateContextMenuState()
+        internal void UpdateContextMenuState()
         {
             int selectedCount = this.GetContextAudios().Count;
             bool hasAny = selectedCount > 0;
@@ -1098,15 +1100,9 @@ namespace ModularAudience.Forms
             this.UpdateCoOpMenuState();
         }
 
-        private List<AudioObj> GetContextAudios()
+        internal List<AudioObj> GetContextAudios()
         {
-            List<AudioObj> selected = this.listBox_audios.SelectedItems.Cast<AudioObj>().OfType<AudioObj>().ToList();
-            if (selected.Count == 0 && this.listBox_audios.SelectedItem is AudioObj audio)
-            {
-                selected.Add(audio);
-            }
-
-            return selected;
+            return WindowMain.SelectedTracks.DistinctBy(audio => audio.Id).ToList();
         }
 
         private AudioObj? GetSingleContextAudio()
@@ -1137,7 +1133,10 @@ namespace ModularAudience.Forms
             }
 
             selectedAudio.Rename(input);
-            this.listBox_audios.Refresh();
+            foreach (AudioCollectionView collection in WindowMain.CollectionViews.Where(view => !view.IsDisposed))
+            {
+                collection.RefreshList();
+            }
             WindowMain.TrackViews.Where(tv => tv.OriginalAudio.Id == selectedAudio.Id).ToList().ForEach(tv => tv.Rename(input));
         }
 
@@ -1151,7 +1150,9 @@ namespace ModularAudience.Forms
 
             AudioObj cloned = selectedAudio.Clone();
             cloned.Name = selectedAudio.Name + " (Clone)";
-            this.AudioC.Audios.Add(cloned);
+            AudioCollection source = WindowMain.CollectionViews
+                .FirstOrDefault(view => !view.IsDisposed && view.AudioC.Audios.Contains(selectedAudio))?.AudioC ?? this.AudioC;
+            source.Audios.Add(cloned);
         }
 
         private void menuToolStripItem_editTags_Click(object sender, EventArgs e)
@@ -1696,7 +1697,7 @@ namespace ModularAudience.Forms
 
         private async void convertToMIDIToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            var track = this.SelectedAudios.FirstOrDefault();
+            var track = this.GetSingleContextAudio();
             if (track == null)
             {
                 return;

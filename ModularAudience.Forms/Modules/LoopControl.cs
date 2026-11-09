@@ -56,6 +56,13 @@ namespace ModularAudience.Forms.Modules
         // Relative rate drag state: tracks cumulative log-rate position per audio
         private void checkedListBox_playlistTracks_MouseDown(object? sender, MouseEventArgs e)
         {
+            int clickedRow = this.checkedListBox_playlistTracks.IndexFromPoint(e.Location);
+            if (clickedRow >= 0 && e.Button is MouseButtons.Left or MouseButtons.Right)
+            {
+                this.playlistSelectionOwnsTarget = true;
+                this.UpdateLoopButtonsState();
+            }
+
             if (e.Button == MouseButtons.Left)
             {
                 WindowMain.Instance?.SuppressPausingSyncerForLoopControl();
@@ -155,6 +162,7 @@ namespace ModularAudience.Forms.Modules
         private readonly System.Windows.Forms.Timer playlistTargetsTimer = new() { Interval = 250 };
         private bool resetPlaylistRateForAllTracks;
         private bool suppressPlaylistChecklistEvents;
+        private bool playlistSelectionOwnsTarget;
 
         private float Bpm => this.OriginalAudio is AudioObj audio ? GetAudioBpm(audio) : 120f;
         private double Multiplier
@@ -385,8 +393,9 @@ namespace ModularAudience.Forms.Modules
             {
                 return;
             }
-            Guid? selectedAudioId = SelectedTrackView?.OriginalAudio.Id
-                ?? (this.checkedListBox_playlistTracks.SelectedItem as PlaylistTargetItem)?.Audio.Id;
+            // A timer refresh must preserve the user's row, including a playlist audio
+            // that has no TrackView. Only a new TrackView interaction may switch targets.
+            Guid? selectedAudioId = this.FocusedPlaylistAudio?.Id;
             int previousIndex = this.checkedListBox_playlistTracks.SelectedIndex;
             List<AudioObj> activePlaylistAudios = this.GetActiveTargetAudios();
             HashSet<Guid> activeIds = activePlaylistAudios.Select(audio => audio.Id).ToHashSet();

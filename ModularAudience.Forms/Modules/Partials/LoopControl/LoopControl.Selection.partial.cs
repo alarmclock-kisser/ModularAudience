@@ -8,6 +8,7 @@ namespace ModularAudience.Forms.Modules
             {
                 return;
             }
+            this.playlistSelectionOwnsTarget = true;
             this.SelectPlaylistTrackView();
             this.UpdateLoopButtonsState();
         }
@@ -52,7 +53,7 @@ namespace ModularAudience.Forms.Modules
             }
         }
 
-        internal void SynchronizeTrackSelection()
+        internal void SynchronizeTrackSelection(bool fromTrackViewInteraction = false)
         {
             if (this.IsDisposed || this.Disposing)
             {
@@ -60,7 +61,7 @@ namespace ModularAudience.Forms.Modules
             }
             if (this.InvokeRequired)
             {
-                this.BeginInvoke((Action)this.SynchronizeTrackSelection);
+                this.BeginInvoke((Action)(() => this.SynchronizeTrackSelection(fromTrackViewInteraction)));
                 return;
             }
             if (this.suppressPlaylistChecklistEvents || this.checkedListBox_playlistTracks.IsInteracting ||
@@ -69,15 +70,18 @@ namespace ModularAudience.Forms.Modules
                 return;
             }
 
+            if (SelectedTrackView == null || (this.playlistSelectionOwnsTarget && !fromTrackViewInteraction))
+            {
+                return;
+            }
+
             bool wasSuppressed = this.suppressPlaylistChecklistEvents;
             this.suppressPlaylistChecklistEvents = true;
             try
             {
+                this.playlistSelectionOwnsTarget = false;
                 int index = this.FindPlaylistTrackIndex(SelectedTrackView?.OriginalAudio.Id);
-                if (index >= 0)
-                {
-                    this.checkedListBox_playlistTracks.SelectedIndex = index;
-                }
+                this.checkedListBox_playlistTracks.SelectedIndex = index;
 
                 // Also sync the loop buttons to reflect the currently selected track
                 this.UpdateLoopButtonsState();

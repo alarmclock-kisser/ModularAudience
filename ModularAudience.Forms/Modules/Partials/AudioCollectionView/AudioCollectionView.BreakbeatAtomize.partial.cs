@@ -301,18 +301,49 @@ namespace ModularAudience.Forms
 
         private async void menuToolStripItem_delete_Click(object sender, EventArgs e)
         {
+            await this.DeleteSelectedAudiosAsync().ConfigureAwait(false);
+        }
+
+        internal Task DeleteSelectedAudiosAsync()
+        {
             List<AudioObj> toDelete = this.GetContextAudios();
             if (toDelete.Count == 0)
             {
-                return;
+                return Task.CompletedTask;
             }
 
+            List<AudioObj> removedAudios = [];
+            // Detach the complete selection from every bound list on the UI thread
+            // before awaiting disposal. An async continuation must never remove the
+            // next collection's item (or recreate its ListBox handle) on a worker.
             foreach (AudioObj audio in toDelete)
             {
-                await this.AudioC.RemoveAsync(audio);
+                AudioCollection[] sources = WindowMain.CollectionViews
+                    .Where(view => !view.IsDisposed && !view.Disposing && view.AudioC.Audios.Contains(audio))
+                    .Select(view => view.AudioC).Distinct().ToArray();
+                bool removed = false;
+                foreach (AudioCollection source in sources)
+                {
+                    removed |= source.Audios.Remove(audio);
+                }
+                if (removed)
+                {
+                    removedAudios.Add(audio);
+                }
             }
 
-            this.ResetAudioListBinding();
+            foreach (AudioCollectionView view in WindowMain.CollectionViews.Where(view => !view.IsDisposed && !view.Disposing))
+            {
+                view.RefreshList();
+            }
+
+            return Task.Run(() =>
+            {
+                foreach (AudioObj audio in removedAudios)
+                {
+                    audio.Dispose();
+                }
+            });
         }
 
         private void menuToolStripItem_toNewCollection_Click(object sender, EventArgs e)
@@ -323,11 +354,17 @@ namespace ModularAudience.Forms
                 return;
             }
 
+            AudioCollection[] sources = WindowMain.CollectionViews
+                .Where(view => !view.IsDisposed && !view.Disposing)
+                .Select(view => view.AudioC).Distinct().ToArray();
             var newView = new AudioCollectionView(toMove);
             newView.Show();
             foreach (AudioObj audio in toMove)
             {
-                this.AudioC.Audios.Remove(audio);
+                foreach (AudioCollection source in sources)
+                {
+                    source.Audios.Remove(audio);
+                }
             }
         }
 
