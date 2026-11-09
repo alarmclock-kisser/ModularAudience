@@ -37,6 +37,8 @@ namespace ModularAudience.Audio.Tests
                 original.Volume = 0.5f;
                 original.Bpm = 125.5f;
                 original.ScannedBpm = 133.25f;
+                original.ScannedTiming = 2.5f;
+                original.ScannedKey = "F minor";
 
                 using var clone = original.Clone();
 
@@ -46,12 +48,18 @@ namespace ModularAudience.Audio.Tests
                 Assert.AreEqual(original.Volume, clone.Volume);
                 Assert.AreEqual(original.Bpm, clone.Bpm);
                 Assert.AreEqual(original.ScannedBpm, clone.ScannedBpm);
+                Assert.AreEqual(original.ScannedTiming, clone.ScannedTiming);
+                Assert.AreEqual(original.ScannedKey, clone.ScannedKey);
                 Assert.AreEqual(original.SampleRate, clone.SampleRate);
                 Assert.AreEqual(original.Data.Length, clone.Data.Length);
                 Assert.AreNotSame(original.Data, clone.Data); // Data should be cloned
                 Assert.AreNotSame(original, clone);
                 clone.ScannedBpm = 91;
+                clone.ScannedTiming = 0.25f;
+                clone.ScannedKey = "C major";
                 Assert.AreEqual(133.25f, original.ScannedBpm);
+                Assert.AreEqual(2.5f, original.ScannedTiming);
+                Assert.AreEqual("F minor", original.ScannedKey);
             }
         }
 

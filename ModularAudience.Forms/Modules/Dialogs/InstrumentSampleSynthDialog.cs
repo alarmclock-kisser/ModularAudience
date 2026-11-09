@@ -66,7 +66,7 @@ public sealed class InstrumentSampleSynthDialog : Form
         articulation.Items.AddRange(["Straight", "Dotted", "Triplet"]); articulation.SelectedIndex = 0;
         Field("Key Duration", duration); Field("Timing", articulation);
         tips.SetToolTip(duration, "Single-note gate length at the selected BPM. Release adds a separate tail; no repeated note sequence.");
-        var parameters = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true, Padding = new Padding(4) };
+        var parameters = new FlowLayoutPanel { Name = "panel_parameters", Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true, Padding = new Padding(4) };
         void Number(string key, string label, decimal min, decimal max, decimal increment, string tooltip)
         {
             var panel = new FlowLayoutPanel { Width = 240, Height = 50, FlowDirection = FlowDirection.TopDown, WrapContents = false };
@@ -136,6 +136,7 @@ public sealed class InstrumentSampleSynthDialog : Form
         savedPresets.SelectedIndexChanged += (_, _) => { if (savedPresets.SelectedItem is string name) presetName.Text = name; };
         tips.SetToolTip(presetName, "Save creates or updates this named preset. Rename renames the selected preset to this name.");
         root.Controls.Add(top, 0, 0); root.Controls.Add(presetBar, 0, 1); root.Controls.Add(picture, 0, 2); root.Controls.Add(parameters, 0, 3); root.Controls.Add(bottom, 0, 4); Controls.Add(root);
+        Shown += (_, _) => FitInitialParameterHeight(parameters);
         voice.SelectedIndexChanged += (_, _) =>
         {
             if (syncing) return; settings.VoiceIndex = voice.SelectedIndex; settings.ApplyVoiceDefaults(); ApplyNumbers(); QueueRender();
@@ -156,6 +157,24 @@ public sealed class InstrumentSampleSynthDialog : Form
         this.store.PrehearDelayChanged += ReceivePrehearDelay;
         this.store.PresetsChanged += ReceivePresetsChanged;
         ApplyNumbers(); QueueRender(); initialized = true;
+    }
+    private void FitInitialParameterHeight(FlowLayoutPanel parameters)
+    {
+        Rectangle workingArea = Screen.FromControl(this).WorkingArea;
+        int maximumHeight = Math.Max(MinimumSize.Height, workingArea.Height);
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            PerformLayout();
+            // Measure at the full, unscrolled width after DPI scaling and wrapping.
+            int preferredHeight = parameters.GetPreferredSize(new Size(parameters.Width, 0)).Height;
+            // Waveform and parameters each receive half of the flexible height.
+            int height = Math.Clamp(Height + 2 * (preferredHeight - parameters.ClientSize.Height), MinimumSize.Height, maximumHeight);
+            if (height == Height) break;
+            Height = height;
+        }
+        Location = new Point(workingArea.Left + Math.Max(0, (workingArea.Width - Width) / 2),
+            workingArea.Top + Math.Max(0, (workingArea.Height - Height) / 2));
+        // Shown runs only once. Later user resizes retain the normal AutoScroll behavior.
     }
     private void Safe(Action action)
     { try { action(); } catch (Exception error) { if (!disposed) status.Text = error.Message; } }

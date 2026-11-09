@@ -127,7 +127,8 @@ public sealed class CoOpRemoteCollectionTests
 
         Assert.AreEqual(scope.Root, remote.Collection.WorkingDirectory);
         Assert.AreEqual(Path.Combine(scope.Root, "_Exports"), remote.Collection.ExportPath);
-        Assert.AreEqual(Path.Combine(scope.Root, "_Recordings"), remote.Collection.RecordPath);
+        Assert.AreEqual(Path.Combine(scope.Root, "_Records"), remote.Collection.RecordPath);
+        Assert.IsFalse(Directory.Exists(Path.Combine(scope.Root, "_Recordings")));
         Assert.IsNotNull(exported);
         Assert.AreEqual(remote.Collection.ExportPath, Path.GetDirectoryName(exported));
         Assert.IsTrue(File.Exists(exported));

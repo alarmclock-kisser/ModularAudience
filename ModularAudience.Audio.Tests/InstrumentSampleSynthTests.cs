@@ -154,6 +154,39 @@ public sealed class InstrumentSampleSynthTests
     }
 
     [STATestMethod]
+    public void InitialHeightFitsEachFamilyAndManualShrinkingRestoresParameterScrolling()
+    {
+        using WinFormsTestContext uiContext = new();
+        store.SavePrehearDelay(0);
+        foreach (var family in Enum.GetValues<SynthFamily>())
+        {
+            using var dialog = new InstrumentSampleSynthDialog(family, store);
+            ((System.Windows.Forms.Timer)typeof(InstrumentSampleSynthDialog)
+                .GetField("debounce", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dialog)!).Stop();
+            dialog.Show();
+            Application.DoEvents();
+            var parameters = (FlowLayoutPanel)dialog.Controls.Find("panel_parameters", true).Single();
+            int preferredHeight = parameters.GetPreferredSize(new Size(parameters.Width, 0)).Height;
+            int availableHeight = Screen.FromControl(dialog).WorkingArea.Height;
+            int maximumParameterHeight = parameters.ClientSize.Height + Math.Max(0, availableHeight - dialog.Height) / 2;
+            Assert.AreEqual(FormBorderStyle.Sizable, dialog.FormBorderStyle);
+            if (preferredHeight <= maximumParameterHeight)
+                Assert.IsFalse(parameters.VerticalScroll.Visible, $"{family}: all initial parameters must fit without scrolling.");
+            else
+                Assert.AreEqual(Math.Max(dialog.MinimumSize.Height, availableHeight), dialog.Height);
+
+            dialog.Height = dialog.MinimumSize.Height;
+            dialog.PerformLayout();
+            Assert.IsTrue(parameters.VerticalScroll.Visible, $"{family}: manually shrinking must allow scrolling.");
+            int resizedHeight = dialog.Height;
+            dialog.Hide();
+            dialog.Show();
+            Application.DoEvents();
+            Assert.AreEqual(resizedHeight, dialog.Height, "Reopening must not override a manual resize.");
+        }
+    }
+
+    [STATestMethod]
     public void DialogsAreModelessAndCreateIntoTheirOwnFamilyCollection()
     {
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;

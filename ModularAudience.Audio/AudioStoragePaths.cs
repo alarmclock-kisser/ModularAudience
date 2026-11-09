@@ -10,7 +10,7 @@ public static class AudioStoragePaths
     private static readonly List<WeakReference<AudioCollection>> DefaultCollections = [];
     private static string? workingDirectoryOverride;
     public const string ExportsFolderName = "_Exports";
-    public const string RecordingsFolderName = "_Recordings";
+    public const string RecordingsFolderName = "_Records";
 
     public static string MusicDirectory => ResolveMusicDirectory(
         Environment.GetFolderPath(Environment.SpecialFolder.MyMusic, Environment.SpecialFolderOption.DoNotVerify),

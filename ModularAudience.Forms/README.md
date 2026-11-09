@@ -109,7 +109,7 @@ The default workspace is the Windows **Music** known folder followed by
 
 ```text
 Music\ModularAudience\_Exports
-Music\ModularAudience\_Recordings
+Music\ModularAudience\_Records
 ```
 
 Windows folder redirection is respected. If the Music directory has not been
@@ -125,6 +125,21 @@ such as `Kick (1).wav`, `Kick (2).wav`. File names are claimed atomically so
 parallel exports cannot overwrite each other. Explicit single-file saves retain
 the existing overwrite-confirmation behavior, and recording finalization can
 still replace its explicitly selected recording file.
+
+## Interactive scan targets
+
+**Scan BPM**, **Scan Time**, and **Scan Key** follow the last interacted-with
+TrackView or the single selected audio across the collection views. A collection
+selection does not require opening a TrackView and takes precedence over an old
+TrackView focus. Refocusing that TrackView switches the scan target back to it.
+An empty or ambiguous collection selection disables the scan buttons rather
+than silently choosing the first item.
+
+The result fields show the current audio's `ScannedBpm`, `ScannedTiming`, and
+`ScannedKey` immediately, including cached values. Opening a TrackView preserves
+these scan values in its audio copy. A scan that finishes after a focus change
+updates the audio it started on, without replacing the newly focused audio's
+displayed results.
 
 ## Main-window preferences
 
@@ -142,7 +157,7 @@ saved immediately to `%APPDATA%\ModularAudience\application-settings.json`:
 
 `WorkingDirectory: null` uses the normal Music\ModularAudience default. Selecting
 a different directory stores its absolute path exactly as selected; `_Exports`
-and `_Recordings` are created inside it. A normal click on **[...]** opens the
+and `_Records` are created inside it. A normal click on **[...]** opens the
 folder picker at the current directory; **Ctrl+click** opens that directory in
 Explorer instead. Existing files are not moved. Existing and future collections
 that follow the application's default directory, including co-op mirrors, use

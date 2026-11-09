@@ -7,7 +7,7 @@ namespace ModularAudience.Forms
     {
         private void InitializeHotkeyFocusTracking()
         {
-            void RememberFocus(object? sender, EventArgs e) => WindowMain.LastSelectedCollectionView = this;
+            void RememberFocus(object? sender, EventArgs e) => WindowMain.FocusCollectionCommands(this);
 
             this.Activated += RememberFocus;
             Attach(this);

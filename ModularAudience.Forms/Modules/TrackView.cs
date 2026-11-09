@@ -238,7 +238,7 @@ namespace ModularAudience.Forms.Modules
 
         private void SetAsLastSelected()
         {
-            WindowMain.LastSelectedTrackView = this;
+            WindowMain.FocusTrackViewCommands(this);
             WindowMain.LoopControlWindow?.SynchronizeTrackSelection(fromTrackViewInteraction: true);
 
             var collectionView = WindowMain.CollectionViews.FirstOrDefault(cv => cv.AudioC == this.SourceCollection && !cv.IsDisposed && cv.Visible);

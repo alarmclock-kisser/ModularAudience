@@ -42,7 +42,8 @@ public sealed class AudioStoragePathsTests
 
         Assert.AreEqual(Path.Combine(AudioStoragePaths.MusicDirectory, "ModularAudience"), collection.WorkingDirectory);
         Assert.AreEqual(Path.Combine(collection.WorkingDirectory, "_Exports"), collection.ExportPath);
-        Assert.AreEqual(Path.Combine(collection.WorkingDirectory, "_Recordings"), collection.RecordPath);
+        Assert.AreEqual(Path.Combine(collection.WorkingDirectory, "_Records"), collection.RecordPath);
+        Assert.AreEqual(collection.RecordPath, AudioStoragePaths.RecordingsDirectory);
         Assert.AreEqual(collection.ExportPath, collection.Exporter.ExportDirectory);
         Assert.AreEqual(collection.ExportPath, exporter.ExportDirectory);
         Assert.IsTrue(Path.IsPathFullyQualified(collection.WorkingDirectory));
@@ -52,8 +53,8 @@ public sealed class AudioStoragePathsTests
     public void ExplicitWorkspace_IsRespectedWithoutMovingOrDeletingLegacyRecordings()
     {
         string directory = Path.Combine(Path.GetTempPath(), "ModularAudience-storage-test-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(directory, "_Records"));
-        string legacyFile = Path.Combine(directory, "_Records", "existing.wav");
+        Directory.CreateDirectory(Path.Combine(directory, "_Recordings"));
+        string legacyFile = Path.Combine(directory, "_Recordings", "existing.wav");
         File.WriteAllText(legacyFile, "existing recording");
         try
         {
@@ -61,7 +62,8 @@ public sealed class AudioStoragePathsTests
 
             Assert.AreEqual(directory, collection.WorkingDirectory);
             Assert.AreEqual(Path.Combine(directory, "_Exports"), collection.Exporter.ExportDirectory);
-            Assert.IsTrue(Directory.Exists(Path.Combine(directory, "_Recordings")));
+            Assert.AreEqual(Path.Combine(directory, "_Records"), collection.RecordPath);
+            Assert.IsTrue(Directory.Exists(collection.RecordPath));
             Assert.AreEqual("existing recording", File.ReadAllText(legacyFile));
         }
         finally { Directory.Delete(directory, recursive: true); }
@@ -85,7 +87,9 @@ public sealed class AudioStoragePathsTests
 
             Assert.AreEqual(second, existing.WorkingDirectory);
             Assert.AreEqual(Path.Combine(second, "_Exports"), existing.Exporter.ExportDirectory);
-            Assert.AreEqual(Path.Combine(second, "_Recordings"), existing.RecordPath);
+            Assert.AreEqual(Path.Combine(second, "_Records"), existing.RecordPath);
+            Assert.IsTrue(Directory.Exists(existing.RecordPath));
+            Assert.IsFalse(Directory.Exists(Path.Combine(second, "_Recordings")));
             Assert.AreEqual(second, newlyCreated.WorkingDirectory);
             Assert.AreEqual(Path.Combine(root, "Custom"), custom.WorkingDirectory);
             Assert.AreEqual("existing export", File.ReadAllText(oldFile));
@@ -117,5 +121,27 @@ public sealed class AudioStoragePathsTests
             AudioStoragePaths.SetWorkingDirectory(null);
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
+    }
+
+    [TestMethod]
+    public void FreshWorkspace_CreatesOnlyRecordsForRecordingsAndReusesExistingFiles()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "ModularAudience-records-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            AudioStoragePaths.PrepareWorkingDirectory(directory);
+            string records = Path.Combine(directory, "_Records");
+            string recording = Path.Combine(records, "existing.wav");
+            File.WriteAllText(recording, "existing recording");
+
+            using var collection = new AudioCollection(directory);
+            AudioStoragePaths.PrepareWorkingDirectory(directory);
+
+            Assert.AreEqual(records, collection.RecordPath);
+            Assert.IsTrue(Directory.Exists(records));
+            Assert.IsFalse(Directory.Exists(Path.Combine(directory, "_Recordings")));
+            Assert.AreEqual("existing recording", File.ReadAllText(recording));
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
     }
 }

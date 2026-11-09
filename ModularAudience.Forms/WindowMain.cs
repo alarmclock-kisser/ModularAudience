@@ -169,6 +169,7 @@ namespace ModularAudience.Forms
             this.AudioC = new AudioCollection();
             Instance = this;
             this.InitializeComponent();
+            this.InitializeScanControls();
             this.InitializeThemeMenu();
             this.Tag = this.Text;
             this.KeyPreview = true;

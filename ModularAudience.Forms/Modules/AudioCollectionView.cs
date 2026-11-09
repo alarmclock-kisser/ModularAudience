@@ -918,6 +918,14 @@ namespace ModularAudience.Forms
 
         private void listBox_audios_SelectedIndexChanged(object? sender, EventArgs e)
         {
+            if (this.IsDisposed || this.Disposing) return;
+            if (this.InvokeRequired)
+            {
+                try { this.BeginInvoke((Action)(() => this.listBox_audios_SelectedIndexChanged(sender, e))); }
+                catch (InvalidOperationException) when (this.IsDisposed || !this.IsHandleCreated) { }
+                return;
+            }
+
             if (this.listBox_audios.IsHandleCreated && !this.listBox_audios.IsDisposed)
             {
                 try
@@ -934,25 +942,10 @@ namespace ModularAudience.Forms
 
             try
             {
-                AudioObj? selectedAudio = this.GetSingleContextAudio();
-                if (WindowMain.Instance == null || WindowMain.Instance.IsDisposed)
-                {
-                    return;
-                }
-
-                WindowMainStaticHelpers.InvokeIfRequired(WindowMain.Instance, () =>
-                {
-                    if (selectedAudio != null)
-                    {
-                        WindowMain.Instance.UpdateInfoText(selectedAudio);
-                        WindowMain.Instance.UpdateTrackDependentUI();
-                    }
-                    else if (WindowMain.LastSelectedTrackView == null)
-                    {
-                        WindowMain.Instance.UpdateInfoText(null);
-                        WindowMain.Instance.UpdateTrackDependentUI();
-                    }
-                });
+                if (this.ContainsFocus || ReferenceEquals(Form.ActiveForm, this))
+                    WindowMain.FocusCollectionCommands(this);
+                else
+                    WindowMain.RefreshCommandSelection();
             }
             catch (Exception ex)
             {

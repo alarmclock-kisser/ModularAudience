@@ -2,6 +2,9 @@
 
 Open **+ Track → Sample Synthesizer → Instrument family** directly below Model Waveform.
 Each family opens a normal modeless window. Other application windows stay interactive.
+The initial height fits that family's wrapped parameter controls without vertical scrolling,
+up to the current screen's working-area height. The window remains resizable; reducing its
+height or width enables parameter scrolling again, without automatically resizing it back.
 
 ## Timing and preview
 

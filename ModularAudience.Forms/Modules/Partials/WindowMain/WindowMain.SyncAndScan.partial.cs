@@ -11,61 +11,41 @@ namespace ModularAudience.Forms
 {
     public partial class WindowMain
     {
+        private AudioObj? bpmEditAudio;
+
         private async void button_scanBpm_Click(object sender, EventArgs e)
         {
-            AudioObj? audio = this.GetSelectedAudioForCommands();
-
-            if (audio == null)
-            {
-                LogManager.Log("No audio selected for BPM scanning.");
-                return;
-            }
-
-            double scannedBpm = await BeatScanner.ScanBpmAsync(audio);
-            this.textBox_scanBpmResult.Text = scannedBpm.ToString("F3") + " BPM";
-            audio.ScannedBpm = (float)scannedBpm;
+            if (this.scanControls == null) return;
+            this.scanControls.SetTarget(this.GetSelectedAudioForCommands());
+            await this.scanControls.ScanBpmAsync();
         }
 
         private async void button_scanTiming_Click(object sender, EventArgs e)
         {
-            AudioObj? audio = this.GetSelectedAudioForCommands();
-
-            if (audio == null)
-            {
-                LogManager.Log("No audio selected for BPM scanning.");
-                return;
-            }
-
-            float scannedTiming = await BeatScanner_V2.ScanTimingAsync(audio);
-            this.textBox_scanTimingResult.Text = WindowMainFormatHelpers.GetTimingString(scannedTiming);
-            audio.ScannedTiming = scannedTiming;
+            if (this.scanControls == null) return;
+            this.scanControls.SetTarget(this.GetSelectedAudioForCommands());
+            await this.scanControls.ScanTimingAsync();
         }
 
         private async void button_scanKey_Click(object sender, EventArgs e)
         {
-            AudioObj? audio = this.GetSelectedAudioForCommands();
-
-            if (audio == null)
-            {
-                LogManager.Log("No audio selected for BPM scanning.");
-                return;
-            }
-
-            string scannedKey = await BeatScanner_V2.ScanKeyAsync(audio);
-            this.textBox_scanKeyResult.Text = scannedKey;
-            audio.ScannedKey = scannedKey;
+            if (this.scanControls == null) return;
+            this.scanControls.SetTarget(this.GetSelectedAudioForCommands());
+            await this.scanControls.ScanKeyAsync();
         }
 
         private void textBox_scanBpmResult_DoubleClick(object? sender, EventArgs e)
         {
-            if (LastSelectedTrackView == null)
+            AudioObj? audio = this.GetSelectedAudioForCommands();
+            if (audio == null)
             {
                 return;
             }
 
             this.textBox_scanBpmResult.ReadOnly = false;
-            this.textBox_scanBpmResult.Text = LastSelectedTrackView.OriginalAudio.ScannedBpm > 0
-                ? LastSelectedTrackView.OriginalAudio.ScannedBpm.ToString("0.###")
+            this.bpmEditAudio = audio;
+            this.textBox_scanBpmResult.Text = audio.ScannedBpm > 0
+                ? audio.ScannedBpm.ToString("0.###")
                 : "";
             this.textBox_scanBpmResult.Focus();
             this.textBox_scanBpmResult.SelectAll();
@@ -75,7 +55,6 @@ namespace ModularAudience.Forms
             this.textBox_scanBpmResult.Leave += this.TextBox_scanBpmResult_LeaveOrEndEdit;
             this.textBox_scanBpmResult.KeyDown += this.TextBox_scanBpmResult_KeyDown;
             this.textBox_scanBpmResult.TabStop = false;
-            this.textBox_scanBpmResult.ReadOnly = true;
         }
 
         private void TextBox_scanBpmResult_LeaveOrEndEdit(object? sender, EventArgs e)
@@ -99,40 +78,24 @@ namespace ModularAudience.Forms
 
         private void ApplyBpmEditAndReset()
         {
-            if (LastSelectedTrackView == null)
-            {
-                return;
-            }
-
+            AudioObj? audio = this.bpmEditAudio;
             string input = this.textBox_scanBpmResult.Text.Trim().Replace(',', '.');
-            if (float.TryParse(input, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float bpm) && bpm > 0)
+            if (audio != null && float.TryParse(input, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float bpm)
+                && float.IsFinite(bpm) && bpm > 0)
             {
-                LastSelectedTrackView.OriginalAudio.ScannedBpm = bpm;
-                this.textBox_scanBpmResult.Text = bpm.ToString("0.###") + " BPM";
-            }
-            else
-            {
-                float oldBpm = LastSelectedTrackView.OriginalAudio.ScannedBpm;
-                this.textBox_scanBpmResult.Text = oldBpm > 0 ? oldBpm.ToString("0.###") + " BPM" : "";
+                audio.ScannedBpm = bpm;
             }
 
-            this.textBox_scanBpmResult.ReadOnly = true;
-            this.textBox_scanBpmResult.Leave -= this.TextBox_scanBpmResult_LeaveOrEndEdit;
-            this.textBox_scanBpmResult.KeyDown -= this.TextBox_scanBpmResult_KeyDown;
+            this.ResetBpmEdit();
         }
 
         private void ResetBpmEdit()
         {
-            if (LastSelectedTrackView == null)
-            {
-                return;
-            }
-
-            float oldBpm = LastSelectedTrackView.OriginalAudio.ScannedBpm;
-            this.textBox_scanBpmResult.Text = oldBpm > 0 ? oldBpm.ToString("0.###") + " BPM" : "";
             this.textBox_scanBpmResult.ReadOnly = true;
+            this.bpmEditAudio = null;
             this.textBox_scanBpmResult.Leave -= this.TextBox_scanBpmResult_LeaveOrEndEdit;
             this.textBox_scanBpmResult.KeyDown -= this.TextBox_scanBpmResult_KeyDown;
+            this.scanControls?.Refresh();
         }
 
         private void button_timeStretch_Click(object sender, EventArgs e)

@@ -39,7 +39,7 @@ the workspace's empty export/recording directories does not persist samples.
 
 Received collections use the same user-facing workspace as local collections:
 the Windows **Music** known folder, then `ModularAudience\_Exports` and
-`ModularAudience\_Recordings`. A co-op collection ID does not add a GUID-named
+`ModularAudience\_Records`. A co-op collection ID does not add a GUID-named
 subdirectory, and the sender's file paths do not determine the recipient's
 export destination. Temporary/AppData directories are not a default export
 fallback. Explicit custom working directories remain supported.
@@ -54,7 +54,8 @@ Shift-exporting a collection reuses `_Exports\<Collection name>` on subsequent
 exports. Existing files are retained; new name collisions become `Sample (1)`,
 `Sample (2)`, and so on. This applies to WAV and MP3, including parallel exports.
 Previously created temporary export folders, numbered collection folders, and
-legacy `_Records` directories are not moved or deleted automatically.
+legacy recording directories are not moved or deleted automatically. Only
+`_Records` is created and used for new recordings.
 
 ## Retaining local control
 
