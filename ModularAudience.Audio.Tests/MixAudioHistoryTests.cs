@@ -54,17 +54,18 @@ public sealed class MixAudioHistoryTests
             mix.Visual.Background = "#112233"; mix.Visual.PixelsPerSecond = 180;
             mix.Loop = true; mix.LoopStart = 0.2; mix.LoopEnd = 0.4; mix.Visual.HorizontalScrollSeconds = -3; mix.Visual.FirstVisibleTrack = 9; mix.Visual.ScrollMode = MixScrollMode.Follow;
             using var json = JsonDocument.Parse(mix.CaptureProject());
-            Assert.IsFalse(json.RootElement.TryGetProperty("Loop", out _)); Assert.IsFalse(json.RootElement.TryGetProperty("LoopStart", out _));
+            Assert.IsTrue(json.RootElement.TryGetProperty("Loop", out _)); Assert.IsFalse(json.RootElement.TryGetProperty("LoopStart", out _));
             Assert.IsFalse(json.RootElement.GetProperty("Visual").TryGetProperty("HorizontalScrollSeconds", out _));
-            Assert.IsFalse(json.RootElement.GetProperty("Visual").TryGetProperty("ScrollMode", out _));
+            Assert.IsTrue(json.RootElement.GetProperty("Visual").TryGetProperty("ScrollMode", out _));
             await mix.SaveAsync(path); long saved = new FileInfo(path).Length;
-            mix.Visual.HorizontalScrollSeconds = 12; mix.Visual.ScrollMode = MixScrollMode.Page; mix.LoopStart = 0;
+            // Navigation-only change (HorizontalScrollSeconds) must not change file size.
+            mix.Visual.HorizontalScrollSeconds = 12; mix.LoopStart = 0;
             await mix.SaveAsync(path); Assert.AreEqual(saved, new FileInfo(path).Length, "A navigation-only repeat save must append no metadata record.");
             using var loaded = await MixArrangement.LoadAsync(path);
             Assert.IsTrue(loaded.Snap); Assert.AreEqual(16, loaded.SnapDivision); Assert.AreEqual(155, loaded.DisplayLaneHeight);
             Assert.AreEqual("#112233", loaded.Visual.Background); Assert.AreEqual(180d, loaded.Visual.PixelsPerSecond);
             Assert.AreEqual(0d, loaded.Visual.HorizontalScrollSeconds); Assert.AreEqual(0, loaded.Visual.FirstVisibleTrack);
-            Assert.AreEqual(MixScrollMode.None, loaded.Visual.ScrollMode); Assert.IsFalse(loaded.Loop);
+            Assert.AreEqual(MixScrollMode.Follow, loaded.Visual.ScrollMode); Assert.IsTrue(loaded.Loop);
         }
         finally { File.Delete(path); }
     }

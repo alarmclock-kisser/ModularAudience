@@ -200,6 +200,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             IDictionary<AudioObj, BreakbeatTrackSettings>? trackSettingsBySample = null)
         {
             this.InitializeComponent();
+            this.LoadTrackNameFontSize();
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.MaximizeBox = true;
             this.MaximumSize = Size.Empty;
@@ -639,14 +640,14 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             float cellHeight = grid.Height / (float)rows;
             int ticksPerBar = BreakbeatGenerator_V2.PatternTicksPerBar;
 
-            using Font labelFont = new("Segoe UI", Math.Clamp(Math.Min(10f, cellHeight * 0.48f), 6f, 10f));
+            using Font labelFont = new("Segoe UI", Math.Clamp(this.trackNameFontSize, 6f, 24f));
             using Font barFont = new("Segoe UI", 8f, FontStyle.Bold);
             using StringFormat labelFormat = new()
             {
                 Alignment = StringAlignment.Far,
-                LineAlignment = StringAlignment.Center,
-                Trimming = StringTrimming.EllipsisCharacter,
-                FormatFlags = StringFormatFlags.NoWrap
+                LineAlignment = StringAlignment.Near,
+                Trimming = StringTrimming.EllipsisWord,
+                FormatFlags = StringFormatFlags.LineLimit
             };
             using Brush labelBrush = new SolidBrush(Color.FromArgb(220, 222, 226));
             using Brush emptyBrush = new SolidBrush(Color.FromArgb(47, 50, 56));
@@ -689,7 +690,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 float y = grid.Top + row * cellHeight;
                 this.PaintAutoReroll(e.Graphics, row);
                 float nameLeft = this.TrackButtonBounds(row, 2).Right + 6;
-                RectangleF labelBounds = new(nameLeft, y, Math.Max(1, grid.Left - nameLeft - 8), Math.Max(1f, cellHeight));
+                float maxLabelHeight = Math.Min(cellHeight, labelFont.GetHeight(e.Graphics) * 3);
+                RectangleF labelBounds = new(nameLeft, y, Math.Max(1, grid.Left - nameLeft - 8), Math.Max(1f, maxLabelHeight));
                 string label = row < this.rowLabels.Count ? this.rowLabels[row] : $"Track {row + 1}";
                 string summary = row < this.trackSettings.Count
                     ? FormatTrackSettingsSummary(this.trackSettings[row])
@@ -3323,6 +3325,12 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void pictureBox_pattern_MouseWheel(object? sender, MouseEventArgs e)
         {
+            if ((ModifierKeys & Keys.Control) == Keys.Control)
+            {
+                Rectangle grid = this.GetGridBounds();
+                Point pc = sender is Control s ? this.pictureBox_pattern.PointToClient(s.PointToScreen(e.Location)) : e.Location;
+                if (pc.X < grid.Left) { this.CycleTrackNameFontSize(e.Delta); return; }
+            }
             Point pointer = e.Location;
             if (sender is Control source)
             {

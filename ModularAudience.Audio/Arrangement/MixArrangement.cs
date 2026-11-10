@@ -6,6 +6,7 @@ namespace ModularAudience.Audio.Arrangement;
 
 public enum ClipTempoMode { Original, Varispeed, TimeStretch }
 public enum MixScrollMode { None, Follow, Page }
+public enum MixOverlapMode { DockNoOverlap, AllowOverlapOverwrite, MixOverlap }
 
 public sealed class MixVisualOptions
 {
@@ -29,7 +30,7 @@ public sealed class MixVisualOptions
     public MixScrollMode ScrollMode { get; set; }
     public double HorizontalScrollSeconds { get; set; }
     public int FirstVisibleTrack { get; set; }
-    public bool AutoTrackHeight { get; set; }
+    public bool AutoTrackHeight { get; set; } = true;
 }
 
 public sealed class MixSource
@@ -94,6 +95,7 @@ public sealed class MixArrangement : IDisposable
     public double LoopEnd { get; set; } = 8;
     public bool Loop { get; set; }
     public bool AutoSave { get; set; }
+    public MixOverlapMode OverlapMode { get; set; } = MixOverlapMode.DockNoOverlap;
     public List<MixLane> Lanes { get; set; } = [];
     [System.Text.Json.Serialization.JsonIgnore] public Dictionary<Guid, MixSource> Sources { get; } = [];
     public double Duration => Math.Max(0, Lanes.SelectMany(l => l.Clips).Select(c => c.Start + ClipDuration(c)).DefaultIfEmpty(0).Max());
@@ -130,8 +132,8 @@ public sealed class MixArrangement : IDisposable
         var resolver = new DefaultJsonTypeInfoResolver();
         resolver.Modifiers.Add(type =>
         {
-            string[] omitted = type.Type == typeof(MixArrangement) ? [nameof(Loop), nameof(LoopStart), nameof(LoopEnd)] :
-                type.Type == typeof(MixVisualOptions) ? [nameof(MixVisualOptions.ScrollMode), nameof(MixVisualOptions.HorizontalScrollSeconds), nameof(MixVisualOptions.FirstVisibleTrack)] : [];
+            string[] omitted = type.Type == typeof(MixArrangement) ? [nameof(LoopStart), nameof(LoopEnd)] :
+                type.Type == typeof(MixVisualOptions) ? [nameof(MixVisualOptions.HorizontalScrollSeconds), nameof(MixVisualOptions.FirstVisibleTrack)] : [];
             foreach (var property in type.Properties.Where(property => omitted.Contains(property.Name)).ToArray()) type.Properties.Remove(property);
         });
         return new JsonSerializerOptions { TypeInfoResolver = resolver };
@@ -155,7 +157,7 @@ public sealed class MixArrangement : IDisposable
     public void Restore(string json)
     {
         var state = JsonSerializer.Deserialize<MixArrangement>(json) ?? throw new InvalidDataException("Invalid arrangement.");
-        Name = state.Name; Bpm = state.Bpm; SnapDivision = state.SnapDivision; Snap = state.Snap; DisplayLaneHeight = state.DisplayLaneHeight; Visual = state.Visual;
+        Name = state.Name; Bpm = state.Bpm; SnapDivision = state.SnapDivision; Snap = state.Snap; DisplayLaneHeight = state.DisplayLaneHeight; Visual = state.Visual; OverlapMode = state.OverlapMode;
         LoopStart = state.LoopStart; LoopEnd = state.LoopEnd; Loop = state.Loop; AutoSave = state.AutoSave; Lanes = state.Lanes;
     }
     public void Validate()
@@ -168,6 +170,7 @@ public sealed class MixArrangement : IDisposable
             || !double.IsFinite(Visual.HueSpeed) || Visual.HueSpeed is < -720 or > 720
             || !double.IsFinite(Visual.PixelsPerSecond) || Visual.PixelsPerSecond is < 8 or > 2000)
             throw new InvalidDataException("Invalid visual options.");
+        if (!Enum.IsDefined(OverlapMode)) throw new InvalidDataException("Invalid overlap mode.");
         if (!double.IsFinite(Visual.HorizontalScrollSeconds) || Visual.FirstVisibleTrack < 0)
             throw new InvalidDataException("Invalid viewport position.");
         foreach (var property in typeof(MixVisualOptions).GetProperties().Where(p => p.PropertyType == typeof(string)))

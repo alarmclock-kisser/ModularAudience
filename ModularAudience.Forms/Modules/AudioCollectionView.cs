@@ -63,7 +63,7 @@ namespace ModularAudience.Forms
         private Point lastMousePos;
         private Point contextMenuShowLocation;
         private WaveformPreview? waveformPreviewForm;
-        private bool ShowPreview => this.checkBox_preview.Checked && Hints.HintPolicy.Enabled;
+        private bool ShowPreview => this.checkBox_preview.Checked;
 
         private int FormListBoxClearance { get; set; } = 5;
         private int _resizeStartHeight;
@@ -199,7 +199,7 @@ namespace ModularAudience.Forms
 
             this.FormClosing += this.AudioCollectionView_FormClosing;
 
-            this.waveformPreviewTimer = new System.Windows.Forms.Timer { Interval = 600 };
+            this.waveformPreviewTimer = new System.Windows.Forms.Timer { Interval = 333 };
             this.waveformPreviewTimer.Tick += this.WaveformPreviewTimer_Tick;
             Hints.HintPolicy.RegisterPopup(this, () => { this.waveformPreviewTimer.Stop(); this.HideWaveformPreview(); this.waveformPreviewIndex = -1; });
             this.listBox_audios.MouseMove += this.ListBox_audios_MouseMove_WaveformPreview;
@@ -740,8 +740,32 @@ namespace ModularAudience.Forms
 
         private async void listBox_audios_MouseClick(object? sender, MouseEventArgs e)
         {
-            if (e.Button != MouseButtons.Left || (ModifierKeys & Keys.Control) != 0)
+            if (e.Button != MouseButtons.Left)
             {
+                return;
+            }
+
+            int clickedIndex = this.listBox_audios.IndexFromPoint(e.Location);
+            if (clickedIndex == ListBox.NoMatches)
+            {
+                return;
+            }
+
+            // Ctrl+click multi-selection: audition newly selected samples; stop on deselect.
+            if ((ModifierKeys & Keys.Control) != 0)
+            {
+                if (this.checkBox_autoPlay.Checked)
+                {
+                    bool nowSelected = this.listBox_audios.SelectedIndices.Contains(clickedIndex);
+                    if (nowSelected && this.listBox_audios.Items[clickedIndex] is AudioObj selectedAudio)
+                    {
+                        await this.TriggerAutoPlayAsync(selectedAudio).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await this.CancelAutoPlayAsync().ConfigureAwait(false);
+                    }
+                }
                 return;
             }
 
@@ -1214,6 +1238,13 @@ namespace ModularAudience.Forms
             if (audio == null || this.closeCleanupStarted)
             {
                 return;
+            }
+
+            // Cross-collection: stop any auto-play in other collections first, so
+            // previews from different collections never overlap.
+            foreach (var other in WindowMain.CollectionViews.Where(c => !ReferenceEquals(c, this) && !c.IsDisposed && !c.Disposing).ToArray())
+            {
+                try { await other.CancelAutoPlayAsync().ConfigureAwait(false); } catch { }
             }
 
             await this.autoPlayLock.WaitAsync().ConfigureAwait(false);

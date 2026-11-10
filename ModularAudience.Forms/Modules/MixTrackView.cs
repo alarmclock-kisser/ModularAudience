@@ -54,6 +54,7 @@ public sealed partial class MixTrackView : Form
     private MixClip? copiedClip;
     private readonly HashSet<Guid> selectedClips = [];
     private double selectionStart, selectionEnd;
+    private readonly List<(double Start, double End, int FirstRow, int LastRow)> lassoRects = [];
     private int selectionFirstRow = -1, selectionLastRow = -1;
     private Point selectionPointer;
     private Guid? draggedLane;
@@ -63,7 +64,12 @@ public sealed partial class MixTrackView : Form
     private Point down;
     private string? dragBefore;
     private double originalStart, originalOffset, originalDuration, originalPointerTime;
+    private readonly CheckBox overlapModeBox;
+    private static double lastRepeatSelectionMultiplier = 4.0;
     private readonly Dictionary<Guid, double> dragOriginalStarts = [];
+    private bool dragOverActive;
+    private int dragOverRow;
+    private double dragOverTime;
     private double rulerOriginalLoopStart, rulerOriginalLoopEnd;
     private int resizeOriginalLaneHeight;
     private const int Header = 190, Ruler = 30;
@@ -116,7 +122,44 @@ public sealed partial class MixTrackView : Form
         autoScroll.Click += (_, _) =>
         {
             Arrangement.Visual.ScrollMode = (MixScrollMode)(((int)Arrangement.Visual.ScrollMode + 1) % 3);
-            UpdateScrollModeControl(); canvas.Invalidate();
+            UpdateScrollModeControl(); canvas.Invalidate(); Changed();
+        };
+        this.overlapModeBox = new CheckBox { Text = "Dock (no overlap)", AutoSize = true, ThreeState = true, AutoCheck = false, CheckState = CheckState.Unchecked };
+        toolbar.Controls.Add(this.overlapModeBox);
+        this.overlapModeBox.Click += (_, _) =>
+        {
+            this.overlapModeBox.CheckState = this.overlapModeBox.CheckState switch
+            {
+                CheckState.Unchecked => CheckState.Checked,
+                CheckState.Checked => CheckState.Indeterminate,
+                _ => CheckState.Unchecked
+            };
+            Arrangement.OverlapMode = this.overlapModeBox.CheckState switch
+            {
+                CheckState.Unchecked => MixOverlapMode.DockNoOverlap,
+                CheckState.Checked => MixOverlapMode.AllowOverlapOverwrite,
+                _ => MixOverlapMode.MixOverlap
+            };
+            this.overlapModeBox.Text = Arrangement.OverlapMode switch
+            {
+                MixOverlapMode.DockNoOverlap => "Dock (no overlap)",
+                MixOverlapMode.AllowOverlapOverwrite => "Allow overlap (overwrite)",
+                _ => "Mix overlap"
+            };
+            Changed();
+        };
+        // Initialize from arrangement.
+        this.overlapModeBox.CheckState = Arrangement.OverlapMode switch
+        {
+            MixOverlapMode.DockNoOverlap => CheckState.Unchecked,
+            MixOverlapMode.AllowOverlapOverwrite => CheckState.Checked,
+            _ => CheckState.Indeterminate
+        };
+        this.overlapModeBox.Text = Arrangement.OverlapMode switch
+        {
+            MixOverlapMode.DockNoOverlap => "Dock (no overlap)",
+            MixOverlapMode.AllowOverlapOverwrite => "Allow overlap (overwrite)",
+            _ => "Mix overlap"
         };
         Tool("− Zoom", () => Zoom(0.8)); Tool("+ Zoom", () => Zoom(1.25));
         Tool("View Settings…", ShowViewSettings);
@@ -149,7 +192,7 @@ public sealed partial class MixTrackView : Form
         };
         division.SelectedIndexChanged += (_, _) => { if (!restoring) { Arrangement.SnapDivision = 1 << division.SelectedIndex; Changed(); } };
         snap.CheckedChanged += (_, _) => { if (!restoring) { Arrangement.Snap = snap.Checked; Changed(); } };
-        loop.CheckedChanged += (_, _) => { if (!restoring) { Arrangement.Loop = loop.Checked; UpdateTransportLoop(); } };
+        loop.CheckedChanged += (_, _) => { if (!restoring) { Arrangement.Loop = loop.Checked; Changed(); } };
         scroll.ValueChanged += (_, _) => { canvas.Invalidate(); Arrangement.Visual.HorizontalScrollSeconds = ViewStart; };
         vertical.ValueChanged += (_, _) => { canvas.Invalidate(); Arrangement.Visual.FirstVisibleTrack = vertical.Value; };
         projectSaveTimer.Tick += async (_, _) => { projectSaveTimer.Stop(); await FlushProjectSaveAsync(); };
@@ -174,8 +217,26 @@ public sealed partial class MixTrackView : Form
         canvas.MouseWheel += (_, e) => { if ((ModifierKeys & Keys.Control) != 0) Zoom(e.Delta > 0 ? 1.15 : 1 / 1.15); else vertical.Value = Math.Clamp(vertical.Value - Math.Sign(e.Delta), 0, Math.Max(0, Arrangement.Lanes.Count - 1)); };
         foreach (Control target in new Control[] { this, canvas })
         {
-            target.DragEnter += (_, e) => e.Effect = Dragged(e.Data).Length > 0 ? DragDropEffects.Copy : DragDropEffects.None;
-            target.DragOver += (_, e) => e.Effect = Dragged(e.Data).Length > 0 ? DragDropEffects.Copy : DragDropEffects.None;
+            target.DragEnter += (_, e) =>
+            {
+                if (Dragged(e.Data).Length == 0) { e.Effect = DragDropEffects.None; return; }
+                e.Effect = DragDropEffects.Copy;
+                var p = canvas.PointToClient(new Point(e.X, e.Y));
+                dragOverActive = true; dragOverRow = Math.Clamp(RowAt(p.Y), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
+                dragOverTime = Arrangement.SnapTime(XTime(p.X), (e.KeyState & 4) != 0);
+                canvas.Invalidate();
+            };
+            target.DragOver += (_, e) =>
+            {
+                if (Dragged(e.Data).Length == 0) { e.Effect = DragDropEffects.None; dragOverActive = false; canvas.Invalidate(); return; }
+                e.Effect = DragDropEffects.Copy;
+                var p = canvas.PointToClient(new Point(e.X, e.Y));
+                dragOverRow = Math.Clamp(RowAt(p.Y), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
+                dragOverTime = Arrangement.SnapTime(XTime(p.X), (e.KeyState & 4) != 0);
+                dragOverActive = true;
+                canvas.Invalidate();
+            };
+            target.DragLeave += (_, _) => { dragOverActive = false; canvas.Invalidate(); };
             target.DragDrop += DropAudio;
         }
         clock.Tick += (_, _) => { if (playback != null) { caret = playback.CurrentTime.TotalSeconds; FollowPlaybackCaret(); canvas.Invalidate(); if (!playback.Playing && !busy) StopPlayback(); } };
@@ -349,6 +410,57 @@ public sealed partial class MixTrackView : Form
         vertical.Value = 0;
         vertical.Maximum = Math.Max(0, Arrangement.Lanes.Count - 1);
     }
+    private async void RepeatSelection()
+    {
+        if (busy || closing) return;
+        double value = lastRepeatSelectionMultiplier;
+        using var form = new Form { Text = "Repeat selection", ClientSize = new Size(300, 100), StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
+        var label = new Label { Text = "Repeat count (N):", Location = new Point(12, 14), AutoSize = true };
+        var num = new NumericUpDown { Location = new Point(140, 12), Width = 120, Minimum = 0.25m, Maximum = 64m, DecimalPlaces = 2, Increment = 0.25m, Value = (decimal)value };
+        var ok = new Button { Text = "OK", Location = new Point(140, 56), Size = new Size(60, 26), DialogResult = DialogResult.OK };
+        var cancel = new Button { Text = "Cancel", Location = new Point(210, 56), Size = new Size(60, 26), DialogResult = DialogResult.Cancel };
+        form.Controls.AddRange(new Control[] { label, num, ok, cancel });
+        form.AcceptButton = null; form.CancelButton = cancel;
+        if (form.ShowDialog(this) != DialogResult.OK) return;
+        double n = (double)num.Value;
+        lastRepeatSelectionMultiplier = n;
+
+        // Collect target clips.
+        var targets = new List<MixClip>();
+        var parts = SelectedParts();
+        if (parts.Count > 0)
+        {
+            foreach (var part in parts) if (part.Clip != null) targets.Add(part.Clip);
+        }
+        else if (Clip is { } c) targets.Add(c);
+        if (targets.Count == 0) return;
+
+        foreach (var clip in targets.ToArray())
+        {
+            var lane = Arrangement.Lanes.FirstOrDefault(l => l.Clips.Contains(clip));
+            if (lane == null) continue;
+            double clipDur = Arrangement.ClipDuration(clip);
+            if (clipDur <= 0) continue;
+            int fullCopies = (int)Math.Floor(n);
+            double remainder = n - fullCopies;
+            for (int i = 1; i < fullCopies; i++)
+            {
+                var copy = System.Text.Json.JsonSerializer.Deserialize<MixClip>(System.Text.Json.JsonSerializer.Serialize(clip))!;
+                copy.Id = Guid.NewGuid();
+                copy.Start = clip.Start + i * clipDur;
+                lane.Clips.Add(copy);
+            }
+            if (remainder > 0.001)
+            {
+                var copy = System.Text.Json.JsonSerializer.Deserialize<MixClip>(System.Text.Json.JsonSerializer.Serialize(clip))!;
+                copy.Id = Guid.NewGuid();
+                copy.Start = clip.Start + fullCopies * clipDur;
+                copy.SourceDuration = clip.SourceDuration * remainder;
+                lane.Clips.Add(copy);
+            }
+        }
+        Changed();
+    }
     private void Changed()
     {
         if (restoring) return;
@@ -379,6 +491,18 @@ public sealed partial class MixTrackView : Form
         LaneHeight = Arrangement.DisplayLaneHeight; preciseLaneHeight = LaneHeight;
         if (Arrangement.Visual.AutoTrackHeight) ApplyAutoTrackHeight();
         pixelsPerSecond = Arrangement.Visual.PixelsPerSecond;
+        this.overlapModeBox.CheckState = Arrangement.OverlapMode switch
+        {
+            MixOverlapMode.DockNoOverlap => CheckState.Unchecked,
+            MixOverlapMode.AllowOverlapOverwrite => CheckState.Checked,
+            _ => CheckState.Indeterminate
+        };
+        this.overlapModeBox.Text = Arrangement.OverlapMode switch
+        {
+            MixOverlapMode.DockNoOverlap => "Dock (no overlap)",
+            MixOverlapMode.AllowOverlapOverwrite => "Allow overlap (overwrite)",
+            _ => "Mix overlap"
+        };
         UpdateScrollModeControl();
         restoring = true;
         try { autoSave.Checked = Arrangement.AutoSave; RestoreViewport(); }
@@ -540,13 +664,33 @@ public sealed partial class MixTrackView : Form
                 }
             }
         }
+        // Ghost preview while dragging audio from a collection into the mix.
+        if (dragOverActive && Arrangement.Lanes.Count > 0)
+        {
+            int row = Math.Clamp(dragOverRow, 0, Arrangement.Lanes.Count - 1);
+            int y = Ruler + (row - vertical.Value) * LaneHeight;
+            using var ghostBrush = new SolidBrush(Color.FromArgb(45, VisualColor(visual.Clip)));
+            using var ghostPen = new Pen(Color.FromArgb(180, VisualColor(visual.SelectedClip))) { DashStyle = DashStyle.Dash };
+            int x = TimeX(dragOverTime);
+            int w = Math.Max(8, (int)Math.Round(0.5 * pixelsPerSecond));
+            var rect = new Rectangle(x, y + 3, w, LaneHeight - 7);
+            var clipRect = Rectangle.Intersect(rect, new Rectangle(Header, Ruler, Math.Max(0, canvas.Width - Header), Math.Max(0, canvas.Height - Ruler)));
+            g.FillRectangle(ghostBrush, clipRect);
+            g.DrawRectangle(ghostPen, rect);
+        }
         if (selectionFirstRow >= 0 && selectionEnd > selectionStart)
         {
-            int y = Ruler + (selectionFirstRow - vertical.Value) * LaneHeight;
-            var selection = Rectangle.Intersect(new Rectangle(Header, Ruler, Math.Max(0, canvas.Width - Header), Math.Max(0, canvas.Height - Ruler)),
-                new Rectangle(TimeX(selectionStart), y, Math.Max(1, TimeX(selectionEnd) - TimeX(selectionStart)), (selectionLastRow - selectionFirstRow + 1) * LaneHeight));
-            using var brush = new SolidBrush(Color.FromArgb(65, VisualColor(visual.LoopRange))); g.FillRectangle(brush, selection);
-            using var pen = new Pen(VisualColor(visual.Text)) { DashStyle = DashStyle.Dash }; g.DrawRectangle(pen, selection);
+            var rects = selectionAdditive && lassoRects.Count > 0 ? lassoRects : new List<(double, double, int, int)> { (selectionStart, selectionEnd, selectionFirstRow, selectionLastRow) };
+            using var brush = new SolidBrush(Color.FromArgb(65, VisualColor(visual.LoopRange)));
+            using var pen = new Pen(VisualColor(visual.Text)) { DashStyle = DashStyle.Dash };
+            foreach (var (rs, re, rf, rl) in rects)
+            {
+                int y = Ruler + (Math.Max(0, rf) - vertical.Value) * LaneHeight;
+                var selection = Rectangle.Intersect(new Rectangle(Header, Ruler, Math.Max(0, canvas.Width - Header), Math.Max(0, canvas.Height - Ruler)),
+                    new Rectangle(TimeX(rs), y, Math.Max(1, TimeX(re) - TimeX(rs)), (Math.Min(Arrangement.Lanes.Count - 1, rl) - Math.Max(0, rf) + 1) * LaneHeight));
+                g.FillRectangle(brush, selection);
+                g.DrawRectangle(pen, selection);
+            }
         }
         if (dragMode == 6 && reorderTarget >= 0)
         {
@@ -570,7 +714,7 @@ public sealed partial class MixTrackView : Form
         this.RequestLiveGainMix();
     }
     private void ClearRangeSelection()
-    { selectedClips.Clear(); fullSelectedClips.Clear(); selectionFirstRow = selectionLastRow = -1; selectionStart = selectionEnd = 0; }
+    { selectedClips.Clear(); fullSelectedClips.Clear(); selectionFirstRow = selectionLastRow = -1; selectionStart = selectionEnd = 0; lassoRects.Clear(); }
     private void UpdateRangeSelection(Point point)
     {
         selectionPointer = point;
@@ -582,10 +726,20 @@ public sealed partial class MixTrackView : Form
         fullSelectedClips.Clear();
         selectedClips.UnionWith(additiveSelection);
         if (selectingWhole) fullSelectedClips.UnionWith(additiveSelection);
-        for (int row = selectionFirstRow; row <= selectionLastRow && row < Arrangement.Lanes.Count; row++)
-            foreach (var clip in Arrangement.Lanes[row].Clips)
-                if (clip.Start < selectionEnd && clip.Start + Arrangement.ClipDuration(clip) > selectionStart)
-                { selectedClips.Add(clip.Id); if (selectingWhole) fullSelectedClips.Add(clip.Id); }
+        // Accumulate the current rectangle into the lasso (Ctrl session) so the selection
+        // grows into a polygon encompassing every touched segment.
+        if (selectionAdditive)
+        {
+            var current = (selectionStart, selectionEnd, selectionFirstRow, selectionLastRow);
+            if (!lassoRects.Any(r => Math.Abs(r.Start - current.selectionStart) < 1e-9 && Math.Abs(r.End - current.selectionEnd) < 1e-9 && r.FirstRow == current.selectionFirstRow && r.LastRow == current.selectionLastRow))
+                lassoRects.Add(current);
+        }
+        var rects = selectionAdditive && lassoRects.Count > 0 ? lassoRects : new List<(double, double, int, int)> { (selectionStart, selectionEnd, selectionFirstRow, selectionLastRow) };
+        foreach (var (rs, re, rf, rl) in rects)
+            for (int row = Math.Max(0, rf); row <= Math.Min(Arrangement.Lanes.Count - 1, rl); row++)
+                foreach (var clip in Arrangement.Lanes[row].Clips)
+                    if (clip.Start < re && clip.Start + Arrangement.ClipDuration(clip) > rs)
+                    { selectedClips.Add(clip.Id); if (selectingWhole) fullSelectedClips.Add(clip.Id); }
         status.Text = $"Selection: {selectionStart:0.000}–{selectionEnd:0.000}s; tracks {selectionFirstRow + 1}–{selectionLastRow + 1}; {selectedClips.Count} segments";
         canvas.Invalidate();
     }
@@ -642,6 +796,7 @@ public sealed partial class MixTrackView : Form
         if (e.Button != MouseButtons.Left) return;
         down = e.Location; originalPointerTime = XTime(e.X); dragBefore = Arrangement.Capture();
         selectionAdditive = ModifierKeys.HasFlag(Keys.Control); selectingWhole = selectionAdditive;
+        if (!selectionAdditive) lassoRects.Clear();
         additiveSelection.Clear();
         if (selectionAdditive) additiveSelection.UnionWith(selectedClips);
         // Ctrl+click on a segment that is already part of the multi-selection removes it again
@@ -838,6 +993,28 @@ public sealed partial class MixTrackView : Form
             MixLane lane;
             if (row >= 0 && row < Arrangement.Lanes.Count) lane = Arrangement.Lanes[row];
             else { lane = new() { Name = source.Name }; Arrangement.Lanes.Add(lane); }
+            // Honor the overlap mode when placing the dropped audio.
+            double clipDur = Math.Max(0.001, source.Duration);
+            if (Arrangement.OverlapMode == MixOverlapMode.DockNoOverlap && row >= 0 && row < Arrangement.Lanes.Count)
+            {
+                double candidate = start; bool changed = true; int guard = 0;
+                while (changed && guard < 200)
+                {
+                    changed = false; guard++;
+                    foreach (var existing in lane.Clips)
+                    {
+                        double eEnd = existing.Start + Arrangement.ClipDuration(existing);
+                        if (candidate < eEnd && candidate + clipDur > existing.Start)
+                        { candidate = eEnd; changed = true; break; }
+                    }
+                }
+                start = Arrangement.SnapTime(candidate, (e.KeyState & 4) != 0);
+            }
+            else if (Arrangement.OverlapMode == MixOverlapMode.AllowOverlapOverwrite && row >= 0 && row < Arrangement.Lanes.Count)
+            {
+                foreach (var existing in lane.Clips.Where(c => c.Start < start + clipDur && c.Start + Arrangement.ClipDuration(c) > start).ToList())
+                    lane.Clips.Remove(existing);
+            }
             Arrangement.AddClip(lane, source, start); row++;
         }
         Changed();
@@ -881,6 +1058,7 @@ public sealed partial class MixTrackView : Form
         }
         else Item("Render selection → Collection", async () => await ExportSelectionAsync(), SelectedParts().Count > 0);
         Item("Copy selection (Ctrl+C)", CopySelection, SelectedParts().Count > 0);
+        Item("Repeat selection…", RepeatSelection, SelectedParts().Count > 0 || Clip != null);
         Item("Delete selection (Delete)", DeleteSelection, SelectedParts().Count > 0);
         Item("Clear selection", this.ClearAudioEffectSelection);
         if (Clip is { } clip && SelectedParts().Count <= 1)
@@ -1073,12 +1251,17 @@ public sealed partial class MixTrackView : Form
     private sealed class LoopRange { public double Start { get; set; } public double End { get; set; } }
     private async void RenameMix()
     {
-        if (busy || closing) return;
+        if (closing) return;
+        // Wait for any in-flight operation instead of silently dropping the rename.
+        while (busy) { await Task.Delay(50); if (closing) return; }
         string? text = await PromptAsync("Mix / project name", Arrangement.Name);
         if (string.IsNullOrWhiteSpace(text)) return;
         Arrangement.Name = text.Trim();
         Text = Arrangement.Name;
+        committedProject = Arrangement.CaptureProject();
         Changed();
+        // Force the title bar to reflect the new name immediately.
+        try { this.Update(); this.Refresh(); } catch { }
     }
     protected override void WndProc(ref Message message)
     {
@@ -1198,7 +1381,13 @@ public sealed partial class MixTrackView : Form
             string directory = DefaultProjectsDirectory;
             Directory.CreateDirectory(directory);
             using var dialog = MixProjectMenu.CreateOpenDialog();
-            if (await this.ShowMixFileDialogAsync(dialog, "Open mix project") != DialogResult.OK) return;
+            if (await this.ShowMixFileDialogAsync(dialog, "Open mix project") != DialogResult.OK)
+            {
+                // Cancelling the open dialog must not discard the (possibly empty) mix view.
+                // Provide a fresh empty mix view so the user can keep working.
+                try { var fresh = new MixTrackView(); fresh.Show(); } catch { }
+                return;
+            }
             await RunAsync(async token =>
             {
                 await LoadFromPathAsync(dialog.FileName, token);
@@ -1214,7 +1403,16 @@ public sealed partial class MixTrackView : Form
         e.Cancel = true; if (closing) return;
         projectSaveTimer.Stop();
         await FlushProjectSaveAsync();
-        if (dirty && await this.windowGroup.AskAsync("Close this mix? Unsaved arrangement changes will be lost.", "Close mix", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+        if (dirty && projectPath != null)
+        {
+            DialogResult answer = await this.windowGroup.AskAsync("Save changes to the project before closing?", "Close mix", MessageBoxButtons.YesNoCancel);
+            if (answer == DialogResult.Cancel) return;
+            if (answer == DialogResult.Yes) await RunAsync(async token => await SaveToPathAsync(projectPath, token));
+        }
+        else if (dirty)
+        {
+            if (await this.windowGroup.AskAsync("Close this mix without saving? Unsaved changes will be lost.", "Close mix", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+        }
         closing = true; operation?.Cancel();
         this.CloseMixEffectWindows();
         this.windowGroup.Dispose();
