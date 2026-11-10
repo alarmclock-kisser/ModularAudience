@@ -24,7 +24,9 @@ internal static class VocalWindowsSpeech
         VoiceInfo voice = SelectVoice(synthesizer, culture, settings.BasePitchHz);
         double nativePitch = voice.Gender == VoiceGender.Male ? 125 : voice.Gender == VoiceGender.Female ? 195 : 170;
         int pitchLevel = SelectPitchLevel(settings.BasePitchHz / nativePitch);
-        string ssml = BuildSsml(tokens, voice.Culture, settings.Speed, pitchLevel, cancellationToken);
+        bool hasCapitalized = tokens.OfType<VocalTextToken>().Any(token => token.Capitalized);
+        double speechSpeed = settings.Singing ? settings.Speed * 0.8 : settings.Speed;
+        string ssml = BuildSsml(tokens, voice.Culture, speechSpeed, pitchLevel, cancellationToken);
         using var stream = new BoundedAudioStream(2L * (VocalSynth.MaxOutputSamples / settings.Channels));
         synthesizer.SetOutputToAudioStream(stream,
             new SpeechAudioFormatInfo(settings.SampleRate, AudioBitsPerSample.Sixteen, AudioChannel.Mono));
@@ -48,6 +50,14 @@ internal static class VocalWindowsSpeech
 
         float[] mono = ReadAudio(stream, cancellationToken);
         mono = ApplyVoiceProfile(mono, nativePitch * PitchRatios[pitchLevel], settings, cancellationToken);
+        if (hasCapitalized)
+        {
+            for (int i = 0; i < mono.Length; i++)
+            {
+                if ((i & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+                mono[i] *= 1.55f;
+            }
+        }
         var data = new float[checked(mono.Length * settings.Channels)];
         for (int i = 0; i < mono.Length; i++)
         {
@@ -94,6 +104,8 @@ internal static class VocalWindowsSpeech
         writer.WriteStartElement("prosody", SsmlNamespace);
         writer.WriteAttributeString("rate", (speed * 100).ToString("0.##", CultureInfo.InvariantCulture) + "%");
         writer.WriteAttributeString("pitch", PitchNames[pitchLevel]);
+        bool hasCapitalized = tokens.OfType<VocalTextToken>().Any(token => token.Capitalized);
+        if (hasCapitalized) writer.WriteAttributeString("volume", "loud");
         foreach (var token in tokens)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -108,7 +120,7 @@ internal static class VocalWindowsSpeech
             }
             else if (token is VocalTextToken text)
             {
-                WriteText(writer, text, pitchLevel);
+                WriteText(writer, text, culture, pitchLevel, hasCapitalized, cancellationToken);
             }
             else throw new InvalidOperationException("Unknown Windows speech token.");
         }
@@ -118,25 +130,100 @@ internal static class VocalWindowsSpeech
         return output.ToString();
     }
 
-    private static void WriteText(XmlWriter writer, VocalTextToken token, int pitchLevel)
+    private static void WriteText(
+        XmlWriter writer, VocalTextToken token, CultureInfo culture, int pitchLevel,
+        bool hasCapitalized, CancellationToken cancellationToken)
     {
-        (string? attribute, string? value) = token.Emphasis switch
+        string? volume = token.Emphasis switch
         {
-            VocalEmphasis.Strong => ("volume", "loud"),
-            VocalEmphasis.Whisper => ("volume", "soft"),
-            VocalEmphasis.Lengthened => ("rate", "70%"),
-            VocalEmphasis.PitchUp => ("pitch", PitchNames[Math.Min(pitchLevel + 1, PitchNames.Length - 1)]),
-            VocalEmphasis.PitchDown => ("pitch", PitchNames[Math.Max(pitchLevel - 1, 0)]),
-            _ => (null, null),
+            VocalEmphasis.Whisper => token.Capitalized ? "medium" : "soft",
+            VocalEmphasis.Strong => hasCapitalized ? "x-loud" : "loud",
+            _ when token.Capitalized => "x-loud",
+            _ => null,
         };
-        if (attribute is not null)
+        string? pitch = token.Question
+            ? PitchNames[Math.Min(pitchLevel + 1, PitchNames.Length - 1)]
+            : token.Emphasis switch
+        {
+            VocalEmphasis.PitchUp => PitchNames[Math.Min(pitchLevel + 1, PitchNames.Length - 1)],
+            VocalEmphasis.PitchDown => PitchNames[Math.Max(pitchLevel - 1, 0)],
+            _ => null,
+        };
+        bool lengthened = token.Emphasis == VocalEmphasis.Lengthened;
+        if (volume is not null || pitch is not null || lengthened)
         {
             writer.WriteStartElement("prosody", SsmlNamespace);
-            writer.WriteAttributeString(attribute, value);
+            if (volume is not null) writer.WriteAttributeString("volume", volume);
+            if (pitch is not null) writer.WriteAttributeString("pitch", pitch);
+            if (lengthened) writer.WriteAttributeString("rate", "70%");
         }
-        writer.WriteString(token.Text);
-        if (attribute is not null) writer.WriteEndElement();
+        WritePronunciation(writer, token.Text, culture, cancellationToken);
+        if (volume is not null || pitch is not null || lengthened) writer.WriteEndElement();
     }
+
+    private static void WritePronunciation(XmlWriter writer, string text, CultureInfo culture, CancellationToken cancellationToken)
+    {
+        bool german = culture.TwoLetterISOLanguageName == "de";
+        if (!german && text.Equals("intrigued", StringComparison.OrdinalIgnoreCase))
+        {
+            WritePhoneme(writer, text, "ih n t r iy g d");
+            return;
+        }
+        int start = 0, index = 0;
+        while (index < text.Length)
+        {
+            if ((index & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+            char letter = char.ToLowerInvariant(text[index]);
+            int end = index + 1;
+            while (end < text.Length && char.ToLowerInvariant(text[end]) == letter)
+            {
+                if ((end & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                end++;
+            }
+            string? phone = SapiPhone(letter, german, end == text.Length);
+            if (end - index >= 3 && phone is not null)
+            {
+                writer.WriteString(text[start..index]);
+                var phones = new StringBuilder((end - index) * (phone.Length + 1));
+                for (int i = index; i < end; i++)
+                {
+                    if ((i & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                    if (i > index) phones.Append(' ');
+                    phones.Append(phone);
+                }
+                WritePhoneme(writer, text[index..end], phones.ToString());
+                start = end;
+            }
+            index = end;
+        }
+        writer.WriteString(text[start..]);
+    }
+
+    private static void WritePhoneme(XmlWriter writer, string text, string phones)
+    {
+        writer.WriteStartElement("phoneme", SsmlNamespace);
+        writer.WriteAttributeString("alphabet", "sapi");
+        writer.WriteAttributeString("ph", phones);
+        writer.WriteString(text);
+        writer.WriteEndElement();
+    }
+
+    private static string? SapiPhone(char letter, bool german, bool atWordEnd) => letter switch
+    {
+        'a' => german ? "a" : "ae",
+        'e' => german ? "ey" : "iy",
+        'i' => german ? "iy" : "ih",
+        'o' => german || atWordEnd ? "ow" : "uw",
+        'u' => german ? "uw" : "ah",
+        '\u00e4' when german => "eh",
+        '\u00f6' when german => "eu",
+        '\u00fc' when german => "ue",
+        'f' or 'l' or 'm' or 'n' or 'r' or 's' => letter.ToString(),
+        'v' => german ? "f" : "v",
+        'w' => german ? "v" : "w",
+        'z' when !german => "z",
+        _ => null,
+    };
 
     private static float[] ReadAudio(MemoryStream stream, CancellationToken cancellationToken)
     {
@@ -156,6 +243,8 @@ internal static class VocalWindowsSpeech
     private static float[] ApplyVoiceProfile(
         float[] source, double nativePitch, VocalSynthSettings settings, CancellationToken cancellationToken)
     {
+        if (settings.Singing)
+            return ColorVoice(VocalSinging.RenderWindows(source, settings, cancellationToken), settings, cancellationToken);
         double shift = 12 * Math.Log2(settings.BasePitchHz / nativePitch);
         if (Math.Abs(shift) > 0.5)
         {

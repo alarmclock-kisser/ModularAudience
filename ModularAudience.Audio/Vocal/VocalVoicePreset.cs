@@ -23,6 +23,8 @@ public sealed class VocalVoicePreset
     public double Voicing { get; init; } = 0.85;
     /// <summary>Noise strength for consonants 0..1.</summary>
     public double Noise { get; init; } = 0.5;
+    /// <summary>Render the text with a generated melody.</summary>
+    public bool Singing { get; init; }
 
     public static IReadOnlyList<VocalVoicePreset> BuiltIn { get; } =
     [
@@ -34,5 +36,6 @@ public sealed class VocalVoicePreset
         new() { Id = "robot", Name = "Robot", BasePitchHz = 150, FormantScale = 1.0, Breathiness = 0.0, Roughness = 0.0, VibratoCents = 0, VibratoHz = 0, Voicing = 1.0, Noise = 0.3 },
         new() { Id = "whisper", Name = "Whisper", BasePitchHz = 180, FormantScale = 1.0, Breathiness = 0.9, Roughness = 0.05, VibratoCents = 0, VibratoHz = 0, Voicing = 0.3, Noise = 0.7 },
         new() { Id = "elderly", Name = "Elderly", BasePitchHz = 140, FormantScale = 0.95, Breathiness = 0.35, Roughness = 0.25, VibratoCents = 18, VibratoHz = 6.5, Voicing = 0.75, Noise = 0.6 },
+        new() { Id = "singing", Name = "Singing", BasePitchHz = 175, FormantScale = 1.0, Breathiness = 0.12, Roughness = 0.04, VibratoCents = 18, VibratoHz = 5, Voicing = 0.9, Noise = 0.5, Singing = true },
     ];
 }

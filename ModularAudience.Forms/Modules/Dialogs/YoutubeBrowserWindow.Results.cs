@@ -54,15 +54,22 @@ public partial class YoutubeBrowserWindow
         for (int index = 0; index < ResultHeaders.Length; index++)
             resultsList.Columns[index].Text = ResultHeaders[index] +
                 (index == sortColumn ? sortDescending ? " ▼" : " ▲" : "");
-        if (sortColumn < 0)
-        {
-            resultsList.ListViewItemSorter = new OriginalRowComparer(originalResultOrder);
-            resultsList.Sort();
-            resultsList.ListViewItemSorter = null;
-            return;
-        }
-        resultsList.ListViewItemSorter = new VideoRowComparer(sortColumn, sortDescending);
+        IComparer comparer = sortColumn < 0
+            ? new OriginalRowComparer(originalResultOrder)
+            : new VideoRowComparer(sortColumn, sortDescending);
+        resultsList.ListViewItemSorter = comparer;
         resultsList.Sort();
+        resultsList.ListViewItemSorter = null;
+        if (activePlaybackVideo is { } playing)
+        {
+            var pinned = resultsList.Items.Cast<ListViewItem>()
+                .FirstOrDefault(item => item.Tag is YtdlpVideo video && video.Id == playing.Id);
+            if (pinned is not null && pinned.Index > 0)
+            {
+                pinned.Remove();
+                resultsList.Items.Insert(0, pinned);
+            }
+        }
     }
 
     private sealed class OriginalRowComparer(Dictionary<ListViewItem, int> order) : IComparer
@@ -81,7 +88,7 @@ public partial class YoutubeBrowserWindow
             var row = resultsList.Items.Cast<ListViewItem>().FirstOrDefault(item => ((YtdlpVideo)item.Tag!).Id == video.Id);
             if (row is null) return;
             row.Tag = metadata;
-            row.Text = metadata.Title;
+            row.Text = FormatResultTitle(metadata, IsPlayingVideo(metadata));
             string[] values = [metadata.Uploader, FormatDuration(metadata.DurationSeconds),
                 metadata.ViewCount?.ToString("N0") ?? "Unknown", metadata.Id, metadata.Url, FormatUploadDate(metadata.UploadDate)];
             for (int index = 0; index < values.Length; index++) row.SubItems[index + 1].Text = values[index];

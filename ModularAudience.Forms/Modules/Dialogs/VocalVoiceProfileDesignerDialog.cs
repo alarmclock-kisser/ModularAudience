@@ -59,7 +59,7 @@ public sealed class VocalVoiceProfileDesignerDialog : Form
         baseRow.Controls.Add(new Label { Text = "Base preset", AutoSize = true, Margin = new Padding(4, 8, 2, 0) });
         var baseCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
         foreach (var p in VocalVoicePreset.BuiltIn) baseCombo.Items.Add(p.Name);
-        baseCombo.SelectedIndex = 0;
+        baseCombo.SelectedIndex = Math.Max(0, VocalVoicePreset.BuiltIn.ToList().FindIndex(p => p.Id == profile.BasePresetId));
         baseCombo.SelectedIndexChanged += (_, _) =>
         {
             var preset = VocalVoicePreset.BuiltIn[baseCombo.SelectedIndex];
@@ -73,6 +73,8 @@ public sealed class VocalVoiceProfileDesignerDialog : Form
             profile.VibratoHz = fp.VibratoHz;
             profile.Voicing = fp.Voicing;
             profile.Noise = fp.Noise;
+            profile.BasePresetId = fp.BasePresetId;
+            profile.Singing = fp.Singing;
             foreach (var kv in numbers)
             {
                 var pi = typeof(VocalVoiceProfile).GetProperty(kv.Key)!;

@@ -37,6 +37,20 @@ public static class VocalTextParser
         while (i < n)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (language == VocalLanguage.Beatboxing)
+            {
+                if (char.IsWhiteSpace(text[i]) || text[i] is '|' or ',' or ';' or ':' or '!' or '?')
+                {
+                    i++;
+                    continue;
+                }
+                if (text[i] is '.' or '-')
+                {
+                    output.Add(new VocalPauseToken(250));
+                    i++;
+                    continue;
+                }
+            }
             // Whitespace handling: spaces -> proportional pause, newlines -> paragraph pause.
             if (char.IsWhiteSpace(text[i]))
             {
@@ -124,6 +138,17 @@ public static class VocalTextParser
                 continue;
             }
 
+            if (language == VocalLanguage.Beatboxing)
+            {
+                string symbol = BeatboxSymbol(text, i, out int consumed);
+                bool capitalized = IsCapitalized(text.Substring(i, consumed), allowSingleLetter: true);
+                output.Add(new VocalPhonemeToken(symbol, pending, Capitalized: capitalized));
+                output.Add(new VocalPauseToken(250 - VocalPhonemeInventory.Get(symbol).DurationMs));
+                pending = baseEmphasis;
+                i += consumed;
+                continue;
+            }
+
             if (IsPunctuation(text[i]))
             {
                 if (preserveText)
@@ -158,12 +183,13 @@ public static class VocalTextParser
                 bool isQuestion = i < n && text[i] == '?';
                 bool isExclamation = i < n && text[i] == '!';
                 var emphasis = pending;
-                if (isQuestion) emphasis = Combine(emphasis, VocalEmphasis.PitchUp);
-                if (isExclamation) emphasis = Combine(emphasis, VocalEmphasis.Strong);
+                if (emphasis == VocalEmphasis.Normal && isQuestion) emphasis = VocalEmphasis.PitchUp;
+                if (emphasis == VocalEmphasis.Normal && isExclamation) emphasis = VocalEmphasis.Strong;
+                bool capitalized = IsCapitalized(word, allowSingleLetter: false);
 
                 if (preserveText)
                 {
-                    output.Add(new VocalTextToken(word, emphasis));
+                    output.Add(new VocalTextToken(word, emphasis, capitalized, isQuestion));
                 }
                 else
                 {
@@ -175,16 +201,52 @@ public static class VocalTextParser
                         {
                             if (!VocalPhonemeInventory.Get(phonemes[p]).IsVowel) continue;
                             stressed = p;
-                            if (!word.Equals("hello", StringComparison.OrdinalIgnoreCase) || p == phonemes.Count - 1)
+                            bool lastVowel = word.Equals("hello", StringComparison.OrdinalIgnoreCase);
+                            bool secondVowel = word.Equals("intrigued", StringComparison.OrdinalIgnoreCase);
+                            if ((!lastVowel && !secondVowel) || lastVowel && p == phonemes.Count - 1
+                                || secondVowel && phonemes[p] == "ee")
                                 break;
                         }
                     }
                     for (int p = 0; p < phonemes.Count; p++)
-                        output.Add(new VocalPhonemeToken(phonemes[p], emphasis, p == stressed));
+                        output.Add(new VocalPhonemeToken(phonemes[p], emphasis, p == stressed, capitalized, isQuestion));
                 }
                 pending = baseEmphasis;
             }
         }
+    }
+
+    private static bool IsCapitalized(string text, bool allowSingleLetter)
+    {
+        int letters = 0;
+        foreach (char c in text)
+        {
+            if (!char.IsLetter(c)) continue;
+            if (!char.IsUpper(c)) return false;
+            letters++;
+        }
+        return letters >= (allowSingleLetter ? 1 : 2);
+    }
+
+    private static string BeatboxSymbol(string text, int index, out int consumed)
+    {
+        char first = char.ToLowerInvariant(text[index]);
+        char next = index + 1 < text.Length ? char.ToLowerInvariant(text[index + 1]) : '\0';
+        consumed = first == 'p' && next == 'f' || first == 't' && next == 's' ? 2 : 1;
+        return (first, consumed) switch
+        {
+            ('b', _) => "beat-b",
+            ('p', 2) => "beat-pf",
+            ('p', _) => "beat-p",
+            ('k', _) => "beat-k",
+            ('t', 2) => "beat-ts",
+            ('t', _) => "beat-t",
+            ('s', _) => "beat-s",
+            ('f', _) => "beat-f",
+            ('h', _) => "beat-h",
+            _ => throw new ArgumentException(
+                $"Unsupported beatbox notation '{text[index]}'. Use B, P, K, T, TS, PF, S, F, H, '.' or '-'.", nameof(text)),
+        };
     }
 
     private static VocalEmphasisRule? TryMatchWrapping(VocalEmphasisSyntax syntax, string text, int index)

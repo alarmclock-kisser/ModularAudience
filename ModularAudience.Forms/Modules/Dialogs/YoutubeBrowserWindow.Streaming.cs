@@ -23,8 +23,7 @@ public partial class YoutubeBrowserWindow
 
     private static ListViewItem CreateResultRow(YtdlpVideo video)
     {
-        string title = video.IsChannel ? "[Channel] " + video.Title
-            : video.IsPlaylist ? "[Playlist] " + video.Title : video.Title;
+        string title = FormatResultTitle(video, false);
         var row = new ListViewItem(title) { Tag = video };
         row.SubItems.AddRange([video.Uploader, video.IsVideo ? FormatDuration(video.DurationSeconds) : "",
             video.IsVideo ? video.ViewCount?.ToString("N0") ?? "Unknown" : "", video.Id, video.Url,
@@ -33,6 +32,13 @@ public partial class YoutubeBrowserWindow
             ? $"Playlist — {video.PlaylistCount?.ToString() ?? "Unknown number of"} videos. Double-click to browse; right-click to enqueue all videos."
             : video.IsChannel ? "Channel — double-click to browse videos." : video.Title;
         return row;
+    }
+
+    private static string FormatResultTitle(YtdlpVideo video, bool playing)
+    {
+        string title = video.IsChannel ? "[Channel] " + video.Title
+            : video.IsPlaylist ? "[Playlist] " + video.Title : video.Title;
+        return playing ? "▶ " + title : title;
     }
 
     private async Task<int> StreamResultsAsync(IAsyncEnumerable<YtdlpVideo> stream, string query,
@@ -46,6 +52,8 @@ public partial class YoutubeBrowserWindow
         displayedChannel = channel;
         resultsSummary.Text = "Loading results...";
         var seen = new HashSet<(bool Channel, bool Playlist, string Id)>();
+        if (activePlaybackVideo is { } playing)
+            seen.Add((playing.IsChannel, playing.IsPlaylist, playing.Id));
         int count = 0;
         await foreach (var video in stream.WithCancellation(token))
         {

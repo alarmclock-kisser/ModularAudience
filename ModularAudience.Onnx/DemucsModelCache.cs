@@ -6,10 +6,13 @@ namespace ModularAudience.Onnx;
 public static class DemucsModelCache
 {
     private static readonly SharedModelPool<OnnxService> Shared = new();
+    public static bool HasDirectMLSessions =>
+        Shared.AnyLoaded((_, service) => service.EffectiveOptions?.UseDirectML == true);
+
     public static async Task<SharedModelPool<OnnxService>.Lease?> AcquireAsync(string path, DemucsLoadOptions options,
         IEnumerable<string> directories, bool allowLoad, CancellationToken token = default)
     {
-        string resource = Path.GetFullPath(path).ToUpperInvariant();
+        string resource = ResourceKey(path, options);
         string key = Key(path, options);
         var copy = JsonSerializer.Deserialize<DemucsLoadOptions>(JsonSerializer.Serialize(options))!;
         string[] folders = directories.ToArray();
@@ -22,6 +25,15 @@ public static class DemucsModelCache
         // Provider fallback/DirectML normalization must reuse the same native session.
         if (lease?.Model.EffectiveOptions is { } effective) lease.AddAlias(Key(path, effective));
         return lease;
+    }
+
+    internal static string ResourceKey(string modelPath, DemucsLoadOptions options)
+    {
+        string model = Path.GetFullPath(modelPath).ToUpperInvariant();
+        string target = options.UseDirectML
+            ? $"DML:{options.DeviceId}"
+            : options.PreferCudaFourier ? $"CUDA:{options.CudaDeviceId}" : "CPU";
+        return model + "|" + target;
     }
     private sealed class Entry(OnnxService service, DateTime expires)
     {

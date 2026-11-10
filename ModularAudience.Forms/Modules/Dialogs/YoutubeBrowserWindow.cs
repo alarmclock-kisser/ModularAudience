@@ -34,6 +34,7 @@ public partial class YoutubeBrowserWindow : Form
         this.settingsPath = settingsPath;
         this.importAudio = importAudio ?? throw new ArgumentNullException(nameof(importAudio));
         client = new YtdlpClient(binaryManager);
+        audioPlayer = new YoutubeAudioPlayer(binaryManager.GetFfmpegPath);
         InitializeComponent();
         RestoreSettings();
         InitializeSearchHistory();
@@ -122,6 +123,11 @@ public partial class YoutubeBrowserWindow : Form
         uploaderButton.Enabled = relatedButton.Enabled && !string.IsNullOrWhiteSpace(SelectedVideo()?.Uploader);
         openButton.Enabled = !closing && resultsList.SelectedItems.Count == 1;
         copyButton.Enabled = !closing && resultsList.SelectedItems.Count > 0;
+        if (playItem is not null)
+        {
+            playItem.Enabled = !closing && !busy && binariesReady && SelectedVideo() is { IsVideo: true };
+            playItem.Text = IsPlayingVideo(SelectedVideo()) ? "Stop" : "Play";
+        }
         metadataButton.Enabled = available && SelectedVideo() is { IsVideo: true };
         showRelatedButton.Enabled = metadataButton.Enabled;
         operationProgress.Visible = busy || activeBatch is not null;
@@ -214,11 +220,17 @@ public partial class YoutubeBrowserWindow : Form
         operationCancellation?.Cancel();
         dateCancellation?.Cancel();
         previewCancellation?.Cancel();
+        playbackStartCancellation?.Cancel();
+        autoplayPreparationCancellation?.Cancel();
         RefreshAvailability();
         statusLabel.Text = "Closing; waiting for processing and temporary-file cleanup...";
         try
         {
             await Task.Yield();
+            await StopPlaybackAsync(updateStatus: false);
+            await playbackStartTask;
+            await autoplayPreparationTask;
+            await playbackObserverTask;
             await operation;
             await Task.WhenAll(browseTasks.ToArray());
             await Task.WhenAll(playlistEnqueueTasks.ToArray());
@@ -252,6 +264,7 @@ public partial class YoutubeBrowserWindow : Form
         operationCancellation?.Cancel();
         previewCancellation?.Cancel();
         client.ProgressChanged -= Client_ProgressChanged;
+        audioPlayer.Dispose();
         connectedSession = null;
         client.MetadataSession = null;
         thumbnailPopup?.Dispose();

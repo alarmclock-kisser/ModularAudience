@@ -81,6 +81,8 @@ public sealed class YtdlpBinaryManager
     internal string FfmpegDirectory => GetInstalledDirectory("ffmpeg", FfmpegFiles)
         ?? throw new FileNotFoundException("FFmpeg is not installed. Call EnsureBinariesAsync first.");
 
+    public string GetFfmpegPath() => Path.Combine(this.FfmpegDirectory, "ffmpeg.exe");
+
     private async Task UpdateDenoAsync(IProgress<string>? progress, CancellationToken token,
         IProgress<YtdlpDownloadProgress>? downloadProgress)
     {

@@ -65,6 +65,16 @@ public static class VocalPhonemeInventory
         ["animal-o"] = V("animal-o", true, 70, [570, 840, 2410], [1.0, 0.65, 0.4], 0.9, 0.1, true),
         ["animal-u"] = V("animal-u", true, 70, [300, 870, 2240], [1.0, 0.65, 0.4], 0.9, 0.1, true),
         ["animal-dot"] = V("animal-dot", true, 55, [500, 1250, 2300], [1.0, 0.7, 0.4], 0.9, 0.1, true),
+        // Percussive mouth sounds, each followed by a rest to fill a beatbox step.
+        ["beat-b"] = V("beat-b", true, 150, [300, 900, 2000], [1.0, 0.4, 0.15], 0.9, 0.7, false),
+        ["beat-p"] = V("beat-p", false, 95, [], [], 0, 1, false),
+        ["beat-k"] = V("beat-k", false, 110, [], [], 0, 1, false),
+        ["beat-t"] = V("beat-t", false, 55, [], [], 0, 1, false),
+        ["beat-ts"] = V("beat-ts", false, 125, [], [], 0, 1, false),
+        ["beat-pf"] = V("beat-pf", false, 145, [], [], 0, 1, false),
+        ["beat-s"] = V("beat-s", false, 150, [], [], 0, 1, false),
+        ["beat-f"] = V("beat-f", false, 150, [], [], 0, 1, false),
+        ["beat-h"] = V("beat-h", false, 140, [], [], 0, 0.8, false),
         // Silence
         ["sil"] = V("sil", false, 40, [], [], 0.0, 0.0, false),
     };

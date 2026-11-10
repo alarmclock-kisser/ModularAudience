@@ -1,5 +1,3 @@
-using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -18,28 +16,7 @@ public sealed partial class YtdlpClient
     {
         string url = ValidateVideo(video);
         YtdlpParser.ValidateMaxResults(maxResults);
-        NetworkOptions.Validate();
-        using var handler = new SocketsHttpHandler { AllowAutoRedirect = false, AutomaticDecompression = DecompressionMethods.All };
-        if (NetworkOptions.ProxyUrl is { } proxy)
-        {
-            handler.UseProxy = proxy.Length > 0;
-            if (proxy.Length > 0) handler.Proxy = new WebProxy(proxy);
-        }
-        if (NetworkOptions.IpVersion != YtdlpIpVersion.Automatic)
-        {
-            var family = NetworkOptions.IpVersion == YtdlpIpVersion.IPv4 ? AddressFamily.InterNetwork : AddressFamily.InterNetworkV6;
-            handler.ConnectCallback = async (context, token) =>
-            {
-                var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, family, token);
-                var socket = new Socket(family, SocketType.Stream, ProtocolType.Tcp);
-                try
-                {
-                    await socket.ConnectAsync(addresses, context.DnsEndPoint.Port, token);
-                    return new NetworkStream(socket, ownsSocket: true);
-                }
-                catch { socket.Dispose(); throw; }
-            };
-        }
+        using var handler = NetworkOptions.CreateHttpHandler();
         using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36");
         http.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9");

@@ -10,6 +10,7 @@ public sealed class DemucsFourier
     private bool cudaFailed;
     public string Backend { get; private set; }
     public int Workers => Math.Clamp(this.options.FourierWorkers, 1, Environment.ProcessorCount);
+    public static DemucsCudaDeviceCatalog EnumerateCudaDevices() => Cuda12Fourier.EnumerateDevices();
     public DemucsFourier(DemucsLoadOptions? options = null)
     {
         this.options = options ?? new DemucsLoadOptions { PreferCudaFourier = false };
@@ -51,7 +52,10 @@ public sealed class DemucsFourier
 internal static class Cuda12Fourier
 {
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int Init(uint flags);
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int DeviceGetCount(out int count);
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int DeviceGet(out int device, int ordinal);
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int DeviceGetName(IntPtr name, int length, int device);
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int DeviceGetLuid(IntPtr luid, out uint nodeMask, int device);
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int ContextCreate(out IntPtr context, uint flags, int device);
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int ContextDestroy(IntPtr context);
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int Allocate(out ulong pointer, nuint bytes);
@@ -66,6 +70,66 @@ internal static class Cuda12Fourier
     private static void Check(int code, string operation)
     {
         if (code != 0) throw new InvalidOperationException($"{operation} returned CUDA error {code}.");
+    }
+
+    internal static DemucsCudaDeviceCatalog EnumerateDevices()
+    {
+        IntPtr driver = IntPtr.Zero;
+        var devices = new List<DemucsCudaDevice>();
+        var warnings = new List<string>();
+        try
+        {
+            driver = NativeLibrary.Load("nvcuda.dll");
+            Check(Function<Init>(driver, "cuInit")(0), "cuInit");
+            Check(Function<DeviceGetCount>(driver, "cuDeviceGetCount")(out int count), "cuDeviceGetCount");
+            if (count < 0 || count > 128) throw new InvalidOperationException($"CUDA reported an invalid device count: {count}.");
+            var getDevice = Function<DeviceGet>(driver, "cuDeviceGet");
+            var getName = Function<DeviceGetName>(driver, "cuDeviceGetName");
+            DeviceGetLuid? getLuid = NativeLibrary.TryGetExport(driver, "cuDeviceGetLuid", out IntPtr luidAddress)
+                ? Marshal.GetDelegateForFunctionPointer<DeviceGetLuid>(luidAddress) : null;
+            for (int ordinal = 0; ordinal < count; ordinal++)
+            {
+                Check(getDevice(out int device, ordinal), "cuDeviceGet");
+                IntPtr name = Marshal.AllocHGlobal(256);
+                string deviceName;
+                try
+                {
+                    if (getName(name, 256, device) != 0)
+                    {
+                        deviceName = $"CUDA device {ordinal}";
+                        warnings.Add($"Could not read the name of CUDA device {ordinal}.");
+                    }
+                    else deviceName = Marshal.PtrToStringAnsi(name) ?? $"CUDA device {ordinal}";
+                }
+                finally { Marshal.FreeHGlobal(name); }
+
+                long? luid = null;
+                if (getLuid is null)
+                    warnings.Add("The NVIDIA driver does not expose CUDA device LUIDs; CUDA devices cannot be matched to DirectML adapters.");
+                else
+                {
+                    IntPtr luidBuffer = Marshal.AllocHGlobal(sizeof(long));
+                    try
+                    {
+                        if (getLuid(luidBuffer, out _, device) == 0) luid = Marshal.ReadInt64(luidBuffer);
+                        else warnings.Add($"Could not read the LUID of CUDA device {ordinal}; it cannot be matched to DirectML.");
+                    }
+                    finally { Marshal.FreeHGlobal(luidBuffer); }
+                }
+                devices.Add(new DemucsCudaDevice(ordinal, deviceName, luid));
+            }
+        }
+        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException or
+            BadImageFormatException or InvalidOperationException)
+        {
+            warnings.Add($"CUDA device enumeration failed: {error.Message}");
+        }
+        finally
+        {
+            if (driver != IntPtr.Zero) NativeLibrary.Free(driver);
+        }
+        return new DemucsCudaDeviceCatalog(devices.AsReadOnly(),
+            warnings.Count == 0 ? null : string.Join(" ", warnings.Distinct(StringComparer.Ordinal)));
     }
 
     internal static void Transform(Complex[][] frames, bool inverse, int deviceId, string directory)

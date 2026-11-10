@@ -2,8 +2,11 @@ using ModularAudience.Audio.Vocal;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Globalization;
 using System.IO;
+using System.Reflection;
 using System.Speech.Synthesis;
+using System.Windows.Forms;
 using System.Xml.Linq;
+using ModularAudience.Forms.Modules.Dialogs;
 
 namespace ModularAudience.Audio.Tests;
 
@@ -79,6 +82,7 @@ public class VocalSynthTests
     [DataRow(VocalLanguage.English, "she", "sh ee")]
     [DataRow(VocalLanguage.English, "know", "n oh")]
     [DataRow(VocalLanguage.English, "hello", "h uh l oh")]
+    [DataRow(VocalLanguage.English, "intrigued", "i n t r ee g d")]
     [DataRow(VocalLanguage.German, "mein", "m eye n")]
     [DataRow(VocalLanguage.German, "heute", "h oy t uh")]
     [DataRow(VocalLanguage.German, "ich", "i ich")]
@@ -291,6 +295,313 @@ public class VocalSynthTests
         Assert.Throws<OperationCanceledException>(() => VocalSynth.Render(settings, cancellation.Token));
     }
 
+    [TestMethod]
+    [DataRow(VocalLanguage.German, "Klenker", "Klenkerrrrrr", "r")]
+    [DataRow(VocalLanguage.English, "hiss", "hissssss", "s")]
+    [DataRow(VocalLanguage.English, "cool", "coooool", "oo")]
+    public void RepeatedLetters_SustainSuitableSounds_WithoutStretchingNormalDoubles(
+        VocalLanguage language, string normal, string extended, string sound)
+    {
+        var plainPhones = VocalPhonemizer.Phonemize(language, normal);
+        var extendedPhones = VocalPhonemizer.Phonemize(language, extended);
+        Assert.IsTrue(plainPhones.Count(phone => phone == sound) <= 1);
+        Assert.IsTrue(extendedPhones.Count(phone => phone == sound) >= 3);
+        var settings = CleanVoice(language, normal);
+        settings.SampleRate = 8000;
+        using var plain = VocalSynth.Render(settings);
+        settings.Text = extended;
+        using var stretched = VocalSynth.Render(settings);
+        Assert.IsTrue(stretched.Duration > plain.Duration + TimeSpan.FromMilliseconds(150));
+    }
+
+    [TestMethod]
+    public void RepeatedR_ProducesAnAudibleTrill()
+    {
+        var settings = CleanVoice(VocalLanguage.German, "rrrrrrrrrrrr");
+        settings.SampleRate = 16000;
+        using var audio = VocalSynth.Render(settings);
+        int block = settings.SampleRate / 100;
+        double sum = 0, real = 0, imaginary = 0;
+        for (int start = settings.SampleRate / 10; start + block < settings.SampleRate * 7 / 10; start += block)
+        {
+            double energy = 0;
+            for (int i = start; i < start + block; i++) energy += audio.Data[i] * audio.Data[i];
+            double level = Math.Sqrt(energy / block);
+            double phase = 2 * Math.PI * 22 * (start + block / 2.0) / settings.SampleRate;
+            sum += level;
+            real += level * Math.Cos(phase);
+            imaginary += level * Math.Sin(phase);
+        }
+        double modulation = 2 * Math.Sqrt(real * real + imaginary * imaginary) / sum;
+        Assert.IsTrue(modulation > 0.35, $"The repeated R had insufficient trill modulation: {modulation}.");
+    }
+
+    [TestMethod]
+    public void WindowsSpeech_UsesPronunciationOverridesForIntriguedAndExtendedSounds()
+    {
+        var syntax = VocalEmphasisSyntax.Default();
+        var tokens = VocalTextParser.ParseWindowsSpeech(
+            VocalLanguage.English, "intrigued coooool rrrrr", syntax, CancellationToken.None);
+        var xml = XDocument.Parse(VocalWindowsSpeech.BuildSsml(tokens, CultureInfo.GetCultureInfo("en-US"), 1));
+        XNamespace ns = "http://www.w3.org/2001/10/synthesis";
+        var phones = xml.Descendants(ns + "phoneme").ToArray();
+        Assert.IsTrue(phones.Any(e => e.Value == "intrigued" && (string?)e.Attribute("ph") == "ih n t r iy g d"));
+        Assert.IsTrue(phones.Any(e => e.Value == "ooooo" && (string?)e.Attribute("ph") == "uw uw uw uw uw"));
+        Assert.IsTrue(phones.Any(e => e.Value == "rrrrr" && (string?)e.Attribute("ph") == "r r r r r"));
+    }
+
+    [TestMethod]
+    [Timeout(30000)]
+    [DataRow(VocalLanguage.German, "Klenker", "Klenkerrrrrr")]
+    [DataRow(VocalLanguage.English, "hiss", "hissssss")]
+    public void WindowsSpeech_RepeatedLettersProduceLongerAudibleSounds(VocalLanguage language, string normal, string extended)
+    {
+        using var probe = new SpeechSynthesizer();
+        string code = language == VocalLanguage.German ? "de" : "en";
+        if (!probe.GetInstalledVoices().Any(v => v.Enabled && v.VoiceInfo.Culture.TwoLetterISOLanguageName == code))
+            Assert.Inconclusive($"A {code} Windows speech voice is not installed.");
+        var settings = CleanVoice(language, normal);
+        settings.UseWindowsSpeech = true;
+        settings.BasePitchHz = 195;
+        settings.SampleRate = 16000;
+        using var plain = VocalSynth.Render(settings);
+        settings.Text = extended;
+        using var stretched = VocalSynth.Render(settings);
+        Assert.IsTrue(stretched.Duration > plain.Duration + TimeSpan.FromMilliseconds(150));
+        Assert.IsTrue(stretched.Data.Any(sample => Math.Abs(sample) > 0.001));
+    }
+
+    [TestMethod]
+    public void Capitals_AddEmphasisWithoutLosingQuestionOrWhisper()
+    {
+        var syntax = VocalEmphasisSyntax.Default();
+        var tokens = VocalTextParser.Parse(VocalLanguage.English, "HELLO? ~WORLD?~ I", syntax)
+            .OfType<VocalPhonemeToken>().ToArray();
+        Assert.IsTrue(tokens.Any(t => t.Capitalized && t.Emphasis == VocalEmphasis.PitchUp));
+        Assert.IsTrue(tokens.Any(t => t.Capitalized && t.Emphasis == VocalEmphasis.Whisper && t.Question));
+        Assert.IsFalse(tokens[^1].Capitalized);
+
+        var windows = VocalTextParser.ParseWindowsSpeech(
+            VocalLanguage.English, "HELLO? ~WORLD?~", syntax, CancellationToken.None);
+        var xml = XDocument.Parse(VocalWindowsSpeech.BuildSsml(windows, CultureInfo.GetCultureInfo("en-US"), 1));
+        XNamespace ns = "http://www.w3.org/2001/10/synthesis";
+        Assert.IsTrue(xml.Descendants(ns + "prosody").Any(e =>
+            e.Value == "HELLO" && (string?)e.Attribute("pitch") == "high" && (string?)e.Attribute("volume") == "x-loud"));
+        Assert.IsTrue(xml.Descendants(ns + "prosody").Any(e =>
+            e.Value == "WORLD" && (string?)e.Attribute("volume") == "medium" && (string?)e.Attribute("pitch") == "high"));
+        foreach (var language in new[] { VocalLanguage.German, VocalLanguage.AnimalCrossing, VocalLanguage.Beatboxing })
+        {
+            string text = language == VocalLanguage.Beatboxing ? "B" : "HALLO";
+            Assert.IsTrue(VocalTextParser.Parse(language, text, syntax).OfType<VocalPhonemeToken>().All(t => t.Capitalized));
+        }
+    }
+
+    [TestMethod]
+    public void Capitals_AreAudiblyLouderInFormantAndBeatboxModes()
+    {
+        foreach (var (language, normal, emphasized) in new[]
+        {
+            (VocalLanguage.English, "hello hello", "HELLO hello"),
+            (VocalLanguage.Beatboxing, "b b", "B b"),
+        })
+        {
+            var settings = CleanVoice(language, normal);
+            settings.SampleRate = 8000;
+            using var plain = VocalSynth.Render(settings);
+            settings.Text = emphasized;
+            using var loud = VocalSynth.Render(settings);
+            int samples = Math.Min(2000, Math.Min(plain.Data.Length, loud.Data.Length));
+            double normalEnergy = plain.Data.Take(samples).Sum(x => x * x);
+            double loudEnergy = loud.Data.Take(samples).Sum(x => x * x);
+            Assert.IsTrue(loudEnergy > normalEnergy * 1.15,
+                $"{language}: capitalized energy {loudEnergy} was not higher than {normalEnergy}.");
+        }
+    }
+
+    [TestMethod]
+    [Timeout(30000)]
+    public void WindowsSpeech_CapitalsAreLouder()
+    {
+        using var probe = new SpeechSynthesizer();
+        if (!probe.GetInstalledVoices().Any(v => v.Enabled && v.VoiceInfo.Culture.TwoLetterISOLanguageName == "en"))
+            Assert.Inconclusive("An English Windows speech voice is not installed.");
+        var settings = CleanVoice(VocalLanguage.English, "hello");
+        settings.UseWindowsSpeech = true;
+        settings.BasePitchHz = 195;
+        settings.SampleRate = 16000;
+        using var plain = VocalSynth.Render(settings);
+        settings.Text = "HELLO";
+        using var loud = VocalSynth.Render(settings);
+        double normalEnergy = plain.Data.Sum(x => x * x);
+        double loudEnergy = loud.Data.Sum(x => x * x);
+        Assert.IsTrue(loudEnergy > normalEnergy * 1.15,
+            $"Capitalized energy {loudEnergy} was not higher than {normalEnergy}.");
+    }
+
+    [TestMethod]
+    public void Beatboxing_RendersNotationOnEvenSteps_WithRestsAndSpeed()
+    {
+        var settings = CleanVoice(VocalLanguage.Beatboxing, "B t K ts pf .");
+        settings.SampleRate = 8000;
+        settings.Noise = 0.5;
+        var tokens = VocalTextParser.Parse(settings.Language, settings.Text, settings.EmphasisSyntax);
+        CollectionAssert.AreEqual(new[] { "beat-b", "beat-t", "beat-k", "beat-ts", "beat-pf" },
+            tokens.OfType<VocalPhonemeToken>().Select(t => t.Phoneme).ToArray());
+        using var audio = VocalSynth.Render(settings);
+        Assert.AreEqual(12000, audio.Data.Length);
+        Assert.AreEqual(120f, audio.Bpm);
+        Assert.IsTrue(audio.Data.Take(10000).Any(x => Math.Abs(x) > 0.001));
+        Assert.IsTrue(audio.Data.Skip(10000).All(x => x == 0));
+        settings.Speed = 2;
+        using var fast = VocalSynth.Render(settings);
+        Assert.AreEqual(audio.Data.Length / 2, fast.Data.Length);
+        Assert.AreEqual(240f, fast.Bpm);
+        foreach (var preset in VocalVoicePreset.BuiltIn)
+        {
+            var voice = VocalSynthSettings.FromPreset(preset, VocalLanguage.Beatboxing, "B t K");
+            voice.SampleRate = 8000;
+            using var beat = VocalSynth.Render(voice);
+            Assert.IsTrue(beat.Data.Any(x => Math.Abs(x) > 0.001), $"{preset.Name} produced silence.");
+            Assert.IsTrue(beat.Data.All(float.IsFinite), $"{preset.Name} produced invalid samples.");
+        }
+        settings.Text = "B X";
+        Assert.ThrowsExactly<ArgumentException>(() => VocalSynth.Render(settings));
+    }
+
+    [TestMethod]
+    public void SingingPreset_RendersMelodicSpeechAcrossLanguageModes()
+    {
+        var preset = VocalVoicePreset.BuiltIn.Single(p => p.Id == "singing");
+        foreach (var language in Enum.GetValues<VocalLanguage>())
+        {
+            string text = language == VocalLanguage.Beatboxing ? "B t K" : "ma ma";
+            var settings = VocalSynthSettings.FromPreset(preset, language, text);
+            settings.SampleRate = 8000;
+            using var audio = VocalSynth.Render(settings);
+            Assert.IsTrue(audio.Data.Any(x => Math.Abs(x) > 0.001), $"{language} produced silence.");
+            Assert.IsTrue(audio.Data.All(float.IsFinite), $"{language} produced invalid samples.");
+        }
+
+        var singer = CleanVoice(VocalLanguage.English, "ma ma");
+        singer.SampleRate = 8000;
+        singer.BasePitchHz = 150;
+        singer.Singing = true;
+        using var melody = VocalSynth.Render(singer);
+        double first = PitchInRange(melody.Data, 8000, 0.10, 0.23, 120, 270);
+        double second = PitchInRange(melody.Data, 8000, 0.44, 0.57, 120, 270);
+        Assert.IsTrue(second > first * 1.15, $"Expected rising sung notes, got {first} and {second} Hz.");
+    }
+
+    [STATestMethod]
+    public void Dialog_CanSelectBeatboxingAndSaveTheSingingVoice()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "vocal_ui_" + Guid.NewGuid());
+        var profiles = new VocalVoiceProfileStore(directory);
+        try
+        {
+            using var dialog = new VocalSynthDialog(profiles, new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json")));
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            object Field(string name) => typeof(VocalSynthDialog).GetField(name, flags)!.GetValue(dialog)!;
+            var language = (ComboBox)Field("languageCombo");
+            var voice = (ComboBox)Field("voiceCombo");
+            language.SelectedItem = "Beatboxing";
+            voice.SelectedItem = "Built-in: Singing";
+            var settings = (VocalSynthSettings)Field("settings");
+            Assert.AreEqual(VocalLanguage.Beatboxing, settings.Language);
+            Assert.IsTrue(settings.Singing);
+            Assert.IsFalse(settings.UseWindowsSpeech);
+
+            ((TextBox)Field("profileName")).Text = "Singing profile";
+            typeof(VocalSynthDialog).GetMethod("SaveProfile", flags)!.Invoke(dialog, null);
+            Assert.IsTrue(profiles.LoadAll().Single(p => p.Name == "Singing profile").Singing);
+            voice.SelectedItem = "Built-in: Adult Female";
+            Assert.IsFalse(((VocalSynthSettings)Field("settings")).Singing);
+            voice.SelectedItem = "Profile: Singing profile";
+            settings = (VocalSynthSettings)Field("settings");
+            Assert.IsTrue(settings.Singing);
+            Assert.AreEqual(VocalLanguage.Beatboxing, settings.Language);
+            settings.Text = "B t K";
+            settings.SampleRate = 8000;
+            using var audio = VocalSynth.Render(settings);
+            Assert.IsTrue(audio.Data.Any(x => Math.Abs(x) > 0.001));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [TestMethod]
+    [Timeout(30000)]
+    public void Singing_WindowsPitchProcessingCreatesDistinctNotes()
+    {
+        var settings = CleanVoice(VocalLanguage.English, "sing");
+        settings.SampleRate = 16000;
+        settings.BasePitchHz = 175;
+        settings.Singing = true;
+        float[] source = Enumerable.Range(0, 16000 * 2)
+            .Select(i => (float)(0.2 * Math.Sin(2 * Math.PI * 180 * i / settings.SampleRate))).ToArray();
+        float[] sung = VocalSinging.RenderWindows(source, settings, CancellationToken.None);
+        double first = PitchInRange(sung, 16000, 0.18, 0.28, 120, 320);
+        double second = PitchInRange(sung, 16000, 0.50, 0.60, 120, 320);
+        double third = PitchInRange(sung, 16000, 0.82, 0.92, 120, 320);
+        Assert.IsTrue(second > first * 1.15 && third > second * 1.1,
+            $"Expected three rising sung notes, got {first}, {second}, {third} Hz.");
+    }
+
+    [TestMethod]
+    [Timeout(30000)]
+    [DataRow(VocalLanguage.English, "en")]
+    [DataRow(VocalLanguage.German, "de")]
+    public void Singing_DesktopWindowsVoicesFollowTheMelody(VocalLanguage language, string languageCode)
+    {
+        using var probe = new SpeechSynthesizer();
+        var selectedVoice = probe.GetInstalledVoices()
+            .Where(v => v.Enabled && v.VoiceInfo.Culture.TwoLetterISOLanguageName == languageCode)
+            .OrderByDescending(v => v.VoiceInfo.Gender == VoiceGender.Female)
+            .Select(v => v.VoiceInfo).FirstOrDefault();
+        if (selectedVoice is null)
+            Assert.Inconclusive($"A {languageCode} Windows speech voice is not installed.");
+        string expectedVoice = language == VocalLanguage.German ? "Microsoft Hedda Desktop" : "Microsoft Zira Desktop";
+        if (selectedVoice.Name != expectedVoice)
+            Assert.Inconclusive($"The fixed timing fixture requires {expectedVoice}; the selected voice is {selectedVoice.Name}.");
+        var settings = CleanVoice(language, "aaaaaa aaaaaa");
+        settings.SampleRate = 16000;
+        settings.BasePitchHz = 175;
+        settings.Singing = true;
+        settings.UseWindowsSpeech = true;
+        using var audio = VocalSynth.Render(settings);
+        Assert.IsTrue(audio.Data.Any(x => Math.Abs(x) > 0.001));
+        Assert.IsTrue(audio.Data.All(float.IsFinite));
+        double first = PitchInRange(audio.Data, 16000, 0.18, 0.28, 120, 320);
+        double second = PitchInRange(audio.Data, 16000, 0.50, 0.60, 120, 320);
+        double third = PitchInRange(audio.Data, 16000, 0.82, 0.92, 120, 320);
+        Assert.IsTrue(second > first * 1.12 && third > second * 1.08,
+            $"Expected rising notes from the Windows voice, got {first}, {second}, {third} Hz.");
+    }
+
+    private static double PitchInRange(float[] samples, int rate, double fromSeconds, double toSeconds, int minHz, int maxHz)
+    {
+        int start = (int)(fromSeconds * rate), end = Math.Min(samples.Length, (int)(toSeconds * rate));
+        double best = double.NegativeInfinity;
+        int bestLag = 0;
+        for (int lag = rate / maxHz; lag <= rate / minHz; lag++)
+        {
+            double cross = 0, first = 0, second = 0;
+            for (int i = start + lag; i < end; i++)
+            {
+                double a = samples[i], b = samples[i - lag];
+                cross += a * b;
+                first += a * a;
+                second += b * b;
+            }
+            double correlation = cross / Math.Sqrt(first * second + 1e-20);
+            if (correlation > best) { best = correlation; bestLag = lag; }
+        }
+        Assert.IsTrue(best > 0.5, "No voiced pitch was detected in the requested interval.");
+        return rate / (double)bestLag;
+    }
+
     private static VocalSynthSettings CleanVoice(VocalLanguage language, string text)
     {
         var settings = VocalSynthSettings.FromPreset(VocalVoicePreset.BuiltIn[5], language, text);
@@ -371,8 +682,13 @@ public class VocalSynthTests
         var store = new VocalVoiceProfileStore(dir);
         var profile = VocalVoiceProfile.FromPreset(VocalVoicePreset.BuiltIn[1], "MyProfile");
         store.Save(profile);
+        var singer = VocalVoiceProfile.FromPreset(VocalVoicePreset.BuiltIn.Single(p => p.Id == "singing"), "Singer");
+        store.Save(singer);
         var loaded = store.LoadAll();
         Assert.IsTrue(loaded.Any(p => p.Name == "MyProfile"));
+        var loadedSinger = loaded.Single(p => p.Name == "Singer");
+        Assert.IsTrue(loadedSinger.Clone().ToPreset("saved").Singing);
+        Assert.IsTrue(VocalSynthSettings.FromProfile(loadedSinger).Clone().Singing);
         Directory.Delete(dir, true);
     }
 

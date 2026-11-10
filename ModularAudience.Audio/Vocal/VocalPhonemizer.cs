@@ -28,6 +28,7 @@ public static class VocalPhonemizer
         ["rough"] = ["r", "uh", "f"], ["enough"] = ["i", "n", "uh", "f"],
         ["book"] = ["b", "u", "k"], ["good"] = ["g", "u", "d"], ["look"] = ["l", "u", "k"],
         ["head"] = ["h", "e", "d"], ["great"] = ["g", "r", "ay", "t"], ["height"] = ["h", "eye", "t"],
+        ["intrigued"] = ["i", "n", "t", "r", "ee", "g", "d"],
         ["cow"] = ["k", "ow"], ["how"] = ["h", "ow"], ["now"] = ["n", "ow"],
         ["i'm"] = ["eye", "m"], ["you're"] = ["y", "o", "r"], ["we're"] = ["w", "ee", "r"],
         ["it's"] = ["i", "t", "s"], ["don't"] = ["d", "oh", "n", "t"],
@@ -40,6 +41,9 @@ public static class VocalPhonemizer
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(text)) return [];
+        if (language == VocalLanguage.Beatboxing)
+            return VocalTextParser.Parse(language, text, VocalEmphasisSyntax.Default(), cancellationToken)
+                .OfType<VocalPhonemeToken>().Select(token => token.Phoneme).ToArray();
         string normalized = text.Normalize(NormalizationForm.FormC).ToLowerInvariant();
         if (language == VocalLanguage.AnimalCrossing) return PhonemizeAnimal(normalized, cancellationToken);
 
@@ -114,11 +118,47 @@ public static class VocalPhonemizer
         {
             if ((i & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
             if (!char.IsLetter(word[i])) { i++; continue; }
+            if (CanSustain(language, word[i]))
+            {
+                int repeat = 1;
+                while (i + repeat < word.Length && word[i + repeat] == word[i])
+                {
+                    if ((repeat & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                    repeat++;
+                }
+                if (repeat >= 3)
+                {
+                    int first = result.Count;
+                    if (language == VocalLanguage.German) MapGerman(word, i, result);
+                    else MapEnglish(word, i, result, hasEnglishVowel);
+                    if (result.Count == first + 1)
+                    {
+                        string phoneme = result[first];
+                        for (int extra = 1; extra < repeat; extra++)
+                        {
+                            if ((extra & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                            result.Add(phoneme);
+                        }
+                        i += repeat;
+                        continue;
+                    }
+                    result.RemoveRange(first, result.Count - first);
+                }
+            }
             int consumed = language == VocalLanguage.German
                 ? MapGerman(word, i, result)
                 : MapEnglish(word, i, result, hasEnglishVowel);
             i += consumed;
         }
+    }
+
+    internal static bool CanSustain(VocalLanguage language, char letter)
+    {
+        char c = char.ToLowerInvariant(letter);
+        return c is 'a' or 'e' or 'i' or 'o' or 'u'
+            or 'f' or 'l' or 'm' or 'n' or 'r' or 's' or 'v' or 'w'
+            || (language == VocalLanguage.German && (c is '\u00e4' or '\u00f6' or '\u00fc'))
+            || (c == 'z' && language != VocalLanguage.German);
     }
 
     private static int MapEnglish(string word, int index, List<string> result, bool hasEnglishVowel)

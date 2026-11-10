@@ -15,6 +15,7 @@ public enum VocalLanguage
     Arabic,
     Russian,
     AnimalCrossing,
+    Beatboxing,
 }
 
 public static class VocalLanguageExtensions
@@ -32,9 +33,10 @@ public static class VocalLanguageExtensions
         VocalLanguage.Arabic => "Arabic",
         VocalLanguage.Russian => "Russian",
         VocalLanguage.AnimalCrossing => "Animal Crossing",
+        VocalLanguage.Beatboxing => "Beatboxing",
         _ => language.ToString(),
     };
 
     public static bool IsFullyImplemented(this VocalLanguage language) =>
-        language is VocalLanguage.English or VocalLanguage.German or VocalLanguage.AnimalCrossing;
+        language is VocalLanguage.English or VocalLanguage.German or VocalLanguage.AnimalCrossing or VocalLanguage.Beatboxing;
 }

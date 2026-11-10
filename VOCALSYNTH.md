@@ -15,6 +15,7 @@ This document captures the current implementation of the **Vocalsynth** feature
 - **Animal Crossing** is an additional playful, non-linguistic pronunciation
   mode. Its voice color is still selected independently through the voice preset
   or a custom profile.
+- **Beatboxing** interprets a compact sequence of vocal percussion symbols.
 - Interactive text input field; **line-by-line text editor** (multiline textbox).
 - Defined speech punctuation markers that modulate speech:
   `-`, `~`, `+`, `...`, `#`, `*`, `_` and friends. Markers can be
@@ -23,8 +24,8 @@ This document captures the current implementation of the **Vocalsynth** feature
 - Configurable in a deeper dialog, **JSON-persistent**, editable interactively:
   strongly pronounced vs. whispered, pauses, pitch up/down, lengthening.
 - NumericUpDown for **Speed**.
-- **8 hard-coded voice presets** (distinct color profiles): Child, Young Female,
-  Adult Female, Adult Male, Deep Male, Robot, Whisper, Elderly.
+- **9 hard-coded voice presets**: Child, Young Female, Adult Female, Adult Male,
+  Deep Male, Robot, Whisper, Elderly, and Singing.
 - Buttons: **Render**, **Prehear / Stop**, **Create** (adds rendered audio to a
   new AudioCollectionView).
 - User voice profiles: **savable / loadable / deletable / renamable** in AppData
@@ -44,7 +45,7 @@ ModularAudience.Audio/Vocal/
   VocalEmphasisMode.cs          Pause/Strong/Whisper/Lengthen/PitchUp/PitchDown
   VocalEmphasisRule.cs          marker rules and syntax collection
   VocalEmphasisSyntaxStore.cs   AppData JSON load/save
-  VocalVoicePreset.cs           8 built-in profiles
+  VocalVoicePreset.cs           built-in profiles, including Singing
   VocalVoiceProfile.cs          user profile (JSON-serializable) + FromPreset/ToPreset
   VocalVoiceProfileStore.cs     AppData folder, one JSON per profile
   VocalPhoneme.cs               acoustic descriptor
@@ -55,6 +56,7 @@ ModularAudience.Audio/Vocal/
   VocalSynthSettings.cs         settings (language, text, speed, voice, format, emphasis)
   VocalSynth.cs                 local formant renderer -> AudioObj
   VocalWindowsSpeech.cs         optional local Windows voice -> AudioObj
+  VocalSinging.cs               deterministic generated melody and Windows pitch processing
 
 ModularAudience.Forms/Modules/Dialogs/
   VocalSynthDialog.cs                 main dialog (merged Prehear/Stop button,
@@ -86,6 +88,8 @@ ModularAudience.Forms/WindowMain.Designer.cs
 - The independent synthesizer uses English/German pronunciation rules and a
   small English exception list. It distinguishes moving diphthongs, English
   `ch` and German `ch`, voiced/unvoiced consonants, and German final devoicing.
+  The exception for `intrigued` uses the stressed `ee` sound followed by `g d`;
+  Windows speech receives an equivalent local SAPI pronunciation.
   Its output is still synthetic and its pronunciation rules are not a complete
   dictionary. Other spoken languages continue to use the English fallback.
 - The formant renderer maintains glottal phase between voiced sounds, blends
@@ -97,6 +101,33 @@ ModularAudience.Forms/WindowMain.Designer.cs
   percussive vocal pops with increasing gaps; this takes precedence over a
   configured ellipsis marker in this mode. Speed scales the pops and gaps.
   These sounds are generated locally and are not samples from a game.
+- **Beatboxing** uses locally synthesized mouth sounds on 250 ms eighth-note
+  steps (120 BPM at speed 1). `B`/`b` is a voiced kick, `K`/`k` a snare-like
+  sound, `P`/`p` a lip burst, `T`/`t` a short hi-hat, `TS`/`ts` a longer
+  hi-hat, `PF`/`pf` a lip snare, and `S`, `F`, `H` are sustained mouth noises.
+  Whitespace and `|` separate symbols without adding time; `.` and `-` each
+  insert one silent step. For example, `B t K t B ts pf .` is two bars of
+  eighth notes. Speed changes the tempo, uppercase symbols are accented, and
+  voice profiles and wrapping emphasis markers still apply. Unsupported
+  symbols report an error.
+- **Singing** is a voice preset usable with every pronunciation mode. It
+  generates a simple deterministic melody rather than interpreting musical
+  notation. The formant engine sustains vowels on successive notes; Windows
+  speech is slowed and locally pitch-tracked and retuned while unvoiced
+  consonants remain mostly unprocessed. Saved profiles derived from Singing
+  retain this behavior. Actual pronunciation in other spoken languages remains
+  the existing English fallback.
+- **Expressive repetition**: three or more consecutive copies of a sustainable
+  letter, such as `Klenkerrrrrr`, `hissssss` or `coooool`, sustain its sound.
+  Ordinary double letters retain their normal pronunciation. The independent
+  engine gives repeated `r` a trill; Windows speech uses repeated SAPI phones
+  in the selected voice. In Windows speech the deliberately extended portion
+  is a separate phonetic fragment, so neighboring pronunciation may change.
+- **CAPS emphasis**: words with at least two uppercase letters are louder, even
+  when followed by a question mark; a single uppercase `I` or `A` is not
+  treated as a shout. Explicit whisper markers remain quieter than normal
+  speech, including for uppercase words. Beatbox symbols may be single-letter
+  uppercase accents.
 - **Whitespace and punctuation**: in the formant engine, spaces create
   proportional pauses, newlines create a 350 ms pause, and sentence
   punctuation adds pauses. Windows speech retains normal single spaces and
@@ -126,7 +157,7 @@ ModularAudience.Forms/WindowMain.Designer.cs
 - Add per-word/line emphasis in the UI (currently text markers only).
 - Wire `SetCollection` to the active AudioCollectionView instead of creating a
   new one (mirror Sample Synthesizer if desired).
-- Add more tests: all 8 presets render, all languages fall back without throwing,
+- Add more tests: all presets render, all languages fall back without throwing,
   pause proportionality, question-mark pitch, profile rename/delete round trips.
 - Consider exposing `VocalSynth` as an AudioObj generator for arrangement tracks.
 
@@ -134,9 +165,11 @@ ModularAudience.Forms/WindowMain.Designer.cs
 
 `ModularAudience.Audio.Tests/VocalSynthTests.cs` covers pronunciation,
 formant/fricative spectra, voiced transitions, cancellation and size limits,
-all animal voice presets, timed ellipsis pops, Windows SSML and actual Windows
-voice output when an English voice is installed, plus the existing settings
-and parser regression cases. No playback device or GPU is required.
+animal voice presets, timed ellipsis pops, expressive letter repetition, CAPS,
+beatboxing, singing, Windows SSML and actual Windows voice output when matching
+voices are installed. The fixed-timing singing tests specifically use Microsoft
+Zira Desktop and Hedda Desktop; other Windows voice tests accept any matching
+installed voice. No playback device or GPU is required.
 
 Run:
 ```

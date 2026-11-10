@@ -192,14 +192,18 @@ public partial class YoutubeBrowserWindow
 
     private void PopulateResults(IReadOnlyList<YtdlpVideo> videos)
     {
+        var rows = videos.ToList();
+        if (activePlaybackVideo is { } playing && rows.All(video => video.Id != playing.Id))
+            rows.Add(playing);
         resultsList.BeginUpdate();
         try
         {
             resultsList.Items.Clear();
             originalResultOrder.Clear();
-            foreach (var video in videos)
+            foreach (var video in rows)
             {
                 var row = CreateResultRow(video);
+                if (IsPlayingVideo(video)) row.Text = FormatResultTitle(video, true);
                 resultsList.Items.Add(row);
                 originalResultOrder[row] = originalResultOrder.Count;
             }

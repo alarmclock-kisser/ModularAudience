@@ -36,7 +36,7 @@ public static class VocalSynth
                 }
                 var previous = GetNeighbor(plan, i - 1);
                 var next = GetNeighbor(plan, i + 1);
-                RenderPhoneme(pcm, phoneme, token, previous, next, unit.Frames, s, state, random, cancellationToken);
+                RenderPhoneme(pcm, phoneme, token, previous, next, unit.Frames, unit.Note, s, state, random, cancellationToken);
             }
         }
 
@@ -71,7 +71,7 @@ public static class VocalSynth
             BitDepth = 32,
             Length = data.Length,
             Duration = TimeSpan.FromSeconds(data.Length / (double)(s.SampleRate * s.Channels)),
-            Bpm = 120,
+            Bpm = s.Language == VocalLanguage.Beatboxing ? (float)(120 * s.Speed) : 120,
             Volume = 100,
         };
         result.Rename($"{s.VoiceName} \u00b7 {s.Language.DisplayName()} \u00b7 Vocal");
@@ -83,6 +83,8 @@ public static class VocalSynth
     {
         var plan = new List<RenderUnit>(tokens.Count);
         long samples = 0;
+        int noteIndex = -1;
+        string? previousSymbol = null;
         foreach (var token in tokens)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -92,13 +94,22 @@ public static class VocalSynth
             {
                 milliseconds = pause.Milliseconds;
                 minimumFrames = 1;
+                previousSymbol = null;
             }
             else if (token is VocalPhonemeToken phoneme)
             {
                 if (!VocalPhonemeInventory.Contains(phoneme.Phoneme))
                     throw new InvalidOperationException($"Unknown vocal phoneme: {phoneme.Phoneme}");
-                milliseconds = VocalPhonemeInventory.Get(phoneme.Phoneme).DurationMs * DurationMultiplier(phoneme);
+                var definition = VocalPhonemeInventory.Get(phoneme.Phoneme);
+                bool beat = IsBeat(phoneme.Phoneme);
+                if (settings.Singing && (beat || definition.IsVowel
+                    && (settings.Language == VocalLanguage.AnimalCrossing || phoneme.Phoneme != previousSymbol)))
+                    noteIndex++;
+                milliseconds = definition.DurationMs * (beat ? 1 : DurationMultiplier(phoneme));
+                if (settings.Singing && definition.IsVowel)
+                    milliseconds *= settings.Language == VocalLanguage.AnimalCrossing ? 1.35 : 1.75;
                 minimumFrames = 4;
+                previousSymbol = phoneme.Phoneme;
             }
             else throw new InvalidOperationException("Unknown vocal synthesis token.");
 
@@ -111,7 +122,7 @@ public static class VocalSynth
             samples += (long)frameCount * settings.Channels;
             if (samples > MaxOutputSamples)
                 throw new InvalidOperationException("The vocal synthesis output would exceed the supported size.");
-            plan.Add(new RenderUnit(token, frameCount));
+            plan.Add(new RenderUnit(token, frameCount, settings.Singing ? VocalSinging.Note(noteIndex) : 0));
         }
         if (plan.Count == 0)
             throw new ArgumentException("Text contains no pronounceable characters or speech markers.", nameof(settings));
@@ -146,15 +157,24 @@ public static class VocalSynth
 
     private static void RenderPhoneme(
         List<float> pcm, VocalPhoneme ph, VocalPhonemeToken token, VocalPhoneme? previous, VocalPhoneme? next,
-        int frames, VocalSynthSettings s, VoiceState state, Random random, CancellationToken cancellationToken)
+        int frames, int note, VocalSynthSettings s, VoiceState state, Random random, CancellationToken cancellationToken)
     {
         bool animal = ph.Symbol.StartsWith("animal-", StringComparison.Ordinal);
+        bool beat = IsBeat(ph.Symbol);
+        bool trill = ph.Symbol == "r" && (previous?.Symbol == "r" || next?.Symbol == "r");
         bool connectedBefore = CanConnect(previous, ph);
         bool connectedAfter = CanConnect(ph, next);
         int fadeIn = connectedBefore ? 0 : Math.Max(1, Math.Min(frames / 4, (int)(s.SampleRate * 0.006)));
         int fadeOut = connectedAfter ? 0 : Math.Max(1, Math.Min(frames / 4, (int)(s.SampleRate * 0.008)));
         var (pitchMultiplier, gainMultiplier, voicingMultiplier, breathExtra) = EmphasisParameters(token.Emphasis);
-        if (token.Stressed) pitchMultiplier *= 1.035;
+        if (token.Question && token.Emphasis != VocalEmphasis.PitchUp) pitchMultiplier *= 1.08;
+        if (token.Stressed && !s.Singing) pitchMultiplier *= 1.035;
+        if (token.Capitalized)
+        {
+            gainMultiplier *= 1.4;
+            if (token.Emphasis != VocalEmphasis.Whisper) pitchMultiplier *= 1.03;
+        }
+        if (s.Singing) pitchMultiplier *= Math.Pow(2, note / 12.0);
         if (animal) pitchMultiplier *= AnimalPitch(ph.Symbol);
 
         double maxFrequency = Math.Min(6000, s.SampleRate * 0.45);
@@ -173,11 +193,13 @@ public static class VocalSynth
             double progress = i / (double)Math.Max(1, frames - 1);
             double time = state.Frame / (double)s.SampleRate;
             double pitch = s.BasePitchHz * pitchMultiplier;
-            if (animal)
+            if (ph.Symbol == "beat-b")
+                pitch *= 0.72 + 0.85 * Math.Exp(-i / (s.SampleRate * 0.035));
+            else if (animal)
                 pitch *= 1.05 - 0.10 * progress;
-            else
+            else if (!s.Singing)
                 pitch *= 1.015 - 0.03 * progress;
-            if (token.Emphasis == VocalEmphasis.PitchUp)
+            if (token.Emphasis == VocalEmphasis.PitchUp || token.Question)
                 pitch *= 0.98 + 0.08 * progress;
             if (s.VibratoCents > 0 && token.Emphasis != VocalEmphasis.Whisper)
             {
@@ -210,6 +232,13 @@ public static class VocalSynth
             double voiceGate = 1;
             double noiseGate = 1;
             ShapeConsonant(ph.Symbol, progress, frames / (double)s.SampleRate, ref voiceGate, ref noiseGate);
+            if (beat) ShapeBeat(ph.Symbol, i / (double)s.SampleRate, ref voiceGate, ref noiseGate);
+            if (trill)
+            {
+                double flutter = 0.25 + 0.75 * (0.5 + 0.5 * Math.Sin(2 * Math.PI * 22 * time));
+                voiceGate *= flutter;
+                noiseGate *= flutter;
+            }
             double value = source * voiceGate + noise * noiseGate;
             if (ph.Voiced && breathiness > 0)
             {
@@ -258,6 +287,19 @@ public static class VocalSynth
 
     private static bool IsClosure(string symbol) => symbol is "p" or "b" or "t" or "d" or "k" or "g"
         or "ts" or "tsh" or "j" or "dz";
+
+    private static bool IsBeat(string symbol) => symbol.StartsWith("beat-", StringComparison.Ordinal);
+
+    private static void ShapeBeat(string symbol, double time, ref double voice, ref double noise)
+    {
+        if (symbol == "beat-b") voice *= Math.Exp(-time * 13);
+        double decay = symbol switch
+        {
+            "beat-b" => 38, "beat-p" => 28, "beat-k" => 20, "beat-t" => 48,
+            "beat-ts" => 14, "beat-pf" => 16, "beat-s" or "beat-f" => 10, _ => 12,
+        };
+        noise *= Math.Exp(-time * decay);
+    }
 
     private static void ShapeConsonant(string symbol, double progress, double duration, ref double voice, ref double noise)
     {
@@ -318,13 +360,14 @@ public static class VocalSynth
     {
         var (low, high) = symbol switch
         {
-            "s" or "z" or "ts" or "dz" => (3500.0, 9500.0),
+            "s" or "z" or "ts" or "dz" or "beat-t" or "beat-ts" or "beat-s" => (3500.0, 9500.0),
             "sh" or "zh" or "tsh" or "j" => (1800.0, 6500.0),
             "ich" => (2600.0, 7000.0),
             "ch" => (900.0, 4200.0),
             "t" or "d" => (2500.0, 8500.0),
-            "k" or "g" => (1200.0, 5500.0),
-            "p" or "b" or "animal-dot" => (400.0, 3200.0),
+            "k" or "g" or "beat-k" => (1200.0, 5500.0),
+            "p" or "b" or "animal-dot" or "beat-b" or "beat-p" => (400.0, 3200.0),
+            "beat-pf" or "beat-f" => (700.0, 6500.0),
             _ => (1000.0, 7000.0),
         };
         return new NoiseFilter(low, high, rate);
@@ -345,7 +388,7 @@ public static class VocalSynth
         public long Frame;
     }
 
-    private readonly record struct RenderUnit(VocalToken Token, int Frames);
+    private readonly record struct RenderUnit(VocalToken Token, int Frames, int Note);
 
     private struct NoiseFilter
     {

@@ -364,6 +364,7 @@ public sealed partial class VocalSynthDialog : Form
             VibratoHz = settings.VibratoHz,
             Voicing = settings.Voicing,
             Noise = settings.Noise,
+            Singing = settings.Singing,
         };
         profileStore.Save(profile);
         RefreshVoiceCombo();

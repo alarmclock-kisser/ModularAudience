@@ -24,6 +24,7 @@ public partial class YoutubeBrowserWindow
             mainSplit.SplitterDistance = Math.Clamp(settings.SplitterDistance, mainSplit.Panel1MinSize,
                 Math.Max(mainSplit.Panel1MinSize, mainSplit.Width - mainSplit.Panel2MinSize - mainSplit.SplitterWidth));
             thumbnailCheck.Checked = settings.ShowThumbnails;
+            autoplayCheck.Checked = settings.Autoplay;
             resultLimit.Value = settings.ResultLimit;
             saveCheck.Checked = settings.SaveToDisk;
             mp3Bitrate = settings.Mp3Bitrate;
@@ -64,6 +65,7 @@ public partial class YoutubeBrowserWindow
                 Maximized = WindowState == FormWindowState.Maximized,
                 SplitterDistance = miniLayout ? normalSplitterDistance : mainSplit.SplitterDistance,
                 ShowThumbnails = thumbnailCheck.Checked,
+                Autoplay = autoplayCheck.Checked,
                 VisibleColumns = columnMenuItems.Select(item => item.Checked).ToArray(),
                 ResultLimit = (int)resultLimit.Value, SaveToDisk = saveCheck.Checked,
                 Format = formatCombo.SelectedIndex == 1 ? "mp3" : "wav",

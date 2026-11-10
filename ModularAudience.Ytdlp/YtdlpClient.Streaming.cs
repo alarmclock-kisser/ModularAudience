@@ -6,6 +6,24 @@ namespace ModularAudience.Ytdlp;
 
 public sealed partial class YtdlpClient
 {
+    public async Task<Uri> GetAudioStreamUrlAsync(YtdlpVideo video, CancellationToken cancellationToken)
+    {
+        string url = ValidateVideo(video);
+        var progress = CreateProgress(null);
+        await EnsureAvailableAsync(progress, cancellationToken).ConfigureAwait(false);
+        var arguments = CommonArguments();
+        MetadataSession?.AddArguments(arguments);
+        arguments.AddRange(["--no-playlist", "--skip-download", "--format", "bestaudio/best", "--get-url", "--", url]);
+        string job = CreateJobDirectory();
+        try
+        {
+            string output = await YtdlpProcess.RunAsync(manager.YtdlpPath, arguments, job, progress, false,
+                cancellationToken, MetadataSession?.CookieContents).ConfigureAwait(false);
+            return YoutubeAudioStreamUrl.Parse(output);
+        }
+        finally { YtdlpBinaryManager.DeleteStaging(job); }
+    }
+
     private async IAsyncEnumerable<YtdlpVideo> ReadMetadataStreamAsync(string target, int? maxResults,
         [EnumeratorCancellation] CancellationToken token, YtdlpResultType resultType, int? fetchCount = null)
     {

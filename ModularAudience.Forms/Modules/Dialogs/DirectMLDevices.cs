@@ -1,10 +1,11 @@
 using System.Runtime.InteropServices;
+using ModularAudience.Onnx;
 
 namespace ModularAudience.Forms;
 
 internal static class DirectMLDevices
 {
-    internal sealed record Adapter(int Id, string Name)
+    internal sealed record Adapter(int Id, string Name, long? Luid = null)
     {
         public override string ToString() => $"{Id}: {Name}";
     }
@@ -40,7 +41,7 @@ internal static class DirectMLDevices
                 {
                     var describe = Marshal.GetDelegateForFunctionPointer<GetDescription>(Marshal.ReadIntPtr(Marshal.ReadIntPtr(adapter), 10 * IntPtr.Size));
                     if (describe(adapter, out var description) >= 0 && (description.Flags & 2) == 0)
-                        adapters.Add(new Adapter((int)index, description.Description));
+                        adapters.Add(new Adapter((int)index, description.Description, description.Luid));
                 }
                 finally { Marshal.Release(adapter); }
             }
@@ -48,4 +49,7 @@ internal static class DirectMLDevices
         finally { Marshal.Release(factory); }
         return adapters.ToArray();
     }
+
+    internal static Adapter? MatchCudaDevice(DemucsCudaDevice cuda, IEnumerable<Adapter> adapters) =>
+        cuda.Luid is { } luid ? adapters.FirstOrDefault(adapter => adapter.Luid == luid) : null;
 }

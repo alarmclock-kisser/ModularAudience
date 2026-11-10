@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using ModularAudience.Forms;
 using ModularAudience.Onnx;
 
 namespace ModularAudience.Audio.Tests;
@@ -51,10 +52,14 @@ public sealed class DemucsSharedModelTests
         leases[11]!.KeepAlive = TimeSpan.FromMilliseconds(80); leases[11]!.Dispose();
         using (var reused = await pool.AcquireAsync("model", "options", null))
         {
-            Assert.AreSame(model, reused!.Model); await Task.Delay(130); Assert.AreEqual(0, model.Disposals);
+            Assert.AreSame(model, reused!.Model);
+            Assert.IsTrue(pool.AnyLoaded((_, _) => true));
+            await Task.Delay(130);
+            Assert.AreEqual(0, model.Disposals);
             reused.KeepAlive = TimeSpan.Zero;
         }
         Assert.AreEqual(1, model.Disposals);
+        Assert.IsFalse(pool.AnyLoaded((_, _) => true));
         Assert.IsNull(await pool.AcquireAsync("model", "options", null));
     }
     [TestMethod]
@@ -84,5 +89,19 @@ public sealed class DemucsSharedModelTests
         var first = new DemucsLoadOptions { UseDirectML = true, EnableMemoryPattern = true, ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_PARALLEL };
         var effective = new DemucsLoadOptions { UseDirectML = true, EnableMemoryPattern = false, ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_SEQUENTIAL };
         Assert.AreEqual(DemucsModelCache.Key("test.onnx", first), DemucsModelCache.Key("test.onnx", effective));
+    }
+
+    [TestMethod]
+    public void CudaDeviceMapsToDirectMLOnlyByMatchingPhysicalLuid()
+    {
+        var expected = new DirectMLDevices.Adapter(3, "NVIDIA GPU", 0x12345678);
+        var other = new DirectMLDevices.Adapter(1, "Other GPU", 0x87654321);
+
+        Assert.AreSame(expected, DirectMLDevices.MatchCudaDevice(
+            new DemucsCudaDevice(2, "NVIDIA GPU", expected.Luid), [other, expected]));
+        Assert.IsNull(DirectMLDevices.MatchCudaDevice(
+            new DemucsCudaDevice(0, "Unknown GPU", null), [expected]));
+        Assert.IsNull(DirectMLDevices.MatchCudaDevice(
+            new DemucsCudaDevice(1, "Different GPU", other.Luid), [expected]));
     }
 }

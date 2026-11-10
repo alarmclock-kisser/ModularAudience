@@ -29,10 +29,13 @@
         /// </summary>
         private void InitializeComponent()
         {
+            this.components = new System.ComponentModel.Container();
             this.comboBox_models = new ComboBox();
             this.progressBar_inferencing = new ProgressBar();
             this.button_run = new Button();
             this.checkedListBox_stems = new CheckedListBox();
+            this.checkedListBox_cudaDevices = new CheckedListBox();
+            this.gpuCacheTimer = new System.Windows.Forms.Timer(this.components);
             this.SuspendLayout();
             // 
             // comboBox_models
@@ -70,6 +73,21 @@
             this.checkedListBox_stems.Name = "checkedListBox_stems";
             this.checkedListBox_stems.Size = new Size(140, 148);
             this.checkedListBox_stems.TabIndex = 3;
+            //
+            // checkedListBox_cudaDevices
+            //
+            this.checkedListBox_cudaDevices.CheckOnClick = true;
+            this.checkedListBox_cudaDevices.Dock = DockStyle.Fill;
+            this.checkedListBox_cudaDevices.FormattingEnabled = true;
+            this.checkedListBox_cudaDevices.Name = "checkedListBox_cudaDevices";
+            this.checkedListBox_cudaDevices.TabIndex = 4;
+            this.checkedListBox_cudaDevices.ItemCheck += this.CudaDevices_ItemCheck;
+            this.components.Add(this.checkedListBox_cudaDevices);
+            //
+            // gpuCacheTimer
+            //
+            this.gpuCacheTimer.Interval = 1000;
+            this.gpuCacheTimer.Tick += this.GpuCacheTimer_Tick;
             // 
             // OnnxDemucsDialog
             // 
@@ -93,5 +111,7 @@
         private ProgressBar progressBar_inferencing;
         private Button button_run;
         private CheckedListBox checkedListBox_stems;
+        private CheckedListBox checkedListBox_cudaDevices;
+        private System.Windows.Forms.Timer gpuCacheTimer;
     }
 }

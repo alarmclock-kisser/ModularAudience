@@ -66,6 +66,8 @@ partial class YoutubeBrowserWindow
     private System.Windows.Forms.Timer progressTimer = null!;
     private ContextMenuStrip columnsMenu = null!;
     private ToolStripMenuItem[] columnMenuItems = null!;
+    private ToolStripMenuItem playItem = null!;
+    private CheckBox autoplayCheck = null!;
     private FolderBrowserDialog folderDialog = null!;
 
     protected override void Dispose(bool disposing)
@@ -320,11 +322,12 @@ partial class YoutubeBrowserWindow
         var relatedItem = new ToolStripMenuItem("Show related / next-up");
         var channelItem = new ToolStripMenuItem("Navigate to Channel");
         var playlistItem = new ToolStripMenuItem("Navigate to Playlist", null, NavigateToPlaylist_Click);
+        playItem = new ToolStripMenuItem("Play", null, PlayStop_Click);
         channelItem.Click += NavigateToChannel_Click;
         relatedItem.Click += ShowRelated_Click;
         openItem.Click += Open_Click;
         copyItem.Click += Copy_Click;
-        columnsMenu.Items.AddRange([enqueueItem, openItem, relatedItem, copyItem, channelItem, playlistItem, new ToolStripSeparator()]);
+        columnsMenu.Items.AddRange([playItem, new ToolStripSeparator(), enqueueItem, openItem, relatedItem, copyItem, channelItem, playlistItem, new ToolStripSeparator()]);
         string[] titles = ["Title", "Uploader", "Duration", "Views", "ID", "URL", "Upload Date"];
         columnMenuItems = new ToolStripMenuItem[titles.Length];
         for (int index = 0; index < titles.Length; index++)
@@ -341,6 +344,8 @@ partial class YoutubeBrowserWindow
         columnsMenu.Opening += (sender, args) =>
         {
             enqueueItem.Enabled = CanEnqueueDownloads && SelectedVideos().Any(video => !video.IsChannel);
+            playItem.Text = IsPlayingVideo(SelectedVideo()) ? "Stop" : "Play";
+            playItem.Enabled = !closing && !busy && binariesReady && SelectedVideo() is { IsVideo: true };
             openItem.Enabled = !closing && SelectedVideo() is not null;
             copyItem.Enabled = !closing && resultsList.SelectedItems.Count > 0;
             relatedItem.Enabled = CanBrowse && SelectedVideo() is { IsVideo: true };
@@ -501,6 +506,13 @@ partial class YoutubeBrowserWindow
         openButton = DesignerButton("Browser");
         copyButton = DesignerButton("Copy URL(s)");
         relatedButton = DesignerButton("Related search");
+        autoplayCheck = new CheckBox
+        {
+            Name = "autoplayCheck", Text = "Autoplay", AutoSize = true,
+            AccessibleName = "Play the first related video when the current audio ends",
+            Margin = new Padding(6, 8, 6, 3)
+        };
+        autoplayCheck.CheckedChanged += Autoplay_CheckedChanged;
         uploaderButton = DesignerButton("Uploader search");
         var columnButton = DesignerButton("Columns...");
         updateButton = DesignerButton("Update tools");
@@ -513,7 +525,7 @@ partial class YoutubeBrowserWindow
         foreach (Control action in new Control[] { downloadButton, openButton, copyButton, relatedButton, uploaderButton, columnButton,
             checkForUpdates, updateButton, toolsFolderButton, cancelButton }) action.Margin = new Padding(2, 3, 2, 3);
         actions.Controls.AddRange([downloadButton, openButton, copyButton, relatedButton,
-            uploaderButton, columnButton, checkForUpdates, updateButton, toolsFolderButton, cancelButton]);
+            uploaderButton, autoplayCheck, columnButton, checkForUpdates, updateButton, toolsFolderButton, cancelButton]);
         downloadButton.Click += Download_Click;
         openButton.Click += Open_Click;
         copyButton.Click += Copy_Click;

@@ -15,6 +15,7 @@ public sealed class VocalVoiceProfile
     public double VibratoHz { get; set; } = 5;
     public double Voicing { get; set; } = 0.85;
     public double Noise { get; set; } = 0.5;
+    public bool Singing { get; set; }
 
     public VocalVoiceProfile Clone() => new()
     {
@@ -28,6 +29,7 @@ public sealed class VocalVoiceProfile
         VibratoHz = VibratoHz,
         Voicing = Voicing,
         Noise = Noise,
+        Singing = Singing,
     };
 
     public static VocalVoiceProfile FromPreset(VocalVoicePreset preset, string? name = null) => new()
@@ -42,6 +44,7 @@ public sealed class VocalVoiceProfile
         VibratoHz = preset.VibratoHz,
         Voicing = preset.Voicing,
         Noise = preset.Noise,
+        Singing = preset.Singing,
     };
 
     public VocalVoicePreset ToPreset(string id) => new()
@@ -56,5 +59,6 @@ public sealed class VocalVoiceProfile
         VibratoHz = VibratoHz,
         Voicing = Voicing,
         Noise = Noise,
+        Singing = Singing,
     };
 }

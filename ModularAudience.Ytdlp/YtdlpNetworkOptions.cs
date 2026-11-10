@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Sockets;
+
 namespace ModularAudience.Ytdlp;
 
 public enum YtdlpIpVersion { Automatic, IPv4, IPv6 }
@@ -10,6 +13,39 @@ public sealed record YtdlpNetworkOptions
     public bool UseSystemCertificateTrust { get; init; }
 
     public void Validate() => AddArguments([]);
+
+    internal SocketsHttpHandler CreateHttpHandler()
+    {
+        this.Validate();
+        var handler = new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            AutomaticDecompression = DecompressionMethods.All
+        };
+        if (this.ProxyUrl is { } proxy)
+        {
+            handler.UseProxy = proxy.Length > 0;
+            if (proxy.Length > 0) handler.Proxy = new WebProxy(proxy);
+        }
+        if (this.IpVersion != YtdlpIpVersion.Automatic)
+        {
+            var family = this.IpVersion == YtdlpIpVersion.IPv4
+                ? AddressFamily.InterNetwork : AddressFamily.InterNetworkV6;
+            handler.ConnectCallback = async (context, token) =>
+            {
+                var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, family, token);
+                if (addresses.Length == 0) throw new SocketException((int)SocketError.HostNotFound);
+                var socket = new Socket(family, SocketType.Stream, ProtocolType.Tcp);
+                try
+                {
+                    await socket.ConnectAsync(addresses, context.DnsEndPoint.Port, token);
+                    return new NetworkStream(socket, ownsSocket: true);
+                }
+                catch { socket.Dispose(); throw; }
+            };
+        }
+        return handler;
+    }
 
     internal void AddArguments(List<string> arguments)
     {

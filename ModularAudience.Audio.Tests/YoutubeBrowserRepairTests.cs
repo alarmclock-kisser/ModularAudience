@@ -108,6 +108,52 @@ public sealed class YoutubeBrowserRepairTests
     }
 
     [TestMethod]
+    public void AutoplaySetting_PersistsAndDefaultsOffForOlderSettings()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "youtube-settings-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            new YoutubeBrowserSettings { Autoplay = true }.Save(path);
+            var saved = YoutubeBrowserSettings.Load(out var warning, path);
+            Assert.IsNull(warning);
+            Assert.IsTrue(saved.Autoplay);
+            File.WriteAllText(path, "{}");
+            Assert.IsFalse(YoutubeBrowserSettings.Load(out _, path).Autoplay);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [STATestMethod]
+    public void ActivePlaybackRowStaysAtTopAfterSortingAndResultRefresh()
+    {
+        using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+        _ = window.Handle;
+        var playing = new YtdlpVideo { Id = "abcdefghijk", Title = "Playing" };
+        var videos = new[]
+        {
+            new YtdlpVideo { Id = "dQw4w9WgXcQ", Title = "Zulu" },
+            playing,
+            new YtdlpVideo { Id = "0123456789_", Title = "Alpha" }
+        };
+        Invoke(window, "PopulateResults", (object)videos);
+        typeof(YoutubeBrowserWindow).GetField("activePlaybackVideo", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(window, playing);
+        Invoke(window, "PinPlaybackVideo", playing);
+        var list = Field<ListView>(window, "resultsList");
+        Assert.AreEqual(playing.Id, ((YtdlpVideo)list.Items[0].Tag!).Id);
+        StringAssert.StartsWith(list.Items[0].Text, "▶ ");
+
+        Invoke(window, "Column_Click", null, new ColumnClickEventArgs(0));
+        Assert.AreEqual(playing.Id, ((YtdlpVideo)list.Items[0].Tag!).Id);
+        Invoke(window, "PopulateResults", (object)new[] { videos[0], videos[2] });
+        Assert.AreEqual(playing.Id, ((YtdlpVideo)list.Items[0].Tag!).Id);
+        StringAssert.StartsWith(list.Items[0].Text, "▶ ");
+    }
+
+    [TestMethod]
     public void Parser_UploadDate_ParsesCalendarDateWithoutInventingMissingDates()
     {
         var videos = YtdlpParser.ParseVideos("""{"entries":[{"id":"abcdefghijk","upload_date":"20240229"},{"id":"dQw4w9WgXcQ","upload_date":"20250229"},{"id":"0123456789_"}]}""");

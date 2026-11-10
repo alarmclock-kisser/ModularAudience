@@ -20,6 +20,7 @@ public sealed class VocalSynthSettings
     public double VibratoHz { get; set; } = 5;
     public double Voicing { get; set; } = 0.85;
     public double Noise { get; set; } = 0.5;
+    public bool Singing { get; set; }
 
     public void Validate()
     {
@@ -69,6 +70,7 @@ public sealed class VocalSynthSettings
         VibratoHz = VibratoHz,
         Voicing = Voicing,
         Noise = Noise,
+        Singing = Singing,
     };
 
     public static VocalSynthSettings FromPreset(VocalVoicePreset preset, VocalLanguage language = VocalLanguage.English, string text = "")
@@ -86,6 +88,7 @@ public sealed class VocalSynthSettings
             VibratoHz = preset.VibratoHz,
             Voicing = preset.Voicing,
             Noise = preset.Noise,
+            Singing = preset.Singing,
         };
         return s;
     }
@@ -105,6 +108,7 @@ public sealed class VocalSynthSettings
             VibratoHz = profile.VibratoHz,
             Voicing = profile.Voicing,
             Noise = profile.Noise,
+            Singing = profile.Singing,
         };
         return s;
     }

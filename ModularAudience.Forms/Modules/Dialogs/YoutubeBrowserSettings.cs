@@ -12,6 +12,7 @@ internal sealed class YoutubeBrowserSettings
     public bool Maximized { get; set; }
     public int SplitterDistance { get; set; } = 760;
     public bool ShowThumbnails { get; set; } = true;
+    public bool Autoplay { get; set; }
     public bool[] VisibleColumns { get; set; } = [true, true, true, true, false, false, true];
     public int ResultLimit { get; set; } = 30;
     public bool SaveToDisk { get; set; }
