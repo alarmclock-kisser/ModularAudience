@@ -1277,6 +1277,12 @@ namespace ModularAudience.Forms
                 await this.CancelAutoPlayInternalAsync(stopCollection: false).ConfigureAwait(false);
                 await this.AudioC.StopAllAsync().ConfigureAwait(false);
 
+                // Reset any leftover rate/pitch factors so auto-hear plays the raw sample
+                // (a shared AudioObj may carry a non-1x factor from a previous operation).
+                audio.SampleRateFactor = 1.0f;
+                audio.ManualSampleRateFactor = 1.0f;
+                audio.StartingOffset = 0;
+
                 lock (this.autoPlayGate)
                 {
                     this.autoPlayCts = cts;
