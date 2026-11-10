@@ -70,6 +70,7 @@ public sealed partial class MixTrackView : Form
     private bool dragOverActive;
     private int dragOverRow;
     private double dragOverTime;
+    private double dragOverDuration;
     private double rulerOriginalLoopStart, rulerOriginalLoopEnd;
     private int resizeOriginalLaneHeight;
     private const int Header = 190, Ruler = 30;
@@ -199,6 +200,26 @@ public sealed partial class MixTrackView : Form
         pasteHoldTimer.Tick += (_, _) => ShowClipboardHistory(); KeyUp += PasteKeyUp;
         Deactivate += (_, _) => { pasteHoldTimer.Stop(); pasteHoldTracking = false; pasteKeyDown = false; };
         canvas.Paint += PaintTimeline; canvas.MouseDown += MouseDownTimeline; canvas.MouseMove += MouseMoveTimeline; canvas.MouseUp += MouseUpTimeline;
+        canvas.KeyDown += (_, e) =>
+        {
+            if (dragMode != 5 || e.KeyCode != Keys.ControlKey) return;
+            bool ctrlNow = (ModifierKeys & Keys.Control) != 0;
+            if (ctrlNow == selectionAdditive) return;
+            if (ctrlNow) { additiveSelection.Clear(); additiveSelection.UnionWith(selectedClips); if (lassoRects.Count == 0) lassoRects.Add((selectionStart, selectionEnd, selectionFirstRow, selectionLastRow)); }
+            else { lassoRects.Clear(); additiveSelection.Clear(); }
+            selectionAdditive = ctrlNow; selectingWhole = ctrlNow;
+            UpdateRangeSelection(lastPointer); e.Handled = true;
+        };
+        canvas.KeyUp += (_, e) =>
+        {
+            if (dragMode != 5 || e.KeyCode != Keys.ControlKey) return;
+            bool ctrlNow = (ModifierKeys & Keys.Control) != 0;
+            if (ctrlNow == selectionAdditive) return;
+            if (ctrlNow) { additiveSelection.Clear(); additiveSelection.UnionWith(selectedClips); if (lassoRects.Count == 0) lassoRects.Add((selectionStart, selectionEnd, selectionFirstRow, selectionLastRow)); }
+            else { lassoRects.Clear(); additiveSelection.Clear(); }
+            selectionAdditive = ctrlNow; selectingWhole = ctrlNow;
+            UpdateRangeSelection(lastPointer); e.Handled = true;
+        };
         canvas.MouseCaptureChanged += (_, _) =>
         {
             if (!canvas.Capture && dragMode == 7 && !closing && !released)
@@ -222,8 +243,10 @@ public sealed partial class MixTrackView : Form
                 if (Dragged(e.Data).Length == 0) { e.Effect = DragDropEffects.None; return; }
                 e.Effect = DragDropEffects.Copy;
                 var p = canvas.PointToClient(new Point(e.X, e.Y));
-                dragOverActive = true; dragOverRow = Math.Clamp(RowAt(p.Y), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
+                var audios = Dragged(e.Data);
+                dragOverActive = true; dragOverRow = Arrangement.Lanes.Count > 0 ? Math.Clamp(RowAt(p.Y), 0, Arrangement.Lanes.Count - 1) : 0;
                 dragOverTime = Arrangement.SnapTime(XTime(p.X), (e.KeyState & 4) != 0);
+                dragOverDuration = audios.Length > 0 ? Math.Max(0.05, audios[0].Duration.TotalSeconds) : 0.5;
                 canvas.Invalidate();
             };
             target.DragOver += (_, e) =>
@@ -231,8 +254,10 @@ public sealed partial class MixTrackView : Form
                 if (Dragged(e.Data).Length == 0) { e.Effect = DragDropEffects.None; dragOverActive = false; canvas.Invalidate(); return; }
                 e.Effect = DragDropEffects.Copy;
                 var p = canvas.PointToClient(new Point(e.X, e.Y));
-                dragOverRow = Math.Clamp(RowAt(p.Y), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
+                var audios2 = Dragged(e.Data);
+                dragOverRow = Arrangement.Lanes.Count > 0 ? Math.Clamp(RowAt(p.Y), 0, Arrangement.Lanes.Count - 1) : 0;
                 dragOverTime = Arrangement.SnapTime(XTime(p.X), (e.KeyState & 4) != 0);
+                dragOverDuration = audios2.Length > 0 ? Math.Max(0.05, audios2[0].Duration.TotalSeconds) : dragOverDuration;
                 dragOverActive = true;
                 canvas.Invalidate();
             };
@@ -665,14 +690,14 @@ public sealed partial class MixTrackView : Form
             }
         }
         // Ghost preview while dragging audio from a collection into the mix.
-        if (dragOverActive && Arrangement.Lanes.Count > 0)
+        if (dragOverActive)
         {
-            int row = Math.Clamp(dragOverRow, 0, Arrangement.Lanes.Count - 1);
-            int y = Ruler + (row - vertical.Value) * LaneHeight;
+            int row = Arrangement.Lanes.Count > 0 ? Math.Clamp(dragOverRow, 0, Arrangement.Lanes.Count - 1) : 0;
+            int y = Arrangement.Lanes.Count > 0 ? Ruler + (row - vertical.Value) * LaneHeight : Ruler + 3;
             using var ghostBrush = new SolidBrush(Color.FromArgb(45, VisualColor(visual.Clip)));
             using var ghostPen = new Pen(Color.FromArgb(180, VisualColor(visual.SelectedClip))) { DashStyle = DashStyle.Dash };
             int x = TimeX(dragOverTime);
-            int w = Math.Max(8, (int)Math.Round(0.5 * pixelsPerSecond));
+            int w = Math.Max(8, (int)Math.Round((dragOverDuration > 0 ? dragOverDuration : 0.5) * pixelsPerSecond));
             var rect = new Rectangle(x, y + 3, w, LaneHeight - 7);
             var clipRect = Rectangle.Intersect(rect, new Rectangle(Header, Ruler, Math.Max(0, canvas.Width - Header), Math.Max(0, canvas.Height - Ruler)));
             g.FillRectangle(ghostBrush, clipRect);
@@ -726,15 +751,8 @@ public sealed partial class MixTrackView : Form
         fullSelectedClips.Clear();
         selectedClips.UnionWith(additiveSelection);
         if (selectingWhole) fullSelectedClips.UnionWith(additiveSelection);
-        // Accumulate the current rectangle into the lasso (Ctrl session) so the selection
-        // grows into a polygon encompassing every touched segment.
-        if (selectionAdditive)
-        {
-            var current = (selectionStart, selectionEnd, selectionFirstRow, selectionLastRow);
-            if (!lassoRects.Any(r => Math.Abs(r.Start - current.selectionStart) < 1e-9 && Math.Abs(r.End - current.selectionEnd) < 1e-9 && r.FirstRow == current.selectionFirstRow && r.LastRow == current.selectionLastRow))
-                lassoRects.Add(current);
-        }
-        var rects = selectionAdditive && lassoRects.Count > 0 ? lassoRects : new List<(double, double, int, int)> { (selectionStart, selectionEnd, selectionFirstRow, selectionLastRow) };
+        // Lasso (Ctrl): accumulate completed rectangles; current drag extends the selection.
+        var rects = new List<(double, double, int, int)>(lassoRects) { (selectionStart, selectionEnd, selectionFirstRow, selectionLastRow) };
         foreach (var (rs, re, rf, rl) in rects)
             for (int row = Math.Max(0, rf); row <= Math.Min(Arrangement.Lanes.Count - 1, rl); row++)
                 foreach (var clip in Arrangement.Lanes[row].Clips)
@@ -866,7 +884,29 @@ public sealed partial class MixTrackView : Form
                 ? LaneVolumeRect(row).Contains(e.Location) ? Cursors.Hand : Cursors.SizeNS : Cursors.Default;
             return;
         }
-        if (dragMode == 5) { if (!selectionAdditive || Math.Abs(e.X - down.X) + Math.Abs(e.Y - down.Y) > 3) UpdateRangeSelection(e.Location); return; }
+        if (dragMode == 5)
+        {
+            bool ctrlNow = (ModifierKeys & Keys.Control) != 0;
+            if (ctrlNow != selectionAdditive)
+            {
+                // Toggle lasso/accumulate mode on the fly while dragging.
+                if (ctrlNow)
+                {
+                    additiveSelection.Clear();
+                    additiveSelection.UnionWith(selectedClips);
+                    if (lassoRects.Count == 0) lassoRects.Add((selectionStart, selectionEnd, selectionFirstRow, selectionLastRow));
+                }
+                else
+                {
+                    lassoRects.Clear();
+                    additiveSelection.Clear();
+                }
+                selectionAdditive = ctrlNow;
+                selectingWhole = ctrlNow;
+            }
+            if (!selectionAdditive || Math.Abs(e.X - down.X) + Math.Abs(e.Y - down.Y) > 3) UpdateRangeSelection(e.Location);
+            return;
+        }
         if (dragMode == 6)
         {
             if (Math.Abs(e.Y - down.Y) < SystemInformation.DragSize.Height / 2) return;
@@ -942,6 +982,12 @@ public sealed partial class MixTrackView : Form
         dragOriginalStarts.Clear();
         bool rulerDrag = dragMode == 4;
         bool rangeDrag = dragMode == 5;
+        if (rangeDrag && selectionAdditive && selectionEnd > selectionStart)
+        {
+            var current = (selectionStart, selectionEnd, selectionFirstRow, selectionLastRow);
+            if (!lassoRects.Any(r => Math.Abs(r.Start - current.selectionStart) < 1e-9 && Math.Abs(r.End - current.selectionEnd) < 1e-9 && r.FirstRow == current.selectionFirstRow && r.LastRow == current.selectionLastRow))
+                lassoRects.Add(current);
+        }
         dragMode = 0; canvas.Capture = false; dragBefore = null;
         if (rulerDrag && Math.Abs(e.X - down.X) < 3)
         {
