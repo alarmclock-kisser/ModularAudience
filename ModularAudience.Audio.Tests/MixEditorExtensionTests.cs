@@ -90,6 +90,34 @@ public sealed class MixEditorExtensionTests
         Assert.AreEqual(0d, copied.SourceOffset); Assert.AreEqual(2d, copied.SourceDuration);
     }
     [STATestMethod]
+    public void ControlLassoSelectsWholeClipsTouchedByItsOrthogonalPolygon()
+    {
+        using var mix = new MixTrackView(); MixSource source = Populate(mix);
+        var third = new MixLane { Name = "Lane 2" }; mix.Arrangement.Lanes.Add(third);
+        mix.Arrangement.AddClip(third, source, 2);
+        Set(mix, "selectionAdditive", true); Set(mix, "selectingWhole", true);
+        Call(mix, "BeginLasso", new Point(190, 30));
+        Point[] path = [new(550, 30), new(550, 180), new(280, 180), new(280, 280), new(190, 280)];
+        foreach (Point point in path) Call(mix, "AppendLassoPoint", point);
+        Call(mix, "UpdateRangeSelection", path[^1]);
+        var polygon = (List<(double Time, double Row)>)Call(mix, "BuildLassoPolygon")!;
+        for (int i = 1; i < polygon.Count; i++)
+            Assert.IsTrue(Math.Abs(polygon[i].Time - polygon[i - 1].Time) < 1e-9 ||
+                Math.Abs(polygon[i].Row - polygon[i - 1].Row) < 1e-9, "Every lasso edge must be horizontal or vertical.");
+        var selected = (HashSet<Guid>)Field(mix, "selectedClips");
+        var whole = (HashSet<Guid>)Field(mix, "fullSelectedClips");
+        Assert.AreEqual(2, selected.Count);
+        CollectionAssert.AreEquivalent(selected.ToArray(), whole.ToArray());
+        var parts = (IList)Call(mix, "SelectedParts")!;
+        Assert.AreEqual(2, parts.Count);
+        foreach (object part in parts)
+        {
+            var copied = (MixClip)part.GetType().GetProperty("Clip")!.GetValue(part)!;
+            Assert.AreEqual(0d, copied.SourceOffset, 0.001);
+            Assert.AreEqual(2d, copied.SourceDuration, 0.001);
+        }
+    }
+    [STATestMethod]
     public void PasteTapShowsGhostAndEscapeCancellationDoesNotMutateArrangement()
     {
         using var mix = new MixTrackView(); Populate(mix);
@@ -101,6 +129,15 @@ public sealed class MixEditorExtensionTests
         Assert.IsFalse(((System.Windows.Forms.Timer)Field(mix, "pasteHoldTimer")).Enabled);
         Call(mix, "CancelPastePreview"); Assert.AreEqual(false, Field(mix, "pastePreview"));
         Assert.AreEqual(2, mix.Arrangement.Lanes.Sum(l => l.Clips.Count));
+    }
+    [STATestMethod]
+    public void AudioDropClearsTheTemporaryPlacementOutline()
+    {
+        using var mix = new MixTrackView();
+        Set(mix, "dragOverActive", true);
+        var args = new DragEventArgs(new DataObject(), 0, 0, 0, DragDropEffects.Copy, DragDropEffects.None);
+        Call(mix, "DropAudio", mix, args);
+        Assert.IsFalse((bool)Field(mix, "dragOverActive"));
     }
     [STATestMethod]
     public void RenderSelectionIncludesOnlySelectedClipsAndKeepsLaneGainAndTiming()
@@ -127,6 +164,81 @@ public sealed class MixEditorExtensionTests
         Set(mix, "manualCaret", 1.25); Set(mix, "caret", 9d); Call(mix, "JumpToManualCaret", false);
         Assert.AreEqual(1.25, Field(mix, "caret"));
         Call(mix, "JumpToManualCaret", true); Assert.AreEqual(0d, Field(mix, "manualCaret")); Assert.AreEqual(0d, Field(mix, "caret"));
+    }
+    [STATestMethod]
+    public void TrackNamesAreEditableAndChooseTheNextUnusedDefaultIndex()
+    {
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".mamix");
+        try
+        {
+            using var mix = new MixTrackView();
+            mix.Arrangement.Lanes.Add(new MixLane { Name = "Track #1" });
+            mix.Arrangement.Lanes.Add(new MixLane { Name = "Track 3" });
+            Call(mix, "AddEmptyTrack");
+            Assert.AreEqual("Track #2", mix.Arrangement.Lanes[2].Name);
+            Call(mix, "BeginLaneNameEdit", 2);
+            ((TextBox)Field(mix, "laneNameEditor")).Text = "  Drum Bus  ";
+            Call(mix, "EndLaneNameEdit", true);
+            Assert.AreEqual("Drum Bus", mix.Arrangement.Lanes[2].Name);
+            Drain(mix.Arrangement.SaveAsync(path));
+            using var restored = MixArrangement.LoadAsync(path).GetAwaiter().GetResult();
+            Assert.AreEqual("Drum Bus", restored.Lanes[2].Name);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+    [STATestMethod]
+    public void MouseWheelScrollsTimeWhileVerticalNavigationUsesItsScrollbar()
+    {
+        using var mix = new MixTrackView(); Populate(mix);
+        for (int i = 0; i < 7; i++) mix.Arrangement.Lanes.Add(new MixLane { Name = "Extra " + i });
+        Call(mix, "Changed");
+        mix.Show(); Application.DoEvents();
+        var vertical = (VScrollBar)Field(mix, "vertical");
+        var horizontal = (HScrollBar)Field(mix, "scroll");
+        Set(mix, "LaneHeight", 100);
+        mix.Arrangement.Visual.AutoTrackHeight = false;
+        Call(mix, "UpdateVerticalScrollbar");
+        Application.DoEvents();
+        Assert.IsTrue(vertical.Visible);
+        Assert.IsGreaterThan(0, vertical.Maximum - vertical.LargeChange + 1);
+        vertical.Value = 1;
+        horizontal.Maximum = 10000; horizontal.Value = 500;
+        Call(mix, "ScrollTimelineByWheel", -120);
+        Assert.IsGreaterThan(500, horizontal.Value);
+        Assert.AreEqual(1, vertical.Value);
+        mix.Arrangement.Visual.AutoTrackHeight = true;
+        Call(mix, "ApplyAutoTrackHeight");
+        Application.DoEvents();
+        Assert.IsFalse(vertical.Visible);
+        Assert.AreEqual(0, vertical.Value);
+    }
+    [STATestMethod]
+    public void RenamingMixUpdatesTitleAndPersistsThroughProjectReload()
+    {
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".mamix");
+        try
+        {
+            using var mix = new MixTrackView();
+            Drain((Task)Call(mix, "SaveToPathAsync", path, CancellationToken.None)!);
+            var autoSave = (CheckBox)Field(mix, "autoSave"); autoSave.Checked = true;
+            var timer = (System.Windows.Forms.Timer)Field(mix, "projectSaveTimer");
+            timer.Stop(); Drain((Task)Call(mix, "FlushProjectSaveAsync")!);
+            mix.DialogPresenter = form =>
+            {
+                form.Controls.OfType<TextBox>().Single().Text = "Renamed mix";
+                return Task.FromResult(DialogResult.OK);
+            };
+            Call(mix, "RenameMix");
+            Assert.AreEqual("Renamed mix", mix.Text);
+            Assert.IsTrue(timer.Enabled);
+            timer.Stop(); Drain((Task)Call(mix, "FlushProjectSaveAsync")!);
+            using var loaded = MixArrangement.LoadAsync(path).GetAwaiter().GetResult();
+            Assert.AreEqual("Renamed mix", loaded.Name);
+            using var reopened = new MixTrackView();
+            Drain((Task)Call(reopened, "LoadFromPathAsync", path, CancellationToken.None)!);
+            Assert.AreEqual("Renamed mix", reopened.Text);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
     }
     [STATestMethod]
     public void AutoSaveEnablesAfterSaveAndPersistsEditsUndoAndView()

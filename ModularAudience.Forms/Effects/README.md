@@ -89,6 +89,9 @@ BPM helpers; presets save their duration factor/speed, not live source metadata.
 Pitch Shift explicitly selects the existing windowed-sinc resampler (duration
 changes by `2^(-semitones/12)`) or its existing phase-locked FFT-PV compensation
 (exact original frame count). Cancellation and a worker limit reach both paths.
+The effect processor then matches the shifted output's peak to the source peak with
+one shared gain, preserving the source level and stereo balance without letting the
+output peak exceed the input peak.
 The vocoder streams successive spectra rather than storing every analysis window,
 so working memory does not grow with window count. Time Stretch offers that same
 continuous phase-locked vocoder or isolated-per-channel legacy V1 chunk processing.

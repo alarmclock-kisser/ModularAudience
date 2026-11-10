@@ -14,14 +14,14 @@ public sealed partial class MixTrackView
 
     private void AddEmptyTrack()
     {
-        Arrangement.Lanes.Add(new() { Name = "Track " + (Arrangement.Lanes.Count + 1) }); Changed();
+        Arrangement.Lanes.Add(new() { Name = NextLaneName() }); Changed();
     }
     private void EnsureTrackLayout()
     {
-        if (Arrangement.Visual.AutoTrackHeight) ApplyAutoTrackHeight();
-        vertical.Maximum = Math.Max(0, Arrangement.Lanes.Count - 1);
-        vertical.Value = Math.Min(vertical.Value, vertical.Maximum);
-        if (Arrangement.Lanes.Count == layoutLaneCount) return;
+        bool laneCountChanged = Arrangement.Lanes.Count != layoutLaneCount;
+        if (Arrangement.Visual.AutoTrackHeight && !laneCountChanged) ApplyAutoTrackHeight();
+        UpdateVerticalScrollbar();
+        if (!laneCountChanged) return;
         layoutLaneCount = Arrangement.Lanes.Count;
         if (layoutLaneCount == 0) return;
         // All lanes use one shared pixel height. Grow the client area on insertion;
@@ -29,15 +29,25 @@ public sealed partial class MixTrackView
         int extra = ClientSize.Height - canvas.ClientSize.Height;
         int requested = extra + Ruler + layoutLaneCount * LaneHeight + 4;
         int maximum = Screen.FromControl(this).WorkingArea.Height - (Height - ClientSize.Height) - 25;
+        int maximumClientHeight = Math.Max(MinimumSize.Height, maximum);
+        if (Arrangement.Visual.AutoTrackHeight && requested > maximumClientHeight)
+        {
+            int available = Math.Max(0, maximumClientHeight - extra - Ruler - 4);
+            LaneHeight = Math.Clamp(available / layoutLaneCount, 32, 600);
+            preciseLaneHeight = LaneHeight;
+            requested = extra + Ruler + layoutLaneCount * LaneHeight + 4;
+        }
         automaticSizing = true;
-        try { if (requested > ClientSize.Height) ClientSize = new(ClientSize.Width, Math.Min(requested, Math.Max(MinimumSize.Height, maximum))); }
+        try { if (requested > ClientSize.Height) ClientSize = new(ClientSize.Width, Math.Min(requested, maximumClientHeight)); }
         finally { previousClientHeight = ClientSize.Height; automaticSizing = false; }
+        UpdateVerticalScrollbar();
         canvas.Invalidate();
     }
     private void RestoreViewport()
     {
-        vertical.Maximum = Math.Max(0, Arrangement.Lanes.Count - 1);
-        vertical.Value = Math.Clamp(Arrangement.Visual.FirstVisibleTrack, 0, vertical.Maximum);
+        UpdateVerticalScrollbar();
+        int maximumValue = Math.Max(0, vertical.Maximum - vertical.LargeChange + 1);
+        vertical.Value = Arrangement.Visual.AutoTrackHeight ? 0 : Math.Clamp(Arrangement.Visual.FirstVisibleTrack, 0, maximumValue);
         this.UpdateTimelineScrollBounds();
         int value = (int)Math.Clamp(Arrangement.Visual.HorizontalScrollSeconds * 100, scroll.Minimum, int.MaxValue - 200);
         scroll.Maximum = Math.Max(scroll.Maximum, value + scroll.LargeChange);

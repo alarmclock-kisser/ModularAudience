@@ -61,7 +61,7 @@ public sealed partial class MixTrackView
         if (!pastePreview || pasteEntry == null || busy) return;
         var (row, time) = PasteAnchor();
         if (pasteEntry.Parts.Any(p => !Arrangement.Sources.ContainsKey(p.Clip.SourceId))) return;
-        while (Arrangement.Lanes.Count <= row + pasteEntry.Parts.Max(p => p.Row)) Arrangement.Lanes.Add(new() { Name = "Track " + (Arrangement.Lanes.Count + 1) });
+        while (Arrangement.Lanes.Count <= row + pasteEntry.Parts.Max(p => p.Row)) Arrangement.Lanes.Add(new() { Name = NextLaneName() });
         ClearRangeSelection(); selectedClip = null;
         foreach (var part in pasteEntry.Parts)
         {

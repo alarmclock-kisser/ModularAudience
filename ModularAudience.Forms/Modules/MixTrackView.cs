@@ -20,6 +20,7 @@ public sealed partial class MixTrackView : Form
     private readonly MixWindowGroup windowGroup;
     private bool restoring, busy, closing, allowClose, dirty;
     private readonly Canvas canvas = new() { Dock = DockStyle.Fill, AllowDrop = true, TabStop = true };
+    private readonly TextBox laneNameEditor = new() { BorderStyle = BorderStyle.FixedSingle, Visible = false };
     private readonly ToolTip interactionHints = new();
     private readonly HScrollBar scroll = new() { Dock = DockStyle.Bottom, Minimum = 0, Maximum = 100000, LargeChange = 100 };
     private readonly VScrollBar vertical = new() { Dock = DockStyle.Right, Minimum = 0, Maximum = 100, LargeChange = 1 };
@@ -54,9 +55,12 @@ public sealed partial class MixTrackView : Form
     private MixClip? copiedClip;
     private readonly HashSet<Guid> selectedClips = [];
     private double selectionStart, selectionEnd;
-    private readonly List<(double Start, double End, int FirstRow, int LastRow)> lassoRects = [];
+    private readonly List<(double Time, double Row)> lassoPoints = [];
     private int selectionFirstRow = -1, selectionLastRow = -1;
     private Point selectionPointer;
+    private Point lassoPreviousPointer;
+    private Guid? selectionClickCandidate, editingLaneId, laneNameClickCandidate;
+    private bool selectionClickWasSelected, selectionGestureMoved;
     private Guid? draggedLane;
     private int reorderTarget = -1;
     private bool reorderMoved;
@@ -173,6 +177,14 @@ public sealed partial class MixTrackView : Form
         toolbar.Controls.Add(autoSave);
         autoSave.CheckedChanged += (_, _) => { if (!restoring) { Arrangement.AutoSave = autoSave.Checked; Changed(); QueueProjectSave(force: true); } };
         Controls.Add(canvas); Controls.Add(vertical); Controls.Add(scroll); Controls.Add(status); Controls.Add(toolbar);
+        canvas.Controls.Add(laneNameEditor);
+        laneNameEditor.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; EndLaneNameEdit(commit: true); }
+            else if (e.KeyCode == Keys.Escape) { e.SuppressKeyPress = true; EndLaneNameEdit(commit: false); }
+        };
+        laneNameEditor.Leave += (_, _) => EndLaneNameEdit(commit: true);
+        UpdateVerticalScrollbar();
         this.interactionHints.SetToolTip(canvas, "Mix timeline: drop audio to create clips; drag clips to move them and their edges to trim. Drag the ruler to set a loop. Shift enables temporary snapping; Ctrl+wheel zooms. Right-click a clip or empty space for context-specific actions.");
         this.interactionHints.SetToolTip(play, "Play or pause the mix on its shared transport. All lanes follow one clock; non-destructive edits leave source audio intact.");
         this.interactionHints.SetToolTip(bpm, "Mix tempo. Changes are applied after the tempo edit debounce and use the arrangement's tempo handling; original source audio remains available.");
@@ -203,22 +215,12 @@ public sealed partial class MixTrackView : Form
         canvas.KeyDown += (_, e) =>
         {
             if (dragMode != 5 || e.KeyCode != Keys.ControlKey) return;
-            bool ctrlNow = (ModifierKeys & Keys.Control) != 0;
-            if (ctrlNow == selectionAdditive) return;
-            if (ctrlNow) { additiveSelection.Clear(); additiveSelection.UnionWith(selectedClips); if (lassoRects.Count == 0) lassoRects.Add((selectionStart, selectionEnd, selectionFirstRow, selectionLastRow)); }
-            else { lassoRects.Clear(); additiveSelection.Clear(); }
-            selectionAdditive = ctrlNow; selectingWhole = ctrlNow;
-            UpdateRangeSelection(lastPointer); e.Handled = true;
+            UpdateSelectionMode(ModifierKeys.HasFlag(Keys.Control)); e.Handled = true;
         };
         canvas.KeyUp += (_, e) =>
         {
             if (dragMode != 5 || e.KeyCode != Keys.ControlKey) return;
-            bool ctrlNow = (ModifierKeys & Keys.Control) != 0;
-            if (ctrlNow == selectionAdditive) return;
-            if (ctrlNow) { additiveSelection.Clear(); additiveSelection.UnionWith(selectedClips); if (lassoRects.Count == 0) lassoRects.Add((selectionStart, selectionEnd, selectionFirstRow, selectionLastRow)); }
-            else { lassoRects.Clear(); additiveSelection.Clear(); }
-            selectionAdditive = ctrlNow; selectingWhole = ctrlNow;
-            UpdateRangeSelection(lastPointer); e.Handled = true;
+            UpdateSelectionMode(ModifierKeys.HasFlag(Keys.Control)); e.Handled = true;
         };
         canvas.MouseCaptureChanged += (_, _) =>
         {
@@ -235,12 +237,17 @@ public sealed partial class MixTrackView : Form
             double time = Arrangement.SnapTime(XTime(e.X), ModifierKeys.HasFlag(Keys.Shift));
             ShowSourcePicker(lane, time, e.Location);
         };
-        canvas.MouseWheel += (_, e) => { if ((ModifierKeys & Keys.Control) != 0) Zoom(e.Delta > 0 ? 1.15 : 1 / 1.15); else vertical.Value = Math.Clamp(vertical.Value - Math.Sign(e.Delta), 0, Math.Max(0, Arrangement.Lanes.Count - 1)); };
+        canvas.MouseWheel += (_, e) =>
+        {
+            if (ModifierKeys.HasFlag(Keys.Control)) Zoom(e.Delta > 0 ? 1.15 : 1 / 1.15);
+            else ScrollTimelineByWheel(e.Delta);
+        };
         foreach (Control target in new Control[] { this, canvas })
         {
             target.DragEnter += (_, e) =>
             {
-                if (Dragged(e.Data).Length == 0) { e.Effect = DragDropEffects.None; return; }
+                if (Dragged(e.Data).Length == 0)
+                { dragOverActive = false; e.Effect = DragDropEffects.None; canvas.Invalidate(); return; }
                 e.Effect = DragDropEffects.Copy;
                 var p = canvas.PointToClient(new Point(e.X, e.Y));
                 var audios = Dragged(e.Data);
@@ -304,9 +311,11 @@ public sealed partial class MixTrackView : Form
                     LaneHeight = (int)Math.Round(preciseLaneHeight);
                 }
             }
+            UpdateVerticalScrollbar();
             previousClientHeight = ClientSize.Height;
             canvas.Invalidate();
         };
+        UpdateVerticalScrollbar();
     }
     private static AudioObj[] Dragged(IDataObject? data) => data?.GetData(typeof(AudioObj[])) as AudioObj[]
         ?? (data?.GetData(typeof(IEnumerable<AudioObj>)) as IEnumerable<AudioObj>)?.ToArray() ?? [];
@@ -357,7 +366,7 @@ public sealed partial class MixTrackView : Form
         view.LeaveCurrentMix();
         foreach (var old in joined.Where(p => ReferenceEquals(p.Value, view)).Select(p => p.Key).ToArray()) joined.Remove(old);
         Arrangement.Sources.TryAdd(source.Id, source);
-        var lane = new MixLane { Name = source.Name, Mute = view.Muted, Solo = view.Soloed };
+        var lane = new MixLane { Name = NextLaneName(), Mute = view.Muted, Solo = view.Soloed };
         Arrangement.Lanes.Add(lane); Arrangement.AddClip(lane, source, 0); joined[lane.Id] = view;
         this.RememberJoinedOrigin(lane.Id, view);
         view.SetJoinedMix(this); view.Hide(); view.Settings.Hide();
@@ -432,8 +441,44 @@ public sealed partial class MixTrackView : Form
         if (available < count * 32) available = count * 32;
         LaneHeight = Math.Clamp(available / count, 32, 600);
         preciseLaneHeight = LaneHeight;
-        vertical.Value = 0;
+        UpdateVerticalScrollbar();
+    }
+    private void UpdateVerticalScrollbar()
+    {
+        bool autoFit = Arrangement.Visual.AutoTrackHeight;
+        vertical.Visible = !autoFit;
         vertical.Maximum = Math.Max(0, Arrangement.Lanes.Count - 1);
+        int visibleRows = Math.Max(1, (canvas.ClientSize.Height - Ruler) / Math.Max(1, LaneHeight));
+        vertical.LargeChange = autoFit ? 1 : Math.Max(1, Math.Min(Arrangement.Lanes.Count, visibleRows));
+        int maximumValue = Math.Max(0, vertical.Maximum - vertical.LargeChange + 1);
+        vertical.Value = autoFit ? 0 : Math.Min(vertical.Value, maximumValue);
+        if (autoFit) Arrangement.Visual.FirstVisibleTrack = 0;
+    }
+    private void ScrollTimelineByWheel(int delta)
+    {
+        if (delta == 0) return;
+        double visibleSeconds = Math.Max(1, canvas.ClientSize.Width - Header) / pixelsPerSecond;
+        int step = Math.Max(1, (int)Math.Round(visibleSeconds * 0.15 * 100));
+        int notches = Math.Max(1, (int)Math.Ceiling(Math.Abs((double)delta) / 120));
+        int maximumValue = Math.Max(scroll.Minimum, scroll.Maximum - scroll.LargeChange + 1);
+        long next = (long)scroll.Value - Math.Sign(delta) * (long)step * notches;
+        scroll.Value = (int)Math.Clamp(next, (long)scroll.Minimum, (long)maximumValue);
+    }
+    private string NextLaneName()
+    {
+        var used = new HashSet<int>();
+        foreach (MixLane lane in Arrangement.Lanes)
+        {
+            string value = lane.Name.Trim();
+            if (!value.StartsWith("Track", StringComparison.OrdinalIgnoreCase)) continue;
+            string suffix = value["Track".Length..].Trim();
+            if (suffix.StartsWith('#')) suffix = suffix[1..].Trim();
+            if (int.TryParse(suffix, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int index) && index > 0)
+                used.Add(index);
+        }
+        int candidate = 1;
+        while (used.Contains(candidate)) candidate++;
+        return $"Track #{candidate}";
     }
     private async void RepeatSelection()
     {
@@ -493,12 +538,13 @@ public sealed partial class MixTrackView : Form
         if (key != committedAudioKey) { undo.Push(MixAudioHistory.Create(committed, state)); redo.Clear(); }
         committed = state; committedAudioKey = key;
         string project = Arrangement.CaptureProject();
-        if (project != committedProject) { committedProject = project; dirty = true; Text = Arrangement.Name; QueueProjectSave(); }
+        Text = Arrangement.Name;
+        if (project != committedProject) { committedProject = project; dirty = true; QueueProjectSave(); }
         foreach (var clip in Arrangement.Lanes.SelectMany(l => l.Clips))
             if (clip.TempoMode != ClipTempoMode.Original && Arrangement.Sources.TryGetValue(clip.SourceId, out var source) && source.Bpm <= 0)
                 status.Text = "A tempo-matched clip has no source BPM. Right-click it → Set source BPM.";
         ReconcileJoined();
-        vertical.Maximum = Math.Max(0, Arrangement.Lanes.Count - 1); vertical.Value = Math.Min(vertical.Value, vertical.Maximum);
+        UpdateVerticalScrollbar();
         this.UpdateTimelineScrollBounds();
         canvas.Invalidate();
         this.UpdateTransportLoop();
@@ -515,6 +561,7 @@ public sealed partial class MixTrackView : Form
         snap.Checked = Arrangement.Snap; loop.Checked = Arrangement.Loop; restoring = false; dirty = true;
         LaneHeight = Arrangement.DisplayLaneHeight; preciseLaneHeight = LaneHeight;
         if (Arrangement.Visual.AutoTrackHeight) ApplyAutoTrackHeight();
+        UpdateVerticalScrollbar();
         pixelsPerSecond = Arrangement.Visual.PixelsPerSecond;
         this.overlapModeBox.CheckState = Arrangement.OverlapMode switch
         {
@@ -589,6 +636,7 @@ public sealed partial class MixTrackView : Form
         Arrangement.DisplayLaneHeight = options.DisplayLaneHeight;
         Arrangement.Bpm = options.Bpm; Arrangement.SnapDivision = options.SnapDivision; Arrangement.Snap = options.Snap;
         LaneHeight = options.DisplayLaneHeight; preciseLaneHeight = LaneHeight; if (options.Visual.AutoTrackHeight) ApplyAutoTrackHeight();
+        UpdateVerticalScrollbar();
         pixelsPerSecond = options.Visual.PixelsPerSecond;
         restoring = true;
         try { bpm.Value = (decimal)Arrangement.Bpm; division.SelectedIndex = (int)Math.Log2(Arrangement.SnapDivision); snap.Checked = Arrangement.Snap; }
@@ -644,8 +692,12 @@ public sealed partial class MixTrackView : Form
             var lane = Arrangement.Lanes[row];
             using var headerBrush = new SolidBrush(VisualColor(lane.Id == selectedLane ? visual.SelectedHeader : visual.TrackHeader));
             g.FillRectangle(headerBrush, 0, y, Header, LaneHeight);
-            TextRenderer.DrawText(g, $"{row + 1}. {lane.Name}\n{lane.Gain:P0}  {(lane.Solo ? "SOLO " : "")}{(lane.Mute ? "MUTE" : "")}", Font,
-                new Rectangle(5, y + 3, Header - 8, Math.Max(1, LaneHeight - 29)), lane.Mute ? Color.Gray : VisualColor(visual.Text), TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis);
+            Rectangle nameBounds = LaneNameRect(row);
+            TextRenderer.DrawText(g, $"{row + 1}. {lane.Name}", Font, nameBounds,
+                lane.Mute ? Color.Gray : VisualColor(visual.Text), TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter);
+            Rectangle details = new(5, nameBounds.Bottom + 2, Header - 8, Math.Max(1, LaneHeight - (nameBounds.Bottom - y) - 29));
+            TextRenderer.DrawText(g, $"{lane.Gain:P0}  {(lane.Solo ? "SOLO " : "")}{(lane.Mute ? "MUTE" : "")}", Font, details,
+                lane.Mute ? Color.Gray : VisualColor(visual.Text), TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter);
             DrawLaneButton(g, row, 0, "S", lane.Solo ? Color.LightGreen : Color.FromArgb(65, 69, 76));
             DrawLaneButton(g, row, 1, "M", lane.Mute ? Color.FromArgb(32, 32, 32) : Color.FromArgb(65, 69, 76));
             Rectangle volume = LaneVolumeRect(row);
@@ -703,19 +755,34 @@ public sealed partial class MixTrackView : Form
             g.FillRectangle(ghostBrush, clipRect);
             g.DrawRectangle(ghostPen, rect);
         }
-        if (selectionFirstRow >= 0 && selectionEnd > selectionStart)
+        if (selectionAdditive && lassoPoints.Count > 1)
         {
-            var rects = selectionAdditive && lassoRects.Count > 0 ? lassoRects : new List<(double, double, int, int)> { (selectionStart, selectionEnd, selectionFirstRow, selectionLastRow) };
+            Point[] points = BuildLassoPolygon().Select(point => new Point(
+                TimeX(point.Time), Ruler + (int)Math.Round((point.Row - vertical.Value) * LaneHeight))).ToArray();
             using var brush = new SolidBrush(Color.FromArgb(65, VisualColor(visual.LoopRange)));
             using var pen = new Pen(VisualColor(visual.Text)) { DashStyle = DashStyle.Dash };
-            foreach (var (rs, re, rf, rl) in rects)
+            var saved = g.Save();
+            g.SetClip(new Rectangle(Header, Ruler, Math.Max(0, canvas.Width - Header), Math.Max(0, canvas.Height - Ruler)));
+            if (points.Length >= 3)
             {
-                int y = Ruler + (Math.Max(0, rf) - vertical.Value) * LaneHeight;
-                var selection = Rectangle.Intersect(new Rectangle(Header, Ruler, Math.Max(0, canvas.Width - Header), Math.Max(0, canvas.Height - Ruler)),
-                    new Rectangle(TimeX(rs), y, Math.Max(1, TimeX(re) - TimeX(rs)), (Math.Min(Arrangement.Lanes.Count - 1, rl) - Math.Max(0, rf) + 1) * LaneHeight));
-                g.FillRectangle(brush, selection);
-                g.DrawRectangle(pen, selection);
+                using var path = new GraphicsPath();
+                path.AddPolygon(points);
+                g.FillPath(brush, path);
+                g.DrawPath(pen, path);
             }
+            else if (points.Length == 2) g.DrawLine(pen, points[0], points[1]);
+            g.Restore(saved);
+        }
+        else if (!selectionAdditive && selectionFirstRow >= 0 && selectionEnd > selectionStart)
+        {
+            int y = Ruler + (Math.Max(0, selectionFirstRow) - vertical.Value) * LaneHeight;
+            var selection = Rectangle.Intersect(new Rectangle(Header, Ruler, Math.Max(0, canvas.Width - Header), Math.Max(0, canvas.Height - Ruler)),
+                new Rectangle(TimeX(selectionStart), y, Math.Max(1, TimeX(selectionEnd) - TimeX(selectionStart)),
+                    (Math.Min(Arrangement.Lanes.Count - 1, selectionLastRow) - Math.Max(0, selectionFirstRow) + 1) * LaneHeight));
+            using var brush = new SolidBrush(Color.FromArgb(65, VisualColor(visual.LoopRange)));
+            using var pen = new Pen(VisualColor(visual.Text)) { DashStyle = DashStyle.Dash };
+            g.FillRectangle(brush, selection);
+            g.DrawRectangle(pen, selection);
         }
         if (dragMode == 6 && reorderTarget >= 0)
         {
@@ -724,6 +791,11 @@ public sealed partial class MixTrackView : Form
         }
         int cx = TimeX(caret); if (cx >= Header) { using var caretPen = new Pen(VisualColor(visual.Playhead)); g.DrawLine(caretPen, cx, 0, cx, canvas.Height); }
         PaintPastePreview(g);
+    }
+    private Rectangle LaneNameRect(int row)
+    {
+        int y = Ruler + (row - vertical.Value) * LaneHeight;
+        return new(5, y + 3, Header - 10, Math.Max(1, Math.Min(20, LaneHeight - 30)));
     }
     private Rectangle LaneButtonRect(int row, int button) => new(5 + button * 25,
         Ruler + (row - vertical.Value + 1) * LaneHeight - 25, 21, 21);
@@ -738,28 +810,181 @@ public sealed partial class MixTrackView : Form
         if (canvas.IsHandleCreated) canvas.Update();
         this.RequestLiveGainMix();
     }
+    private void BeginLaneNameEdit(int row)
+    {
+        if (row < 0 || row >= Arrangement.Lanes.Count) return;
+        EndLaneNameEdit(commit: true);
+        MixLane lane = Arrangement.Lanes[row];
+        editingLaneId = lane.Id;
+        laneNameEditor.Bounds = LaneNameRect(row);
+        laneNameEditor.Text = lane.Name;
+        laneNameEditor.Visible = true;
+        laneNameEditor.BringToFront();
+        laneNameEditor.SelectAll();
+        laneNameEditor.Focus();
+    }
+    private void EndLaneNameEdit(bool commit)
+    {
+        if (editingLaneId is not Guid id) return;
+        string value = laneNameEditor.Text.Trim();
+        editingLaneId = null;
+        laneNameEditor.Visible = false;
+        if (commit && Arrangement.Lanes.FirstOrDefault(lane => lane.Id == id) is { } lane)
+        {
+            if (value.Length == 0) status.Text = "Track name cannot be empty.";
+            else if (lane.Name != value) { lane.Name = value; Changed(); }
+        }
+        canvas.Focus();
+        canvas.Invalidate();
+    }
     private void ClearRangeSelection()
-    { selectedClips.Clear(); fullSelectedClips.Clear(); selectionFirstRow = selectionLastRow = -1; selectionStart = selectionEnd = 0; lassoRects.Clear(); }
+    {
+        selectedClips.Clear(); fullSelectedClips.Clear(); additiveSelection.Clear();
+        selectionFirstRow = selectionLastRow = -1; selectionStart = selectionEnd = 0;
+        selectionAdditive = selectingWhole = selectionGestureMoved = selectionClickWasSelected = false;
+        selectionClickCandidate = null; lassoPoints.Clear();
+    }
+    private (double Time, double Row) LassoPosition(Point point) =>
+        (XTime(point.X), vertical.Value + (point.Y - Ruler) / (double)LaneHeight);
+    private void AddLassoVertex((double Time, double Row) point)
+    {
+        if (lassoPoints.Count > 0 && Math.Abs(lassoPoints[^1].Time - point.Time) < 1e-9 &&
+            Math.Abs(lassoPoints[^1].Row - point.Row) < 1e-9) return;
+        lassoPoints.Add(point);
+    }
+    private void BeginLasso(Point pointer)
+    {
+        lassoPoints.Clear();
+        AddLassoVertex(LassoPosition(pointer));
+        lassoPreviousPointer = pointer;
+    }
+    private void AppendLassoPoint(Point pointer)
+    {
+        int dx = pointer.X - lassoPreviousPointer.X, dy = pointer.Y - lassoPreviousPointer.Y;
+        if (Math.Abs(dx) + Math.Abs(dy) < 3) return;
+        Point corner = Math.Abs(dx) >= Math.Abs(dy)
+            ? new Point(pointer.X, lassoPreviousPointer.Y)
+            : new Point(lassoPreviousPointer.X, pointer.Y);
+        AddLassoVertex(LassoPosition(corner));
+        AddLassoVertex(LassoPosition(pointer));
+        lassoPreviousPointer = pointer;
+    }
+    private List<(double Time, double Row)> BuildLassoPolygon()
+    {
+        var polygon = new List<(double Time, double Row)>(lassoPoints);
+        if (polygon.Count < 2) return polygon;
+        var first = polygon[0]; var last = polygon[^1];
+        if (Math.Abs(first.Time - last.Time) > 1e-9 && Math.Abs(first.Row - last.Row) > 1e-9)
+            polygon.Add((last.Time, first.Row));
+        if (Math.Abs(first.Time - last.Time) > 1e-9 || Math.Abs(first.Row - last.Row) > 1e-9)
+            polygon.Add(first);
+        return polygon;
+    }
+    private void UpdateSelectionMode(bool ctrlNow)
+    {
+        if (ctrlNow == selectionAdditive) return;
+        selectionAdditive = selectingWhole = ctrlNow;
+        additiveSelection.Clear();
+        if (ctrlNow)
+        {
+            additiveSelection.UnionWith(selectedClips);
+            fullSelectedClips.UnionWith(additiveSelection);
+            BeginLasso(lastPointer);
+        }
+        else lassoPoints.Clear();
+        UpdateRangeSelection(lastPointer);
+    }
     private void UpdateRangeSelection(Point point)
     {
         selectionPointer = point;
-        selectionStart = Arrangement.SnapTime(Math.Min(XTime(down.X), XTime(point.X)), ModifierKeys.HasFlag(Keys.Shift));
-        selectionEnd = Arrangement.SnapTime(Math.Max(XTime(down.X), XTime(point.X)), ModifierKeys.HasFlag(Keys.Shift));
-        selectionFirstRow = Math.Clamp(Math.Min(RowAt(down.Y), RowAt(point.Y)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
-        selectionLastRow = Math.Clamp(Math.Max(RowAt(down.Y), RowAt(point.Y)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
+        if (selectionAdditive)
+        {
+            if (lassoPoints.Count == 0) BeginLasso(point);
+            else AppendLassoPoint(point);
+            UpdateLassoSelection();
+        }
+        else
+        {
+            selectionStart = Arrangement.SnapTime(Math.Min(XTime(down.X), XTime(point.X)), ModifierKeys.HasFlag(Keys.Shift));
+            selectionEnd = Arrangement.SnapTime(Math.Max(XTime(down.X), XTime(point.X)), ModifierKeys.HasFlag(Keys.Shift));
+            selectionFirstRow = Math.Clamp(Math.Min(RowAt(down.Y), RowAt(point.Y)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
+            selectionLastRow = Math.Clamp(Math.Max(RowAt(down.Y), RowAt(point.Y)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
+            selectedClips.Clear();
+            fullSelectedClips.Clear();
+            for (int row = Math.Max(0, selectionFirstRow); row <= Math.Min(Arrangement.Lanes.Count - 1, selectionLastRow); row++)
+                foreach (var clip in Arrangement.Lanes[row].Clips)
+                    if (clip.Start < selectionEnd && clip.Start + Arrangement.ClipDuration(clip) > selectionStart)
+                    {
+                        selectedClips.Add(clip.Id);
+                        if (selectingWhole) fullSelectedClips.Add(clip.Id);
+                    }
+        }
+        status.Text = $"Selection: {selectionStart:0.000}–{selectionEnd:0.000}s; tracks {selectionFirstRow + 1}–{selectionLastRow + 1}; {selectedClips.Count} segments";
+        canvas.Invalidate();
+    }
+    private void UpdateLassoSelection()
+    {
+        List<(double Time, double Row)> polygon = BuildLassoPolygon();
+        if (polygon.Count == 0) return;
+        selectionStart = polygon.Min(point => point.Time);
+        selectionEnd = polygon.Max(point => point.Time);
+        selectionFirstRow = Math.Clamp((int)Math.Floor(polygon.Min(point => point.Row)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
+        selectionLastRow = Math.Clamp((int)Math.Floor(polygon.Max(point => point.Row)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
         selectedClips.Clear();
         fullSelectedClips.Clear();
         selectedClips.UnionWith(additiveSelection);
         if (selectingWhole) fullSelectedClips.UnionWith(additiveSelection);
-        // Lasso (Ctrl): accumulate completed rectangles; current drag extends the selection.
-        var rects = new List<(double, double, int, int)>(lassoRects) { (selectionStart, selectionEnd, selectionFirstRow, selectionLastRow) };
-        foreach (var (rs, re, rf, rl) in rects)
-            for (int row = Math.Max(0, rf); row <= Math.Min(Arrangement.Lanes.Count - 1, rl); row++)
-                foreach (var clip in Arrangement.Lanes[row].Clips)
-                    if (clip.Start < re && clip.Start + Arrangement.ClipDuration(clip) > rs)
-                    { selectedClips.Add(clip.Id); if (selectingWhole) fullSelectedClips.Add(clip.Id); }
-        status.Text = $"Selection: {selectionStart:0.000}–{selectionEnd:0.000}s; tracks {selectionFirstRow + 1}–{selectionLastRow + 1}; {selectedClips.Count} segments";
-        canvas.Invalidate();
+        for (int row = 0; row < Arrangement.Lanes.Count; row++)
+            foreach (MixClip clip in Arrangement.Lanes[row].Clips)
+                if (LassoIntersectsRectangle(polygon, clip.Start, clip.Start + Arrangement.ClipDuration(clip), row, row + 1))
+                {
+                    selectedClips.Add(clip.Id);
+                    if (selectingWhole) fullSelectedClips.Add(clip.Id);
+                }
+    }
+    internal static bool LassoIntersectsRectangle(IReadOnlyList<(double Time, double Row)> polygon,
+        double left, double right, double top, double bottom)
+    {
+        if (polygon.Count == 0 || left > right || top > bottom) return false;
+        bool InRectangle((double Time, double Row) point) =>
+            point.Time >= left - 1e-9 && point.Time <= right + 1e-9 && point.Row >= top - 1e-9 && point.Row <= bottom + 1e-9;
+        if (polygon.Any(InRectangle)) return true;
+        if (polygon.Count >= 3 && new[] { (left, top), (right, top), (right, bottom), (left, bottom) }
+            .Any(corner => PointInLasso(polygon, corner))) return true;
+        for (int i = 0; i < polygon.Count; i++)
+            if (LassoEdgeIntersectsRectangle(polygon[i], polygon[(i + 1) % polygon.Count], left, right, top, bottom))
+                return true;
+        return false;
+    }
+    private static bool PointInLasso(IReadOnlyList<(double Time, double Row)> polygon, (double Time, double Row) point)
+    {
+        bool inside = false;
+        for (int i = 0, j = polygon.Count - 1; i < polygon.Count; j = i++)
+        {
+            var a = polygon[i]; var b = polygon[j];
+            double cross = (point.Time - a.Time) * (b.Row - a.Row) - (point.Row - a.Row) * (b.Time - a.Time);
+            if (Math.Abs(cross) < 1e-9 && point.Time >= Math.Min(a.Time, b.Time) - 1e-9 &&
+                point.Time <= Math.Max(a.Time, b.Time) + 1e-9 && point.Row >= Math.Min(a.Row, b.Row) - 1e-9 &&
+                point.Row <= Math.Max(a.Row, b.Row) + 1e-9) return true;
+            if ((a.Row > point.Row) != (b.Row > point.Row) &&
+                point.Time < (b.Time - a.Time) * (point.Row - a.Row) / (b.Row - a.Row) + a.Time)
+                inside = !inside;
+        }
+        return inside;
+    }
+    private static bool LassoEdgeIntersectsRectangle((double Time, double Row) start, (double Time, double Row) end,
+        double left, double right, double top, double bottom)
+    {
+        if (start.Time >= left - 1e-9 && start.Time <= right + 1e-9 && start.Row >= top - 1e-9 && start.Row <= bottom + 1e-9 ||
+            end.Time >= left - 1e-9 && end.Time <= right + 1e-9 && end.Row >= top - 1e-9 && end.Row <= bottom + 1e-9)
+            return true;
+        if (Math.Abs(start.Row - end.Row) < 1e-9)
+            return start.Row >= top - 1e-9 && start.Row <= bottom + 1e-9 &&
+                Math.Max(start.Time, end.Time) >= left - 1e-9 && Math.Min(start.Time, end.Time) <= right + 1e-9;
+        if (Math.Abs(start.Time - end.Time) < 1e-9)
+            return start.Time >= left - 1e-9 && start.Time <= right + 1e-9 &&
+                Math.Max(start.Row, end.Row) >= top - 1e-9 && Math.Min(start.Row, end.Row) <= bottom + 1e-9;
+        return false;
     }
     private void DrawLaneButton(Graphics g, int row, int button, string text, Color color)
     {
@@ -814,22 +1039,16 @@ public sealed partial class MixTrackView : Form
         if (e.Button != MouseButtons.Left) return;
         down = e.Location; originalPointerTime = XTime(e.X); dragBefore = Arrangement.Capture();
         selectionAdditive = ModifierKeys.HasFlag(Keys.Control); selectingWhole = selectionAdditive;
-        if (!selectionAdditive) lassoRects.Clear();
+        selectionGestureMoved = false;
+        laneNameClickCandidate = null;
+        selectionClickCandidate = selectionAdditive && e.X >= Header && e.Y >= Ruler ? selectedClip : null;
+        selectionClickWasSelected = selectionClickCandidate is { } candidate && selectedClips.Contains(candidate);
+        lassoPoints.Clear();
         additiveSelection.Clear();
-        if (selectionAdditive) additiveSelection.UnionWith(selectedClips);
-        // Ctrl+click on a segment that is already part of the multi-selection removes it again
-        // (toggle). The segment is not dragged afterwards.
-        if (selectionAdditive && selectedClip is { } toggled && selectedClips.Contains(toggled) && e.X >= Header && e.Y >= Ruler)
+        if (selectionAdditive)
         {
-            selectedClips.Remove(toggled); fullSelectedClips.Remove(toggled);
-            if (selectedClip == toggled) selectedClip = null;
-            canvas.Invalidate(); return;
-        }
-        if (selectionAdditive && previousSelectedClip is { } previousId) { selectedClips.Add(previousId); additiveSelection.Add(previousId); }
-        if (selectionAdditive && selectedClip is { } clicked && e.X >= Header && e.Y >= Ruler)
-        {
-            SelectWholeClip(clicked, true); additiveSelection.UnionWith(selectedClips);
-            dragMode = 5; canvas.Capture = true; return;
+            if (previousSelectedClip is { } previousId) { selectedClips.Add(previousId); fullSelectedClips.Add(previousId); }
+            additiveSelection.UnionWith(selectedClips);
         }
         if (row >= 0 && row < Arrangement.Lanes.Count)
         {
@@ -839,6 +1058,11 @@ public sealed partial class MixTrackView : Form
             if (e.X < Header)
             {
                 if (LaneVolumeRect(row).Contains(e.Location)) { dragMode = 7; SetLaneGain(row, e.X); }
+                else if (LaneNameRect(row).Contains(e.Location))
+                {
+                    laneNameClickCandidate = lane.Id; dragMode = 6; draggedLane = lane.Id;
+                    reorderTarget = row; reorderMoved = false; canvas.Cursor = Cursors.SizeNS;
+                }
                 else { dragMode = 6; draggedLane = lane.Id; reorderTarget = row; reorderMoved = false; canvas.Cursor = Cursors.SizeNS; }
                 canvas.Capture = true; return;
             }
@@ -848,6 +1072,7 @@ public sealed partial class MixTrackView : Form
             rulerOriginalLoopStart = Arrangement.LoopStart; rulerOriginalLoopEnd = Arrangement.LoopEnd;
             caret = manualCaret = Arrangement.SnapTime(XTime(e.X), ModifierKeys.HasFlag(Keys.Shift)); dragMode = 4;
         }
+        else if (selectionAdditive && e.X >= Header && row >= 0 && row < Arrangement.Lanes.Count) dragMode = 5;
         else if (Clip is { } clip)
         {
             var rect = ClipRect(row, clip);
@@ -863,7 +1088,13 @@ public sealed partial class MixTrackView : Form
             if (dragMode != 5) ClearRangeSelection();
         }
         else if (e.X >= Header && row >= 0 && row < Arrangement.Lanes.Count) dragMode = 5;
-        if (dragMode == 5) { if (!selectionAdditive) ClearRangeSelection(); selectedClip = null; UpdateRangeSelection(e.Location); }
+        if (dragMode == 5)
+        {
+            if (!selectionAdditive) ClearRangeSelection();
+            else BeginLasso(e.Location);
+            selectedClip = null;
+            UpdateRangeSelection(e.Location);
+        }
         canvas.Capture = dragMode != 0; canvas.Invalidate();
     }
     private void MouseMoveTimeline(object? sender, MouseEventArgs e)
@@ -886,33 +1117,23 @@ public sealed partial class MixTrackView : Form
         }
         if (dragMode == 5)
         {
-            bool ctrlNow = (ModifierKeys & Keys.Control) != 0;
-            if (ctrlNow != selectionAdditive)
+            UpdateSelectionMode(ModifierKeys.HasFlag(Keys.Control));
+            if (Math.Abs(e.X - down.X) + Math.Abs(e.Y - down.Y) > 3)
             {
-                // Toggle lasso/accumulate mode on the fly while dragging.
-                if (ctrlNow)
-                {
-                    additiveSelection.Clear();
-                    additiveSelection.UnionWith(selectedClips);
-                    if (lassoRects.Count == 0) lassoRects.Add((selectionStart, selectionEnd, selectionFirstRow, selectionLastRow));
-                }
-                else
-                {
-                    lassoRects.Clear();
-                    additiveSelection.Clear();
-                }
-                selectionAdditive = ctrlNow;
-                selectingWhole = ctrlNow;
+                selectionGestureMoved = true;
+                selectionClickCandidate = null;
             }
-            if (!selectionAdditive || Math.Abs(e.X - down.X) + Math.Abs(e.Y - down.Y) > 3) UpdateRangeSelection(e.Location);
+            if (!selectionAdditive || selectionGestureMoved) UpdateRangeSelection(e.Location);
             return;
         }
         if (dragMode == 6)
         {
             if (Math.Abs(e.Y - down.Y) < SystemInformation.DragSize.Height / 2) return;
             reorderMoved = true;
+            laneNameClickCandidate = null;
+            int maximumValue = Math.Max(0, vertical.Maximum - vertical.LargeChange + 1);
             if (e.Y < Ruler + 12 && vertical.Value > 0) vertical.Value--;
-            else if (e.Y > canvas.Height - 12 && vertical.Value < Math.Max(0, Arrangement.Lanes.Count - 1)) vertical.Value++;
+            else if (e.Y > canvas.Height - 12 && vertical.Value < maximumValue) vertical.Value++;
             reorderTarget = Math.Clamp((int)Math.Floor((e.Y - Ruler) / (double)LaneHeight + 0.5) + vertical.Value, 0, Arrangement.Lanes.Count);
             canvas.Invalidate(); return;
         }
@@ -956,6 +1177,10 @@ public sealed partial class MixTrackView : Form
     private void MouseUpTimeline(object? sender, MouseEventArgs e)
     {
         if (dragMode == 0) return;
+        lastPointer = e.Location;
+        if (dragMode == 6 && Math.Abs(e.Y - down.Y) >= SystemInformation.DragSize.Height / 2)
+        { reorderMoved = true; laneNameClickCandidate = null; }
+        Guid? renameLane = dragMode == 6 && !reorderMoved ? laneNameClickCandidate : null;
         if (dragMode == 6 && draggedLane is { } laneId && reorderMoved)
         {
             reorderTarget = Math.Clamp((int)Math.Floor((e.Y - Ruler) / (double)LaneHeight + 0.5) + vertical.Value, 0, Arrangement.Lanes.Count);
@@ -982,11 +1207,24 @@ public sealed partial class MixTrackView : Form
         dragOriginalStarts.Clear();
         bool rulerDrag = dragMode == 4;
         bool rangeDrag = dragMode == 5;
-        if (rangeDrag && selectionAdditive && selectionEnd > selectionStart)
+        if (rangeDrag)
         {
-            var current = (selectionStart, selectionEnd, selectionFirstRow, selectionLastRow);
-            if (!lassoRects.Any(r => Math.Abs(r.Start - current.selectionStart) < 1e-9 && Math.Abs(r.End - current.selectionEnd) < 1e-9 && r.FirstRow == current.selectionFirstRow && r.LastRow == current.selectionLastRow))
-                lassoRects.Add(current);
+            if (Math.Abs(e.X - down.X) + Math.Abs(e.Y - down.Y) > 3)
+            {
+                selectionGestureMoved = true;
+                selectionClickCandidate = null;
+            }
+            if (!selectionAdditive || selectionGestureMoved) UpdateRangeSelection(e.Location);
+            if (selectionAdditive && !selectionGestureMoved && selectionClickCandidate is { } clicked)
+            {
+                if (selectionClickWasSelected) { selectedClips.Remove(clicked); fullSelectedClips.Remove(clicked); selectedClip = null; }
+                else { selectedClips.Add(clicked); fullSelectedClips.Add(clicked); selectedClip = clicked; }
+                selectionStart = selectionEnd = 0;
+                selectionFirstRow = selectionLastRow = -1;
+            }
+            lassoPoints.Clear();
+            selectionClickCandidate = null;
+            selectionGestureMoved = selectionClickWasSelected = false;
         }
         dragMode = 0; canvas.Capture = false; dragBefore = null;
         if (rulerDrag && Math.Abs(e.X - down.X) < 3)
@@ -997,7 +1235,13 @@ public sealed partial class MixTrackView : Form
         }
         if (rulerDrag) this.UpdateTransportLoop(); else if (!rangeDrag) Changed();
         draggedLane = null; reorderTarget = -1; reorderMoved = false;
-        canvas.Cursor = Cursors.Default;
+        canvas.Cursor = Cursors.Default; canvas.Invalidate();
+        laneNameClickCandidate = null;
+        if (renameLane is { } renameId)
+        {
+            int row = Arrangement.Lanes.FindIndex(lane => lane.Id == renameId);
+            if (row >= 0) BeginLaneNameEdit(row);
+        }
     }
     private void MoveLane(Guid id, int insertion)
     {
@@ -1010,6 +1254,8 @@ public sealed partial class MixTrackView : Form
     }
     private async void DropAudio(object? sender, DragEventArgs e)
     {
+        dragOverActive = false;
+        canvas.Invalidate();
         if (busy || this.windowGroup.IsBlocked) return; Point p = canvas.PointToClient(new Point(e.X, e.Y)); int row = RowAt(p.Y);
         var audios = Dragged(e.Data); double start = Arrangement.SnapTime(XTime(p.X), (e.KeyState & 4) != 0);
         foreach (var audio in audios)
@@ -1038,7 +1284,7 @@ public sealed partial class MixTrackView : Form
             Arrangement.Sources.Add(source.Id, source);
             MixLane lane;
             if (row >= 0 && row < Arrangement.Lanes.Count) lane = Arrangement.Lanes[row];
-            else { lane = new() { Name = source.Name }; Arrangement.Lanes.Add(lane); }
+            else { lane = new() { Name = NextLaneName() }; Arrangement.Lanes.Add(lane); }
             // Honor the overlap mode when placing the dropped audio.
             double clipDur = Math.Max(0.001, source.Duration);
             if (Arrangement.OverlapMode == MixOverlapMode.DockNoOverlap && row >= 0 && row < Arrangement.Lanes.Count)
@@ -1303,9 +1549,8 @@ public sealed partial class MixTrackView : Form
         string? text = await PromptAsync("Mix / project name", Arrangement.Name);
         if (string.IsNullOrWhiteSpace(text)) return;
         Arrangement.Name = text.Trim();
-        Text = Arrangement.Name;
-        committedProject = Arrangement.CaptureProject();
         Changed();
+        Text = Arrangement.Name;
         // Force the title bar to reflect the new name immediately.
         try { this.Update(); this.Refresh(); } catch { }
     }
@@ -1501,6 +1746,7 @@ public sealed partial class MixTrackView : Form
         if (keyData == (Keys.Control | Keys.S)) { _ = SaveProjectAsync(); return true; }
         if (keyData == (Keys.Control | Keys.O)) { _ = OpenProjectAsync(); return true; }
         if (keyData == Keys.S) { Split(); return true; }
+        if (keyData == Keys.Delete && pastePreview) { CancelPastePreview(); return true; }
         if (keyData == Keys.Delete && (selectedClips.Count > 0 || Clip != null)) { DeleteSelection(); return true; }
         if (keyData is Keys.Back or (Keys.Control | Keys.Back)) { JumpToManualCaret(keyData.HasFlag(Keys.Control)); return true; }
         if (keyData == Keys.Space) { _ = TogglePlayAsync(); return true; }
@@ -1508,9 +1754,12 @@ public sealed partial class MixTrackView : Form
         if (keyData == Keys.Escape && dragBefore != null)
         {
             Arrangement.Restore(dragBefore); dragBefore = null; dragMode = 0; draggedLane = null; reorderTarget = -1;
+            ClearRangeSelection(); selectedClip = null;
             canvas.Capture = false; RefreshPreparedMixer(); canvas.Invalidate(); return true;
         }
         if (keyData == Keys.Escape && this.HasAudioEffectSelection) { this.ClearAudioEffectSelection(); return true; }
+        if (keyData == Keys.Escape && (selectedClips.Count > 0 || selectionFirstRow >= 0 || selectedClip != null))
+        { ClearRangeSelection(); selectedClip = null; canvas.Invalidate(); return true; }
         return base.ProcessCmdKey(ref msg, keyData);
     }
     private sealed class Canvas : Control

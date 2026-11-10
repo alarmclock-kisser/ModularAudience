@@ -13,6 +13,9 @@
 - The first audio track sets an empty mix's BPM from its known source BPM, without a tempo prompt.
   This applies to Join and audio drops. Unknown BPM retains the current grid tempo.
 - Double-click the title bar to rename the mix/project; use the maximize button to maximize.
+- Click a track name in the left header to edit it inline. New tracks use the next unused
+  `Track #N` name; names are saved with the `.mamix` project. Renaming a mix updates its
+  title and project metadata; saving under a different filename adopts that filename.
 - When source and grid BPM differ, choose **Time-stretch**, **Varispeed**, or **Keep original tempo**.
 Unknown source BPM keeps the original tempo; set it later through the clip's context menu.
 - Mix context menu → **Remove Track** → select a track: the original TrackView returns.
@@ -40,7 +43,11 @@ Unknown source BPM keeps the original tempo; set it later through the clip's con
   Right-click → **Set loop to selection**, **Delete selected audio range**, or
   **Render selected range → Collection**. Delete cuts only the selected audio region and keeps
   left/right remainders as independent non-destructive clips. Escape clears selection.
-- Drag the **track header/name** vertically to reorder complete lanes; a line marks insertion.
+- A normal drag selects a rectangular time range, so copy/paste and delete can use partial
+  clips. Hold **Ctrl** and drag to draw a right-angle lasso; any clip touched by the lasso is
+  selected as a whole for copy/paste and delete, even when only part of it is enclosed.
+- Drag a track name or the remaining header area vertically to reorder complete lanes; a
+  click without dragging edits the name, and a line marks the reorder insertion point.
 - Each track header has a **0–200% volume slider** beside Solo/Mute. Its thumb is
   repainted during the drag. Audio mixing is coalesced on background workers, never
   performed synchronously in each mouse event; superseded updates are cancelled and
@@ -57,9 +64,15 @@ Unknown source BPM keeps the original tempo; set it later through the clip's con
   The shared preview/export is stereo: mono duplicates, stereo stays stereo, larger channel layouts
   fold to left/right by parity. It is not a surround-device routing editor.
 - Initial lane height is 100 px. Window resizing scales lanes together for the current
-  view; this navigation gesture is not saved or undoable. A track height explicitly
-  accepted in **View Settings** is saved and restored from the project.
-- Ctrl+wheel zooms; wheel scrolls tracks; bottom scrollbar moves the time viewport.
+  view; this navigation gesture is not saved or undoable. Adding lanes preserves their
+  current height by growing the window when screen space permits; when **Auto-adjust
+  track height** is on and the screen is full, lanes are fitted without showing a vertical
+  scrollbar. A track height explicitly accepted in **View Settings** is saved and restored.
+- The mouse wheel scrolls the time viewport horizontally; Ctrl+wheel zooms. Vertical track
+  scrolling is only available from the right scrollbar when **Auto-adjust track height** is off.
+  That scrollbar is hidden while auto-adjust is on. The bottom scrollbar also moves time.
+- The blue dashed audio-drop outline is a temporary placement preview, not a stored clip or
+  historical selection; it clears when the drop completes or the pointer leaves the view.
 - The three-state checkbox cycles **No Scroll → Auto-Scroll → Auto-Skip**. Auto-Scroll follows
   playback with the caret near the left quarter of the viewport. Auto-Skip keeps a page stationary
   until the caret reaches its right edge, then advances a page so the caret reappears at the left.

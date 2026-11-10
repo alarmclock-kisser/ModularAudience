@@ -72,6 +72,8 @@ public static partial class AudioEffectProcessor
                     AudioEffectKind.NoiseReduction => ReduceNoise(source, snapshot, context),
                     _ => Utility(source, snapshot, context)
                 };
+            if (snapshot.Effect == AudioEffectKind.PitchShift)
+                MatchPitchShiftPeak(source, result.Samples, cancellationToken);
             bool outputGain = snapshot.Parameters.ContainsKey("OutputGainDb"), amountCurve = context.Automation.Has(EffectCurveTargets.Amount);
             bool usedAmount = false, usedOutputGain = false;
             for (int frame = 0; frame < result.Samples.Length / result.Channels; frame++)
@@ -101,6 +103,29 @@ public static partial class AudioEffectProcessor
             progress?.Report(1);
             return result;
         }, cancellationToken);
+    }
+
+    private static void MatchPitchShiftPeak(float[] reference, float[] output, CancellationToken token)
+    {
+        float referencePeak = 0, outputPeak = 0;
+        for (int i = 0; i < reference.Length; i++)
+        {
+            if ((i & 65535) == 0) token.ThrowIfCancellationRequested();
+            referencePeak = Math.Max(referencePeak, Math.Abs(reference[i]));
+        }
+        for (int i = 0; i < output.Length; i++)
+        {
+            if ((i & 65535) == 0) token.ThrowIfCancellationRequested();
+            outputPeak = Math.Max(outputPeak, Math.Abs(output[i]));
+        }
+        if (referencePeak < 1e-6f || outputPeak < 1e-6f) return;
+        double gain = referencePeak / (double)outputPeak;
+        if (Math.Abs(gain - 1) < 0.001) return;
+        for (int i = 0; i < output.Length; i++)
+        {
+            if ((i & 65535) == 0) token.ThrowIfCancellationRequested();
+            output[i] = (float)(output[i] * gain);
+        }
     }
 
     private sealed record RenderContext(int Rate, int Channels, int MaximumThreads, IProgress<double>? Progress, CancellationToken Token)

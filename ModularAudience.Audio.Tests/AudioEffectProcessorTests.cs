@@ -118,6 +118,9 @@ public sealed class AudioEffectProcessorTests
             Defaults(AudioEffectKind.PitchShift).With(("Semitones", semitones), ("Method", method)));
         Assert.AreEqual(method == 0 ? source.Length : (int)(source.Length / Math.Pow(2, semitones / 12)), result.Samples.Length);
         Assert.IsGreaterThan(0.10, Amplitude(result.Samples, 16000, 440 * Math.Pow(2, semitones / 12)));
+        double inputPeak = source.Max(sample => (double)Math.Abs(sample));
+        double outputPeak = result.Samples.Max(sample => (double)Math.Abs(sample));
+        Assert.AreEqual(inputPeak, outputPeak, 0.001, "Pitch shifting should preserve the source peak level.");
         for (int i = 0; i < result.Samples.Length; i += 2) Assert.AreEqual(-0.5f * result.Samples[i], result.Samples[i + 1], 0.0001f);
     }
 
