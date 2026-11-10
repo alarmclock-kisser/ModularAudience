@@ -111,6 +111,22 @@ namespace ModularAudience.Audio
 
             Stopwatch sw = Stopwatch.StartNew();
 
+            // Snapshot pre-existing files with the same base name so post-write dedup
+            // can reuse an identical export instead of keeping a numbered duplicate.
+            DateTime preExistingSnapshotTime = DateTime.UtcNow;
+            var preExistingFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                string dir = Path.GetDirectoryName(targetPath) ?? string.Empty;
+                string baseName = Path.GetFileNameWithoutExtension(targetPath);
+                string ext = Path.GetExtension(targetPath);
+                if (Directory.Exists(dir))
+                    foreach (string f in Directory.GetFiles(dir, baseName + "*"))
+                        if (string.Equals(Path.GetExtension(f), ext, StringComparison.OrdinalIgnoreCase))
+                            preExistingFiles.Add(f);
+            }
+            catch { }
+
             try
             {
                 using (await AcquirePathLockAsync(outFile))
@@ -165,6 +181,7 @@ namespace ModularAudience.Audio
                     float fileSizeMb = new FileInfo(outFile).Length / (1024f * 1024f);
 
                     LogCollection.Log($"Exported {audio.Name} to {outFile} ({fileSizeMb:F2} MB)");
+                    outFile = DeduplicateExport(outFile, preExistingFiles, preExistingSnapshotTime);
                     audio.LastExportPath = outFile;
                 }
 
@@ -225,6 +242,22 @@ namespace ModularAudience.Audio
             }
 
             bool uniqueName = string.IsNullOrEmpty(customFilePath) || !overwriteExisting;
+
+            DateTime preExistingSnapshotTime = DateTime.UtcNow;
+            var preExistingFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (uniqueName)
+            {
+                try
+                {
+                    string baseName = Path.GetFileNameWithoutExtension(finalPath);
+                    string ext = Path.GetExtension(finalPath);
+                    if (Directory.Exists(targetDirectory))
+                        foreach (string f in Directory.GetFiles(targetDirectory, baseName + "*"))
+                            if (string.Equals(Path.GetExtension(f), ext, StringComparison.OrdinalIgnoreCase))
+                                preExistingFiles.Add(f);
+                }
+                catch { }
+            }
 
             Stopwatch sw = Stopwatch.StartNew();
 
@@ -304,6 +337,7 @@ namespace ModularAudience.Audio
                     float fileSizeMb = new FileInfo(finalPath).Length / (1024f * 1024f);
 
                     LogCollection.Log($"Exported {audio.Name} to {finalPath} ({fileSizeMb:F2} MB)");
+                    if (uniqueName) finalPath = DeduplicateExport(finalPath, preExistingFiles, preExistingSnapshotTime);
                     audio.LastExportPath = finalPath;
                 }
 
@@ -520,6 +554,66 @@ namespace ModularAudience.Audio
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Fast deduplication: if an existing file (snapshot taken before this export) has the
+        /// same size and byte-identical content, reuse it instead of keeping a numbered duplicate.
+        /// Quick path: size + first/last 64 bytes; exact path: full SHA-256.
+        /// </summary>
+        private static string DeduplicateExport(string newPath, HashSet<string> preExisting, DateTime snapshotTime)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(newPath) || !File.Exists(newPath)) return newPath;
+                var newInfo = new FileInfo(newPath);
+                byte[] newHash = ComputeFileHash(newPath);
+                foreach (string existing in preExisting.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (string.Equals(existing, newPath, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!File.Exists(existing)) continue;
+                    // Only dedup against files that existed BEFORE this export batch.
+                    if (new FileInfo(existing).LastWriteTimeUtc >= snapshotTime) continue;
+                    var ei = new FileInfo(existing);
+                    if (ei.Length != newInfo.Length) continue;
+                    if (!FastPrefixSuffixEqual(existing, newPath, 64)) continue;
+                    byte[] oldHash = ComputeFileHash(existing);
+                    if (oldHash.SequenceEqual(newHash))
+                    {
+                        try { File.Delete(newPath); } catch { }
+                        return existing;
+                    }
+                }
+            }
+            catch { }
+            return newPath;
+        }
+
+        private static bool FastPrefixSuffixEqual(string a, string b, int bytes)
+        {
+            try
+            {
+                using var fa = new FileStream(a, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using var fb = new FileStream(b, FileMode.Open, FileAccess.Read, FileShare.Read);
+                if (fa.Length != fb.Length) return false;
+                byte[] ba = new byte[bytes], bb = new byte[bytes];
+                int ra = fa.Read(ba, 0, bytes);
+                int rb = fb.Read(bb, 0, bytes);
+                if (ra != rb || !ba.AsSpan(0, ra).SequenceEqual(bb.AsSpan(0, rb))) return false;
+                if (fa.Length <= bytes * 2) return true;
+                fa.Seek(-bytes, SeekOrigin.End);
+                fb.Seek(-bytes, SeekOrigin.End);
+                ra = fa.Read(ba, 0, bytes);
+                rb = fb.Read(bb, 0, bytes);
+                return ra == rb && ba.AsSpan(0, ra).SequenceEqual(bb.AsSpan(0, rb));
+            }
+            catch { return false; }
+        }
+
+        private static byte[] ComputeFileHash(string path)
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return System.Security.Cryptography.SHA256.HashData(stream);
         }
     }
 }

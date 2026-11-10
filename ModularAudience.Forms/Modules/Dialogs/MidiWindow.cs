@@ -64,6 +64,34 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.comboBox_renderQuality.Items.AddRange(["Best", "Balanced", "Fast", "Draft"]);
             this.comboBox_renderQuality.SelectedIndex = (int)MidiRenderQuality.Balanced;
             this.RefreshMidiPages(1);
+
+            // Right-click on the Merge button: "Merge all / Un-merge all".
+            var mergeMenu = new ContextMenuStrip();
+            var mergeAllItem = new ToolStripMenuItem("Merge all");
+            mergeAllItem.Click += (_, _) =>
+            {
+                bool allMerged = this.mergedTrackIndices.Count > 0 &&
+                    this.mergedTrackIndices.SetEquals(this.midiFile.Tracks.Select(t => t.Index));
+                if (allMerged)
+                {
+                    this.mergedTrackIndices.Clear();
+                }
+                else
+                {
+                    this.mergedTrackIndices.Clear();
+                    foreach (int idx in this.midiFile.Tracks.Select(t => t.Index)) this.mergedTrackIndices.Add(idx);
+                }
+                this.previewCts?.Cancel();
+                this.RefreshMidiPages((int)this.numericUpDown_track.Value);
+            };
+            mergeMenu.Opening += (_, _) =>
+            {
+                bool allMerged = this.mergedTrackIndices.Count > 0 &&
+                    this.mergedTrackIndices.SetEquals(this.midiFile.Tracks.Select(t => t.Index));
+                mergeAllItem.Text = allMerged ? "Un-merge all" : "Merge all";
+            };
+            mergeMenu.Items.Add(mergeAllItem);
+            this.button_merge.ContextMenuStrip = mergeMenu;
         }
 
         private MidiTrackData SelectedTrack => this.tracks[Math.Clamp((int)this.numericUpDown_track.Value - 1, 0, this.tracks.Count - 1)];
@@ -173,11 +201,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            if (ReferenceEquals(this.SelectedTrack, this.mergedTrack))
-            {
-                this.label_status.Text = "Merged is generated from the selected pages. Edit the original MIDI pages to update it.";
-                return;
-            }
+            // Allow rectangle selection on the merged track too, so the MIDI editor can be opened on it.
 
             this.midiSelectionStart = this.ClampToMidiCanvas(e.Location);
             this.midiSelectionCurrent = this.midiSelectionStart;
@@ -412,7 +436,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 AudioObj audio = await this.TrackMidiRenderAsync(() => MidiAudioRenderer.Render(midi, trackIndex, instrument, bpm, customSample, cancellationToken: renderCts.Token, pitchFrequency: midi.PitchFrequency,
                     progress: progress, renderQuality: quality, sampleCache: this.sampleRenderCache, customCollection: collection.Samples), renderCts.Token);
                 if (renderCts.IsCancellationRequested || this.closingMidiWindow) { audio.Dispose(); return; }
-                WindowMain.Instance?.PlaceRenderedAudio(audio);
+                string midiName = Path.GetFileNameWithoutExtension(this.midiFile?.FilePath ?? "MIDI");
+                string sampleName = this.SelectedInstrument.ToString();
+                var renderedCollection = new AudioCollectionView([]);
+                renderedCollection.AudioC.Audios.Add(audio);
+                audio = null; // collection owns the rendered audio
+                renderedCollection.Rename($"{midiName}_rendered{sampleName}");
+                renderedCollection.Show();
                 progressDialog.Complete();
                 this.label_status.Text = "Audio object saved";
             }

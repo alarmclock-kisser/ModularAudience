@@ -64,7 +64,8 @@ public sealed class AudioCollectionExportTests
         }
 
         string? repeated = await exporter.ExportWavAsync(first, 16, folder, writeBpmTag: false, customFilePath: requested, overwriteExisting: false);
-        Assert.AreEqual("Kick (4).wav", Path.GetFileName(repeated));
+        // Exact duplicate content is deduplicated to the pre-existing identical file.
+        Assert.AreEqual("Kick (1).wav", Path.GetFileName(repeated));
         Assert.AreEqual(repeated, first.LastExportPath);
         Assert.HasCount(1, Directory.GetDirectories(files.Directory));
     }
