@@ -110,8 +110,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Controls.Add(button_generate);
             var button_recordBeat = new Button
             {
-                Name = "button_recordBeat", Text = "Record Beat", Size = new Size(80, 25),
-                Location = new Point(480, 14), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+                Name = "button_recordBeat", Text = "Record Beat", Size = new Size(74, 25),
+                Location = new Point(456, 14), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
                 UseVisualStyleBackColor = true
             };
             button_recordBeat.Click += (_, _) => this.RecordBeatAsync();
@@ -119,8 +119,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Controls.Add(button_recordBeat);
             var button_clearAll = new Button
             {
-                Name = "button_clearAll", Text = "Clear", Size = new Size(46, 25),
-                Location = new Point(574, 14), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+                Name = "button_clearAll", Text = "Clear", Size = new Size(40, 25),
+                Location = new Point(622, 14), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
                 UseVisualStyleBackColor = true
             };
             button_clearAll.Click += (_, _) => this.ClearAllPatternNotes();
@@ -144,9 +144,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_save
             // 
             button_save.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_save.Location = new Point(881, 14);
+            button_save.Location = new Point(902, 14);
             button_save.Name = "button_save";
-            button_save.Size = new Size(75, 25);
+            button_save.Size = new Size(54, 25);
             button_save.TabIndex = 4;
             button_save.Text = "Save";
             button_save.UseVisualStyleBackColor = true;
@@ -155,9 +155,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
 // button_help
 //
             button_help.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_help.Location = new Point(796, 14);
+            button_help.Location = new Point(852, 14);
             button_help.Name = "button_help";
-            button_help.Size = new Size(72, 25);
+            button_help.Size = new Size(48, 25);
             button_help.TabIndex = 9;
             button_help.Text = "Help";
             toolTip_pattern.SetToolTip(button_help, "Show pattern editor gestures and shortcuts.");
@@ -167,11 +167,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_settings
             //
             // Right-hand cluster: [+/-] stay next to "Steps / bar"; the gear groups with Help/Save.
-            //   addBar 462..488 | removeBar 494..520 | remix 540..616 | generate 624..708 | settings 716..788 | help 796..868 | save 881..956
+            //   record 456..530 | add/remove 532..578 | roll 580..620 | clear 622..662 | remix 664..710
+            //   generate 712..780 | settings 782..850 | help 852..900 | save 902..956
             button_settings.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_settings.Location = new Point(716, 14);
+            button_settings.Location = new Point(782, 14);
             button_settings.Name = "button_settings";
-            button_settings.Size = new Size(72, 25);
+            button_settings.Size = new Size(68, 25);
             button_settings.TabIndex = 10;
             button_settings.Text = "⚙ Controls";
             toolTip_pattern.SetToolTip(button_settings, "Open control configuration (key bindings, mouse actions).");
@@ -181,9 +182,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_generate
             //
             button_generate.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_generate.Location = new Point(624, 14);
+            button_generate.Location = new Point(712, 14);
             button_generate.Name = "button_generate";
-            button_generate.Size = new Size(84, 25);
+            button_generate.Size = new Size(68, 25);
             button_generate.TabIndex = 11;
             button_generate.Text = "Generate";
             toolTip_pattern.SetToolTip(button_generate, "Generate random notes inside a dragged rectangle (Ctrl+click skips the options dialog).");
@@ -194,7 +195,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             button_remix.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             button_remix.Enabled = false;
-            button_remix.Location = new Point(574, 14);
+            button_remix.Location = new Point(664, 14);
             button_remix.Name = "button_remix";
             button_remix.Size = new Size(46, 25);
             button_remix.TabIndex = 12;
@@ -206,9 +207,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_roll
             //
             button_roll.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_roll.Location = new Point(522, 14);
+            button_roll.Location = new Point(580, 14);
             button_roll.Name = "button_roll";
-            button_roll.Size = new Size(48, 25);
+            button_roll.Size = new Size(40, 25);
             button_roll.TabIndex = 13;
             button_roll.Text = "Roll";
             button_roll.UseVisualStyleBackColor = true;
@@ -217,9 +218,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             // button_removeBar
             //
-            button_removeBar.Location = new Point(494, 14);
+            button_removeBar.Location = new Point(556, 14);
             button_removeBar.Name = "button_removeBar";
-            button_removeBar.Size = new Size(26, 25);
+            button_removeBar.Size = new Size(22, 25);
             button_removeBar.TabIndex = 8;
             button_removeBar.Text = "-";
             toolTip_pattern.SetToolTip(button_removeBar, "Remove the last bar");
@@ -228,9 +229,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             // button_addBar
             // 
-            button_addBar.Location = new Point(462, 14);
+            button_addBar.Location = new Point(532, 14);
             button_addBar.Name = "button_addBar";
-            button_addBar.Size = new Size(26, 25);
+            button_addBar.Size = new Size(22, 25);
             button_addBar.TabIndex = 7;
             button_addBar.Text = "+";
             toolTip_pattern.SetToolTip(button_addBar, "Append one bar");
@@ -329,7 +330,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             MaximumSize = Size.Empty;
             // The right-hand button cluster is anchored to the right edge, so the window must
             // never be narrower than its design width or it would slide over the BPM controls.
-            MinimumSize = new Size(968, 360);
+            MinimumSize = SizeFromClientSize(new Size(968, 360));
             Name = "BreakbeatPatternEditorDialog";
             StartPosition = FormStartPosition.CenterParent;
             Text = "Breakbeat Pattern Editor";

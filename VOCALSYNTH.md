@@ -10,8 +10,11 @@ This document captures the current implementation of the **Vocalsynth** feature
   top-level, bottom-most item "Vocalsynth …"** opens the dialog.
 - Highly interactive & intuitive but highly customizable.
 - Selectable languages: English, German, French, Spanish, Italian, Chinese,
-  Japanese, Turkish, Arabic, Russian, … (UI lists all; engine fully implements
-  **English + German** first; others fall back to a generic Latin mapper).
+  Japanese, Turkish, Arabic, Russian, … (the independent engine has
+  language-specific **English + German** rules; others use the English fallback).
+- **Animal Crossing** is an additional playful, non-linguistic pronunciation
+  mode. Its voice color is still selected independently through the voice preset
+  or a custom profile.
 - Interactive text input field; **line-by-line text editor** (multiline textbox).
 - Defined speech punctuation markers that modulate speech:
   `-`, `~`, `+`, `...`, `#`, `*`, `_` and friends. Markers can be
@@ -39,23 +42,24 @@ This document captures the current implementation of the **Vocalsynth** feature
 ModularAudience.Audio/Vocal/
   VocalLanguage.cs              enum + display names + IsFullyImplemented
   VocalEmphasisMode.cs          Pause/Strong/Whisper/Lengthen/PitchUp/PitchDown
-  VocalEmphasisRule.cs          marker, mode, value, wrapping
-  VocalEmphasisSyntax.cs        collection + Default() + clone
+  VocalEmphasisRule.cs          marker rules and syntax collection
   VocalEmphasisSyntaxStore.cs   AppData JSON load/save
   VocalVoicePreset.cs           8 built-in profiles
   VocalVoiceProfile.cs          user profile (JSON-serializable) + FromPreset/ToPreset
   VocalVoiceProfileStore.cs     AppData folder, one JSON per profile
   VocalPhoneme.cs               acoustic descriptor
-  VocalPhonemeInventory.cs      shared phoneme table (formants, voicing, noise)
+  VocalPhonemeInventory.cs      phonemes, moving vowels and animal-style syllables
   VocalPhonemizer.cs            language grapheme->phoneme (EN/DE + fallback)
-  VocalTextParser.cs            text + emphasis markers -> VocalToken list
-  VocalToken.cs                 VocalPauseToken / VocalPhonemeToken + VocalEmphasis
+  VocalTextParser.cs            text + emphasis markers -> synthesis tokens
+  VocalToken.cs                 pauses, phonemes, text and emphasis
   VocalSynthSettings.cs         settings (language, text, speed, voice, format, emphasis)
-  VocalSynth.cs                 renderer -> AudioObj
+  VocalSynth.cs                 local formant renderer -> AudioObj
+  VocalWindowsSpeech.cs         optional local Windows voice -> AudioObj
 
 ModularAudience.Forms/Modules/Dialogs/
   VocalSynthDialog.cs                 main dialog (merged Prehear/Stop button,
                                       empty-text disables buttons)
+  VocalSynthDialog.Designer.cs        Windows speech option
   VocalEmphasisSyntaxDialog.cs         emphasis marker editor
   VocalVoiceProfileDesignerDialog.cs   interactive voice color profile designer
 
@@ -66,28 +70,49 @@ ModularAudience.Forms/WindowMain.Designer.cs
   contextMenuStrip_newTrack.Items.Add(CreateVocalSynthMenu());  // bottom-most
 ```
 
-## 3. Key behaviors implemented
+## 3. Current speech engines and behavior
 
-- **Whitespace → pauses**: a run of spaces produces a pause proportional to the
-  number of spaces (`60ms * count` ... actually `70ms * count`, min 60ms).
-  Newlines/paragraphs produce a ~350ms pause. Multiple consecutive spaces →
-  longer pause.
-- **Apostrophes** (e.g. "I'm") are skipped by the phonemizer.
-- **Question marks** raise pitch on the word's phonemes; **exclamation marks**
-  strengthen them.
-- **Silent trailing 'e'** in English (e.g. "more", "name", "time") is
-  skipped so it does not sound like an extra "ee".
+- **Natural speech (Windows)** is enabled by default in the dialog for English
+  and German. It uses an installed Windows desktop speech voice locally; no
+  cloud service is used. If a matching voice is missing, the dialog reports an
+  error rather than silently switching engines. Install a matching Windows voice
+  or uncheck the option to use the independent formant synthesizer. The API's
+  `UseWindowsSpeech` setting defaults to `false` for existing callers.
+- Windows voice profiles are **approximations**, not separate recorded voices:
+  the engine chooses an available voice, uses its supported pitch levels and
+  applies additional pitch and color processing. Exact timbre, whispering, and
+  the effect of individual emphasis parameters depend on the installed voice;
+  whispered text in this mode is made quieter rather than truly whispered.
+- The independent synthesizer uses English/German pronunciation rules and a
+  small English exception list. It distinguishes moving diphthongs, English
+  `ch` and German `ch`, voiced/unvoiced consonants, and German final devoicing.
+  Its output is still synthetic and its pronunciation rules are not a complete
+  dictionary. Other spoken languages continue to use the English fallback.
+- The formant renderer maintains glottal phase between voiced sounds, blends
+  neighboring formants, shapes stops and fricatives separately, and retains
+  higher harmonics for lower-pitched voices. Voice presets, speed, and
+  emphasis remain applicable to this mode.
+- **Animal Crossing** uses short, character-derived pitched syllables instead
+  of linguistic pronunciation. Both `...` and `…` produce three distinct
+  percussive vocal pops with increasing gaps; this takes precedence over a
+  configured ellipsis marker in this mode. Speed scales the pops and gaps.
+  These sounds are generated locally and are not samples from a game.
+- **Whitespace and punctuation**: in the formant engine, spaces create
+  proportional pauses, newlines create a 350 ms pause, and sentence
+  punctuation adds pauses. Windows speech retains normal single spaces and
+  punctuation for its own prosody; explicit markers and longer whitespace
+  still create breaks.
+- Apostrophes within words are retained for English pronunciation exceptions.
+- Question and exclamation marks affect emphasis and, in Windows speech, are
+  also passed through as punctuation.
 - **Empty text** disables Render/Prehear/Create buttons; Prehear and Stop are
   merged into one toggling button.
-- **Apostrophes** (e.g. "I'm") are skipped by the phonemizer, so "I'm" is
-  spoken as "im" without being treated as an emphasis marker.
-- **Question marks** raise pitch (`VocalEmphasis.PitchUp`) on the word's
-  phonemes; **exclamation marks** strengthen them.
 - **Emphasis markers**: wrapping markers apply their mode to inner text;
-  inline markers insert pauses / set pending emphasis for the next word.
-- **Speed** scales both phoneme durations and pause durations.
-- **Rendering** uses additive harmonics with spectral tilt + formant boosts +
-  gentle smoothing to reduce the harsh "square-wave" quality (still improvable).
+  inline markers insert pauses / set pending emphasis for the next word. An
+  unmatched wrapping marker is ignored instead of blocking the parser.
+- Rendering is cancellable and rejects invalid settings or output exceeding
+  30 million interleaved samples. Windows speech also limits text to 100,000
+  characters and accepts speeds from 0.5 to 4.
 
 ## 4. Extension points / TODOs
 
@@ -95,9 +120,9 @@ ModularAudience.Forms/WindowMain.Designer.cs
   Turkish, Arabic, Russian (currently fall back to English). Implement in
   `VocalPhonemizer` with language-specific digraphs/umlauts. Keep the
   `VocalLanguage` enum and `Phonemize` signature stable.
-- Improve TTS quality: proper source-filter formant synthesis (Klatt-style),
-  coarticulation, prosody (F0 contour, stress), better consonant shaping,
-  breath noise, glottal pulse model.
+- Improve the independent synthesizer further with a larger pronunciation
+  dictionary, richer stress/prosody and perceptual listening tests. Its
+  rule-based output should not be presented as natural speech.
 - Add per-word/line emphasis in the UI (currently text markers only).
 - Wire `SetCollection` to the active AudioCollectionView instead of creating a
   new one (mirror Sample Synthesizer if desired).
@@ -107,19 +132,15 @@ ModularAudience.Forms/WindowMain.Designer.cs
 
 ## 5. Tests
 
-`ModularAudience.Audio.Tests/VocalSynthTests.cs` (MSTest):
-- Render produces non-empty audio (EN/DE)
-- German "sch" → "sh" (not s-k-h)
-- Speed affects duration
-- Wrapping strong produces strong tokens
-- Pause marker produces pause token
-- Voice profile JSON round trip
-- Emphasis syntax JSON round trip
-- Whitespace/question behavior (add when extending)
+`ModularAudience.Audio.Tests/VocalSynthTests.cs` covers pronunciation,
+formant/fricative spectra, voiced transitions, cancellation and size limits,
+all animal voice presets, timed ellipsis pops, Windows SSML and actual Windows
+voice output when an English voice is installed, plus the existing settings
+and parser regression cases. No playback device or GPU is required.
 
 Run:
 ```
-dotnet test ModularAudience.Audio.Tests/ModularAudience.Audio.Tests.csproj --filter "FullyQualifiedName~Vocal"
+dotnet test ModularAudience.Audio.Tests\ModularAudience.Audio.Tests.csproj --filter "FullyQualifiedName~VocalSynthTests"
 ```
 
 ## 6. Notes for future agents

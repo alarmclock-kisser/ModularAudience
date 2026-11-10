@@ -103,8 +103,8 @@ public partial class BreakbeatPatternEditorDialog
             }
             if (e.Button == MouseButtons.Left && this.AutoRollBounds(row).Contains(e.Location))
             {
-                bool count = (ModifierKeys & Keys.Control) == 0;
-                this.RollAutoTrack(row, count);
+                bool advanceCounter = (ModifierKeys & Keys.Control) == 0;
+                this.RollAutoTrack(row, advanceCounter);
                 return true;
             }
             if (e.Button == MouseButtons.Left && bounds.Contains(e.Location) && state.Options.Enabled)
@@ -204,12 +204,13 @@ public partial class BreakbeatPatternEditorDialog
         this.CommitHistoryAction();
         this.pictureBox_pattern.Invalidate();
     }
-    private void RollAutoTrack(int row, bool count = true)
+    private void RollAutoTrack(int row, bool advanceCounter = true)
     {
         if (this.saveInProgress || this.autoRerollClosing) return;
         if (!this.autoRerolls.TryGetValue(this.samples[row], out var state))
             this.autoRerolls[this.samples[row]] = state = new();
-        if (count) state.CompletedLoops = 0;
+        if (advanceCounter && state.Options.Enabled)
+            state.CompletedLoops = (state.CompletedLoops + 1) % Math.Max(1, state.Options.Loops);
         this.ApplyTrackAutoRerolls([row], this.AutoRerollSections());
         this.pictureBox_pattern.Invalidate();
     }

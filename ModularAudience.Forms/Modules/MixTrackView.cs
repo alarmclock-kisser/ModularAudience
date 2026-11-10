@@ -55,10 +55,8 @@ public sealed partial class MixTrackView : Form
     private MixClip? copiedClip;
     private readonly HashSet<Guid> selectedClips = [];
     private double selectionStart, selectionEnd;
-    private readonly List<(double Time, double Row)> lassoPoints = [];
+    private readonly List<(double Time, double Row)> lassoPolygon = [];
     private int selectionFirstRow = -1, selectionLastRow = -1;
-    private Point selectionPointer;
-    private Point lassoPreviousPointer;
     private Guid? selectionClickCandidate, editingLaneId, laneNameClickCandidate;
     private bool selectionClickWasSelected, selectionGestureMoved;
     private Guid? draggedLane;
@@ -790,9 +788,9 @@ public sealed partial class MixTrackView : Form
             g.FillRectangle(ghostBrush, clipRect);
             g.DrawRectangle(ghostPen, rect);
         }
-        if (selectionAdditive && lassoPoints.Count > 1)
+        if (selectionAdditive && lassoPolygon.Count > 1)
         {
-            Point[] points = BuildLassoPolygon().Select(point => new Point(
+            Point[] points = lassoPolygon.Select(point => new Point(
                 TimeX(point.Time), Ruler + (int)Math.Round((point.Row - vertical.Value) * LaneHeight))).ToArray();
             using var brush = new SolidBrush(Color.FromArgb(65, VisualColor(visual.LoopRange)));
             using var pen = new Pen(VisualColor(visual.Text)) { DashStyle = DashStyle.Dash };
@@ -877,43 +875,7 @@ public sealed partial class MixTrackView : Form
         selectedClips.Clear(); fullSelectedClips.Clear(); additiveSelection.Clear();
         selectionFirstRow = selectionLastRow = -1; selectionStart = selectionEnd = 0;
         selectionAdditive = selectingWhole = selectionGestureMoved = selectionClickWasSelected = false;
-        selectionClickCandidate = null; lassoPoints.Clear();
-    }
-    private (double Time, double Row) LassoPosition(Point point) =>
-        (XTime(point.X), vertical.Value + (point.Y - Ruler) / (double)LaneHeight);
-    private void AddLassoVertex((double Time, double Row) point)
-    {
-        if (lassoPoints.Count > 0 && Math.Abs(lassoPoints[^1].Time - point.Time) < 1e-9 &&
-            Math.Abs(lassoPoints[^1].Row - point.Row) < 1e-9) return;
-        lassoPoints.Add(point);
-    }
-    private void BeginLasso(Point pointer)
-    {
-        lassoPoints.Clear();
-        AddLassoVertex(LassoPosition(pointer));
-        lassoPreviousPointer = pointer;
-    }
-    private void AppendLassoPoint(Point pointer)
-    {
-        int dx = pointer.X - lassoPreviousPointer.X, dy = pointer.Y - lassoPreviousPointer.Y;
-        if (Math.Abs(dx) + Math.Abs(dy) < 3) return;
-        Point corner = Math.Abs(dx) >= Math.Abs(dy)
-            ? new Point(pointer.X, lassoPreviousPointer.Y)
-            : new Point(lassoPreviousPointer.X, pointer.Y);
-        AddLassoVertex(LassoPosition(corner));
-        AddLassoVertex(LassoPosition(pointer));
-        lassoPreviousPointer = pointer;
-    }
-    private List<(double Time, double Row)> BuildLassoPolygon()
-    {
-        var polygon = new List<(double Time, double Row)>(lassoPoints);
-        if (polygon.Count < 2) return polygon;
-        var first = polygon[0]; var last = polygon[^1];
-        if (Math.Abs(first.Time - last.Time) > 1e-9 && Math.Abs(first.Row - last.Row) > 1e-9)
-            polygon.Add((last.Time, first.Row));
-        if (Math.Abs(first.Time - last.Time) > 1e-9 || Math.Abs(first.Row - last.Row) > 1e-9)
-            polygon.Add(first);
-        return polygon;
+        selectionClickCandidate = null; lassoPolygon.Clear();
     }
     private void UpdateSelectionMode(bool ctrlNow)
     {
@@ -924,26 +886,22 @@ public sealed partial class MixTrackView : Form
         {
             additiveSelection.UnionWith(selectedClips);
             fullSelectedClips.UnionWith(additiveSelection);
-            BeginLasso(lastPointer);
         }
-        else lassoPoints.Clear();
+        else lassoPolygon.Clear();
         UpdateRangeSelection(lastPointer);
     }
     private void UpdateRangeSelection(Point point)
     {
-        selectionPointer = point;
+        selectionStart = Arrangement.SnapTime(Math.Min(XTime(down.X), XTime(point.X)), ModifierKeys.HasFlag(Keys.Shift));
+        selectionEnd = Arrangement.SnapTime(Math.Max(XTime(down.X), XTime(point.X)), ModifierKeys.HasFlag(Keys.Shift));
+        selectionFirstRow = Math.Clamp(Math.Min(RowAt(down.Y), RowAt(point.Y)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
+        selectionLastRow = Math.Clamp(Math.Max(RowAt(down.Y), RowAt(point.Y)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
         if (selectionAdditive)
         {
-            if (lassoPoints.Count == 0) BeginLasso(point);
-            else AppendLassoPoint(point);
             UpdateLassoSelection();
         }
         else
         {
-            selectionStart = Arrangement.SnapTime(Math.Min(XTime(down.X), XTime(point.X)), ModifierKeys.HasFlag(Keys.Shift));
-            selectionEnd = Arrangement.SnapTime(Math.Max(XTime(down.X), XTime(point.X)), ModifierKeys.HasFlag(Keys.Shift));
-            selectionFirstRow = Math.Clamp(Math.Min(RowAt(down.Y), RowAt(point.Y)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
-            selectionLastRow = Math.Clamp(Math.Max(RowAt(down.Y), RowAt(point.Y)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
             selectedClips.Clear();
             fullSelectedClips.Clear();
             for (int row = Math.Max(0, selectionFirstRow); row <= Math.Min(Arrangement.Lanes.Count - 1, selectionLastRow); row++)
@@ -959,67 +917,56 @@ public sealed partial class MixTrackView : Form
     }
     private void UpdateLassoSelection()
     {
-        List<(double Time, double Row)> polygon = BuildLassoPolygon();
-        if (polygon.Count == 0) return;
-        selectionStart = polygon.Min(point => point.Time);
-        selectionEnd = polygon.Max(point => point.Time);
-        selectionFirstRow = Math.Clamp((int)Math.Floor(polygon.Min(point => point.Row)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
-        selectionLastRow = Math.Clamp((int)Math.Floor(polygon.Max(point => point.Row)), 0, Math.Max(0, Arrangement.Lanes.Count - 1));
         selectedClips.Clear();
         fullSelectedClips.Clear();
         selectedClips.UnionWith(additiveSelection);
         if (selectingWhole) fullSelectedClips.UnionWith(additiveSelection);
-        for (int row = 0; row < Arrangement.Lanes.Count; row++)
-            foreach (MixClip clip in Arrangement.Lanes[row].Clips)
-                if (LassoIntersectsRectangle(polygon, clip.Start, clip.Start + Arrangement.ClipDuration(clip), row, row + 1))
-                {
-                    selectedClips.Add(clip.Id);
-                    if (selectingWhole) fullSelectedClips.Add(clip.Id);
-                }
-    }
-    internal static bool LassoIntersectsRectangle(IReadOnlyList<(double Time, double Row)> polygon,
-        double left, double right, double top, double bottom)
-    {
-        if (polygon.Count == 0 || left > right || top > bottom) return false;
-        bool InRectangle((double Time, double Row) point) =>
-            point.Time >= left - 1e-9 && point.Time <= right + 1e-9 && point.Row >= top - 1e-9 && point.Row <= bottom + 1e-9;
-        if (polygon.Any(InRectangle)) return true;
-        if (polygon.Count >= 3 && new[] { (left, top), (right, top), (right, bottom), (left, bottom) }
-            .Any(corner => PointInLasso(polygon, corner))) return true;
-        for (int i = 0; i < polygon.Count; i++)
-            if (LassoEdgeIntersectsRectangle(polygon[i], polygon[(i + 1) % polygon.Count], left, right, top, bottom))
-                return true;
-        return false;
-    }
-    private static bool PointInLasso(IReadOnlyList<(double Time, double Row)> polygon, (double Time, double Row) point)
-    {
-        bool inside = false;
-        for (int i = 0, j = polygon.Count - 1; i < polygon.Count; j = i++)
+        lassoPolygon.Clear();
+        if (selectionEnd <= selectionStart || Arrangement.Lanes.Count == 0 ||
+            selectionFirstRow >= Arrangement.Lanes.Count || selectionLastRow < selectionFirstRow) return;
+        var rowBounds = new List<(double Left, double Right)>();
+        for (int row = selectionFirstRow; row <= selectionLastRow; row++)
         {
-            var a = polygon[i]; var b = polygon[j];
-            double cross = (point.Time - a.Time) * (b.Row - a.Row) - (point.Row - a.Row) * (b.Time - a.Time);
-            if (Math.Abs(cross) < 1e-9 && point.Time >= Math.Min(a.Time, b.Time) - 1e-9 &&
-                point.Time <= Math.Max(a.Time, b.Time) + 1e-9 && point.Row >= Math.Min(a.Row, b.Row) - 1e-9 &&
-                point.Row <= Math.Max(a.Row, b.Row) + 1e-9) return true;
-            if ((a.Row > point.Row) != (b.Row > point.Row) &&
-                point.Time < (b.Time - a.Time) * (point.Row - a.Row) / (b.Row - a.Row) + a.Time)
-                inside = !inside;
+            double left = selectionStart, right = selectionEnd;
+            foreach (MixClip clip in Arrangement.Lanes[row].Clips)
+            {
+                double clipEnd = clip.Start + Arrangement.ClipDuration(clip);
+                if (clip.Start > selectionEnd || clipEnd < selectionStart) continue;
+                left = Math.Min(left, clip.Start);
+                right = Math.Max(right, clipEnd);
+                selectedClips.Add(clip.Id);
+                if (selectingWhole) fullSelectedClips.Add(clip.Id);
+            }
+            rowBounds.Add((left, right));
         }
-        return inside;
+        lassoPolygon.AddRange(BuildMagneticLassoPolygon(selectionFirstRow, rowBounds));
     }
-    private static bool LassoEdgeIntersectsRectangle((double Time, double Row) start, (double Time, double Row) end,
-        double left, double right, double top, double bottom)
+    private static List<(double Time, double Row)> BuildMagneticLassoPolygon(int firstRow, IReadOnlyList<(double Left, double Right)> rowBounds)
     {
-        if (start.Time >= left - 1e-9 && start.Time <= right + 1e-9 && start.Row >= top - 1e-9 && start.Row <= bottom + 1e-9 ||
-            end.Time >= left - 1e-9 && end.Time <= right + 1e-9 && end.Row >= top - 1e-9 && end.Row <= bottom + 1e-9)
-            return true;
-        if (Math.Abs(start.Row - end.Row) < 1e-9)
-            return start.Row >= top - 1e-9 && start.Row <= bottom + 1e-9 &&
-                Math.Max(start.Time, end.Time) >= left - 1e-9 && Math.Min(start.Time, end.Time) <= right + 1e-9;
-        if (Math.Abs(start.Time - end.Time) < 1e-9)
-            return start.Time >= left - 1e-9 && start.Time <= right + 1e-9 &&
-                Math.Max(start.Row, end.Row) >= top - 1e-9 && Math.Min(start.Row, end.Row) <= bottom + 1e-9;
-        return false;
+        var polygon = new List<(double Time, double Row)>();
+        if (rowBounds.Count == 0) return polygon;
+        void Add(double time, double row)
+        {
+            var point = (time, row);
+            if (polygon.Count == 0 || polygon[^1] != point) polygon.Add(point);
+        }
+        Add(rowBounds[0].Left, firstRow);
+        Add(rowBounds[0].Right, firstRow);
+        for (int index = 0; index < rowBounds.Count; index++)
+        {
+            int boundary = firstRow + index + 1;
+            Add(rowBounds[index].Right, boundary);
+            if (index + 1 < rowBounds.Count) Add(rowBounds[index + 1].Right, boundary);
+        }
+        Add(rowBounds[^1].Left, firstRow + rowBounds.Count);
+        for (int index = rowBounds.Count - 1; index > 0; index--)
+        {
+            int boundary = firstRow + index;
+            Add(rowBounds[index].Left, boundary);
+            Add(rowBounds[index - 1].Left, boundary);
+        }
+        Add(rowBounds[0].Left, firstRow);
+        return polygon;
     }
     private void DrawLaneButton(Graphics g, int row, int button, string text, Color color)
     {
@@ -1078,7 +1025,7 @@ public sealed partial class MixTrackView : Form
         laneNameClickCandidate = null;
         selectionClickCandidate = selectionAdditive && e.X >= Header && e.Y >= Ruler ? selectedClip : null;
         selectionClickWasSelected = selectionClickCandidate is { } candidate && selectedClips.Contains(candidate);
-        lassoPoints.Clear();
+        lassoPolygon.Clear();
         additiveSelection.Clear();
         if (selectionAdditive)
         {
@@ -1126,7 +1073,6 @@ public sealed partial class MixTrackView : Form
         if (dragMode == 5)
         {
             if (!selectionAdditive) ClearRangeSelection();
-            else BeginLasso(e.Location);
             selectedClip = null;
             UpdateRangeSelection(e.Location);
         }
@@ -1282,7 +1228,6 @@ public sealed partial class MixTrackView : Form
                 selectionStart = selectionEnd = 0;
                 selectionFirstRow = selectionLastRow = -1;
             }
-            lassoPoints.Clear();
             selectionClickCandidate = null;
             selectionGestureMoved = selectionClickWasSelected = false;
         }

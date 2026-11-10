@@ -3,6 +3,7 @@ namespace ModularAudience.Audio.Vocal;
 public sealed class VocalSynthSettings
 {
     public VocalLanguage Language { get; set; } = VocalLanguage.English;
+    public bool UseWindowsSpeech { get; set; }
     public string Text { get; set; } = string.Empty;
     public double Speed { get; set; } = 1.0;
     public int SampleRate { get; set; } = 44100;
@@ -24,14 +25,36 @@ public sealed class VocalSynthSettings
     {
         if (SampleRate < 8000 || SampleRate > 192000) throw new ArgumentOutOfRangeException(nameof(SampleRate));
         if (Channels < 1 || Channels > 2) throw new ArgumentOutOfRangeException(nameof(Channels));
-        if (Speed <= 0 || Speed > 4) throw new ArgumentOutOfRangeException(nameof(Speed));
-        if (BasePitchHz <= 0) throw new ArgumentOutOfRangeException(nameof(BasePitchHz));
+        if (!double.IsFinite(Speed) || Speed <= 0 || Speed > 4) throw new ArgumentOutOfRangeException(nameof(Speed));
+        if (!double.IsFinite(BasePitchHz) || BasePitchHz < 20 || BasePitchHz >= SampleRate * 0.2)
+            throw new ArgumentOutOfRangeException(nameof(BasePitchHz));
+        if (!double.IsFinite(FormantScale) || FormantScale <= 0 || FormantScale > 3)
+            throw new ArgumentOutOfRangeException(nameof(FormantScale));
+        ValidateUnitRange(Breathiness, nameof(Breathiness));
+        ValidateUnitRange(Roughness, nameof(Roughness));
+        ValidateUnitRange(Voicing, nameof(Voicing));
+        ValidateUnitRange(Noise, nameof(Noise));
+        if (!double.IsFinite(VibratoCents) || VibratoCents < 0 || VibratoCents > 200)
+            throw new ArgumentOutOfRangeException(nameof(VibratoCents));
+        if (!double.IsFinite(VibratoHz) || VibratoHz < 0 || VibratoHz > 40)
+            throw new ArgumentOutOfRangeException(nameof(VibratoHz));
         if (string.IsNullOrWhiteSpace(Text)) throw new ArgumentException("Text must not be empty.", nameof(Text));
+        if (UseWindowsSpeech && Language is not (VocalLanguage.English or VocalLanguage.German))
+            throw new ArgumentException("Windows speech is available for English and German only.", nameof(Language));
+        if (UseWindowsSpeech && Speed < 0.5)
+            throw new ArgumentOutOfRangeException(nameof(Speed), "Windows speech speed must be at least 0.5.");
+    }
+
+    private static void ValidateUnitRange(double value, string name)
+    {
+        if (!double.IsFinite(value) || value < 0 || value > 1)
+            throw new ArgumentOutOfRangeException(name);
     }
 
     public VocalSynthSettings Clone() => new()
     {
         Language = Language,
+        UseWindowsSpeech = UseWindowsSpeech,
         Text = Text,
         Speed = Speed,
         SampleRate = SampleRate,

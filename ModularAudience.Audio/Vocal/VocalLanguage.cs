@@ -1,8 +1,7 @@
 namespace ModularAudience.Audio.Vocal;
 
-/// <summary>Supported spoken languages for the VocalSynth. Only English and German
-/// are fully phonemized in the first implementation; others fall back to a generic
-/// Latin vowel/consonant mapper so the UI stays usable and extensible.</summary>
+/// <summary>Supported pronunciation modes. Other spoken languages currently
+/// fall back to the English grapheme mapper.</summary>
 public enum VocalLanguage
 {
     English,
@@ -15,6 +14,7 @@ public enum VocalLanguage
     Turkish,
     Arabic,
     Russian,
+    AnimalCrossing,
 }
 
 public static class VocalLanguageExtensions
@@ -31,9 +31,10 @@ public static class VocalLanguageExtensions
         VocalLanguage.Turkish => "Turkish",
         VocalLanguage.Arabic => "Arabic",
         VocalLanguage.Russian => "Russian",
+        VocalLanguage.AnimalCrossing => "Animal Crossing",
         _ => language.ToString(),
     };
 
     public static bool IsFullyImplemented(this VocalLanguage language) =>
-        language is VocalLanguage.English or VocalLanguage.German;
+        language is VocalLanguage.English or VocalLanguage.German or VocalLanguage.AnimalCrossing;
 }

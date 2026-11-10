@@ -5,7 +5,7 @@ using System.Globalization;
 
 namespace ModularAudience.Forms.Modules.Dialogs;
 
-public sealed class VocalSynthDialog : Form
+public sealed partial class VocalSynthDialog : Form
 {
     private readonly VocalEmphasisSyntaxStore emphasisStore;
     private VocalEmphasisSyntax emphasisSyntax;
@@ -71,6 +71,8 @@ public sealed class VocalSynthDialog : Form
         emphasisSyntax = emphasisStore.Load();
 
         settings = VocalSynthSettings.FromPreset(VocalVoicePreset.BuiltIn[2], VocalLanguage.English, "");
+        InitializeSpeechBackendControl();
+        UpdateSpeechBackend();
         Text = "VocalSynth"; Name = "VocalSynthDialog";
         ClientSize = new Size(900, 650); MinimumSize = new Size(700, 500); StartPosition = FormStartPosition.CenterScreen;
 
@@ -81,6 +83,7 @@ public sealed class VocalSynthDialog : Form
         {
             if (syncing) return;
             settings.Language = (VocalLanguage)languageCombo.SelectedIndex;
+            UpdateSpeechBackend();
             QueueRender();
         };
 
@@ -95,6 +98,7 @@ public sealed class VocalSynthDialog : Form
         Field("Language", languageCombo);
         Field("Voice", voiceCombo);
         Field("Speed", speed);
+        top.Controls.Add(windowsSpeechCheckBox);
         Field("Profile name", profileName);
         top.Controls.Add(prehear); top.Controls.Add(create); top.Controls.Add(renderBtn); top.Controls.Add(designProfileBtn);
         top.Controls.Add(emphasisBtn); top.Controls.Add(saveProfileBtn); top.Controls.Add(loadProfileBtn);
@@ -113,7 +117,17 @@ public sealed class VocalSynthDialog : Form
             if (syncing) return;
             settings.Text = textEditor.Text;
             UpdateButtonState();
-            if (string.IsNullOrWhiteSpace(textEditor.Text)) { audio?.Dispose(); audio = null; ready = -1; status.Text = "Enter text to synthesize."; return; }
+            if (string.IsNullOrWhiteSpace(textEditor.Text))
+            {
+                revision++;
+                rendering?.Cancel();
+                debounce.Stop();
+                audio?.Dispose();
+                audio = null;
+                ready = -1;
+                status.Text = "Enter text to synthesize.";
+                return;
+            }
             QueueRender();
         };
         prehear.Click += async (_, _) => await ToggleHearAsync();
@@ -143,14 +157,33 @@ public sealed class VocalSynthDialog : Form
         create.Enabled = hasText;
     }
 
+    private void UpdateSpeechBackend()
+    {
+        bool supported = settings.Language is VocalLanguage.English or VocalLanguage.German;
+        windowsSpeechCheckBox.Enabled = supported;
+        settings.UseWindowsSpeech = supported && windowsSpeechCheckBox.Checked;
+    }
+
+    private void WindowsSpeechCheckedChanged(object? sender, EventArgs e)
+    {
+        if (syncing) return;
+        UpdateSpeechBackend();
+        QueueRender();
+    }
+
     private void RefreshVoiceCombo()
     {
+        string selected = voiceCombo.SelectedItem?.ToString() ?? "Built-in: " + settings.VoiceName;
         voiceCombo.Items.Clear();
         foreach (var p in VocalVoicePreset.BuiltIn)
             voiceCombo.Items.Add("Built-in: " + p.Name);
         foreach (var p in profileStore.LoadAll())
             voiceCombo.Items.Add("Profile: " + p.Name);
-        if (voiceCombo.Items.Count > 0) voiceCombo.SelectedIndex = 0;
+        if (voiceCombo.Items.Count > 0)
+        {
+            int index = voiceCombo.Items.IndexOf(selected);
+            voiceCombo.SelectedIndex = index >= 0 ? index : 0;
+        }
     }
 
     private void ApplyVoiceSelection()
@@ -165,6 +198,7 @@ public sealed class VocalSynthDialog : Form
                 var name = item.Substring("Built-in: ".Length);
                 var preset = VocalVoicePreset.BuiltIn.First(p => p.Name == name);
                 var s = VocalSynthSettings.FromPreset(preset, settings.Language, settings.Text);
+                s.UseWindowsSpeech = settings.UseWindowsSpeech;
                 s.Speed = settings.Speed;
                 s.EmphasisSyntax = settings.EmphasisSyntax;
                 settings = s;
@@ -176,6 +210,7 @@ public sealed class VocalSynthDialog : Form
                 if (profile != null)
                 {
                     var s = VocalSynthSettings.FromProfile(profile, settings.Language, settings.Text);
+                    s.UseWindowsSpeech = settings.UseWindowsSpeech;
                     s.Speed = settings.Speed;
                     s.EmphasisSyntax = settings.EmphasisSyntax;
                     settings = s;
@@ -195,6 +230,12 @@ public sealed class VocalSynthDialog : Form
         revision++;
         rendering?.Cancel();
         debounce.Stop();
+        if (string.IsNullOrWhiteSpace(textEditor.Text))
+        {
+            ready = -1;
+            status.Text = "Enter text to synthesize.";
+            return;
+        }
         debounce.Start();
         status.Text = "Updating…";
     }
@@ -232,9 +273,10 @@ public sealed class VocalSynthDialog : Form
         await RenderAsync();
     }
 
-    private async Task EnsureRenderedAsync()
+    private async Task<bool> EnsureRenderedAsync()
     {
         if (ready != revision) await RenderAsync();
+        return !disposedFlag && ready == revision && audio is not null;
     }
 
     private async Task ToggleHearAsync()
@@ -242,8 +284,7 @@ public sealed class VocalSynthDialog : Form
         if (output != null) { StopHear(); return; }
         try
         {
-            await EnsureRenderedAsync();
-            if (audio == null) return;
+            if (!await EnsureRenderedAsync() || audio == null) return;
             provider = new VocalPreview(audio.Data, audio.SampleRate, audio.Channels);
             output = new WaveOut { BufferMilliseconds = 60 };
             output.Init(provider);
@@ -271,8 +312,7 @@ public sealed class VocalSynthDialog : Form
         create.Enabled = false;
         try
         {
-            await EnsureRenderedAsync();
-            if (audio == null) return;
+            if (!await EnsureRenderedAsync() || audio == null) return;
             if (collection == null || collection.IsDisposed) collection = new AudioCollectionView([], "VocalSynth");
             var created = audio.Clone();
             string basis = audio.Name, name = basis; int index = 2;
@@ -283,7 +323,7 @@ public sealed class VocalSynthDialog : Form
             status.Text = "Created: " + name;
         }
         catch (Exception error) { if (!disposedFlag) status.Text = error.Message; }
-        finally { creating = false; create.Enabled = true; }
+        finally { creating = false; if (!disposedFlag) UpdateButtonState(); }
     }
 
     private void OpenEmphasisDialog()

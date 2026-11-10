@@ -44,8 +44,11 @@ Unknown source BPM keeps the original tempo; set it later through the clip's con
   **Render selected range → Collection**. Delete cuts only the selected audio region and keeps
   left/right remainders as independent non-destructive clips. Escape clears selection.
 - A normal drag selects a rectangular time range, so copy/paste and delete can use partial
-  clips. Hold **Ctrl** and drag to draw a right-angle lasso; any clip touched by the lasso is
-  selected as a whole for copy/paste and delete, even when only part of it is enclosed.
+  clips. Hold **Ctrl** while dragging to keep the same rectangular gesture, but magnetically
+  extend each affected track's left/right edge to the boundaries of clips intersected by the
+  original rectangle. The outline only steps at track boundaries; it does not trace the
+  pointer path or cascade onto neighboring clips. Every intersected clip is selected whole
+  for copy/paste and delete, including when the rectangle touched only part of it.
 - Drag a track name or the remaining header area vertically to reorder complete lanes; a
   click without dragging edits the name, and a line marks the reorder insertion point.
 - Each track header has a **0–200% volume slider** beside Solo/Mute. Its thumb is

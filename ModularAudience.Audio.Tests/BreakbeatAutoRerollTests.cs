@@ -52,7 +52,15 @@ public sealed class BreakbeatAutoRerollTests
         var before = notes.ToArray();
         var roll = (Button)Field(editor, "button_roll");
         var remix = (Button)Field(editor, "button_remix");
+        var recordBeat = editor.Controls.Find("button_recordBeat", true).OfType<Button>().Single();
+        var settings = (Button)Field(editor, "button_settings");
         Assert.IsTrue(roll.Right <= remix.Left);
+        Assert.IsFalse(recordBeat.Bounds.IntersectsWith(settings.Bounds));
+        Button[] buttons = ((Panel)Field(editor, "panel_controls")).Controls.OfType<Button>().ToArray();
+        for (int i = 0; i < buttons.Length; i++)
+            for (int j = i + 1; j < buttons.Length; j++)
+                Assert.IsFalse(buttons[i].Bounds.IntersectsWith(buttons[j].Bounds),
+                    $"{buttons[i].Name} overlaps {buttons[j].Name}.");
         Invoke(editor, "button_roll_Click", roll, EventArgs.Empty);
         Assert.AreEqual(0L, first.GetType().GetField("CompletedLoops")!.GetValue(first));
         Assert.AreEqual(3L, second.GetType().GetField("CompletedLoops")!.GetValue(second));
@@ -254,7 +262,7 @@ public sealed class BreakbeatAutoRerollTests
     }
 
     [STATestMethod]
-    public void CounterClickResetsOnlyOneTrackAndRollButtonRegeneratesOnce()
+    public void PerTrackRollAdvancesCounterAndCtrlStyleRollPreservesIt()
     {
         using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
         using var editor = Editor(sample);
@@ -269,12 +277,15 @@ public sealed class BreakbeatAutoRerollTests
             var bounds = (Rectangle)Invoke(editor, boundsMethod, 0)!;
             Assert.AreEqual(true, Invoke(editor, "TryClickAutoReroll", new MouseEventArgs(MouseButtons.Left, 1, bounds.X + 2, bounds.Y + 2, 0)));
         }
-        Click("AutoCounterBounds");
-        Assert.AreEqual(0L, Count(0)); Assert.AreEqual(3L, Count(1));
         Click("AutoRollBounds");
         var notes = (List<BreakbeatPatternNote>)Field(editor, "notes");
         Assert.AreEqual(4, notes.Count(n => n.TrackIndex == 0 && n.StartTick < 256));
-        Assert.AreEqual(0L, Count(0)); Assert.AreEqual(3L, Count(1));
+        Assert.AreEqual(4L, Count(0)); Assert.AreEqual(3L, Count(1));
+        states[samples[0]]!.GetType().GetField("CompletedLoops")!.SetValue(states[samples[0]], 7L);
+        Invoke(editor, "RollAutoTrack", 0, false);
+        Assert.AreEqual(7L, Count(0));
+        Invoke(editor, "RollAutoTrack", 0, true);
+        Assert.AreEqual(0L, Count(0));
     }
 
     [STATestMethod]

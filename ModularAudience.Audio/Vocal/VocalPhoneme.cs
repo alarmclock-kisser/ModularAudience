@@ -9,6 +9,8 @@ public sealed class VocalPhoneme
     public double DurationMs { get; init; } = 80;
     /// <summary>Formant frequencies in Hz (F1, F2, F3). Empty for pure noise.</summary>
     public double[] Formants { get; init; } = [];
+    /// <summary>Optional ending frequencies for a moving vowel.</summary>
+    public double[] EndFormants { get; init; } = [];
     /// <summary>Formant amplitudes 0..1.</summary>
     public double[] FormantAmplitudes { get; init; } = [];
     /// <summary>Voice-source strength 0..1.</summary>

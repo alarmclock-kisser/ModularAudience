@@ -90,26 +90,28 @@ public sealed class MixEditorExtensionTests
         Assert.AreEqual(0d, copied.SourceOffset); Assert.AreEqual(2d, copied.SourceDuration);
     }
     [STATestMethod]
-    public void ControlLassoSelectsWholeClipsTouchedByItsOrthogonalPolygon()
+    public void ControlLassoUsesOneSegmentMagnetStepPerTrack()
     {
         using var mix = new MixTrackView(); MixSource source = Populate(mix);
         var third = new MixLane { Name = "Lane 2" }; mix.Arrangement.Lanes.Add(third);
         mix.Arrangement.AddClip(third, source, 2);
+        mix.Arrangement.AddClip(mix.Arrangement.Lanes[0], source, -1, 0, 1);
+        Set(mix, "down", new Point(235, 45));
         Set(mix, "selectionAdditive", true); Set(mix, "selectingWhole", true);
-        Call(mix, "BeginLasso", new Point(190, 30));
-        Point[] path = [new(550, 30), new(550, 180), new(280, 180), new(280, 280), new(190, 280)];
-        foreach (Point point in path) Call(mix, "AppendLassoPoint", point);
-        Call(mix, "UpdateRangeSelection", path[^1]);
-        var polygon = (List<(double Time, double Row)>)Call(mix, "BuildLassoPolygon")!;
-        for (int i = 1; i < polygon.Count; i++)
-            Assert.IsTrue(Math.Abs(polygon[i].Time - polygon[i - 1].Time) < 1e-9 ||
-                Math.Abs(polygon[i].Row - polygon[i - 1].Row) < 1e-9, "Every lasso edge must be horizontal or vertical.");
+        Call(mix, "UpdateRangeSelection", new Point(370, 230));
+        var polygon = (List<(double Time, double Row)>)Field(mix, "lassoPolygon");
+        (double Time, double Row)[] expected =
+        [
+            (0, 0), (2, 0), (2, 1), (3, 1), (3, 2), (4, 2), (4, 3),
+            (0.5, 3), (0.5, 2), (0.5, 1), (0, 1), (0, 0)
+        ];
+        CollectionAssert.AreEqual(expected, polygon);
         var selected = (HashSet<Guid>)Field(mix, "selectedClips");
         var whole = (HashSet<Guid>)Field(mix, "fullSelectedClips");
-        Assert.AreEqual(2, selected.Count);
+        Assert.AreEqual(3, selected.Count, "Only clips intersecting the original rectangle should be selected, not clips reached by a magnet extension.");
         CollectionAssert.AreEquivalent(selected.ToArray(), whole.ToArray());
         var parts = (IList)Call(mix, "SelectedParts")!;
-        Assert.AreEqual(2, parts.Count);
+        Assert.AreEqual(3, parts.Count);
         foreach (object part in parts)
         {
             var copied = (MixClip)part.GetType().GetProperty("Clip")!.GetValue(part)!;
