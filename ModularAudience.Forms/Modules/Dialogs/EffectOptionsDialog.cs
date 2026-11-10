@@ -13,6 +13,14 @@ internal sealed record EffectDialogContext(AudioEffectEditSession Session, strin
     Func<AudioEffectSettings, AudioEffectExecutionOptions, IProgress<double>, CancellationToken, Task<AudioEffectResult>>? RenderAsync = null,
     Action<Form, Form>? ShowChildDialog = null);
 
+/// <summary>Instance-wide (in-RAM) last-used effect settings, keyed by effect type. Shared across TrackView and MixTrackView.</summary>
+internal static class EffectSettingsStore
+{
+    private static readonly Dictionary<AudioEffectKind, AudioEffectSettings> _store = new();
+    public static AudioEffectSettings? Get(AudioEffectKind kind) => _store.TryGetValue(kind, out var value) ? value : null;
+    public static void Set(AudioEffectKind kind, AudioEffectSettings settings) => _store[kind] = settings;
+}
+
 internal sealed class EffectOptionsDialog : Form
 {
     internal EffectOptionsEditor Editor { get; }
@@ -31,12 +39,24 @@ internal static class EffectDialogHost
 
     internal static EffectOptionsEditor Attach(Form form, EffectDialogContext context, EffectPresetStore? store = null, IEffectPreviewPlayer? preview = null)
     {
-        var editor = new EffectOptionsEditor(context, () => { form.DialogResult = DialogResult.OK; form.Close(); }, form.Close, store, preview);
+        // Restore the last used settings for this effect type (in-RAM, instance-wide) if available.
+        AudioEffectSettings? stored = EffectSettingsStore.Get(context.Defaults.Effect);
+        if (stored is not null) context = context with { Defaults = stored };
+        EffectOptionsEditor? editor = null;
+        var accepted = () =>
+        {
+            if (editor is not null) EffectSettingsStore.Set(context.Defaults.Effect, editor.CurrentSettings);
+            form.DialogResult = DialogResult.OK; form.Close();
+        };
+        editor = new EffectOptionsEditor(context, accepted, form.Close, store, preview);
         form.Name = context.Defaults.Effect + "Dialog";
         form.Text = AudioEffectCatalog.Get(context.Defaults.Effect).Name + " — " + context.TrackName;
         form.ClientSize = new Size(1000, 730); form.MinimumSize = new Size(720, 460);
         form.StartPosition = FormStartPosition.CenterParent;
-        form.Controls.Add(editor); form.AcceptButton = editor.ApplyButton; form.CancelButton = editor.CancelButton;
+        form.Controls.Add(editor); form.CancelButton = editor.CancelButton;
+        // Enter must not auto-confirm/render effect settings; editing a NumericUpDown and pressing Enter
+        // should only commit the field, never start rendering. Apply stays an explicit button click.
+        form.AcceptButton = null;
         form.FormClosing += (_, _) => editor.CancelWork();
         return editor;
     }

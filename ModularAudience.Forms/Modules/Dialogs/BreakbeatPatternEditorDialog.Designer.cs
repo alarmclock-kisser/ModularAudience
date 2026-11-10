@@ -108,6 +108,15 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Controls.Add(button_help);
             panel_controls.Controls.Add(button_settings);
             panel_controls.Controls.Add(button_generate);
+            var button_recordBeat = new Button
+            {
+                Name = "button_recordBeat", Text = "Record Beat", Size = new Size(80, 25),
+                Location = new Point(480, 14), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+                UseVisualStyleBackColor = true
+            };
+            button_recordBeat.Click += (_, _) => this.RecordBeatAsync();
+            toolTip_pattern.SetToolTip(button_recordBeat, "Record a knock sequence via microphone and derive a breakbeat pattern.");
+            panel_controls.Controls.Add(button_recordBeat);
             var button_clearAll = new Button
             {
                 Name = "button_clearAll", Text = "Clear", Size = new Size(46, 25),

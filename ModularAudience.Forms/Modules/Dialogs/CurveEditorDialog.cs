@@ -96,7 +96,9 @@ internal sealed class CurveEditorDialog : Form
         root.Controls.Add(new Label { AutoSize = true, Text = "OK activates the curve for this effect only. Save stores the SHAPE globally; parameter ranges/timing stay with the effect. Built-ins are read-only." }, 0, 6);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
         var cancel = new Button { Name = "cancelCurve", Text = "Cancel", AutoSize = true }; cancel.Click += (_, _) => this.Close();
-        actions.Controls.AddRange([cancel, this.apply]); root.Controls.Add(actions, 0, 7); this.Controls.Add(root); this.AcceptButton = this.apply; this.CancelButton = cancel;
+        actions.Controls.AddRange([cancel, this.apply]); root.Controls.Add(actions, 0, 7); this.Controls.Add(root); this.CancelButton = cancel;
+        // Enter must not auto-apply the curve; editing a coefficient and pressing Enter should only commit the field.
+        this.AcceptButton = null;
         this.apply.Click += (_, _) => this.Safe(this.AcceptCurve);
         this.presets.Presets.SelectedIndexChanged += (_, _) => { if (!this.refreshing) this.Safe(this.LoadSelectedPreset); this.UpdatePresetButtons(); };
         this.presets.Presets.DropDown += (_, _) => this.Safe(() => this.RefreshPresets(this.presets.Presets.SelectedItem as CurvePreset));

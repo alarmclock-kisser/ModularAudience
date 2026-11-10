@@ -92,7 +92,9 @@ internal sealed class AutoTuneDialog : Form
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
         var cancel = new Button { Text = "Cancel", AutoSize = true };
         actions.Controls.AddRange([cancel, this.accept]); root.Controls.Add(actions, 0, 5);
-        this.Controls.Add(root); this.AcceptButton = this.accept; this.CancelButton = cancel;
+        this.Controls.Add(root); this.CancelButton = cancel;
+        // Enter must not auto-confirm; editing a value and pressing Enter should only commit the field.
+        this.AcceptButton = null;
         this.ApplySettingsWithTrackTempo(context.Defaults);
         this.parameters.SettingsChanged += (_, _) => this.InvalidateResult();
         this.maxThreads.ValueChanged += (_, _) => this.InvalidateResult();
