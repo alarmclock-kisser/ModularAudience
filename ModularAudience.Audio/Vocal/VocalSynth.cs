@@ -74,7 +74,8 @@ public static class VocalSynth
             Bpm = s.Language == VocalLanguage.Beatboxing ? (float)(120 * s.Speed) : 120,
             Volume = 100,
         };
-        result.Rename($"{s.VoiceName} \u00b7 {s.Language.DisplayName()} \u00b7 Vocal");
+        string spokenText = s.Text.Length <= 48 ? s.Text : s.Text[..48];
+        result.Rename($"[{s.Language.ShortCode()}] {s.VoiceName} \u00b0 \"{spokenText}\"");
         return result;
     }
 

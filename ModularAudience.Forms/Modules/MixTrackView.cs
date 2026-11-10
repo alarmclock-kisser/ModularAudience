@@ -20,7 +20,7 @@ public sealed partial class MixTrackView : Form
     private readonly MixWindowGroup windowGroup;
     private bool restoring, busy, closing, allowClose, dirty;
     private readonly Canvas canvas = new() { Dock = DockStyle.Fill, AllowDrop = true, TabStop = true };
-    private readonly TextBox laneNameEditor = new() { BorderStyle = BorderStyle.FixedSingle, Visible = false };
+    private readonly TextHistoryTextBox laneNameEditor = new() { BorderStyle = BorderStyle.FixedSingle, Visible = false };
     private readonly ToolTip interactionHints = new();
     private readonly HScrollBar scroll = new() { Dock = DockStyle.Bottom, Minimum = 0, Maximum = 100000, LargeChange = 100 };
     private readonly VScrollBar vertical = new() { Dock = DockStyle.Right, Minimum = 0, Maximum = 100, LargeChange = 1 };
@@ -851,6 +851,7 @@ public sealed partial class MixTrackView : Form
         editingLaneId = lane.Id;
         laneNameEditor.Bounds = LaneNameRect(row);
         laneNameEditor.Text = lane.Name;
+        laneNameEditor.ResetHistory();
         laneNameEditor.Visible = true;
         laneNameEditor.BringToFront();
         laneNameEditor.SelectAll();
@@ -862,6 +863,7 @@ public sealed partial class MixTrackView : Form
         string value = laneNameEditor.Text.Trim();
         editingLaneId = null;
         laneNameEditor.Visible = false;
+        laneNameEditor.ResetHistory();
         if (commit && Arrangement.Lanes.FirstOrDefault(lane => lane.Id == id) is { } lane)
         {
             if (value.Length == 0) status.Text = "Track name cannot be empty.";
@@ -1743,9 +1745,11 @@ public sealed partial class MixTrackView : Form
     {
         if (this.windowGroup.IsBlocked) return true;
         if (busy && keyData != Keys.Space && keyData != Keys.Escape) return base.ProcessCmdKey(ref msg, keyData);
+        if (laneNameEditor.Focused && keyData == (Keys.Control | Keys.Z)) { laneNameEditor.UndoText(); return true; }
+        if (laneNameEditor.Focused && keyData == (Keys.Control | Keys.Y)) { laneNameEditor.RedoText(); return true; }
+        if (ModularAudience.Forms.TextInputFocus.IsActive()) return base.ProcessCmdKey(ref msg, keyData);
         if (keyData == (Keys.Control | Keys.Z)) { Undo(); return true; }
         if (keyData == (Keys.Control | Keys.Y)) { Redo(); return true; }
-        if (ModularAudience.Forms.TextInputFocus.IsActive()) return base.ProcessCmdKey(ref msg, keyData);
         if (keyData == (Keys.Control | Keys.D)) { Duplicate(); return true; }
         if (keyData == (Keys.Control | Keys.C)) { CopySelection(); return true; }
         if (keyData == (Keys.Control | Keys.X)) { CutSelection(); return true; }

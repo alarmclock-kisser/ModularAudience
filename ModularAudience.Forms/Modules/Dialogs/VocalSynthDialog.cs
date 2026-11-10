@@ -1,5 +1,6 @@
 using ModularAudience.Audio;
 using ModularAudience.Audio.Vocal;
+using ModularAudience.Forms.Modules;
 using NAudio.Wave;
 using System.Globalization;
 
@@ -14,7 +15,7 @@ public sealed partial class VocalSynthDialog : Form
     private readonly ComboBox voiceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
     private readonly NumericUpDown speed = new() { Minimum = 0.5m, Maximum = 2.0m, Increment = 0.05m, DecimalPlaces = 2, Value = 1.0m, Width = 80 };
     private readonly TextBox profileName = new() { Width = 160 };
-    private readonly TextBox textEditor = new() { Multiline = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Both, Font = new Font("Consolas", 11f) };
+    private readonly TextHistoryTextBox textEditor = new() { Multiline = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Both, Font = new Font("Consolas", 11f) };
     private readonly Label status = new() { Dock = DockStyle.Fill, AutoSize = true, Text = "Ready." };
     private readonly Button prehear = new() { Text = "Prehear", AutoSize = true };
     private readonly Button create = new() { Text = "Create", AutoSize = true };

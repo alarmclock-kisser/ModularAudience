@@ -20,6 +20,23 @@ public enum VocalLanguage
 
 public static class VocalLanguageExtensions
 {
+    public static string ShortCode(this VocalLanguage language) => language switch
+    {
+        VocalLanguage.English => "EN",
+        VocalLanguage.German => "DE",
+        VocalLanguage.French => "FR",
+        VocalLanguage.Spanish => "ES",
+        VocalLanguage.Italian => "IT",
+        VocalLanguage.Chinese => "CN",
+        VocalLanguage.Japanese => "JP",
+        VocalLanguage.Turkish => "TK",
+        VocalLanguage.Arabic => "AR",
+        VocalLanguage.Russian => "RU",
+        VocalLanguage.AnimalCrossing => "AC",
+        VocalLanguage.Beatboxing => "BB",
+        _ => language.ToString().ToUpperInvariant(),
+    };
+
     public static string DisplayName(this VocalLanguage language) => language switch
     {
         VocalLanguage.English => "English",
