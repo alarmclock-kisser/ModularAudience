@@ -30,6 +30,7 @@ public partial class BreakbeatPatternEditorDialog
     private int[] autoLoopSelection = [];
     private Task autoSaveWork = Task.CompletedTask;
     private readonly Dictionary<AudioObj, AudioCollectionView> autoSoloCollections = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<AudioObj, float> autoSoloBpm = new(ReferenceEqualityComparer.Instance);
     private AudioCollectionView? autoEnsembleCollection;
     private double autoEnsembleBpm;
     private long autoVariation;
@@ -115,7 +116,7 @@ public partial class BreakbeatPatternEditorDialog
                     existing.Activate();
                     return true;
                 }
-                var dialog = new BreakbeatPatternGenerateDialog(state.Options.Generate.Clone(), state.Options);
+                var dialog = new BreakbeatPatternGenerateDialog(state.Options.Generate.Clone(), state.Options, this.currentResolution);
                 dialog.SetOtherTrackOptions(Enumerable.Range(0, this.samples.Count)
                     .Where(other => other != row && this.autoRerolls.ContainsKey(this.samples[other]))
                     .Select(other => (other + 1,
@@ -394,14 +395,22 @@ public partial class BreakbeatPatternEditorDialog
                     hash = $"{rendered.SampleRate}:{rendered.Channels}:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
                     if (this.savedEnsembleHashes.Contains(hash)) return;
                 }
+                AudioObj? soloTrack = isEnsemble ? null : trackIdentities[soloRow!.Value];
+                bool soloBpmChanged = !isEnsemble && this.autoSoloBpm.TryGetValue(soloTrack!, out float existingSoloBpm) && existingSoloBpm != bpm;
                 AudioCollectionView? collection = isEnsemble ? this.autoEnsembleCollection
-                    : this.autoSoloCollections.GetValueOrDefault(trackIdentities[soloRow!.Value]);
-                if (collection == null || collection.IsDisposed)
+                    : this.autoSoloCollections.GetValueOrDefault(soloTrack!);
+                if (collection == null || collection.IsDisposed || soloBpmChanged)
                 {
                     collection = new AudioCollectionView([]);
-                    collection.Rename(isEnsemble ? $"Auto-Reroll Ensembles [{bpm:F1}]" : $"Auto-Reroll Solos — {labels[soloRow!.Value]}");
+                    collection.Rename(isEnsemble
+                        ? $"Auto-Reroll Ensembles [{bpm:F1}]"
+                        : $"Auto-Reroll Solos — {labels[soloRow!.Value]} [{bpm:F1}]");
                     if (isEnsemble) { this.autoEnsembleCollection = collection; this.autoEnsembleBpm = bpm; }
-                    else this.autoSoloCollections[trackIdentities[soloRow!.Value]] = collection;
+                    else
+                    {
+                        this.autoSoloCollections[soloTrack!] = collection;
+                        this.autoSoloBpm[soloTrack!] = bpm;
+                    }
                 }
                 collection.AudioC.Audios.Add(rendered); rendered = null;
                 if (hash != null) this.savedEnsembleHashes.Add(hash);

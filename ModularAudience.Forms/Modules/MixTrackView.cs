@@ -202,7 +202,7 @@ public sealed partial class MixTrackView : Form
         canvas.Paint += PaintTimeline; canvas.MouseDown += MouseDownTimeline; canvas.MouseMove += MouseMoveTimeline; canvas.MouseUp += MouseUpTimeline;
         canvas.KeyDown += (_, e) =>
         {
-            if (dragMode != 5 || e.KeyCode != Keys.ControlKey) return;
+            if (dragMode != 5 || !(e.KeyCode == Keys.ControlKey || e.KeyCode == Keys.LControlKey || e.KeyCode == Keys.RControlKey)) return;
             bool ctrlNow = (ModifierKeys & Keys.Control) != 0;
             if (ctrlNow == selectionAdditive) return;
             if (ctrlNow) { additiveSelection.Clear(); additiveSelection.UnionWith(selectedClips); if (lassoRects.Count == 0) lassoRects.Add((selectionStart, selectionEnd, selectionFirstRow, selectionLastRow)); }
@@ -212,7 +212,7 @@ public sealed partial class MixTrackView : Form
         };
         canvas.KeyUp += (_, e) =>
         {
-            if (dragMode != 5 || e.KeyCode != Keys.ControlKey) return;
+            if (dragMode != 5 || !(e.KeyCode == Keys.ControlKey || e.KeyCode == Keys.LControlKey || e.KeyCode == Keys.RControlKey)) return;
             bool ctrlNow = (ModifierKeys & Keys.Control) != 0;
             if (ctrlNow == selectionAdditive) return;
             if (ctrlNow) { additiveSelection.Clear(); additiveSelection.UnionWith(selectedClips); if (lassoRects.Count == 0) lassoRects.Add((selectionStart, selectionEnd, selectionFirstRow, selectionLastRow)); }
@@ -450,20 +450,39 @@ public sealed partial class MixTrackView : Form
         double n = (double)num.Value;
         lastRepeatSelectionMultiplier = n;
 
-        // Collect target clips.
-        var targets = new List<MixClip>();
-        var parts = SelectedParts();
-        if (parts.Count > 0)
+        // Collect target clips (original clips, possibly trimmed to the active selection).
+        var targets = new List<(int Row, MixClip Clip)>();
+        if (selectedClips.Count > 0)
         {
-            foreach (var part in parts) if (part.Clip != null) targets.Add(part.Clip);
+            for (int row = 0; row < Arrangement.Lanes.Count; row++)
+                foreach (var clip in Arrangement.Lanes[row].Clips)
+                {
+                    if (!selectedClips.Contains(clip.Id)) continue;
+                    var copy = System.Text.Json.JsonSerializer.Deserialize<MixClip>(System.Text.Json.JsonSerializer.Serialize(clip))!;
+                    if (!fullSelectedClips.Contains(clip.Id) && selectionFirstRow >= 0 && selectionEnd > selectionStart)
+                    {
+                        double start = Math.Max(clip.Start, selectionStart), end = Math.Min(clip.Start + Arrangement.ClipDuration(clip), selectionEnd);
+                        if (end <= start) continue;
+                        copy.SourceOffset += (start - clip.Start) * Arrangement.Rate(clip);
+                        copy.SourceDuration = (end - start) * Arrangement.Rate(clip); copy.Start = start;
+                        if (start > clip.Start) copy.FadeIn = 0;
+                        if (end < clip.Start + Arrangement.ClipDuration(clip)) copy.FadeOut = 0;
+                    }
+                    targets.Add((row, copy));
+                }
         }
-        else if (Clip is { } c) targets.Add(c);
+        else if (Clip is { } c)
+        {
+            for (int row = 0; row < Arrangement.Lanes.Count; row++)
+                if (Arrangement.Lanes[row].Clips.Contains(c))
+                { targets.Add((row, System.Text.Json.JsonSerializer.Deserialize<MixClip>(System.Text.Json.JsonSerializer.Serialize(c))!)); break; }
+        }
         if (targets.Count == 0) return;
 
-        foreach (var clip in targets.ToArray())
+        foreach (var (row, clip) in targets)
         {
-            var lane = Arrangement.Lanes.FirstOrDefault(l => l.Clips.Contains(clip));
-            if (lane == null) continue;
+            if (row < 0 || row >= Arrangement.Lanes.Count) continue;
+            var lane = Arrangement.Lanes[row];
             double clipDur = Arrangement.ClipDuration(clip);
             if (clipDur <= 0) continue;
             int fullCopies = (int)Math.Floor(n);
@@ -660,7 +679,9 @@ public sealed partial class MixTrackView : Form
                 using var brush = new SolidBrush(ClipColor(selected ? visual.SelectedClip : visual.Clip, row)); g.FillRectangle(brush, rect);
                 using var edge = new Pen(selected ? Color.White : Color.FromArgb(110, 150, 165)); g.DrawRectangle(edge, rect);
                 using (var handleBrush = new SolidBrush(Color.FromArgb(65, Color.Black))) g.FillRectangle(handleBrush, rect.X, rect.Y, rect.Width, Math.Min(21, rect.Height));
-                TextRenderer.DrawText(g, clip.Name, Font, new Rectangle(rect.X + 4, rect.Y + 2, Math.Max(1, rect.Width - 8), 18), VisualColor(visual.Text), TextFormatFlags.EndEllipsis);
+                int labelX = Math.Max(Header + 4, rect.X + 4);
+                int labelWidth = Math.Max(1, rect.Right - labelX);
+                TextRenderer.DrawText(g, clip.Name, Font, new Rectangle(labelX, rect.Y + 2, labelWidth, 18), VisualColor(visual.Text), TextFormatFlags.EndEllipsis);
                 if (visual.ShowWaveforms && Arrangement.Sources.TryGetValue(clip.SourceId, out var source)) DrawWave(g, rect, clip, source);
                 g.Restore(saved);
             }
@@ -751,6 +772,13 @@ public sealed partial class MixTrackView : Form
         fullSelectedClips.Clear();
         selectedClips.UnionWith(additiveSelection);
         if (selectingWhole) fullSelectedClips.UnionWith(additiveSelection);
+        // Lasso (Ctrl): when accumulating, seed the first rectangle so an initial
+        // Ctrl-drag also grows instead of staying a single moving rectangle.
+        if (selectionAdditive && lassoRects.Count == 0
+            && (Math.Abs(selectionEnd - selectionStart) > 1e-9 || selectionFirstRow != selectionLastRow))
+        {
+            lassoRects.Add((selectionStart, selectionEnd, selectionFirstRow, selectionLastRow));
+        }
         // Lasso (Ctrl): accumulate completed rectangles; current drag extends the selection.
         var rects = new List<(double, double, int, int)>(lassoRects) { (selectionStart, selectionEnd, selectionFirstRow, selectionLastRow) };
         foreach (var (rs, re, rf, rl) in rects)
@@ -903,6 +931,7 @@ public sealed partial class MixTrackView : Form
                 }
                 selectionAdditive = ctrlNow;
                 selectingWhole = ctrlNow;
+                canvas.Invalidate();
             }
             if (!selectionAdditive || Math.Abs(e.X - down.X) + Math.Abs(e.Y - down.Y) > 3) UpdateRangeSelection(e.Location);
             return;

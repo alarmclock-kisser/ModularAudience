@@ -35,11 +35,23 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private readonly ComboBox combo_preset = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
         private readonly NumericUpDown numeric_presetIntensity = new();
         private readonly NumericUpDown numeric_phraseBars = new();
+        private readonly int stepsPerBar;
         private bool applyingOptions;
 
-        public BreakbeatPatternGenerateDialog(BreakbeatGenerateOptions options, TrackAutoRerollOptions? autoOptions = null)
+        public BreakbeatPatternGenerateDialog(BreakbeatGenerateOptions options)
+            : this(options, null, 16)
+        {
+        }
+
+        public BreakbeatPatternGenerateDialog(BreakbeatGenerateOptions options, TrackAutoRerollOptions? autoOptions)
+            : this(options, autoOptions, 16)
+        {
+        }
+
+        public BreakbeatPatternGenerateDialog(BreakbeatGenerateOptions options, TrackAutoRerollOptions? autoOptions, int stepsPerBar)
         {
             this.autoReroll = autoOptions != null;
+            this.stepsPerBar = Math.Max(1, stepsPerBar);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.StartPosition = FormStartPosition.CenterParent;
             this.ClientSize = new Size(440, autoReroll ? 710 : 624);
@@ -206,7 +218,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.numeric_presetIntensity.Enabled = this.numeric_phraseBars.Enabled = active;
                 this.toolTip.SetToolTip(this.combo_preset, active ? ((BreakbeatTrackPreset)this.combo_preset.SelectedItem!).Description : "Legacy random generation; no preset processing.");
                 if (!this.applyingOptions && this.combo_preset.SelectedItem is BreakbeatTrackPreset preset)
-                    this.ApplyOptions(preset.Defaults(this.Options));
+                    this.ApplyOptions(preset.Defaults(this.Options, this.stepsPerBar));
             };
         }
 

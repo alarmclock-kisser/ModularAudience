@@ -172,6 +172,53 @@ namespace ModularAudience.Forms
             this.listBox_audios.AllowDrop = true;
             this.AllowDrop = true;
             this.listBox_audios.DrawMode = DrawMode.OwnerDrawFixed;
+
+            // Register the external multi-select/drag helper FIRST so its MouseDown handler
+            // snapshots the selection before our own handler mutates it. The helper's
+            // snapshot enumeration can throw IndexOutOfRangeException on a transiently
+            // inconsistent SelectedIndices collection (notably with Auto-Hear / rapid
+            // selection changes), so wrap that single handler in a try/catch instead of
+            // letting the exception tear down the message loop.
+            alarmclockkisser.DragNDrop.Forms.ListBoxExtensions.Register_ListBox_DragNDrop(this.listBox_audios, true);
+            try
+            {
+                var extAsm = AppDomain.CurrentDomain.GetAssemblies()
+                    .FirstOrDefault(a => a.GetName().Name == "alarmclockkisser.DragNDrop.Forms");
+                var extType = extAsm?.GetType("alarmclockkisser.DragNDrop.Forms.ListBoxExtensions");
+                if (extType != null)
+                {
+                    // Wrap MouseDown (contains SelectedIndices snapshot enumeration).
+                    var mdMethod = extType.GetMethod("ListBox_MouseDown", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+                    if (mdMethod != null)
+                    {
+                        var externalMouseDown = (MouseEventHandler)Delegate.CreateDelegate(typeof(MouseEventHandler), mdMethod);
+                        this.listBox_audios.MouseDown -= externalMouseDown;
+                        this.listBox_audios.MouseDown += (s, e) =>
+                        {
+                            try { externalMouseDown(s, e); }
+                            catch (Exception ex) { try { LogManager.Log($"ListBoxExtensions.MouseDown (external) suppressed: {ex}"); } catch { } }
+                        };
+                    }
+
+                    // Wrap MouseMove (also enumerates SelectedIndices when multi-select dragging).
+                    var mmMethod = extType.GetMethod("ListBox_MouseMove", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+                    if (mmMethod != null)
+                    {
+                        var externalMouseMove = (MouseEventHandler)Delegate.CreateDelegate(typeof(MouseEventHandler), mmMethod);
+                        this.listBox_audios.MouseMove -= externalMouseMove;
+                        this.listBox_audios.MouseMove += (s, e) =>
+                        {
+                            try { externalMouseMove(s, e); }
+                            catch (Exception ex) { try { LogManager.Log($"ListBoxExtensions.MouseMove (external) suppressed: {ex}"); } catch { } }
+                        };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                try { LogManager.Log($"Wrapping external ListBox handlers failed: {ex}"); } catch { }
+            }
+
             this.listBox_audios.MouseDown += this.listBox_audios_MouseDown;
             this.listBox_audios.MouseUp += this.listBox_audios_MouseUp;
             this.listBox_audios.MouseMove += this.listBox_audios_MouseMove_DragStart;
@@ -182,7 +229,6 @@ namespace ModularAudience.Forms
             this.checkBox_autoPlay.CheckedChanged += this.checkBox_autoPlay_CheckedChanged;
             this.checkBox_preview.CheckedChanged += this.checkBox_preview_CheckedChanged;
             this.DoubleClick += this.Form_DoubleClick;
-            alarmclockkisser.DragNDrop.Forms.ListBoxExtensions.Register_ListBox_DragNDrop(this.listBox_audios, true);
             this.listBox_audios.DrawItem += this.listBox_audios_DrawItem;
             this.InitializeCoOpMenu();
 
@@ -367,7 +413,8 @@ namespace ModularAudience.Forms
                         }
                     }
 
-                    if (!this.listBox_audios.GetSelected(index))
+                    if ((ModifierKeys & (Keys.Control | Keys.Shift)) == Keys.None
+                        && !this.listBox_audios.GetSelected(index))
                     {
                         this.listBox_audios.SelectedIndex = index;
                     }
@@ -399,17 +446,33 @@ namespace ModularAudience.Forms
 
         private void RestoreListBoxSelection(IEnumerable<AudioObj> audios)
         {
-            for (int index = this.listBox_audios.SelectedIndices.Count - 1; index >= 0; index--)
+            try
             {
-                this.listBox_audios.SetSelected(this.listBox_audios.SelectedIndices[index], false);
+                for (int index = this.listBox_audios.SelectedIndices.Count - 1; index >= 0; index--)
+                {
+                    int selectedIndex = this.listBox_audios.SelectedIndices[index];
+                    this.listBox_audios.SetSelected(selectedIndex, false);
+                }
+            }
+            catch (Exception ex)
+            {
+                try { LogManager.Log($"RestoreListBoxSelection (clear) suppressed: {ex}"); } catch { }
+                try { this.listBox_audios.ClearSelected(); } catch { }
             }
 
             foreach (AudioObj audio in audios)
             {
-                int index = this.listBox_audios.Items.IndexOf(audio);
-                if (index >= 0)
+                try
                 {
-                    this.listBox_audios.SetSelected(index, true);
+                    int index = this.listBox_audios.Items.IndexOf(audio);
+                    if (index >= 0)
+                    {
+                        this.listBox_audios.SetSelected(index, true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    try { LogManager.Log($"RestoreListBoxSelection (select) suppressed: {ex}"); } catch { }
                 }
             }
         }
@@ -977,9 +1040,16 @@ namespace ModularAudience.Forms
                 {
                     this.listBox_audios.BeginInvoke((Action)(() =>
                     {
-                        this._stableSelection = this.listBox_audios.SelectedItems
-                            .Cast<AudioObj>()
-                            .ToList();
+                        try
+                        {
+                            this._stableSelection = this.listBox_audios.SelectedItems
+                                .Cast<AudioObj>()
+                                .ToList();
+                        }
+                        catch (Exception ex)
+                        {
+                            try { LogManager.Log($"StableSelection capture suppressed: {ex}"); } catch { }
+                        }
                     }));
                 }
                 catch { }

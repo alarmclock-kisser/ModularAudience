@@ -542,10 +542,28 @@ namespace ModularAudience.Forms.Hotkeys
             }
         }
 
+        private static bool IsReservedClipboardShortcut(Keys key, HotkeyModifiers modifiers)
+        {
+            Keys code = key & Keys.KeyCode;
+            if ((modifiers & HotkeyModifiers.Control) == HotkeyModifiers.None)
+            {
+                return false;
+            }
+
+            return code == Keys.C || code == Keys.V || code == Keys.Z || code == Keys.Y;
+        }
+
         private bool HandleKeyDown(Keys key)
         {
             key = HotkeyFormatter.NormalizeKey(key);
             if (key == Keys.None)
+            {
+                return false;
+            }
+
+            // Ctrl+C/V/Z/Y stay reserved for clipboard/editing and can neither be
+            // captured nor triggered as global hotkeys.
+            if (IsReservedClipboardShortcut(key, HotkeyActionResolver.GetCurrentModifiers()))
             {
                 return false;
             }
@@ -632,6 +650,14 @@ namespace ModularAudience.Forms.Hotkeys
 
             HotkeyModifiers currentModifiers = HotkeyActionResolver.GetCurrentModifiers()
                 & ~HotkeyFormatter.GetInherentModifier(key);
+
+            // Ctrl+C/V/Z/Y are reserved for the standard clipboard/edit shortcuts and
+            // must never be swallowed or triggered by the global hotkey system.
+            if (IsReservedClipboardShortcut(key, currentModifiers))
+            {
+                return false;
+            }
+
             HotkeyBinding? binding = this._settings.FindBinding(
                 key,
                 currentModifiers,
@@ -641,6 +667,18 @@ namespace ModularAudience.Forms.Hotkeys
             if (binding == null)
             {
                 return false;
+            }
+
+            // A binding that was registered with fewer modifiers than currently held
+            // may only fire when its action explicitly supports additional modifiers.
+            // Otherwise (e.g. a plain "C" hotkey) it must not trigger on Ctrl+C etc.
+            if (additionalModifiers != HotkeyModifiers.None)
+            {
+                IHotkeyAction action = HotkeyActionCatalog.Create(binding.Target);
+                if (action is not IModifierAwareHotkeyAction)
+                {
+                    return false;
+                }
             }
 
             if (this._pressedKeys.Contains(key))
