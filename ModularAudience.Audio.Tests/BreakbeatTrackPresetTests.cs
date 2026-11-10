@@ -20,7 +20,7 @@ public sealed class BreakbeatTrackPresetTests
     private static void Set(object target, string name, object value) => target.GetType().GetProperty(name)!.SetValue(target, value);
     private static object[] Presets => ((IEnumerable)TypeOf("BreakbeatTrackPresets").GetProperty("All")!.GetValue(null)!).Cast<object>().ToArray();
     private static object Options() => Activator.CreateInstance(TypeOf("BreakbeatGenerateOptions"))!;
-    private static object Defaults(object preset) => preset.GetType().GetMethod("Defaults")!.Invoke(preset, [Options()])!;
+    private static object Defaults(object preset, int stepsPerBar = 16) => preset.GetType().GetMethod("Defaults")!.Invoke(preset, [Options(), stepsPerBar])!;
     private static object[] Hits(object preset, object options, int resolution = 32) =>
         ((IEnumerable)TypeOf("BreakbeatTrackPresets").GetMethod("Generate")!.Invoke(null,
             [preset, options, 0, (int)Get(options, "PhraseBars") * resolution - 1, resolution, new Random(87)])!).Cast<object>().ToArray();

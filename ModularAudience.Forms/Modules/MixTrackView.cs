@@ -309,6 +309,9 @@ public sealed partial class MixTrackView : Form
                     laneHeightCustomized = true;
                     preciseLaneHeight = Math.Clamp(preciseLaneHeight + (ClientSize.Height - previousClientHeight) / (double)Arrangement.Lanes.Count, 32, 600);
                     LaneHeight = (int)Math.Round(preciseLaneHeight);
+                    int needed = Arrangement.Lanes.Count * LaneHeight;
+                    int avail = Math.Max(0, canvas.ClientSize.Height - Ruler);
+                    vertical.Visible = needed > avail;
                 }
             }
             UpdateVerticalScrollbar();
@@ -435,11 +438,22 @@ public sealed partial class MixTrackView : Form
     }
     private void ApplyAutoTrackHeight()
     {
-        if (!Arrangement.Visual.AutoTrackHeight) return;
+        if (!Arrangement.Visual.AutoTrackHeight)
+        {
+            // Manual track height: keep a vertical scrollbar only when the lanes
+            // do not fit into the current view.
+            int needed = Arrangement.Lanes.Count * LaneHeight;
+            int available = Math.Max(0, canvas.ClientSize.Height - Ruler);
+            vertical.Visible = needed > available;
+            vertical.Maximum = Math.Max(0, Arrangement.Lanes.Count - 1);
+            vertical.Value = Math.Min(vertical.Value, vertical.Maximum);
+            return;
+        }
+
         int count = Math.Max(1, Arrangement.Lanes.Count);
-        int available = canvas.ClientSize.Height - Ruler - 4;
-        if (available < count * 32) available = count * 32;
-        LaneHeight = Math.Clamp(available / count, 32, 600);
+        int avail = canvas.ClientSize.Height - Ruler - 4;
+        if (avail < count * 32) avail = count * 32;
+        LaneHeight = Math.Clamp(avail / count, 32, 600);
         preciseLaneHeight = LaneHeight;
         UpdateVerticalScrollbar();
     }
@@ -495,20 +509,39 @@ public sealed partial class MixTrackView : Form
         double n = (double)num.Value;
         lastRepeatSelectionMultiplier = n;
 
-        // Collect target clips.
-        var targets = new List<MixClip>();
-        var parts = SelectedParts();
-        if (parts.Count > 0)
+        // Collect target clips (original clips, possibly trimmed to the active selection).
+        var targets = new List<(int Row, MixClip Clip)>();
+        if (selectedClips.Count > 0)
         {
-            foreach (var part in parts) if (part.Clip != null) targets.Add(part.Clip);
+            for (int row = 0; row < Arrangement.Lanes.Count; row++)
+                foreach (var clip in Arrangement.Lanes[row].Clips)
+                {
+                    if (!selectedClips.Contains(clip.Id)) continue;
+                    var copy = System.Text.Json.JsonSerializer.Deserialize<MixClip>(System.Text.Json.JsonSerializer.Serialize(clip))!;
+                    if (!fullSelectedClips.Contains(clip.Id) && selectionFirstRow >= 0 && selectionEnd > selectionStart)
+                    {
+                        double start = Math.Max(clip.Start, selectionStart), end = Math.Min(clip.Start + Arrangement.ClipDuration(clip), selectionEnd);
+                        if (end <= start) continue;
+                        copy.SourceOffset += (start - clip.Start) * Arrangement.Rate(clip);
+                        copy.SourceDuration = (end - start) * Arrangement.Rate(clip); copy.Start = start;
+                        if (start > clip.Start) copy.FadeIn = 0;
+                        if (end < clip.Start + Arrangement.ClipDuration(clip)) copy.FadeOut = 0;
+                    }
+                    targets.Add((row, copy));
+                }
         }
-        else if (Clip is { } c) targets.Add(c);
+        else if (Clip is { } c)
+        {
+            for (int row = 0; row < Arrangement.Lanes.Count; row++)
+                if (Arrangement.Lanes[row].Clips.Contains(c))
+                { targets.Add((row, System.Text.Json.JsonSerializer.Deserialize<MixClip>(System.Text.Json.JsonSerializer.Serialize(c))!)); break; }
+        }
         if (targets.Count == 0) return;
 
-        foreach (var clip in targets.ToArray())
+        foreach (var (row, clip) in targets)
         {
-            var lane = Arrangement.Lanes.FirstOrDefault(l => l.Clips.Contains(clip));
-            if (lane == null) continue;
+            if (row < 0 || row >= Arrangement.Lanes.Count) continue;
+            var lane = Arrangement.Lanes[row];
             double clipDur = Arrangement.ClipDuration(clip);
             if (clipDur <= 0) continue;
             int fullCopies = (int)Math.Floor(n);
@@ -712,7 +745,9 @@ public sealed partial class MixTrackView : Form
                 using var brush = new SolidBrush(ClipColor(selected ? visual.SelectedClip : visual.Clip, row)); g.FillRectangle(brush, rect);
                 using var edge = new Pen(selected ? Color.White : Color.FromArgb(110, 150, 165)); g.DrawRectangle(edge, rect);
                 using (var handleBrush = new SolidBrush(Color.FromArgb(65, Color.Black))) g.FillRectangle(handleBrush, rect.X, rect.Y, rect.Width, Math.Min(21, rect.Height));
-                TextRenderer.DrawText(g, clip.Name, Font, new Rectangle(rect.X + 4, rect.Y + 2, Math.Max(1, rect.Width - 8), 18), VisualColor(visual.Text), TextFormatFlags.EndEllipsis);
+                int labelX = Math.Max(Header + 4, rect.X + 4);
+                int labelWidth = Math.Max(1, rect.Right - labelX);
+                TextRenderer.DrawText(g, clip.Name, Font, new Rectangle(labelX, rect.Y + 2, labelWidth, 18), VisualColor(visual.Text), TextFormatFlags.EndEllipsis);
                 if (visual.ShowWaveforms && Arrangement.Sources.TryGetValue(clip.SourceId, out var source)) DrawWave(g, rect, clip, source);
                 g.Restore(saved);
             }
@@ -1147,6 +1182,31 @@ public sealed partial class MixTrackView : Form
         {
             this.AutoPanClipDrag(e.X);
             double delta = XTime(e.X) - originalPointerTime, factor = Arrangement.Rate(c);
+
+            // Move the dragged structure between lanes immediately while dragging,
+            // instead of only showing a ghost preview until mouse release.
+            if (dragMode == 1 && Arrangement.Lanes.Count > 0)
+            {
+                int targetRow = Math.Clamp(RowAt(e.Y), 0, Arrangement.Lanes.Count - 1);
+                var group = dragOriginalStarts.Count > 0
+                    ? Arrangement.Lanes.SelectMany(l => l.Clips).Where(cl => dragOriginalStarts.ContainsKey(cl.Id)).ToList()
+                    : new List<MixClip> { c };
+                int currentRow = Arrangement.Lanes.FindIndex(l => l.Clips.Contains(c));
+                if (currentRow >= 0 && targetRow != currentRow)
+                {
+                    foreach (var grouped in group)
+                    {
+                        var oldLane = Arrangement.Lanes.FirstOrDefault(l => l.Clips.Contains(grouped));
+                        if (oldLane != null && oldLane != Arrangement.Lanes[targetRow])
+                        {
+                            oldLane.Clips.Remove(grouped);
+                            Arrangement.Lanes[targetRow].Clips.Add(grouped);
+                        }
+                    }
+                    selectedLane = Arrangement.Lanes[targetRow].Id;
+                }
+            }
+
             if (dragMode == 1)
             {
                 c.Start = Arrangement.SnapTime(originalStart + delta, ModifierKeys.HasFlag(Keys.Shift));
@@ -1350,6 +1410,7 @@ public sealed partial class MixTrackView : Form
         }
         else Item("Render selection → Collection", async () => await ExportSelectionAsync(), SelectedParts().Count > 0);
         Item("Copy selection (Ctrl+C)", CopySelection, SelectedParts().Count > 0);
+        Item("Cut selection (Ctrl+X)", CutSelection, SelectedParts().Count > 0);
         Item("Repeat selection…", RepeatSelection, SelectedParts().Count > 0 || Clip != null);
         Item("Delete selection (Delete)", DeleteSelection, SelectedParts().Count > 0);
         Item("Clear selection", this.ClearAudioEffectSelection);
@@ -1742,6 +1803,7 @@ public sealed partial class MixTrackView : Form
         if (ModularAudience.Forms.TextInputFocus.IsActive()) return base.ProcessCmdKey(ref msg, keyData);
         if (keyData == (Keys.Control | Keys.D)) { Duplicate(); return true; }
         if (keyData == (Keys.Control | Keys.C)) { CopySelection(); return true; }
+        if (keyData == (Keys.Control | Keys.X)) { CutSelection(); return true; }
         if (keyData == (Keys.Control | Keys.V)) { BeginPasteHold(); return true; }
         if (keyData == (Keys.Control | Keys.S)) { _ = SaveProjectAsync(); return true; }
         if (keyData == (Keys.Control | Keys.O)) { _ = OpenProjectAsync(); return true; }

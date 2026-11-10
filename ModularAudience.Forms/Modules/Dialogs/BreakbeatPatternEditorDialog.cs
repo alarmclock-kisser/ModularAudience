@@ -5267,7 +5267,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 this.savedCollection.AudioC.Audios.Add(rendered);
                 rendered = null; // Collection owns the rendered result, independent of this editor.
                 this.savedCollection.Show();
-                this.savedCollection.Rename($"Break-Beat Generated {bpm:F1} BPM");
+                this.savedCollection.Rename($"Break-Beat Generated [{bpm:F1}]");
             }
             finally { rendered?.Dispose(); }
         }
@@ -5329,7 +5329,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             BreakbeatGenerateOptions options = BreakbeatPatternGenerateSettings.Load();
             if (!ctrlHeld)
             {
-                using BreakbeatPatternGenerateDialog dialog = new(options);
+                using BreakbeatPatternGenerateDialog dialog = new(options, null, this.currentResolution);
                 if (dialog.ShowDialog(this) != DialogResult.OK)
                 {
                     return;

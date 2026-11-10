@@ -5,11 +5,20 @@ internal sealed record BreakbeatTrackPreset(string Name, string Description, str
     bool Stretch, bool Varispeed, bool Trim, int Motif, int Repeat, float VolumeMin, float VolumeMax)
 {
     public override string ToString() => Name;
-    public BreakbeatGenerateOptions Defaults(BreakbeatGenerateOptions source)
+    public BreakbeatGenerateOptions Defaults(BreakbeatGenerateOptions source, int stepsPerBar = 16)
     {
         var result = source.Clone();
+        // Preset note lengths are authored against a standard 16 steps/bar grid.
+        // Scale them with the active resolution so other resolutions keep the same
+        // musical note lengths instead of becoming too short/long.
+        int scaleNumerator = Math.Max(1, stepsPerBar);
+        double scale = scaleNumerator / 16.0;
+        int minLength = Math.Max(1, (int)Math.Round(MinLength * scale));
+        int maxLength = Math.Max(minLength, (int)Math.Round(MaxLength * scale));
+        minLength = Math.Clamp(minLength, 1, 16);
+        maxLength = Math.Clamp(maxLength, 1, 16);
         result.Preset = Name; result.DensityPercent = Density; result.AmenFactorPercent = Amen;
-        result.PhraseBars = Bars; result.MinNoteLengthSteps = MinLength; result.MaxNoteLengthSteps = MaxLength;
+        result.PhraseBars = Bars; result.MinNoteLengthSteps = minLength; result.MaxNoteLengthSteps = maxLength;
         result.PitchChancePercent = PitchChance; result.PitchRangeSemitones = PitchRange;
         result.AllowPitchedNotes = PitchChance > 0; result.AllowTimeStretch = Stretch;
         result.AllowVarispeed = Varispeed; result.AllowTruncated = Trim;
