@@ -37,6 +37,12 @@ public sealed partial class MixTrackView
             }
         return result;
     }
+    private void CutSelection()
+    {
+        CopySelection();
+        DeleteSelection();
+    }
+
     private void CopySelection()
     {
         var parts = SelectedParts(); if (parts.Count == 0) return;
