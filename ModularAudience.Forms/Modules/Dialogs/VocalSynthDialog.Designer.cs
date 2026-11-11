@@ -3,7 +3,8 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 public sealed partial class VocalSynthDialog
 {
     private CheckBox windowsSpeechCheckBox = null!;
-    private FlowLayoutPanel profileButtons = null!;
+    private FlowLayoutPanel profileRow = null!;
+    private TextBox profileName = null!;
     private Button saveProfileBtn = null!;
     private Button loadProfileBtn = null!;
     private Button renameProfileBtn = null!;
@@ -24,18 +25,19 @@ public sealed partial class VocalSynthDialog
 
     private void InitializeProfileControls()
     {
+        profileName = new TextBox { Width = 120, PlaceholderText = "Profile name", AccessibleName = "Profile name" };
         saveProfileBtn = new Button { Text = "Save Profile", AutoSize = true };
         loadProfileBtn = new Button { Text = "Load Profile", AutoSize = true };
         renameProfileBtn = new Button { Text = "Rename Profile", AutoSize = true };
         deleteProfileBtn = new Button { Text = "Delete Profile", AutoSize = true };
-        profileButtons = new FlowLayoutPanel
+        profileRow = new FlowLayoutPanel
         {
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             WrapContents = false,
             Margin = Padding.Empty,
         };
-        profileButtons.Controls.AddRange([saveProfileBtn, loadProfileBtn, renameProfileBtn, deleteProfileBtn]);
+        profileRow.Controls.AddRange([profileName, saveProfileBtn, loadProfileBtn, renameProfileBtn, deleteProfileBtn]);
         saveProfileBtn.Click += (_, _) => SaveProfile();
         loadProfileBtn.Click += (_, _) => LoadProfile();
         renameProfileBtn.Click += (_, _) => RenameProfile();

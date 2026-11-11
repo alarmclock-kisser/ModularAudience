@@ -96,20 +96,36 @@ public class VocalSynthTests
     }
 
     [TestMethod]
-    [DataRow("der", "d de-e-long de-er")]
-    [DataRow("her", "h de-e-long de-er")]
+    [DataRow("der", "d de-e-long de-r-glide")]
+    [DataRow("her", "h de-e-long de-r-glide")]
     [DataRow("gehst", "g de-e-long s t")]
     [DataRow("beschaffenheit", "b de-schwa sh de-a-short f de-schwa n h eye t")]
-    [DataRow("schwer", "sh v de-e-long de-er")]
+    [DataRow("schwer", "sh v de-e-long de-r-glide")]
     [DataRow("wasser", "v de-a-short s de-er")]
     [DataRow("lieblingsfrau", "l ee b l i ng s f de-r ow")]
-    [DataRow("horrorfilm", "h de-o-short de-r o de-er f i l m")]
+    [DataRow("horrorfilm", "h de-o-short de-r o de-r-glide f i l m")]
     [DataRow("affenscheide", "de-a-short f de-schwa n sh eye d de-schwa")]
     [DataRow("eisenschmiede", "eye z de-schwa n sh m ee d de-schwa")]
     [DataRow("den", "d de-e-long n")]
     [DataRow("dem", "d de-e-long m")]
     [DataRow("jemandem", "y e m a n d de-schwa m")]
     [DataRow("problem", "p de-r o b l de-e-long m")]
+    [DataRow("Regelversto\u00df", "de-r de-e-long g de-schwa l f e de-r-glide sh t de-o-long s")]
+    [DataRow("segel", "z de-e-long g de-schwa l")]
+    [DataRow("riegel", "de-r ee g de-schwa l")]
+    [DataRow("verstehen", "f e de-r-glide sh t de-e-long de-schwa n")]
+    [DataRow("verspielt", "f e de-r-glide sh p ee l t")]
+    [DataRow("wespe", "v e s p de-schwa")]
+    [DataRow("fu\u00df", "f oo s")]
+    [DataRow("rosen", "de-r de-o-long z de-schwa n")]
+    [DataRow("rollen", "de-r de-o-short l de-schwa n")]
+    [DataRow("gestern", "g e s t e de-r-glide n")]
+    [DataRow("feuer", "f oy de-er")]
+    [DataRow("mir", "m ee de-r-glide")]
+    [DataRow("dir", "d ee de-r-glide")]
+    [DataRow("wir", "v ee de-r-glide")]
+    [DataRow("ihr", "ee de-r-glide")]
+    [DataRow("wird", "v i de-r-glide t")]
     public void Phonemizer_GermanFeedbackWords_UseDistinctVowelsAndR(string word, string expected)
     {
         var phonemes = VocalPhonemizer.Phonemize(VocalLanguage.German, word);
@@ -124,6 +140,19 @@ public class VocalSynthTests
             .OfType<VocalPhonemeToken>().ToArray();
         Assert.IsFalse(phonemes.First(p => p.Phoneme == "de-schwa").Stressed);
         Assert.AreEqual("de-a-short", phonemes.Single(p => p.Stressed).Phoneme);
+    }
+
+    [TestMethod]
+    [DataRow("Versto\u00df", "de-o-long")]
+    [DataRow("verstehen", "de-e-long")]
+    [DataRow("verspielt", "ee")]
+    [DataRow("Vers", "e")]
+    [DataRow("Regelversto\u00df", "de-e-long")]
+    public void Parser_GermanVerPrefix_StressesTheRootWhenPresent(string word, string expected)
+    {
+        var phonemes = VocalTextParser.Parse(VocalLanguage.German, word, VocalEmphasisSyntax.Default())
+            .OfType<VocalPhonemeToken>().ToArray();
+        Assert.AreEqual(expected, phonemes.Single(p => p.Stressed).Phoneme);
     }
 
     [TestMethod]
@@ -151,6 +180,7 @@ public class VocalSynthTests
     [DataRow("Affenscheide")]
     [DataRow("Eisenschmiede")]
     [DataRow("Gehst du mir mal den K\u00e4se holen?")]
+    [DataRow("Regelversto\u00df")]
     public void Render_GermanFeedbackPhrases_AtRequestedVoiceAndSpeed(string phrase)
     {
         var settings = VocalSynthSettings.FromPreset(
@@ -172,8 +202,46 @@ public class VocalSynthTests
         using var english = VocalSynth.Render(settings);
         double germanBrightness = DifferenceEnergyRatio(german.Data);
         double englishBrightness = DifferenceEnergyRatio(english.Data);
-        Assert.IsTrue(germanBrightness > englishBrightness * 1.15,
+        Assert.IsTrue(germanBrightness > englishBrightness * 5.5,
             $"Expected German uvular frication: {germanBrightness} versus {englishBrightness}.");
+    }
+
+    [TestMethod]
+    public void Render_GermanR_GentlyFluttersEvenWithoutRepeatedLetters()
+    {
+        var settings = CleanVoice(VocalLanguage.German, "r");
+        settings.SampleRate = 16000;
+        settings.BasePitchHz = 200;
+        settings.Speed = 0.5;
+        using var german = VocalSynth.Render(settings);
+        settings.Language = VocalLanguage.English;
+        using var english = VocalSynth.Render(settings);
+        double germanVariation = ShortTimeLevelVariation(german.Data, settings.SampleRate);
+        double englishVariation = ShortTimeLevelVariation(english.Data, settings.SampleRate);
+        Assert.IsTrue(germanVariation > englishVariation + 0.035 && germanVariation < 0.25,
+            $"Expected a gentle German R flutter: German {germanVariation}, English {englishVariation}.");
+    }
+
+    [TestMethod]
+    public void Render_GermanVocalicR_GlidesFromPrecedingVowel()
+    {
+        var settings = CleanVoice(VocalLanguage.German, "mir");
+        settings.SampleRate = 16000;
+        settings.BasePitchHz = 150;
+        settings.Speed = 0.5;
+        using var audio = VocalSynth.Render(settings);
+        int glideFrames = (int)Math.Round(VocalPhonemeInventory.Get("de-r-glide").DurationMs
+            * settings.SampleRate / (1000 * settings.Speed));
+        int start = audio.Data.Length - glideFrames;
+        int window = settings.SampleRate / 40;
+        var early = audio.Data.Skip(start + glideFrames / 5).Take(window).ToArray();
+        var late = audio.Data.Skip(start + glideFrames * 3 / 5).Take(window).ToArray();
+        double earlyRatio = BandEnergy(early, settings.SampleRate, 1200, 1600)
+            / BandEnergy(early, settings.SampleRate, 1750, 2100);
+        double lateRatio = BandEnergy(late, settings.SampleRate, 1200, 1600)
+            / BandEnergy(late, settings.SampleRate, 1750, 2100);
+        Assert.IsTrue(lateRatio > earlyRatio * 2,
+            $"Expected the vocalic R to move away from the preceding vowel: {earlyRatio} to {lateRatio}.");
     }
 
     [TestMethod]
@@ -631,7 +699,8 @@ public class VocalSynthTests
             naturalSpeech.Checked = true;
             Assert.IsTrue(settings.UseWindowsSpeech);
 
-            var group = (FlowLayoutPanel)Field("profileButtons");
+            var group = (FlowLayoutPanel)Field("profileRow");
+            var nameField = (TextBox)Field("profileName");
             dialog.CreateControl();
             var buttons = new[]
             {
@@ -644,6 +713,20 @@ public class VocalSynthTests
                 dialog.PerformLayout();
                 group.Parent!.PerformLayout();
                 group.PerformLayout();
+                Assert.AreSame(group, nameField.Parent, "Profile name must be in the profile action row.");
+                Assert.AreSame(nameField, group.Controls[0], "Profile name must be the first profile control.");
+                Assert.AreEqual("Profile name", nameField.PlaceholderText);
+                Assert.AreEqual("Profile name", nameField.AccessibleName);
+                Assert.AreEqual(group.Parent.Padding.Left, group.Left, "The profile row must start at the left.");
+                Assert.IsTrue(nameField.Right <= buttons[0].Left
+                    && nameField.Top < buttons[0].Bottom && nameField.Bottom > buttons[0].Top,
+                    $"Profile name is not to the left of Save Profile at width {width}.");
+                if (width == 900)
+                {
+                    var lastAction = (Button)Field("emphasisBtn");
+                    Assert.IsTrue(lastAction.Top < group.Bottom && lastAction.Bottom > group.Top,
+                        "The profile row should fit on the second toolbar row at the default width.");
+                }
                 foreach (var button in buttons)
                 {
                     Assert.AreEqual(buttons[0].Top, button.Top, $"{button.Text} wrapped at width {width}.");
@@ -656,7 +739,7 @@ public class VocalSynthTests
                     $"The profile button row extends beyond the window at width {width}.");
             }
 
-            ((TextBox)Field("profileName")).Text = "Layout profile";
+            nameField.Text = "Layout profile";
             var click = typeof(Button).GetMethod("OnClick", flags)!;
             click.Invoke(buttons[0], [EventArgs.Empty]);
             Assert.IsTrue(profiles.LoadAll().Any(p => p.Name == "Layout profile"));
@@ -763,6 +846,20 @@ public class VocalSynthTests
             energy += samples[i] * samples[i];
         }
         return difference / energy;
+    }
+
+    private static double ShortTimeLevelVariation(float[] samples, int rate)
+    {
+        int block = rate / 100;
+        var levels = new List<double>();
+        for (int start = block; start + block <= samples.Length - block; start += block)
+        {
+            double energy = 0;
+            for (int i = start; i < start + block; i++) energy += samples[i] * samples[i];
+            levels.Add(Math.Sqrt(energy / block));
+        }
+        double mean = levels.Average();
+        return Math.Sqrt(levels.Sum(level => (level - mean) * (level - mean)) / levels.Count) / mean;
     }
 
     private static double BandEnergy(float[] samples, int rate, int lower, int upper)

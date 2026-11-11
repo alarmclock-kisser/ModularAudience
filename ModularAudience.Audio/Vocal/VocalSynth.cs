@@ -241,6 +241,13 @@ public static class VocalSynth
                 voiceGate *= flutter;
                 noiseGate *= flutter;
             }
+            else if (ph.Symbol == "de-r")
+            {
+                double edge = Math.Min(1, Math.Min(progress, 1 - progress) / 0.15);
+                double flutter = 1 - 0.3 * edge * (0.5 - 0.5 * Math.Cos(2 * Math.PI * 22 * time));
+                voiceGate *= flutter;
+                noiseGate *= flutter;
+            }
             double value = source * voiceGate + noise * noiseGate;
             if (ph.Voiced && breathiness > 0)
             {
@@ -325,11 +332,14 @@ public static class VocalSynth
             double start = ph.Formants[f];
             double end = ph.EndFormants.Length > f ? ph.EndFormants[f] : start;
             double value = start + (end - start) * glide;
-            if (connectedBefore && previous is not null && previous.Formants.Length > f && progress < 0.25)
+            if (connectedBefore && previous is not null && previous.Formants.Length > f)
             {
                 double previousEnd = previous.EndFormants.Length > f ? previous.EndFormants[f] : previous.Formants[f];
                 double boundary = (previousEnd + start) * 0.5;
-                value = boundary + (value - boundary) * progress / 0.25;
+                if (ph.Symbol == "de-r-glide" && previous.IsVowel)
+                    value = boundary + (value - boundary) * glide;
+                else if (progress < 0.25)
+                    value = boundary + (value - boundary) * progress / 0.25;
             }
             if (connectedAfter && next is not null && next.Formants.Length > f && progress > 0.75)
             {
@@ -366,7 +376,7 @@ public static class VocalSynth
             "sh" or "zh" or "tsh" or "j" => (1800.0, 6500.0),
             "ich" => (2600.0, 7000.0),
             "ch" => (900.0, 4200.0),
-            "de-r" => (900.0, 3500.0),
+            "de-r" => (700.0, 3000.0),
             "t" or "d" => (2500.0, 8500.0),
             "k" or "g" or "beat-k" => (1200.0, 5500.0),
             "p" or "b" or "animal-dot" or "beat-b" or "beat-p" => (400.0, 3200.0),

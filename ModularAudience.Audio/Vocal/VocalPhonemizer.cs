@@ -258,12 +258,17 @@ public static class VocalPhonemizer
         foreach (var (grapheme, phonemes) in GermanClusters)
         {
             if (!remaining.StartsWith(grapheme, StringComparison.Ordinal)) continue;
-            if (grapheme is "sp" or "st" && index != 0) continue;
+            if (grapheme is "sp" or "st" && index != 0
+                && !(index >= 3 && word.AsSpan(index - 3, 3).SequenceEqual("ver"))) continue;
             if (grapheme == "er" && index + 2 != word.Length) continue;
             if (grapheme == "er")
             {
-                if (!hasPreviousVowel) result.Add("de-e-long");
-                result.Add("de-er");
+                if (!hasPreviousVowel)
+                {
+                    result.Add("de-e-long");
+                    result.Add("de-r-glide");
+                }
+                else result.Add("de-er");
             }
             else if (grapheme == "ch")
             {
@@ -285,14 +290,16 @@ public static class VocalPhonemizer
         {
             'a' => "a",
             'e' => GermanE(word, index, hasPreviousVowel),
-            'i' => "i", 'o' => "o",
-            'u' => index + 3 == word.Length && word[index + 2] == 'e' ? "oo" : "u",
+            'i' => word is "mir" or "dir" or "wir" or "ihr" ? "ee" : "i",
+            'o' => next is '\0' or 'h' or '\u00df' || HasOpenVowelSpelling(word, index) ? "de-o-long" : "o",
+            'u' => next is '\0' or 'h' or '\u00df' || HasOpenVowelSpelling(word, index)
+                || index + 3 == word.Length && word[index + 2] == 'e' ? "oo" : "u",
             '\u00e4' => "ae", '\u00f6' => "oe", '\u00fc' => "ue",
             'b' => next == '\0' ? "p" : "b", 'c' => "k",
             'd' => next == '\0' ? "t" : "d", 'f' => "f",
             'g' => next == '\0' ? prev == 'i' && index > 1 ? "ich" : "k" : "g",
             'h' => "h", 'j' => "y", 'k' => "k", 'l' => "l", 'm' => "m", 'n' => "n",
-            'p' => "p", 'q' => "k", 'r' => IsGermanVocalicR(word, index) ? "de-er" : "de-r",
+            'p' => "p", 'q' => "k", 'r' => IsGermanVocalicR(word, index) ? "de-r-glide" : "de-r",
             's' => IsGermanVowel(next) && (index == 0 || IsGermanVowel(prev)) ? "z" : "s",
             '\u00df' => "s", 't' => "t", 'v' => "f", 'w' => "v", 'z' => "ts", _ => null,
         });
@@ -314,6 +321,11 @@ public static class VocalPhonemizer
     {
         if (index == word.Length - 1)
             return word.Length == 1 ? "de-e-long" : "de-schwa";
+        // Common -egel roots have a long first E and a reduced -el.
+        if (word.AsSpan(index).StartsWith("egel", StringComparison.Ordinal)
+            && (index == 0 || !IsGermanVowel(word[index - 1]))) return "de-e-long";
+        if (index >= 2 && word.AsSpan(index - 2).StartsWith("egel", StringComparison.Ordinal))
+            return "de-schwa";
         if (index == 1 && word[0] == 'b' && word.AsSpan(2).StartsWith("sch", StringComparison.Ordinal))
             return "de-schwa";
         char next = word[index + 1];
@@ -325,6 +337,10 @@ public static class VocalPhonemizer
             return "de-schwa";
         return "e";
     }
+
+    private static bool HasOpenVowelSpelling(string word, int index) =>
+        index + 2 < word.Length && char.IsLetter(word[index + 1])
+        && !IsGermanVowel(word[index + 1]) && IsGermanVowel(word[index + 2]);
 
     private static bool HasShortVowelSpelling(string word, int index)
     {

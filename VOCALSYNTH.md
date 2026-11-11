@@ -88,13 +88,19 @@ ModularAudience.Forms/WindowMain.Designer.cs
 - The independent synthesizer uses English/German pronunciation rules and a
   small English exception list. It distinguishes moving diphthongs, English
   `ch` and German `ch`, voiced/unvoiced consonants, and German final devoicing.
-  German uses a separate uvular consonantal R and a more open vocalic R after
-  vowels and in unstressed `-er`. Words such as `der` and `her` retain their
-  full E before that vocalic R. A distinct unrounded schwa is used for final
+  German uses a lightly fluttering, fricated uvular consonantal R, a short
+  vocalic R glide after vowels, and a more open vocalic R in unstressed `-er`.
+  Words such as `der` and `her` retain their full E before the glide.
+  A distinct unrounded schwa is used for final
   `-e` and common unstressed `-en`/`-em` endings; monosyllabic `den`/`dem`
   and a small set of stressed endings retain a full E. The `be-` prefix before
   `sch` is unstressed, as in `Beschaffenheit`. Vowels before double
-  consonants, `ck`, and `tz` are shortened. These spelling heuristics are not
+  consonants, `ck`, and `tz` are shortened. Long O and U are recognized in
+  selected open syllables and before `h` or `ß`; `st` after `ver` begins with
+  the German `sh` sound, and an initial `ver-` is left unstressed when a root
+  vowel follows. Common `-egel` roots use a long E and reduced `-el`, and
+  `mir`, `dir`, `wir`, and `ihr` use a long I.
+  These spelling heuristics are not
   a complete German pronunciation dictionary and regional R variants differ.
   The exception for `intrigued` uses the stressed `ee` sound followed by `g d`;
   Windows speech receives an equivalent local SAPI pronunciation.

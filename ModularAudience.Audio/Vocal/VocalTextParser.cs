@@ -197,7 +197,12 @@ public static class VocalTextParser
                     int stressed = -1;
                     if (language != VocalLanguage.AnimalCrossing && !UnstressedWords.Contains(word))
                     {
-                        for (int p = 0; p < phonemes.Count; p++)
+                        int stressStart = 0;
+                        if (language == VocalLanguage.German && word.StartsWith("ver", StringComparison.OrdinalIgnoreCase)
+                            && phonemes.Count > 3 && phonemes[0] == "f" && phonemes[1] == "e" && phonemes[2] == "de-r-glide"
+                            && phonemes.Skip(3).Any(p => p != "de-schwa" && VocalPhonemeInventory.Get(p).IsVowel))
+                            stressStart = 3;
+                        for (int p = stressStart; p < phonemes.Count; p++)
                         {
                             if (!VocalPhonemeInventory.Get(phonemes[p]).IsVowel) continue;
                             if (language == VocalLanguage.German && phonemes[p] == "de-schwa") continue;
