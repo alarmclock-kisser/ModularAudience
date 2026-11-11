@@ -22,10 +22,6 @@ public sealed partial class VocalSynthDialog : Form
     private readonly Button renderBtn = new() { Text = "Render", AutoSize = true };
     private readonly Button designProfileBtn = new() { Text = "Design Profile...", AutoSize = true };
     private readonly Button emphasisBtn = new() { Text = "Emphasis Syntax...", AutoSize = true };
-    private readonly Button saveProfileBtn = new() { Text = "Save Profile", AutoSize = true };
-    private readonly Button loadProfileBtn = new() { Text = "Load Profile", AutoSize = true };
-    private readonly Button deleteProfileBtn = new() { Text = "Delete Profile", AutoSize = true };
-    private readonly Button renameProfileBtn = new() { Text = "Rename Profile", AutoSize = true };
 
     private VocalSynthSettings settings;
     private AudioObj? audio;
@@ -73,6 +69,7 @@ public sealed partial class VocalSynthDialog : Form
 
         settings = VocalSynthSettings.FromPreset(VocalVoicePreset.BuiltIn[2], VocalLanguage.English, "");
         InitializeSpeechBackendControl();
+        InitializeProfileControls();
         UpdateSpeechBackend();
         Text = "VocalSynth"; Name = "VocalSynthDialog";
         ClientSize = new Size(900, 650); MinimumSize = new Size(700, 500); StartPosition = FormStartPosition.CenterScreen;
@@ -102,8 +99,7 @@ public sealed partial class VocalSynthDialog : Form
         top.Controls.Add(windowsSpeechCheckBox);
         Field("Profile name", profileName);
         top.Controls.Add(prehear); top.Controls.Add(create); top.Controls.Add(renderBtn); top.Controls.Add(designProfileBtn);
-        top.Controls.Add(emphasisBtn); top.Controls.Add(saveProfileBtn); top.Controls.Add(loadProfileBtn);
-        top.Controls.Add(deleteProfileBtn); top.Controls.Add(renameProfileBtn);
+        top.Controls.Add(emphasisBtn); top.Controls.Add(profileButtons);
 
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(6) };
         bottom.Controls.Add(status);
@@ -136,10 +132,6 @@ public sealed partial class VocalSynthDialog : Form
         renderBtn.Click += async (_, _) => await RenderNowAsync();
         emphasisBtn.Click += (_, _) => OpenEmphasisDialog();
         designProfileBtn.Click += (_, _) => OpenDesignerDialog();
-        saveProfileBtn.Click += (_, _) => SaveProfile();
-        loadProfileBtn.Click += (_, _) => LoadProfile();
-        deleteProfileBtn.Click += (_, _) => DeleteProfile();
-        renameProfileBtn.Click += (_, _) => RenameProfile();
 
         debounce.Tick += async (_, _) => { debounce.Stop(); await RenderAsync(); };
         playbackTimer.Tick += (_, _) => { if (provider?.Finished == true) StopHear(); };

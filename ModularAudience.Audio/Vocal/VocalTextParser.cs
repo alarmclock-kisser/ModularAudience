@@ -200,6 +200,7 @@ public static class VocalTextParser
                         for (int p = 0; p < phonemes.Count; p++)
                         {
                             if (!VocalPhonemeInventory.Get(phonemes[p]).IsVowel) continue;
+                            if (language == VocalLanguage.German && phonemes[p] == "de-schwa") continue;
                             stressed = p;
                             bool lastVowel = word.Equals("hello", StringComparison.OrdinalIgnoreCase);
                             bool secondVowel = word.Equals("intrigued", StringComparison.OrdinalIgnoreCase);

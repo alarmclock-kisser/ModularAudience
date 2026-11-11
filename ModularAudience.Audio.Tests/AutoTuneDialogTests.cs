@@ -25,6 +25,23 @@ public sealed class AutoTuneDialogTests
     }
 
     [STATestMethod]
+    public void PitchGridControl_IsFirstSettingInTuningTab()
+    {
+        using var editor = new AutoTuneParameterEditor();
+        NumericUpDown grid = Descendants(editor).OfType<NumericUpDown>()
+            .Single(control => control.Name == nameof(AutoTuneSettings.PitchGridSemitones));
+        TabControl tabs = Descendants(editor).OfType<TabControl>().Single();
+        TabPage tuning = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "Tuning / notes");
+        FlowLayoutPanel settings = (FlowLayoutPanel)tuning.Controls[0];
+
+        Assert.AreEqual(1m, grid.Value);
+        Assert.AreSame(settings, grid.Parent!.Parent);
+        Assert.AreEqual(0, settings.Controls.GetChildIndex(grid.Parent));
+        tabs.SelectedIndex = 1;
+        Assert.AreEqual(1m, grid.Value);
+    }
+
+    [STATestMethod]
     public void Prehear_IsModelessAndDoesNotMutateSourceOrUndoHistory_ThenAcceptUsesCachedRender()
     {
         using var fixture = new DialogFixture();

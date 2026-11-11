@@ -16,6 +16,7 @@ public sealed record AutoTuneSettings
 
     public AutoTuneScale Scale { get; init; } = AutoTuneScale.Chromatic;
     public int RootNote { get; init; }
+    public int PitchGridSemitones { get; init; } = 1;
     public int CustomNotesMask { get; init; } = 4095;
     public double IntensityPercent { get; init; } = 100;
     public string MinimumNoteLength { get; init; } = "1/64";
@@ -72,6 +73,7 @@ public sealed record AutoTuneSettings
     {
         if (!Enum.IsDefined(Scale) || !Enum.IsDefined(AnalysisChannel)) throw new ArgumentException("Invalid Auto Tune mode.");
         if (RootNote is < 0 or > 11) throw new ArgumentOutOfRangeException(nameof(RootNote));
+        if (PitchGridSemitones is < 1 or > 12) throw new ArgumentOutOfRangeException(nameof(PitchGridSemitones));
         if (CustomNotesMask is < 0 or > 4095 || (Scale == AutoTuneScale.Custom && CustomNotesMask == 0))
             throw new ArgumentException("A custom scale must contain at least one of the twelve pitch classes.");
         if (!NoteLengths.Contains(MinimumNoteLength)) throw new ArgumentException("Choose a supported minimum note length.");

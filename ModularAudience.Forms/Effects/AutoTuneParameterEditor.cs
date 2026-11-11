@@ -26,6 +26,8 @@ internal sealed class AutoTuneParameterEditor : UserControl
         FlowLayoutPanel tuning = Page(tabs, "Tuning / notes"), detection = Page(tabs, "Detection / quality"), output = Page(tabs, "Mix / output");
         FlowLayoutPanel curveTiming = Page(tabs, "Curve timing"); curveTiming.Controls.Add(this.timing); this.timing.SettingsChanged += this.ChangedControl;
         this.Controls.Add(tabs);
+        Number(tuning, nameof(AutoTuneSettings.PitchGridSemitones), "Pitch grid spacing (semitones)", 1, 12, 1,
+            s => s.PitchGridSemitones, "1 follows the selected Scale. Values above 1 replace Scale with an equal-tempered grid at this many semitones, anchored to Root key; e.g. 4 creates a 4-semitone grid. Maximum correction remains a separate safety limit.");
         this.scale.Items.AddRange(Enum.GetValues<AutoTuneScale>().Cast<object>().ToArray());
         this.rootNote.Items.AddRange(["C", "C# / Db", "D", "D# / Eb", "E", "F", "F# / Gb", "G", "G# / Ab", "A", "A# / Bb", "B"]);
         this.noteLength.Items.AddRange(AutoTuneSettings.NoteLengths.Cast<object>().ToArray());
@@ -45,7 +47,7 @@ internal sealed class AutoTuneParameterEditor : UserControl
 
         Number(tuning, nameof(AutoTuneSettings.IntensityPercent), "Intensity (%)", 0, 100, 1, s => (decimal)s.IntensityPercent, "0 is bypass; 100 applies the full measured correction.");
         Number(tuning, nameof(AutoTuneSettings.TempoBpm), "Tempo (BPM)", 20, 400, 0.1m, s => (decimal)s.TempoBpm, "Tempo used to convert minimum musical note length to time.");
-        Number(tuning, nameof(AutoTuneSettings.MaximumCorrectionSemitones), "Max keys adjustment (semitones)", 0, 24, 0.1m, s => (decimal)s.MaximumCorrectionSemitones, "Notes needing a larger correction are left dry, not force-shifted. 0 bypasses pitch correction.");
+        Number(tuning, nameof(AutoTuneSettings.MaximumCorrectionSemitones), "Maximum correction (semitones)", 0, 24, 0.1m, s => (decimal)s.MaximumCorrectionSemitones, "Notes needing a larger correction are left dry, not force-shifted. 0 bypasses pitch correction.");
         Number(tuning, nameof(AutoTuneSettings.RetuneMilliseconds), "Retune time (ms)", 0, 2000, 1, s => (decimal)s.RetuneMilliseconds, "0 = hard/robotic correction; longer values approach the target more gently.");
         Number(tuning, nameof(AutoTuneSettings.ReleaseMilliseconds), "Correction release (ms)", 0, 2000, 1, s => (decimal)s.ReleaseMilliseconds, "Time to return the shift to neutral after voiced material.");
         Number(tuning, nameof(AutoTuneSettings.PitchSmoothingMilliseconds), "Note tracking smoothing (ms)", 0, 500, 1, s => (decimal)s.PitchSmoothingMilliseconds, "Smooth the pitch used to select a target note; retune time separately smooths the correction.");
@@ -90,6 +92,7 @@ internal sealed class AutoTuneParameterEditor : UserControl
         var settings = new AutoTuneSettings
         {
             Scale = (AutoTuneScale)this.scale.SelectedItem!, RootNote = this.rootNote.SelectedIndex,
+            PitchGridSemitones = (int)N(nameof(AutoTuneSettings.PitchGridSemitones)),
             CustomNotesMask = Enumerable.Range(0, 12).Where(i => this.notes[i].Checked).Aggregate(0, (mask, i) => mask | 1 << i),
             MinimumNoteLength = this.noteLength.SelectedItem?.ToString() ?? "1/64",
             AnalysisChannel = (AutoTuneAnalysisChannel)this.analysisChannel.SelectedItem!,

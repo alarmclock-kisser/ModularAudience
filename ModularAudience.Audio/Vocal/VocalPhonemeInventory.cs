@@ -24,6 +24,18 @@ public static class VocalPhonemeInventory
         ["er"] = V("er", true, 100, [490, 1350, 1690], [1.0, 0.7, 0.4], 0.9, 0.1, true),
         ["oe"] = V("oe", true, 110, [320, 1500, 2200], [1.0, 0.75, 0.4], 0.9, 0.1, true), // ö
         ["ue"] = V("ue", true, 110, [320, 1700, 2200], [1.0, 0.75, 0.4], 0.9, 0.1, true), // ü
+        // German unstressed schwa, vocalic R, long E and short vowels.
+        ["de-schwa"] = V("de-schwa", true, 75, [480, 1650, 2500], [0.85, 0.65, 0.35], 0.85, 0.1, true),
+        ["de-er"] = V("de-er", true, 75, [610, 1450, 2450], [0.9, 0.65, 0.35], 0.85, 0.1, true),
+        ["de-e-long"] = V("de-e-long", true, 130, [400, 1950, 2550], [1.0, 0.75, 0.4], 0.9, 0.1, true),
+        ["de-a-short"] = V("de-a-short", true, 65, [730, 1090, 2440], [1.0, 0.7, 0.4], 0.9, 0.1, true),
+        ["de-e-short"] = V("de-e-short", true, 65, [530, 1840, 2480], [1.0, 0.75, 0.4], 0.9, 0.1, true),
+        ["de-i-short"] = V("de-i-short", true, 60, [390, 1990, 2550], [1.0, 0.75, 0.4], 0.9, 0.1, true),
+        ["de-o-short"] = V("de-o-short", true, 65, [570, 840, 2410], [1.0, 0.65, 0.4], 0.9, 0.1, true),
+        ["de-u-short"] = V("de-u-short", true, 60, [440, 1020, 2240], [1.0, 0.65, 0.4], 0.9, 0.12, true),
+        ["de-ae-short"] = V("de-ae-short", true, 65, [660, 1720, 2410], [1.0, 0.75, 0.4], 0.9, 0.1, true),
+        ["de-oe-short"] = V("de-oe-short", true, 65, [450, 1550, 2200], [1.0, 0.75, 0.4], 0.9, 0.1, true),
+        ["de-ue-short"] = V("de-ue-short", true, 65, [400, 1750, 2200], [1.0, 0.75, 0.4], 0.9, 0.1, true),
         // Nasals
         ["m"] = V("m", true, 70, [250, 1000, 2000], [0.6, 0.3, 0.2], 0.85, 0.15, false),
         ["n"] = V("n", true, 70, [250, 1500, 2300], [0.6, 0.4, 0.2], 0.85, 0.15, false),
@@ -31,6 +43,7 @@ public static class VocalPhonemeInventory
         // Liquids/glides
         ["l"] = V("l", true, 70, [300, 1100, 2500], [0.7, 0.4, 0.3], 0.8, 0.2, false),
         ["r"] = V("r", true, 70, [300, 1200, 1600], [0.7, 0.4, 0.3], 0.8, 0.2, false),
+        ["de-r"] = V("de-r", true, 70, [350, 1150, 2400], [0.65, 0.35, 0.25], 0.75, 0.7, false),
         ["w"] = V("w", true, 60, [300, 600, 2200], [0.6, 0.4, 0.3], 0.7, 0.15, false),
         ["y"] = V("y", true, 60, [250, 2000, 2800], [0.6, 0.5, 0.3], 0.7, 0.15, false),
         // Fricatives (voiced)

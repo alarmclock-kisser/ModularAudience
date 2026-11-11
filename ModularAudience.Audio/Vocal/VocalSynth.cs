@@ -162,7 +162,8 @@ public static class VocalSynth
     {
         bool animal = ph.Symbol.StartsWith("animal-", StringComparison.Ordinal);
         bool beat = IsBeat(ph.Symbol);
-        bool trill = ph.Symbol == "r" && (previous?.Symbol == "r" || next?.Symbol == "r");
+        bool trill = (ph.Symbol is "r" or "de-r")
+            && (previous?.Symbol == ph.Symbol || next?.Symbol == ph.Symbol);
         bool connectedBefore = CanConnect(previous, ph);
         bool connectedAfter = CanConnect(ph, next);
         int fadeIn = connectedBefore ? 0 : Math.Max(1, Math.Min(frames / 4, (int)(s.SampleRate * 0.006)));
@@ -365,6 +366,7 @@ public static class VocalSynth
             "sh" or "zh" or "tsh" or "j" => (1800.0, 6500.0),
             "ich" => (2600.0, 7000.0),
             "ch" => (900.0, 4200.0),
+            "de-r" => (900.0, 3500.0),
             "t" or "d" => (2500.0, 8500.0),
             "k" or "g" or "beat-k" => (1200.0, 5500.0),
             "p" or "b" or "animal-dot" or "beat-b" or "beat-p" => (400.0, 3200.0),

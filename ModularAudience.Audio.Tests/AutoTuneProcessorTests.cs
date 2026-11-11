@@ -110,6 +110,22 @@ public sealed class AutoTuneProcessorTests
     }
 
     [TestMethod]
+    public void FourSemitonePitchGrid_HardIntensitySnapsToRootAnchoredGrid()
+    {
+        AutoTuneSettings settings = Fast with
+        {
+            Scale = AutoTuneScale.Major, RootNote = 0, PitchGridSemitones = 4,
+            IntensityPercent = 100, MaximumCorrectionSemitones = 2
+        };
+        Assert.AreEqual(68d, AutoTunePitchMap.Nearest(69, settings), 1e-12);
+
+        AutoTuneResult result = AutoTuneProcessor.Process(Tone(440), 8000, 1, settings);
+
+        Assert.IsTrue(result.CorrectedFrames > 0);
+        Assert.AreEqual(440 * Math.Pow(2, -1d / 12), Estimate(result.Samples, 8000, 400, 430), 0.75);
+    }
+
+    [TestMethod]
     public void NoteLengthUsesWholeNotesAtSelectedTempo()
     {
         Assert.AreEqual(0.5, (new AutoTuneSettings { MinimumNoteLength = "1/4", TempoBpm = 120 }).MinimumNoteSeconds, 1e-12);
@@ -122,6 +138,8 @@ public sealed class AutoTuneProcessorTests
         Assert.ThrowsExactly<ArgumentException>(() => (Fast with { Scale = AutoTuneScale.Custom, CustomNotesMask = 0 }).Validate());
         Assert.ThrowsExactly<ArgumentException>(() => (Fast with { MaximumFrequencyHz = 4000 }).Validate(8000));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => (Fast with { IntensityPercent = double.NaN }).Validate());
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => (Fast with { PitchGridSemitones = 0 }).Validate());
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => (Fast with { PitchGridSemitones = 13 }).Validate());
         Assert.ThrowsExactly<ArgumentException>(() => AutoTuneProcessor.Process(new float[] { float.NaN }, 8000, 1, Fast));
     }
 

@@ -90,6 +90,7 @@ public sealed class AutoTunePresetStoreTests
     internal static AutoTuneSettings DetailedSettings => new()
     {
         Scale = AutoTuneScale.Custom, RootNote = 7, CustomNotesMask = 0x295,
+        PitchGridSemitones = 4,
         IntensityPercent = 73, MinimumNoteLength = "1/32", TempoBpm = 135.5,
         MaximumCorrectionSemitones = 4.5, RetuneMilliseconds = 31, ReleaseMilliseconds = 92,
         PitchSmoothingMilliseconds = 18, HysteresisCents = 12, DeadZoneCents = 3.5,

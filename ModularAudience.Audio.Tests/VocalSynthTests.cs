@@ -84,15 +84,96 @@ public class VocalSynthTests
     [DataRow(VocalLanguage.English, "hello", "h uh l oh")]
     [DataRow(VocalLanguage.English, "intrigued", "i n t r ee g d")]
     [DataRow(VocalLanguage.German, "mein", "m eye n")]
-    [DataRow(VocalLanguage.German, "heute", "h oy t uh")]
+    [DataRow(VocalLanguage.German, "heute", "h oy t de-schwa")]
     [DataRow(VocalLanguage.German, "ich", "i ich")]
     [DataRow(VocalLanguage.German, "buch", "b u ch")]
-    [DataRow(VocalLanguage.German, "schule", "sh oo l uh")]
+    [DataRow(VocalLanguage.German, "schule", "sh oo l de-schwa")]
     public void Phonemizer_DistinguishesCommonVowelsAndConsonants(VocalLanguage language, string text, string expected)
     {
         var phonemes = VocalPhonemizer.Phonemize(language, text);
         CollectionAssert.AreEqual(expected.Split(' '), phonemes.ToArray());
         Assert.IsTrue(phonemes.All(VocalPhonemeInventory.Contains));
+    }
+
+    [TestMethod]
+    [DataRow("der", "d de-e-long de-er")]
+    [DataRow("her", "h de-e-long de-er")]
+    [DataRow("gehst", "g de-e-long s t")]
+    [DataRow("beschaffenheit", "b de-schwa sh de-a-short f de-schwa n h eye t")]
+    [DataRow("schwer", "sh v de-e-long de-er")]
+    [DataRow("wasser", "v de-a-short s de-er")]
+    [DataRow("lieblingsfrau", "l ee b l i ng s f de-r ow")]
+    [DataRow("horrorfilm", "h de-o-short de-r o de-er f i l m")]
+    [DataRow("affenscheide", "de-a-short f de-schwa n sh eye d de-schwa")]
+    [DataRow("eisenschmiede", "eye z de-schwa n sh m ee d de-schwa")]
+    [DataRow("den", "d de-e-long n")]
+    [DataRow("dem", "d de-e-long m")]
+    [DataRow("jemandem", "y e m a n d de-schwa m")]
+    [DataRow("problem", "p de-r o b l de-e-long m")]
+    public void Phonemizer_GermanFeedbackWords_UseDistinctVowelsAndR(string word, string expected)
+    {
+        var phonemes = VocalPhonemizer.Phonemize(VocalLanguage.German, word);
+        CollectionAssert.AreEqual(expected.Split(' '), phonemes.ToArray());
+        Assert.IsTrue(phonemes.All(VocalPhonemeInventory.Contains));
+    }
+
+    [TestMethod]
+    public void Parser_GermanUnstressedPrefix_DoesNotTakeWordStress()
+    {
+        var phonemes = VocalTextParser.Parse(VocalLanguage.German, "Beschaffenheit", VocalEmphasisSyntax.Default())
+            .OfType<VocalPhonemeToken>().ToArray();
+        Assert.IsFalse(phonemes.First(p => p.Phoneme == "de-schwa").Stressed);
+        Assert.AreEqual("de-a-short", phonemes.Single(p => p.Stressed).Phoneme);
+    }
+
+    [TestMethod]
+    [DataRow("Affe", "Afe")]
+    [DataRow("Masse", "Mase")]
+    [DataRow("Backe", "Bake")]
+    [DataRow("denn", "den")]
+    public void Render_GermanShortVowels_AreAudiblyShorterAtHalfSpeed(string shortWord, string longWord)
+    {
+        var settings = VocalSynthSettings.FromPreset(
+            VocalVoicePreset.BuiltIn[2], VocalLanguage.German, shortWord);
+        settings.Speed = 0.5;
+        using var shorter = VocalSynth.Render(settings);
+        settings.Text = longWord;
+        using var longer = VocalSynth.Render(settings);
+        Assert.IsTrue(longer.Duration - shorter.Duration > TimeSpan.FromMilliseconds(70),
+            $"{shortWord}: {shorter.Duration}; {longWord}: {longer.Duration}.");
+        Assert.IsTrue(shorter.Data.Any(sample => Math.Abs(sample) > 0.001));
+    }
+
+    [TestMethod]
+    [DataRow("Von der Beschaffenheit her")]
+    [DataRow("Lieblingsfrau")]
+    [DataRow("Horrorfilm")]
+    [DataRow("Affenscheide")]
+    [DataRow("Eisenschmiede")]
+    [DataRow("Gehst du mir mal den K\u00e4se holen?")]
+    public void Render_GermanFeedbackPhrases_AtRequestedVoiceAndSpeed(string phrase)
+    {
+        var settings = VocalSynthSettings.FromPreset(
+            VocalVoicePreset.BuiltIn[2], VocalLanguage.German, phrase);
+        settings.Speed = 0.5;
+        using var audio = VocalSynth.Render(settings);
+        Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001));
+        Assert.IsTrue(audio.Data.All(float.IsFinite));
+    }
+
+    [TestMethod]
+    public void Render_GermanR_HasDistinctFricationFromEnglishR()
+    {
+        var settings = VocalSynthSettings.FromPreset(VocalVoicePreset.BuiltIn[2], VocalLanguage.German, "r");
+        settings.SampleRate = 16000;
+        settings.Speed = 0.5;
+        using var german = VocalSynth.Render(settings);
+        settings.Language = VocalLanguage.English;
+        using var english = VocalSynth.Render(settings);
+        double germanBrightness = DifferenceEnergyRatio(german.Data);
+        double englishBrightness = DifferenceEnergyRatio(english.Data);
+        Assert.IsTrue(germanBrightness > englishBrightness * 1.15,
+            $"Expected German uvular frication: {germanBrightness} versus {englishBrightness}.");
     }
 
     [TestMethod]
@@ -296,7 +377,7 @@ public class VocalSynthTests
     }
 
     [TestMethod]
-    [DataRow(VocalLanguage.German, "Klenker", "Klenkerrrrrr", "r")]
+    [DataRow(VocalLanguage.German, "Klenker", "Klenkerrrrrr", "de-r")]
     [DataRow(VocalLanguage.English, "hiss", "hissssss", "s")]
     [DataRow(VocalLanguage.English, "cool", "coooool", "oo")]
     public void RepeatedLetters_SustainSuitableSounds_WithoutStretchingNormalDoubles(
@@ -524,6 +605,65 @@ public class VocalSynthTests
             settings.SampleRate = 8000;
             using var audio = VocalSynth.Render(settings);
             Assert.IsTrue(audio.Data.Any(x => Math.Abs(x) > 0.001));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [STATestMethod]
+    public void Dialog_DefaultsToFormantSpeech_AndKeepsProfileButtonsOnOneRow()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "vocal_layout_" + Guid.NewGuid());
+        var profiles = new VocalVoiceProfileStore(directory);
+        try
+        {
+            using var dialog = new VocalSynthDialog(profiles, new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json")));
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            object Field(string name) => typeof(VocalSynthDialog).GetField(name, flags)!.GetValue(dialog)!;
+            var naturalSpeech = (CheckBox)Field("windowsSpeechCheckBox");
+            var settings = (VocalSynthSettings)Field("settings");
+            Assert.IsFalse(naturalSpeech.Checked);
+            Assert.IsFalse(settings.UseWindowsSpeech);
+            ((ComboBox)Field("languageCombo")).SelectedItem = "German";
+            Assert.IsFalse(settings.UseWindowsSpeech);
+            naturalSpeech.Checked = true;
+            Assert.IsTrue(settings.UseWindowsSpeech);
+
+            var group = (FlowLayoutPanel)Field("profileButtons");
+            dialog.CreateControl();
+            var buttons = new[]
+            {
+                (Button)Field("saveProfileBtn"), (Button)Field("loadProfileBtn"),
+                (Button)Field("renameProfileBtn"), (Button)Field("deleteProfileBtn"),
+            };
+            foreach (int width in new[] { 900, 700 })
+            {
+                dialog.ClientSize = new System.Drawing.Size(width, dialog.ClientSize.Height);
+                dialog.PerformLayout();
+                group.Parent!.PerformLayout();
+                group.PerformLayout();
+                foreach (var button in buttons)
+                {
+                    Assert.AreEqual(buttons[0].Top, button.Top, $"{button.Text} wrapped at width {width}.");
+                    Assert.IsTrue(button.Left >= 0 && button.Right <= group.ClientSize.Width,
+                        $"{button.Text} is clipped at width {width}.");
+                }
+                for (int i = 1; i < buttons.Length; i++)
+                    Assert.IsTrue(buttons[i].Left >= buttons[i - 1].Right, "Profile buttons overlap or are out of order.");
+                Assert.IsTrue(group.Right <= group.Parent.ClientSize.Width - group.Parent.Padding.Right,
+                    $"The profile button row extends beyond the window at width {width}.");
+            }
+
+            ((TextBox)Field("profileName")).Text = "Layout profile";
+            var click = typeof(Button).GetMethod("OnClick", flags)!;
+            click.Invoke(buttons[0], [EventArgs.Empty]);
+            Assert.IsTrue(profiles.LoadAll().Any(p => p.Name == "Layout profile"));
+            click.Invoke(buttons[1], [EventArgs.Empty]);
+            Assert.AreEqual("Profile: Layout profile", ((ComboBox)Field("voiceCombo")).SelectedItem);
+            click.Invoke(buttons[3], [EventArgs.Empty]);
+            Assert.IsFalse(profiles.LoadAll().Any(p => p.Name == "Layout profile"));
         }
         finally
         {

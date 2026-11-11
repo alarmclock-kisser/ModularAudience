@@ -37,7 +37,7 @@ internal static class AutoTuneCurveBuilder
             if ((i & 4095) == 0) token.ThrowIfCancellationRequested();
             power[i + 1] = power[i] + (double)mono[i] * mono[i];
         }
-        int mask = AutoTunePitchMap.AllowedMask(settings), voiced = 0;
+        int voiced = 0;
         double smooth = double.NaN, currentNote = double.NaN;
         double hopSeconds = hop / (double)sampleRate;
         int radius = Math.Max(1, sampleRate / 100);
@@ -60,7 +60,7 @@ internal static class AutoTuneCurveBuilder
             raw[i] = 69 + 12 * Math.Log2(frequency / V(nameof(settings.ReferenceA4Hz), center));
             smooth = double.IsNaN(smooth) ? raw[i] : smooth + noteAlpha * (raw[i] - smooth);
             double fineTune = V(nameof(settings.FineTuneCents), center) / 100;
-            double candidate = AutoTunePitchMap.Nearest(smooth - fineTune, mask);
+            double candidate = AutoTunePitchMap.Nearest(smooth - fineTune, settings);
             if (double.IsNaN(currentNote) || Math.Abs(smooth - (currentNote + fineTune)) - Math.Abs(smooth - (candidate + fineTune)) > 2 * V(nameof(settings.HysteresisCents), center) / 100)
                 currentNote = candidate;
             targets[i] = currentNote + fineTune; targetNotes[i] = currentNote;

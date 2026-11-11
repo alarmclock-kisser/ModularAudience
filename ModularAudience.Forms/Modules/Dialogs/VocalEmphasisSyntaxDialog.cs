@@ -14,9 +14,21 @@ public sealed class VocalEmphasisSyntaxDialog : Form
         ClientSize = new Size(640, 400); StartPosition = FormStartPosition.CenterParent;
 
         grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Marker", HeaderText = "Marker", Width = 80 });
-        grid.Columns.Add(new DataGridViewComboBoxColumn { Name = "Mode", HeaderText = "Mode", DataSource = Enum.GetValues<VocalEmphasisMode>() });
+        grid.Columns.Add(new DataGridViewComboBoxColumn
+        {
+            Name = "Mode",
+            HeaderText = "Mode",
+            ValueType = typeof(VocalEmphasisMode),
+            DataSource = Enum.GetValues<VocalEmphasisMode>(),
+        });
         grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Value", HeaderText = "Value", Width = 80 });
         grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Wrapping", HeaderText = "Wrapping" });
+        grid.DefaultValuesNeeded += (_, e) =>
+        {
+            e.Row.Cells["Mode"].Value = VocalEmphasisMode.Strong;
+            e.Row.Cells["Value"].Value = 1.0;
+            e.Row.Cells["Wrapping"].Value = true;
+        };
 
         foreach (var r in Syntax.Rules)
         {

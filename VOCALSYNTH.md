@@ -74,11 +74,11 @@ ModularAudience.Forms/WindowMain.Designer.cs
 
 ## 3. Current speech engines and behavior
 
-- **Natural speech (Windows)** is enabled by default in the dialog for English
-  and German. It uses an installed Windows desktop speech voice locally; no
+- **Natural speech (Windows)** is available but unchecked by default in the
+  dialog for English and German. It uses an installed Windows desktop speech voice locally; no
   cloud service is used. If a matching voice is missing, the dialog reports an
   error rather than silently switching engines. Install a matching Windows voice
-  or uncheck the option to use the independent formant synthesizer. The API's
+  or leave the option unchecked to use the independent formant synthesizer. The API's
   `UseWindowsSpeech` setting defaults to `false` for existing callers.
 - Windows voice profiles are **approximations**, not separate recorded voices:
   the engine chooses an available voice, uses its supported pitch levels and
@@ -88,6 +88,14 @@ ModularAudience.Forms/WindowMain.Designer.cs
 - The independent synthesizer uses English/German pronunciation rules and a
   small English exception list. It distinguishes moving diphthongs, English
   `ch` and German `ch`, voiced/unvoiced consonants, and German final devoicing.
+  German uses a separate uvular consonantal R and a more open vocalic R after
+  vowels and in unstressed `-er`. Words such as `der` and `her` retain their
+  full E before that vocalic R. A distinct unrounded schwa is used for final
+  `-e` and common unstressed `-en`/`-em` endings; monosyllabic `den`/`dem`
+  and a small set of stressed endings retain a full E. The `be-` prefix before
+  `sch` is unstressed, as in `Beschaffenheit`. Vowels before double
+  consonants, `ck`, and `tz` are shortened. These spelling heuristics are not
+  a complete German pronunciation dictionary and regional R variants differ.
   The exception for `intrigued` uses the stressed `ee` sound followed by `g d`;
   Windows speech receives an equivalent local SAPI pronunciation.
   Its output is still synthetic and its pronunciation rules are not a complete

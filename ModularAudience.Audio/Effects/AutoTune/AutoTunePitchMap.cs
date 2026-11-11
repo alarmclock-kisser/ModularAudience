@@ -40,4 +40,15 @@ internal static class AutoTunePitchMap
         }
         return best;
     }
+
+    internal static double Nearest(double midiNote, AutoTuneSettings settings)
+    {
+        if (!double.IsFinite(midiNote)) throw new ArgumentException("Invalid note.");
+        if (settings.PitchGridSemitones == 1) return Nearest(midiNote, AllowedMask(settings));
+
+        double gridPosition = (midiNote - settings.RootNote) / settings.PitchGridSemitones;
+        double lower = Math.Floor(gridPosition);
+        double nearest = gridPosition - lower <= 0.5 ? lower : lower + 1;
+        return settings.RootNote + nearest * settings.PitchGridSemitones;
+    }
 }
