@@ -124,7 +124,7 @@ internal sealed class YoutubeAudioPlayer : IDisposable
             Task exit = session.Process.WaitForExitAsync(session.Token);
             foreach (Task task in new[] { input, output, errors, exit })
                 _ = task.ContinueWith(_ => Kill(session.Process), CancellationToken.None,
-                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.OnlyOnCanceled,
+                    TaskContinuationOptions.NotOnRanToCompletion,
                     TaskScheduler.Default);
             await Task.WhenAll(input, output, errors, exit).ConfigureAwait(false);
             if (session.Process.ExitCode != 0)
