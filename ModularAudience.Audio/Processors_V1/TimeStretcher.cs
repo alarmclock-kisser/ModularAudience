@@ -26,6 +26,7 @@ namespace ModularAudience.Audio.Processors_V1
     IProgress<double>? progress = null,
     bool offload = false, bool channeled = false)
         {
+            int? requestedMaxWorkers = maxWorkers;
             if (maxWorkers == null)
             {
                 maxWorkers = Environment.ProcessorCount;
@@ -34,6 +35,14 @@ namespace ModularAudience.Audio.Processors_V1
             {
                 maxWorkers = Math.Clamp(maxWorkers.Value, 1, Environment.ProcessorCount);
             }
+
+            string route = offload ? nameof(TimeStretchOffloadedAsync)
+                : factor >= 1.5 ? nameof(TimeStretchSlowAsync)
+                : channeled ? nameof(TimeStretchChanneledAsync)
+                : maxWorkers != Environment.ProcessorCount ? nameof(TimeStretchMostThreadsAsync)
+                : "TimeStretchAllThreadsCore";
+            LogCollection.Log(
+                $"Time stretch call: TimeStretcher.TimeStretchAllThreadsAsync(obj={obj.Name}, chunkSize={chunkSize}, overlap={overlap:F3}, factor={factor:F6}, keepData={keepData}, normalize={normalize:F3}, maxWorkers={requestedMaxWorkers?.ToString() ?? "null"} (effective={maxWorkers.Value}), progress={progress?.GetType().FullName ?? "null"}, offload={offload}, channeled={channeled}); method=V1 route={route} slowVariant={!offload && factor >= 1.5} (factor>=1.5); inputScannedBpm={obj.ScannedBpm:F3} inputDuration={obj.Duration.TotalSeconds:F3}s.");
 
                     if (offload)
                     {

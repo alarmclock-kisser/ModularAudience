@@ -31,7 +31,12 @@ namespace ModularAudience.Forms.Modules
 
         public void ShowWaveform(Bitmap bmp, Point location)
         {
-            // Preview is explicitly requested by the user (Preview checkbox); do not gate on the global hint policy.
+            if (!Hints.HintPolicy.Enabled)
+            {
+                if (!ReferenceEquals(this.pictureBox_waveform.Image, bmp)) bmp.Dispose();
+                return;
+            }
+
             this.ReplaceImage(bmp);
             this.Size = new Size(bmp.Width, bmp.Height);
             this.pictureBox_waveform.Size = new Size(bmp.Width, bmp.Height);
@@ -44,6 +49,11 @@ namespace ModularAudience.Forms.Modules
         {
             if (bitmaps.Count == 0)
             {
+                return;
+            }
+            if (!Hints.HintPolicy.Enabled)
+            {
+                foreach (Bitmap bitmap in bitmaps) bitmap.Dispose();
                 return;
             }
 

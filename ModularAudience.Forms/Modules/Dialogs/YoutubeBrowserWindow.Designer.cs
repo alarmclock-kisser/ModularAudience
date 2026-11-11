@@ -67,6 +67,8 @@ partial class YoutubeBrowserWindow
     private ContextMenuStrip columnsMenu = null!;
     private ToolStripMenuItem[] columnMenuItems = null!;
     private ToolStripMenuItem playItem = null!;
+    private ToolStripMenuItem skipItem = null!;
+    private ToolStripMenuItem addNextItem = null!;
     private CheckBox autoplayCheck = null!;
     private FolderBrowserDialog folderDialog = null!;
 
@@ -323,11 +325,14 @@ partial class YoutubeBrowserWindow
         var channelItem = new ToolStripMenuItem("Navigate to Channel");
         var playlistItem = new ToolStripMenuItem("Navigate to Playlist", null, NavigateToPlaylist_Click);
         playItem = new ToolStripMenuItem("Play", null, PlayStop_Click);
+        skipItem = new ToolStripMenuItem("Skip", null, Skip_Click);
+        addNextItem = new ToolStripMenuItem("Add next", null, AddNext_Click);
+        skipItem.DropDownOpening += (_, _) => PopulateSkipMenu();
         channelItem.Click += NavigateToChannel_Click;
         relatedItem.Click += ShowRelated_Click;
         openItem.Click += Open_Click;
         copyItem.Click += Copy_Click;
-        columnsMenu.Items.AddRange([playItem, new ToolStripSeparator(), enqueueItem, openItem, relatedItem, copyItem, channelItem, playlistItem, new ToolStripSeparator()]);
+        columnsMenu.Items.AddRange([playItem, skipItem, addNextItem, new ToolStripSeparator(), enqueueItem, openItem, relatedItem, copyItem, channelItem, playlistItem, new ToolStripSeparator()]);
         string[] titles = ["Title", "Uploader", "Duration", "Views", "ID", "URL", "Upload Date"];
         columnMenuItems = new ToolStripMenuItem[titles.Length];
         for (int index = 0; index < titles.Length; index++)
@@ -345,7 +350,10 @@ partial class YoutubeBrowserWindow
         {
             enqueueItem.Enabled = CanEnqueueDownloads && SelectedVideos().Any(video => !video.IsChannel);
             playItem.Text = IsPlayingVideo(SelectedVideo()) ? "Stop" : "Play";
-            playItem.Enabled = !closing && !busy && binariesReady && SelectedVideo() is { IsVideo: true };
+            playItem.Enabled = !closing && !busy && binariesReady && SelectedVideo() is not null;
+            skipItem.Enabled = CanSkipPlayback;
+            PopulateSkipMenu();
+            addNextItem.Enabled = CanAddNext;
             openItem.Enabled = !closing && SelectedVideo() is not null;
             copyItem.Enabled = !closing && resultsList.SelectedItems.Count > 0;
             relatedItem.Enabled = CanBrowse && SelectedVideo() is { IsVideo: true };

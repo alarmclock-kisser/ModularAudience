@@ -125,9 +125,11 @@ public partial class YoutubeBrowserWindow : Form
         copyButton.Enabled = !closing && resultsList.SelectedItems.Count > 0;
         if (playItem is not null)
         {
-            playItem.Enabled = !closing && !busy && binariesReady && SelectedVideo() is { IsVideo: true };
+            playItem.Enabled = !closing && !busy && binariesReady && SelectedVideo() is not null;
             playItem.Text = IsPlayingVideo(SelectedVideo()) ? "Stop" : "Play";
         }
+        if (skipItem is not null) skipItem.Enabled = CanSkipPlayback;
+        if (addNextItem is not null) addNextItem.Enabled = CanAddNext;
         metadataButton.Enabled = available && SelectedVideo() is { IsVideo: true };
         showRelatedButton.Enabled = metadataButton.Enabled;
         operationProgress.Visible = busy || activeBatch is not null;

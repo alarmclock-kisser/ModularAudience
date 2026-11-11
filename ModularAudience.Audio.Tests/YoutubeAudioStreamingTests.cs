@@ -39,6 +39,67 @@ public sealed class YoutubeAudioStreamingTests
     }
 
     [TestMethod]
+    public async Task OpenAsync_FollowsRelativeGoogleVideoRedirect()
+    {
+        byte[] expected = [1, 2, 3];
+        using var contentStream = new TrackingStream(expected);
+        using var redirect = new HttpResponseMessage(HttpStatusCode.Found);
+        redirect.Headers.Location = new Uri("/videoplayback?token=redirected", UriKind.Relative);
+        using var handler = new RedirectHandler(redirect,
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(contentStream) });
+        using var http = new HttpClient(handler);
+        using var client = new YoutubeAudioStreamClient(http);
+
+        await using var response = await client.OpenAsync(
+            new Uri("https://rr1.googlevideo.com/videoplayback?token=initial"), CancellationToken.None);
+        using var output = new MemoryStream();
+        await response.Stream.CopyToAsync(output);
+
+        CollectionAssert.AreEqual(expected, output.ToArray());
+        Assert.AreEqual(2, handler.RequestUris.Count);
+        Assert.AreEqual("https://rr1.googlevideo.com/videoplayback?token=redirected",
+            handler.RequestUris[1].AbsoluteUri);
+    }
+
+    [TestMethod]
+    public async Task OpenAsync_RejectsRedirectOutsideGoogleVideo()
+    {
+        using var redirect = new HttpResponseMessage(HttpStatusCode.Found)
+        {
+            Headers = { Location = new Uri("https://example.com/audio") }
+        };
+        using var handler = new RedirectHandler(redirect);
+        using var http = new HttpClient(handler);
+        using var client = new YoutubeAudioStreamClient(http);
+
+        var error = await Assert.ThrowsExactlyAsync<HttpRequestException>(async () =>
+            await client.OpenAsync(new Uri("https://rr1.googlevideo.com/audio"), CancellationToken.None));
+
+        Assert.AreEqual(HttpStatusCode.Found, error.StatusCode);
+        Assert.AreEqual(1, handler.RequestUris.Count);
+    }
+
+    [TestMethod]
+    public async Task OpenAsync_StopsRedirectLoops()
+    {
+        var redirects = Enumerable.Range(0, 6).Select(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.TemporaryRedirect);
+            response.Headers.Location = new Uri("/audio", UriKind.Relative);
+            return response;
+        }).ToArray();
+        using var handler = new RedirectHandler(redirects);
+        using var http = new HttpClient(handler);
+        using var client = new YoutubeAudioStreamClient(http);
+
+        var error = await Assert.ThrowsExactlyAsync<HttpRequestException>(async () =>
+            await client.OpenAsync(new Uri("https://rr1.googlevideo.com/audio"), CancellationToken.None));
+
+        Assert.AreEqual(HttpStatusCode.TemporaryRedirect, error.StatusCode);
+        Assert.AreEqual(6, handler.RequestUris.Count);
+    }
+
+    [TestMethod]
     public async Task OpenAsync_RejectsUnsafeHostBeforeSendingRequest()
     {
         using var handler = new AudioHandler(new TrackingStream([]));
@@ -72,6 +133,20 @@ public sealed class YoutubeAudioStreamingTests
             Assert.AreEqual("https", request.RequestUri!.Scheme);
             Assert.IsTrue(request.RequestUri.Host.EndsWith(".googlevideo.com", StringComparison.Ordinal));
             return Task.FromResult(new HttpResponseMessage(status) { Content = new StreamContent(stream) });
+        }
+    }
+
+    private sealed class RedirectHandler(params HttpResponseMessage[] responses) : HttpMessageHandler
+    {
+        internal List<Uri> RequestUris { get; } = [];
+        private int responseIndex;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            this.RequestUris.Add(request.RequestUri!);
+            if (this.responseIndex >= responses.Length)
+                throw new InvalidOperationException("The redirect test handler ran out of responses.");
+            return Task.FromResult(responses[this.responseIndex++]);
         }
     }
 

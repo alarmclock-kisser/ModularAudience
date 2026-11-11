@@ -24,6 +24,8 @@ Binary transfer messages identify the actual asset and show downloaded / total d
 
 Results support ascending/descending header sorting with direction arrows. Duration, view count and upload date sort by their typed values, with unknown values last. `UploadDate` is a nullable `DateOnly`, parsed strictly from yt-dlp's `upload_date` (`yyyyMMdd`). Flat results may omit dates; the browser's **Load full metadata** action calls `GetVideoMetadataAsync` asynchronously for only the selected video. No dates are guessed. Seven-column visibility settings migrate older six-column arrays without changing the original six preferences.
 
+The browser's audio-only player follows up to five stream redirects manually. Every redirect target must remain an HTTPS `googlevideo.com` host; redirects to other hosts are rejected.
+
 MP3 offers 64/96/128/192/256/320 kbps. WAV offers actual 8/16/24/32-bit PCM via `ExtractAudio+ffmpeg_o:-c:a`: `pcm_u8`, `pcm_s16le`, `pcm_s24le`, `pcm_s32le`. 32-bit WAV is signed integer PCM, not floating point. These settings are independent; legacy MP3 values migrate to the nearest supported bitrate. Increasing depth cannot restore quality absent from the source.
 
 Thumbnail loading prefers YouTube's canonical HTTPS JPEG endpoint instead of flat-metadata WebP/AVIF URLs unsupported by GDI+. A trusted metadata URL is a fallback. The loader checks byte signatures, size and dimensions and reports unsupported encodings explicitly; redirects and untrusted image hosts remain disabled.
@@ -125,6 +127,7 @@ to these methods.
 - `Task<IReadOnlyList<YtdlpVideo>> SearchAsync(string query, int maxResults, CancellationToken cancellationToken)`
 - `Task<IReadOnlyList<YtdlpVideo>> BrowseAsync(string youtubeUrl, int maxResults, CancellationToken cancellationToken)`
 - `IAsyncEnumerable<YtdlpVideo> BrowseChannelStreamAsync(string youtubeUrl, int maxResults, CancellationToken token, YtdlpResultType resultType = YtdlpResultType.All)`
+- `IAsyncEnumerable<YtdlpVideo> BrowseChannelVideosStreamAsync(string youtubeUrl, CancellationToken token)` streams all channel videos without materializing the full channel or imposing a result limit.
 - `string CreateChannelBrowseUrl(string youtubeUrl, YtdlpResultType resultType)` validates and selects a channel tab without a global search.
 - `Task<YtdlpDownloadResult> DownloadAsync(YtdlpVideo video, YtdlpDownloadOptions options, IProgress<string>? progress, CancellationToken cancellationToken, IProgress<YtdlpDownloadProgress>? downloadProgress = null)`
 

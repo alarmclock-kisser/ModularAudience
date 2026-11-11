@@ -44,12 +44,14 @@
             toolStripMenuItem_clear = new ToolStripMenuItem();
             toolStripMenuItem_timestretchEach = new ToolStripMenuItem();
             toolStripMenuItem_countdown = new ToolStripMenuItem();
+            toolStripMenuItem_autoImportWhenEmpty = new ToolStripMenuItem();
             toolStripSeparator_playlistQueue = new ToolStripSeparator();
             toolStripMenuItem_addNext = new ToolStripMenuItem();
             toolStripMenuItem_enqueueLast = new ToolStripMenuItem();
             toolStripSeparator_playlistAutoEnqueue = new ToolStripSeparator();
             toolStripMenuItem_autoEnqueueOne = new ToolStripMenuItem();
             toolTip_playlist = new ToolTip(components);
+            toolTip_playlistInfo = new ToolTip(components);
             button_playlist = new Button();
             button_random = new Button();
             contextMenuStrip_random = new ContextMenuStrip(components);
@@ -146,9 +148,9 @@
             // 
             // contextMenuStrip_playlist
             // 
-            contextMenuStrip_playlist.Items.AddRange(new ToolStripItem[] { toolStripMenuItem_playPause, toolStripMenuItem_prev, toolStripMenuItem_skip, toolStripMenuItem_crossfade, toolStripMenuItem_crossSyncDuration, toolStripMenuItem_shuffle, toolStripMenuItem_clear, toolStripMenuItem_timestretchEach, toolStripMenuItem_countdown, toolStripSeparator_playlistQueue, toolStripMenuItem_addNext, toolStripMenuItem_enqueueLast, toolStripSeparator_playlistAutoEnqueue, toolStripMenuItem_autoEnqueueOne });
+            contextMenuStrip_playlist.Items.AddRange(new ToolStripItem[] { toolStripMenuItem_playPause, toolStripMenuItem_prev, toolStripMenuItem_skip, toolStripMenuItem_crossfade, toolStripMenuItem_crossSyncDuration, toolStripMenuItem_shuffle, toolStripMenuItem_clear, toolStripMenuItem_timestretchEach, toolStripMenuItem_countdown, toolStripMenuItem_autoImportWhenEmpty, toolStripSeparator_playlistQueue, toolStripMenuItem_addNext, toolStripMenuItem_enqueueLast, toolStripSeparator_playlistAutoEnqueue, toolStripMenuItem_autoEnqueueOne });
             contextMenuStrip_playlist.Name = "contextMenuStrip_playlist";
-            contextMenuStrip_playlist.Size = new Size(201, 280);
+            contextMenuStrip_playlist.Size = new Size(201, 302);
             contextMenuStrip_playlist.Opening += contextMenuStrip_playlist_Opening;
             // 
             // toolStripMenuItem_playPause
@@ -219,6 +221,16 @@
             toolStripMenuItem_countdown.Text = "Countdown before play";
             toolStripMenuItem_countdown.Click += playlistMenu_Countdown_Click;
             // 
+            // toolStripMenuItem_autoImportWhenEmpty
+            //
+            toolStripMenuItem_autoImportWhenEmpty.CheckOnClick = true;
+            toolStripMenuItem_autoImportWhenEmpty.Checked = false;
+            toolStripMenuItem_autoImportWhenEmpty.CheckState = CheckState.Unchecked;
+            toolStripMenuItem_autoImportWhenEmpty.Name = "toolStripMenuItem_autoImportWhenEmpty";
+            toolStripMenuItem_autoImportWhenEmpty.Size = new Size(200, 22);
+            toolStripMenuItem_autoImportWhenEmpty.Text = "Auto-import when empty";
+            toolStripMenuItem_autoImportWhenEmpty.Click += playlistMenu_AutoImportWhenEmpty_Click;
+            //
             // toolStripSeparator_playlistQueue
             // 
             toolStripSeparator_playlistQueue.Name = "toolStripSeparator_playlistQueue";
@@ -258,6 +270,11 @@
             toolTip_playlist.InitialDelay = 500;
             toolTip_playlist.ReshowDelay = 100;
             toolTip_playlist.ShowAlways = true;
+            toolTip_playlistInfo.AlwaysAvailable = true;
+            toolTip_playlistInfo.AutoPopDelay = 10000;
+            toolTip_playlistInfo.InitialDelay = 500;
+            toolTip_playlistInfo.ReshowDelay = 100;
+            toolTip_playlistInfo.ShowAlways = true;
             // 
             // button_playlist
             // 
@@ -270,7 +287,7 @@
             button_playlist.TabIndex = 32;
             button_playlist.TabStop = false;
             button_playlist.Text = "\u25B6 List";
-            toolTip_playlist.SetToolTip(button_playlist, "Right-click to configure.\nPlaylist empty.");
+            toolTip_playlistInfo.SetToolTip(button_playlist, "Right-click to configure.\nPlaylist empty.");
             button_playlist.UseVisualStyleBackColor = false;
             button_playlist.Click += button_playlist_TogglePlayPause_Click;
             button_playlist.MouseHover += button_playlist_MouseHover;
@@ -840,6 +857,7 @@ contextMenuStrip_newTrack.Items.Add(CreateVocalSynthMenu());
         private ContextMenuStrip contextMenuStrip_playlist;
         private ToolStripMenuItem toolStripMenuItem_autoEnqueueOne;
         private ToolStripSeparator toolStripSeparator_playlistQueue;
+        private ToolStripMenuItem toolStripMenuItem_autoImportWhenEmpty;
         private ToolStripMenuItem toolStripMenuItem_addNext;
         private ToolStripMenuItem toolStripMenuItem_enqueueLast;
         private ToolStripSeparator toolStripSeparator_playlistAutoEnqueue;
@@ -851,6 +869,7 @@ contextMenuStrip_newTrack.Items.Add(CreateVocalSynthMenu());
         private ToolStripMenuItem toolStripMenuItem_clear;
         private ToolStripMenuItem toolStripMenuItem_timestretchEach;
         private ToolTip toolTip_playlist;
+        private ToolTip toolTip_playlistInfo;
         private ToolStripMenuItem toolStripMenuItem_crossfade;
         private ToolStripMenuItem toolStripMenuItem_crossSyncDuration;
         private VScrollBar vScrollBar_masterLimiter;

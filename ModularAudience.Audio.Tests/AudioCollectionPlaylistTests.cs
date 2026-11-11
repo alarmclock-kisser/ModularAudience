@@ -48,6 +48,31 @@ public sealed class AudioCollectionPlaylistTests
         }
     }
 
+    [TestMethod]
+    public void AutoImportWhenEmptyTogglesThePlaylistProviderAndDefaultsOff()
+    {
+        using PlaylistEngine engine = new();
+        WindowMain shell = (WindowMain)RuntimeHelpers.GetUninitializedObject(typeof(WindowMain));
+        GC.SuppressFinalize(shell);
+        SetField(shell, "_playlist", engine);
+        using ToolStripMenuItem item = new();
+
+        Assert.IsFalse(Field<bool>(shell, "_playlistAutoImportWhenEmpty"));
+        Assert.IsNull(engine.AutoEnqueuePathProvider);
+
+        item.Checked = true;
+        typeof(WindowMain).GetMethod("playlistMenu_AutoImportWhenEmpty_Click",
+            BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(shell, [item, EventArgs.Empty]);
+        Assert.IsTrue(Field<bool>(shell, "_playlistAutoImportWhenEmpty"));
+        Assert.IsNotNull(engine.AutoEnqueuePathProvider);
+
+        item.Checked = false;
+        typeof(WindowMain).GetMethod("playlistMenu_AutoImportWhenEmpty_Click",
+            BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(shell, [item, EventArgs.Empty]);
+        Assert.IsFalse(Field<bool>(shell, "_playlistAutoImportWhenEmpty"));
+        Assert.IsNull(engine.AutoEnqueuePathProvider);
+    }
+
     [STATestMethod]
     [DataRow("idle")]
     [DataRow("playing")]
@@ -59,6 +84,7 @@ public sealed class AudioCollectionPlaylistTests
         using Button button = new();
         using Label label = new();
         using AppToolTip tooltip = new();
+        tooltip.AlwaysAvailable = true;
         AudioObj first = scope.Create([0.1f, 0.2f]);
         AudioObj unselected = scope.Create([]);
         AudioObj second = scope.Create([0.3f, 0.4f]);
@@ -82,7 +108,7 @@ public sealed class AudioCollectionPlaylistTests
         SetField(shell, "_playlist", engine);
         SetField(shell, "button_playlist", button);
         SetField(shell, "label_currentlyEnqueued", label);
-        SetField(shell, "toolTip_playlist", tooltip);
+        SetField(shell, "toolTip_playlistInfo", tooltip);
         PropertyInfo instance = typeof(WindowMain).GetProperty(nameof(WindowMain.Instance))!;
         WindowMain? previous = WindowMain.Instance;
         AudioCollectionView? collection = null;
@@ -116,6 +142,17 @@ public sealed class AudioCollectionPlaylistTests
             Assert.IsNull(Field<Task?>(engine, "_runLoopTask"));
             Assert.IsTrue(Field<bool>(shell, "_playlistActivityStarted"));
             StringAssert.Contains(tooltip.GetToolTip(button)!, "Queue total: 4");
+            bool hintsWereEnabled = HintPolicy.Enabled;
+            try
+            {
+                HintPolicy.SetEnabled(false);
+                Assert.IsTrue(tooltip.Active, "Playlist queue information must remain available when optional hints are disabled.");
+                StringAssert.Contains(tooltip.GetToolTip(button)!, "Queue total: 4");
+            }
+            finally
+            {
+                HintPolicy.SetEnabled(hintsWereEnabled);
+            }
 
             engine.Shuffle();
             CollectionAssert.AreEquivalent(expected, engine.GetQueueSnapshot().FilePaths.ToArray());
@@ -359,6 +396,7 @@ public sealed class AudioCollectionPlaylistTests
             Assert.AreEqual(firstExport, engine.GetTrackFilePath(key));
             Assert.AreSame(source, (await Prepare(engine, key))!.Audio);
 
+            source.Data = [0.4f, -0.3f, 0.2f, -0.1f];
             string? latestExport = await exporter.ExportWavAsync(source, 16, writeBpmTag: false,
                 customFilePath: requested, overwriteExisting: false);
             Assert.IsNotNull(latestExport);

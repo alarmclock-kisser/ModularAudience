@@ -63,7 +63,7 @@ namespace ModularAudience.Forms
         private Point lastMousePos;
         private Point contextMenuShowLocation;
         private WaveformPreview? waveformPreviewForm;
-        private bool ShowPreview => this.checkBox_preview.Checked;
+        private bool ShowPreview => this.checkBox_preview.Checked && Hints.HintPolicy.Enabled;
 
         private int FormListBoxClearance { get; set; } = 5;
         private int _resizeStartHeight;

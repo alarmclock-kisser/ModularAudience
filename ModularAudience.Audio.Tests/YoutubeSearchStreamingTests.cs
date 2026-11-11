@@ -176,8 +176,10 @@ public sealed class YoutubeSearchStreamingTests
         list.Items[1].Selected = true;
         var tabs = Field<TabControl>(window, "browsingTabs");
         var originalTab = tabs.SelectedTab;
-        list.ContextMenuStrip!.Items[0].PerformClick();
-        PumpUntil(() => Field<HashSet<Task>>(window, "playlistEnqueueTasks").Count == 0);
+        list.ContextMenuStrip!.Items.OfType<ToolStripMenuItem>()
+            .Single(item => item.Text == "Download enqueue").PerformClick();
+        PumpUntil(() => Field<HashSet<Task>>(window, "playlistEnqueueTasks").Count == 0 &&
+            Field<ListView>(window, "downloadJobsList").Items.Count == 225);
         Assert.AreSame(originalTab, tabs.SelectedTab);
         Assert.AreEqual(2, list.Items.Count, "Queueing a playlist must not replace the search results.");
         Assert.AreEqual(225, Field<ListView>(window, "downloadJobsList").Items.Count);

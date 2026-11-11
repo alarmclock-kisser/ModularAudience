@@ -19,6 +19,7 @@ namespace ModularAudience.Forms
         private PlaylistEngine _playlist = new();
         private System.Windows.Forms.Timer? _playlistTimer;
         private bool _playlistAutoEnqueueRightClickHandled;
+        private bool _playlistAutoImportWhenEmpty;
 
         // Metadata cache: path â†’ (duration, bpm, channels, sampleRate, bitDepth)
         private readonly Dictionary<string, (TimeSpan Duration, float Bpm, int Channels, int SampleRate, int BitDepth)>
@@ -55,6 +56,7 @@ namespace ModularAudience.Forms
         {
             this._playlistAutoEnqueueRightClickHandled = false;
             this.toolStripMenuItem_autoEnqueueOne.Enabled = true;
+            this.toolStripMenuItem_autoImportWhenEmpty.Checked = this._playlistAutoImportWhenEmpty;
         }
 
         // If user clicks the menu item with the right mouse button, treat it like Ctrl+Click (allow fallback)
@@ -80,8 +82,7 @@ namespace ModularAudience.Forms
         private void InitPlaylist()
         {
             this._playlist.CountdownEnabledProvider = () => PlaylistCountdownEnabled;
-            this._playlist.AutoEnqueuePathProvider = original =>
-                SelectRandomPlaylistPath(original == null ? null : this._playlist.GetTrackFilePath(original));
+            this.UpdatePlaylistAutoImportProvider();
 
             this._playlist.TrackChanged += () =>
             {
@@ -146,6 +147,30 @@ namespace ModularAudience.Forms
 
         // Toggle controlled by context menu
         internal static bool PlaylistCountdownEnabled = true;
+
+        private void UpdatePlaylistAutoImportProvider()
+        {
+            if (!this._playlistAutoImportWhenEmpty)
+            {
+                this._playlist.AutoEnqueuePathProvider = null;
+                return;
+            }
+
+            this._playlist.AutoEnqueuePathProvider = original =>
+                SelectRandomPlaylistPath(original == null ? null : this._playlist.GetTrackFilePath(original));
+        }
+
+        private void playlistMenu_AutoImportWhenEmpty_Click(object? sender, EventArgs e)
+        {
+            if (sender is not ToolStripMenuItem item)
+            {
+                return;
+            }
+
+            this._playlistAutoImportWhenEmpty = item.Checked;
+            this.UpdatePlaylistAutoImportProvider();
+            LogManager.Log($"Playlist auto-import when empty {(item.Checked ? "enabled" : "disabled")}.");
+        }
 
         private float ResolvePlaylistPlaybackBpm(string originalPath, string playPath)
         {
@@ -694,14 +719,14 @@ namespace ModularAudience.Forms
             string? currentTrackTitle = this.GetCurrentPlaylistTrackTitle(snapshot);
             if (!string.IsNullOrWhiteSpace(currentTrackTitle))
             {
-                this.toolTip_playlist.SetToolTip(this.button_playlist, this.BuildPlaylistHoverSummary(snapshot));
+                this.toolTip_playlistInfo.SetToolTip(this.button_playlist, this.BuildPlaylistHoverSummary(snapshot));
                 return;
             }
 
             var paths = snapshot.FilePaths;
             if (paths.Count == 0)
             {
-                this.toolTip_playlist.SetToolTip(this.button_playlist, "Right-click to configure.\nPlaylist empty.");
+                this.toolTip_playlistInfo.SetToolTip(this.button_playlist, "Right-click to configure.\nPlaylist empty.");
                 return;
             }
 
@@ -732,7 +757,7 @@ namespace ModularAudience.Forms
                 sb.AppendLine($"\u2026 and {paths.Count - 30} more.");
             }
 
-            this.toolTip_playlist.SetToolTip(this.button_playlist, sb.ToString().TrimEnd());
+            this.toolTip_playlistInfo.SetToolTip(this.button_playlist, sb.ToString().TrimEnd());
         }
 
         // â”€â”€ Label + button text update â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -809,7 +834,7 @@ namespace ModularAudience.Forms
             }
 
             PlaylistQueueSnapshot snapshot = this._playlist.GetQueueSnapshot();
-            this.toolTip_playlist.SetToolTip(this.button_playlist, this.BuildPlaylistHoverSummary(snapshot));
+            this.toolTip_playlistInfo.SetToolTip(this.button_playlist, this.BuildPlaylistHoverSummary(snapshot));
         }
 
         private string BuildPlaylistHoverSummary(PlaylistQueueSnapshot snapshot)

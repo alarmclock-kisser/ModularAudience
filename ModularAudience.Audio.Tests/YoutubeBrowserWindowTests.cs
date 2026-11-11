@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Forms.Modules.Dialogs;
 using ModularAudience.Ytdlp;
+using System.Runtime.CompilerServices;
 using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
@@ -214,8 +215,175 @@ public sealed class YoutubeBrowserWindowTests
         Assert.AreEqual(5m, wait.Value);
         Assert.IsFalse(Field<Button>(window, "showRelatedButton").Enabled);
         var menu = Field<ContextMenuStrip>(window, "columnsMenu");
-        Assert.AreEqual("Download enqueue", menu.Items[0].Text);
-        Assert.AreEqual("Show related / next-up", menu.Items[2].Text);
+        Assert.IsTrue(menu.Items.Cast<ToolStripItem>().Any(item => item.Text == "Download enqueue"));
+        Assert.IsTrue(menu.Items.Cast<ToolStripItem>().Any(item => item.Text == "Show related / next-up"));
+    }
+
+    [STATestMethod]
+    public void AddNextContextMenu_RequiresAutoplayAndActivePlayback_QueuesSelectedVideoFirst()
+    {
+        using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+        _ = window.Handle;
+        var list = Field<ListView>(window, "resultsList");
+        _ = list.Handle;
+        var playing = new YtdlpVideo { Id = "playing12345", Title = "Currently playing" };
+        var first = new YtdlpVideo { Id = "first123456", Title = "First next" };
+        var second = new YtdlpVideo { Id = "second12345", Title = "Second next" };
+        Invoke(window, "PopulateResults", (object)new[] { playing, first, second });
+        SetField(window, "activePlaybackVideo", playing);
+
+        var autoplay = Field<CheckBox>(window, "autoplayCheck");
+        SetField(window, "restoringSettings", true);
+        autoplay.Checked = false;
+        SetField(window, "restoringSettings", false);
+        list.Items[1].Selected = true;
+        Invoke(window, "RefreshAvailability");
+        var addNext = Field<ContextMenuStrip>(window, "columnsMenu").Items
+            .Cast<ToolStripItem>().Single(item => item.Text == "Add next");
+        Assert.IsFalse(addNext.Enabled);
+
+        SetField(window, "restoringSettings", true);
+        autoplay.Checked = true;
+        SetField(window, "restoringSettings", false);
+        Invoke(window, "RefreshAvailability");
+        Assert.IsTrue(addNext.Enabled);
+        Invoke(window, "AddNext_Click", null, EventArgs.Empty);
+
+        list.Items[1].Selected = false;
+        list.Items[2].Selected = true;
+        Invoke(window, "RefreshAvailability");
+        Invoke(window, "AddNext_Click", null, EventArgs.Empty);
+        var queue = Field<LinkedList<YtdlpVideo>>(window, "queuedPlaybackVideos");
+        CollectionAssert.AreEqual(new[] { second.Id, first.Id }, queue.Select(video => video.Id).ToArray());
+    }
+
+    [STATestMethod]
+    public async Task PlaybackCollections_StreamPlaylistAndChannelVideosInOrder()
+    {
+        using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+        string? playlistUrl = null;
+        string? channelUrl = null;
+        SetField(window, "playlistVideosProvider", new Func<string, CancellationToken, IAsyncEnumerable<YtdlpVideo>>(
+            (url, token) =>
+            {
+                playlistUrl = url;
+                return PlaybackVideos("playlist", token);
+            }));
+        SetField(window, "channelPlaybackVideosProvider", new Func<string, CancellationToken, IAsyncEnumerable<YtdlpVideo>>(
+            (url, token) =>
+            {
+                channelUrl = url;
+                return PlaybackVideos("channel", token);
+            }));
+
+        var playlist = new YtdlpVideo { IsPlaylist = true, Url = "https://www.youtube.com/playlist?list=PL1234567890" };
+        var channel = new YtdlpVideo { IsChannel = true, Url = "https://www.youtube.com/@sample/videos" };
+        var playlistVideos = (IAsyncEnumerable<YtdlpVideo>)Invoke(window, "GetPlaybackVideos", playlist, CancellationToken.None)!;
+        var channelVideos = (IAsyncEnumerable<YtdlpVideo>)Invoke(window, "GetPlaybackVideos", channel, CancellationToken.None)!;
+
+        CollectionAssert.AreEqual(new[] { "playlist-1", "playlist-2" }, await CollectIdsAsync(playlistVideos));
+        CollectionAssert.AreEqual(new[] { "channel-1", "channel-2" }, await CollectIdsAsync(channelVideos));
+        Assert.AreEqual(playlist.Url, playlistUrl);
+        Assert.AreEqual(channel.Url, channelUrl);
+    }
+
+    [STATestMethod]
+    public void PlayContextMenu_IsEnabledForPlaylistAndChannelResults()
+    {
+        using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+        _ = window.Handle;
+        var list = Field<ListView>(window, "resultsList");
+        _ = list.Handle;
+        SetField(window, "binariesReady", true);
+        Invoke(window, "PopulateResults", (object)new[]
+        {
+            new YtdlpVideo { IsPlaylist = true, Id = "playlist", Title = "Playlist" },
+            new YtdlpVideo { IsChannel = true, Id = "channel", Title = "Channel" }
+        });
+
+        var play = Field<ToolStripMenuItem>(window, "playItem");
+        foreach (int index in new[] { 0, 1 })
+        {
+            list.SelectedItems.Clear();
+            list.Items[index].Selected = true;
+            Invoke(window, "RefreshAvailability");
+            Assert.IsTrue(play.Enabled, $"Play should be enabled for collection row {index}.");
+        }
+    }
+
+    [STATestMethod]
+    public void SkipMenu_IsAutoplayAndPlaybackGated_OffersPlaylistVideosAndCanJumpAhead()
+    {
+        using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+        _ = window.Handle;
+        var autoplay = Field<CheckBox>(window, "autoplayCheck");
+        SetField(window, "restoringSettings", true);
+        autoplay.Checked = true;
+        SetField(window, "restoringSettings", false);
+        SetField(window, "activePlaybackVideo", new YtdlpVideo { Id = "playing12345", Title = "Playing" });
+        SetField(window, "activePlaybackTask", new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously).Task);
+
+        var manualQueue = Field<LinkedList<YtdlpVideo>>(window, "queuedPlaybackVideos");
+        manualQueue.AddLast(new YtdlpVideo { Id = "manual12345", Title = "Manual next" });
+        var collectionQueue = Field<List<YtdlpVideo>>(window, "queuedCollectionVideos");
+        collectionQueue.AddRange(new[]
+        {
+            new YtdlpVideo { Id = "collection1", Title = "Playlist one" },
+            new YtdlpVideo { Id = "collection2", Title = "Playlist two" },
+            new YtdlpVideo { Id = "collection3", Title = "Playlist three" }
+        });
+        var sequenceType = typeof(YoutubeBrowserWindow).GetNestedType("PlaybackSequence", BindingFlags.NonPublic)!;
+        SetField(window, "playbackSequence", RuntimeHelpers.GetUninitializedObject(sequenceType));
+        Invoke(window, "RefreshAvailability");
+        var skip = Field<ToolStripMenuItem>(window, "skipItem");
+        Assert.IsTrue(skip.Enabled);
+        Invoke(window, "PopulateSkipMenu");
+        CollectionAssert.AreEqual(new[]
+        {
+            "Skip -> Manual next", "Skip -> Playlist one", "Skip -> Playlist two", "Skip -> Playlist three"
+        }, skip.DropDownItems.Cast<ToolStripItem>().Select(item => item.Text).ToArray());
+
+        var targets = (Array)Invoke(window, "GetSkipTargets")!;
+        Assert.IsTrue((bool)Invoke(window, "TryApplySkipTarget", targets.GetValue(2))!);
+        Assert.AreEqual(0, manualQueue.Count);
+        CollectionAssert.AreEqual(new[] { "collection3" }, collectionQueue.Select(video => video.Id).ToArray());
+
+        SetField(window, "restoringSettings", true);
+        autoplay.Checked = false;
+        SetField(window, "restoringSettings", false);
+        Invoke(window, "RefreshAvailability");
+        Assert.IsFalse(skip.Enabled, "Skip is disabled while Autoplay is off.");
+
+        SetField(window, "restoringSettings", true);
+        autoplay.Checked = true;
+        SetField(window, "restoringSettings", false);
+        SetField(window, "activePlaybackTask", Task.CompletedTask);
+        Invoke(window, "RefreshAvailability");
+        Assert.IsFalse(skip.Enabled, "Skip is disabled when playback has stopped.");
+    }
+
+    [STATestMethod]
+    public void SkipToAutoplayRecommendation_PreservesRecommendationsAfterSelectedVideo()
+    {
+        using var window = new YoutubeBrowserWindow(_ => Assert.Fail());
+        SetField(window, "activePlaybackVideo", new YtdlpVideo { Id = "playing12345", Title = "Playing" });
+        SetField(window, "activePlaybackTask", new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously).Task);
+        SetField(window, "restoringSettings", true);
+        Field<CheckBox>(window, "autoplayCheck").Checked = true;
+        SetField(window, "restoringSettings", false);
+        var recommendations = Field<List<YtdlpVideo>>(window, "queuedAutoplayVideos");
+        recommendations.AddRange(new[]
+        {
+            new YtdlpVideo { Id = "recommend1", Title = "Recommendation one" },
+            new YtdlpVideo { Id = "recommend2", Title = "Recommendation two" },
+            new YtdlpVideo { Id = "recommend3", Title = "Recommendation three" }
+        });
+
+        var targets = (Array)Invoke(window, "GetSkipTargets")!;
+        Assert.IsTrue((bool)Invoke(window, "TryApplySkipTarget", targets.GetValue(1))!);
+        Assert.AreEqual(0, recommendations.Count);
+        CollectionAssert.AreEqual(new[] { "recommend3" },
+            Field<LinkedList<YtdlpVideo>>(window, "queuedPlaybackVideos").Select(video => video.Id).ToArray());
     }
 
     [STATestMethod]
@@ -365,6 +533,24 @@ public sealed class YoutubeBrowserWindowTests
         while (!ReferenceEquals(progress, Property<YtdlpDownloadProgress?>(job, "Latest")) && deadline.Elapsed < TimeSpan.FromSeconds(5))
             Application.DoEvents();
         Assert.AreSame(progress, Property<YtdlpDownloadProgress?>(job, "Latest"), "The UI progress callback did not arrive within five seconds.");
+    }
+
+    private static async IAsyncEnumerable<YtdlpVideo> PlaybackVideos(
+        string prefix, [EnumeratorCancellation] CancellationToken token)
+    {
+        for (int index = 1; index <= 2; index++)
+        {
+            token.ThrowIfCancellationRequested();
+            yield return new YtdlpVideo { Id = $"{prefix}-{index}", Title = $"{prefix} {index}" };
+            await Task.CompletedTask;
+        }
+    }
+
+    private static async Task<string[]> CollectIdsAsync(IAsyncEnumerable<YtdlpVideo> videos)
+    {
+        var ids = new List<string>();
+        await foreach (var video in videos) ids.Add(video.Id);
+        return ids.ToArray();
     }
 
     private static object? Invoke(YoutubeBrowserWindow window, string name, params object?[] arguments) =>

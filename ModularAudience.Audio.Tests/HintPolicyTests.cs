@@ -158,12 +158,11 @@ public sealed class HintPolicyTests
         preview.ShowWaveform(new Bitmap(32, 24), new Point(50, 50));
         Assert.IsTrue(preview.Visible);
         HintPolicy.SetEnabled(false);
-        // Waveform preview is now driven by the explicit Preview checkbox, not the global hint policy.
-        Assert.IsTrue(preview.Visible);
+        Assert.IsFalse(preview.Visible);
         preview.ShowWaveform(new Bitmap(32, 24), new Point(50, 50));
-        Assert.IsTrue(preview.Visible);
+        Assert.IsFalse(preview.Visible);
         preview.ShowConcatenatedWaveforms([new Bitmap(32, 24), new Bitmap(32, 24)], new Point(50, 50));
-        Assert.IsTrue(preview.Visible);
+        Assert.IsFalse(preview.Visible);
         HintPolicy.SetEnabled(true);
         preview.ShowWaveform(new Bitmap(32, 24), new Point(50, 50));
         Assert.IsTrue(preview.Visible);

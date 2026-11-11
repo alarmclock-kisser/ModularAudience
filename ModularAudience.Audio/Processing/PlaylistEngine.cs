@@ -77,15 +77,39 @@ namespace ModularAudience.Audio.Processing
         private volatile bool _skipRequested;
         private volatile bool _disposed;
 
-        // Lightweight timestamped logger wrapper to produce consistent, ms-precise
-        // debug messages into the existing LogCollection sink.
+        // Lightweight debug logger wrapper for the existing timestamped LogCollection sink.
         private static void LogDebug(string message)
         {
             try
             {
-                LogCollection.Log($"[{DateTime.UtcNow:HH:mm:ss.fff}] {message}");
+                LogCollection.Log(message);
             }
             catch { }
+        }
+
+        private async Task RunCountdownBeforePlayAsync(string audioName, CancellationToken ct)
+        {
+            if (!(this.CountdownEnabledProvider?.Invoke() ?? false))
+            {
+                return;
+            }
+
+            try
+            {
+                for (int second = 5; second >= 1; second--)
+                {
+                    if (!(this.CountdownEnabledProvider?.Invoke() ?? false))
+                    {
+                        return;
+                    }
+
+                    LogCollection.Log($"t-{second} {audioName}");
+                    await Task.Delay(TimeSpan.FromSeconds(1), ct).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+            }
         }
 
         public bool HasPreparedOriginalPath(string originalPath)
@@ -695,66 +719,11 @@ namespace ModularAudience.Audio.Processing
 
                 TrackChanged?.Invoke();
 
-                // If countdown is enabled, announce 3..2..1 with approx. timing before logging Now playing.
-                try
-                {
-                    string logName = Path.GetFileNameWithoutExtension(this.OriginalCurrentPath ?? path) ?? "";
-                    string logBpm = this.CurrentBpm > 0 ? $" [{this.CurrentBpm:F0} BPM]" : string.Empty;
-                    bool wantCountdown = this.CountdownEnabledProvider?.Invoke() ?? false;
-
-                    if (wantCountdown)
-                    {
-                        _ = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                double bpm = 0.0;
-                                try { bpm = this.CurrentBpm; } catch { }
-
-                                // If no BPM in tag, try a fast scan (non-blocking to UI), with a short timeout
-                                if (bpm <= 0.0)
-                                {
-                                    try
-                                    {
-                                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                                        // Create a lightweight AudioObj just for scanning metadata if possible
-                                        try
-                                        {
-                                            var ao = new ModularAudience.Audio.AudioObj(path ?? "", load: false);
-                                            var scanned = await Audio.Processors_V1.BeatScanner.ScanBpmAsync(ao).ConfigureAwait(false);
-                                            if (scanned > 0.0)
-                                            {
-                                                bpm = scanned;
-                                            }
-                                        }
-                                        catch { }
-                                    }
-                                    catch { }
-                                }
-
-                                // Fallback interval in ms
-                                int intervalMs = 900;
-                                if (bpm > 0.0)
-                                {
-                                    double beatMs = 60000.0 / bpm; // ms per beat
-                                    // Use quarter-note count: count 3 beats (3,2,1) so interval = beatMs
-                                    intervalMs = (int)Math.Max(150, Math.Round(beatMs));
-                                }
-
-                                try { LogCollection.Log($"Countdown: 3 (interval={intervalMs}ms)"); } catch { }
-                                try { await Task.Delay(intervalMs); } catch { }
-                                try { LogCollection.Log("Countdown: 2"); } catch { }
-                                try { await Task.Delay(intervalMs); } catch { }
-                                try { LogCollection.Log("Countdown: 1"); } catch { }
-                            }
-                            catch { }
-                        });
-                    }
-
-                    // Intentionally logged before Play(): runs on each new track entry via PlayTrackAsync.
-                    LogCollection.Log($"Now playing: {logName}{logBpm}");
-                }
-                catch { }
+                string logName = Path.GetFileNameWithoutExtension(this.OriginalCurrentPath ?? path) ?? "";
+                string logBpm = this.CurrentBpm > 0 ? $" [{this.CurrentBpm:F0} BPM]" : string.Empty;
+                await this.RunCountdownBeforePlayAsync(logName, ct).ConfigureAwait(false);
+                ct.ThrowIfCancellationRequested();
+                LogCollection.Log($"Now playing: {logName}{logBpm}");
 
                 waveOut.Play();
 
@@ -918,6 +887,52 @@ namespace ModularAudience.Audio.Processing
             var fadeOutTasks = new List<Task>();
             Task<PreparedPlaylistTrack?>? nextPrepareTask = null;
             string? nextPrepareTaskPath = null;
+            Task? countdownTask = null;
+            CancellationTokenSource? countdownCts = null;
+            string? countdownPath = null;
+
+            void CancelCountdown()
+            {
+                countdownCts?.Cancel();
+                countdownCts?.Dispose();
+                countdownCts = null;
+                countdownTask = null;
+            }
+
+            void ResetCountdownFor(string? path)
+            {
+                if (QueuePathsEqual(countdownPath, path))
+                {
+                    return;
+                }
+
+                CancelCountdown();
+                countdownPath = path;
+            }
+
+            void StartCountdownFor(PreparedPlaylistTrack prepared)
+            {
+                if (!(this.CountdownEnabledProvider?.Invoke() ?? false) || countdownTask != null)
+                {
+                    return;
+                }
+
+                ResetCountdownFor(prepared.OriginalPath);
+                countdownCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                countdownTask = this.RunCountdownBeforePlayAsync(prepared.Audio.Name, countdownCts.Token);
+            }
+
+            async Task CompleteCountdownForAsync(PreparedPlaylistTrack prepared)
+            {
+                StartCountdownFor(prepared);
+                if (countdownTask != null)
+                {
+                    await countdownTask.ConfigureAwait(false);
+                    countdownCts?.Dispose();
+                    countdownCts = null;
+                    countdownTask = null;
+                }
+            }
 
             try
             {
@@ -986,6 +1001,8 @@ namespace ModularAudience.Audio.Processing
                         continue;
                     }
 
+                    await this.RunCountdownBeforePlayAsync(currentPrepared.Audio.Name, ct).ConfigureAwait(false);
+                    ct.ThrowIfCancellationRequested();
                     if (!await this.TryStartPreparedAsync(currentPrepared, null, 1.0f, ct).ConfigureAwait(false))
                     {
                         this.DiscardPreparedIfUnused(currentPrepared);
@@ -1101,6 +1118,7 @@ namespace ModularAudience.Audio.Processing
 
                                 if (seamNext != null)
                                 {
+                                    await CompleteCountdownForAsync(seamNext).ConfigureAwait(false);
                                     if (!await this.TryStartPreparedAsync(seamNext, currentPrepared, 1.0f, ct).ConfigureAwait(false))
                                     {
                                         this.DiscardPreparedIfUnused(seamNext);
@@ -1141,6 +1159,12 @@ namespace ModularAudience.Audio.Processing
                             string? candidate = this.FilePaths.Count > 1 ? this.FilePaths[1] : null;
                             nextOriginalPath = string.Equals(candidate, currentOriginalPath, StringComparison.OrdinalIgnoreCase) ? null : candidate;
                         }
+                        ResetCountdownFor(nextOriginalPath);
+                        if (!(this.CountdownEnabledProvider?.Invoke() ?? false) ||
+                            this.HasQueuedPreparedStart(nextOriginalPath))
+                        {
+                            CancelCountdown();
+                        }
 
                         PreparedPlaylistTrack? autoStarted = await this.TryStartQueuedPreparedTrackAsync(currentPrepared, currentOriginalPath, nextOriginalPath, ct).ConfigureAwait(false);
                         if (autoStarted != null && !string.IsNullOrWhiteSpace(nextOriginalPath))
@@ -1175,6 +1199,13 @@ namespace ModularAudience.Audio.Processing
                                 LogDebug($"[PlaylistEngine] pre-preparing: {Path.GetFileNameWithoutExtension(nextOriginalPath)} (remaining={remainingSeconds:F1}s) nextPrepareTaskPath={nextPrepareTaskPath}");
                             }
                         }
+                        if (effectiveCrossfade <= 0.0 && remainingSeconds <= 5.0 &&
+                            nextPrepareTask is { IsCompletedSuccessfully: true } &&
+                            nextPrepareTask.Result is { } seamCountdownTrack &&
+                            !this.HasQueuedPreparedStart(nextOriginalPath))
+                        {
+                            StartCountdownFor(seamCountdownTrack);
+                        }
 
                         // ── Beat-aligned crossfade window check ──────────────────────────────
                         bool inAlignWindow = !crossfadeTriggered
@@ -1201,6 +1232,17 @@ namespace ModularAudience.Audio.Processing
                                 currentPrepared.Audio.CurrentTime,
                                 remainingSeconds,
                                 effectiveCrossfade);
+                            double forceThreshold = Math.Max(effectiveCrossfade + 0.1, 0.5);
+                            double secondsUntilTrigger = Math.Max(0.0,
+                                Math.Min(Math.Max(0.0, beatWait), Math.Max(0.0, remainingSeconds - forceThreshold)));
+                            if (this.CountdownEnabledProvider?.Invoke() == true &&
+                                !this.HasQueuedPreparedStart(nextOriginalPath) &&
+                                nextPrepareTask is { IsCompletedSuccessfully: true } &&
+                                nextPrepareTask.Result is { } countdownTrack &&
+                                secondsUntilTrigger <= 5.0)
+                            {
+                                StartCountdownFor(countdownTrack);
+                            }
 
                             // Not yet at the beat-aligned trigger point. However, if we're
                             // already within the effective crossfade window (or very near the
@@ -1245,6 +1287,11 @@ namespace ModularAudience.Audio.Processing
 
                             if (nextTrack != null)
                             {
+                                if (!this.HasQueuedPreparedStart(nextOriginalPath))
+                                {
+                                    await CompleteCountdownForAsync(nextTrack).ConfigureAwait(false);
+                                }
+
                                 // Fade duration: honor the user-configured crossfade as closely as possible.
                                 // - Cap by the next track's own duration (never longer than half of the incoming track).
                                 // - DO NOT cap by currentRemainingNow: the outgoing track will simply end while the
@@ -1335,6 +1382,7 @@ namespace ModularAudience.Audio.Processing
             }
             finally
             {
+                CancelCountdown();
                 if (nextPrepareTask != null)
                 {
                     _ = this.DiscardPreparationAsync(nextPrepareTask);
@@ -1491,7 +1539,17 @@ namespace ModularAudience.Audio.Processing
                 if (request.LastCountdownSecond != countdownSecond)
                 {
                     request.LastCountdownSecond = countdownSecond;
-                    LogCollection.Log($"Auto enqueue one: on-beat handoff in {countdownSecond}s -> {Path.GetFileNameWithoutExtension(request.OriginalPath)}");
+                    if (countdownSecond <= 5)
+                    {
+                        if (this.CountdownEnabledProvider?.Invoke() == true)
+                        {
+                            LogCollection.Log($"t-{countdownSecond} {nextTrack.Audio.Name}");
+                        }
+                    }
+                    else
+                    {
+                        LogCollection.Log($"Auto enqueue one: on-beat handoff in {countdownSecond}s -> {Path.GetFileNameWithoutExtension(request.OriginalPath)}");
+                    }
                 }
 
                 await Task.Delay(TimeSpan.FromSeconds(Math.Min(waitSeconds, 0.25)), ct).ConfigureAwait(false);

@@ -6,6 +6,8 @@ stored in `%AppData%/ModularAudience/application-settings.json`. Existing atomic
 field-specific saves and cross-instance monitoring apply to this option as well.
 Full-message hover tooltips on WindowMain's log ListBox are explicitly always on,
 so clipped diagnostic entries remain readable regardless of this preference.
+The playlist button's current/next-track and queue summary is also always available;
+it uses a dedicated tooltip so unrelated interaction hints on the same form remain optional.
 
 ## Coverage
 

@@ -43,6 +43,13 @@ public static class TimeStretcher_V2
         }
 
         CancellationToken ctLocal = ct ?? CancellationToken.None;
+        string chunkArgument = chunkSize?.ToString() ?? "null";
+        string overlapArgument = overlap?.ToString("F3") ?? "null";
+        string cancellationArgument = ct.HasValue
+            ? $"CanBeCanceled={ctLocal.CanBeCanceled},IsCancellationRequested={ctLocal.IsCancellationRequested}"
+            : "null";
+        LogCollection.Log(
+            $"Time stretch call: TimeStretcher_V2.Timestretch_V2Async(track={track.Name}, stretchFactor={stretchFactor:F6}, chunkSize={chunkArgument}, overlap={overlapArgument}, progress={progress?.GetType().FullName ?? "null"}, ct={cancellationArgument}); method=V2 route=Timestretch_V2Async slowVariant=false; inputScannedBpm={track.ScannedBpm:F3} inputDuration={track.Duration.TotalSeconds:F3}s.");
 
         await Task.Run(() =>
         {

@@ -1,7 +1,10 @@
+using System.Net;
+
 namespace ModularAudience.Ytdlp;
 
 public sealed class YoutubeAudioStreamClient : IDisposable
 {
+    private const int MaximumRedirects = 5;
     private readonly HttpClient client;
     private readonly bool ownsClient;
 
@@ -26,22 +29,52 @@ public sealed class YoutubeAudioStreamClient : IDisposable
     public async Task<YoutubeAudioStreamResponse> OpenAsync(Uri streamUrl, CancellationToken cancellationToken)
     {
         YoutubeAudioStreamUrl.Validate(streamUrl);
-        using var request = new HttpRequestMessage(HttpMethod.Get, streamUrl);
-        HttpResponseMessage? response = null;
-        try
+        Uri currentUrl = streamUrl;
+        for (int redirectCount = 0; ; redirectCount++)
         {
-            response = await this.client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+            using var request = new HttpRequestMessage(HttpMethod.Get, currentUrl);
+            var response = await this.client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            return new YoutubeAudioStreamResponse(response, stream);
-        }
-        catch
-        {
-            response?.Dispose();
-            throw;
+            if (IsRedirect(response.StatusCode))
+            {
+                var location = response.Headers.Location;
+                var status = response.StatusCode;
+                response.Dispose();
+                if (location is null)
+                    throw new HttpRequestException("The YouTube audio stream redirected without a Location header.", null, status);
+                if (redirectCount >= MaximumRedirects)
+                    throw new HttpRequestException($"The YouTube audio stream exceeded {MaximumRedirects} redirects.", null, status);
+
+                try
+                {
+                    currentUrl = location.IsAbsoluteUri ? location : new Uri(currentUrl, location);
+                    YoutubeAudioStreamUrl.Validate(currentUrl);
+                }
+                catch (Exception error) when (error is ArgumentException or UriFormatException)
+                {
+                    throw new HttpRequestException(
+                        "The YouTube audio stream redirected to an invalid or untrusted URL.", error, status);
+                }
+                continue;
+            }
+
+            try
+            {
+                response.EnsureSuccessStatusCode();
+                var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                return new YoutubeAudioStreamResponse(response, stream);
+            }
+            catch
+            {
+                response.Dispose();
+                throw;
+            }
         }
     }
+
+    private static bool IsRedirect(HttpStatusCode status) =>
+        status is HttpStatusCode.MovedPermanently or HttpStatusCode.Redirect or HttpStatusCode.SeeOther or
+            HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect;
 
     public void Dispose()
     {

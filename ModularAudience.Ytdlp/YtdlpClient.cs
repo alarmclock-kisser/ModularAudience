@@ -72,6 +72,11 @@ public sealed partial class YtdlpClient
         return ReadMetadataStreamAsync(CreateChannelBrowseUrl(youtubeUrl, resultType), maxResults, cancellationToken, resultType);
     }
 
+    public IAsyncEnumerable<YtdlpVideo> BrowseChannelVideosStreamAsync(string youtubeUrl,
+        CancellationToken cancellationToken) =>
+        ReadMetadataStreamAsync(CreateChannelBrowseUrl(youtubeUrl, YtdlpResultType.Videos), null,
+            cancellationToken, YtdlpResultType.Videos);
+
     public static string CreateChannelBrowseUrl(string youtubeUrl, YtdlpResultType resultType)
     {
         Uri url = YtdlpParser.ValidateYoutubeUrl(youtubeUrl);

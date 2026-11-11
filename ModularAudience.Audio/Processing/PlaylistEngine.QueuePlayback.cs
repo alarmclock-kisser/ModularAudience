@@ -52,6 +52,19 @@ namespace ModularAudience.Audio.Processing
                 QueuePathsEqual(this._queueCurrentPath, path);
         }
 
+        private bool HasQueuedPreparedStart(string? originalPath)
+        {
+            if (string.IsNullOrWhiteSpace(originalPath))
+            {
+                return false;
+            }
+
+            lock (this._lock)
+            {
+                return QueuePathsEqual(this._queuedPreparedStart?.OriginalPath, originalPath);
+            }
+        }
+
         private bool CanCommitPreparedStartLocked(PreparedPlaylistTrack prepared,
             PreparedPlaylistTrack? current, CancellationToken ct, QueuedPreparedStart? request)
         {
