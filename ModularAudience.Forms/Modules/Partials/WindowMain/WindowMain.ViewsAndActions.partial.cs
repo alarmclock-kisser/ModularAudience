@@ -542,9 +542,19 @@ namespace ModularAudience.Forms
 
         private void button_breakbeatArchitect_Click(object sender, EventArgs e)
         {
-            var breakbeatWindow = new BreakbeatGeneratorDialog(SelectedTracks);
-            breakbeatWindow.Show();
+            List<AudioObj> selectedTracks = SelectedTracks.ToList();
+            bool controlPressed = (Control.ModifierKeys & Keys.Control) == Keys.Control;
+            if (ShouldOpenBreakbeatPatternEditorDirectly(selectedTracks.Count > 0, controlPressed))
+            {
+                BreakbeatGeneratorDialog.CreateDirectPatternEditor(selectedTracks).Show(this);
+                return;
+            }
+
+            new BreakbeatGeneratorDialog(selectedTracks).Show();
         }
+
+        internal static bool ShouldOpenBreakbeatPatternEditorDirectly(bool hasSelectedTracks, bool controlPressed)
+            => !hasSelectedTracks || controlPressed;
 
         private void button_pitchShift_Click(object sender, EventArgs e)
         {

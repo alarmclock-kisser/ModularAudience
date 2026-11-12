@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace ModularAudience.Audio.Vocal;
@@ -14,21 +15,60 @@ public static class VocalTextParser
     {
         var result = new List<VocalToken>();
         if (string.IsNullOrEmpty(text)) return result;
-        ParseSegment(language, text, syntax, VocalEmphasis.Normal, result, 0, false, cancellationToken);
+        ParseSegment(language, text, syntax, VocalEmphasis.Normal, result, 0, false, cancellationToken, 0);
         return result;
+    }
+
+    public static IReadOnlyList<VocalSyllableTextRange> GetSyllableTextRanges(
+        VocalLanguage language, string text, VocalEmphasisSyntax syntax, CancellationToken cancellationToken = default)
+    {
+        var syllables = VocalSinging.CreateSyllables(
+            language, Parse(language, text, syntax, cancellationToken), cancellationToken).Syllables;
+        var wordGroups = new Dictionary<(int Start, int Length), List<int>>();
+        for (int i = 0; i < syllables.Count; i++)
+        {
+            var syllable = syllables[i];
+            if (syllable.SourceStart < 0 || syllable.SourceLength <= 0
+                || syllable.SourceStart + syllable.SourceLength > text.Length)
+                continue;
+            var key = (syllable.SourceStart, syllable.SourceLength);
+            if (!wordGroups.TryGetValue(key, out List<int>? indices))
+                wordGroups.Add(key, indices = []);
+            indices.Add(i);
+        }
+
+        List<VocalSyllableTextRange> ranges = [];
+        foreach (var (word, indices) in wordGroups.OrderBy(entry => entry.Key.Start))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int[] graphemeStarts = StringInfo.ParseCombiningCharacters(text.Substring(word.Start, word.Length));
+            int graphemeCount = graphemeStarts.Length;
+            for (int part = 0; part < indices.Count; part++)
+            {
+                int firstGrapheme = part * graphemeCount / indices.Count;
+                int endGrapheme = (part + 1) * graphemeCount / indices.Count;
+                if (endGrapheme <= firstGrapheme) continue;
+                int start = word.Start + graphemeStarts[firstGrapheme];
+                int end = endGrapheme == graphemeCount
+                    ? word.Start + word.Length
+                    : word.Start + graphemeStarts[endGrapheme];
+                ranges.Add(new VocalSyllableTextRange(start, end - start, indices[part], indices.Count));
+            }
+        }
+        return ranges.OrderBy(range => range.Start).ToArray();
     }
 
     internal static IReadOnlyList<VocalToken> ParseWindowsSpeech(
         VocalLanguage language, string text, VocalEmphasisSyntax syntax, CancellationToken cancellationToken)
     {
         var result = new List<VocalToken>();
-        ParseSegment(language, text, syntax, VocalEmphasis.Normal, result, 0, true, cancellationToken);
+        ParseSegment(language, text, syntax, VocalEmphasis.Normal, result, 0, true, cancellationToken, 0);
         return result;
     }
 
     private static void ParseSegment(
         VocalLanguage language, string text, VocalEmphasisSyntax syntax, VocalEmphasis baseEmphasis,
-        List<VocalToken> output, int depth, bool preserveText, CancellationToken cancellationToken)
+        List<VocalToken> output, int depth, bool preserveText, CancellationToken cancellationToken, int sourceOffset)
     {
         if (depth > 32) throw new ArgumentException("Emphasis markers are nested too deeply.", nameof(text));
         int i = 0;
@@ -84,7 +124,11 @@ public static class VocalTextParser
                 for (int dot = 0; dot < 3; dot++)
                 {
                     if (dot > 0) output.Add(new VocalPauseToken(85 + dot * 15));
-                    output.Add(new VocalPhonemeToken("animal-dot", pending));
+                    output.Add(new VocalPhonemeToken("animal-dot", pending)
+                    {
+                        SourceStart = sourceOffset + i,
+                        SourceLength = text[i] == '\u2026' ? 1 : 3,
+                    });
                 }
                 pending = baseEmphasis;
                 i += text[i] == '\u2026' ? 1 : 3;
@@ -100,6 +144,11 @@ public static class VocalTextParser
                 if (close >= 0)
                 {
                     var inner = text.Substring(i + markerLen, close - i - markerLen);
+                    if (wrapRule.Mode == VocalEmphasisMode.Muted)
+                    {
+                        i = close + markerLen;
+                        continue;
+                    }
                     var modeEmphasis = ModeToEmphasis(wrapRule.Mode);
                     // For pause mode, treat whole as pause
                     if (wrapRule.Mode == VocalEmphasisMode.Pause)
@@ -109,7 +158,7 @@ public static class VocalTextParser
                     else
                     {
                         ParseSegment(language, inner, syntax, Combine(baseEmphasis, modeEmphasis),
-                            output, depth + 1, preserveText, cancellationToken);
+                            output, depth + 1, preserveText, cancellationToken, sourceOffset + i + markerLen);
                     }
                     i = close + markerLen;
                     continue;
@@ -120,6 +169,16 @@ public static class VocalTextParser
             var inlineRule = TryMatchInline(syntax, text, i);
             if (inlineRule is not null)
             {
+                if (inlineRule.Mode == VocalEmphasisMode.Muted)
+                {
+                    i += inlineRule.Marker.Length;
+                    while (i < n && text[i] is not '\r' and not '\n')
+                    {
+                        if ((i & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                        i++;
+                    }
+                    continue;
+                }
                 if (inlineRule.Mode == VocalEmphasisMode.Pause)
                 {
                     output.Add(new VocalPauseToken(inlineRule.Value));
@@ -147,7 +206,11 @@ public static class VocalTextParser
                 }
                 string symbol = BeatboxSymbol(text, i, out int consumed);
                 bool capitalized = IsCapitalized(text.Substring(i, consumed), allowSingleLetter: true);
-                output.Add(new VocalPhonemeToken(symbol, pending, Capitalized: capitalized));
+                output.Add(new VocalPhonemeToken(symbol, pending, Capitalized: capitalized)
+                {
+                    SourceStart = sourceOffset + i,
+                    SourceLength = consumed,
+                });
                 output.Add(new VocalPauseToken(250 - VocalPhonemeInventory.Get(symbol).DurationMs));
                 pending = baseEmphasis;
                 i += consumed;
@@ -175,6 +238,7 @@ public static class VocalTextParser
                 continue;
             }
 
+            int wordStart = i;
             var sb = new StringBuilder();
             while (i < n && !char.IsWhiteSpace(text[i]) && !IsPunctuation(text[i], language)
                 && !IsMarkerStart(syntax, text, i)
@@ -196,7 +260,11 @@ public static class VocalTextParser
 
                 if (preserveText)
                 {
-                    output.Add(new VocalTextToken(word, emphasis, capitalized, isQuestion));
+                    output.Add(new VocalTextToken(word, emphasis, capitalized, isQuestion)
+                    {
+                        SourceStart = sourceOffset + wordStart,
+                        SourceLength = word.Length,
+                    });
                 }
                 else
                 {
@@ -210,6 +278,8 @@ public static class VocalTextParser
                                 ToneStart = phone.ToneStart,
                                 ToneEnd = phone.ToneEnd,
                                 SourceRepetitionLength = phone.SourceRepetitionLength,
+                                SourceStart = sourceOffset + wordStart,
+                                SourceLength = word.Length,
                             });
                         pending = baseEmphasis;
                         continue;
@@ -224,6 +294,8 @@ public static class VocalTextParser
                                 ToneStart = phone.ToneStart,
                                 ToneEnd = phone.ToneEnd,
                                 SourceRepetitionLength = phone.SourceRepetitionLength,
+                                SourceStart = sourceOffset + wordStart,
+                                SourceLength = word.Length,
                             });
                         pending = baseEmphasis;
                         continue;
@@ -258,6 +330,8 @@ public static class VocalTextParser
                         output.Add(new VocalPhonemeToken(phonemes[p], emphasis, p == stressed, capitalized, isQuestion)
                         {
                             SourceRepetitionLength = repetitions is null ? 0 : repetitions[p],
+                            SourceStart = sourceOffset + wordStart,
+                            SourceLength = word.Length,
                         });
                 }
                 pending = baseEmphasis;

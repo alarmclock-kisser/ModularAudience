@@ -24,9 +24,17 @@ public sealed record VocalPhonemeToken(
     public int Tone { get; init; }
     public double ToneStart { get; init; }
     public double ToneEnd { get; init; } = 1;
+    internal int SourceStart { get; init; } = -1;
+    internal int SourceLength { get; init; }
     // Zero means unknown; three represents three or more source letters.
     internal int SourceRepetitionLength { get; init; }
 }
 
 internal sealed record VocalTextToken(
-    string Text, VocalEmphasis Emphasis = VocalEmphasis.Normal, bool Capitalized = false, bool Question = false) : VocalToken;
+    string Text, VocalEmphasis Emphasis = VocalEmphasis.Normal, bool Capitalized = false, bool Question = false) : VocalToken
+{
+    internal int SourceStart { get; init; } = -1;
+    internal int SourceLength { get; init; }
+}
+
+public readonly record struct VocalSyllableTextRange(int Start, int Length, int Index, int Count);

@@ -4,6 +4,7 @@ using System.Speech.Synthesis;
 using System.Text;
 using System.Xml;
 using ModularAudience.Audio.Effects.AutoTune;
+using ModularAudience.Audio.Processors_V1;
 
 namespace ModularAudience.Audio.Vocal;
 
@@ -17,6 +18,8 @@ internal static class VocalWindowsSpeech
     {
         if (settings.Text.Length > 100_000)
             throw new InvalidOperationException("The text is too long for Windows speech synthesis.");
+        if (settings.Singing && settings.SingingMidiFile is not null)
+            return RenderMidi(settings, cancellationToken);
 
         var culture = CultureInfo.GetCultureInfo(settings.Language == VocalLanguage.German ? "de-DE" : "en-US");
         var tokens = VocalTextParser.ParseWindowsSpeech(settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
@@ -66,6 +69,184 @@ internal static class VocalWindowsSpeech
                 data[i * settings.Channels + channel] = mono[i];
         }
         return VocalSynth.CreateAudio(data, settings, cancellationToken);
+    }
+
+    private static AudioObj RenderMidi(VocalSynthSettings settings, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<VocalToken> phoneticTokens = VocalTextParser.Parse(
+            settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
+        VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, phoneticTokens, cancellationToken);
+        IReadOnlyList<VocalToken> speechTokens = VocalTextParser.ParseWindowsSpeech(
+            settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
+        Dictionary<int, VocalSyllableTextRange> ranges = VocalTextParser.GetSyllableTextRanges(
+                settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken)
+            .GroupBy(range => range.Index)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        var culture = CultureInfo.GetCultureInfo(settings.Language == VocalLanguage.German ? "de-DE" : "en-US");
+        using var synthesizer = new SpeechSynthesizer();
+        VoiceInfo voice = SelectVoice(synthesizer, culture, settings.BasePitchHz);
+        double nativePitch = voice.Gender == VoiceGender.Male ? 125 : voice.Gender == VoiceGender.Female ? 195 : 170;
+        int pitchLevel = SelectPitchLevel(settings.BasePitchHz / nativePitch);
+        int channels = settings.Channels;
+        float[] output = new float[checked(plan.OutputFrames * channels)];
+
+        foreach (IGrouping<int, VocalMidiScheduledNote> syllableNotes in plan.Notes.GroupBy(note => note.SyllableIndex))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int syllableIndex = syllableNotes.Key;
+            VocalSingingSyllable syllable = plan.Syllables[syllableIndex];
+            VocalSyllableTextRange range;
+            if (!ranges.TryGetValue(syllableIndex, out range))
+            {
+                if (syllable.SourceStart < 0 || syllable.SourceLength <= 0
+                    || syllable.SourceStart + syllable.SourceLength > settings.Text.Length)
+                    throw new InvalidOperationException("A MIDI singing syllable could not be mapped back to source text.");
+                range = new VocalSyllableTextRange(
+                    syllable.SourceStart, syllable.SourceLength, syllableIndex, 1);
+            }
+
+            IReadOnlyList<VocalToken> syllableSpeechTokens = GetSyllableSpeechTokens(speechTokens, range);
+            if (syllableSpeechTokens.Count == 0)
+                throw new InvalidOperationException("A MIDI singing syllable contains no Windows speech text.");
+
+            int longestNoteFrames = syllableNotes.Max(note => note.DurationFrames);
+            double targetSeconds = longestNoteFrames / (double)settings.SampleRate;
+            double naturalSeconds = syllable.NaturalDurationMilliseconds / (1000 * settings.Speed);
+            double speechSpeed = Math.Clamp(settings.Speed * 0.8 * naturalSeconds / targetSeconds, 0.2, 4.0);
+            string ssml = BuildSsml(syllableSpeechTokens, voice.Culture, speechSpeed, pitchLevel, cancellationToken);
+            float[] mono = SynthesizeMono(synthesizer, ssml, settings, cancellationToken);
+            mono = ApplyVoiceProfile(
+                mono, nativePitch * PitchRatios[pitchLevel], settings, cancellationToken, applyGeneratedMelody: false);
+            if (syllableSpeechTokens.OfType<VocalTextToken>().Any(token => token.Capitalized))
+            {
+                for (int i = 0; i < mono.Length; i++)
+                {
+                    if ((i & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+                    mono[i] *= 1.55f;
+                }
+            }
+
+            foreach (VocalMidiScheduledNote note in syllableNotes)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                double frequency = VocalMidiSinging.GetFrequency(settings.SingingMidiFile!, note.NoteNumber);
+                if (!double.IsFinite(frequency) || frequency <= 0 || frequency >= settings.SampleRate * 0.45)
+                    throw new InvalidDataException($"MIDI note {note.NoteNumber} is outside the supported vocal frequency range.");
+                float[] durationMatched = FitSpeechToFrames(mono, note.DurationFrames, cancellationToken);
+                float[] pitched = VocalSinging.RenderWindowsAtPitch(durationMatched, settings, frequency, cancellationToken);
+                MixMidiMono(output, pitched, note, channels, cancellationToken);
+            }
+        }
+
+        AudioObj result = VocalSynth.CreateAudio(output, settings, cancellationToken);
+        result.Bpm = (float)(settings.SingingMidiFile!.DefaultBpm * settings.Speed);
+        return result;
+    }
+
+    private static IReadOnlyList<VocalToken> GetSyllableSpeechTokens(
+        IReadOnlyList<VocalToken> speechTokens, VocalSyllableTextRange range)
+    {
+        List<VocalToken> result = [];
+        int rangeEnd = checked(range.Start + range.Length);
+        foreach (VocalToken token in speechTokens)
+        {
+            if (token is not VocalTextToken text || text.SourceStart < 0 || text.SourceLength <= 0) continue;
+            int overlapStart = Math.Max(range.Start, text.SourceStart);
+            int overlapEnd = Math.Min(rangeEnd, text.SourceStart + text.SourceLength);
+            if (overlapEnd <= overlapStart) continue;
+
+            int textOffset = overlapStart - text.SourceStart;
+            int length = Math.Min(overlapEnd - overlapStart, text.Text.Length - textOffset);
+            if (length <= 0) continue;
+            result.Add(text with
+            {
+                Text = text.Text.Substring(textOffset, length),
+                SourceStart = overlapStart,
+                SourceLength = length,
+            });
+        }
+        return result;
+    }
+
+    private static float[] SynthesizeMono(
+        SpeechSynthesizer synthesizer, string ssml, VocalSynthSettings settings,
+        CancellationToken cancellationToken)
+    {
+        using var stream = new BoundedAudioStream(2L * (VocalSynth.MaxOutputSamples / settings.Channels));
+        synthesizer.SetOutputToAudioStream(stream,
+            new SpeechAudioFormatInfo(settings.SampleRate, AudioBitsPerSample.Sixteen, AudioChannel.Mono));
+        var completion = new TaskCompletionSource<SpeakCompletedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+        EventHandler<SpeakCompletedEventArgs> completed = (_, args) => completion.TrySetResult(args);
+        synthesizer.SpeakCompleted += completed;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            synthesizer.SpeakSsmlAsync(ssml);
+            while (!completion.Task.Wait(50))
+            {
+                if (!cancellationToken.IsCancellationRequested) continue;
+                synthesizer.SpeakAsyncCancelAll();
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            SpeakCompletedEventArgs result = completion.Task.GetAwaiter().GetResult();
+            if (result.Error is not null)
+                throw new InvalidOperationException($"Windows speech synthesis failed: {result.Error.Message}", result.Error);
+            if (result.Cancelled)
+                throw new InvalidOperationException("Windows speech synthesis was canceled unexpectedly.");
+            synthesizer.SetOutputToNull();
+            return ReadAudio(stream, cancellationToken);
+        }
+        finally
+        {
+            synthesizer.SpeakCompleted -= completed;
+            synthesizer.SetOutputToNull();
+        }
+    }
+
+    private static float[] FitSpeechToFrames(
+        float[] source, int targetFrames, CancellationToken cancellationToken)
+    {
+        if (source.Length == targetFrames) return (float[])source.Clone();
+        if (source.Length >= 256 && targetFrames >= 256)
+        {
+            int fftSize = 256;
+            while (fftSize < 4096 && fftSize * 2 <= Math.Min(source.Length, targetFrames))
+                fftSize *= 2;
+            return PitchShifter.StretchPhaseVocoder(
+                source, 1, targetFrames, fftSize, 0.875, cancellationToken: cancellationToken);
+        }
+
+        var result = new float[targetFrames];
+        for (int i = 0; i < targetFrames; i++)
+        {
+            if ((i & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+            double position = targetFrames <= 1 || source.Length <= 1
+                ? 0
+                : i * (source.Length - 1.0) / (targetFrames - 1);
+            int left = (int)position;
+            int right = Math.Min(left + 1, source.Length - 1);
+            result[i] = source[left] + (source[right] - source[left]) * (float)(position - left);
+        }
+        return result;
+    }
+
+    private static void MixMidiMono(
+        float[] output, float[] voice, VocalMidiScheduledNote note, int channels,
+        CancellationToken cancellationToken)
+    {
+        float gain = Math.Clamp(note.Velocity / 127f, 0.05f, 1f);
+        for (int frame = 0; frame < voice.Length; frame++)
+        {
+            if ((frame & 2047) == 0) cancellationToken.ThrowIfCancellationRequested();
+            int outputFrame = note.StartFrame + frame;
+            if ((uint)outputFrame >= (uint)(output.Length / channels))
+                throw new InvalidOperationException("A scheduled MIDI voice exceeds the output timeline.");
+            float sample = voice[frame] * gain;
+            for (int channel = 0; channel < channels; channel++)
+                output[outputFrame * channels + channel] += sample;
+        }
     }
 
     private static VoiceInfo SelectVoice(SpeechSynthesizer synthesizer, CultureInfo culture, double pitch)
@@ -241,9 +422,10 @@ internal static class VocalWindowsSpeech
     }
 
     private static float[] ApplyVoiceProfile(
-        float[] source, double nativePitch, VocalSynthSettings settings, CancellationToken cancellationToken)
+        float[] source, double nativePitch, VocalSynthSettings settings, CancellationToken cancellationToken,
+        bool applyGeneratedMelody = true)
     {
-        if (settings.Singing)
+        if (settings.Singing && applyGeneratedMelody)
             return ColorVoice(VocalSinging.RenderWindows(source, settings, cancellationToken), settings, cancellationToken);
         double shift = 12 * Math.Log2(settings.BasePitchHz / nativePitch);
         if (Math.Abs(shift) > 0.5)

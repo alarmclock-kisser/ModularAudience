@@ -1,4 +1,5 @@
 using ModularAudience.Audio;
+using ModularAudience.Audio.Midi;
 using ModularAudience.Audio.Vocal;
 using ModularAudience.Forms.Modules;
 using NAudio.Wave;
@@ -69,6 +70,7 @@ public sealed partial class VocalSynthDialog : Form
         InitializeSpeechBackendControl();
         InitializeUnsupportedBeepControl();
         InitializeProfileControls();
+        InitializeMidiControls(prehear, textEditor);
         UpdateSpeechBackend();
         Text = "VocalSynth"; Name = "VocalSynthDialog";
         ClientSize = new Size(900, 650); MinimumSize = new Size(700, 500); StartPosition = FormStartPosition.CenterScreen;
@@ -81,6 +83,7 @@ public sealed partial class VocalSynthDialog : Form
             if (syncing) return;
             settings.Language = (VocalLanguage)languageCombo.SelectedIndex;
             UpdateSpeechBackend();
+            if (showSyllablesCheckBox.Checked) RefreshSyllablePreview();
             QueueRender();
         };
 
@@ -97,15 +100,15 @@ public sealed partial class VocalSynthDialog : Form
         Field("Speed", speed);
         top.Controls.Add(windowsSpeechCheckBox);
         top.Controls.Add(unsupportedBeepCheckBox);
-        top.Controls.Add(prehear);
-        top.SetFlowBreak(prehear, true);
+        top.Controls.Add(midiOptionsRow);
+        top.SetFlowBreak(midiOptionsRow, true);
         top.Controls.Add(profileRow);
         top.Controls.Add(create); top.Controls.Add(designProfileBtn); top.Controls.Add(emphasisBtn);
 
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(6) };
         bottom.Controls.Add(status);
 
-        Controls.Add(textEditor);
+        Controls.Add(textContentPanel);
         Controls.Add(top);
         Controls.Add(bottom);
 
@@ -115,6 +118,7 @@ public sealed partial class VocalSynthDialog : Form
             if (syncing) return;
             settings.Text = textEditor.Text;
             UpdateButtonState();
+            if (showSyllablesCheckBox.Checked) RefreshSyllablePreview();
             if (string.IsNullOrWhiteSpace(textEditor.Text))
             {
                 revision++;
@@ -147,6 +151,173 @@ public sealed partial class VocalSynthDialog : Form
         bool hasText = !string.IsNullOrWhiteSpace(textEditor.Text);
         prehear.Enabled = hasText || output is not null;
         create.Enabled = hasText;
+        UpdateMidiControls();
+    }
+
+    private void UpdateMidiControls()
+    {
+        MidiFileData? midi = settings.SingingMidiFile;
+        int trackCount = midi?.Tracks.Count ?? 0;
+        decimal maximum = Math.Max(1, trackCount);
+        if (midiTrackNumber.Value > maximum) midiTrackNumber.Value = maximum;
+        midiTrackNumber.Maximum = maximum;
+        midiTrackNumber.Enabled = trackCount > 0;
+        editMidiButton.Enabled = trackCount > 0;
+        showSyllablesCheckBox.Enabled = trackCount > 0;
+        UpdateMidiFileLabel();
+    }
+
+    private void UpdateMidiFileLabel()
+    {
+        MidiFileData? midi = settings.SingingMidiFile;
+        if (midi is null || midi.Tracks.Count == 0)
+        {
+            midiFileLabel.Text = "No MIDI loaded";
+            return;
+        }
+
+        int pageNumber = Math.Clamp((int)midiTrackNumber.Value, 1, midi.Tracks.Count);
+        string fileName = Path.GetFileName(midi.FilePath);
+        string trackName = midi.Tracks[pageNumber - 1].Name;
+        if (string.IsNullOrWhiteSpace(trackName)) trackName = $"Track {pageNumber}";
+        midiFileLabel.Text = $"{fileName} (#{pageNumber} {trackName})";
+    }
+
+    private void OpenMidiFile()
+    {
+        string musicFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Load MIDI for singing",
+            Filter = "MIDI files (*.mid;*.midi)|*.mid;*.midi",
+            InitialDirectory = musicFolder,
+            CheckFileExists = true,
+            Multiselect = false,
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+        try
+        {
+            MidiFileData midi = MidiFileData.Load(dialog.FileName);
+            if (midi.Tracks.Count == 0 || !midi.Tracks.Any(track => track.Notes.Count > 0))
+                throw new InvalidDataException("The selected MIDI file contains no notes.");
+
+            int pageIndex = 0;
+            while (midi.Tracks[pageIndex].Notes.Count == 0) pageIndex++;
+            syncing = true;
+            try
+            {
+                midiTrackNumber.Maximum = Math.Max(1, midi.Tracks.Count);
+                midiTrackNumber.Value = pageIndex + 1;
+                SelectSingingVoiceForMidi(midi, pageIndex);
+            }
+            finally { syncing = false; }
+
+            UpdateMidiControls();
+            UpdateButtonState();
+            status.Text = $"Loaded {Path.GetFileName(midi.FilePath)} for MIDI singing.";
+            QueueRender();
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or FormatException)
+        {
+            status.Text = "Could not load MIDI: " + error.Message;
+            MessageBox.Show(this, error.Message, "MIDI load failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void SelectSingingVoiceForMidi(MidiFileData midi, int pageIndex)
+    {
+        VocalVoicePreset preset = VocalVoicePreset.BuiltIn.First(voice => voice.Singing);
+        var singingSettings = VocalSynthSettings.FromPreset(preset, settings.Language, textEditor.Text);
+        singingSettings.UseWindowsSpeech = settings.UseWindowsSpeech;
+        singingSettings.BeepForUnsupportedSounds = unsupportedBeepCheckBox.Checked;
+        singingSettings.Speed = settings.Speed;
+        singingSettings.EmphasisSyntax = emphasisSyntax;
+        singingSettings.SingingMidiFile = midi;
+        singingSettings.SingingMidiTrackIndex = midi.Tracks[pageIndex].Index;
+        settings = singingSettings;
+
+        int voiceIndex = voiceCombo.Items.IndexOf("Built-in: " + preset.Name);
+        if (voiceIndex >= 0) voiceCombo.SelectedIndex = voiceIndex;
+        speed.Value = (decimal)settings.Speed;
+    }
+
+    private void MidiTrackNumberChanged()
+    {
+        if (syncing || settings.SingingMidiFile is not MidiFileData midi || midi.Tracks.Count == 0) return;
+        int pageIndex = Math.Clamp((int)midiTrackNumber.Value - 1, 0, midi.Tracks.Count - 1);
+        settings.SingingMidiTrackIndex = midi.Tracks[pageIndex].Index;
+        UpdateMidiFileLabel();
+        QueueRender();
+    }
+
+    private void EditLoadedMidi()
+    {
+        MidiFileData? midi = settings.SingingMidiFile;
+        if (midi is null || midi.Tracks.Count == 0) return;
+
+        int pageNumber = Math.Clamp((int)midiTrackNumber.Value, 1, midi.Tracks.Count);
+        StopHear();
+        using var midiWindow = new MidiWindow(midi.FilePath, midi);
+        midiWindow.SelectPage(pageNumber);
+        midiWindow.ShowDialog(this);
+
+        MidiFileData editedMidi = midiWindow.CurrentMidiFile;
+        int selectedPage = Math.Clamp(pageNumber, 1, Math.Max(1, editedMidi.Tracks.Count));
+        if (editedMidi.Tracks.Count > 0)
+        {
+            syncing = true;
+            try
+            {
+                settings.SingingMidiFile = editedMidi;
+                settings.SingingMidiTrackIndex = editedMidi.Tracks[selectedPage - 1].Index;
+                midiTrackNumber.Maximum = editedMidi.Tracks.Count;
+                midiTrackNumber.Value = selectedPage;
+            }
+            finally { syncing = false; }
+        }
+        UpdateMidiControls();
+        QueueRender();
+    }
+
+    private void ToggleSyllablePreview()
+    {
+        bool show = showSyllablesCheckBox.Checked && settings.SingingMidiFile is not null;
+        if (show)
+        {
+            RefreshSyllablePreview();
+            textEditor.Visible = false;
+            syllablePreview.Visible = true;
+            syllablePreview.BringToFront();
+        }
+        else
+        {
+            syllablePreview.Visible = false;
+            textEditor.Visible = true;
+            textEditor.BringToFront();
+        }
+    }
+
+    private void RefreshSyllablePreview()
+    {
+        string text = textEditor.Text;
+        IReadOnlyList<VocalSyllableTextRange> ranges = VocalTextParser.GetSyllableTextRanges(
+            settings.Language, text, emphasisSyntax);
+        syllablePreview.Clear();
+        syllablePreview.SelectionColor = Color.Black;
+        int cursor = 0;
+        int syllableNumber = 0;
+        foreach (VocalSyllableTextRange range in ranges)
+        {
+            if (range.Start < cursor || range.Start + range.Length > text.Length) continue;
+            syllablePreview.SelectionColor = Color.Black;
+            syllablePreview.AppendText(text[cursor..range.Start]);
+            syllablePreview.SelectionColor = syllableNumber++ % 2 == 0 ? Color.Black : Color.DimGray;
+            syllablePreview.AppendText(text.Substring(range.Start, range.Length));
+            cursor = range.Start + range.Length;
+        }
+        syllablePreview.SelectionColor = Color.Black;
+        syllablePreview.AppendText(text[cursor..]);
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -213,6 +384,7 @@ public sealed partial class VocalSynthDialog : Form
                 s.BeepForUnsupportedSounds = unsupportedBeepCheckBox.Checked;
                 s.Speed = settings.Speed;
                 s.EmphasisSyntax = settings.EmphasisSyntax;
+                PreserveMidiSingingSettings(s);
                 settings = s;
             }
             else if (item.StartsWith("Profile: "))
@@ -226,6 +398,7 @@ public sealed partial class VocalSynthDialog : Form
                     s.BeepForUnsupportedSounds = unsupportedBeepCheckBox.Checked;
                     s.Speed = settings.Speed;
                     s.EmphasisSyntax = settings.EmphasisSyntax;
+                    PreserveMidiSingingSettings(s);
                     settings = s;
                 }
             }
@@ -233,6 +406,14 @@ public sealed partial class VocalSynthDialog : Form
         }
         finally { syncing = false; }
         QueueRender();
+    }
+
+    private void PreserveMidiSingingSettings(VocalSynthSettings replacement)
+    {
+        if (settings.SingingMidiFile is null) return;
+        replacement.Singing = true;
+        replacement.SingingMidiFile = settings.SingingMidiFile;
+        replacement.SingingMidiTrackIndex = settings.SingingMidiTrackIndex;
     }
 
     public void SetCollection(AudioCollectionView? collection) => this.collection = collection;
@@ -265,11 +446,16 @@ public sealed partial class VocalSynthDialog : Form
             settings.Text = textEditor.Text;
             settings.Speed = (double)speed.Value;
             var snapshot = settings.Clone();
-            var next = await Task.Run(() => VocalSynth.Render(snapshot, cts.Token), cts.Token);
+            var (next, midiWarning) = await Task.Run(() =>
+            {
+                string? warning = VocalSynth.GetMidiSingingWarning(snapshot, cts.Token);
+                return (VocalSynth.Render(snapshot, cts.Token), warning);
+            }, cts.Token);
             if (disposedFlag || version != revision || cts.IsCancellationRequested) { next.Dispose(); return; }
             var old = audio; audio = next; ready = version;
             old?.Dispose();
-            status.Text = $"Rendered {next.Duration.TotalSeconds:0.###} s · {next.SampleRate} Hz";
+            status.Text = $"Rendered {next.Duration.TotalSeconds:0.###} s · {next.SampleRate} Hz"
+                + (midiWarning is null ? string.Empty : " · " + midiWarning);
         }
         catch (OperationCanceledException) { }
         catch (Exception error) { if (!disposedFlag && version == revision) status.Text = error.Message; }
@@ -346,6 +532,7 @@ public sealed partial class VocalSynthDialog : Form
             emphasisSyntax = dlg.Syntax;
             emphasisStore.Save(emphasisSyntax);
             settings.EmphasisSyntax = emphasisSyntax;
+            if (showSyllablesCheckBox.Checked) RefreshSyllablePreview();
             QueueRender();
         }
     }

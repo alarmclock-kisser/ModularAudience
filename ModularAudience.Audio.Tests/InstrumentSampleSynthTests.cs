@@ -47,9 +47,9 @@ public sealed class InstrumentSampleSynthTests
     }
 
     [TestMethod]
-    public void EightDrumKitsSupportEveryDrumAndHaveDistinctCharacter()
+    public void NineteenDrumKitsSupportEveryDrumAndHaveDistinctCharacter()
     {
-        Assert.HasCount(8, InstrumentSynthCatalog.DrumKits);
+        Assert.HasCount(19, InstrumentSynthCatalog.DrumKits);
         var kicks = new HashSet<string>();
         for (int kit = 0; kit < InstrumentSynthCatalog.DrumKits.Count; kit++)
         {
@@ -64,6 +64,29 @@ public sealed class InstrumentSampleSynthTests
                         System.Runtime.InteropServices.MemoryMarshal.AsBytes(audio.Data.AsSpan())))));
             }
         }
+    }
+
+    [STATestMethod]
+    public void PedalHiHatUsesClosedHiHatBreakbeatTag()
+    {
+        var mapping = typeof(InstrumentSampleSynthDialog).GetMethod(
+            "GetDrumsetElement",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        DrumsetElement tag = (DrumsetElement)mapping.Invoke(null, [SynthDrum.PedalHiHat])!;
+
+        Assert.AreEqual(DrumsetElement.HiHatClosed, tag);
+    }
+
+    [STATestMethod]
+    public void BothSampleSynthMenusListEveryInstrumentFamily()
+    {
+        using var menu = WindowMain.CreateSampleSynthesizerMenu(_ => { });
+        string?[] actual = menu.DropDownItems.Cast<ToolStripItem>().Select(item => item.Text).ToArray();
+        string[] expected = Enum.GetValues<SynthFamily>()
+            .Select(InstrumentSynthCatalog.FamilyName)
+            .ToArray();
+
+        CollectionAssert.AreEqual(expected, actual);
     }
 
     [TestMethod]
@@ -279,6 +302,17 @@ public sealed class InstrumentSampleSynthTests
     }
 
     [STATestMethod]
+    public void SpaceShortcutIsFormWideAndTriggersOnlyOncePerKeyPress()
+    {
+        using var dialog = new InstrumentSampleSynthDialog(SynthFamily.Keyboard, store);
+        Assert.IsTrue(dialog.KeyPreview);
+        Assert.IsTrue(InstrumentSampleSynthDialog.ShouldStartSpacePrehear(Keys.Space, false, false));
+        Assert.IsFalse(InstrumentSampleSynthDialog.ShouldStartSpacePrehear(Keys.Space, false, true));
+        Assert.IsFalse(InstrumentSampleSynthDialog.ShouldStartSpacePrehear(Keys.Space, true, false));
+        Assert.IsFalse(InstrumentSampleSynthDialog.ShouldStartSpacePrehear(Keys.Enter, false, false));
+    }
+
+    [STATestMethod]
     public void InitialHeightFitsEachFamilyAndManualShrinkingRestoresParameterScrolling()
     {
         using WinFormsTestContext uiContext = new();
@@ -342,7 +376,7 @@ public sealed class InstrumentSampleSynthTests
                 Assert.AreEqual("Synthesized " + InstrumentSynthCatalog.FamilyName(family), collection.Text);
                 if (family == SynthFamily.DrumSet)
                 {
-                    Assert.HasCount(8, ((ComboBox)Field("kit")).Items);
+                    Assert.HasCount(19, ((ComboBox)Field("kit")).Items);
                     Assert.AreEqual(DrumsetElement.Kick, audioCollection.Audios[0].Tag);
                 }
             }

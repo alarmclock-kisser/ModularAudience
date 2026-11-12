@@ -100,6 +100,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public double PreviewBpm => (double)this.numericUpDown_bpm.Value;
 
+        public MidiFileData CurrentMidiFile => this.midiFile;
+
+        public void SelectPage(int pageNumber) => this.RefreshMidiPages(pageNumber);
+
         private MidiRenderQuality SelectedRenderQuality => (MidiRenderQuality)Math.Clamp(this.comboBox_renderQuality.SelectedIndex, 0, 3);
 
         private void pictureBox_midi_Paint(object? sender, PaintEventArgs e)

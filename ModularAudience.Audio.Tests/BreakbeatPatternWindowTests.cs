@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio.Synthesis;
+using ModularAudience.Forms;
 using ModularAudience.Forms.Modules.Dialogs;
 using System.Runtime.InteropServices;
 using ModularAudience.Generators;
@@ -10,6 +11,33 @@ namespace ModularAudience.Audio.Tests;
 [TestClass]
 public sealed class BreakbeatPatternWindowTests
 {
+    [TestMethod]
+    public void BreakbeatButtonRoutesToEditorWhenEmptyOrControlClicked()
+    {
+        Assert.IsTrue(WindowMain.ShouldOpenBreakbeatPatternEditorDirectly(false, false));
+        Assert.IsTrue(WindowMain.ShouldOpenBreakbeatPatternEditorDirectly(false, true));
+        Assert.IsTrue(WindowMain.ShouldOpenBreakbeatPatternEditorDirectly(true, true));
+        Assert.IsFalse(WindowMain.ShouldOpenBreakbeatPatternEditorDirectly(true, false));
+    }
+
+    [STATestMethod]
+    public void DirectPatternEditorFactorySupportsEmptyAndSelectedTracks()
+    {
+        using BreakbeatPatternEditorDialog emptyEditor = BreakbeatGeneratorDialog.CreateDirectPatternEditor([]);
+        Assert.AreEqual(0, emptyEditor.SourceSamples.Count);
+        Assert.AreEqual(0, emptyEditor.Notes.Count);
+
+        using var source = new AudioObj { Name = "Selected Track", Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using BreakbeatPatternEditorDialog selectedEditor = BreakbeatGeneratorDialog.CreateDirectPatternEditor([source]);
+        Assert.AreEqual(1, selectedEditor.SourceSamples.Count);
+        Assert.AreNotSame(source, selectedEditor.SourceSamples[0]);
+        Assert.AreEqual("Selected Track", selectedEditor.SourceSamples[0].Name);
+        Assert.AreEqual(0, selectedEditor.Notes.Count);
+        Assert.AreEqual(2, selectedEditor.Bars);
+        Assert.AreEqual(4, selectedEditor.Resolution);
+        Assert.AreEqual(87.5m, selectedEditor.Bpm);
+    }
+
     [STATestMethod]
     public void InstrumentTrackKeepsSynthConfigurationOutOfAudioSourcePattern()
     {

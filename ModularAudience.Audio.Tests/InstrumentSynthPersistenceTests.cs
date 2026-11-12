@@ -51,6 +51,8 @@ public sealed class InstrumentSynthPersistenceTests
             store.Save(family, "My sound", settings, true);
             var loaded = new InstrumentSynthStore(directory).Load(family, "My sound");
             Assert.AreEqual(JsonSerializer.Serialize(settings), JsonSerializer.Serialize(loaded.Settings));
+            Assert.AreEqual(InstrumentSynthCatalog.Voices(family)[settings.VoiceIndex].Name, loaded.VoiceType);
+            Assert.AreEqual(InstrumentSynthCatalog.DrumKits[settings.KitIndex].Name, loaded.DrumKitType);
             Assert.IsTrue(loaded.Loop);
             Assert.IsTrue(File.Exists(store.PresetsPath(family)));
             settings.Brightness = 77; store.Save(family, "My sound", settings, false);
@@ -73,6 +75,24 @@ public sealed class InstrumentSynthPersistenceTests
         File.Copy(store.PresetsPath(SynthFamily.Keyboard), store.PresetsPath(SynthFamily.Brass));
         Assert.ThrowsExactly<InvalidDataException>(() => store.Names(SynthFamily.Brass));
         Assert.ThrowsExactly<ArgumentException>(() => store.Save(SynthFamily.Keyboard, "   ", keyboard, false));
+    }
+
+    [STATestMethod]
+    public void LegacyPresetWithoutStableTypeNamesRestoresTheSavedKeyboardSubtype()
+    {
+        string path = store.PresetsPath(SynthFamily.Keyboard);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path,
+            """{"Version":1,"Schema":"ModularAudience.SampleSynthesizer.Keyboard.v1","Family":"Keyboard","Presets":[{"Name":"Legacy keyboard","Settings":{"Family":"Keyboard","VoiceIndex":2,"KitIndex":0}}]}""");
+
+        using var dialog = new InstrumentSampleSynthDialog(SynthFamily.Keyboard, store);
+        ((ComboBox)Field(dialog, "savedPresets")).SelectedItem = "Legacy keyboard";
+        Call(dialog, "LoadPreset");
+
+        var voice = (ComboBox)Field(dialog, "voice");
+        Assert.AreEqual(2, voice.SelectedIndex);
+        Assert.AreEqual(InstrumentSynthCatalog.Voices(SynthFamily.Keyboard)[2].Name,
+            ((InstrumentSynthSettings)Call(dialog, "CaptureSettings")!).VoiceName);
     }
 
     [STATestMethod]

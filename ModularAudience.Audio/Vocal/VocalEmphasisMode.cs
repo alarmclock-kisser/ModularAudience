@@ -15,4 +15,6 @@ public enum VocalEmphasisMode
     PitchUp,
     /// <summary>Lowers pitch only.</summary>
     PitchDown,
+    /// <summary>Silences text inside a wrapping marker or to the end of a line.</summary>
+    Muted,
 }

@@ -630,6 +630,7 @@ contextMenuStrip_newTrack.Items.Add(CreateVocalSynthMenu());
             button_breakbeatArchitect.TabStop = false;
             button_breakbeatArchitect.Text = "Break Beat";
             button_breakbeatArchitect.UseVisualStyleBackColor = true;
+            toolTip_playlist.SetToolTip(button_breakbeatArchitect, "No tracks selected: open the empty Pattern Editor.\nCtrl+click: open the Pattern Editor with selected tracks.");
             button_breakbeatArchitect.Click += button_breakbeatArchitect_Click;
             // 
             // button_pitchShift

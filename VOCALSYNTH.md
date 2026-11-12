@@ -46,7 +46,7 @@ This document captures the current implementation of the **Vocalsynth** feature
 ```
 ModularAudience.Audio/Vocal/
   VocalLanguage.cs              enum + display names + IsFullyImplemented
-  VocalEmphasisMode.cs          Pause/Strong/Whisper/Lengthen/PitchUp/PitchDown
+  VocalEmphasisMode.cs          Pause/Strong/Whisper/Lengthen/PitchUp/PitchDown/Muted
   VocalEmphasisRule.cs          marker rules and syntax collection
   VocalEmphasisSyntaxStore.cs   AppData JSON load/save
   VocalVoicePreset.cs           built-in profiles, including Singing
@@ -64,15 +64,16 @@ ModularAudience.Audio/Vocal/
   VocalRussian.cs               Russian Cyrillic and Latin transliteration
   VocalTextParser.cs            text + emphasis markers -> synthesis tokens
   VocalToken.cs                 pauses, phonemes, text and emphasis
-  VocalSynthSettings.cs         settings (language, text, speed, voice, format, emphasis)
+  VocalSynthSettings.cs         settings (language, text, speed, voice, MIDI, emphasis)
   VocalSynth.cs                 local formant renderer -> AudioObj
+  VocalMidiSinging.cs           MIDI track timing, chord grouping and syllable mapping
   VocalWindowsSpeech.cs         optional local Windows voice -> AudioObj
-  VocalSinging.cs               deterministic generated melody and Windows pitch processing
+  VocalSinging.cs               generated melody, syllable grouping and Windows pitch processing
 
 ModularAudience.Forms/Modules/Dialogs/
   VocalSynthDialog.cs                 main dialog (merged Prehear/Stop button,
                                       empty-text disables buttons)
-  VocalSynthDialog.Designer.cs        Windows speech option
+  VocalSynthDialog.Designer.cs        Windows speech and MIDI/syllable controls
   VocalEmphasisSyntaxDialog.cs         emphasis marker editor
   VocalVoiceProfileDesignerDialog.cs   interactive voice color profile designer
 
@@ -197,6 +198,17 @@ so expressive repetitions remain separate in the shared renderer.
   consonants remain mostly unprocessed. Saved profiles derived from Singing
   retain this behavior. Mandarin tones are softened while singing so the
   generated melody remains recognizable.
+- **MIDI singing**: load a `.mid` or `.midi` file from the user's Music folder.
+  Loading selects the Singing voice; the track selector shows the current
+  page/name and the Edit button opens the MIDI inspector/editor on that page.
+  Same-tick notes form a chord for one vocal syllable. MIDI onset, duration,
+  tempo, gaps and text pauses set the vocal timeline; overlapping notes are
+  mixed as simultaneous voices. Extra text syllables reuse the last MIDI chord,
+  while excess MIDI note groups are left silent and reported after rendering.
+  The optional syllable preview alternates black and gray highlighting. Its
+  word-internal split is a grapheme-based display approximation, not linguistic
+  syllabification. MIDI singing also works with Natural speech (Windows), where
+  syllables are rendered locally, time-fitted to notes and pitch-retuned.
 - **Expressive repetition**: three or more consecutive copies of a sustainable
   letter, such as `Klenkerrrrrr`, `hissssss` or `coooool`, sustain its sound.
   Ordinary double letters retain their normal pronunciation. The formant
@@ -226,8 +238,12 @@ so expressive repetitions remain separate in the shared renderer.
 - **Empty text** disables Create and Prehear; the merged Prehear/Stop
   button remains enabled to stop any current playback.
 - **Emphasis markers**: wrapping markers apply their mode to inner text;
-  inline markers insert pauses / set pending emphasis for the next word. An
-  unmatched wrapping marker is ignored instead of blocking the parser.
+  inline markers insert pauses / set pending emphasis for the next word.
+  `Muted` wrapping markers silence their enclosed text; inline `Muted` markers
+  silence through the end of the current line. Markers must contain printable
+  Unicode punctuation or symbols (not letters, digits or whitespace), and
+  multi-character markers match as exact substrings. An unmatched wrapping
+  marker is ignored instead of blocking the parser.
 - Rendering is cancellable and rejects invalid settings or output exceeding
   30 million interleaved samples. Windows speech also limits text to 100,000
   characters and accepts speeds from 0.5 to 4.
@@ -251,9 +267,11 @@ multilingual scripts, transliteration, Mandarin tones, formant/fricative spectra
 voiced transitions, cancellation and size limits,
 animal voice presets, timed ellipsis pops, expressive letter repetition, CAPS,
 language-independent IPA, mixed-script best-effort fallback, beatboxing,
-singing, Windows SSML and actual Windows voice output when matching
-voices are installed. The fixed-timing singing tests specifically use Microsoft
-Zira Desktop and Hedda Desktop; other Windows voice tests accept any matching
+generated and MIDI singing (including chords, text pauses, note-count mismatch,
+and Windows speech), muted emphasis markers, multi-character marker parsing,
+Windows SSML and actual Windows voice output when matching voices are
+installed. The fixed-timing singing tests specifically use Microsoft Zira
+Desktop and Hedda Desktop; other Windows voice tests accept any matching
 installed voice. No playback device or GPU is required.
 
 Run:

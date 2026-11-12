@@ -1,4 +1,5 @@
 using ModularAudience.Audio.Vocal;
+using ModularAudience.Audio.Midi;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Globalization;
 using System.IO;
@@ -15,6 +16,24 @@ namespace ModularAudience.Audio.Tests;
 [TestClass]
 public class VocalSynthTests
 {
+    private static MidiFileData CreateMidi(params MidiNoteData[] notes)
+    {
+        var track = new MidiTrackData { Index = 4, Name = "Lead" };
+        track.Notes.AddRange(notes);
+        track.ExtendLengthTo(notes.Max(note => note.StartTick + note.DurationTicks));
+        return MidiFileData.CreateGenerated([track], 960, 120, "vocal-test.mid");
+    }
+
+    private static VocalSynthSettings CreateMidiSettings(string text, MidiFileData midi)
+    {
+        var settings = VocalSynthSettings.FromPreset(
+            VocalVoicePreset.BuiltIn.Single(preset => preset.Singing), VocalLanguage.English, text);
+        settings.SampleRate = 8000;
+        settings.SingingMidiFile = midi;
+        settings.SingingMidiTrackIndex = midi.Tracks[0].Index;
+        return settings;
+    }
+
     [TestMethod]
     public void Render_English_ProducesAudio()
     {
@@ -44,11 +63,127 @@ public class VocalSynthTests
     }
 
     [TestMethod]
+    public void MidiSinging_RendersChordAtMidiTempo()
+    {
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData { NoteNumber = 60, Velocity = 110, StartTick = 0, DurationTicks = 960 },
+            new MidiNoteData { NoteNumber = 64, Velocity = 90, StartTick = 0, DurationTicks = 960 });
+        VocalSynthSettings settings = CreateMidiSettings("A", midi);
+
+        using AudioObj audio = VocalSynth.Render(settings);
+
+        Assert.AreEqual(120f, audio.Bpm);
+        Assert.AreEqual(4000, audio.Data.Length);
+        Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001f));
+        Assert.IsTrue(audio.Data.All(float.IsFinite));
+    }
+
+    [TestMethod]
+    public void MidiSinging_ReusesLastPitchForExtraSyllablesAndReportsWarning()
+    {
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData { NoteNumber = 60, Velocity = 100, StartTick = 0, DurationTicks = 960 });
+        VocalSynthSettings settings = CreateMidiSettings("a e i", midi);
+
+        using AudioObj audio = VocalSynth.Render(settings);
+
+        Assert.IsTrue(audio.Data.Length > 4000);
+        Assert.AreEqual(
+            "2 extra text syllables reuse the last MIDI pitch.",
+            VocalSynth.GetMidiSingingWarning(settings));
+    }
+
+    [TestMethod]
+    public void MidiSinging_LeavesExcessMidiGroupsUnplayed()
+    {
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData { NoteNumber = 60, Velocity = 100, StartTick = 0, DurationTicks = 960 },
+            new MidiNoteData { NoteNumber = 72, Velocity = 100, StartTick = 960, DurationTicks = 960 });
+        VocalSynthSettings settings = CreateMidiSettings("A", midi);
+
+        using AudioObj audio = VocalSynth.Render(settings);
+
+        Assert.AreEqual(8000, audio.Data.Length);
+        Assert.IsTrue(audio.Data.Skip(4000).All(sample => sample == 0));
+        Assert.AreEqual(
+            "1 extra MIDI note group will remain unplayed.",
+            VocalSynth.GetMidiSingingWarning(settings));
+    }
+
+    [TestMethod]
+    public void MidiSinging_AddsTextPausesToNoteTimeline()
+    {
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData { NoteNumber = 60, Velocity = 100, StartTick = 0, DurationTicks = 960 },
+            new MidiNoteData { NoteNumber = 64, Velocity = 100, StartTick = 960, DurationTicks = 960 });
+        VocalSynthSettings settings = CreateMidiSettings("a e", midi);
+
+        using AudioObj audio = VocalSynth.Render(settings);
+
+        Assert.AreEqual(8560, audio.Data.Length);
+    }
+
+    [TestMethod]
+    [Timeout(30000)]
+    public void MidiSinging_WindowsSpeechUsesMidiNoteDuration()
+    {
+        using var probe = new SpeechSynthesizer();
+        if (!probe.GetInstalledVoices().Any(voice =>
+            voice.Enabled && voice.VoiceInfo.Culture.TwoLetterISOLanguageName == "en"))
+            Assert.Inconclusive("An English Windows speech voice is not installed.");
+
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData { NoteNumber = 69, Velocity = 100, StartTick = 0, DurationTicks = 960 });
+        VocalSynthSettings settings = CreateMidiSettings("A", midi);
+        settings.UseWindowsSpeech = true;
+        settings.SampleRate = 16000;
+
+        using AudioObj audio = VocalSynth.Render(settings);
+
+        Assert.AreEqual(8000, audio.Data.Length);
+        Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001f));
+        Assert.IsTrue(audio.Data.All(float.IsFinite));
+    }
+
+    [TestMethod]
     public void Parser_WrappingStrong_ProducesStrongTokens()
     {
         var syntax = VocalEmphasisSyntax.Default();
         var tokens = VocalTextParser.Parse(VocalLanguage.English, "*very* loud", syntax);
         Assert.IsTrue(tokens.OfType<VocalPhonemeToken>().Any(t => t.Emphasis == VocalEmphasis.Strong));
+    }
+
+    [TestMethod]
+    public void Parser_MultiCharacterMutedMarkersSuppressWrappedAndInlineText()
+    {
+        var syntax = new VocalEmphasisSyntax
+        {
+            Rules =
+            [
+                new VocalEmphasisRule { Marker = "!!", Mode = VocalEmphasisMode.Muted, Wrapping = true },
+                new VocalEmphasisRule { Marker = "//", Mode = VocalEmphasisMode.Muted, Wrapping = false },
+            ],
+        };
+
+        var wrapped = VocalTextParser.Parse(VocalLanguage.English, "hi!!hidden!!there", syntax)
+            .OfType<VocalPhonemeToken>().Select(token => token.Phoneme).ToArray();
+        var wrappedExpected = VocalPhonemizer.Phonemize(VocalLanguage.English, "hi")
+            .Concat(VocalPhonemizer.Phonemize(VocalLanguage.English, "there")).ToArray();
+        var inline = VocalTextParser.Parse(VocalLanguage.English, "hi//hidden\nthere", syntax)
+            .OfType<VocalPhonemeToken>().Select(token => token.Phoneme).ToArray();
+
+        CollectionAssert.AreEqual(wrappedExpected, wrapped);
+        CollectionAssert.AreEqual(wrappedExpected, inline);
+    }
+
+    [TestMethod]
+    public void EmphasisMarkerValidation_AllowsPrintablePunctuationAndSymbolsOnly()
+    {
+        Assert.IsTrue(VocalEmphasisSyntaxDialog.IsValidMarker("!!+©"));
+        Assert.IsFalse(VocalEmphasisSyntaxDialog.IsValidMarker("a"));
+        Assert.IsFalse(VocalEmphasisSyntaxDialog.IsValidMarker("7"));
+        Assert.IsFalse(VocalEmphasisSyntaxDialog.IsValidMarker(" "));
+        Assert.IsFalse(VocalEmphasisSyntaxDialog.IsValidMarker("\u0001"));
     }
 
     [TestMethod]

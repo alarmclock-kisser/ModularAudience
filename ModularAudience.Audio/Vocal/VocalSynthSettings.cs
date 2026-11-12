@@ -1,3 +1,5 @@
+using ModularAudience.Audio.Midi;
+
 namespace ModularAudience.Audio.Vocal;
 
 public sealed class VocalSynthSettings
@@ -10,6 +12,8 @@ public sealed class VocalSynthSettings
     public int SampleRate { get; set; } = 44100;
     public int Channels { get; set; } = 1;
     public VocalEmphasisSyntax EmphasisSyntax { get; set; } = VocalEmphasisSyntax.Default();
+    public MidiFileData? SingingMidiFile { get; set; }
+    public int? SingingMidiTrackIndex { get; set; }
 
     // Voice params
     public string VoiceName { get; set; } = "Adult Female";
@@ -45,6 +49,12 @@ public sealed class VocalSynthSettings
             throw new ArgumentException("Windows speech is available for English and German only.", nameof(Language));
         if (UseWindowsSpeech && Speed < 0.5)
             throw new ArgumentOutOfRangeException(nameof(Speed), "Windows speech speed must be at least 0.5.");
+        if (Singing && SingingMidiFile is not null)
+        {
+            if (SingingMidiTrackIndex is null
+                || !SingingMidiFile.Tracks.Any(track => track.Index == SingingMidiTrackIndex.Value))
+                throw new ArgumentException("Select an existing MIDI track for singing.", nameof(SingingMidiTrackIndex));
+        }
     }
 
     private static void ValidateUnitRange(double value, string name)
@@ -63,6 +73,8 @@ public sealed class VocalSynthSettings
         SampleRate = SampleRate,
         Channels = Channels,
         EmphasisSyntax = EmphasisSyntax,
+        SingingMidiFile = SingingMidiFile,
+        SingingMidiTrackIndex = SingingMidiTrackIndex,
         VoiceName = VoiceName,
         BasePitchHz = BasePitchHz,
         FormantScale = FormantScale,

@@ -2,8 +2,8 @@ using System.Globalization;
 
 namespace ModularAudience.Audio.Synthesis;
 
-public enum SynthFamily { Keyboard, DrumSet, Woodwinds, Brass, PluckedStrings, BowedStrings, MalletsAndBells, Organ, SynthBassAndLead }
-public enum SynthDrum { Kick, BassDrum, Snare, Rimshot, Clap, ClosedHiHat, OpenHiHat, LowTom, MidTom, HighTom, Ride, Crash, Cowbell, Shaker }
+public enum SynthFamily { Keyboard, DrumSet, Woodwinds, Brass, PluckedStrings, BowedStrings, MalletsAndBells, Organ, SynthBassAndLead, SynthPadsAndPoly, SynthKeysAndPlucks, OtherSoundFx }
+public enum SynthDrum { Kick, BassDrum, Snare, Rimshot, Clap, ClosedHiHat, OpenHiHat, LowTom, MidTom, HighTom, Ride, Crash, Cowbell, Shaker, PedalHiHat }
 
 public sealed record SynthVoice(string Name, double Brightness, double Decay, double Release, double Body, double Noise, double Drive, double Detune, double Vibrato)
 {
@@ -11,6 +11,8 @@ public sealed record SynthVoice(string Name, double Brightness, double Decay, do
 }
 public sealed record SynthDrumKit(string Name, double Tone, double Decay, double Sweep, double Noise, double Metal, double Drive, double Click)
 {
+    public double BitCrush { get; init; }
+    public double Stutter { get; init; }
     public override string ToString() => Name;
 }
 
@@ -20,7 +22,11 @@ public static class InstrumentSynthCatalog
     {
         SynthFamily.DrumSet => "Drum Set", SynthFamily.PluckedStrings => "Plucked Strings",
         SynthFamily.BowedStrings => "Bowed Strings", SynthFamily.MalletsAndBells => "Mallets & Bells",
-        SynthFamily.SynthBassAndLead => "Synth Bass & Lead", _ => family.ToString()
+        SynthFamily.SynthBassAndLead => "Synth Bass & Lead",
+        SynthFamily.SynthPadsAndPoly => "Synth Pads & Poly",
+        SynthFamily.SynthKeysAndPlucks => "Synth Keys & Plucks",
+        SynthFamily.OtherSoundFx => "Other Sound FX",
+        _ => family.ToString()
     };
     public static IReadOnlyList<SynthDrumKit> DrumKits { get; } =
     [
@@ -31,7 +37,18 @@ public static class InstrumentSynthCatalog
         new("Acoustic Studio", 1.0, 1.0, 0.65, 1.05, 1.0, 0.03, 0.6),
         new("Lo-Fi Dust", 0.9, 0.75, 0.9, 0.9, 0.55, 0.45, 0.3),
         new("Electro Glass", 1.3, 0.65, 2.6, 0.45, 2.5, 0.12, 0.7),
-        new("Tribal Earth", 0.7, 1.3, 0.35, 0.75, 0.45, 0.2, 0.5)
+        new("Tribal Earth", 0.7, 1.3, 0.35, 0.75, 0.45, 0.2, 0.5),
+        new("Minimal Techno", 0.86, 0.52, 1.35, 0.5, 0.75, 0.08, 0.42),
+        new("Electro Breakbeat", 1.08, 0.78, 1.65, 0.95, 1.25, 0.18, 0.82),
+        new("Hard Techno", 0.92, 1.2, 2.3, 1.1, 1.7, 0.55, 0.9),
+        new("Jungle Break", 1.05, 0.78, 1.55, 0.9, 0.85, 0.16, 0.85) { BitCrush = 0.06, Stutter = 0.12 },
+        new("Breakcore Crunch", 1.18, 0.5, 2.1, 1.15, 1.25, 0.62, 1.0) { BitCrush = 0.58, Stutter = 0.65 },
+        new("Ragga Jungle", 0.9, 1.15, 1.05, 1.25, 0.82, 0.28, 0.75) { BitCrush = 0.08, Stutter = 0.05 },
+        new("Glitch DnB", 1.22, 0.62, 2.4, 1.3, 1.8, 0.45, 0.9) { BitCrush = 0.72, Stutter = 0.88 },
+        new("Chiptune DnB", 0.78, 0.48, 1.7, 0.55, 0.35, 0.16, 0.55) { BitCrush = 0.92 },
+        new("Liquid DnB", 0.95, 1.05, 0.9, 0.75, 0.82, 0.05, 0.5),
+        new("Neurofunk", 0.92, 0.83, 2.05, 1.05, 1.8, 0.48, 0.9) { BitCrush = 0.25, Stutter = 0.12 },
+        new("Jump-Up", 1.12, 0.82, 1.7, 1.0, 1.1, 0.3, 0.88) { BitCrush = 0.14, Stutter = 0.1 }
     ];
     public static IReadOnlyList<SynthVoice> Voices(SynthFamily family) => family switch
     {
@@ -43,6 +60,9 @@ public static class InstrumentSynthCatalog
         SynthFamily.MalletsAndBells => Mallets,
         SynthFamily.Organ => Organs,
         SynthFamily.SynthBassAndLead => Synths,
+        SynthFamily.SynthPadsAndPoly => SynthPads,
+        SynthFamily.SynthKeysAndPlucks => SynthKeys,
+        SynthFamily.OtherSoundFx => SoundFx,
         _ => Keyboards
     };
     private static readonly SynthVoice[] Keyboards =
@@ -120,7 +140,43 @@ public static class InstrumentSynthCatalog
         new("Silk Lead", 55, 2, 0.5, 40, 0, 8, 10, 24),
         new("Hard Sync Lead", 95, 1.1, 0.25, 25, 3, 40, 6, 15),
         new("FM Growl", 82, 1.0, 0.4, 65, 5, 25, 8, 8),
-        new("Dream Unison", 70, 2, 1.5, 55, 0, 3, 20, 18)
+        new("Dream Unison", 70, 2, 1.5, 55, 0, 3, 20, 18),
+        new("Deep House Bass", 28, 1.4, 0.25, 95, 0, 8, 2, 0),
+        new("Offbeat Bass", 48, 0.8, 0.18, 75, 0, 14, 4, 0),
+        new("Donk Bass", 82, 0.5, 0.16, 58, 0, 24, 7, 0),
+        new("Wobble Bass", 60, 1.3, 0.3, 65, 0, 20, 3, 0),
+        new("Acid 303 Slide", 88, 0.65, 0.2, 48, 0, 38, 2, 0),
+        new("Neuro Bass", 80, 1, 0.4, 70, 2, 30, 18, 0)
+    ];
+    private static readonly SynthVoice[] SynthPads =
+    [
+        new("Supersaw Stack", 90, 3.8, 1.8, 55, 0, 10, 26, 10),
+        new("Wide Unison Saw", 78, 2.7, 1.4, 50, 0, 8, 18, 8),
+        new("Warm Analog Pad", 48, 4, 2.2, 75, 0, 5, 12, 16),
+        new("Dark Drone Pad", 22, 5.5, 2.5, 95, 1, 14, 15, 4),
+        new("Hoover Rave Lead", 96, 1.3, 0.35, 65, 2, 32, 20, 9)
+    ];
+    private static readonly SynthVoice[] SynthKeys =
+    [
+        new("Digital Pluck", 82, 0.55, 0.18, 40, 0, 8, 5, 0),
+        new("FM Bell", 94, 3.2, 1.3, 20, 0, 5, 2, 5),
+        new("House Techno Stab", 74, 0.45, 0.2, 62, 0, 18, 10, 2)
+    ];
+    private static readonly SynthVoice[] SoundFx =
+    [
+        new("100 Hz Censor Tone", 42, 0.55, 0.12, 42, 0, 10, 0, 0),
+        new("Buzzer", 58, 0.7, 0.14, 50, 5, 26, 0, 0),
+        new("Synthetic Vocal Whoop", 54, 0.7, 0.22, 72, 12, 6, 5, 0),
+        new("8-Bit Coin", 92, 0.22, 0.1, 18, 0, 4, 0, 0),
+        new("8-Bit Laser", 88, 0.42, 0.1, 22, 4, 18, 0, 0),
+        new("8-Bit Power-Up", 90, 0.62, 0.12, 30, 0, 10, 0, 0),
+        new("8-Bit Game Over", 76, 1.0, 0.22, 35, 0, 12, 0, 0),
+        new("DJ Scratch", 76, 0.5, 0.12, 55, 70, 14, 0, 0),
+        new("Morse SOS", 34, 0.8, 0.18, 30, 0, 3, 0, 0),
+        new("Sonar Ping", 42, 1.2, 0.45, 70, 2, 0, 1, 0),
+        new("Boat Foghorn", 22, 2.4, 0.5, 92, 8, 18, 0, 2),
+        new("Alarm Siren", 62, 1.8, 0.2, 45, 0, 10, 0, 0),
+        new("Radio Static", 95, 0.7, 0.18, 22, 95, 10, 0, 0)
     ];
 }
 
@@ -181,8 +237,86 @@ public sealed class InstrumentSynthSettings
         var voice = InstrumentSynthCatalog.Voices(Family)[VoiceIndex];
         Brightness = voice.Brightness; DecaySeconds = voice.Decay; ReleaseSeconds = voice.Release;
         Body = voice.Body; Noise = voice.Noise; Drive = voice.Drive; DetuneCents = voice.Detune; VibratoCents = voice.Vibrato;
-        AttackMs = Family switch { SynthFamily.BowedStrings => 100, SynthFamily.Woodwinds => 40, SynthFamily.Brass => 30, SynthFamily.Organ => 8, _ => 3 };
-        SustainPercent = Family is SynthFamily.Keyboard or SynthFamily.PluckedStrings or SynthFamily.MalletsAndBells or SynthFamily.DrumSet ? 0 : 75;
+        AttackMs = Family switch
+        {
+            SynthFamily.BowedStrings => 100,
+            SynthFamily.Woodwinds => 40,
+            SynthFamily.Brass => 30,
+            SynthFamily.Organ => 8,
+            SynthFamily.SynthPadsAndPoly => voice.Name switch { "Warm Analog Pad" => 220, "Dark Drone Pad" => 360, _ => 5 },
+            SynthFamily.SynthKeysAndPlucks => 2,
+            _ => 3
+        };
+        SustainPercent = Family is SynthFamily.Keyboard or SynthFamily.PluckedStrings or SynthFamily.MalletsAndBells
+            or SynthFamily.DrumSet or SynthFamily.SynthKeysAndPlucks or SynthFamily.OtherSoundFx ? 0 : 75;
+        if (Family == SynthFamily.SynthBassAndLead)
+        {
+            switch (voice.Name)
+            {
+                case "Deep House Bass":
+                    CutoffHz = 2200; FilterEnvelope = 20; SustainPercent = 65;
+                    break;
+                case "Offbeat Bass":
+                    CutoffHz = 3500; FilterEnvelope = 55; SustainPercent = 20;
+                    break;
+                case "Donk Bass":
+                    CutoffHz = 4500; FilterEnvelope = 75; SustainPercent = 0;
+                    break;
+                case "Wobble Bass":
+                    CutoffHz = 3500; FilterEnvelope = 80; Resonance = 2.2; VibratoHz = 2.5; VibratoCents = 0; SustainPercent = 50;
+                    break;
+                case "Acid 303 Slide":
+                    CutoffHz = 4800; FilterEnvelope = 88; Resonance = 3; SustainPercent = 0;
+                    break;
+                case "Neuro Bass":
+                    CutoffHz = 5200; FilterEnvelope = 70; Resonance = 2.5; SustainPercent = 55;
+                    break;
+            }
+        }
+        if (Family == SynthFamily.SynthPadsAndPoly)
+        {
+            SustainPercent = 85;
+            if (voice.Name == "Hoover Rave Lead") SustainPercent = 65;
+            if (voice.Name == "Dark Drone Pad") CutoffHz = 2400;
+            if (voice.Name == "Warm Analog Pad") CutoffHz = 6500;
+            if (voice.Name is "Supersaw Stack" or "Wide Unison Saw") CutoffHz = 12000;
+        }
+        if (Family == SynthFamily.SynthKeysAndPlucks)
+        {
+            SustainPercent = 0;
+            switch (voice.Name)
+            {
+                case "Digital Pluck":
+                    CutoffHz = 9000; FilterEnvelope = 65;
+                    break;
+                case "FM Bell":
+                    CutoffHz = 15000; FilterEnvelope = 20;
+                    break;
+                case "House Techno Stab":
+                    CutoffHz = 6500; FilterEnvelope = 75;
+                    break;
+            }
+        }
+        if (Family == SynthFamily.OtherSoundFx)
+        {
+            (CutoffHz, FilterEnvelope, SustainPercent) = voice.Name switch
+            {
+                "100 Hz Censor Tone" => (2400, 0, 85),
+                "Buzzer" => (5000, 8, 90),
+                "Synthetic Vocal Whoop" => (8500, 20, 0),
+                "8-Bit Coin" => (10000, 0, 0),
+                "8-Bit Laser" => (8500, 0, 0),
+                "8-Bit Power-Up" => (10000, 0, 0),
+                "8-Bit Game Over" => (7500, 0, 0),
+                "DJ Scratch" => (7000, 0, 0),
+                "Morse SOS" => (3500, 0, 85),
+                "Sonar Ping" => (6500, 30, 0),
+                "Boat Foghorn" => (2500, 0, 85),
+                "Alarm Siren" => (7000, 0, 85),
+                "Radio Static" => (10500, 0, 0),
+                _ => (8000, 0, 0)
+            };
+        }
         if (Family == SynthFamily.DrumSet) { DecaySeconds = 0.5; ReleaseSeconds = 0.25; AttackMs = 1; Noise = 50; }
     }
     public void Validate()

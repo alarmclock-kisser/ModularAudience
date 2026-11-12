@@ -92,9 +92,14 @@ public sealed class InstrumentSynthStore
     {
         var s = preset.Settings;
         var voices = InstrumentSynthCatalog.Voices(s.Family);
-        int voice = voices.ToList().FindIndex(v => v.Name == preset.VoiceType);
-        int kit = InstrumentSynthCatalog.DrumKits.ToList().FindIndex(k => k.Name == preset.DrumKitType);
-        if (voice < 0 || kit < 0) throw new InvalidDataException("A preset references an unknown instrument or drum-set type.");
+        int voice = string.IsNullOrWhiteSpace(preset.VoiceType)
+            ? s.VoiceIndex
+            : voices.ToList().FindIndex(v => v.Name == preset.VoiceType);
+        int kit = string.IsNullOrWhiteSpace(preset.DrumKitType)
+            ? s.KitIndex
+            : InstrumentSynthCatalog.DrumKits.ToList().FindIndex(k => k.Name == preset.DrumKitType);
+        if (voice < 0 || voice >= voices.Count || kit < 0 || kit >= InstrumentSynthCatalog.DrumKits.Count)
+            throw new InvalidDataException("A preset references an unknown instrument or drum-set type.");
         s.VoiceIndex = voice; s.KitIndex = kit;
     }
     private static void ValidateName(string name)

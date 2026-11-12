@@ -6,6 +6,8 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 
 public sealed partial class InstrumentSampleSynthDialog : Form
 {
+    private static readonly object ActiveDialogsGate = new();
+    private static readonly HashSet<InstrumentSampleSynthDialog> ActiveDialogs = [];
     private static readonly (string Label, double Value)[] OctaveOffsets =
     [
         ("0 (base)", 0), ("+8", 8), ("+4", 4), ("-4", -4), ("-8", -8)
@@ -32,6 +34,8 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     private readonly NumericUpDown prehearDelay = new() { Minimum = 0, Maximum = 10000, Value = 200, Increment = 25, Width = 85 };
     private readonly System.Windows.Forms.Timer autoHearTimer = new();
     private bool initialized, autoHearPending, autoHearDue;
+    private bool spaceKeyHeld;
+    private int prehearRequestVersion;
     private readonly Button hear = new() { Text = "Prehear", AutoSize = true }, create = new() { Text = "Create", AutoSize = true };
     private readonly System.Windows.Forms.Timer debounce = new() { Interval = 180 }, playbackTimer = new() { Interval = 40 };
     private readonly string[] noteNames = Enumerable.Range(12, 97).Select(InstrumentSampleSynth.NoteName).ToArray();
@@ -60,6 +64,10 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         this.onInstrumentConfirmed = onInstrumentConfirmed;
         this.family = family; settings = new() { Family = family }; settings.ApplyVoiceDefaults();
         this.InitializeSynthActionControls();
+        KeyPreview = true;
+        KeyDown += InstrumentSampleSynthDialog_KeyDown;
+        KeyUp += InstrumentSampleSynthDialog_KeyUp;
+        Deactivate += (_, _) => spaceKeyHeld = false;
         Text = $"Sample Synthesizer — {InstrumentSynthCatalog.FamilyName(family)}"; Name = "InstrumentSampleSynthDialog";
         ClientSize = new Size(1080, 780); MinimumSize = new Size(840, 620); StartPosition = FormStartPosition.CenterScreen;
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, Padding = new Padding(10) };
@@ -77,11 +85,17 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         else
         {
             voice.Items.AddRange(InstrumentSynthCatalog.Voices(family).Cast<object>().ToArray()); voice.SelectedIndex = 0;
-            Field(family == SynthFamily.Keyboard ? "Keyboard Type" : "Instrument Type", voice);
+            Field(family switch
+            {
+                SynthFamily.Keyboard => "Keyboard Type",
+                SynthFamily.OtherSoundFx => "Sound Effect Type",
+                _ => "Instrument Type"
+            }, voice);
         }
         note.Items.AddRange(noteNames.Cast<object>().ToArray()); note.SelectedItem = InstrumentSampleSynth.NoteName(settings.MidiNote);
         if (family != SynthFamily.DrumSet) Field("Key Note", note);
-        duration.Items.AddRange(Durations.Select(d => (object)d.Name).ToArray()); duration.SelectedIndex = 4;
+        duration.Items.AddRange(Durations.Select(d => (object)d.Name).ToArray());
+        duration.SelectedIndex = family == SynthFamily.OtherSoundFx ? 5 : 4;
         articulation.Items.AddRange(["Straight", "Dotted", "Triplet"]); articulation.SelectedIndex = 0;
         Field("Key Duration", duration); Field("Timing", articulation);
         tips.SetToolTip(duration, "Single-note gate length at the selected BPM. Release adds a separate tail; no repeated note sequence.");
@@ -103,17 +117,22 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         Number(nameof(settings.ReleaseSeconds), "Release / tail (s)", 0.01m, 10, 0.01m, "Additional sample duration after key release; envelope fades to silence.");
         Number(nameof(settings.Brightness), "Brightness / hardness (%)", 0, 100, 1, "Harmonic content, modal damping and filter brightness.");
         Number(nameof(settings.Body), "Body / resonance (%)", 0, 100, 1, "Instrument body: string resonance, piano inharmonicity and wind formant character.");
-        Number(nameof(settings.Noise), "Breath / bow / strike noise (%)", 0, 100, 1, "Breath for winds; bow texture for strings; hammer/strike/noise for percussion.");
+        Number(nameof(settings.Noise),
+            family == SynthFamily.OtherSoundFx ? "Noise / texture (%)" : "Breath / bow / strike noise (%)",
+            0, 100, 1,
+            family == SynthFamily.OtherSoundFx
+                ? "Broadband texture for DJ Scratch and Radio Static."
+                : "Breath for winds; bow texture for strings; hammer/strike/noise for percussion.");
         Number(nameof(settings.Drive), "Saturation / drive (%)", 0, 100, 1, "Nonlinear warmth and distortion.");
         if (family != SynthFamily.DrumSet)
         {
             Number(nameof(settings.DetuneCents), "Unison detune (cents)", 0, 50, 0.25m, "Partial detuning and unison voices; stereo width adds spatial separation.");
             Number(nameof(settings.VibratoCents), "Vibrato depth (cents)", 0, 100, 1, "Delayed pitch modulation on sustained wind, bowed and synth voices.");
-            Number(nameof(settings.VibratoHz), "Vibrato / rotary rate (Hz)", 0, 20, 0.1m, "Vibrato rate; organ also uses it for the rotary amplitude movement.");
+            Number(nameof(settings.VibratoHz), "Vibrato / modulation rate (Hz)", 0, 20, 0.1m, "Vibrato rate; organ uses it for rotary movement and Wobble Bass uses it for filter-LFO speed.");
         }
         Number(nameof(settings.CutoffHz), "Low-pass cutoff (Hz)", 20, 24000, 50, "Resonant output filter; automatically limited below Nyquist.");
         Number(nameof(settings.Resonance), "Filter resonance Q", 0.1m, 12, 0.1m, "Resonance at the filter cutoff.");
-        Number(nameof(settings.FilterEnvelope), "Filter envelope (%)", 0, 100, 1, "Initial cutoff lift, falling with decay.");
+        Number(nameof(settings.FilterEnvelope), "Filter envelope (%)", 0, 100, 1, "Initial cutoff lift, falling with decay; Wobble Bass also uses it as filter-LFO depth.");
         if (family is SynthFamily.PluckedStrings or SynthFamily.BowedStrings)
             Number(nameof(settings.StrikePosition), "Pluck / bow position (%)", 1, 99, 1, "Excitation position changes the harmonic notches and body response.");
         if (family is SynthFamily.DrumSet or SynthFamily.Organ)
@@ -179,12 +198,21 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             autoHearTimer.Stop(); autoHearDue = true; TryAutoHear();
         };
         playbackTimer.Tick += (_, _) => { if (provider?.Finished == true) StopHear(); picture.Invalidate(); };
-        FormClosing += (_, _) => { CancelAutoHear(); rendering?.Cancel(); this.octaveRendering?.Cancel(); StopHear(); };
+        FormClosing += (_, _) =>
+        {
+            prehearRequestVersion++;
+            spaceKeyHeld = false;
+            CancelAutoHear();
+            rendering?.Cancel();
+            this.octaveRendering?.Cancel();
+            StopHear();
+        };
         Safe(() => ReceivePrehearDelay(this.store.LoadPrehearDelay()));
         Safe(RefreshPresets);
         this.store.PrehearDelayChanged += ReceivePrehearDelay;
         this.store.PresetsChanged += ReceivePresetsChanged;
         ApplyNumbers(); QueueRender(); initialized = true;
+        lock (ActiveDialogsGate) ActiveDialogs.Add(this);
     }
     private void FitInitialParameterHeight(FlowLayoutPanel parameters)
     {
@@ -344,13 +372,117 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     private async Task ToggleHearAsync()
     {
         CancelAutoHear();
-        if (output != null) { StopHear(); return; }
+        if (output != null)
+        {
+            prehearRequestVersion++;
+            StopHear();
+            return;
+        }
+
+        await StartPrehearAsync();
+    }
+
+    private async void InstrumentSampleSynthDialog_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyCode != Keys.Space || e.Alt || presetName.Focused)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        e.SuppressKeyPress = true;
+        if (!ShouldStartSpacePrehear(e.KeyCode, textInputFocused: false, spaceKeyHeld))
+        {
+            return;
+        }
+
+        spaceKeyHeld = true;
+        await RestartPrehearFromSpaceAsync();
+    }
+
+    private void InstrumentSampleSynthDialog_KeyUp(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Space)
+        {
+            spaceKeyHeld = false;
+        }
+    }
+
+    internal static bool ShouldStartSpacePrehear(Keys keyCode, bool textInputFocused, bool keyAlreadyHeld)
+        => keyCode == Keys.Space && !textInputFocused && !keyAlreadyHeld;
+
+    private async Task RestartPrehearFromSpaceAsync()
+    {
+        Exception? stopError = StopAllPrehearPlayback();
+        if (stopError is not null)
+        {
+            if (!disposed)
+            {
+                status.Text = $"Could not stop existing prehear: {stopError.Message}";
+            }
+
+            return;
+        }
+
+        await StartPrehearAsync();
+    }
+
+    private async Task StartPrehearAsync()
+    {
+        int requestVersion = ++prehearRequestVersion;
         try
         {
-            if (!await EnsureRendered()) return;
+            if (!await EnsureRendered() || requestVersion != prehearRequestVersion) return;
             StartHear();
         }
         catch (Exception error) { StopHear(); if (!disposed) status.Text = error.Message; }
+    }
+
+    private static Exception? StopAllPrehearPlayback()
+    {
+        InstrumentSampleSynthDialog[] dialogs;
+        lock (ActiveDialogsGate)
+        {
+            dialogs = ActiveDialogs.ToArray();
+        }
+
+        Exception? stopError = null;
+        foreach (InstrumentSampleSynthDialog dialog in dialogs)
+        {
+            if (dialog.IsDisposed || dialog.Disposing)
+            {
+                continue;
+            }
+
+            try
+            {
+                if (dialog.InvokeRequired)
+                {
+                    dialog.Invoke((Action)dialog.StopPrehearPlayback);
+                }
+                else
+                {
+                    dialog.StopPrehearPlayback();
+                }
+            }
+            catch (Exception error)
+            {
+                stopError ??= error;
+                if (!dialog.disposed && !dialog.IsDisposed && !dialog.Disposing)
+                {
+                    dialog.status.Text = error.Message;
+                }
+            }
+        }
+
+        return stopError;
+    }
+
+    private void StopPrehearPlayback()
+    {
+        prehearRequestVersion++;
+        CancelAutoHear();
+        StopHear();
     }
     private void StartHear()
     {
@@ -577,6 +709,7 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         SynthDrum.Snare => DrumsetElement.Snare,
         SynthDrum.Clap => DrumsetElement.Clap,
         SynthDrum.Rimshot => DrumsetElement.Rim,
+        SynthDrum.PedalHiHat => DrumsetElement.HiHatClosed,
         SynthDrum.ClosedHiHat => DrumsetElement.HiHatClosed,
         SynthDrum.OpenHiHat => DrumsetElement.HiHatOpen,
         SynthDrum.LowTom => DrumsetElement.TomLow,
@@ -620,6 +753,9 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         if (disposing && !disposed)
         {
             disposed = true; store.PrehearDelayChanged -= ReceivePrehearDelay; store.PresetsChanged -= ReceivePresetsChanged;
+            prehearRequestVersion++;
+            spaceKeyHeld = false;
+            lock (ActiveDialogsGate) ActiveDialogs.Remove(this);
             CancelAutoHear(); autoHearTimer.Dispose(); rendering?.Cancel(); this.octaveRendering?.Cancel();
             StopHear(); debounce.Dispose(); playbackTimer.Dispose(); tips.Dispose(); audio?.Dispose(); this.components?.Dispose();
         }

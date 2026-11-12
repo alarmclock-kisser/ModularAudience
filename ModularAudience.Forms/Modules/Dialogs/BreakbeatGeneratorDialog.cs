@@ -1080,8 +1080,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         }
 
         private IReadOnlyList<string> GetBeatMapRowLabels()
+            => GetBeatMapRowLabels(this.AudioC.Audios);
+
+        private static IReadOnlyList<string> GetBeatMapRowLabels(IEnumerable<AudioObj> samples)
         {
-            return this.AudioC.Audios.Select((audio, index) =>
+            return samples.Select((audio, index) =>
             {
                 string name = string.IsNullOrWhiteSpace(audio.Name) ? $"Sample {index}" : audio.Name.Trim();
                 if (audio.Tag is DrumsetElement element)
@@ -1623,6 +1626,21 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             return pattern;
+        }
+
+        internal static BreakbeatPatternEditorDialog CreateDirectPatternEditor(IEnumerable<AudioObj> samples)
+        {
+            AudioObj[] editorSamples = samples.Select(CloneSampleForGenerator).ToArray();
+            const int bars = 2;
+            const int resolution = 16;
+            return new BreakbeatPatternEditorDialog(
+                CreateEmptyPattern(editorSamples.Length, bars * resolution),
+                editorSamples,
+                GetBeatMapRowLabels(editorSamples),
+                bars,
+                resolution,
+                0,
+                87.5m);
         }
 
         private static bool ApplyPatternDefinition(JsonElement patternElement, List<bool[]> pattern, IReadOnlyList<DrumkitSampleInfo> drumkit, int totalSteps)

@@ -1,6 +1,6 @@
 namespace ModularAudience.Audio.Vocal;
 
-public static class VocalSynth
+public static partial class VocalSynth
 {
     internal const int MaxOutputSamples = 30_000_000;
 
@@ -11,6 +11,8 @@ public static class VocalSynth
         var s = settings.Clone();
         if (s.UseWindowsSpeech) return VocalWindowsSpeech.Render(s, cancellationToken);
         var tokens = VocalTextParser.Parse(s.Language, s.Text, s.EmphasisSyntax, cancellationToken);
+        if (s.Singing && s.SingingMidiFile is not null)
+            return RenderMidi(s, tokens, cancellationToken);
         var plan = CreateRenderPlan(tokens, s, cancellationToken, out int sampleCount);
         var pcm = new List<float>(sampleCount);
         var random = new Random(StableSeed(s));
@@ -50,6 +52,24 @@ public static class VocalSynth
         }
 
         return CreateAudio(pcm.ToArray(), s, cancellationToken);
+    }
+
+    public static string? GetMidiSingingWarning(
+        VocalSynthSettings settings, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (!settings.Singing || settings.SingingMidiFile is null) return null;
+        settings.Validate();
+        IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
+            settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
+        VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, tokens, cancellationToken);
+        if (plan.RepeatedSyllables > 0)
+            return $"{plan.RepeatedSyllables} extra text syllable{(plan.RepeatedSyllables == 1 ? string.Empty : "s")} "
+                + $"reuse{(plan.RepeatedSyllables == 1 ? "s" : string.Empty)} the last MIDI pitch.";
+        if (plan.UnusedMidiGroups > 0)
+            return $"{plan.UnusedMidiGroups} extra MIDI note group{(plan.UnusedMidiGroups == 1 ? string.Empty : "s")} "
+                + "will remain unplayed.";
+        return null;
     }
 
     internal static AudioObj CreateAudio(float[] data, VocalSynthSettings s, CancellationToken cancellationToken)
@@ -230,7 +250,7 @@ public static class VocalSynth
         if (write < plan.Count) plan.RemoveRange(write, plan.Count - write);
     }
 
-    private static double DurationMultiplier(VocalPhonemeToken token)
+    internal static double DurationMultiplier(VocalPhonemeToken token)
     {
         double duration = token.Emphasis switch
         {
@@ -250,14 +270,14 @@ public static class VocalSynth
         }
     }
 
-    private static VocalPhoneme? GetNeighbor(List<RenderUnit> plan, int index) =>
+    private static VocalPhoneme? GetNeighbor(IReadOnlyList<RenderUnit> plan, int index) =>
         index >= 0 && index < plan.Count && plan[index].Token is VocalPhonemeToken token
             ? VocalPhonemeInventory.Get(token.Phoneme)
             : null;
 
     private static void RenderPhoneme(
         List<float> pcm, VocalPhoneme ph, VocalPhonemeToken token, VocalPhoneme? previous, VocalPhoneme? next,
-        int frames, int note, VocalSynthSettings s, VoiceState state, Random random, CancellationToken cancellationToken)
+        int frames, double note, VocalSynthSettings s, VoiceState state, Random random, CancellationToken cancellationToken)
     {
         bool animal = ph.Symbol.StartsWith("animal-", StringComparison.Ordinal);
         bool beat = IsBeat(ph.Symbol);
@@ -529,7 +549,7 @@ public static class VocalSynth
         public long Frame;
     }
 
-    private readonly record struct RenderUnit(VocalToken Token, int Frames, int Note);
+    private readonly record struct RenderUnit(VocalToken Token, int Frames, double Note);
 
     private struct NoiseFilter
     {
