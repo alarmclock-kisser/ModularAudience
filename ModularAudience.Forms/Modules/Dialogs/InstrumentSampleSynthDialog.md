@@ -1,7 +1,8 @@
 # Instrument Sample Synthesizer
 
-Open **+ Track → Sample Synthesizer → Instrument family** directly below Model Waveform.
-Each family opens a normal modeless window. Other application windows stay interactive.
+Open **+ Track → Sample Synthesizer → Instrument family** directly below Model Waveform, or
+choose the same family from **+ Instrument** in the Breakbeat Pattern Editor. Each family
+opens a normal modeless window. Other application windows stay interactive.
 The initial height fits that family's wrapped parameter controls without vertical scrolling,
 up to the current screen's working-area height. The window remains resizable; reducing its
 height or width enables parameter scrolling again, without automatically resizing it back.
@@ -11,7 +12,7 @@ height or width enables parameter scrolling again, without automatically resizin
 - BPM and Key Duration specify the gate length of **one note**, not a sequence.
 - Durations run from 1/64 through 4 Bars (4/4); Straight, Dotted and Triplet timing are supported.
 - Attack/Decay/Sustain control the held sound; Release adds a separate tail to the output sample.
-- Key Note is a DomainUpDown from C0 through C8. Pitch is -16…+16 semitones in 0.25 steps.
+- Key Note defaults to C4 and is a DomainUpDown from C0 through C8. Pitch is -16…+16 semitones in 0.25 steps.
 - Prehear plays the generated sample; Loop repeats it. Parameter changes update the sample
   asynchronously and refresh the waveform; current-format preview switches to the new audio.
 - Prehear on change (ms) defaults to 200. Changes restart the delay; playback starts once
@@ -22,6 +23,17 @@ height or width enables parameter scrolling again, without automatically resizin
 - Create adds a named AudioObj to this window's family collection without closing the editor.
   Names use `Instrument · Key · Key Duration [BPM]` (for example `Sub Anchor · G#2 · 1/4 [120]`);
   repeated names get a numeric suffix. Closed output collections are recreated on the next Create.
+- OK in a standalone synthesizer behaves like Create. From the Breakbeat Pattern Editor, OK
+  stores the selected family, instrument/drum type and sound parameters in the current editor
+  session, then adds a live instrument track. Melodic notes are synthesized at their requested
+  pitch; each note uses the editor's BPM and note length as its synthesis tempo and key duration.
+  The instrument's release remains an additional tail. Drum notes retain their configured drum
+  and add the note pitch offset to that drum's tuning.
+- Create Octave renders individual AudioObj notes into a new AudioCollectionView. Right-click
+  the button to choose Offset (0/base, +8, +4, -4 or -8 semitones) and Step (2, 1, 0.5, 0.33
+  [exactly 1/3], 0.25 or 0.125 semitones). The range includes both the selected starting
+  transpose and the endpoint 12 semitones above it. Requests exceeding 512 MiB are rejected
+  with guidance instead of silently lowering render quality.
 - Seed fixes noise/strike variation; New variation changes it. Render formats include mono/stereo
   at 22.05, 44.1, 48 and 96 kHz. Changing format stops the old preview so it cannot play at the wrong rate.
 

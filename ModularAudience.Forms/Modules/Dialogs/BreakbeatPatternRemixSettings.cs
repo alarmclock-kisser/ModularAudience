@@ -5,6 +5,13 @@ using System.Text.Json;
 
 namespace ModularAudience.Forms.Modules.Dialogs
 {
+    internal enum BreakbeatRollPitchMode
+    {
+        Same,
+        Ascending,
+        Descending
+    }
+
     /// <summary>
     /// Derivation parameters for the Remix button in the Breakbeat Pattern
     /// Editor: derive a variation from the current note multiselection.
@@ -35,6 +42,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public int GhostVolumePercent { get; set; } = BreakbeatPatternRemixSettings.DefaultGhostVolumePercent;
         public int RollChancePercent { get; set; } = BreakbeatPatternRemixSettings.DefaultRollChancePercent;
         public int RollPartsMax { get; set; } = BreakbeatPatternRemixSettings.DefaultRollPartsMax;
+        public BreakbeatRollPitchMode RollPitchMode { get; set; } = BreakbeatRollPitchMode.Same;
+        public float RollPitchStepSemitones { get; set; } = BreakbeatPatternRemixSettings.DefaultRollPitchStepSemitones;
         public int MergeChancePercent { get; set; } = BreakbeatPatternRemixSettings.DefaultMergeChancePercent;
         public int MergeGapSteps { get; set; } = BreakbeatPatternRemixSettings.DefaultMergeGapSteps;
         public int ThinChancePercent { get; set; } = BreakbeatPatternRemixSettings.DefaultThinChancePercent;
@@ -73,6 +82,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public const int DefaultGhostVolumePercent = 60;
         public const int DefaultRollChancePercent = 20;
         public const int DefaultRollPartsMax = 4;
+        public const float DefaultRollPitchStepSemitones = 1f;
         public const int DefaultMergeChancePercent = 15;
         public const int DefaultMergeGapSteps = 1;
         public const int DefaultThinChancePercent = 15;
@@ -175,6 +185,16 @@ namespace ModularAudience.Forms.Modules.Dialogs
             options.GhostVolumePercent = Math.Clamp(options.GhostVolumePercent, 0, 250);
             options.RollChancePercent = Math.Clamp(options.RollChancePercent, 0, 100);
             options.RollPartsMax = Math.Clamp(options.RollPartsMax, 2, 16);
+            if (!Enum.IsDefined(options.RollPitchMode))
+            {
+                options.RollPitchMode = BreakbeatRollPitchMode.Same;
+            }
+
+            if (!float.IsFinite(options.RollPitchStepSemitones))
+            {
+                options.RollPitchStepSemitones = DefaultRollPitchStepSemitones;
+            }
+            options.RollPitchStepSemitones = Math.Clamp(options.RollPitchStepSemitones, 0.25f, 24f);
             options.MergeChancePercent = Math.Clamp(options.MergeChancePercent, 0, 100);
             options.MergeGapSteps = Math.Clamp(options.MergeGapSteps, 0, 16);
             options.ThinChancePercent = Math.Clamp(options.ThinChancePercent, 0, 100);

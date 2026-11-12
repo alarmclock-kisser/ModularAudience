@@ -13,6 +13,7 @@ public partial class BreakbeatPatternEditorDialog
         // Warm unique transforms without allocating a complete pattern-length mix buffer.
         var notes = this.notes.Select(n => n with { StartTick = 0, VolumePercent = 100f }).Distinct().ToArray();
         var samples = this.samples.Select(CloneSampleWithMetadata).ToArray();
+        var instruments = this.GetInstrumentSettingsByTrack();
         var settings = this.trackSettings.ToArray();
         float bpm = (float)this.Bpm;
         int resolution = this.currentResolution;
@@ -22,8 +23,9 @@ public partial class BreakbeatPatternEditorDialog
         {
             try
             {
-                using AudioObj? warm = await BreakbeatGenerator_V2.RenderPatternNotesAsync(notes, samples, 1, bpm,
-                    resolution, 0, "CacheWarm", this.cacheLifetime.Token, settings, this.noteRenderCache);
+                using AudioObj? warm = await BreakbeatPatternInstrumentRenderer.RenderAsync(notes, samples, instruments,
+                    settings, 1, bpm, resolution, 0, "CacheWarm", this.cacheLifetime.Token,
+                    this.instrumentSampleCache, this.noteRenderCache);
             }
             catch (OperationCanceledException) { }
             catch (Exception error) { LogManager.Log("Pattern note cache preparation failed."); LogManager.Log(error); }
@@ -35,6 +37,7 @@ public partial class BreakbeatPatternEditorDialog
         if (this.cacheLifetime.IsCancellationRequested) return;
         this.cacheWarmTimer.Stop(); this.cacheWarmTimer.Dispose();
         this.cacheLifetime.Cancel();
+        this.instrumentSampleCache.Dispose();
         _ = this.cacheWarmWork.ContinueWith(_ => this.cacheLifetime.Dispose(), TaskScheduler.Default);
         this.noteRenderCache.Dispose();
     }

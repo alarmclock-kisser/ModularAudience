@@ -349,6 +349,7 @@ public partial class BreakbeatPatternEditorDialog
         // Only one ensemble is queued, regardless of how many tracks requested it.
         var notes = this.ApplyTrackAudibility(this.GetNotesWithoutCoveredRetriggers());
         var samples = this.samples.Select(CloneSampleWithMetadata).ToArray();
+        var instruments = this.GetInstrumentSettingsByTrack();
         var trackIdentities = this.samples.ToArray();
         var settings = this.trackSettings.Select(NormalizeTrackSettings).ToArray();
         string[] labels = this.rowLabels.ToArray();
@@ -376,8 +377,8 @@ public partial class BreakbeatPatternEditorDialog
         async Task RenderAsync(BreakbeatPatternNote[] renderNotes, string name, int? soloRow)
         {
             bool isEnsemble = soloRow == null;
-            AudioObj? rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(renderNotes, samples, bars, bpm,
-                resolution, swing, name, trackSettings: settings);
+            AudioObj? rendered = await BreakbeatPatternInstrumentRenderer.RenderAsync(renderNotes, samples, instruments,
+                settings, bars, bpm, resolution, swing, name, CancellationToken.None, this.instrumentSampleCache);
             if (rendered == null) return;
             try
             {

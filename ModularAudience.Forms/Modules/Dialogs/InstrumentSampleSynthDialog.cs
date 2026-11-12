@@ -4,9 +4,20 @@ using NAudio.Wave;
 
 namespace ModularAudience.Forms.Modules.Dialogs;
 
-public sealed class InstrumentSampleSynthDialog : Form
+public sealed partial class InstrumentSampleSynthDialog : Form
 {
+    private static readonly (string Label, double Value)[] OctaveOffsets =
+    [
+        ("0 (base)", 0), ("+8", 8), ("+4", 4), ("-4", -4), ("-8", -8)
+    ];
+    private static readonly (string Label, double Value)[] OctaveSteps =
+    [
+        ("2", 2), ("1", 1), ("0.5", 0.5), ("0.33", 1d / 3), ("0.25", 0.25), ("0.125", 0.125)
+    ];
+    private const long MaximumOctaveCollectionBytes = 512L * 1024 * 1024;
+
     private readonly SynthFamily family;
+    private readonly Action<InstrumentSynthSettings>? onInstrumentConfirmed;
     private InstrumentSynthSettings settings;
     private readonly InstrumentSynthStore store;
     private readonly ComboBox savedPresets = Combo();
@@ -29,18 +40,26 @@ public sealed class InstrumentSampleSynthDialog : Form
     private AudioObj? audio;
     private AudioCollectionView? collection;
     private CancellationTokenSource? rendering;
+    private CancellationTokenSource? octaveRendering;
     private WaveOut? output;
     private SynthPreview? provider;
     private int revision, ready = -1;
     private bool syncing, disposed, creating;
+    private bool octaveCreating;
+    private double octaveOffsetSemitones;
+    private double octaveStepSemitones = 1;
     private double[] overviewMin = [], overviewMax = [];
     private float peak;
 
-    public InstrumentSampleSynthDialog(SynthFamily family, InstrumentSynthStore? store = null)
+    public InstrumentSampleSynthDialog(
+        SynthFamily family,
+        InstrumentSynthStore? store = null,
+        Action<InstrumentSynthSettings>? onInstrumentConfirmed = null)
     {
         this.store = store ?? InstrumentSynthStore.Shared;
+        this.onInstrumentConfirmed = onInstrumentConfirmed;
         this.family = family; settings = new() { Family = family }; settings.ApplyVoiceDefaults();
-        if (family is SynthFamily.SynthBassAndLead or SynthFamily.BowedStrings) settings.MidiNote = 48;
+        this.InitializeSynthActionControls();
         Text = $"Sample Synthesizer — {InstrumentSynthCatalog.FamilyName(family)}"; Name = "InstrumentSampleSynthDialog";
         ClientSize = new Size(1080, 780); MinimumSize = new Size(840, 620); StartPosition = FormStartPosition.CenterScreen;
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, Padding = new Padding(10) };
@@ -118,6 +137,7 @@ public sealed class InstrumentSampleSynthDialog : Form
         picture.Paint += PaintWave;
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
         bottom.Controls.Add(hear); bottom.Controls.Add(loop); bottom.Controls.Add(create);
+        bottom.Controls.Add(this.button_createOctave); bottom.Controls.Add(this.button_ok);
         var randomize = new Button { Text = "New variation", AutoSize = true }; bottom.Controls.Add(randomize);
         randomize.Click += (_, _) => numbers[nameof(settings.Seed)].Value = Random.Shared.Next(1, 999999);
         bottom.Controls.Add(status); status.Width = 560; status.Height = 45; status.Dock = DockStyle.None;
@@ -159,7 +179,7 @@ public sealed class InstrumentSampleSynthDialog : Form
             autoHearTimer.Stop(); autoHearDue = true; TryAutoHear();
         };
         playbackTimer.Tick += (_, _) => { if (provider?.Finished == true) StopHear(); picture.Invalidate(); };
-        FormClosing += (_, _) => { CancelAutoHear(); rendering?.Cancel(); StopHear(); };
+        FormClosing += (_, _) => { CancelAutoHear(); rendering?.Cancel(); this.octaveRendering?.Cancel(); StopHear(); };
         Safe(() => ReceivePrehearDelay(this.store.LoadPrehearDelay()));
         Safe(RefreshPresets);
         this.store.PrehearDelayChanged += ReceivePrehearDelay;
@@ -345,33 +365,228 @@ public sealed class InstrumentSampleSynthDialog : Form
         catch (Exception error) { if (!disposed) status.Text = error.Message; }
         finally { creating = false; if (!disposed) create.Enabled = true; }
     }
+
+    private async Task ConfirmAsync()
+    {
+        if (creating) return;
+        creating = true;
+        this.button_ok.Enabled = false;
+        try
+        {
+            InstrumentSynthSettings snapshot = CaptureSettings();
+            if (this.onInstrumentConfirmed is not null)
+            {
+                this.onInstrumentConfirmed(snapshot);
+                Close();
+            }
+            else if (await EnsureRendered())
+            {
+                AddToCollection();
+            }
+        }
+        catch (Exception error)
+        {
+            if (!disposed) status.Text = error.Message;
+        }
+        finally
+        {
+            creating = false;
+            if (!disposed) this.button_ok.Enabled = true;
+        }
+    }
+
+    private void SetOctaveOffset(double semitones)
+    {
+        if (!OctaveOffsets.Any(option => option.Value == semitones))
+        {
+            throw new ArgumentOutOfRangeException(nameof(semitones));
+        }
+
+        this.octaveOffsetSemitones = semitones;
+        this.UpdateOctaveMenuChecks();
+    }
+
+    private void SetOctaveStep(double semitones)
+    {
+        if (!OctaveSteps.Any(option => option.Value == semitones))
+        {
+            throw new ArgumentOutOfRangeException(nameof(semitones));
+        }
+
+        this.octaveStepSemitones = semitones;
+        this.UpdateOctaveMenuChecks();
+    }
+
+    private void UpdateOctaveMenuChecks()
+    {
+        foreach (ToolStripMenuItem item in this.octaveOffsetItems)
+        {
+            item.Checked = item.Tag is double value && value == this.octaveOffsetSemitones;
+        }
+
+        foreach (ToolStripMenuItem item in this.octaveStepItems)
+        {
+            item.Checked = item.Tag is double value && value == this.octaveStepSemitones;
+        }
+    }
+
+    internal static double[] GetOctaveTranspositions(double step)
+    {
+        if (!OctaveSteps.Any(option => option.Value == step))
+        {
+            throw new ArgumentOutOfRangeException(nameof(step));
+        }
+
+        int intervals = (int)Math.Round(12 / step);
+        return Enumerable.Range(0, intervals + 1)
+            .Select(index => index == intervals ? 12d : index * step)
+            .ToArray();
+    }
+
+    internal static InstrumentSynthSettings CreatePitchedSettings(InstrumentSynthSettings source, double semitones)
+    {
+        InstrumentSynthSettings pitched = source.Clone();
+        if (pitched.Family == SynthFamily.DrumSet)
+        {
+            pitched.PitchSemitones += semitones;
+        }
+        else
+        {
+            double midiPitch = pitched.MidiNote + pitched.PitchSemitones + semitones;
+            if (!double.IsFinite(midiPitch) || midiPitch is < 0 or > 127)
+            {
+                throw new InvalidOperationException("The generated octave is outside the supported MIDI range (0–127).");
+            }
+
+            int midiNote = (int)Math.Round(midiPitch);
+            pitched.MidiNote = midiNote;
+            pitched.PitchSemitones = midiPitch - midiNote;
+        }
+
+        pitched.Validate();
+        return pitched;
+    }
+
+    private static long EstimateRenderBytes(InstrumentSynthSettings settings)
+    {
+        double frames = Math.Ceiling((settings.GateSeconds + settings.ReleaseSeconds) * settings.SampleRate);
+        return checked((long)frames * settings.Channels * sizeof(float));
+    }
+
+    private async Task CreateOctaveAsync()
+    {
+        if (this.octaveCreating) return;
+        this.octaveCreating = true;
+        this.button_createOctave.Enabled = false;
+        CancellationTokenSource cancellation = new();
+        this.octaveRendering = cancellation;
+        List<AudioObj> generated = [];
+        try
+        {
+            InstrumentSynthSettings snapshot = CaptureSettings();
+            double[] transpositions = GetOctaveTranspositions(this.octaveStepSemitones);
+            InstrumentSynthSettings[] renderSettings = transpositions
+                .Select(offset => CreatePitchedSettings(snapshot, this.octaveOffsetSemitones + offset))
+                .ToArray();
+
+            long estimatedBytes = 0;
+            foreach (InstrumentSynthSettings item in renderSettings)
+            {
+                estimatedBytes = checked(estimatedBytes + EstimateRenderBytes(item));
+            }
+
+            if (estimatedBytes > MaximumOctaveCollectionBytes)
+            {
+                throw new InvalidOperationException(
+                    $"This octave would require {estimatedBytes / (1024d * 1024d):0.#} MiB of sample data. "
+                    + "Shorten the key duration, lower the sample rate, or choose a larger step.");
+            }
+
+            for (int index = 0; index < renderSettings.Length; index++)
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                if (!disposed)
+                {
+                    status.Text = $"Rendering octave sample {index + 1} of {renderSettings.Length}…";
+                }
+
+                AudioObj rendered = await Task.Run(
+                    () => InstrumentSampleSynth.Render(renderSettings[index], cancellation.Token),
+                    cancellation.Token);
+                if (snapshot.Family == SynthFamily.DrumSet)
+                {
+                    rendered.Tag = GetDrumsetElement(snapshot.Drum);
+                }
+
+                generated.Add(rendered);
+            }
+
+            cancellation.Token.ThrowIfCancellationRequested();
+            if (disposed || IsDisposed) return;
+
+            AudioCollectionView octaveCollection = new(
+                generated,
+                $"{InstrumentSynthCatalog.FamilyName(snapshot.Family)} - {snapshot.VoiceName} Octave");
+            generated.Clear();
+            try
+            {
+                octaveCollection.Show();
+            }
+            catch
+            {
+                octaveCollection.Dispose();
+                throw;
+            }
+
+            status.Text = $"Created {renderSettings.Length} octave samples.";
+        }
+        catch (OperationCanceledException)
+        {
+            if (!disposed) status.Text = "Octave generation cancelled.";
+        }
+        catch (Exception error)
+        {
+            if (!disposed) status.Text = error.Message;
+        }
+        finally
+        {
+            foreach (AudioObj sample in generated) sample.Dispose();
+            if (ReferenceEquals(this.octaveRendering, cancellation)) this.octaveRendering = null;
+            cancellation.Dispose();
+            this.octaveCreating = false;
+            if (!disposed) this.button_createOctave.Enabled = true;
+        }
+    }
+
     private void AddToCollection()
     {
         if (audio == null) throw new InvalidOperationException("Render a valid sample first.");
         if (collection == null || collection.IsDisposed) collection = new AudioCollectionView([], "Synthesized " + InstrumentSynthCatalog.FamilyName(family));
         var created = audio.Clone();
         if (family == SynthFamily.DrumSet)
-            created.Tag = (SynthDrum)drum.SelectedItem! switch
-            {
-                SynthDrum.Kick or SynthDrum.BassDrum => DrumsetElement.Kick,
-                SynthDrum.Snare => DrumsetElement.Snare,
-                SynthDrum.Clap => DrumsetElement.Clap,
-                SynthDrum.Rimshot => DrumsetElement.Rim,
-                SynthDrum.ClosedHiHat => DrumsetElement.HiHatClosed,
-                SynthDrum.OpenHiHat => DrumsetElement.HiHatOpen,
-                SynthDrum.LowTom => DrumsetElement.TomLow,
-                SynthDrum.MidTom => DrumsetElement.TomMid,
-                SynthDrum.HighTom => DrumsetElement.TomHigh,
-                SynthDrum.Ride => DrumsetElement.Ride,
-                SynthDrum.Crash => DrumsetElement.CrashLong,
-                SynthDrum.Cowbell => DrumsetElement.Cowbell,
-                _ => DrumsetElement.Shaker
-            };
+            created.Tag = GetDrumsetElement((SynthDrum)drum.SelectedItem!);
         string basis = audio.Name, name = basis; int index = 2;
         while (collection.AudioC.Audios.Any(a => a.Name == name)) name = basis + " " + index++;
         created.Rename(name); collection.AudioC.Audios.Add(created); collection.Show();
         status.Text = "Created: " + name;
     }
+
+    private static DrumsetElement GetDrumsetElement(SynthDrum drum) => drum switch
+    {
+        SynthDrum.Kick or SynthDrum.BassDrum => DrumsetElement.Kick,
+        SynthDrum.Snare => DrumsetElement.Snare,
+        SynthDrum.Clap => DrumsetElement.Clap,
+        SynthDrum.Rimshot => DrumsetElement.Rim,
+        SynthDrum.ClosedHiHat => DrumsetElement.HiHatClosed,
+        SynthDrum.OpenHiHat => DrumsetElement.HiHatOpen,
+        SynthDrum.LowTom => DrumsetElement.TomLow,
+        SynthDrum.MidTom => DrumsetElement.TomMid,
+        SynthDrum.HighTom => DrumsetElement.TomHigh,
+        SynthDrum.Ride => DrumsetElement.Ride,
+        SynthDrum.Crash => DrumsetElement.CrashLong,
+        SynthDrum.Cowbell => DrumsetElement.Cowbell,
+        _ => DrumsetElement.Shaker
+    };
     private void BuildOverview(AudioObj value)
     {
         peak = 0;
@@ -405,7 +620,8 @@ public sealed class InstrumentSampleSynthDialog : Form
         if (disposing && !disposed)
         {
             disposed = true; store.PrehearDelayChanged -= ReceivePrehearDelay; store.PresetsChanged -= ReceivePresetsChanged;
-            CancelAutoHear(); autoHearTimer.Dispose(); rendering?.Cancel(); StopHear(); debounce.Dispose(); playbackTimer.Dispose(); tips.Dispose(); audio?.Dispose();
+            CancelAutoHear(); autoHearTimer.Dispose(); rendering?.Cancel(); this.octaveRendering?.Cancel();
+            StopHear(); debounce.Dispose(); playbackTimer.Dispose(); tips.Dispose(); audio?.Dispose(); this.components?.Dispose();
         }
         base.Dispose(disposing);
     }

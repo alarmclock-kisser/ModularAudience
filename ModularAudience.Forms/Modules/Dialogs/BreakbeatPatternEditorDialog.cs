@@ -1,4 +1,5 @@
 ﻿using ModularAudience.Audio;
+using ModularAudience.Audio.Synthesis;
 using ModularAudience.Forms.Helpers;
 using ModularAudience.Forms.ControlsConfig;
 using ModularAudience.Generators;
@@ -17,6 +18,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private readonly List<AudioObj> originalSampleOrder;
         private readonly List<AudioObj> sourceSampleOrder;
         private readonly IDictionary<AudioObj, BreakbeatTrackSettings>? trackSettingsBySample;
+        private readonly Dictionary<AudioObj, InstrumentSynthSettings> instrumentSettingsBySample = new(ReferenceEqualityComparer.Instance);
         private readonly List<BreakbeatTrackSettings> trackSettings;
         private readonly List<string> rowLabels;
         private int bars;
@@ -95,6 +97,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private bool initializing = true;
         private bool saveInProgress;
         private readonly PatternRenderCache noteRenderCache = new();
+        private readonly BreakbeatInstrumentSampleCache instrumentSampleCache = new();
         private readonly CancellationTokenSource cacheLifetime = new();
         private readonly System.Windows.Forms.Timer cacheWarmTimer = new() { Interval = 180 };
         private Task cacheWarmWork = Task.CompletedTask;
@@ -129,7 +132,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public IReadOnlyList<bool[]> Pattern => this.BuildPatternMatrix();
 
         public IReadOnlyList<BreakbeatPatternNote> Notes => this.GetNotesWithoutCoveredRetriggers()
-            .Select(note => note with { TrackIndex = this.GetOriginalTrackIndex(note.TrackIndex) })
+            .Select(note => (Note: note, TrackIndex: this.GetExternalTrackIndex(note.TrackIndex)))
+            .Where(item => item.TrackIndex >= 0)
+            .Select(item => item.Note with { TrackIndex = item.TrackIndex })
             .ToArray();
 
         public decimal Bpm => this.numericUpDown_bpm.Value;
@@ -149,7 +154,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         /// </summary>
         public bool SaveMarkedQuartersRequested { get; private set; }
 
-        internal IReadOnlyList<AudioObj> SourceSamples => this.sourceSampleOrder;
+        internal IReadOnlyList<AudioObj> SourceSamples => this.GetExternalSamples(this.sourceSampleOrder);
 
         public event Func<BreakbeatPatternEditorDialog, Task>? SaveRequested;
 
@@ -429,15 +434,64 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         internal IReadOnlyList<KeyValuePair<AudioObj, BreakbeatTrackSettings>> GetSourceTrackSettings()
         {
-            KeyValuePair<AudioObj, BreakbeatTrackSettings>[] result = new KeyValuePair<AudioObj, BreakbeatTrackSettings>[this.sourceSampleOrder.Count];
+            AudioObj[] externalSamples = this.GetExternalSamples(this.sourceSampleOrder);
+            Dictionary<AudioObj, int> externalIndices = new(ReferenceEqualityComparer.Instance);
+            for (int index = 0; index < externalSamples.Length; index++)
+            {
+                externalIndices.Add(externalSamples[index], index);
+            }
+
+            KeyValuePair<AudioObj, BreakbeatTrackSettings>[] result = new KeyValuePair<AudioObj, BreakbeatTrackSettings>[externalSamples.Length];
             for (int displayIndex = 0; displayIndex < this.samples.Count; displayIndex++)
             {
                 int sourceIndex = this.GetOriginalTrackIndex(displayIndex);
-                if (sourceIndex >= 0 && sourceIndex < result.Length)
+                if (sourceIndex >= 0
+                    && sourceIndex < this.sourceSampleOrder.Count
+                    && externalIndices.TryGetValue(this.sourceSampleOrder[sourceIndex], out int externalIndex))
                 {
-                    result[sourceIndex] = new KeyValuePair<AudioObj, BreakbeatTrackSettings>(
+                    result[externalIndex] = new KeyValuePair<AudioObj, BreakbeatTrackSettings>(
                         this.sourceSampleOrder[sourceIndex],
                         this.trackSettings[displayIndex]);
+                }
+            }
+
+            return result;
+        }
+
+        private AudioObj[] GetExternalSamples(IEnumerable<AudioObj> sourceSamples) =>
+            sourceSamples.Where(sample => !this.instrumentSettingsBySample.ContainsKey(sample)).ToArray();
+
+        private int GetExternalTrackIndex(int displayTrackIndex)
+        {
+            int sourceIndex = this.GetOriginalTrackIndex(displayTrackIndex);
+            if (sourceIndex < 0 || sourceIndex >= this.sourceSampleOrder.Count
+                || this.instrumentSettingsBySample.ContainsKey(this.sourceSampleOrder[sourceIndex]))
+            {
+                return -1;
+            }
+
+            int externalIndex = 0;
+            for (int index = 0; index < sourceIndex; index++)
+            {
+                if (!this.instrumentSettingsBySample.ContainsKey(this.sourceSampleOrder[index]))
+                {
+                    externalIndex++;
+                }
+            }
+
+            return externalIndex;
+        }
+
+        private InstrumentSynthSettings?[] GetInstrumentSettingsByTrack()
+        {
+            InstrumentSynthSettings?[] result = new InstrumentSynthSettings?[this.samples.Count];
+            for (int displayIndex = 0; displayIndex < this.samples.Count; displayIndex++)
+            {
+                int sourceIndex = this.GetOriginalTrackIndex(displayIndex);
+                if (sourceIndex >= 0 && sourceIndex < this.sourceSampleOrder.Count
+                    && this.instrumentSettingsBySample.TryGetValue(this.sourceSampleOrder[sourceIndex], out InstrumentSynthSettings? settings))
+                {
+                    result[displayIndex] = settings.Clone();
                 }
             }
 
@@ -543,7 +597,9 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
         private void RestoreHistoryState(PatternEditorHistoryState state)
         {
             PatternEditorHistoryState previous = this.CaptureHistoryState();
-            bool tracksChanged = !ReferenceSequenceEqual(previous.SourceSampleOrder, state.SourceSampleOrder);
+            bool tracksChanged = !ReferenceSequenceEqual(
+                this.GetExternalSamples(previous.SourceSampleOrder),
+                this.GetExternalSamples(state.SourceSampleOrder));
             this.restoringHistory = true;
             try
             {
@@ -612,6 +668,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             HashSet<AudioObj> ownedSamples = new(ReferenceEqualityComparer.Instance);
             ownedSamples.UnionWith(this.samples);
             ownedSamples.UnionWith(this.droppedSourceSamples);
+            ownedSamples.UnionWith(this.instrumentSettingsBySample.Keys);
             foreach (PatternEditorHistoryState state in this.undoHistory.Concat(this.redoHistory))
             {
                 ownedSamples.UnionWith(state.Samples);
@@ -1922,6 +1979,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             AudioObj sourceSample = this.sourceSampleOrder[sourceIndex];
+            bool instrumentTrack = this.instrumentSettingsBySample.ContainsKey(sourceSample);
             PatternEditorHistoryState preRemovalState = this.CaptureHistoryState();
             BreakbeatPatternNote[] originalNotes = this.notes.ToArray();
             this.notes.RemoveAll(note => note.TrackIndex == row);
@@ -1964,8 +2022,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.pattern.RemoveAt(row);
             this.trackSettings.RemoveAt(row);
             this.rowLabels.RemoveAt(row);
-            this.trackSettingsBySample?.Remove(sourceSample);
-            this.TrackSetRestored?.Invoke(this);
+            if (!instrumentTrack)
+            {
+                this.trackSettingsBySample?.Remove(sourceSample);
+                this.TrackSetRestored?.Invoke(this);
+            }
             this.RegisterPatternNotesChanged(originalNotes
                 .Concat(this.notes)
                 .Select(note => (BreakbeatPatternNote?)note)
@@ -1991,6 +2052,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             AudioObj sourceOriginal = this.sourceSampleOrder[sourceIndex];
+            bool isInstrumentTrack = this.instrumentSettingsBySample.TryGetValue(sourceOriginal, out InstrumentSynthSettings? instrumentSettings);
             AudioObj newSourceSample = CloneSampleWithMetadata(sourceOriginal);
             AudioObj newEditorSample = CloneSampleWithMetadata(newSourceSample);
             if (this.soloTracks.Contains(this.samples[row])) this.soloTracks.Add(newEditorSample);
@@ -2050,7 +2112,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.pattern.Insert(displayIndex, clonedPatternRow);
             this.trackSettings.Insert(displayIndex, clonedSettings);
             this.rowLabels.Insert(displayIndex, clonedLabel);
-            if (this.trackSettingsBySample is not null)
+            if (isInstrumentTrack)
+            {
+                this.instrumentSettingsBySample.Add(newSourceSample, instrumentSettings!.Clone());
+            }
+            else if (this.trackSettingsBySample is not null)
             {
                 this.trackSettingsBySample[newSourceSample] = clonedSettings;
             }
@@ -2066,7 +2132,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
             this.notes.AddRange(duplicatedNotes);
             this.deadGroupNotes.Clear();
-            this.TrackAdded?.Invoke(newSourceSample, newSourceIndex);
+            if (!isInstrumentTrack)
+            {
+                this.TrackAdded?.Invoke(newSourceSample, this.GetExternalTrackIndex(displayIndex));
+            }
             this.RegisterPatternNotesChanged(originalNotes
                 .Concat(this.notes)
                 .Select(note => (BreakbeatPatternNote?)note)
@@ -2300,7 +2369,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 this.hoverPitchNote = this.hoverPitchNote with { TrackIndex = MapTrackIndex(this.hoverPitchNote.TrackIndex) };
             }
 
-            this.TrackAdded?.Invoke(sourceSample, sourceIndex);
+            this.TrackAdded?.Invoke(sourceSample, this.GetExternalTrackIndex(displayIndex));
             if (this.TrackAdded is not null) this.droppedSourceSamples.Remove(sourceSample);
             this.RegisterPatternNotesChanged(originalNotes
                 .Concat(this.notes)
@@ -2314,6 +2383,48 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.InsertSampleTrack(sample, this.samples.Count, this.sourceSampleOrder.Count);
             this.deadGroupNotes.Clear();
             this.CommitHistoryAction();
+        }
+
+        internal void AddInstrumentTrack(InstrumentSynthSettings settings)
+        {
+            ArgumentNullException.ThrowIfNull(settings);
+            InstrumentSynthSettings snapshot = settings.Clone();
+            snapshot.Validate();
+            string label = $"{InstrumentSynthCatalog.FamilyName(snapshot.Family)} - {snapshot.VoiceName}";
+            double durationSeconds = snapshot.GateSeconds + snapshot.ReleaseSeconds;
+            AudioObj sourceSample = new()
+            {
+                Name = label,
+                Data = [],
+                SampleRate = snapshot.SampleRate,
+                Channels = snapshot.Channels,
+                BitDepth = 32,
+                Length = 0,
+                Duration = TimeSpan.FromSeconds(durationSeconds),
+                Bpm = (float)snapshot.Bpm,
+                Volume = 100
+            };
+            sourceSample.Rename(label);
+            AudioObj editorSample = CloneSampleWithMetadata(sourceSample);
+            int patternColumns = Math.Max(1, this.bars * this.currentResolution);
+
+            this.samples.Add(editorSample);
+            this.originalSampleOrder.Add(editorSample);
+            this.sourceSampleOrder.Add(sourceSample);
+            this.instrumentSettingsBySample.Add(sourceSample, snapshot);
+            this.pattern.Add(new bool[patternColumns]);
+            this.trackSettings.Add(new BreakbeatTrackSettings());
+            this.rowLabels.Add(label);
+            this.deadGroupNotes.Clear();
+            this.ConfigurePatternScrollBar();
+            this.pictureBox_pattern.Invalidate();
+            this.CommitHistoryAction();
+        }
+
+        private void OpenInstrumentSampleSynth(SynthFamily family)
+        {
+            InstrumentSampleSynthDialog dialog = new(family, onInstrumentConfirmed: this.AddInstrumentTrack);
+            dialog.Show(this);
         }
 
         private static AudioObj CloneSampleWithMetadata(AudioObj sample)
@@ -3384,31 +3495,21 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
             else if (pitchWheel && e.Delta != 0)
             {
-                int wheelSteps = Math.Max(1, Math.Abs(e.Delta) / 120);
-                int pitchDelta = Math.Sign(e.Delta) * wheelSteps;
                 List<BreakbeatPatternNote> changedNotes = [];
 
-                // Note unter dem Cursor bestimmen (wie beim Alt+Wheel für Volume).
+                // Find the note under the pointer, as in the Alt+wheel volume gesture.
                 int hoveredIndex = -1;
                 if (this.TryGetCell(pointer, out int hoverRow, out _))
                 {
                     hoveredIndex = this.FindNoteIndexAt(hoverRow, this.PointToTick(pointer));
                 }
 
-                bool hoveredIsSelected = hoveredIndex >= 0 && this.selectedNotes.Contains(this.notes[hoveredIndex]);
                 List<int> targetIndices = [];
-                if (hoveredIndex >= 0 && !hoveredIsSelected)
+                if (this.selectedNotes.Count > 0)
                 {
-                    // Hover über nicht-selektierter Note: nur diese pitchen
-                    // (konsistent zum Alt+Wheel-Volume-Verhalten).
-                    targetIndices.Add(hoveredIndex);
-                }
-                else if (this.selectedNotes.Count > 0)
-                {
-                    // Gesamte Auswahl pitchen. Wertbasierter Lookup statt
-                    // ReferenceEquals: nach Track-Insert/Clone/Reorder/Remove enthält
-                    // das Set wertegleiche Kopien, keine Referenzen aus this.notes.
-                    // Über Snapshot iterieren: Set wird unten modifiziert.
+                    // Pitch the full selection. Use value lookup rather than ReferenceEquals
+                    // because track edits can leave equal copies in the set; iterate a snapshot
+                    // because the selection is updated below.
                     foreach (BreakbeatPatternNote selected in this.selectedNotes.ToArray())
                     {
                         int noteIndex = this.notes.FindIndex(note => note.Equals(selected));
@@ -3431,10 +3532,9 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     }
 
                     BreakbeatPatternNote originalNote = this.notes[noteIndex];
-                    int quarterSteps = (int)Math.Round(originalNote.PitchSemitones * 4f) + pitchDelta;
                     BreakbeatPatternNote updatedNote = originalNote with
                     {
-                        PitchSemitones = Math.Clamp(quarterSteps, -96, 96) / 4f
+                        PitchSemitones = GetPitchWheelValue(originalNote.PitchSemitones, e.Delta)
                     };
                     if (updatedNote.PitchSemitones != originalNote.PitchSemitones)
                     {
@@ -3532,6 +3632,22 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             {
                 this.CommitHistoryAction();
             }
+        }
+
+        internal static float GetPitchWheelValue(float currentPitch, int wheelDelta)
+        {
+            if (!float.IsFinite(currentPitch))
+            {
+                throw new ArgumentOutOfRangeException(nameof(currentPitch));
+            }
+
+            if (wheelDelta == 0)
+            {
+                return Math.Clamp(currentPitch, -24f, 24f);
+            }
+
+            int wheelSteps = Math.Max(1, Math.Abs(wheelDelta) / 120);
+            return Math.Clamp(currentPitch + Math.Sign(wheelDelta) * wheelSteps, -24f, 24f);
         }
 
         private void CompletePitchGesture()
@@ -4198,11 +4314,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
         private List<bool[]> BuildPatternMatrix()
         {
             int columns = Math.Max(1, this.bars * this.currentResolution);
-            var result = Enumerable.Range(0, this.samples.Count).Select(_ => new bool[columns]).ToList();
+            var result = Enumerable.Range(0, this.SourceSamples.Count).Select(_ => new bool[columns]).ToList();
             int stepTicks = this.GetTicksPerStep();
             foreach (BreakbeatPatternNote note in this.GetNotesWithoutCoveredRetriggers())
             {
-                int trackIndex = this.GetOriginalTrackIndex(note.TrackIndex);
+                int trackIndex = this.GetExternalTrackIndex(note.TrackIndex);
                 if (trackIndex < 0 || trackIndex >= result.Count || note.DurationTicks <= 0)
                 {
                     continue;
@@ -4286,16 +4402,19 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             float bpm,
             CancellationToken cancellationToken)
         {
-            AudioObj? renderedPattern = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+            AudioObj? renderedPattern = await BreakbeatPatternInstrumentRenderer.RenderAsync(
                 this.ApplyTrackAudibility(patternNotes),
                 this.samples,
+                this.GetInstrumentSettingsByTrack(),
+                this.trackSettings,
                 this.bars,
                 bpm,
                 this.currentResolution,
                 this.swing,
                 "BreakbeatPreview",
                 cancellationToken,
-                trackSettings: this.trackSettings, renderCache: this.noteRenderCache);
+                this.instrumentSampleCache,
+                this.noteRenderCache);
 
             if (renderedPattern is null)
             {
@@ -4920,16 +5039,19 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             {
                 int previewBars = Math.Max(1, (int)Math.Ceiling(note.DurationTicks / (double)BreakbeatGenerator_V2.PatternTicksPerBar));
                 BreakbeatPatternNote previewNote = note with { StartTick = 0 };
-                notePreviewAudio = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                notePreviewAudio = await BreakbeatPatternInstrumentRenderer.RenderAsync(
                     this.ApplyTrackAudibility([previewNote]),
                     this.samples,
+                    this.GetInstrumentSettingsByTrack(),
+                    this.trackSettings,
                     previewBars,
                     (float)this.numericUpDown_bpm.Value,
                     this.currentResolution,
                     0f,
                     "BreakbeatNotePreview",
                     cancellationTokenSource.Token,
-                    trackSettings: this.trackSettings, renderCache: this.noteRenderCache);
+                    this.instrumentSampleCache,
+                    this.noteRenderCache);
 
                 if (notePreviewAudio is null
                     || cancellationTokenSource.IsCancellationRequested
@@ -5249,9 +5371,19 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             var samples = this.samples.ToArray();
             var settings = this.trackSettings.Select(NormalizeTrackSettings).ToArray();
             int[] quarters = this.SaveMarkedQuartersRequested ? this.SelectedLoopSections : [];
-            AudioObj? rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(notes, samples,
-                this.bars, bpm, this.currentResolution, this.swing, "BreakbeatEdited", trackSettings: settings,
-                renderCache: this.noteRenderCache);
+            AudioObj? rendered = await BreakbeatPatternInstrumentRenderer.RenderAsync(
+                notes,
+                samples,
+                this.GetInstrumentSettingsByTrack(),
+                settings,
+                this.bars,
+                bpm,
+                this.currentResolution,
+                this.swing,
+                "BreakbeatEdited",
+                CancellationToken.None,
+                this.instrumentSampleCache,
+                this.noteRenderCache);
             if (rendered == null) return;
             try
             {
@@ -5280,13 +5412,14 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 "Click empty / drag: add hit / longer note. Click note: play. Right-click / drag: erase.",
                 "Shift-click empty cell: add a green hit hard-cut to one grid step. Shift-drag: select notes; Shift-drag a note edge: hard-cut its sample. Del: erase selection. Ctrl+C: copy (keeps 50-entry history, re-copied moves back to top). Ctrl+V (tap): preview top entry; click to place, Esc/right-click to cancel. Ctrl+V (hold >250ms): clipboard history with thumbnails; Up/Down to cycle, Enter/click takes one for insertion and pulls it to top.",
                 "Ctrl+Z: undo. Ctrl+Y: redo.",
-                "Shift+wheel on a note: pitch +/-0.25 semitones (up to +/-24); hovers a selected note with an active multiselection to pitch the whole selection.",
+                "Shift+wheel: pitch selected notes by 1 semitone per notch (up to +/-24); with no selection, pitch the note under the pointer.",
                 "Alt+wheel on a note: volume +/-5% (0-250%); 100% is default.",
                 "Right-click a sample name: configure persistent defaults for new notes on that track. Double-click a sample name: rename the track.",
                 "Generate: pick randomization options, then drag a rectangle over empty cells to fill it with random notes (Ctrl+click skips the dialog; right-click/Esc cancels).",
                 "Track Auto: click Off to configure/enable (empty tracks fill immediately), On to disable. Roll rerolls once and advances the counter; Ctrl+Roll rerolls without changing it. Click the counter to reset it. Right-click Auto to edit. Normal Stop preserves counters; Ctrl+Stop resets all counters. Solo/ensemble autosaves collect variations separately; simultaneous ensemble requests are combined.",
                 "R: reroll the last Generate rectangle with the same options. Configurable in the gear / Control Configuration.",
-                "Remix: with 2+ selected notes it derives a variation from the selection (pattern detection/reuse, mirror, halves swap, rotate, lane shift, humanize, ghosts, rolls, merge, thin-out, track shuffle, pitch/volume). Ctrl+click applies the persisted settings immediately; the dialog's bottom checkbox toggles between replacing the selection and copying the remix to the clipboard.",
+                "Remix: with 2+ selected notes it derives a variation from the selection (pattern detection/reuse, mirror, halves swap, rotate, lane shift, humanize, ghosts, rolls, merge, thin-out, track shuffle, pitch/volume). Roll pitch can stay the same or step up/down. Ctrl+click applies the persisted settings immediately; the dialog's bottom checkbox toggles between replacing the selection and copying the remix to the clipboard.",
+                "+ Instrument: choose a Sample Synthesizer family and press OK to add a live instrument track. Melodic notes use the configured key (C4 by default), exact pitch, editor BPM, and note duration.",
                 "Drag a sample name left of the grid to reorder sample tracks.",
                 "Pre-hear toggles auto-preview; clicking a note always plays it.",
                 "",
@@ -5848,11 +5981,12 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
         {
             this.RemixThinOut(work, run);
             this.RemixMerge(work, outside, run);
+            this.RemixPitch(work, run);
             this.RemixRoll(work, outside, run);
             this.RemixGhost(work, outside, run);
             this.RemixTrackShuffle(work, outside, run);
             this.RemixHumanize(work, outside, run);
-            this.RemixPitchAndVolume(work, run);
+            this.RemixVolume(work, run);
             this.RemixNoteKinds(work, run);
         }
 
@@ -5965,17 +6099,19 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                         continue;
                     }
 
+                    float pitch = GetRollPitch(note.PitchSemitones, part,
+                        run.Options.RollPitchMode, run.Options.RollPitchStepSemitones);
                     rolled.Add(duration >= minimumDuration
                         ? new BreakbeatPatternNote(
                             note.TrackIndex, start, duration,
-                            PitchSemitones: note.PitchSemitones,
+                            PitchSemitones: pitch,
                             VolumePercent: note.VolumePercent)
                         : new BreakbeatPatternNote(
                             note.TrackIndex, start, duration,
                             Truncated: true,
                             HardResized: true,
                             OriginalDurationTicks: minimumDuration,
-                            PitchSemitones: note.PitchSemitones,
+                            PitchSemitones: pitch,
                             VolumePercent: note.VolumePercent));
                 }
 
@@ -6000,6 +6136,37 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     work.Insert(noteIndex, note);
                 }
             }
+        }
+
+        internal static float GetRollPitch(
+            float sourcePitch,
+            int hitIndex,
+            BreakbeatRollPitchMode mode,
+            float stepSemitones)
+        {
+            if (!float.IsFinite(sourcePitch))
+            {
+                throw new ArgumentOutOfRangeException(nameof(sourcePitch));
+            }
+
+            if (!float.IsFinite(stepSemitones) || stepSemitones < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(stepSemitones));
+            }
+
+            if (hitIndex < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(hitIndex));
+            }
+
+            float direction = mode switch
+            {
+                BreakbeatRollPitchMode.Same => 0,
+                BreakbeatRollPitchMode.Ascending => 1,
+                BreakbeatRollPitchMode.Descending => -1,
+                _ => throw new ArgumentOutOfRangeException(nameof(mode))
+            };
+            return Math.Clamp(sourcePitch + direction * hitIndex * stepSemitones, -24f, 24f);
         }
 
         private void RemixGhost(
@@ -6122,7 +6289,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
         }
 
-        private void RemixPitchAndVolume(List<BreakbeatPatternNote> work, RemixRun run)
+        private void RemixPitch(List<BreakbeatPatternNote> work, RemixRun run)
         {
             for (int index = 0; index < work.Count; index++)
             {
@@ -6148,7 +6315,24 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                         }
                     }
                 }
+                if (updated != note)
+                {
+                    work[index] = updated;
+                }
+            }
+        }
 
+        private void RemixVolume(List<BreakbeatPatternNote> work, RemixRun run)
+        {
+            for (int index = 0; index < work.Count; index++)
+            {
+                BreakbeatPatternNote note = work[index];
+                if (note.TrackIndex < run.MinRow || note.TrackIndex > run.MaxRow)
+                {
+                    continue;
+                }
+
+                BreakbeatPatternNote updated = note;
                 if (run.Options.VolumeRangePercent > 0f && run.Roll(run.Options.VolumeChancePercent))
                 {
                     float delta = (float)(run.Rand.NextDouble() * 2.0 - 1.0) * run.Options.VolumeRangePercent;

@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using ModularAudience.Audio.Synthesis;
 using ModularAudience.Forms.Modules.Dialogs;
 using System.Runtime.InteropServices;
 using ModularAudience.Generators;
@@ -9,6 +10,85 @@ namespace ModularAudience.Audio.Tests;
 [TestClass]
 public sealed class BreakbeatPatternWindowTests
 {
+    [STATestMethod]
+    public void InstrumentTrackKeepsSynthConfigurationOutOfAudioSourcePattern()
+    {
+        using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using var editor = new BreakbeatPatternEditorDialog(
+            [new bool[16]],
+            [sample],
+            ["Audio"],
+            1,
+            16,
+            0,
+            120,
+            [new BreakbeatPatternNote(0, 0, 64)],
+            initialGridResolution: 16);
+        InstrumentSynthSettings settings = new() { Family = SynthFamily.Keyboard, SampleRate = 22050, Channels = 1 };
+        settings.ApplyVoiceDefaults();
+
+        editor.AddInstrumentTrack(settings);
+
+        Type type = typeof(BreakbeatPatternEditorDialog);
+        var editorSamples = (List<AudioObj>)type.GetField("samples", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(editor)!;
+        var labels = (List<string>)type.GetField("rowLabels", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(editor)!;
+        var notes = (List<BreakbeatPatternNote>)type.GetField("notes", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(editor)!;
+        notes.Add(new BreakbeatPatternNote(1, 256, 128, PitchSemitones: 2f));
+
+        Assert.HasCount(2, editorSamples);
+        Assert.AreEqual(0, editorSamples[1].Data.Length, "An instrument track must not become a fixed sample.");
+        Assert.AreEqual("Keyboard - Concert Grand", labels[1]);
+        Assert.HasCount(1, editor.SourceSamples);
+        Assert.HasCount(1, editor.Pattern);
+        Assert.HasCount(1, editor.Notes);
+        Assert.AreEqual(0, editor.Notes[0].TrackIndex);
+        Assert.IsTrue(editor.Pattern[0][0]);
+        Assert.IsFalse(editor.Pattern[0][4], "Instrument notes must not leak into the source-audio beat map.");
+    }
+
+    [STATestMethod]
+    public void PitchWheelUsesWholeSemitoneNotchesAndRollSupportsSameUpAndDown()
+    {
+        Assert.AreEqual(1f, BreakbeatPatternEditorDialog.GetPitchWheelValue(0f, 120));
+        Assert.AreEqual(-1f, BreakbeatPatternEditorDialog.GetPitchWheelValue(0f, -120));
+        Assert.AreEqual(2.25f, BreakbeatPatternEditorDialog.GetPitchWheelValue(1.25f, 120));
+        Assert.AreEqual(24f, BreakbeatPatternEditorDialog.GetPitchWheelValue(23f, 240));
+
+        Assert.AreEqual(0.25f, BreakbeatPatternEditorDialog.GetRollPitch(
+            0.25f, 2, BreakbeatRollPitchMode.Same, 1f));
+        Assert.AreEqual(2.25f, BreakbeatPatternEditorDialog.GetRollPitch(
+            0.25f, 2, BreakbeatRollPitchMode.Ascending, 1f));
+        Assert.AreEqual(-1.75f, BreakbeatPatternEditorDialog.GetRollPitch(
+            0.25f, 2, BreakbeatRollPitchMode.Descending, 1f));
+    }
+
+    [STATestMethod]
+    public void InstrumentToolbarButtonDoesNotOverlapExistingControls()
+    {
+        using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using var editor = new BreakbeatPatternEditorDialog([new bool[16]], [sample], ["Audio"], 1, 16, 0, 120);
+        editor.PerformLayout();
+        string[] controlNames =
+        [
+            "label_resolution", "numericUpDown_resolution", "button_instrument", "button_recordBeat",
+            "button_addBar", "button_removeBar", "button_roll", "button_clearAll", "button_remix",
+            "button_generate", "button_settings", "button_help", "button_save"
+        ];
+        Control[] controls = controlNames
+            .Select(name => editor.Controls.Find(name, true).OfType<Control>().Single())
+            .ToArray();
+
+        for (int first = 0; first < controls.Length; first++)
+        {
+            for (int second = first + 1; second < controls.Length; second++)
+            {
+                Assert.IsFalse(
+                    controls[first].Bounds.IntersectsWith(controls[second].Bounds),
+                    $"{controls[first].Name} overlaps {controls[second].Name}.");
+            }
+        }
+    }
+
     [STATestMethod]
     public void TrackButtonsSupportMultipleSolosMutePriorityClearAndUndo()
     {

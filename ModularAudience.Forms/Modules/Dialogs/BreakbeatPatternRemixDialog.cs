@@ -10,7 +10,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
     /// them back on OK. The bottom checkbox toggles between replacing the
     /// selection and copying the remix to the clipboard.
     /// </summary>
-    internal sealed class BreakbeatPatternRemixDialog : Form
+    internal sealed partial class BreakbeatPatternRemixDialog : Form
     {
         private readonly NumericUpDown numeric_variation = new();
         private readonly NumericUpDown numeric_minPatternLength = new();
@@ -53,6 +53,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.toolTip = new ToolTip { IsParameterHelp = true };
             this.Disposed += (_, _) => this.toolTip.Dispose();
+            this.InitializeRollPitchControls();
 
             TableLayoutPanel grid = new()
             {
@@ -103,6 +104,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 row++;
             }
 
+            void AddCombo(string label, ComboBox combo, int selectedIndex, string tooltip)
+            {
+                Label caption = new() { Text = label, AutoSize = true, Anchor = AnchorStyles.Left };
+                combo.SelectedIndex = Math.Clamp(selectedIndex, 0, combo.Items.Count - 1);
+                this.toolTip.SetToolTip(combo, tooltip);
+                this.toolTip.SetToolTip(caption, tooltip);
+                grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                grid.Controls.Add(caption, 0, row);
+                grid.Controls.Add(combo, 1, row);
+                row++;
+            }
+
             AddNumeric("Variation master (%)", this.numeric_variation, options.VariationPercent, 0, 100, 5, 0,
                 "Master strength: scales the chance of every operation below.");
             AddNumeric("Min pattern length (steps)", this.numeric_minPatternLength, options.MinPatternLengthSteps, 1, 64, 1, 0,
@@ -137,6 +150,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 "Chance per longer note to split it into a roll / fill (multiple hits across its span).");
             AddNumeric("Roll parts max", this.numeric_rollParts, options.RollPartsMax, 2, 16, 1, 0,
                 "Maximum number of hits a roll is split into.");
+            AddCombo("Roll pitch mode", this.combo_rollPitchMode, (int)options.RollPitchMode,
+                "Keep every roll hit at the source pitch, or step each following hit upward or downward.");
+            AddNumeric("Roll pitch step (st)", this.numeric_rollPitchStep, (decimal)options.RollPitchStepSemitones, 0.25m, 24m, 0.25m, 2,
+                "Semitone change between consecutive roll hits. The first hit keeps the source pitch.");
             AddNumeric("Merge chance (%)", this.numeric_mergeChance, options.MergeChancePercent, 0, 100, 5, 0,
                 "Chance to merge two adjacent notes per lane into one longer note.");
             AddNumeric("Merge gap max (steps)", this.numeric_mergeGap, options.MergeGapSteps, 0, 16, 1, 0,
@@ -208,6 +225,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numeric_ghostVolume.Value = options.GhostVolumePercent;
             this.numeric_rollChance.Value = options.RollChancePercent;
             this.numeric_rollParts.Value = options.RollPartsMax;
+            this.combo_rollPitchMode.SelectedIndex = (int)options.RollPitchMode;
+            this.numeric_rollPitchStep.Value = (decimal)options.RollPitchStepSemitones;
             this.numeric_mergeChance.Value = options.MergeChancePercent;
             this.numeric_mergeGap.Value = options.MergeGapSteps;
             this.numeric_thin.Value = options.ThinChancePercent;
@@ -240,6 +259,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             GhostVolumePercent = (int)this.numeric_ghostVolume.Value,
             RollChancePercent = (int)this.numeric_rollChance.Value,
             RollPartsMax = (int)this.numeric_rollParts.Value,
+            RollPitchMode = (BreakbeatRollPitchMode)this.combo_rollPitchMode.SelectedIndex,
+            RollPitchStepSemitones = (float)this.numeric_rollPitchStep.Value,
             MergeChancePercent = (int)this.numeric_mergeChance.Value,
             MergeGapSteps = (int)this.numeric_mergeGap.Value,
             ThinChancePercent = (int)this.numeric_thin.Value,

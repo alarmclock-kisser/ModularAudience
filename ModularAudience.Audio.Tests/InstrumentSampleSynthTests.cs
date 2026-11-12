@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio.Synthesis;
 using ModularAudience.Forms;
 using ModularAudience.Forms.Modules.Dialogs;
+using ModularAudience.Generators;
 
 namespace ModularAudience.Audio.Tests;
 
@@ -105,6 +106,130 @@ public sealed class InstrumentSampleSynthTests
         s.DurationMultiplier = 1; s.NoteBeats = 4; s.PitchSemitones = 2;
         using (var bar = InstrumentSampleSynth.Render(s))
             Assert.AreEqual("Sub Anchor · G#2 +2 st · 1 Bar [137.5]", bar.Name);
+    }
+
+    [TestMethod]
+    public void PatternInstrumentRenderingUsesEditorTempoDurationAndPitch()
+    {
+        InstrumentSynthSettings source = Short(SynthFamily.Keyboard);
+        source.MidiNote = 60;
+        source.PitchSemitones = 0.25;
+        source.NoteBeats = 2;
+        source.DurationMultiplier = 1.5;
+        BreakbeatPatternNote note = new(0, 0, 128, PitchSemitones: 3.5f);
+        BreakbeatTrackSettings track = new(DefaultPitchSemitones: 1f);
+
+        InstrumentSynthSettings renderedSettings = BreakbeatPatternInstrumentRenderer.CreateSettingsForNote(
+            source, note, track, 80f);
+
+        Assert.AreEqual(80d, renderedSettings.Bpm);
+        Assert.AreEqual(0.5d, renderedSettings.NoteBeats, 1e-12);
+        Assert.AreEqual(1d, renderedSettings.DurationMultiplier);
+        Assert.AreEqual(65, renderedSettings.MidiNote);
+        Assert.AreEqual(-0.25d, renderedSettings.PitchSemitones, 1e-12);
+        Assert.AreEqual(0.375d, renderedSettings.GateSeconds, 1e-12);
+        using AudioObj rendered = InstrumentSampleSynth.Render(renderedSettings);
+        Assert.AreEqual((int)Math.Ceiling((0.375 + source.ReleaseSeconds) * source.SampleRate), rendered.Data.Length);
+        Assert.AreEqual(80f, rendered.Bpm);
+
+        InstrumentSynthSettings drum = Short(SynthFamily.DrumSet);
+        drum.PitchSemitones = 2;
+        InstrumentSynthSettings pitchedDrum = BreakbeatPatternInstrumentRenderer.CreateSettingsForNote(
+            drum,
+            note with { PitchSemitones = 3f },
+            new BreakbeatTrackSettings(DefaultPitchSemitones: -1f),
+            80f);
+        Assert.AreEqual(60, pitchedDrum.MidiNote);
+        Assert.AreEqual(4d, pitchedDrum.PitchSemitones);
+        Assert.AreEqual(0.5d, pitchedDrum.NoteBeats, 1e-12);
+        Assert.AreEqual(80f, pitchedDrum.Bpm);
+    }
+
+    [TestMethod]
+    public async Task PatternRendererMatchesDirectSynthesisAtTheNotePitch()
+    {
+        InstrumentSynthSettings source = Short(SynthFamily.Keyboard);
+        source.MidiNote = 60;
+        source.PitchSemitones = 0.25;
+        BreakbeatPatternNote note = new(0, 0, 128, PitchSemitones: 3.5f);
+        BreakbeatTrackSettings track = new(DefaultPitchSemitones: 1f);
+        InstrumentSynthSettings exactSettings = BreakbeatPatternInstrumentRenderer.CreateSettingsForNote(
+            source, note, track, 80f);
+        using AudioObj exactSample = InstrumentSampleSynth.Render(exactSettings);
+        using AudioObj placeholder = new()
+        {
+            Data = [],
+            SampleRate = exactSettings.SampleRate,
+            Channels = exactSettings.Channels,
+            Duration = exactSample.Duration,
+            Bpm = 80f
+        };
+        using BreakbeatInstrumentSampleCache cache = new(0);
+
+        AudioObj? instrumentPattern = await BreakbeatPatternInstrumentRenderer.RenderAsync(
+            [note],
+            [placeholder],
+            [source],
+            [track],
+            1,
+            80f,
+            4,
+            0,
+            "Instrument",
+            CancellationToken.None,
+            cache);
+        using (instrumentPattern)
+        using (AudioObj directPattern = await ModularAudience.Generators.BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                   [note with { PitchSemitones = 0f }],
+                   [exactSample],
+                   1,
+                   80f,
+                   4,
+                   0,
+                   "Direct"))
+        {
+            Assert.IsNotNull(instrumentPattern);
+            CollectionAssert.AreEqual(directPattern.Data, instrumentPattern!.Data);
+        }
+    }
+
+    [TestMethod]
+    public void OctaveTranspositionsIncludeBothEndpointsAndExactThirdSteps()
+    {
+        double[] semitones = InstrumentSampleSynthDialog.GetOctaveTranspositions(1);
+        Assert.HasCount(13, semitones);
+        Assert.AreEqual(0d, semitones[0]);
+        Assert.AreEqual(12d, semitones[^1]);
+
+        double[] thirds = InstrumentSampleSynthDialog.GetOctaveTranspositions(1d / 3);
+        Assert.HasCount(37, thirds);
+        Assert.AreEqual(1d / 3, thirds[1], 1e-12);
+        Assert.AreEqual(12d, thirds[^1]);
+
+        Assert.HasCount(97, InstrumentSampleSynthDialog.GetOctaveTranspositions(0.125));
+    }
+
+    [STATestMethod]
+    public void PatternEditorOkAddsConfiguredInstrumentAndUsesC4ByDefault()
+    {
+        InstrumentSynthSettings? confirmed = null;
+        using var dialog = new InstrumentSampleSynthDialog(
+            SynthFamily.Keyboard,
+            store,
+            settings => confirmed = settings);
+        var note = (DomainUpDown)typeof(InstrumentSampleSynthDialog)
+            .GetField("note", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dialog)!;
+        Assert.AreEqual("C4", note.Text);
+        var ok = dialog.Controls.Find("button_ok", true).OfType<Button>().Single();
+        Assert.AreEqual("OK", ok.Text);
+
+        dialog.Show();
+        ok.PerformClick();
+        Application.DoEvents();
+
+        Assert.IsNotNull(confirmed);
+        Assert.AreEqual(60, confirmed.MidiNote);
+        Assert.AreEqual("Concert Grand", confirmed.VoiceName);
     }
 
     [STATestMethod]

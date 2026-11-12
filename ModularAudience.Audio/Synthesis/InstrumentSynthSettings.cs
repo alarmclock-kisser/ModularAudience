@@ -188,12 +188,12 @@ public sealed class InstrumentSynthSettings
     public void Validate()
     {
         if (!Enum.IsDefined(Family) || !Enum.IsDefined(Drum) || VoiceIndex < 0 || VoiceIndex >= InstrumentSynthCatalog.Voices(Family).Count
-            || KitIndex < 0 || KitIndex >= InstrumentSynthCatalog.DrumKits.Count || MidiNote is < 12 or > 108
+            || KitIndex < 0 || KitIndex >= InstrumentSynthCatalog.DrumKits.Count || MidiNote is < 0 or > 127
             || SampleRate is not (22050 or 44100 or 48000 or 96000) || Channels is < 1 or > 2 || Seed < 0)
             throw new ArgumentException("Invalid instrument, sample format or note.");
         double[] all = [PitchSemitones, Bpm, NoteBeats, DurationMultiplier, AttackMs, DecaySeconds, SustainPercent, ReleaseSeconds, Brightness, Body,
             Noise, Drive, DetuneCents, VibratoCents, VibratoHz, CutoffHz, Resonance, FilterEnvelope, StrikePosition, DrumSweep, DrumSnap, RoomPercent, StereoWidth, GainPercent];
-        if (all.Any(v => !double.IsFinite(v)) || Math.Abs(PitchSemitones) > 16 || Bpm is < 20 or > 400 || NoteBeats is < 0.0625 or > 16
+        if (all.Any(v => !double.IsFinite(v)) || Math.Abs(PitchSemitones) > 64 || Bpm is < 10 or > 400 || NoteBeats is < 0.0001 or > 256
             || DurationMultiplier is < 0.5 or > 1.5 || AttackMs is < 0 or > 2000 || DecaySeconds is < 0.01 or > 10 || ReleaseSeconds is < 0.01 or > 10
             || SustainPercent is < 0 or > 100 || Brightness is < 0 or > 100 || Body is < 0 or > 100 || Noise is < 0 or > 100 || Drive is < 0 or > 100
             || DetuneCents is < 0 or > 50 || VibratoCents is < 0 or > 100 || VibratoHz is < 0 or > 20 || CutoffHz is < 20 or > 24000 || Resonance is < 0.1 or > 12
