@@ -263,8 +263,6 @@ public sealed class InstrumentSampleSynthTests
     {
         using var dialog = new InstrumentSampleSynthDialog(SynthFamily.Keyboard, store);
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        ((System.Windows.Forms.Timer)typeof(InstrumentSampleSynthDialog)
-            .GetField("debounce", flags)!.GetValue(dialog)!).Stop();
         var ok = dialog.Controls.Find("button_ok", true).OfType<Button>().Single();
 
         dialog.Show();
@@ -292,7 +290,7 @@ public sealed class InstrumentSampleSynthTests
     }
 
     [STATestMethod]
-    public void PrehearDelayDefaultsTo200DebouncesEverySoundControlAndZeroDisablesIt()
+    public void PrehearDelayDefaultsTo200TracksChangesAndZeroDisablesIt()
     {
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         using var dialog = new InstrumentSampleSynthDialog(SynthFamily.Keyboard, store);
@@ -302,9 +300,13 @@ public sealed class InstrumentSampleSynthTests
         Assert.AreEqual(200m, delay.Value);
         Assert.IsFalse(timer.Enabled, "Opening the window must not automatically play.");
         var numbers = (Dictionary<string, NumericUpDown>)Field("numbers");
+        int previousRevision = (int)Field("revision");
         numbers["Brightness"].Value = 33;
         Assert.IsTrue(timer.Enabled); Assert.AreEqual(200, timer.Interval);
         Assert.AreEqual(true, Field("autoHearPending"));
+        Assert.AreEqual(previousRevision + 1, (int)Field("revision"));
+        Assert.AreEqual((int)Field("revision"), (int)Field("renderTaskRevision"),
+            "Waveform rendering must start without waiting for the prehear delay.");
         delay.Value = 0;
         Assert.IsFalse(timer.Enabled); Assert.AreEqual(SystemColors.GrayText, delay.ForeColor);
         numbers["Brightness"].Value = 34; Assert.IsFalse(timer.Enabled);
@@ -320,6 +322,47 @@ public sealed class InstrumentSampleSynthTests
         Assert.IsTrue(timer.Enabled);
         delay.Value = 0;
         Assert.AreEqual(false, Field("autoHearPending"));
+    }
+
+    [STATestMethod]
+    public void KeyNoteAndDurationItemsAreReversedForEveryFamily()
+    {
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        foreach (SynthFamily family in Enum.GetValues<SynthFamily>())
+        {
+            using var dialog = new InstrumentSampleSynthDialog(family, store);
+            object Field(string name) => typeof(InstrumentSampleSynthDialog).GetField(name, flags)!.GetValue(dialog)!;
+            FieldInfo syncing = typeof(InstrumentSampleSynthDialog).GetField("syncing", flags)!;
+            syncing.SetValue(dialog, true);
+
+            try
+            {
+                var duration = (ComboBox)Field("duration");
+                var keyDurations = InstrumentSynthSettings.KeyDurations;
+                for (int index = 0; index < keyDurations.Count; index++)
+                    Assert.AreEqual(keyDurations[keyDurations.Count - 1 - index].Name, duration.Items[index],
+                        $"{family}: Key Duration items must be reversed.");
+                int defaultDurationIndex = family == SynthFamily.OtherSoundFx ? 5 : 4;
+                Assert.AreEqual(keyDurations.Count - 1 - defaultDurationIndex, duration.SelectedIndex,
+                    $"{family}: the default duration should remain unchanged.");
+                var capture = typeof(InstrumentSampleSynthDialog).GetMethod("CaptureSettings", flags)!;
+                var defaultSettings = (InstrumentSynthSettings)capture.Invoke(dialog, null)!;
+                Assert.AreEqual(keyDurations[defaultDurationIndex].Beats, defaultSettings.NoteBeats, 1e-12,
+                    $"{family}: capturing the default duration should preserve its value.");
+
+                if (family != SynthFamily.DrumSet)
+                {
+                    var note = (DomainUpDown)Field("note");
+                    string[] noteNames = Enumerable.Range(12, 97).Select(InstrumentSampleSynth.NoteName).ToArray();
+                    for (int index = 0; index < noteNames.Length; index++)
+                        Assert.AreEqual(noteNames[noteNames.Length - 1 - index], note.Items[index],
+                            $"{family}: Key Note items must be reversed.");
+                    Assert.AreEqual(InstrumentSampleSynth.NoteName(60), note.SelectedItem,
+                        $"{family}: the default note should remain C4.");
+                }
+            }
+            finally { syncing.SetValue(dialog, false); }
+        }
     }
 
     [STATestMethod]
@@ -341,8 +384,6 @@ public sealed class InstrumentSampleSynthTests
         foreach (var family in Enum.GetValues<SynthFamily>())
         {
             using var dialog = new InstrumentSampleSynthDialog(family, store);
-            ((System.Windows.Forms.Timer)typeof(InstrumentSampleSynthDialog)
-                .GetField("debounce", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dialog)!).Stop();
             dialog.Show();
             Application.DoEvents();
             var parameters = (FlowLayoutPanel)dialog.Controls.Find("panel_parameters", true).Single();
@@ -383,7 +424,6 @@ public sealed class InstrumentSampleSynthTests
             Assert.AreEqual(16m, numbers["PitchSemitones"].Maximum);
             numbers["ReleaseSeconds"].Value = 0.05m;
             ((ComboBox)Field("duration")).SelectedIndex = 2;
-            ((System.Windows.Forms.Timer)Field("debounce")).Stop();
             Task render = (Task)Call("RenderAsync")!; DateTime deadline = DateTime.UtcNow.AddSeconds(15);
             while (!render.IsCompleted && DateTime.UtcNow < deadline) { Application.DoEvents(); Thread.Sleep(2); }
             render.GetAwaiter().GetResult();

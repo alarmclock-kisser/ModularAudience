@@ -13,9 +13,12 @@ height or width enables parameter scrolling again, without automatically resizin
 - Durations run from 1/64 through 4 Bars (4/4); Straight, Dotted and Triplet timing are supported.
 - Other Sound FX opens with a 1/2-note gate (one second at 120 BPM) so timed signals such as Morse SOS are audible; choose a shorter duration for quick hits.
 - Attack/Decay/Sustain control the held sound; Release adds a separate tail to the output sample.
-- Key Note defaults to C4 and is a DomainUpDown from C0 through C8. Pitch is -16…+16 semitones in 0.25 steps.
-- Prehear plays the generated sample; Loop repeats it. Parameter changes update the sample
-  asynchronously and refresh the waveform; current-format preview switches to the new audio.
+- Key Note defaults to C4 and is a DomainUpDown with items ordered C8 through C0. Pitch is -16…+16 semitones in 0.25 steps.
+  Up/wheel-up lowers the key; Down/wheel-down raises it. Key Duration items are ordered longest to shortest:
+  Up/wheel-up lengthens the duration; Down/wheel-down shortens it.
+- Prehear plays the generated sample; Loop repeats it. Sound-parameter changes start a cancellable
+  background render immediately and refresh the waveform as soon as the latest render is ready.
+  The prehear delay affects playback only; current-format preview switches to the new audio.
 - Prehear on change (ms) defaults to 200. Changes restart the delay; playback starts once
   both the delay and current render are complete. At 0 the number is gray and automatic
   prehear is disabled. Manual Prehear remains available; opening the window does not autoplay.

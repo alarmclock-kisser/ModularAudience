@@ -16,7 +16,7 @@ internal static class ReleaseCommitHistoryFormatter
         Format(history, installedRelease, offeredRelease, out _);
 
     internal static string Format(ReleaseCommitHistory history, long installedRelease, long offeredRelease,
-        out int currentChangesStart)
+        out int latestReleaseStart)
     {
         ReleaseCommitHistoryEntry[] previousEntries = history.Entries
             .Where(entry => entry.ReleaseNumber <= installedRelease)
@@ -44,23 +44,27 @@ internal static class ReleaseCommitHistoryFormatter
             .Append(installedRelease.ToString(CultureInfo.InvariantCulture))
             .AppendLine()
             .AppendLine();
-        currentChangesStart = text.Length;
         if (currentEntries.Length == 0)
+        {
+            latestReleaseStart = text.Length;
             text.Append("No commit messages are available for this release range.");
+        }
         else
-            AppendEntries(text, currentEntries);
+            latestReleaseStart = AppendEntries(text, currentEntries, currentEntries[^1].ReleaseNumber);
 
         foreach (string warning in history.Warnings.Distinct(StringComparer.Ordinal))
             text.AppendLine().AppendLine().Append("Note: ").Append(warning.Replace("\0", string.Empty, StringComparison.Ordinal));
         return text.ToString();
     }
 
-    private static void AppendEntries(StringBuilder text, IEnumerable<ReleaseCommitHistoryEntry> entries)
+    private static int AppendEntries(StringBuilder text, IEnumerable<ReleaseCommitHistoryEntry> entries, long? releaseToFind = null)
     {
         bool hasEntry = false;
+        int releaseStart = -1;
         foreach (ReleaseCommitHistoryEntry entry in entries)
         {
             if (hasEntry) text.AppendLine().AppendLine();
+            if (entry.ReleaseNumber == releaseToFind) releaseStart = text.Length;
             text.Append("Build ").Append(entry.ReleaseNumber.ToString(CultureInfo.InvariantCulture));
             if (entry.CommittedAt is { } date)
                 text.Append(" | ").Append(date.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture));
@@ -74,5 +78,6 @@ internal static class ReleaseCommitHistoryFormatter
                     : entry.Message.Replace("\0", string.Empty, StringComparison.Ordinal).ReplaceLineEndings(Environment.NewLine).Trim());
             hasEntry = true;
         }
+        return releaseStart;
     }
 }

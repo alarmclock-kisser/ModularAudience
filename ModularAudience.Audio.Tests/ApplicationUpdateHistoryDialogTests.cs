@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Forms.Updates;
 using ModularAudience.Ytdlp;
@@ -8,6 +9,8 @@ namespace ModularAudience.Audio.Tests;
 [TestClass]
 public sealed class ApplicationUpdateHistoryDialogTests
 {
+    private const int EmGetFirstVisibleLine = 0x00CE;
+
     [STATestMethod]
     public void HistoryControl_IsReadOnlyMultilineScrollableAndDoesNotLoadBeforeShown()
     {
@@ -32,7 +35,7 @@ public sealed class ApplicationUpdateHistoryDialogTests
     }
 
     [STATestMethod]
-    public void History_LoadsOldestFirstAndIncludesPreviouslySkippedIntermediateVersions()
+    public void History_LoadsOldestFirstAndInitiallyShowsOfferedReleaseAtTop()
     {
         using var files = new DialogFiles();
         files.Store.SkipThroughRelease(129);
@@ -41,12 +44,16 @@ public sealed class ApplicationUpdateHistoryDialogTests
         {
             dialog.Show();
             Application.DoEvents();
-            string text = Field<TextBox>(dialog, "historyTextBox").Text;
+            TextBox history = Field<TextBox>(dialog, "historyTextBox");
+            string text = history.Text;
+            int offeredReleaseStart = text.IndexOf("Build 130", StringComparison.Ordinal);
 
             Assert.IsTrue(text.IndexOf("Build 126", StringComparison.Ordinal) < text.IndexOf("Build 127", StringComparison.Ordinal));
             Assert.IsTrue(text.IndexOf("Build 127", StringComparison.Ordinal) < text.IndexOf("Build 128", StringComparison.Ordinal));
-            Assert.AreEqual(text.IndexOf("Build 128", StringComparison.Ordinal), Field<TextBox>(dialog, "historyTextBox").SelectionStart);
             Assert.IsTrue(text.IndexOf("Build 129", StringComparison.Ordinal) < text.IndexOf("Build 130", StringComparison.Ordinal));
+            Assert.AreEqual(offeredReleaseStart, history.SelectionStart);
+            Assert.AreEqual(history.GetLineFromCharIndex(offeredReleaseStart),
+                SendMessage(history.Handle, EmGetFirstVisibleLine, IntPtr.Zero, IntPtr.Zero).ToInt32());
             StringAssert.Contains(text, "First change");
             StringAssert.Contains(text, "Second change");
             StringAssert.Contains(text, "Third change");
@@ -117,6 +124,9 @@ public sealed class ApplicationUpdateHistoryDialogTests
 
     private static T Field<T>(ReleaseUpdateDialog dialog, string name) => (T)typeof(ReleaseUpdateDialog)
         .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dialog)!;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
     private sealed class DialogFiles : IDisposable
     {

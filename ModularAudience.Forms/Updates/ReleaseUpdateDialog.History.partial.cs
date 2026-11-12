@@ -1,9 +1,12 @@
+using System.Runtime.InteropServices;
 using ModularAudience.Audio;
 
 namespace ModularAudience.Forms.Updates;
 
 internal sealed partial class ReleaseUpdateDialog
 {
+    private const int EmLineScroll = 0x00B6;
+    private const int EmGetFirstVisibleLine = 0x00CE;
     private CancellationTokenSource? activeHistoryLoad;
     private bool historyRequested;
     private bool historyStopped;
@@ -18,8 +21,8 @@ internal sealed partial class ReleaseUpdateDialog
         {
             ReleaseCommitHistory history = await this.loadHistory(cancellation.Token);
             if (this.IsDisposed || this.Disposing || this.historyStopped || cancellation.IsCancellationRequested) return;
-            string text = ReleaseCommitHistoryFormatter.Format(history, this.currentRelease, this.release.Number, out int currentChangesStart);
-            this.SetHistoryText(text, currentChangesStart);
+            string text = ReleaseCommitHistoryFormatter.Format(history, this.currentRelease, this.release.Number, out int latestReleaseStart);
+            this.SetHistoryText(text, latestReleaseStart);
         }
         catch (OperationCanceledException) when (this.historyStopped)
         {
@@ -42,10 +45,25 @@ internal sealed partial class ReleaseUpdateDialog
 
     private void SetHistoryText(string text, int scrollPosition = 0)
     {
+        int position = Math.Clamp(scrollPosition, 0, text.Length);
         this.historyTextBox.Text = text;
-        this.historyTextBox.SelectionStart = Math.Clamp(scrollPosition, 0, this.historyTextBox.TextLength);
+        if (position > 0)
+        {
+            int targetLine = this.historyTextBox.GetLineFromCharIndex(position);
+            int lastLine = this.historyTextBox.GetLineFromCharIndex(this.historyTextBox.TextLength);
+            int visibleLines = Math.Max(1, this.historyTextBox.ClientSize.Height / this.historyTextBox.Font.Height + 1);
+            int paddingLines = Math.Max(0, visibleLines - (lastLine - targetLine) - 1);
+            if (paddingLines > 0)
+                this.historyTextBox.AppendText(string.Concat(Enumerable.Repeat(Environment.NewLine, paddingLines)));
+        }
+        this.historyTextBox.SelectionStart = position;
         this.historyTextBox.SelectionLength = 0;
         this.historyTextBox.ScrollToCaret();
+        int targetVisibleLine = this.historyTextBox.GetLineFromCharIndex(position);
+        int firstVisibleLine = SendMessage(this.historyTextBox.Handle, EmGetFirstVisibleLine, IntPtr.Zero, IntPtr.Zero).ToInt32();
+        int linesToScroll = targetVisibleLine - firstVisibleLine;
+        if (linesToScroll != 0)
+            SendMessage(this.historyTextBox.Handle, EmLineScroll, IntPtr.Zero, new IntPtr(linesToScroll));
     }
 
     private void WordWrap_CheckedChanged(object? sender, EventArgs e)
@@ -71,4 +89,7 @@ internal sealed partial class ReleaseUpdateDialog
         this.CancelHistoryLoad();
         base.OnFormClosed(e);
     }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 }

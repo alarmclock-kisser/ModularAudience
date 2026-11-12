@@ -192,7 +192,7 @@ public sealed class GitHubReleaseHistoryTests
     }
 
     [TestMethod]
-    public void Formatting_LimitsPreviousReleasesAndStartsAtCurrentChanges()
+    public void Formatting_LimitsPreviousReleasesAndStartsAtOfferedRelease()
     {
         var history = new ReleaseCommitHistory(
             Enumerable.Range(1, 102)
@@ -200,14 +200,14 @@ public sealed class GitHubReleaseHistoryTests
                 .ToArray(),
             []);
 
-        string text = ReleaseCommitHistoryFormatter.Format(history, 100, 102, out int currentChangesStart);
+        string text = ReleaseCommitHistoryFormatter.Format(history, 100, 102, out int latestReleaseStart);
 
         Assert.IsFalse(text.Contains("Build 76", StringComparison.Ordinal));
         StringAssert.Contains(text, "Build 77");
         StringAssert.Contains(text, "Build 100");
         StringAssert.Contains(text, "Build 101");
         StringAssert.Contains(text, "Build 102");
-        Assert.AreEqual(text.IndexOf("Build 101", StringComparison.Ordinal), currentChangesStart);
+        Assert.AreEqual(text.IndexOf("Build 102", StringComparison.Ordinal), latestReleaseStart);
     }
 
     [TestMethod]

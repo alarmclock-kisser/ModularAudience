@@ -25,7 +25,8 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     private readonly ComboBox savedPresets = Combo();
     private readonly TextBox presetName = new() { Width = 180, PlaceholderText = "Preset name" };
     private bool syncingPreference;
-    private readonly ComboBox voice = Combo(), kit = Combo(), drum = Combo(), duration = Combo(), articulation = Combo(), format = Combo();
+    private readonly ComboBox voice = Combo(), kit = Combo(), drum = Combo(), duration = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 170 },
+        articulation = Combo(), format = Combo();
     private readonly DomainUpDown note = new() { ReadOnly = true, Wrap = true, Width = 90 };
     private readonly Dictionary<string, NumericUpDown> numbers = [];
     private readonly Label status = new() { Dock = DockStyle.Fill, AutoEllipsis = true, Text = "Preparing sample…" };
@@ -37,7 +38,7 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     private bool spaceKeyHeld;
     private int prehearRequestVersion;
     private readonly Button hear = new() { Text = "Prehear", AutoSize = true }, create = new() { Text = "Create", AutoSize = true };
-    private readonly System.Windows.Forms.Timer debounce = new() { Interval = 180 }, playbackTimer = new() { Interval = 40 };
+    private readonly System.Windows.Forms.Timer playbackTimer = new() { Interval = 40 };
     private readonly string[] noteNames = Enumerable.Range(12, 97).Select(InstrumentSampleSynth.NoteName).ToArray();
     private static readonly (string Name, double Beats)[] Durations = [.. InstrumentSynthSettings.KeyDurations];
     private readonly ToolTip tips = new() { IsParameterHelp = true };
@@ -45,9 +46,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     private AudioCollectionView? collection;
     private CancellationTokenSource? rendering;
     private CancellationTokenSource? octaveRendering;
+    private Task? renderTask;
     private WaveOut? output;
     private SynthPreview? provider;
     private int revision, ready = -1;
+    private int renderTaskRevision = -1;
     private bool syncing, disposed, creating;
     private bool octaveCreating;
     private double octaveOffsetSemitones;
@@ -92,10 +95,10 @@ public sealed partial class InstrumentSampleSynthDialog : Form
                 _ => "Instrument Type"
             }, voice);
         }
-        note.Items.AddRange(noteNames.Cast<object>().ToArray()); note.SelectedItem = InstrumentSampleSynth.NoteName(settings.MidiNote);
+        note.Items.AddRange(noteNames.Reverse().Cast<object>().ToArray()); note.SelectedItem = InstrumentSampleSynth.NoteName(settings.MidiNote);
         if (family != SynthFamily.DrumSet) Field("Key Note", note);
-        duration.Items.AddRange(Durations.Select(d => (object)d.Name).ToArray());
-        duration.SelectedIndex = family == SynthFamily.OtherSoundFx ? 5 : 4;
+        duration.Items.AddRange(Durations.Reverse().Select(d => (object)d.Name).ToArray());
+        duration.SelectedIndex = Durations.Length - 1 - (family == SynthFamily.OtherSoundFx ? 5 : 4);
         articulation.Items.AddRange(["Straight", "Dotted", "Triplet"]); articulation.SelectedIndex = 0;
         Field("Key Duration", duration); Field("Timing", articulation);
         tips.SetToolTip(duration, "Single-note gate length at the selected BPM. Release adds a separate tail; no repeated note sequence.");
@@ -146,7 +149,7 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         format.Items.AddRange(["44100 Hz · Stereo", "48000 Hz · Stereo", "22050 Hz · Mono", "44100 Hz · Mono", "96000 Hz · Stereo"]); format.SelectedIndex = 0;
         Field("Render format", format);
         Field("Prehear on change (ms)", prehearDelay);
-        tips.SetToolTip(prehearDelay, "Wait after the last sound parameter change before playing the updated sample. 0 = off. If rendering takes longer, playback waits for the current sample.");
+        tips.SetToolTip(prehearDelay, "The waveform updates immediately. Wait after the last sound parameter change before playing the updated sample. 0 = off.");
         prehearDelay.ValueChanged += (_, _) =>
         {
             prehearDelay.ForeColor = prehearDelay.Value == 0 ? SystemColors.GrayText : SystemColors.WindowText;
@@ -192,7 +195,6 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         note.SelectedItemChanged += (_, _) => QueueRender();
         hear.Click += async (_, _) => await ToggleHearAsync(); create.Click += async (_, _) => await CreateAsync();
         loop.CheckedChanged += (_, _) => { if (provider != null) provider.Loop = loop.Checked; };
-        debounce.Tick += async (_, _) => { debounce.Stop(); await RenderAsync(); };
         autoHearTimer.Tick += (_, _) =>
         {
             autoHearTimer.Stop(); autoHearDue = true; TryAutoHear();
@@ -295,7 +297,8 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             if (family == SynthFamily.DrumSet) { kit.SelectedIndex = next.KitIndex; drum.SelectedIndex = (int)next.Drum; }
             else voice.SelectedIndex = next.VoiceIndex;
             note.SelectedItem = InstrumentSampleSynth.NoteName(next.MidiNote);
-            duration.SelectedIndex = durationIndex; articulation.SelectedIndex = timing; format.SelectedIndex = formatIndex;
+            duration.SelectedIndex = Durations.Length - 1 - durationIndex;
+            articulation.SelectedIndex = timing; format.SelectedIndex = formatIndex;
             loop.Checked = preset.Loop; presetName.Text = preset.Name;
             ApplyNumbers();
         }
@@ -320,7 +323,8 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         if (family == SynthFamily.DrumSet) { snapshot.KitIndex = kit.SelectedIndex; snapshot.Drum = (SynthDrum)drum.SelectedIndex; }
         else snapshot.VoiceIndex = voice.SelectedIndex;
         snapshot.MidiNote = Math.Max(0, Array.IndexOf(noteNames, note.Text)) + 12;
-        snapshot.NoteBeats = Durations[Math.Max(0, duration.SelectedIndex)].Beats;
+        int durationIndex = duration.SelectedIndex < 0 ? 0 : Durations.Length - 1 - duration.SelectedIndex;
+        snapshot.NoteBeats = Durations[durationIndex].Beats;
         snapshot.DurationMultiplier = articulation.SelectedIndex switch { 1 => 1.5, 2 => 2d / 3, _ => 1 };
         snapshot.SampleRate = format.SelectedIndex switch { 1 => 48000, 2 => 22050, 4 => 96000, _ => 44100 };
         snapshot.Channels = format.SelectedIndex is 2 or 3 ? 1 : 2;
@@ -329,13 +333,14 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     private void QueueRender()
     {
         if (syncing || disposed) return;
-        revision++; rendering?.Cancel(); debounce.Stop(); debounce.Start(); status.Text = "Updating sample…";
+        revision++; rendering?.Cancel(); status.Text = "Updating sample…";
         CancelAutoHear();
         if (initialized && prehearDelay.Value > 0)
         {
             StopHear();
             autoHearPending = true; autoHearTimer.Interval = (int)prehearDelay.Value; autoHearTimer.Start();
         }
+        _ = RenderAsync();
     }
     private void CancelAutoHear()
     { autoHearTimer.Stop(); autoHearPending = false; autoHearDue = false; }
@@ -346,27 +351,65 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         try { StopHear(); StartHear(); }
         catch (Exception error) { StopHear(); if (!disposed) status.Text = error.Message; }
     }
-    private async Task RenderAsync()
+    private Task RenderAsync()
     {
-        if (disposed) return;
-        var cts = new CancellationTokenSource(); rendering?.Cancel(); rendering = cts; int version = revision;
+        if (disposed || ready == revision) return Task.CompletedTask;
+        if (renderTask is Task activeTask && !activeTask.IsCompleted && renderTaskRevision == revision)
+            return activeTask;
+        rendering?.Cancel();
+        var cts = new CancellationTokenSource();
+        rendering = cts;
+        int version = revision;
+        renderTaskRevision = version;
+        renderTask = RenderRevisionAsync(version, cts);
+        return renderTask;
+    }
+
+    private async Task RenderRevisionAsync(int version, CancellationTokenSource cts)
+    {
         try
         {
-            var snapshot = CaptureSettings(); var next = await Task.Run(() => InstrumentSampleSynth.Render(snapshot, cts.Token), cts.Token);
-            if (disposed || version != revision || cts.IsCancellationRequested) { next.Dispose(); return; }
-            var old = audio; audio = next; ready = version;
-            if (provider != null && (provider.WaveFormat.SampleRate != next.SampleRate || provider.WaveFormat.Channels != next.Channels)) StopHear();
-            BuildOverview(next); provider?.Update(next.Data); old?.Dispose(); picture.Invalidate();
-            status.Text = $"{snapshot.VoiceName} · Gate {snapshot.GateSeconds:0.###} s + tail {snapshot.ReleaseSeconds:0.##} s · {next.Duration.TotalSeconds:0.###} s · {next.SampleRate} Hz";
+            var snapshot = CaptureSettings();
+            var next = await Task.Run(() => RenderWithOverview(snapshot, cts.Token), cts.Token);
+            if (disposed || version != revision || cts.IsCancellationRequested) { next.Audio.Dispose(); return; }
+            var old = audio; audio = next.Audio; ready = version;
+            if (provider != null && (provider.WaveFormat.SampleRate != next.Audio.SampleRate || provider.WaveFormat.Channels != next.Audio.Channels)) StopHear();
+            overviewMin = next.Minimum; overviewMax = next.Maximum; peak = next.Peak;
+            provider?.Update(next.Audio.Data); old?.Dispose(); picture.Invalidate();
+            status.Text = $"{snapshot.VoiceName} · Gate {snapshot.GateSeconds:0.###} s + tail {snapshot.ReleaseSeconds:0.##} s · {next.Audio.Duration.TotalSeconds:0.###} s · {next.Audio.SampleRate} Hz";
             TryAutoHear();
         }
         catch (OperationCanceledException) { }
-        catch (Exception error) { if (!disposed && version == revision) status.Text = error.Message; }
+        catch (Exception error)
+        {
+            if (!disposed && version == revision)
+            {
+                status.Text = error.Message;
+                CancelAutoHear();
+            }
+        }
         finally { if (ReferenceEquals(rendering, cts)) rendering = null; cts.Dispose(); }
     }
+
+    private static (AudioObj Audio, double[] Minimum, double[] Maximum, float Peak) RenderWithOverview(
+        InstrumentSynthSettings snapshot, CancellationToken token)
+    {
+        AudioObj rendered = InstrumentSampleSynth.Render(snapshot, token);
+        try
+        {
+            var overview = BuildOverview(rendered, token);
+            return (rendered, overview.Minimum, overview.Maximum, overview.Peak);
+        }
+        catch
+        {
+            rendered.Dispose();
+            throw;
+        }
+    }
+
     private async Task<bool> EnsureRendered()
     {
-        debounce.Stop(); if (ready != revision) await RenderAsync();
+        if (ready != revision) await RenderAsync();
         return !disposed && audio != null && ready == revision;
     }
     private async Task ToggleHearAsync()
@@ -713,15 +756,25 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         SynthDrum.Cowbell => DrumsetElement.Cowbell,
         _ => DrumsetElement.Shaker
     };
-    private void BuildOverview(AudioObj value)
+    private static (double[] Minimum, double[] Maximum, float Peak) BuildOverview(AudioObj value, CancellationToken token)
     {
-        peak = 0;
+        float peak = 0;
         int frames = value.Data.Length / value.Channels, bins = Math.Min(4096, frames);
-        overviewMin = new double[bins]; overviewMax = new double[bins];
+        var minimum = new double[bins];
+        var maximum = new double[bins];
         for (int b = 0; b < bins; b++)
+        {
+            token.ThrowIfCancellationRequested();
             for (int i = b * frames / bins; i < (b + 1) * frames / bins; i++)
                 for (int c = 0; c < value.Channels; c++)
-                { float v = value.Data[i * value.Channels + c]; overviewMin[b] = Math.Min(overviewMin[b], v); overviewMax[b] = Math.Max(overviewMax[b], v); peak = Math.Max(peak, Math.Abs(v)); }
+                {
+                    float sample = value.Data[i * value.Channels + c];
+                    minimum[b] = Math.Min(minimum[b], sample);
+                    maximum[b] = Math.Max(maximum[b], sample);
+                    peak = Math.Max(peak, Math.Abs(sample));
+                }
+        }
+        return (minimum, maximum, peak);
     }
     private void PaintWave(object? sender, PaintEventArgs e)
     {
@@ -750,10 +803,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             spaceKeyHeld = false;
             lock (ActiveDialogsGate) ActiveDialogs.Remove(this);
             CancelAutoHear(); autoHearTimer.Dispose(); rendering?.Cancel(); this.octaveRendering?.Cancel();
-            StopHear(); debounce.Dispose(); playbackTimer.Dispose(); tips.Dispose(); audio?.Dispose(); this.components?.Dispose();
+            StopHear(); playbackTimer.Dispose(); tips.Dispose(); audio?.Dispose(); this.components?.Dispose();
         }
         base.Dispose(disposing);
     }
+
     private sealed class WavePicture : PictureBox
     { public WavePicture() { DoubleBuffered = true; SetStyle(ControlStyles.ResizeRedraw, true); } }
     private sealed class SynthPreview : ISampleProvider
