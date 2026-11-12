@@ -184,7 +184,7 @@ public static class VocalTextParser
                 }
                 if (hasNewline)
                 {
-                    output.Add(new VocalPauseToken(350));
+                    output.Add(new VocalPauseToken(350) { IsLineBreak = true });
                 }
                 else if (preserveText && spaceCount == 1)
                 {

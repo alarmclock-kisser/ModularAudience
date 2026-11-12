@@ -74,23 +74,15 @@ public static partial class VocalSynth
 
     internal static AudioObj CreateAudio(float[] data, VocalSynthSettings s, CancellationToken cancellationToken)
     {
-        float peak = 0;
-        for (int i = 0; i < data.Length; i++)
-        {
-            if ((i & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
-            if (!float.IsFinite(data[i]))
-                throw new InvalidOperationException("Vocal synthesis produced an invalid audio sample.");
-            peak = Math.Max(peak, Math.Abs(data[i]));
-        }
+        bool parallelizeMidi = s.Singing && s.SingingMidiFile is not null
+            && GetMidiMaxDegreeOfParallelism() > 1
+            && data.Length >= MidiAudioChunkSize * 2;
+        int chunkCount = parallelizeMidi
+            ? (data.Length + MidiAudioChunkSize - 1) / MidiAudioChunkSize
+            : 0;
+        float peak = GetAudioPeak(data, parallelizeMidi, chunkCount, cancellationToken);
         if (peak > 0.95f)
-        {
-            float scale = 0.95f / peak;
-            for (int i = 0; i < data.Length; i++)
-            {
-                if ((i & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
-                data[i] *= scale;
-            }
-        }
+            ScaleAudio(data, 0.95f / peak, parallelizeMidi, chunkCount, cancellationToken);
 
         var result = new AudioObj
         {
@@ -106,6 +98,70 @@ public static partial class VocalSynth
         string spokenText = s.Text.Length <= 48 ? s.Text : s.Text[..48];
         result.Rename($"[{s.Language.ShortCode()}] {s.VoiceName} \u00b0 \"{spokenText}\"");
         return result;
+    }
+
+    private static float GetAudioPeak(
+        float[] data, bool parallelizeMidi, int chunkCount, CancellationToken cancellationToken)
+    {
+        if (!parallelizeMidi)
+        {
+            float peak = 0;
+            for (int i = 0; i < data.Length; i++)
+            {
+                if ((i & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if (!float.IsFinite(data[i]))
+                    throw new InvalidOperationException("Vocal synthesis produced an invalid audio sample.");
+                peak = Math.Max(peak, Math.Abs(data[i]));
+            }
+            return peak;
+        }
+
+        var chunkPeaks = new float[chunkCount];
+        ParallelForMidi(0, chunkCount, cancellationToken, chunkIndex =>
+        {
+            int start = chunkIndex * MidiAudioChunkSize;
+            int end = Math.Min(data.Length, start + MidiAudioChunkSize);
+            float chunkPeak = 0;
+            for (int i = start; i < end; i++)
+            {
+                if (((i - start) & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if (!float.IsFinite(data[i]))
+                    throw new InvalidOperationException("Vocal synthesis produced an invalid audio sample.");
+                chunkPeak = Math.Max(chunkPeak, Math.Abs(data[i]));
+            }
+            chunkPeaks[chunkIndex] = chunkPeak;
+        });
+
+        float peakResult = 0;
+        foreach (float chunkPeak in chunkPeaks)
+            peakResult = Math.Max(peakResult, chunkPeak);
+        return peakResult;
+    }
+
+    private static void ScaleAudio(
+        float[] data, float scale, bool parallelizeMidi, int chunkCount,
+        CancellationToken cancellationToken)
+    {
+        if (parallelizeMidi)
+        {
+            ParallelForMidi(0, chunkCount, cancellationToken, chunkIndex =>
+            {
+                int start = chunkIndex * MidiAudioChunkSize;
+                int end = Math.Min(data.Length, start + MidiAudioChunkSize);
+                for (int i = start; i < end; i++)
+                {
+                    if (((i - start) & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+                    data[i] *= scale;
+                }
+            });
+            return;
+        }
+
+        for (int i = 0; i < data.Length; i++)
+        {
+            if ((i & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+            data[i] *= scale;
+        }
     }
 
     private static List<RenderUnit> CreateRenderPlan(

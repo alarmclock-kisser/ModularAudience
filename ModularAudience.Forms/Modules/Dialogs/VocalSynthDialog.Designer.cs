@@ -18,6 +18,7 @@ public sealed partial class VocalSynthDialog
     private Label midiSemitoneOffsetLabel = null!;
     private Button editMidiButton = null!;
     private CheckBox showSyllablesCheckBox = null!;
+    private Button fillSyllablesButton = null!;
     private FlowLayoutPanel midiOptionsRow = null!;
     private FlowLayoutPanel vocalActionsRow = null!;
     private Panel textContentPanel = null!;
@@ -91,8 +92,15 @@ public sealed partial class VocalSynthDialog
             Name = "showSyllablesCheckBox",
             Text = "Show syllables",
             AutoSize = true,
-            Enabled = false,
+            Enabled = true,
             Margin = new Padding(6, 8, 4, 0),
+        };
+        fillSyllablesButton = new Button
+        {
+            Name = "fillSyllablesButton",
+            Text = "Fill Syllables",
+            AutoSize = true,
+            Enabled = false,
         };
 
         midiOptionsRow = new FlowLayoutPanel
@@ -119,6 +127,7 @@ public sealed partial class VocalSynthDialog
         midiSemitoneOffset.ValueChanged += MidiSemitoneOffsetChanged;
         editMidiButton.Click += (_, _) => EditLoadedMidi();
         showSyllablesCheckBox.CheckedChanged += (_, _) => ToggleSyllablePreview();
+        fillSyllablesButton.Click += (_, _) => FillSyllables();
 
         vocalActionsRow = new FlowLayoutPanel
         {
@@ -129,7 +138,8 @@ public sealed partial class VocalSynthDialog
             WrapContents = false,
             Margin = Padding.Empty,
         };
-        vocalActionsRow.Controls.AddRange([showSyllablesCheckBox, emphasisBtn, designProfileBtn, create]);
+        vocalActionsRow.Controls.AddRange(
+            [fillSyllablesButton, showSyllablesCheckBox, emphasisBtn, designProfileBtn, create]);
 
         textContentPanel = new Panel { Dock = DockStyle.Fill };
         textContentPanel.Controls.Add(textEditor);

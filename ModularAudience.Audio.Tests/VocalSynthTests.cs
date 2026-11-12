@@ -17,11 +17,16 @@ namespace ModularAudience.Audio.Tests;
 public class VocalSynthTests
 {
     private static MidiFileData CreateMidi(params MidiNoteData[] notes)
+        => CreateMidiWithMeter(4, 4, notes);
+
+    private static MidiFileData CreateMidiWithMeter(
+        int timeSignatureNumerator, int timeSignatureDenominator, params MidiNoteData[] notes)
     {
         var track = new MidiTrackData { Index = 4, Name = "Lead" };
         track.Notes.AddRange(notes);
         track.ExtendLengthTo(notes.Max(note => note.StartTick + note.DurationTicks));
-        return MidiFileData.CreateGenerated([track], 960, 120, "vocal-test.mid");
+        return MidiFileData.CreateGenerated(
+            [track], 960, 120, "vocal-test.mid", 440, timeSignatureNumerator, timeSignatureDenominator);
     }
 
     private static VocalSynthSettings CreateMidiSettings(string text, MidiFileData midi)
@@ -70,7 +75,7 @@ public class VocalSynthTests
             new MidiNoteData { NoteNumber = 64, Velocity = 90, StartTick = 0, DurationTicks = 960 });
         VocalSynthSettings settings = CreateMidiSettings("A", midi);
 
-        using AudioObj audio = VocalSynth.Render(settings);
+        using var audio = VocalSynth.Render(settings);
 
         Assert.AreEqual(120f, audio.Bpm);
         Assert.AreEqual(4000, audio.Data.Length);
@@ -141,7 +146,7 @@ public class VocalSynthTests
     }
 
     [TestMethod]
-    public void MidiSinging_LeavesExcessMidiGroupsUnplayed()
+    public void MidiSinging_LeavesExcessMidiGroupsUnplayedAndTrimsPlayback()
     {
         MidiFileData midi = CreateMidi(
             new MidiNoteData { NoteNumber = 60, Velocity = 100, StartTick = 0, DurationTicks = 960 },
@@ -150,8 +155,8 @@ public class VocalSynthTests
 
         using AudioObj audio = VocalSynth.Render(settings);
 
-        Assert.AreEqual(8000, audio.Data.Length);
-        Assert.IsTrue(audio.Data.Skip(4000).All(sample => sample == 0));
+        Assert.AreEqual(4000, audio.Data.Length);
+        Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001f));
         Assert.AreEqual(
             "1 extra MIDI note group will remain unplayed.",
             VocalSynth.GetMidiSingingWarning(settings));
@@ -168,6 +173,164 @@ public class VocalSynthTests
         using AudioObj audio = VocalSynth.Render(settings);
 
         Assert.AreEqual(8560, audio.Data.Length);
+    }
+
+    [TestMethod]
+    public void MidiSinging_DoesNotAddLineBreakPauses()
+    {
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData { NoteNumber = 60, Velocity = 100, StartTick = 0, DurationTicks = 960 },
+            new MidiNoteData { NoteNumber = 64, Velocity = 100, StartTick = 960, DurationTicks = 960 });
+        VocalSynthSettings settings = CreateMidiSettings("a\ne", midi);
+        IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
+            settings.Language, settings.Text, settings.EmphasisSyntax);
+
+        VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, tokens, CancellationToken.None);
+
+        Assert.AreEqual(4000, plan.Notes.Single(note => note.SyllableIndex == 1).StartFrame);
+        Assert.AreEqual(8000, plan.OutputFrames);
+        using var audio = VocalSynth.Render(settings);
+        Assert.AreEqual(8000, audio.Data.Length);
+    }
+
+    [TestMethod]
+    public async Task MidiFileData_ExportAndLoadPreserveTimeSignature()
+    {
+        MidiFileData midi = CreateMidiWithMeter(
+            3,
+            4,
+            new MidiNoteData { NoteNumber = 60, Velocity = 90, StartTick = 0, DurationTicks = 960 });
+        string filePath = Path.Combine(Path.GetTempPath(), "vocal_meter_" + Guid.NewGuid() + ".mid");
+
+        try
+        {
+            Assert.AreEqual(filePath, await midi.ExportAsync(filePath));
+            MidiFileData loaded = MidiFileData.Load(filePath);
+
+            Assert.AreEqual(3, loaded.TimeSignatureNumerator);
+            Assert.AreEqual(4, loaded.TimeSignatureDenominator);
+            Assert.AreEqual(2880, loaded.TicksPerBar);
+        }
+        finally
+        {
+            if (File.Exists(filePath)) File.Delete(filePath);
+        }
+    }
+
+    [TestMethod]
+    public void MidiSyllableFiller_AppendsMissingLyricsAndRendersToTheMidiTimeline()
+    {
+        MidiFileData midi = CreateMidiWithMeter(
+            3,
+            4,
+            new MidiNoteData { NoteNumber = 36, Velocity = 50, StartTick = 0, DurationTicks = 480 },
+            new MidiNoteData { NoteNumber = 40, Velocity = 100, StartTick = 0, DurationTicks = 480 },
+            new MidiNoteData { NoteNumber = 48, Velocity = 80, StartTick = 960, DurationTicks = 480 },
+            new MidiNoteData { NoteNumber = 72, Velocity = 90, StartTick = 2880, DurationTicks = 960 },
+            new MidiNoteData { NoteNumber = 60, Velocity = 70, StartTick = 3840, DurationTicks = 1920 });
+        VocalSynthSettings settings = CreateMidiSettings("da", midi);
+
+        VocalMidiSyllableFillResult result = VocalMidiSyllableFiller.FillMissing(
+            settings, settings.Text, CancellationToken.None);
+        string completedText = settings.Text + result.AppendedText;
+        Assert.AreEqual(2880, midi.TicksPerBar);
+        Assert.AreEqual(3, result.AddedSyllables);
+        Assert.IsTrue(result.AppendedText.Contains(", ", StringComparison.Ordinal));
+        Assert.IsTrue(result.AppendedText.Contains(Environment.NewLine, StringComparison.Ordinal));
+        Assert.AreEqual(4, VocalTextParser.GetSyllableTextRanges(
+            settings.Language, completedText, settings.EmphasisSyntax).Count);
+
+        settings.Text = completedText;
+        settings.IgnoreTextPausesForMidiSinging = true;
+        IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
+            settings.Language, settings.Text, settings.EmphasisSyntax);
+        VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, tokens, CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { 0, 0, 4000, 12000, 16000 },
+            plan.Notes.Select(note => note.StartFrame).ToArray());
+        CollectionAssert.AreEqual(new[] { 2000, 2000, 2000, 4000, 8000 },
+            plan.Notes.Select(note => note.DurationFrames).ToArray());
+        CollectionAssert.AreEqual(new[] { 50, 100, 80, 90, 70 },
+            plan.Notes.Select(note => note.Velocity).ToArray());
+        Assert.AreEqual(24000, plan.OutputFrames);
+
+        using AudioObj audio = VocalSynth.Render(settings);
+        Assert.AreEqual(plan.OutputFrames, audio.Data.Length);
+        Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001f));
+        Assert.IsTrue(audio.Data.All(float.IsFinite));
+    }
+
+    [TestMethod]
+    public void MidiSyllableFiller_MapsPitchAndRepeatsVowelsForLongNotes()
+    {
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData { NoteNumber = 36, Velocity = 90, StartTick = 0, DurationTicks = 120 },
+            new MidiNoteData { NoteNumber = 84, Velocity = 90, StartTick = 240, DurationTicks = 1920 });
+        VocalSynthSettings settings = CreateMidiSettings(string.Empty, midi);
+
+        VocalMidiSyllableFillResult result = VocalMidiSyllableFiller.FillMissing(
+            settings, string.Empty, CancellationToken.None);
+        IReadOnlyList<VocalSyllableTextRange> ranges = VocalTextParser.GetSyllableTextRanges(
+            settings.Language, result.AppendedText, settings.EmphasisSyntax);
+        IReadOnlyList<VocalSingingSyllable> syllables = VocalSinging.CreateSyllables(
+            settings.Language,
+            VocalTextParser.Parse(settings.Language, result.AppendedText, settings.EmphasisSyntax),
+            CancellationToken.None).Syllables;
+
+        Assert.AreEqual(2, ranges.Count);
+        Assert.AreEqual(2, syllables.Count);
+        Assert.AreEqual("oo", syllables[0].Tokens.OfType<VocalPhonemeToken>()
+            .First(token => VocalPhonemeInventory.Get(token.Phoneme).IsVowel).Phoneme);
+        Assert.AreEqual("ee", syllables[1].Tokens.OfType<VocalPhonemeToken>()
+            .First(token => VocalPhonemeInventory.Get(token.Phoneme).IsVowel).Phoneme);
+        Assert.AreEqual(8, result.AppendedText.Count(character => character == 'e'));
+    }
+
+    [TestMethod]
+    public void MidiSyllableFiller_UsesGermanUmlautsAcrossThePitchRange()
+    {
+        MidiNoteData[] notes = Enumerable.Range(0, 8)
+            .Select(index => new MidiNoteData
+            {
+                NoteNumber = 36 + index * 8,
+                Velocity = 90,
+                StartTick = index * 960,
+                DurationTicks = 480,
+            })
+            .ToArray();
+        MidiFileData midi = CreateMidi(notes);
+        VocalSynthSettings settings = CreateMidiSettings(string.Empty, midi);
+        settings.Language = VocalLanguage.German;
+
+        VocalMidiSyllableFillResult result = VocalMidiSyllableFiller.FillMissing(
+            settings, string.Empty, CancellationToken.None);
+
+        StringAssert.Contains(result.AppendedText, "\u00e4");
+        StringAssert.Contains(result.AppendedText, "\u00f6");
+        StringAssert.Contains(result.AppendedText, "\u00fc");
+        Assert.AreEqual(8, VocalTextParser.GetSyllableTextRanges(
+            settings.Language, result.AppendedText, settings.EmphasisSyntax).Count);
+    }
+
+    [TestMethod]
+    public void MidiSyllableFiller_ProducesOneSyllablePerGroupForEveryLanguage()
+    {
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData { NoteNumber = 36, Velocity = 90, StartTick = 0, DurationTicks = 480 },
+            new MidiNoteData { NoteNumber = 84, Velocity = 90, StartTick = 960, DurationTicks = 480 });
+
+        foreach (VocalLanguage language in Enum.GetValues<VocalLanguage>())
+        {
+            VocalSynthSettings settings = CreateMidiSettings(string.Empty, midi);
+            settings.Language = language;
+
+            VocalMidiSyllableFillResult result = VocalMidiSyllableFiller.FillMissing(
+                settings, string.Empty, CancellationToken.None);
+            int syllableCount = VocalTextParser.GetSyllableTextRanges(
+                language, result.AppendedText, settings.EmphasisSyntax).Count;
+
+            Assert.AreEqual(2, syllableCount, $"{language}: {result.AppendedText}");
+        }
     }
 
     [TestMethod]
@@ -1449,11 +1612,15 @@ public class VocalSynthTests
             var vocalActionsRow = (FlowLayoutPanel)Field("vocalActionsRow");
             var emphasisButton = (Button)Field("emphasisBtn");
             var showSyllables = (CheckBox)Field("showSyllablesCheckBox");
+            var fillSyllables = (Button)Field("fillSyllablesButton");
             vocalActionsRow.PerformLayout();
             Assert.AreSame(vocalActionsRow, emphasisButton.Parent);
             Assert.AreSame(vocalActionsRow, showSyllables.Parent);
+            Assert.AreSame(vocalActionsRow, fillSyllables.Parent);
             Assert.IsTrue(showSyllables.Left >= emphasisButton.Right,
-                "Show syllables must be the rightmost action beside Emphasis Syntax.");
+                "Show syllables must be beside Emphasis Syntax.");
+            Assert.IsTrue(fillSyllables.Left >= showSyllables.Right,
+                "Fill Syllables must be immediately to the right of Show syllables.");
 
             nameField.Text = "Layout profile";
             var click = typeof(Button).GetMethod("OnClick", flags)!;
@@ -1661,22 +1828,18 @@ public class VocalSynthTests
             Assert.AreEqual(0m, offset.Value);
             Assert.IsFalse(offset.Enabled);
 
-            var settings = (VocalSynthSettings)Field("settings");
-            MidiFileData midi = CreateMidi(
-                new MidiNoteData { NoteNumber = 60, Velocity = 100, StartTick = 0, DurationTicks = 960 });
-            settings.Singing = true;
-            settings.SingingMidiFile = midi;
-            settings.SingingMidiTrackIndex = midi.Tracks[0].Index;
-            var editor = (RichTextBox)Field("textEditor");
-            editor.Text = "banana";
-            typeof(VocalSynthDialog).GetMethod("UpdateMidiControls", flags)!.Invoke(dialog, null);
-            Assert.IsTrue(offset.Enabled);
-            offset.Value = 1.25m;
-            Assert.AreEqual(1.25, settings.SingingMidiSemitoneOffset);
-
-            var timer = (System.Windows.Forms.Timer)Field("debounce");
-            timer.Stop();
             var showSyllables = (CheckBox)Field("showSyllablesCheckBox");
+            Assert.IsTrue(showSyllables.Enabled);
+            Assert.IsFalse(showSyllables.Checked);
+            var fillSyllables = (Button)Field("fillSyllablesButton");
+            Assert.IsFalse(fillSyllables.Enabled);
+
+            var settings = (VocalSynthSettings)Field("settings");
+            var editor = (RichTextBox)Field("textEditor");
+            var timer = (System.Windows.Forms.Timer)Field("debounce");
+            editor.Text = "banana";
+            timer.Stop();
+            Assert.IsTrue(showSyllables.Enabled);
             editor.SelectionStart = 5;
             showSyllables.Checked = true;
             Assert.IsFalse(editor.ReadOnly);
@@ -1687,6 +1850,25 @@ public class VocalSynthTests
             VocalSyllableTextRange secondSyllable = ranges.Single(range => range.Index == 1);
             editor.Select(secondSyllable.Start, secondSyllable.Length);
             Assert.IsTrue(editor.SelectionFont!.Style.HasFlag(FontStyle.Underline));
+            showSyllables.Checked = false;
+            editor.Select(secondSyllable.Start, secondSyllable.Length);
+            Assert.IsFalse(editor.SelectionFont!.Style.HasFlag(FontStyle.Underline));
+            showSyllables.Checked = true;
+
+            MidiFileData midi = CreateMidi(
+                new MidiNoteData { NoteNumber = 60, Velocity = 100, StartTick = 0, DurationTicks = 960 });
+            settings.Singing = true;
+            settings.SingingMidiFile = midi;
+            settings.SingingMidiTrackIndex = midi.Tracks[0].Index;
+            typeof(VocalSynthDialog).GetMethod("UpdateMidiControls", flags)!.Invoke(dialog, null);
+            Assert.IsTrue(offset.Enabled);
+            Assert.IsTrue(showSyllables.Enabled);
+            Assert.IsTrue(showSyllables.Checked);
+            Assert.IsTrue(fillSyllables.Enabled);
+            offset.Value = 1.25m;
+            Assert.AreEqual(1.25, settings.SingingMidiSemitoneOffset);
+
+            Assert.IsFalse(editor.ReadOnly);
             VocalSyllableTextRange firstSyllable = ranges.Single(range => range.Index == 0);
             editor.Select(firstSyllable.Start, firstSyllable.Length);
             Assert.IsFalse(editor.SelectionFont!.Style.HasFlag(FontStyle.Underline));
@@ -1697,6 +1879,57 @@ public class VocalSynthTests
             Assert.AreEqual("bananas", editor.Text);
             Assert.AreEqual(editor.Text, settings.Text);
             Assert.AreSame(editor, ((Panel)Field("textContentPanel")).Controls[0]);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [STATestMethod]
+    public void Dialog_FillSyllablesAppendsMissingTextOnlyForSingingMidi()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "vocal_fill_syllables_" + Guid.NewGuid());
+        var profiles = new VocalVoiceProfileStore(directory);
+        try
+        {
+            using var dialog = new VocalSynthDialog(
+                profiles, new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json")));
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            object Field(string name) => typeof(VocalSynthDialog).GetField(name, flags)!.GetValue(dialog)!;
+
+            var settings = (VocalSynthSettings)Field("settings");
+            var fillSyllables = (Button)Field("fillSyllablesButton");
+            var editor = (RichTextBox)Field("textEditor");
+            var debounce = (System.Windows.Forms.Timer)Field("debounce");
+            var status = (Label)Field("status");
+            MethodInfo updateMidiControls = typeof(VocalSynthDialog).GetMethod("UpdateMidiControls", flags)!;
+            MethodInfo click = typeof(Button).GetMethod("OnClick", flags)!;
+
+            Assert.IsFalse(fillSyllables.Enabled);
+            MidiFileData midi = CreateMidi(
+                new MidiNoteData { NoteNumber = 36, Velocity = 90, StartTick = 0, DurationTicks = 480 },
+                new MidiNoteData { NoteNumber = 48, Velocity = 90, StartTick = 960, DurationTicks = 480 },
+                new MidiNoteData { NoteNumber = 72, Velocity = 90, StartTick = 1920, DurationTicks = 480 });
+            settings.SingingMidiFile = midi;
+            settings.SingingMidiTrackIndex = midi.Tracks[0].Index;
+            settings.Singing = false;
+            updateMidiControls.Invoke(dialog, null);
+            Assert.IsFalse(fillSyllables.Enabled);
+
+            settings.Singing = true;
+            updateMidiControls.Invoke(dialog, null);
+            Assert.IsTrue(fillSyllables.Enabled);
+            editor.Text = "da";
+            debounce.Stop();
+            click.Invoke(fillSyllables, [EventArgs.Empty]);
+            debounce.Stop();
+
+            Assert.AreEqual(editor.Text, settings.Text);
+            Assert.AreEqual(3, VocalTextParser.GetSyllableTextRanges(
+                settings.Language, editor.Text, settings.EmphasisSyntax).Count);
+            Assert.IsTrue(settings.IgnoreTextPausesForMidiSinging);
+            Assert.AreEqual("Added 2 syllables to match the selected MIDI track.", status.Text);
         }
         finally
         {

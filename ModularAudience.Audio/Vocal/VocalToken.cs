@@ -12,7 +12,10 @@ public enum VocalEmphasis
 
 public abstract record VocalToken;
 
-public sealed record VocalPauseToken(double Milliseconds) : VocalToken;
+public sealed record VocalPauseToken(double Milliseconds) : VocalToken
+{
+    public bool IsLineBreak { get; init; }
+}
 
 public sealed record VocalPhonemeToken(
     string Phoneme,

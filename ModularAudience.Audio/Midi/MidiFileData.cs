@@ -62,13 +62,20 @@ public sealed class MidiFileData
     public int TicksPerQuarterNote { get; }
     public double DefaultBpm { get; }
     public double PitchFrequency { get; }
+    public int TimeSignatureNumerator { get; }
+    public int TimeSignatureDenominator { get; }
+    public long TicksPerBar => Math.Max(
+        1L,
+        (long)this.TicksPerQuarterNote * this.TimeSignatureNumerator * 4 / this.TimeSignatureDenominator);
     public IReadOnlyList<MidiTrackData> Tracks { get; }
     public long LengthTicks => this.Tracks.Count == 0 ? 0 : this.Tracks.Max(track => track.LengthTicks);
     public double LengthBeats => this.LengthTicks / (double)Math.Max(1, this.TicksPerQuarterNote);
 
     public MidiFileData WithPitchFrequency(double pitchFrequency)
     {
-        return new MidiFileData(this.FilePath, this.TicksPerQuarterNote, this.DefaultBpm, this.Tracks, pitchFrequency);
+        return new MidiFileData(
+            this.FilePath, this.TicksPerQuarterNote, this.DefaultBpm, this.Tracks, pitchFrequency,
+            this.TimeSignatureNumerator, this.TimeSignatureDenominator);
     }
 
     public MidiFileData SelectTracks(IEnumerable<int> trackIndices)
@@ -84,7 +91,9 @@ public sealed class MidiFileData
             throw new ArgumentOutOfRangeException(nameof(trackIndices), "A selected MIDI track does not exist.");
         }
 
-        return new MidiFileData(this.FilePath, this.TicksPerQuarterNote, this.DefaultBpm, selectedTracks, this.PitchFrequency);
+        return new MidiFileData(
+            this.FilePath, this.TicksPerQuarterNote, this.DefaultBpm, selectedTracks, this.PitchFrequency,
+            this.TimeSignatureNumerator, this.TimeSignatureDenominator);
     }
 
     public MidiFileData MergeTracks(string trackName = "Merged", int trackIndex = 0)
@@ -94,15 +103,26 @@ public sealed class MidiFileData
             .OrderBy(note => note.StartTick)
             .ThenBy(note => note.Channel)
             .ThenBy(note => note.NoteNumber));
-        return new MidiFileData(this.FilePath, this.TicksPerQuarterNote, this.DefaultBpm, [mergedTrack], this.PitchFrequency);
+        return new MidiFileData(
+            this.FilePath, this.TicksPerQuarterNote, this.DefaultBpm, [mergedTrack], this.PitchFrequency,
+            this.TimeSignatureNumerator, this.TimeSignatureDenominator);
     }
 
-    private MidiFileData(string filePath, int ticksPerQuarterNote, double defaultBpm, IReadOnlyList<MidiTrackData> tracks, double pitchFrequency = 440.0)
+    private MidiFileData(
+        string filePath,
+        int ticksPerQuarterNote,
+        double defaultBpm,
+        IReadOnlyList<MidiTrackData> tracks,
+        double pitchFrequency = 440.0,
+        int timeSignatureNumerator = 4,
+        int timeSignatureDenominator = 4)
     {
         this.FilePath = filePath;
         this.TicksPerQuarterNote = ticksPerQuarterNote;
         this.DefaultBpm = defaultBpm;
         this.PitchFrequency = Math.Clamp(pitchFrequency, 1.0, 1000.0);
+        this.TimeSignatureNumerator = timeSignatureNumerator;
+        this.TimeSignatureDenominator = timeSignatureDenominator;
         this.Tracks = tracks;
     }
 
@@ -141,7 +161,9 @@ public sealed class MidiFileData
             });
         }
 
-        MidiFileData selectedFile = new(source.FilePath, source.TicksPerQuarterNote, source.DefaultBpm, [selectedTrack], source.PitchFrequency);
+        MidiFileData selectedFile = new(
+            source.FilePath, source.TicksPerQuarterNote, source.DefaultBpm, [selectedTrack], source.PitchFrequency,
+            source.TimeSignatureNumerator, source.TimeSignatureDenominator);
         List<MidiNoteData> orderedNotes = sourceTrack.Notes.OrderBy(note => note.StartTick).ToList();
         return new MidiEditSelection(selectedFile)
         {
@@ -157,18 +179,34 @@ public sealed class MidiFileData
     }
 
 
-    public static MidiFileData CreateEmpty(int ticksPerQuarterNote = 960, double defaultBpm = 120.0, double pitchFrequency = 440.0)
+    public static MidiFileData CreateEmpty(
+        int ticksPerQuarterNote = 960,
+        double defaultBpm = 120.0,
+        double pitchFrequency = 440.0,
+        int timeSignatureNumerator = 4,
+        int timeSignatureDenominator = 4)
     {
-        return new MidiFileData(string.Empty, ticksPerQuarterNote, defaultBpm, [], pitchFrequency);
+        ValidateTimeSignature(timeSignatureNumerator, timeSignatureDenominator);
+        return new MidiFileData(
+            string.Empty, ticksPerQuarterNote, defaultBpm, [], pitchFrequency,
+            timeSignatureNumerator, timeSignatureDenominator);
     }
 
-    public static MidiFileData CreateGenerated(IEnumerable<MidiTrackData> tracks, int ticksPerQuarterNote = 960, double defaultBpm = 120.0, string? filePath = null, double pitchFrequency = 440.0)
+    public static MidiFileData CreateGenerated(
+        IEnumerable<MidiTrackData> tracks,
+        int ticksPerQuarterNote = 960,
+        double defaultBpm = 120.0,
+        string? filePath = null,
+        double pitchFrequency = 440.0,
+        int timeSignatureNumerator = 4,
+        int timeSignatureDenominator = 4)
     {
         ArgumentNullException.ThrowIfNull(tracks);
         if (ticksPerQuarterNote <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(ticksPerQuarterNote));
         }
+        ValidateTimeSignature(timeSignatureNumerator, timeSignatureDenominator);
 
         List<MidiTrackData> generatedTracks = tracks.ToList();
         foreach (MidiTrackData track in generatedTracks)
@@ -180,8 +218,21 @@ public sealed class MidiFileData
             track.ExtendLengthTo(noteEnd);
         }
 
-        return new MidiFileData(filePath ?? string.Empty, ticksPerQuarterNote, Math.Clamp(defaultBpm, 20.0, 400.0), generatedTracks, pitchFrequency);
+        return new MidiFileData(
+            filePath ?? string.Empty, ticksPerQuarterNote, Math.Clamp(defaultBpm, 20.0, 400.0),
+            generatedTracks, pitchFrequency, timeSignatureNumerator, timeSignatureDenominator);
     }
+
+    private static void ValidateTimeSignature(int numerator, int denominator)
+    {
+        if (numerator <= 0)
+            throw new ArgumentOutOfRangeException("timeSignatureNumerator");
+        if (denominator <= 0 || (denominator & (denominator - 1)) != 0)
+            throw new ArgumentOutOfRangeException("timeSignatureDenominator");
+    }
+
+    private static bool IsValidTimeSignature(int numerator, int denominator) =>
+        numerator > 0 && denominator > 0 && (denominator & (denominator - 1)) == 0;
 
     public static MidiFileData CreateSingleNotePreview(MidiFileData source, int trackIndex, MidiNoteData note)
     {
@@ -202,7 +253,9 @@ public sealed class MidiFileData
             StartTick = 0,
             DurationTicks = Math.Max(1, note.DurationTicks)
         });
-        return new MidiFileData(source.FilePath, source.TicksPerQuarterNote, source.DefaultBpm, [previewTrack], source.PitchFrequency);
+        return new MidiFileData(
+            source.FilePath, source.TicksPerQuarterNote, source.DefaultBpm, [previewTrack], source.PitchFrequency,
+            source.TimeSignatureNumerator, source.TimeSignatureDenominator);
     }
 
     public MidiFileData ReplaceSelection(MidiEditSelection selection, MidiFileData editedFile)
@@ -236,7 +289,9 @@ public sealed class MidiFileData
         }
 
         target.LengthTicks = target.Notes.Count == 0 ? 0 : target.Notes.Max(note => note.StartTick + note.DurationTicks);
-        return new MidiFileData(this.FilePath, this.TicksPerQuarterNote, this.DefaultBpm, replacementTracks, editedFile.PitchFrequency);
+        return new MidiFileData(
+            this.FilePath, this.TicksPerQuarterNote, this.DefaultBpm, replacementTracks, editedFile.PitchFrequency,
+            this.TimeSignatureNumerator, this.TimeSignatureDenominator);
     }
 
     private static MidiTrackData CloneTrack(MidiTrackData source)
@@ -268,6 +323,9 @@ public sealed class MidiFileData
         }
 
         double bpm = 120.0;
+        int timeSignatureNumerator = 4;
+        int timeSignatureDenominator = 4;
+        bool hasTimeSignature = false;
         List<MidiTrackData> tracks = [];
         for (int trackIndex = 0; trackIndex < midiFile.Events.Count(); trackIndex++)
         {
@@ -283,6 +341,14 @@ public sealed class MidiFileData
             foreach (MidiEvent midiEvent in events)
             {
                 lastTick = Math.Max(lastTick, midiEvent.AbsoluteTime);
+                if (midiEvent is TimeSignatureEvent timeSignatureEvent && !hasTimeSignature)
+                {
+                    if (!IsValidTimeSignature(timeSignatureEvent.Numerator, timeSignatureEvent.Denominator))
+                        throw new InvalidDataException("The MIDI file contains an invalid time signature.");
+                    timeSignatureNumerator = timeSignatureEvent.Numerator;
+                    timeSignatureDenominator = timeSignatureEvent.Denominator;
+                    hasTimeSignature = true;
+                }
                 if (midiEvent is TempoEvent tempoEvent && tempoEvent.MicrosecondsPerQuarterNote > 0)
                 {
                     bpm = 60_000_000.0 / tempoEvent.MicrosecondsPerQuarterNote;
@@ -349,7 +415,9 @@ public sealed class MidiFileData
             throw new InvalidDataException("The MIDI file contains no playable notes.");
         }
 
-        return new MidiFileData(Path.GetFullPath(filePath), ticksPerQuarterNote, Math.Clamp(bpm, 20.0, 400.0), tracks);
+        return new MidiFileData(
+            Path.GetFullPath(filePath), ticksPerQuarterNote, Math.Clamp(bpm, 20.0, 400.0),
+            tracks, 440.0, timeSignatureNumerator, timeSignatureDenominator);
     }
 
     public static MidiFileData Convert(AudioObj audioObj, MidiConversionPreset preset = MidiConversionPreset.Synth)
@@ -804,11 +872,18 @@ public sealed class MidiFileData
             try
             {
                 MidiEventCollection midiEvents = new(1, this.TicksPerQuarterNote);
+                bool timeSignatureWritten = false;
                 foreach (MidiTrackData track in this.Tracks)
                 {
                     List<MidiEvent> events = new();
                     events.Add(new TextEvent(track.Name, MetaEventType.SequenceTrackName, 0));
                     events.Add(new TempoEvent((int)Math.Round(60_000_000.0 / this.DefaultBpm), 0));
+                    if (!timeSignatureWritten)
+                    {
+                        events.Add(new TimeSignatureEvent(
+                            0, this.TimeSignatureNumerator, this.TimeSignatureDenominator, 24, 8));
+                        timeSignatureWritten = true;
+                    }
                     foreach (MidiNoteData note in track.Notes)
                     {
                         int channel = Math.Clamp(note.Channel, 1, 16);

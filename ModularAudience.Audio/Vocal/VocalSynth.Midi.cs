@@ -1,9 +1,16 @@
 using ModularAudience.Audio.Midi;
+using System.Runtime.ExceptionServices;
 
 namespace ModularAudience.Audio.Vocal;
 
 public static partial class VocalSynth
 {
+    private const int MidiAudioChunkSize = 16_384;
+
+    public static VocalMidiSyllableFillResult FillMissingMidiSyllables(
+        VocalSynthSettings settings, string existingText, CancellationToken cancellationToken = default) =>
+        VocalMidiSyllableFiller.FillMissing(settings, existingText, cancellationToken);
+
     private static AudioObj RenderMidi(
         VocalSynthSettings settings, IReadOnlyList<VocalToken> tokens, CancellationToken cancellationToken)
     {
@@ -12,25 +19,77 @@ public static partial class VocalSynth
         int channels = settings.Channels;
         int sampleCount = checked(plan.OutputFrames * channels);
         var output = new float[sampleCount];
+        int maxParallelNotes = GetMidiMaxDegreeOfParallelism();
+        var voices = new float[Math.Min(plan.Notes.Count, maxParallelNotes)][];
 
-        foreach (VocalMidiScheduledNote note in plan.Notes)
+        for (int batchStart = 0; batchStart < plan.Notes.Count; batchStart += voices.Length)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            VocalSingingSyllable syllable = plan.Syllables[note.SyllableIndex];
-            double frequency = VocalMidiSinging.GetFrequency(
-                midi, note.NoteNumber, settings.SingingMidiSemitoneOffset);
-            if (!double.IsFinite(frequency) || frequency <= 0 || frequency >= settings.SampleRate * 0.45)
-                throw new InvalidDataException($"MIDI note {note.NoteNumber} is outside the supported vocal frequency range.");
-            double semitoneOffset = VocalMidiSinging.GetSemitoneOffset(frequency, settings.BasePitchHz);
-            List<RenderUnit> units = CreateMidiSyllablePlan(syllable, settings, semitoneOffset, cancellationToken);
-            FitMidiSyllableToDuration(units, note.DurationFrames, cancellationToken);
-            var voice = RenderMidiSyllable(units, note, settings, cancellationToken);
-            MixMidiVoice(output, voice, note, channels, cancellationToken);
+            int batchCount = Math.Min(voices.Length, plan.Notes.Count - batchStart);
+            ParallelForMidi(0, batchCount, cancellationToken, batchIndex =>
+                voices[batchIndex] = RenderMidiNote(
+                    plan, plan.Notes[batchStart + batchIndex], midi, settings, cancellationToken));
+
+            for (int batchIndex = 0; batchIndex < batchCount; batchIndex++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                MixMidiVoice(output, voices[batchIndex], plan.Notes[batchStart + batchIndex],
+                    channels, cancellationToken);
+                voices[batchIndex] = Array.Empty<float>();
+            }
         }
 
         AudioObj result = CreateAudio(output, settings, cancellationToken);
         result.Bpm = (float)(midi.DefaultBpm * settings.Speed);
         return result;
+    }
+
+    private static float[] RenderMidiNote(
+        VocalMidiSingingPlan plan, VocalMidiScheduledNote note, MidiFileData midi,
+        VocalSynthSettings settings, CancellationToken cancellationToken)
+    {
+        VocalSingingSyllable syllable = plan.Syllables[note.SyllableIndex];
+        double frequency = VocalMidiSinging.GetFrequency(
+            midi, note.NoteNumber, settings.SingingMidiSemitoneOffset);
+        if (!double.IsFinite(frequency) || frequency <= 0 || frequency >= settings.SampleRate * 0.45)
+            throw new InvalidDataException($"MIDI note {note.NoteNumber} is outside the supported vocal frequency range.");
+        double semitoneOffset = VocalMidiSinging.GetSemitoneOffset(frequency, settings.BasePitchHz);
+        List<RenderUnit> units = CreateMidiSyllablePlan(syllable, settings, semitoneOffset, cancellationToken);
+        FitMidiSyllableToDuration(units, note.DurationFrames, cancellationToken);
+        return RenderMidiSyllable(units, note, settings, cancellationToken);
+    }
+
+    private static int GetMidiMaxDegreeOfParallelism() =>
+        Math.Max(1, Math.Min(8, Environment.ProcessorCount / 2));
+
+    private static void ParallelForMidi(
+        int fromInclusive, int toExclusive, CancellationToken cancellationToken, Action<int> body)
+    {
+        int maxDegreeOfParallelism = GetMidiMaxDegreeOfParallelism();
+        if (maxDegreeOfParallelism == 1 || toExclusive - fromInclusive <= 1)
+        {
+            for (int index = fromInclusive; index < toExclusive; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                body(index);
+            }
+            return;
+        }
+
+        try
+        {
+            Parallel.For(fromInclusive, toExclusive, new ParallelOptions
+            {
+                CancellationToken = cancellationToken,
+                MaxDegreeOfParallelism = maxDegreeOfParallelism,
+            }, body);
+        }
+        catch (AggregateException error)
+        {
+            AggregateException flattened = error.Flatten();
+            if (flattened.InnerExceptions.Count > 0)
+                ExceptionDispatchInfo.Capture(flattened.InnerExceptions[0]).Throw();
+            throw flattened;
+        }
     }
 
     private static List<RenderUnit> CreateMidiSyllablePlan(

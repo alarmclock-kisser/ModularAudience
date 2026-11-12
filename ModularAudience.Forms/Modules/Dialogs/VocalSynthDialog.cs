@@ -36,7 +36,7 @@ public sealed partial class VocalSynthDialog : Form
     private AudioCollectionView? collection;
     private CancellationTokenSource? rendering;
     private int revision, ready = -1;
-    private bool disposedFlag, creating, syncing, formattingSyllables;
+    private bool disposedFlag, creating, syncing, formattingSyllables, fillingSyllables;
     private readonly System.Windows.Forms.Timer debounce = new() { Interval = 300 };
     private WaveOut? output;
     private VocalPreview? provider;
@@ -127,6 +127,7 @@ public sealed partial class VocalSynthDialog : Form
         {
             if (syncing || formattingSyllables) return;
             settings.Text = textEditor.Text;
+            if (!fillingSyllables) settings.IgnoreTextPausesForMidiSinging = false;
             UpdateButtonState();
             if (showSyllablesCheckBox.Checked) RefreshSyllablePreview();
             if (string.IsNullOrWhiteSpace(textEditor.Text))
@@ -174,7 +175,11 @@ public sealed partial class VocalSynthDialog : Form
         midiTrackNumber.Enabled = trackCount > 0;
         midiSemitoneOffset.Enabled = trackCount > 0;
         editMidiButton.Enabled = trackCount > 0;
-        showSyllablesCheckBox.Enabled = trackCount > 0;
+        showSyllablesCheckBox.Enabled = true;
+        MidiTrackData? selectedTrack = midi?.Tracks.FirstOrDefault(
+            track => track.Index == settings.SingingMidiTrackIndex);
+        fillSyllablesButton.Enabled = settings.Singing && selectedTrack is not null
+            && selectedTrack.Notes.Count > 0;
         UpdateMidiFileLabel();
     }
 
@@ -246,6 +251,7 @@ public sealed partial class VocalSynthDialog : Form
         singingSettings.EmphasisSyntax = emphasisSyntax;
         singingSettings.SingingMidiFile = midi;
         singingSettings.SingingMidiTrackIndex = midi.Tracks[pageIndex].Index;
+        singingSettings.IgnoreTextPausesForMidiSinging = settings.IgnoreTextPausesForMidiSinging;
         settings = singingSettings;
         midiSemitoneOffset.Value = (decimal)settings.SingingMidiSemitoneOffset;
 
@@ -259,7 +265,7 @@ public sealed partial class VocalSynthDialog : Form
         if (syncing || settings.SingingMidiFile is not MidiFileData midi || midi.Tracks.Count == 0) return;
         int pageIndex = Math.Clamp((int)midiTrackNumber.Value - 1, 0, midi.Tracks.Count - 1);
         settings.SingingMidiTrackIndex = midi.Tracks[pageIndex].Index;
-        UpdateMidiFileLabel();
+        UpdateMidiControls();
         QueueRender();
     }
 
@@ -304,6 +310,40 @@ public sealed partial class VocalSynthDialog : Form
         RefreshSyllablePreview();
     }
 
+    private void FillSyllables()
+    {
+        try
+        {
+            VocalMidiSyllableFillResult result = VocalSynth.FillMissingMidiSyllables(settings, textEditor.Text);
+            fillingSyllables = true;
+            try
+            {
+                if (result.AppendedText.Length > 0)
+                {
+                    textEditor.SelectionStart = textEditor.TextLength;
+                    textEditor.SelectionLength = 0;
+                    textEditor.SelectedText = result.AppendedText;
+                }
+            }
+            finally { fillingSyllables = false; }
+
+            settings.Text = textEditor.Text;
+            settings.IgnoreTextPausesForMidiSinging = result.ExistingSyllables <= result.MidiSyllables;
+            if (showSyllablesCheckBox.Checked) RefreshSyllablePreview();
+            if (result.AddedSyllables == 0) QueueRender();
+            status.Text = result.AddedSyllables > 0
+                ? $"Added {result.AddedSyllables} syllables to match the selected MIDI track."
+                : result.ExistingSyllables == result.MidiSyllables
+                    ? "The text already matches the selected MIDI track."
+                    : "The text has more syllables than the selected MIDI track; no text was changed.";
+        }
+        catch (Exception error) when (
+            error is ArgumentException or InvalidOperationException or InvalidDataException)
+        {
+            status.Text = error.Message;
+        }
+    }
+
     private void RefreshSyllablePreview()
     {
         if (formattingSyllables) return;
@@ -321,7 +361,7 @@ public sealed partial class VocalSynthDialog : Form
                 textEditor.Select(0, text.Length);
                 textEditor.SelectionFont = textEditor.Font;
 
-                if (showSyllablesCheckBox.Checked && settings.SingingMidiFile is not null)
+                if (showSyllablesCheckBox.Checked)
                 {
                     IReadOnlyList<VocalSyllableTextRange> ranges = VocalTextParser.GetSyllableTextRanges(
                         settings.Language, text, emphasisSyntax);
@@ -447,6 +487,7 @@ public sealed partial class VocalSynthDialog : Form
         replacement.SingingMidiFile = settings.SingingMidiFile;
         replacement.SingingMidiTrackIndex = settings.SingingMidiTrackIndex;
         replacement.SingingMidiSemitoneOffset = settings.SingingMidiSemitoneOffset;
+        replacement.IgnoreTextPausesForMidiSinging = settings.IgnoreTextPausesForMidiSinging;
     }
 
     public void SetCollection(AudioCollectionView? collection) => this.collection = collection;

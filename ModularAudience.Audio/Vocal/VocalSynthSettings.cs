@@ -15,6 +15,7 @@ public sealed class VocalSynthSettings
     public MidiFileData? SingingMidiFile { get; set; }
     public int? SingingMidiTrackIndex { get; set; }
     public double SingingMidiSemitoneOffset { get; set; }
+    public bool IgnoreTextPausesForMidiSinging { get; set; }
 
     // Voice params
     public string VoiceName { get; set; } = "Adult Female";
@@ -81,6 +82,7 @@ public sealed class VocalSynthSettings
         SingingMidiFile = SingingMidiFile,
         SingingMidiTrackIndex = SingingMidiTrackIndex,
         SingingMidiSemitoneOffset = SingingMidiSemitoneOffset,
+        IgnoreTextPausesForMidiSinging = IgnoreTextPausesForMidiSinging,
         VoiceName = VoiceName,
         BasePitchHz = BasePitchHz,
         FormantScale = FormantScale,

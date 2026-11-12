@@ -202,13 +202,24 @@ so expressive repetitions remain separate in the shared renderer.
   Loading selects the Singing voice; the track selector shows the current
   page/name and the Edit button opens the MIDI inspector/editor on that page.
   Same-tick notes form a chord for one vocal syllable. MIDI onset, duration,
-  tempo, gaps and text pauses set the vocal timeline; overlapping notes are
+  tempo and gaps set the vocal timeline; explicit punctuation/emphasis pauses
+  remain supported, but lyric line breaks do not add audible pauses. Text filled
+  from MIDI keeps its commas and line breaks for display without shifting note
+  timing. MIDI note velocity controls the rendered level, and overlapping notes are
   mixed as simultaneous voices. Extra text syllables reuse the last MIDI chord,
-  while excess MIDI note groups are left silent and reported after rendering.
+  while excess MIDI note groups are left silent and reported after rendering;
+  they do not extend the rendered audio past the final sung syllable.
   The **Semitone offset** control transposes MIDI notes by -16…+16 semitones in
   0.25-semitone steps. **Speed** scales MIDI note durations and the resulting BPM;
   1.00 preserves the MIDI tempo (for example, 120 BPM stays 120 BPM). **Show
-  syllables** underlines every second syllable in the same editable text field.
+  syllables** underlines every second syllable in the same editable text field,
+  whether or not a MIDI file is loaded. **Fill Syllables** is available for a
+  selected Singing MIDI track; it appends only the missing syllables, counting
+  same-tick chords once. Its language-appropriate vowel color follows the MIDI
+  pitches, and repeatable vowels are lengthened up to eight characters based on
+  note duration. Rest gaps and the MIDI time signature guide comma and line
+  formatting without adding extra time in the aligned MIDI render. The first
+  MIDI time signature is used when formatting measures.
   Word-internal boundaries use matching written vowel nuclei and keep grapheme
   clusters intact, with a deterministic fallback where orthography is ambiguous;
   they remain a display approximation, not linguistic syllabification. MIDI singing also works with Natural speech
@@ -271,8 +282,8 @@ multilingual scripts, transliteration, Mandarin tones, formant/fricative spectra
 voiced transitions, cancellation and size limits,
 animal voice presets, timed ellipsis pops, expressive letter repetition, CAPS,
 language-independent IPA, mixed-script best-effort fallback, beatboxing,
-generated and MIDI singing (including chords, text pauses, note-count mismatch,
-and Windows speech), muted emphasis markers, multi-character marker parsing,
+generated and MIDI singing (including chords, text pauses, lyric line breaks,
+syllable filling, note-count mismatch, and Windows speech), muted emphasis markers, multi-character marker parsing,
 Windows SSML and actual Windows voice output when matching voices are
 installed. The fixed-timing singing tests specifically use Microsoft Zira
 Desktop and Hedda Desktop; other Windows voice tests accept any matching

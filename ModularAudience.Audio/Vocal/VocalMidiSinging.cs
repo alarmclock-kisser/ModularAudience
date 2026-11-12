@@ -28,16 +28,15 @@ internal static class VocalMidiSinging
         MidiTrackData track = midi.Tracks.FirstOrDefault(candidate => candidate.Index == trackIndex)
             ?? throw new ArgumentOutOfRangeException(nameof(settings), "The selected MIDI track does not exist.");
 
-        var (syllables, trailingPauseMilliseconds) = VocalSinging.CreateSyllables(settings.Language, tokens, cancellationToken);
+        IReadOnlyList<VocalToken> timelineTokens = settings.IgnoreTextPausesForMidiSinging
+            ? tokens.Where(token => token is not VocalPauseToken).ToArray()
+            : tokens.Where(token => token is not VocalPauseToken { IsLineBreak: true }).ToArray();
+        var (syllables, trailingPauseMilliseconds) =
+            VocalSinging.CreateSyllables(settings.Language, timelineTokens, cancellationToken);
         if (syllables.Count == 0)
             throw new InvalidOperationException("The text contains no singable syllables.");
 
-        var noteGroups = track.Notes
-            .OrderBy(note => note.StartTick)
-            .ThenBy(note => note.NoteNumber)
-            .GroupBy(note => note.StartTick)
-            .Select(group => group.ToArray())
-            .ToArray();
+        MidiNoteData[][] noteGroups = GroupNotesByStartTick(track, cancellationToken);
         if (noteGroups.Length == 0)
             throw new InvalidOperationException("The selected MIDI page contains no notes.");
 
@@ -60,14 +59,21 @@ internal static class VocalMidiSinging
             return Math.Max(0, (int)frames);
         }
 
-        long midiEndTick = Math.Max(track.LengthTicks, track.Notes.Max(note => note.StartTick + Math.Max(1, note.DurationTicks)));
-        int midiEndFrame = FramesForTicks(midiEndTick);
+        int midiEndFrame = 0;
+        int repeatedDurationFrames = 0;
+        if (syllables.Count > noteGroups.Length)
+        {
+            long midiEndTick = Math.Max(
+                track.LengthTicks,
+                track.Notes.Max(note => note.StartTick + Math.Max(1, note.DurationTicks)));
+            midiEndFrame = FramesForTicks(midiEndTick);
+            long repeatedDurationTicks = Math.Max(1, noteGroups[^1].Max(note => note.DurationTicks));
+            repeatedDurationFrames = Math.Max(1, FramesForTicks(repeatedDurationTicks));
+        }
         int accumulatedPauseFrames = 0;
         int repeatedCursor = midiEndFrame;
-        long repeatedDurationTicks = Math.Max(1, noteGroups[^1].Max(note => note.DurationTicks));
-        int repeatedDurationFrames = Math.Max(1, FramesForTicks(repeatedDurationTicks));
         List<VocalMidiScheduledNote> scheduledNotes = [];
-        int latestVoiceEnd = midiEndFrame;
+        int latestVoiceEnd = 0;
 
         for (int syllableIndex = 0; syllableIndex < syllables.Count; syllableIndex++)
         {
@@ -100,7 +106,7 @@ internal static class VocalMidiSinging
         }
 
         int trailingPauseFrames = FramesForPause(trailingPauseMilliseconds);
-        int outputFrames = checked(Math.Max(checked(midiEndFrame + accumulatedPauseFrames + trailingPauseFrames), latestVoiceEnd));
+        int outputFrames = checked(latestVoiceEnd + trailingPauseFrames);
         if ((long)outputFrames * settings.Channels > VocalSynth.MaxOutputSamples)
             throw new InvalidOperationException("The MIDI-sung vocal would exceed the supported output size.");
 
@@ -121,4 +127,24 @@ internal static class VocalMidiSinging
 
     internal static double GetSemitoneOffset(double frequency, double basePitchHz) =>
         12.0 * Math.Log2(frequency / basePitchHz);
+
+    internal static MidiNoteData[][] GroupNotesByStartTick(
+        MidiTrackData track, CancellationToken cancellationToken)
+    {
+        MidiNoteData[] orderedNotes = track.Notes
+            .OrderBy(note => note.StartTick)
+            .ThenBy(note => note.NoteNumber)
+            .ToArray();
+        List<MidiNoteData[]> noteGroups = [];
+        for (int first = 0; first < orderedNotes.Length;)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int end = first + 1;
+            while (end < orderedNotes.Length && orderedNotes[end].StartTick == orderedNotes[first].StartTick)
+                end++;
+            noteGroups.Add(orderedNotes[first..end]);
+            first = end;
+        }
+        return noteGroups.ToArray();
+    }
 }
