@@ -2,7 +2,60 @@ namespace ModularAudience.Audio.Vocal;
 
 public static partial class VocalSynth
 {
-    internal const int MaxOutputSamples = 30_000_000;
+    internal const long MaxOutputPcmBytes = 4L * 1024 * 1024 * 1024;
+    internal const int MaxOutputSamples = (int)(MaxOutputPcmBytes / sizeof(float));
+
+    private sealed class PcmBuffer(int capacity)
+    {
+        private readonly float[] samples = new float[capacity];
+        private int position;
+
+        internal int Count => position;
+
+        internal void Add(float sample)
+        {
+            if (position >= samples.Length)
+                throw new InvalidOperationException("Vocal synthesis exceeded its planned output size.");
+            samples[position++] = sample;
+        }
+
+        internal void AddRange(ReadOnlySpan<float> values)
+        {
+            if (values.Length > samples.Length - position)
+                throw new InvalidOperationException("Vocal synthesis exceeded its planned output size.");
+            values.CopyTo(samples.AsSpan(position));
+            position += values.Length;
+        }
+
+        internal float[] ToArray()
+        {
+            if (position != samples.Length)
+                throw new InvalidOperationException("Vocal synthesis did not fill its planned output size.");
+            return samples;
+        }
+    }
+
+    public static bool IsValidCustomSampleIpa(string? value) =>
+        VocalCustomSampleMapper.IsValidIpaSubstring(value);
+
+    public static IReadOnlyList<VocalSyllableTextRange> GetSyllableTextRanges(
+        VocalSynthSettings settings, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.Validate();
+        IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
+            settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
+        tokens = VocalCustomSampleMapper.Apply(
+            settings.Language,
+            settings.Text,
+            settings.EmphasisSyntax,
+            tokens,
+            settings.CustomSampleMappings,
+            settings.Singing,
+            cancellationToken);
+        return VocalTextParser.GetSyllableTextRangesForTokens(
+            settings.Language, settings.Text, settings.EmphasisSyntax, tokens, cancellationToken);
+    }
 
     public static AudioObj Render(VocalSynthSettings settings, CancellationToken cancellationToken = default)
     {
@@ -10,11 +63,14 @@ public static partial class VocalSynth
         cancellationToken.ThrowIfCancellationRequested();
         var s = settings.Clone();
         if (s.UseWindowsSpeech) return VocalWindowsSpeech.Render(s, cancellationToken);
-        var tokens = VocalTextParser.Parse(s.Language, s.Text, s.EmphasisSyntax, cancellationToken);
+        IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
+            s.Language, s.Text, s.EmphasisSyntax, cancellationToken);
+        tokens = VocalCustomSampleMapper.Apply(
+            s.Language, s.Text, s.EmphasisSyntax, tokens, s.CustomSampleMappings, s.Singing, cancellationToken);
         if (s.Singing && s.SingingMidiFile is not null)
             return RenderMidi(s, tokens, cancellationToken);
         var plan = CreateRenderPlan(tokens, s, cancellationToken, out int sampleCount);
-        var pcm = new List<float>(sampleCount);
+        var pcm = new PcmBuffer(sampleCount);
         var random = new Random(StableSeed(s));
         var state = new VoiceState();
 
@@ -49,6 +105,16 @@ public static partial class VocalSynth
                 var next = GetNeighbor(plan, i + 1);
                 RenderPhoneme(pcm, phoneme, token, previous, next, unit.Frames, unit.Note, s, state, random, cancellationToken);
             }
+            else if (unit.Token is VocalCustomSampleToken sample)
+            {
+                double? targetFrequency = s.Singing
+                    ? s.BasePitchHz * Math.Pow(2, unit.Note / 12.0)
+                    : null;
+                float[] renderedSample = VocalCustomSampleRenderer.Render(
+                    sample, s, unit.Frames, s.Channels, targetFrequency, cancellationToken);
+                pcm.AddRange(renderedSample);
+                state.Frame += unit.Frames;
+            }
         }
 
         return CreateAudio(pcm.ToArray(), s, cancellationToken);
@@ -62,6 +128,9 @@ public static partial class VocalSynth
         settings.Validate();
         IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
             settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
+        tokens = VocalCustomSampleMapper.Apply(
+            settings.Language, settings.Text, settings.EmphasisSyntax,
+            tokens, settings.CustomSampleMappings, settings.Singing, cancellationToken);
         VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, tokens, cancellationToken);
         if (plan.RepeatedSyllables > 0)
             return $"{plan.RepeatedSyllables} extra text syllable{(plan.RepeatedSyllables == 1 ? string.Empty : "s")} "
@@ -206,6 +275,13 @@ public static partial class VocalSynth
                     previousSymbol = phoneme.Phoneme;
                 }
             }
+            else if (token is VocalCustomSampleToken sample)
+            {
+                milliseconds = sample.DurationMilliseconds;
+                minimumFrames = 1;
+                if (settings.Singing && sample.HasNucleus) noteIndex++;
+                previousSymbol = null;
+            }
             else throw new InvalidOperationException("Unknown vocal synthesis token.");
 
             if (!double.IsFinite(milliseconds) || milliseconds < 0)
@@ -233,7 +309,7 @@ public static partial class VocalSynth
     }
 
     private static void RenderUnsupportedBeep(
-        List<float> pcm, int frames, VocalSynthSettings settings, VoiceState state,
+        PcmBuffer pcm, int frames, VocalSynthSettings settings, VoiceState state,
         CancellationToken cancellationToken)
     {
         int attackFrames = Math.Max(1, settings.SampleRate / 300);
@@ -317,7 +393,7 @@ public static partial class VocalSynth
         return duration * (token.Stressed ? 1.12 : 1.0);
     }
 
-    private static void AppendSilence(List<float> pcm, int frames, int channels, CancellationToken cancellationToken)
+    private static void AppendSilence(PcmBuffer pcm, int frames, int channels, CancellationToken cancellationToken)
     {
         for (int i = 0; i < frames * channels; i++)
         {
@@ -332,7 +408,7 @@ public static partial class VocalSynth
             : null;
 
     private static void RenderPhoneme(
-        List<float> pcm, VocalPhoneme ph, VocalPhonemeToken token, VocalPhoneme? previous, VocalPhoneme? next,
+        PcmBuffer pcm, VocalPhoneme ph, VocalPhonemeToken token, VocalPhoneme? previous, VocalPhoneme? next,
         int frames, double note, VocalSynthSettings s, VoiceState state, Random random, CancellationToken cancellationToken)
     {
         bool animal = ph.Symbol.StartsWith("animal-", StringComparison.Ordinal);

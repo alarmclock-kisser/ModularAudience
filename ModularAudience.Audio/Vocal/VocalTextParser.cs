@@ -22,8 +22,18 @@ public static class VocalTextParser
     public static IReadOnlyList<VocalSyllableTextRange> GetSyllableTextRanges(
         VocalLanguage language, string text, VocalEmphasisSyntax syntax, CancellationToken cancellationToken = default)
     {
-        var syllables = VocalSinging.CreateSyllables(
-            language, Parse(language, text, syntax, cancellationToken), cancellationToken).Syllables;
+        return GetSyllableTextRangesForTokens(
+            language, text, syntax, Parse(language, text, syntax, cancellationToken), cancellationToken);
+    }
+
+    internal static IReadOnlyList<VocalSyllableTextRange> GetSyllableTextRangesForTokens(
+        VocalLanguage language,
+        string text,
+        VocalEmphasisSyntax syntax,
+        IReadOnlyList<VocalToken> tokens,
+        CancellationToken cancellationToken)
+    {
+        var syllables = VocalSinging.CreateSyllables(language, tokens, cancellationToken).Syllables;
         var wordGroups = new Dictionary<(int Start, int Length), List<int>>();
         for (int i = 0; i < syllables.Count; i++)
         {

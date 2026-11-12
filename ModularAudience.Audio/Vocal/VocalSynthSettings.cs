@@ -16,6 +16,7 @@ public sealed class VocalSynthSettings
     public int? SingingMidiTrackIndex { get; set; }
     public double SingingMidiSemitoneOffset { get; set; }
     public bool IgnoreTextPausesForMidiSinging { get; set; }
+    public IReadOnlyList<VocalCustomSampleMapping> CustomSampleMappings { get; set; } = [];
 
     // Voice params
     public string VoiceName { get; set; } = "Adult Female";
@@ -55,6 +56,7 @@ public sealed class VocalSynthSettings
             || SingingMidiSemitoneOffset < -16
             || SingingMidiSemitoneOffset > 16)
             throw new ArgumentOutOfRangeException(nameof(SingingMidiSemitoneOffset));
+        VocalCustomSampleMapper.ValidateMappings(CustomSampleMappings);
         if (Singing && SingingMidiFile is not null)
         {
             if (SingingMidiTrackIndex is null
@@ -83,6 +85,7 @@ public sealed class VocalSynthSettings
         SingingMidiTrackIndex = SingingMidiTrackIndex,
         SingingMidiSemitoneOffset = SingingMidiSemitoneOffset,
         IgnoreTextPausesForMidiSinging = IgnoreTextPausesForMidiSinging,
+        CustomSampleMappings = CustomSampleMappings.ToArray(),
         VoiceName = VoiceName,
         BasePitchHz = BasePitchHz,
         FormantScale = FormantScale,

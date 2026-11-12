@@ -34,7 +34,7 @@
             this.progressBar_inferencing = new ProgressBar();
             this.button_run = new Button();
             this.checkedListBox_stems = new CheckedListBox();
-            this.checkedListBox_cudaDevices = new CheckedListBox();
+            this.checkedListBox_directMLDevices = new CheckedListBox();
             this.gpuCacheTimer = new System.Windows.Forms.Timer(this.components);
             this.SuspendLayout();
             // 
@@ -74,15 +74,15 @@
             this.checkedListBox_stems.Size = new Size(140, 148);
             this.checkedListBox_stems.TabIndex = 3;
             //
-            // checkedListBox_cudaDevices
+            // checkedListBox_directMLDevices
             //
-            this.checkedListBox_cudaDevices.CheckOnClick = true;
-            this.checkedListBox_cudaDevices.Dock = DockStyle.Fill;
-            this.checkedListBox_cudaDevices.FormattingEnabled = true;
-            this.checkedListBox_cudaDevices.Name = "checkedListBox_cudaDevices";
-            this.checkedListBox_cudaDevices.TabIndex = 4;
-            this.checkedListBox_cudaDevices.ItemCheck += this.CudaDevices_ItemCheck;
-            this.components.Add(this.checkedListBox_cudaDevices);
+            this.checkedListBox_directMLDevices.CheckOnClick = true;
+            this.checkedListBox_directMLDevices.Dock = DockStyle.Fill;
+            this.checkedListBox_directMLDevices.FormattingEnabled = true;
+            this.checkedListBox_directMLDevices.Name = "checkedListBox_directMLDevices";
+            this.checkedListBox_directMLDevices.TabIndex = 4;
+            this.checkedListBox_directMLDevices.ItemCheck += this.DirectMLDevices_ItemCheck;
+            this.components.Add(this.checkedListBox_directMLDevices);
             //
             // gpuCacheTimer
             //
@@ -93,13 +93,13 @@
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
-            this.ClientSize = new Size(464, 321);
+            this.ClientSize = new Size(1040, 820);
             this.Controls.Add(this.checkedListBox_stems);
             this.Controls.Add(this.button_run);
             this.Controls.Add(this.progressBar_inferencing);
             this.Controls.Add(this.comboBox_models);
             this.MaximumSize = new Size(480, 360);
-            this.MinimumSize = new Size(480, 360);
+            this.MinimumSize = new Size(1020, 850);
             this.Name = "OnnxDemucsDialog";
             this.Text = "OnnxDemucsDialog";
             this.ResumeLayout(false);
@@ -111,7 +111,7 @@
         private ProgressBar progressBar_inferencing;
         private Button button_run;
         private CheckedListBox checkedListBox_stems;
-        private CheckedListBox checkedListBox_cudaDevices;
+        private CheckedListBox checkedListBox_directMLDevices;
         private System.Windows.Forms.Timer gpuCacheTimer;
     }
 }

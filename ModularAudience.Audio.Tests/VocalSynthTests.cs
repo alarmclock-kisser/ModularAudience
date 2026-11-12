@@ -39,6 +39,14 @@ public class VocalSynthTests
         return settings;
     }
 
+    private static VocalCustomSampleMapping CreateCustomSample(string ipa, int frames = 800, int sampleRate = 8000)
+    {
+        float[] samples = Enumerable.Range(0, frames)
+            .Select(frame => (float)(0.25 * Math.Sin(2 * Math.PI * 220 * frame / sampleRate)))
+            .ToArray();
+        return new VocalCustomSampleMapping(ipa, samples, sampleRate, 1);
+    }
+
     [TestMethod]
     public void Render_English_ProducesAudio()
     {
@@ -114,6 +122,107 @@ public class VocalSynthTests
             shiftedFrequency,
             1e-10);
         Assert.AreEqual(0.25, settings.Clone().SingingMidiSemitoneOffset);
+    }
+
+    [TestMethod]
+    public void CustomSamples_IpaReplacementUsesSampleAndRespectsSpeed()
+    {
+        VocalSynthSettings settings = VocalSynthSettings.FromPreset(
+            VocalVoicePreset.BuiltIn[0], VocalLanguage.Japanese, "か");
+        settings.SampleRate = 8000;
+        settings.CustomSampleMappings = [CreateCustomSample("/ka/")];
+
+        using AudioObj normalSpeed = VocalSynth.Render(settings);
+        settings.Speed = 2;
+        using AudioObj doubleSpeed = VocalSynth.Render(settings);
+
+        Assert.AreEqual(800, normalSpeed.Data.Length);
+        Assert.AreEqual(400, doubleSpeed.Data.Length);
+        Assert.IsTrue(doubleSpeed.Data.Any(sample => Math.Abs(sample) > 0.001f));
+    }
+
+    [TestMethod]
+    public void CustomSamples_IpaMatchesKanjiPronunciation()
+    {
+        VocalSynthSettings settings = VocalSynthSettings.FromPreset(
+            VocalVoicePreset.BuiltIn[0], VocalLanguage.Japanese, "学校");
+        VocalCustomSampleMapping mapping = CreateCustomSample("/ga/");
+        IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
+            settings.Language, settings.Text, settings.EmphasisSyntax);
+
+        IReadOnlyList<VocalToken> mapped = VocalCustomSampleMapper.Apply(
+            settings.Language,
+            settings.Text,
+            settings.EmphasisSyntax,
+            tokens,
+            [mapping],
+            splitForSinging: false,
+            CancellationToken.None);
+        VocalCustomSampleToken sample = mapped.OfType<VocalCustomSampleToken>().Single();
+
+        Assert.AreEqual("学", settings.Text.Substring(sample.SourceStart, sample.SourceLength));
+    }
+
+    [TestMethod]
+    public void CustomSamples_WindowsSpeechReplacesEveryMappedOccurrence()
+    {
+        const string text = "cat cat";
+        const VocalLanguage language = VocalLanguage.English;
+        VocalCustomSampleMapping mapping = CreateCustomSample("/k/");
+        IReadOnlyList<VocalToken> phoneticTokens = VocalTextParser.Parse(
+            language, text, VocalEmphasisSyntax.Default());
+        IReadOnlyList<VocalToken> mappedTokens = VocalCustomSampleMapper.Apply(
+            language,
+            text,
+            VocalEmphasisSyntax.Default(),
+            phoneticTokens,
+            [mapping],
+            splitForSinging: false,
+            CancellationToken.None);
+        IReadOnlyList<VocalToken> speechTokens = VocalTextParser.ParseWindowsSpeech(
+            language, text, VocalEmphasisSyntax.Default(), CancellationToken.None);
+
+        IReadOnlyList<VocalToken> mixedTokens = VocalCustomSampleMapper.AddSamplesToSpeechTokens(
+            speechTokens, mappedTokens.OfType<VocalCustomSampleToken>().ToArray(), CancellationToken.None);
+
+        Assert.AreEqual(2, mixedTokens.OfType<VocalCustomSampleToken>().Count());
+        Assert.AreEqual("at at", string.Concat(mixedTokens.OfType<VocalTextToken>().Select(token => token.Text)));
+    }
+
+    [TestMethod]
+    public void MidiSinging_CustomSampleUsesTheScheduledNoteDuration()
+    {
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData { NoteNumber = 60, Velocity = 100, StartTick = 0, DurationTicks = 960 });
+        VocalSynthSettings settings = CreateMidiSettings("か", midi);
+        settings.Language = VocalLanguage.Japanese;
+        settings.CustomSampleMappings = [CreateCustomSample("/ka/")];
+
+        using AudioObj audio = VocalSynth.Render(settings);
+
+        Assert.AreEqual(4000, audio.Data.Length);
+        Assert.IsTrue(audio.Data.All(float.IsFinite));
+        Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001f));
+    }
+
+    [TestMethod]
+    public void MidiSinging_AcceptsPlansAboveTheFormerOutputLimit()
+    {
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData
+            {
+                NoteNumber = 60,
+                Velocity = 100,
+                StartTick = 0,
+                DurationTicks = 7_680_000,
+            });
+        VocalSynthSettings settings = CreateMidiSettings("A", midi);
+        IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
+            settings.Language, settings.Text, settings.EmphasisSyntax);
+
+        VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, tokens, CancellationToken.None);
+
+        Assert.IsGreaterThan(30_000_000, plan.OutputFrames);
     }
 
     [TestMethod]
@@ -1634,6 +1743,79 @@ public class VocalSynthTests
         finally
         {
             Directory.Delete(directory, true);
+        }
+    }
+
+    [STATestMethod]
+    public void Dialog_RestoresLastSettingsAndTextWithinTheApplicationProcess()
+    {
+        const BindingFlags instanceFlags = BindingFlags.Instance | BindingFlags.NonPublic;
+        FieldInfo snapshotField = typeof(VocalSynthDialog).GetField(
+            "lastSessionSnapshot", BindingFlags.Static | BindingFlags.NonPublic)!;
+        object? previousSnapshot = snapshotField.GetValue(null);
+        string directory = Path.Combine(Path.GetTempPath(), "vocal_session_" + Guid.NewGuid());
+        var profiles = new VocalVoiceProfileStore(directory);
+        object Field(VocalSynthDialog dialog, string name) =>
+            typeof(VocalSynthDialog).GetField(name, instanceFlags)!.GetValue(dialog)!;
+
+        try
+        {
+            snapshotField.SetValue(null, null);
+            var emphasisStore = new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json"));
+            using var dialog = new VocalSynthDialog(profiles, emphasisStore);
+            dialog.Show();
+            Application.DoEvents();
+
+            ((ComboBox)Field(dialog, "languageCombo")).SelectedItem = "German";
+            ((ComboBox)Field(dialog, "voiceCombo")).SelectedItem = "Built-in: Singing";
+            ((NumericUpDown)Field(dialog, "speed")).Value = 1.35m;
+            ((CheckBox)Field(dialog, "unsupportedBeepCheckBox")).Checked = true;
+            ((CheckBox)Field(dialog, "windowsSpeechCheckBox")).Checked = true;
+            ((CheckBox)Field(dialog, "showSyllablesCheckBox")).Checked = true;
+            ((RichTextBox)Field(dialog, "textEditor")).Text = "Guten Morgen";
+
+            MidiTrackData lead = new() { Index = 4, Name = "Lead" };
+            lead.Notes.Add(new MidiNoteData
+                { NoteNumber = 60, Velocity = 90, StartTick = 0, DurationTicks = 480 });
+            MidiTrackData harmony = new() { Index = 9, Name = "Harmony" };
+            harmony.Notes.Add(new MidiNoteData
+                { NoteNumber = 67, Velocity = 90, StartTick = 0, DurationTicks = 480 });
+            MidiFileData midi = MidiFileData.CreateGenerated(
+                [lead, harmony], filePath: "remembered.mid");
+            VocalSynthSettings settings = (VocalSynthSettings)Field(dialog, "settings");
+            settings.SampleRate = 8000;
+            settings.SingingMidiFile = midi;
+            settings.SingingMidiTrackIndex = harmony.Index;
+            MethodInfo updateMidiControls = typeof(VocalSynthDialog).GetMethod(
+                "UpdateMidiControls", instanceFlags)!;
+            updateMidiControls.Invoke(dialog, null);
+            ((NumericUpDown)Field(dialog, "midiTrackNumber")).Value = 2;
+            ((NumericUpDown)Field(dialog, "midiSemitoneOffset")).Value = 1.25m;
+            ((System.Windows.Forms.Timer)Field(dialog, "debounce")).Stop();
+
+            dialog.Close();
+            Assert.IsTrue(dialog.IsDisposed);
+
+            using var restored = new VocalSynthDialog(profiles, emphasisStore);
+            VocalSynthSettings restoredSettings = (VocalSynthSettings)Field(restored, "settings");
+            Assert.AreEqual("Guten Morgen", ((RichTextBox)Field(restored, "textEditor")).Text);
+            Assert.AreEqual(VocalLanguage.German, restoredSettings.Language);
+            Assert.AreEqual(1.35, restoredSettings.Speed, 0.001);
+            Assert.IsTrue(restoredSettings.UseWindowsSpeech);
+            Assert.IsTrue(restoredSettings.BeepForUnsupportedSounds);
+            Assert.IsTrue(restoredSettings.Singing);
+            Assert.AreEqual(8000, restoredSettings.SampleRate);
+            Assert.AreEqual("remembered.mid", Path.GetFileName(restoredSettings.SingingMidiFile?.FilePath));
+            Assert.AreEqual(9, restoredSettings.SingingMidiTrackIndex);
+            Assert.AreEqual(2m, ((NumericUpDown)Field(restored, "midiTrackNumber")).Value);
+            Assert.AreEqual(1.25m, ((NumericUpDown)Field(restored, "midiSemitoneOffset")).Value);
+            Assert.AreEqual("Built-in: Singing", ((ComboBox)Field(restored, "voiceCombo")).SelectedItem);
+            Assert.IsTrue(((CheckBox)Field(restored, "showSyllablesCheckBox")).Checked);
+        }
+        finally
+        {
+            snapshotField.SetValue(null, previousSnapshot);
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
         }
     }
 

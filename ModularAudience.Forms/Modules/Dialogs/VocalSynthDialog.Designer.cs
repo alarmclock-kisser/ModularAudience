@@ -11,6 +11,7 @@ public sealed partial class VocalSynthDialog
     private Button renameProfileBtn = null!;
     private Button deleteProfileBtn = null!;
     private Button midiButton = null!;
+    private Button customSamplesButton = null!;
     private Label midiFileLabel = null!;
     private NumericUpDown midiTrackNumber = null!;
     private Label midiTrackNumberLabel = null!;
@@ -102,6 +103,13 @@ public sealed partial class VocalSynthDialog
             AutoSize = true,
             Enabled = false,
         };
+        customSamplesButton = new Button
+        {
+            Name = "customSamplesButton",
+            Text = "Custom Samples...",
+            AutoSize = true,
+        };
+        customSamplesButton.Click += (_, _) => OpenCustomSamplesDialog();
 
         midiOptionsRow = new FlowLayoutPanel
         {
@@ -139,7 +147,7 @@ public sealed partial class VocalSynthDialog
             Margin = Padding.Empty,
         };
         vocalActionsRow.Controls.AddRange(
-            [fillSyllablesButton, showSyllablesCheckBox, emphasisBtn, designProfileBtn, create]);
+            [fillSyllablesButton, showSyllablesCheckBox, customSamplesButton, emphasisBtn, designProfileBtn, create]);
 
         textContentPanel = new Panel { Dock = DockStyle.Fill };
         textContentPanel.Controls.Add(textEditor);

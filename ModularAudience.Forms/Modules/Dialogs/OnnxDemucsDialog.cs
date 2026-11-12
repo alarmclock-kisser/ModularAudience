@@ -18,14 +18,13 @@ public partial class OnnxDemucsDialog : Form
     private readonly Button browse = new() { Text = "Browse models directory…", AutoSize = true };
     private readonly Button cancel = new() { Text = "Cancel", AutoSize = true, Enabled = false };
     private readonly ComboBox provider = DropDown(["DirectML", "CPU"]);
-    private readonly ComboBox device = DropDown([]);
     private readonly ComboBox optimization = DropDown(Enum.GetNames<GraphOptimizationLevel>());
     private readonly ComboBox execution = DropDown(Enum.GetNames<ExecutionMode>());
     private readonly NumericUpDown intraThreads = Number(0, Environment.ProcessorCount);
     private readonly NumericUpDown interThreads = Number(0, Environment.ProcessorCount);
     private readonly NumericUpDown workers = Number(1, Environment.ProcessorCount);
     private readonly NumericUpDown overlap = new() { Minimum = 0, Maximum = 75, Value = 25, Increment = 5, Width = 120 };
-    private readonly NumericUpDown keepModelLoaded = new() { Name = "keepModelLoaded", Minimum = 0, Maximum = 86400, Value = 300, Increment = 30, Width = 120,
+    private readonly NumericUpDown keepModelLoaded = new() { Name = "keepModelLoaded", Minimum = 0, Maximum = 86400, Value = 0, Increment = 30, Width = 120,
         AccessibleName = "Keep Model Loaded Seconds" };
     private string? loadedCacheKey;
     private readonly List<SharedModelPool<OnnxService>.Lease> modelLeases = [];
@@ -40,8 +39,6 @@ public partial class OnnxDemucsDialog : Form
     private readonly CheckBox prepacking = Check("Disable weight prepacking");
     private readonly CheckBox profiling = Check("Enable ONNX profiling");
     private readonly CheckBox logging = Check("Verbose ONNX session logging");
-    private readonly CheckBox cuda = Check("Prefer CUDA 12 CuFFT; fall back to parallel CPU FFT");
-    private readonly TextBox cudaDirectory = new() { Dock = DockStyle.Fill };
     private readonly TextBox profilePath = new() { Dock = DockStyle.Fill };
     private readonly TextBox optimizedPath = new() { Dock = DockStyle.Fill };
     private readonly TextBox advanced = new() { Multiline = true, ScrollBars = ScrollBars.Vertical, Height = 65, Dock = DockStyle.Fill };
@@ -53,12 +50,15 @@ public partial class OnnxDemucsDialog : Form
     private bool closeRequested;
     private bool loadedWithCurrentOptions;
     private string? deviceNotice;
+    private DemucsCudaDevice[] cudaDevices = [];
 
-    private sealed record GpuDeviceChoice(DemucsCudaDevice Cuda, DirectMLDevices.Adapter? DirectML)
+    private sealed record DirectMLDeviceChoice(DirectMLDevices.Adapter Adapter, DemucsCudaDevice? Cuda)
     {
-        public override string ToString() => $"cuda:{this.Cuda.Id} — {this.Cuda.Name}" +
-            (this.DirectML is null ? " (no DirectML match)" : $" -> DirectML {this.DirectML.Id}");
+        public override string ToString() => $"DirectML {this.Adapter.Id} — {this.Adapter.Name}" +
+            (this.Cuda is null ? "" : $" (CUDA FFT cuda:{this.Cuda.Id})");
     }
+
+    private sealed class DirectMLMemoryGuardException(string message) : InvalidOperationException(message) { }
 
     public OnnxDemucsDialog(AudioObj audioObj)
     {
@@ -66,8 +66,6 @@ public partial class OnnxDemucsDialog : Form
         this.OriginalAudio = audioObj;
         this.Text = "Demucs Source Separation";
         this.MaximumSize = Size.Empty;
-        this.MinimumSize = new Size(1020, 770);
-        this.ClientSize = new Size(1040, 760);
         this.StartPosition = FormStartPosition.CenterParent;
         this.Controls.Clear();
         this.comboBox_models.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -102,7 +100,7 @@ public partial class OnnxDemucsDialog : Form
         var retentionRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
         retentionRow.Controls.Add(new Label { Text = "Keep Model Loaded Seconds", AutoSize = true, Margin = new Padding(3, 7, 8, 3) });
         retentionRow.Controls.Add(this.keepModelLoaded);
-        retentionRow.Controls.Add(new Label { Text = "0 = unload on close; default 300 s", AutoSize = true, Margin = new Padding(8, 7, 3, 3) });
+        retentionRow.Controls.Add(new Label { Text = "0 = unload on close; DirectML always unloads; default 0 s", AutoSize = true, Margin = new Padding(8, 7, 3, 3) });
         modelRow.Controls.Add(retentionRow, 0, 1);
         modelRow.SetColumnSpan(retentionRow, 2);
         this.keepModelLoaded.ValueChanged += (_, _) =>
@@ -118,16 +116,14 @@ public partial class OnnxDemucsDialog : Form
             this.optionsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         }
         this.AddOption("Execution provider", this.provider);
-        this.AddOption("DirectML device", this.device);
-        this.AddOption("Graph optimization", this.optimization);
+        this.AddOption("Graph optimization (DirectML uses BASIC)", this.optimization);
         this.AddOption("Execution mode (CPU only)", this.execution);
         this.AddOption("Intra-op threads (0 = auto)", this.intraThreads);
         this.AddOption("Inter-op threads (0 = auto)", this.interThreads);
         this.AddOption("Profiling output prefix", this.profilePath);
         this.AddOption("Save optimized model (optional)", this.optimizedPath);
-        this.AddOption("CPU FFT workers", this.workers);
-        this.AddOption("Parallel GPU devices (cuda:<id>)", this.checkedListBox_cudaDevices);
-        this.AddOption("CUDA 12 directory (optional)", this.cudaDirectory);
+        this.AddOption("CPU FFT workers (fallback)", this.workers);
+        this.AddOption("Parallel DirectML devices", this.checkedListBox_directMLDevices);
         this.AddOption("Chunk overlap (%)", this.overlap);
         int checksRow = (this.optionCount + 1) / 2;
         for (int row = 0; row < checksRow; row++) this.optionsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
@@ -140,7 +136,7 @@ public partial class OnnxDemucsDialog : Form
         this.checksPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         this.checksPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         int checkIndex = 0;
-        foreach (var check in new[] { this.cpuFallback, this.cpuOperators, this.validate, this.disableDmlFusion, this.memoryPattern, this.cpuArena, this.spinning, this.prepacking, this.profiling, this.logging, this.cuda })
+        foreach (var check in new[] { this.cpuFallback, this.cpuOperators, this.validate, this.disableDmlFusion, this.memoryPattern, this.cpuArena, this.spinning, this.prepacking, this.profiling, this.logging })
         {
             check.AutoSize = false;
             check.Dock = DockStyle.Fill;
@@ -157,7 +153,7 @@ public partial class OnnxDemucsDialog : Form
         this.optionCount = (checksRow + 1) * 2;
         this.AddOption("Extra ONNX session entries\n(one key=value per line)", this.advanced);
         var qualityInfo = new Label { AutoSize = false, Dock = DockStyle.Fill, AutoEllipsis = true,
-            Text = "FFT 4096 / hop 1024 (fixed).\nOverlap: 0% fast; 25% balanced; 50–75% smoother boundaries, more work." };
+            Text = "CuFFT is selected automatically when a compatible CUDA toolkit is available; otherwise parallel CPU FFT is used.\nFFT 4096 / hop 1024 (fixed). Overlap: 0% fast; 25% balanced; 50–75% smoother boundaries, more work." };
         this.AddOption("Separation quality", qualityInfo);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
         buttons.Controls.AddRange([this.load, this.button_run, this.cancel]);
@@ -214,35 +210,46 @@ public partial class OnnxDemucsDialog : Form
         this.optionsPanel.Controls.Add(control, column + 1, row);
     }
 
-    private void LoadCudaDevices(DemucsCudaDeviceCatalog catalog, DirectMLDevices.Adapter[] adapters)
+    private void LoadDirectMLDevices(DirectMLDevices.Adapter[] adapters, DemucsCudaDeviceCatalog cudaCatalog)
     {
-        this.checkedListBox_cudaDevices.Items.Clear();
-        var choices = catalog.Devices.Select(cuda =>
-            new GpuDeviceChoice(cuda, DirectMLDevices.MatchCudaDevice(cuda, adapters))).ToArray();
-        foreach (var choice in choices) this.checkedListBox_cudaDevices.Items.Add(choice, false);
+        this.cudaDevices = cudaCatalog.Devices.ToArray();
+        this.checkedListBox_directMLDevices.Items.Clear();
+        foreach (var adapter in adapters)
+        {
+            DemucsCudaDevice? cuda = this.cudaDevices.FirstOrDefault(device =>
+                DirectMLDevices.MatchCudaDevice(device, [adapter]) is not null);
+            this.checkedListBox_directMLDevices.Items.Add(new DirectMLDeviceChoice(adapter, cuda), false);
+        }
+
         var notices = new List<string>();
-        if (!string.IsNullOrWhiteSpace(catalog.Warning)) notices.Add(catalog.Warning);
-        notices.AddRange(choices.Where(choice => choice.DirectML is null)
-            .Select(choice => $"CUDA device cuda:{choice.Cuda.Id} has no matching DirectML adapter and cannot be selected."));
-        if (choices.Length == 0) notices.Add("No CUDA devices were detected; GPU parallel selection is unavailable.");
+        if (!string.IsNullOrWhiteSpace(cudaCatalog.Warning)) notices.Add(cudaCatalog.Warning);
+        if (adapters.Length == 0) notices.Add("No DirectML adapters were detected; choose CPU execution.");
+        if (this.cudaDevices.Length == 0) notices.Add("No CUDA devices were detected; CuFFT will use parallel CPU FFT.");
         this.deviceNotice = string.Join(" ", notices.Distinct(StringComparer.Ordinal));
     }
 
-    private GpuDeviceChoice? FindCudaDevice(DirectMLDevices.Adapter? adapter) =>
-        adapter is null ? null : this.checkedListBox_cudaDevices.Items.Cast<GpuDeviceChoice>()
-            .FirstOrDefault(choice => choice.DirectML?.Id == adapter.Id);
+    private DirectMLDeviceChoice? FindDirectMLDevice(int id) =>
+        this.checkedListBox_directMLDevices.Items.Cast<DirectMLDeviceChoice>()
+            .FirstOrDefault(choice => choice.Adapter.Id == id);
+
+    private int[] GetSelectedDirectMLDeviceIds() =>
+        this.checkedListBox_directMLDevices.CheckedItems.Cast<DirectMLDeviceChoice>()
+            .Select(choice => choice.Adapter.Id).Distinct().ToArray();
 
     private DemucsLoadOptions[] GetDesiredOptions()
     {
         var options = this.ReadOptions();
-        var selected = this.checkedListBox_cudaDevices.CheckedItems.Cast<GpuDeviceChoice>().ToArray();
-        if (selected.Length == 0) return [options];
+        if (!options.UseDirectML) return [options];
+        var selected = this.checkedListBox_directMLDevices.CheckedItems.Cast<DirectMLDeviceChoice>()
+            .DistinctBy(choice => choice.Adapter.Id).ToArray();
+        if (selected.Length == 0)
+            throw new ArgumentException("Select at least one DirectML device or choose CPU execution.");
         return selected.Select(choice =>
         {
             var copy = JsonSerializer.Deserialize<DemucsLoadOptions>(JsonSerializer.Serialize(options))!;
             copy.UseDirectML = true;
-            copy.DeviceId = choice.DirectML!.Id;
-            copy.CudaDeviceId = choice.Cuda.Id;
+            copy.DeviceId = choice.Adapter.Id;
+            copy.CudaDeviceId = choice.Cuda?.Id ?? -1;
             return copy;
         }).ToArray();
     }
@@ -250,15 +257,8 @@ public partial class OnnxDemucsDialog : Form
     private string WithDeviceNotice(string message) =>
         string.IsNullOrWhiteSpace(this.deviceNotice) ? message : $"{message}\n{this.deviceNotice}";
 
-    private void CudaDevices_ItemCheck(object? sender, ItemCheckEventArgs e)
+    private void DirectMLDevices_ItemCheck(object? sender, ItemCheckEventArgs e)
     {
-        if (e.NewValue == CheckState.Checked &&
-            this.checkedListBox_cudaDevices.Items[e.Index] is GpuDeviceChoice { DirectML: null })
-        {
-            e.NewValue = CheckState.Unchecked;
-            this.status.Text = this.WithDeviceNotice("This CUDA device cannot be mapped to a DirectML adapter.");
-            return;
-        }
         if (!this.initializing && this.IsHandleCreated)
             this.BeginInvoke((Action)this.OptionsChanged);
     }
@@ -281,9 +281,7 @@ public partial class OnnxDemucsDialog : Form
             Task<DemucsCudaDeviceCatalog> cudaTask = Task.Run(DemucsFourier.EnumerateCudaDevices);
             await Task.WhenAll(adaptersTask, cudaTask);
             var devices = adaptersTask.Result;
-            this.device.Items.AddRange(devices.Cast<object>().ToArray());
-            if (this.device.Items.Count == 0) this.device.Items.Add(new DirectMLDevices.Adapter(0, "Default adapter"));
-            this.LoadCudaDevices(cudaTask.Result, devices);
+            this.LoadDirectMLDevices(devices, cudaTask.Result);
             this.ApplySettings();
             this.Onnx = await Task.Run(() => new OnnxService(this.settings.ModelDirectories, loadImmediately: false));
             this.RefreshModels();
@@ -301,9 +299,11 @@ public partial class OnnxDemucsDialog : Form
         var o = this.settings.Options;
         this.keepModelLoaded.Value = Math.Clamp(this.settings.KeepModelLoadedSeconds, 0, 86400);
         o.NormalizeWorkers();
-        this.provider.SelectedIndex = o.UseDirectML ? 0 : 1;
-        this.device.SelectedItem = this.device.Items.Cast<DirectMLDevices.Adapter>().FirstOrDefault(d => d.Id == o.DeviceId) ?? this.device.Items[0];
-        this.optimization.SelectedItem = Enum.IsDefined(o.GraphOptimization) ? o.GraphOptimization.ToString() : GraphOptimizationLevel.ORT_ENABLE_ALL.ToString();
+        bool directMLAvailable = this.checkedListBox_directMLDevices.Items.Count > 0;
+        if (!directMLAvailable) o.UseDirectML = false;
+        o.NormalizeForProvider(o.UseDirectML);
+        this.provider.SelectedIndex = o.UseDirectML && directMLAvailable ? 0 : 1;
+        this.optimization.SelectedItem = Enum.IsDefined(o.GraphOptimization) ? o.GraphOptimization.ToString() : GraphOptimizationLevel.ORT_ENABLE_BASIC.ToString();
         this.execution.SelectedItem = Enum.IsDefined(o.ExecutionMode) ? o.ExecutionMode.ToString() : ExecutionMode.ORT_SEQUENTIAL.ToString();
         this.intraThreads.Value = o.IntraOpThreads;
         this.interThreads.Value = o.InterOpThreads;
@@ -319,11 +319,23 @@ public partial class OnnxDemucsDialog : Form
         this.prepacking.Checked = o.DisablePrepacking;
         this.profiling.Checked = o.EnableProfiling;
         this.logging.Checked = o.LogSession;
-        this.cuda.Checked = o.PreferCudaFourier;
-        this.cudaDirectory.Text = o.CudaToolkitDirectory;
         this.profilePath.Text = o.ProfileOutputPathPrefix;
         this.optimizedPath.Text = o.OptimizedModelPath;
         this.advanced.Text = string.Join(Environment.NewLine, (o.SessionConfigEntries ?? []).Select(p => $"{p.Key}={p.Value}"));
+
+        int[] selectedIds = this.settings.SelectedDirectMLDeviceIds.Length == 0
+            ? [o.DeviceId]
+            : this.settings.SelectedDirectMLDeviceIds;
+        if (!selectedIds.Any(id => this.FindDirectMLDevice(id) is not null)
+            && this.checkedListBox_directMLDevices.Items.Count > 0)
+            selectedIds = [((DirectMLDeviceChoice)this.checkedListBox_directMLDevices.Items[0]).Adapter.Id];
+        this.settings.SelectedDirectMLDeviceIds = selectedIds
+            .Where(id => this.FindDirectMLDevice(id) is not null).Distinct().ToArray();
+        for (int index = 0; index < this.checkedListBox_directMLDevices.Items.Count; index++)
+        {
+            var choice = (DirectMLDeviceChoice)this.checkedListBox_directMLDevices.Items[index];
+            this.checkedListBox_directMLDevices.SetItemChecked(index, selectedIds.Contains(choice.Adapter.Id));
+        }
     }
 
     private DemucsLoadOptions ReadOptions()
@@ -335,11 +347,20 @@ public partial class OnnxDemucsDialog : Form
             if (equals <= 0) throw new ArgumentException("Extra session entries must use key=value, one entry per line.");
             entries.Add(line[..equals].Trim(), line[(equals + 1)..].Trim());
         }
+        bool useDirectML = this.provider.SelectedIndex == 0;
+        DirectMLDeviceChoice? selectedDevice = this.checkedListBox_directMLDevices.CheckedItems
+            .Cast<DirectMLDeviceChoice>().FirstOrDefault()
+            ?? this.FindDirectMLDevice(this.settings.Options.DeviceId);
+        int cudaDeviceId;
+        if (useDirectML) cudaDeviceId = selectedDevice?.Cuda?.Id ?? -1;
+        else if (this.settings.Options.CudaDeviceId < 0) cudaDeviceId = -1;
+        else cudaDeviceId = this.cudaDevices.FirstOrDefault(device => device.Id == this.settings.Options.CudaDeviceId)?.Id
+            ?? this.cudaDevices.FirstOrDefault()?.Id ?? -1;
         return new DemucsLoadOptions
         {
-            UseDirectML = this.provider.SelectedIndex == 0,
-            DeviceId = (this.device.SelectedItem as DirectMLDevices.Adapter)?.Id ?? 0,
-            GraphOptimization = Enum.Parse<GraphOptimizationLevel>(this.optimization.Text),
+            UseDirectML = useDirectML,
+            DeviceId = selectedDevice?.Adapter.Id ?? this.settings.Options.DeviceId,
+            GraphOptimization = useDirectML ? GraphOptimizationLevel.ORT_ENABLE_BASIC : Enum.Parse<GraphOptimizationLevel>(this.optimization.Text),
             ExecutionMode = Enum.Parse<ExecutionMode>(this.execution.Text),
             IntraOpThreads = (int)this.intraThreads.Value, InterOpThreads = (int)this.interThreads.Value,
             FourierWorkers = (int)this.workers.Value,
@@ -350,11 +371,8 @@ public partial class OnnxDemucsDialog : Form
             EnableCpuMemoryArena = this.cpuArena.Checked, DisableSpinning = this.spinning.Checked,
             DisablePrepacking = this.prepacking.Checked, EnableProfiling = this.profiling.Checked,
             LogSession = this.logging.Checked,
-            PreferCudaFourier = this.cuda.Checked && (this.provider.SelectedIndex != 0 ||
-                this.FindCudaDevice(this.device.SelectedItem as DirectMLDevices.Adapter) is not null),
-            CudaDeviceId = this.FindCudaDevice(this.device.SelectedItem as DirectMLDevices.Adapter)?.Cuda.Id
-                ?? Math.Clamp(this.settings.Options.CudaDeviceId, 0, 127),
-            CudaToolkitDirectory = this.cudaDirectory.Text.Trim(), ProfileOutputPathPrefix = this.profilePath.Text.Trim(),
+            CudaDeviceId = cudaDeviceId,
+            ProfileOutputPathPrefix = this.profilePath.Text.Trim(),
             OptimizedModelPath = this.optimizedPath.Text.Trim(), SessionConfigEntries = entries
         };
     }
@@ -434,31 +452,36 @@ public partial class OnnxDemucsDialog : Form
             this.settings.Options = this.ReadOptions();
             this.settings.KeepModelLoadedSeconds = (int)this.keepModelLoaded.Value;
             this.settings.SelectedModel = model.Path;
+            this.settings.SelectedDirectMLDeviceIds = this.GetSelectedDirectMLDeviceIds();
             this.settings.Save();
             if (await this.TryReuseModelsAsync(model.Path, desiredOptions)) return;
+            var loadOptions = this.GetMemorySafeOptions(model.Path, desiredOptions, out string? memoryWarning);
+            if (await this.TryReuseModelsAsync(model.Path, loadOptions))
+            {
+                if (memoryWarning is not null) this.status.Text = this.WithDeviceNotice($"{this.status.Text}\n{memoryWarning}");
+                return;
+            }
             this.ReleaseModel();
-            var acquired = new List<SharedModelPool<OnnxService>.Lease>();
+            List<SharedModelPool<OnnxService>.Lease> acquired;
             try
             {
-                for (int index = 0; index < desiredOptions.Length; index++)
-                {
-                    this.status.Text = desiredOptions.Length == 1
-                        ? $"Loading {model.Name}…"
-                        : $"Loading {model.Name} on GPU {index + 1}/{desiredOptions.Length}…";
-                    var lease = await DemucsModelCache.AcquireAsync(model.Path, desiredOptions[index],
-                        this.settings.ModelDirectories, allowLoad: true);
-                    acquired.Add(lease ?? throw new InvalidOperationException("The selected Demucs model could not be loaded."));
-                }
+                acquired = await this.LoadModelLeasesAsync(model.Path, loadOptions);
             }
-            catch
+            catch (DirectMLMemoryGuardException error) when (loadOptions.All(option => option.UseDirectML && option.AllowCpuFallback))
             {
-                ReleaseLeases(acquired, TimeSpan.Zero);
-                throw;
+                memoryWarning = $"{error.Message}{Environment.NewLine}Falling back to CPU ONNX and CPU FFT.";
+                loadOptions = [CreateCpuFallback(loadOptions[0])];
+                if (await this.TryReuseModelsAsync(model.Path, loadOptions))
+                {
+                    this.status.Text = this.WithDeviceNotice($"{this.status.Text}\n{memoryWarning}");
+                    return;
+                }
+                acquired = await this.LoadModelLeasesAsync(model.Path, loadOptions);
             }
             this.modelLeases.AddRange(acquired);
             this.Onnx = acquired[0].Model;
             this.ApplyEffectiveOptions(this.Onnx.EffectiveOptions!);
-            this.loadedCacheKeys = desiredOptions.Select(options => DemucsModelCache.Key(model.Path, options))
+            this.loadedCacheKeys = this.GetDesiredOptions().Select(options => DemucsModelCache.Key(model.Path, options))
                 .Order(StringComparer.Ordinal).ToArray();
             this.loadedCacheKey = this.loadedCacheKeys.FirstOrDefault();
             this.settings.Save();
@@ -466,9 +489,12 @@ public partial class OnnxDemucsDialog : Form
             this.checkedListBox_stems.Items.Clear();
             foreach (string stem in this.Onnx.AvailableStems)
                 this.checkedListBox_stems.Items.Add(stem, this.settings.SelectedStems.Contains(stem));
-            this.status.Text = this.WithDeviceNotice($"Ready — {this.Onnx.ExecutionProvider}" +
+            string ready = $"Ready — {this.Onnx.ExecutionProvider}" +
                 (acquired.Count > 1 ? $" on {acquired.Count} GPUs" : string.Empty) +
-                $"\n{this.Onnx.FourierBackend}\n{this.Onnx.LoadWarning}");
+                $"\n{this.Onnx.FourierBackend}";
+            string details = string.Join(Environment.NewLine,
+                new[] { memoryWarning, this.Onnx.LoadWarning }.Where(message => !string.IsNullOrWhiteSpace(message)));
+            this.status.Text = this.WithDeviceNotice(string.IsNullOrWhiteSpace(details) ? ready : $"{ready}\n{details}");
         }
         catch (Exception error) { this.ShowError("Unable to load Demucs", error); }
         finally { this.SetBusy(false); }
@@ -507,14 +533,99 @@ public partial class OnnxDemucsDialog : Form
     private void UpdateProviderControls()
     {
         bool dml = this.provider.SelectedIndex == 0;
-        this.device.Enabled = dml;
+        if (dml && !string.Equals(this.optimization.Text, GraphOptimizationLevel.ORT_ENABLE_BASIC.ToString(), StringComparison.Ordinal))
+        {
+            bool wasInitializing = this.initializing;
+            this.initializing = true;
+            this.optimization.SelectedItem = GraphOptimizationLevel.ORT_ENABLE_BASIC.ToString();
+            this.initializing = wasInitializing;
+        }
+        this.optimization.Enabled = !dml;
         this.execution.Enabled = !dml;
         this.memoryPattern.Enabled = !dml;
         this.cpuFallback.Enabled = dml;
         this.cpuOperators.Enabled = dml;
         this.validate.Enabled = dml;
         this.disableDmlFusion.Enabled = dml;
-        this.checkedListBox_cudaDevices.Enabled = !DemucsModelCache.HasDirectMLSessions;
+        this.checkedListBox_directMLDevices.Enabled = dml && !this.busy && !DemucsModelCache.HasDirectMLSessions;
+        this.keepModelLoaded.Enabled = !dml && !this.busy;
+        if (dml && this.keepModelLoaded.Value != 0) this.keepModelLoaded.Value = 0;
+    }
+
+    private string? GetDirectMLMemoryIssue(int deviceId, string? modelPath)
+    {
+        try
+        {
+            var memory = DirectMLDevices.GetVideoMemoryInfo(deviceId);
+            return modelPath is null
+                ? DirectMLDevices.GetRuntimeMemoryWarning(memory)
+                : DirectMLDevices.GetLoadMemoryWarning(memory, new FileInfo(modelPath).Length);
+        }
+        catch (Exception error) when (error is InvalidOperationException or DllNotFoundException
+            or EntryPointNotFoundException or System.Runtime.InteropServices.COMException)
+        {
+            return $"DirectML memory budget could not be verified for device {deviceId}: {error.Message}";
+        }
+    }
+
+    private DemucsLoadOptions[] GetMemorySafeOptions(string modelPath, DemucsLoadOptions[] options, out string? warning)
+    {
+        var issues = options.Where(option => option.UseDirectML)
+            .Select(option => (option.DeviceId, Issue: this.GetDirectMLMemoryIssue(option.DeviceId, modelPath)))
+            .Where(item => item.Issue is not null)
+            .Select(item => $"Device {item.DeviceId}: {item.Issue}")
+            .ToArray();
+        warning = null;
+        if (issues.Length == 0) return options;
+
+        string reason = string.Join(Environment.NewLine, issues);
+        if (options.All(option => option.AllowCpuFallback))
+        {
+            warning = $"{reason}{Environment.NewLine}DirectML was blocked by the memory safety check; CPU ONNX and CPU FFT will be used.";
+            return [CreateCpuFallback(options[0])];
+        }
+        throw new DirectMLMemoryGuardException($"{reason}{Environment.NewLine}Choose CPU execution or close GPU-heavy applications.");
+    }
+
+    private static DemucsLoadOptions CreateCpuFallback(DemucsLoadOptions options)
+    {
+        var cpu = JsonSerializer.Deserialize<DemucsLoadOptions>(JsonSerializer.Serialize(options))!;
+        cpu.UseDirectML = false;
+        cpu.DeviceId = 0;
+        cpu.CudaDeviceId = -1;
+        cpu.NormalizeForProvider(false);
+        return cpu;
+    }
+
+    private async Task<List<SharedModelPool<OnnxService>.Lease>> LoadModelLeasesAsync(
+        string modelPath, DemucsLoadOptions[] options)
+    {
+        var acquired = new List<SharedModelPool<OnnxService>.Lease>();
+        try
+        {
+            for (int index = 0; index < options.Length; index++)
+            {
+                this.status.Text = options.Length == 1
+                    ? $"Loading {Path.GetFileName(modelPath)}…"
+                    : $"Loading {Path.GetFileName(modelPath)} on DirectML device {index + 1}/{options.Length}…";
+                var lease = await DemucsModelCache.AcquireAsync(modelPath, options[index],
+                    this.settings.ModelDirectories, allowLoad: true)
+                    ?? throw new InvalidOperationException("The selected Demucs model could not be loaded.");
+                acquired.Add(lease);
+                if (lease.Model.EffectiveOptions is { UseDirectML: true } effective)
+                {
+                    string? issue = this.GetDirectMLMemoryIssue(effective.DeviceId, modelPath: null);
+                    if (issue is not null)
+                        throw new DirectMLMemoryGuardException($"The DirectML session was unloaded after initialization because its memory use is unsafe. {issue}");
+                }
+            }
+            return acquired;
+        }
+        catch
+        {
+            ReleaseLeases(acquired, TimeSpan.Zero);
+            throw;
+        }
     }
 
     private async void button_Run_Click(object sender, EventArgs e)
@@ -568,6 +679,11 @@ public partial class OnnxDemucsDialog : Form
                     for (int index = deviceIndex; index < selected.Length; index += leases.Length)
                     {
                         this.cancellation.Token.ThrowIfCancellationRequested();
+                        if (lease.Model.EffectiveOptions is { UseDirectML: true } effective)
+                        {
+                            string? issue = this.GetDirectMLMemoryIssue(effective.DeviceId, modelPath: null);
+                            if (issue is not null) throw new DirectMLMemoryGuardException(issue);
+                        }
                         var stems = await lease.Model.ExtractStemsAsync(this.OriginalAudio,
                             [selected[index]], stemProgress[index], this.cancellation.Token);
                         float[] samples = stems[selected[index]];
@@ -637,6 +753,7 @@ public partial class OnnxDemucsDialog : Form
                 this.settings.Options = this.ReadOptions();
                 this.settings.KeepModelLoadedSeconds = (int)this.keepModelLoaded.Value;
                 this.settings.SelectedModel = (this.comboBox_models.SelectedItem as ModelItem)?.Path ?? "";
+                this.settings.SelectedDirectMLDeviceIds = this.GetSelectedDirectMLDeviceIds();
                 if (this.checkedListBox_stems.Items.Count > 0)
                     this.settings.SelectedStems = this.checkedListBox_stems.CheckedItems.Cast<string>().ToArray();
                 this.settings.Save();
@@ -678,9 +795,10 @@ public partial class OnnxDemucsDialog : Form
         this.modelLeases.AddRange(acquired);
         OnnxService cached = acquired[0].Model;
         this.Onnx = cached;
-        this.loadedCacheKeys = keys;
-        this.loadedCacheKey = keys.FirstOrDefault();
         this.ApplyEffectiveOptions(cached.EffectiveOptions!);
+        this.loadedCacheKeys = this.GetDesiredOptions().Select(option => DemucsModelCache.Key(path, option))
+            .Order(StringComparer.Ordinal).ToArray();
+        this.loadedCacheKey = this.loadedCacheKeys.FirstOrDefault();
         this.loadedWithCurrentOptions = true;
         this.checkedListBox_stems.Items.Clear();
         foreach (string stem in cached.AvailableStems)
@@ -706,7 +824,7 @@ public partial class OnnxDemucsDialog : Form
     {
         foreach (var lease in leases)
         {
-            lease.KeepAlive = keepAlive;
+            lease.KeepAlive = lease.Model.EffectiveOptions?.UseDirectML == true ? TimeSpan.Zero : keepAlive;
             lease.Dispose();
         }
         if (leases is List<SharedModelPool<OnnxService>.Lease> list) list.Clear();

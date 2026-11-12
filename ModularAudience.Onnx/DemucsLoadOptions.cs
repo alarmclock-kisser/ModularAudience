@@ -12,10 +12,8 @@ public sealed class DemucsLoadOptions
     public bool DisableDirectMLGraphFusion { get; set; } = true;
     public int FourierWorkers { get; set; } = Math.Max(1, Environment.ProcessorCount / 2);
     public double ChunkOverlap { get; set; } = 0.25;
-    public bool PreferCudaFourier { get; set; } = true;
     public int CudaDeviceId { get; set; }
-    public string CudaToolkitDirectory { get; set; } = "";
-    public GraphOptimizationLevel GraphOptimization { get; set; } = GraphOptimizationLevel.ORT_ENABLE_ALL;
+    public GraphOptimizationLevel GraphOptimization { get; set; } = GraphOptimizationLevel.ORT_ENABLE_BASIC;
     public ExecutionMode ExecutionMode { get; set; } = ExecutionMode.ORT_SEQUENTIAL;
     public bool EnableMemoryPattern { get; set; }
     public bool EnableCpuMemoryArena { get; set; } = true;
@@ -31,7 +29,7 @@ public sealed class DemucsLoadOptions
 
     internal SessionOptions Create(bool directML)
     {
-        this.NormalizeWorkers();
+        this.NormalizeForProvider(directML);
         var options = new SessionOptions
         {
             GraphOptimizationLevel = this.GraphOptimization,
@@ -69,5 +67,14 @@ public sealed class DemucsLoadOptions
         this.IntraOpThreads = Math.Clamp(this.IntraOpThreads, 0, Environment.ProcessorCount);
         this.InterOpThreads = Math.Clamp(this.InterOpThreads, 0, Environment.ProcessorCount);
         this.ChunkOverlap = double.IsFinite(this.ChunkOverlap) ? Math.Clamp(this.ChunkOverlap, 0, 0.75) : 0.25;
+    }
+
+    public void NormalizeForProvider(bool directML)
+    {
+        this.NormalizeWorkers();
+        if (!directML) return;
+        this.GraphOptimization = GraphOptimizationLevel.ORT_ENABLE_BASIC;
+        this.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
+        this.EnableMemoryPattern = false;
     }
 }

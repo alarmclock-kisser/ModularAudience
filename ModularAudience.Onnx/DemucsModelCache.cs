@@ -32,7 +32,7 @@ public static class DemucsModelCache
         string model = Path.GetFullPath(modelPath).ToUpperInvariant();
         string target = options.UseDirectML
             ? $"DML:{options.DeviceId}"
-            : options.PreferCudaFourier ? $"CUDA:{options.CudaDeviceId}" : "CPU";
+            : "CPU";
         return model + "|" + target;
     }
     private sealed class Entry(OnnxService service, DateTime expires)
@@ -49,8 +49,7 @@ public static class DemucsModelCache
     public static string Key(string modelPath, DemucsLoadOptions options)
     {
         var copy = JsonSerializer.Deserialize<DemucsLoadOptions>(JsonSerializer.Serialize(options))!;
-        copy.NormalizeWorkers();
-        if (copy.UseDirectML) { copy.ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_SEQUENTIAL; copy.EnableMemoryPattern = false; }
+        copy.NormalizeForProvider(copy.UseDirectML);
         copy.SessionConfigEntries = copy.SessionConfigEntries.OrderBy(p => p.Key, StringComparer.Ordinal)
             .ToDictionary(p => p.Key, p => p.Value);
         var file = new FileInfo(Path.GetFullPath(modelPath));

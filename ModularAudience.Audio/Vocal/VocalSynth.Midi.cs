@@ -126,6 +126,11 @@ public static partial class VocalSynth
                     minimumFrames = 4;
                 }
             }
+            else if (token is VocalCustomSampleToken sample)
+            {
+                milliseconds = sample.DurationMilliseconds;
+                minimumFrames = 1;
+            }
             else
             {
                 throw new InvalidOperationException("Unknown vocal synthesis token.");
@@ -159,7 +164,8 @@ public static partial class VocalSynth
         {
             int holdIndex = Enumerable.Range(0, plan.Count)
                 .LastOrDefault(index => plan[index].Token is VocalPhonemeToken phoneme
-                    && VocalPhonemeInventory.Get(phoneme.Phoneme).IsVowel, -1);
+                    && VocalPhonemeInventory.Get(phoneme.Phoneme).IsVowel
+                    || plan[index].Token is VocalCustomSampleToken sample && sample.HasNucleus, -1);
             if (holdIndex < 0) holdIndex = plan.Count - 1;
             plan[holdIndex] = plan[holdIndex] with { Frames = plan[holdIndex].Frames + targetFrames - naturalFrames };
             return;
@@ -197,7 +203,8 @@ public static partial class VocalSynth
         {
             int holdIndex = Enumerable.Range(0, plan.Count)
                 .LastOrDefault(index => plan[index].Token is VocalPhonemeToken phoneme
-                    && VocalPhonemeInventory.Get(phoneme.Phoneme).IsVowel, -1);
+                    && VocalPhonemeInventory.Get(phoneme.Phoneme).IsVowel
+                    || plan[index].Token is VocalCustomSampleToken sample && sample.HasNucleus, -1);
             if (holdIndex < 0) holdIndex = plan.Count - 1;
             plan[holdIndex] = plan[holdIndex] with { Frames = plan[holdIndex].Frames + targetFrames - scaledTotal };
         }
@@ -207,7 +214,7 @@ public static partial class VocalSynth
         IReadOnlyList<RenderUnit> plan, VocalMidiScheduledNote note, VocalSynthSettings settings,
         CancellationToken cancellationToken)
     {
-        var pcm = new List<float>(checked(note.DurationFrames * settings.Channels));
+        var pcm = new PcmBuffer(checked(note.DurationFrames * settings.Channels));
         var state = new VoiceState { Frame = note.StartFrame };
         var random = new Random(unchecked(StableSeed(settings) ^ note.NoteNumber * 16777619 ^ note.SyllableIndex));
         for (int i = 0; i < plan.Count; i++)
@@ -217,6 +224,15 @@ public static partial class VocalSynth
             if (unit.Token is VocalPauseToken)
             {
                 AppendSilence(pcm, unit.Frames, settings.Channels, cancellationToken);
+                state.Frame += unit.Frames;
+                continue;
+            }
+            if (unit.Token is VocalCustomSampleToken sample)
+            {
+                double targetFrequency = settings.BasePitchHz * Math.Pow(2, unit.Note / 12.0);
+                float[] renderedSample = VocalCustomSampleRenderer.Render(
+                    sample, settings, unit.Frames, settings.Channels, targetFrequency, cancellationToken);
+                pcm.AddRange(renderedSample);
                 state.Frame += unit.Frames;
                 continue;
             }

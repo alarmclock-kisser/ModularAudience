@@ -2699,8 +2699,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                             continue;
                         }
 
-                        int minLengthSteps = Math.Clamp(options.MinNoteLengthSteps, 1, 16);
-                        int maxLengthSteps = Math.Max(minLengthSteps, options.MaxNoteLengthSteps);
+                        int minLengthSteps = Math.Clamp(options.MinNoteLengthSteps, 1, this.currentResolution);
+                        int maxLengthSteps = Math.Clamp(options.MaxNoteLengthSteps, minLengthSteps, this.currentResolution);
                         int lengthSteps = minLengthSteps + rand.Next(maxLengthSteps - minLengthSteps + 1);
                         float pitch = this.RollGeneratePitch(rand, options);
                         float volume = this.RollGenerateVolume(rand, options);
@@ -5473,7 +5473,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             this.CancelPastePreview();
-            this.generateOptions = BreakbeatPatternGenerateSettings.Normalize(options.Clone());
+            this.generateOptions = BreakbeatPatternGenerateSettings.Normalize(options.Clone(), this.currentResolution);
             this.generatingRect = true;
             this.generateDragging = false;
             this.pictureBox_pattern.Cursor = Cursors.Cross;

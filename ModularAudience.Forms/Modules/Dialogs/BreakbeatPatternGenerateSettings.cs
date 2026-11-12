@@ -116,7 +116,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
         }
 
-        public static BreakbeatGenerateOptions Normalize(BreakbeatGenerateOptions options)
+        public static BreakbeatGenerateOptions Normalize(BreakbeatGenerateOptions options, int maxNoteLengthSteps = 256)
         {
             if (!BreakbeatTrackPresets.All.Any(p => p.Name == options.Preset)) options.Preset = "- None -";
             options.PresetIntensityPercent = Math.Clamp(options.PresetIntensityPercent, 0, 100);
@@ -125,8 +125,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             options.AmenFactorPercent = Math.Clamp(options.AmenFactorPercent, 0, 100);
             options.MotifLengthSteps = Math.Clamp(options.MotifLengthSteps, 1, 64);
             options.MotifRepeatPercent = Math.Clamp(options.MotifRepeatPercent, 0, 100);
-            options.MaxNoteLengthSteps = Math.Clamp(options.MaxNoteLengthSteps, 1, 16);
-            options.MinNoteLengthSteps = Math.Clamp(options.MinNoteLengthSteps, 1, 16);
+            maxNoteLengthSteps = Math.Max(1, maxNoteLengthSteps);
+            options.MaxNoteLengthSteps = Math.Clamp(options.MaxNoteLengthSteps, 1, maxNoteLengthSteps);
+            options.MinNoteLengthSteps = Math.Clamp(options.MinNoteLengthSteps, 1, maxNoteLengthSteps);
             if (options.MinNoteLengthSteps > options.MaxNoteLengthSteps)
             {
                 (options.MinNoteLengthSteps, options.MaxNoteLengthSteps) = (options.MaxNoteLengthSteps, options.MinNoteLengthSteps);

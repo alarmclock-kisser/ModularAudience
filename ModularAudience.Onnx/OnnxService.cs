@@ -43,6 +43,8 @@ namespace ModularAudience.Onnx
         public bool LoadModel(string modelPath, DemucsLoadOptions? loadOptions = null)
         {
             loadOptions = JsonSerializer.Deserialize<DemucsLoadOptions>(JsonSerializer.Serialize(loadOptions ?? new()))!;
+            loadOptions.NormalizeForProvider(loadOptions.UseDirectML);
+            bool directMLRequested = loadOptions.UseDirectML;
             this.EffectiveOptions = null;
             string? fallbackWarning = null;
             InferenceSession? session = null;
@@ -97,12 +99,12 @@ namespace ModularAudience.Onnx
                 this.fourier = new DemucsFourier(loadOptions);
                 if (loadOptions.UseDirectML && this.ExecutionProvider.StartsWith("DirectML") && loadOptions.ValidateDirectML)
                     this.ValidateDirectML(modelPath, loadOptions);
-                loadOptions.UseDirectML = this.ExecutionProvider.StartsWith("DirectML", StringComparison.Ordinal);
-                if (loadOptions.UseDirectML)
+                if (directMLRequested && !this.ExecutionProvider.StartsWith("DirectML", StringComparison.Ordinal))
                 {
-                    loadOptions.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
-                    loadOptions.EnableMemoryPattern = false;
+                    loadOptions.CudaDeviceId = -1;
+                    this.fourier = new DemucsFourier(loadOptions);
                 }
+                loadOptions.UseDirectML = this.ExecutionProvider.StartsWith("DirectML", StringComparison.Ordinal);
                 this.EffectiveOptions = loadOptions;
                 return true;
             }

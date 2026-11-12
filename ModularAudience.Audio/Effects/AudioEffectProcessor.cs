@@ -6,7 +6,8 @@ namespace ModularAudience.Audio.Effects;
 /// <summary>Offline, RAM-only DSP. No method edits an AudioObj or creates history; the caller commits once.</summary>
 public static partial class AudioEffectProcessor
 {
-    private const int MaximumOutputSamples = 134_217_728;
+    private const long MaximumOutputPcmBytes = 4L * 1024 * 1024 * 1024;
+    private const int MaximumOutputSamples = (int)(MaximumOutputPcmBytes / sizeof(float));
 
     public static Task<AudioEffectResult> ProcessAsync(ReadOnlyMemory<float> input, int sampleRate, int channels,
         AudioEffectSettings settings, IProgress<double>? progress = null, CancellationToken cancellationToken = default,
@@ -144,7 +145,7 @@ public static partial class AudioEffectProcessor
     private static int EnsureLength(double frames, int channels)
     {
         if (!double.IsFinite(frames) || frames <= 0 || frames * channels > MaximumOutputSamples)
-            throw new ArgumentOutOfRangeException(nameof(frames), "Rendered audio would exceed the 512 MiB per-effect output limit. Use a smaller selection or shorter tail.");
+            throw new ArgumentOutOfRangeException(nameof(frames), "Rendered audio would exceed the 4 GiB per-effect output limit. Use a smaller selection or shorter tail.");
         return Math.Max(1, checked((int)Math.Round(frames)));
     }
 

@@ -22,7 +22,21 @@ internal static class VocalWindowsSpeech
             return RenderMidi(settings, cancellationToken);
 
         var culture = CultureInfo.GetCultureInfo(settings.Language == VocalLanguage.German ? "de-DE" : "en-US");
-        var tokens = VocalTextParser.ParseWindowsSpeech(settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
+        IReadOnlyList<VocalToken> phoneticTokens = VocalTextParser.Parse(
+            settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
+        IReadOnlyList<VocalToken> mappedTokens = VocalCustomSampleMapper.Apply(
+            settings.Language, settings.Text, settings.EmphasisSyntax,
+            phoneticTokens, settings.CustomSampleMappings, settings.Singing, cancellationToken);
+        List<VocalCustomSampleToken> customSamples = mappedTokens.OfType<VocalCustomSampleToken>().ToList();
+        IReadOnlyList<VocalToken> tokens = VocalTextParser.ParseWindowsSpeech(
+            settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
+        if (customSamples.Count > 0)
+        {
+            IReadOnlyList<VocalToken> mixedTokens = VocalCustomSampleMapper.AddSamplesToSpeechTokens(
+                tokens, customSamples, cancellationToken);
+            return RenderSpeechSegments(settings, mixedTokens, cancellationToken);
+        }
+
         using var synthesizer = new SpeechSynthesizer();
         VoiceInfo voice = SelectVoice(synthesizer, culture, settings.BasePitchHz);
         double nativePitch = voice.Gender == VoiceGender.Male ? 125 : voice.Gender == VoiceGender.Female ? 195 : 170;
@@ -75,11 +89,15 @@ internal static class VocalWindowsSpeech
     {
         IReadOnlyList<VocalToken> phoneticTokens = VocalTextParser.Parse(
             settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
-        VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, phoneticTokens, cancellationToken);
+        IReadOnlyList<VocalToken> mappedTokens = VocalCustomSampleMapper.Apply(
+            settings.Language, settings.Text, settings.EmphasisSyntax,
+            phoneticTokens, settings.CustomSampleMappings, splitForSinging: true, cancellationToken);
+        bool hasCustomSamples = mappedTokens.Any(token => token is VocalCustomSampleToken);
+        VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, mappedTokens, cancellationToken);
         IReadOnlyList<VocalToken> speechTokens = VocalTextParser.ParseWindowsSpeech(
             settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken);
-        Dictionary<int, VocalSyllableTextRange> ranges = VocalTextParser.GetSyllableTextRanges(
-                settings.Language, settings.Text, settings.EmphasisSyntax, cancellationToken)
+        Dictionary<int, VocalSyllableTextRange> ranges = VocalTextParser.GetSyllableTextRangesForTokens(
+                settings.Language, settings.Text, settings.EmphasisSyntax, mappedTokens, cancellationToken)
             .GroupBy(range => range.Index)
             .ToDictionary(group => group.Key, group => group.First());
 
@@ -107,6 +125,12 @@ internal static class VocalWindowsSpeech
             }
 
             IReadOnlyList<VocalToken> syllableSpeechTokens = GetSyllableSpeechTokens(speechTokens, range);
+            IReadOnlyList<VocalCustomSampleToken> syllableSamples = hasCustomSamples
+                ? syllable.Tokens.OfType<VocalCustomSampleToken>().ToArray()
+                : [];
+            if (syllableSamples.Count > 0)
+                syllableSpeechTokens = VocalCustomSampleMapper.AddSamplesToSpeechTokens(
+                    syllableSpeechTokens, syllableSamples, cancellationToken);
             if (syllableSpeechTokens.Count == 0)
                 throw new InvalidOperationException("A MIDI singing syllable contains no Windows speech text.");
 
@@ -114,11 +138,29 @@ internal static class VocalWindowsSpeech
             double targetSeconds = longestNoteFrames / (double)settings.SampleRate;
             double naturalSeconds = syllable.NaturalDurationMilliseconds / (1000 * settings.Speed);
             double speechSpeed = Math.Clamp(settings.Speed * 0.8 * naturalSeconds / targetSeconds, 0.2, 4.0);
-            string ssml = BuildSsml(syllableSpeechTokens, voice.Culture, speechSpeed, pitchLevel, cancellationToken);
-            float[] mono = SynthesizeMono(synthesizer, ssml, settings, cancellationToken);
-            mono = ApplyVoiceProfile(
-                mono, nativePitch * PitchRatios[pitchLevel], settings, cancellationToken, applyGeneratedMelody: false);
-            if (syllableSpeechTokens.OfType<VocalTextToken>().Any(token => token.Capitalized))
+            float[] mono;
+            if (hasCustomSamples)
+            {
+                mono = RenderSpeechSegments(
+                    settings,
+                    syllableSpeechTokens,
+                    synthesizer,
+                    voice.Culture,
+                    speechSpeed,
+                    pitchLevel,
+                    nativePitch,
+                    applyGeneratedMelody: false,
+                    cancellationToken);
+            }
+            else
+            {
+                string ssml = BuildSsml(syllableSpeechTokens, voice.Culture, speechSpeed, pitchLevel, cancellationToken);
+                mono = SynthesizeMono(synthesizer, ssml, settings, cancellationToken);
+                mono = ApplyVoiceProfile(
+                    mono, nativePitch * PitchRatios[pitchLevel], settings, cancellationToken, applyGeneratedMelody: false);
+            }
+            if (!hasCustomSamples
+                && syllableSpeechTokens.OfType<VocalTextToken>().Any(token => token.Capitalized))
             {
                 for (int i = 0; i < mono.Length; i++)
                 {
@@ -143,6 +185,108 @@ internal static class VocalWindowsSpeech
         AudioObj result = VocalSynth.CreateAudio(output, settings, cancellationToken);
         result.Bpm = (float)(settings.SingingMidiFile!.DefaultBpm * settings.Speed);
         return result;
+    }
+
+    private static AudioObj RenderSpeechSegments(
+        VocalSynthSettings settings,
+        IReadOnlyList<VocalToken> tokens,
+        CancellationToken cancellationToken)
+    {
+        var culture = CultureInfo.GetCultureInfo(settings.Language == VocalLanguage.German ? "de-DE" : "en-US");
+        using var synthesizer = new SpeechSynthesizer();
+        VoiceInfo voice = SelectVoice(synthesizer, culture, settings.BasePitchHz);
+        double nativePitch = voice.Gender == VoiceGender.Male ? 125 : voice.Gender == VoiceGender.Female ? 195 : 170;
+        int pitchLevel = SelectPitchLevel(settings.BasePitchHz / nativePitch);
+        double speechSpeed = settings.Singing ? settings.Speed * 0.8 : settings.Speed;
+        float[] mono = RenderSpeechSegments(
+            settings,
+            tokens,
+            synthesizer,
+            voice.Culture,
+            speechSpeed,
+            pitchLevel,
+            nativePitch,
+            applyGeneratedMelody: true,
+            cancellationToken);
+        var data = new float[checked(mono.Length * settings.Channels)];
+        for (int frame = 0; frame < mono.Length; frame++)
+        {
+            if ((frame & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+            for (int channel = 0; channel < settings.Channels; channel++)
+                data[frame * settings.Channels + channel] = mono[frame];
+        }
+        return VocalSynth.CreateAudio(data, settings, cancellationToken);
+    }
+
+    private static float[] RenderSpeechSegments(
+        VocalSynthSettings settings,
+        IReadOnlyList<VocalToken> tokens,
+        SpeechSynthesizer synthesizer,
+        CultureInfo culture,
+        double speechSpeed,
+        int pitchLevel,
+        double nativePitch,
+        bool applyGeneratedMelody,
+        CancellationToken cancellationToken)
+    {
+        List<float> output = [];
+        long startFrame = 0;
+        int index = 0;
+        int maximumFrames = VocalSynth.MaxOutputSamples / settings.Channels;
+        while (index < tokens.Count)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (tokens[index] is VocalCustomSampleToken sample)
+            {
+                int frames = VocalCustomSampleRenderer.GetFrameCount(sample, settings.SampleRate, settings.Speed, 1);
+                double? targetFrequency = settings.Singing && applyGeneratedMelody
+                    ? settings.BasePitchHz * Math.Pow(
+                        2,
+                        VocalSinging.Note((int)(startFrame * settings.Speed / (settings.SampleRate * 0.32))) / 12.0)
+                    : null;
+                float[] rendered = VocalCustomSampleRenderer.Render(
+                    sample, settings, frames, 1, targetFrequency, cancellationToken);
+                AppendSpeechSegment(output, rendered, maximumFrames);
+                startFrame += frames;
+                index++;
+                continue;
+            }
+
+            List<VocalToken> segmentTokens = [];
+            while (index < tokens.Count && tokens[index] is not VocalCustomSampleToken)
+                segmentTokens.Add(tokens[index++]);
+            if (segmentTokens.Count == 0) continue;
+
+            string ssml = BuildSsml(segmentTokens, culture, speechSpeed, pitchLevel, cancellationToken);
+            float[] segment = SynthesizeMono(synthesizer, ssml, settings, cancellationToken);
+            segment = ApplyVoiceProfile(
+                segment,
+                nativePitch * PitchRatios[pitchLevel],
+                settings,
+                cancellationToken,
+                applyGeneratedMelody,
+                startFrame);
+            if (segmentTokens.OfType<VocalTextToken>().Any(token => token.Capitalized))
+            {
+                for (int frame = 0; frame < segment.Length; frame++)
+                {
+                    if ((frame & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+                    segment[frame] *= 1.55f;
+                }
+            }
+            AppendSpeechSegment(output, segment, maximumFrames);
+            startFrame += segment.Length;
+        }
+        if (output.Count == 0)
+            throw new InvalidOperationException("Windows speech did not produce audio for the selected text.");
+        return output.ToArray();
+    }
+
+    private static void AppendSpeechSegment(List<float> output, float[] segment, int maximumFrames)
+    {
+        if (segment.Length > maximumFrames - output.Count)
+            throw new InvalidOperationException("The vocal synthesis output would exceed the supported size.");
+        output.AddRange(segment);
     }
 
     private static IReadOnlyList<VocalToken> GetSyllableSpeechTokens(
@@ -424,10 +568,13 @@ internal static class VocalWindowsSpeech
 
     private static float[] ApplyVoiceProfile(
         float[] source, double nativePitch, VocalSynthSettings settings, CancellationToken cancellationToken,
-        bool applyGeneratedMelody = true)
+        bool applyGeneratedMelody = true, long generatedMelodyStartFrame = 0)
     {
         if (settings.Singing && applyGeneratedMelody)
-            return ColorVoice(VocalSinging.RenderWindows(source, settings, cancellationToken), settings, cancellationToken);
+            return ColorVoice(
+                VocalSinging.RenderWindows(source, settings, cancellationToken, generatedMelodyStartFrame),
+                settings,
+                cancellationToken);
         double shift = 12 * Math.Log2(settings.BasePitchHz / nativePitch);
         if (Math.Abs(shift) > 0.5)
         {

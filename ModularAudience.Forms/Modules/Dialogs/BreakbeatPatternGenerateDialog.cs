@@ -110,9 +110,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 "Motif length in grid steps for repeats across the selection width.");
             AddNumeric("Sub-pattern repeat (%)", this.numeric_motifRepeat, options.MotifRepeatPercent, 0, 100, 5, 0,
                 "Chance to repeat the first motif instead of rolling a new one.");
-            AddNumeric("Min note length (steps)", this.numeric_minLength, options.MinNoteLengthSteps, 1, 16, 1, 0,
+            AddNumeric("Min note length (steps)", this.numeric_minLength, options.MinNoteLengthSteps, 1, this.stepsPerBar, 1, 0,
                 "Minimum note length in grid steps (1 = short hits allowed too).");
-            AddNumeric("Max note length (steps)", this.numeric_maxLength, options.MaxNoteLengthSteps, 1, 16, 1, 0,
+            AddNumeric("Max note length (steps)", this.numeric_maxLength, options.MaxNoteLengthSteps, 1, this.stepsPerBar, 1, 0,
                 "Maximum note length in grid steps (1 = short hits only).");
             AddNumeric("Pitch chance (%)", this.numeric_pitchChance, options.PitchChancePercent, 0, 100, 5, 0,
                 "Probability that a generated note gets pitched.");
@@ -256,7 +256,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void ApplyOptions(BreakbeatGenerateOptions options)
         {
-            options = BreakbeatPatternGenerateSettings.Normalize(options);
+            options = BreakbeatPatternGenerateSettings.Normalize(options, this.stepsPerBar);
             this.applyingOptions = true;
             this.combo_preset.SelectedIndex = Math.Max(0, BreakbeatTrackPresets.All.ToList().FindIndex(p => p.Name == options.Preset) + 1);
             this.numeric_presetIntensity.Value = options.PresetIntensityPercent;
@@ -301,6 +301,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             AllowTruncated = this.check_truncated.Checked,
             Interleaved = !this.autoReroll && this.check_interleaved.Checked,
             Seed = (int)this.numeric_seed.Value
-        });
+        }, this.stepsPerBar);
     }
 }

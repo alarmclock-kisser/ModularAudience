@@ -24,6 +24,9 @@ This document captures the current implementation of the **Vocalsynth** feature
 - Configurable in a deeper dialog, **JSON-persistent**, editable interactively:
   strongly pronounced vs. whispered, pauses, pitch up/down, lengthening.
 - NumericUpDown for **Speed**.
+- The last VocalSynth settings and text are remembered in RAM for the current
+  application process only. No last-settings JSON is written to disk; profile
+  and emphasis-syntax storage remain separate.
 - **9 hard-coded voice presets**: Child, Young Female, Adult Female, Adult Male,
   Deep Male, Robot, Whisper, Elderly, and Singing.
 - Buttons: **Prehear / Stop** and **Create** (adds rendered audio to a new
@@ -62,6 +65,8 @@ ModularAudience.Audio/Vocal/
   VocalJapanese.cs              Japanese dictionary readings, kana, and romaji
   VocalArabic.cs                Arabic script and Latin transliteration
   VocalRussian.cs               Russian Cyrillic and Latin transliteration
+  VocalCustomSampleMapper.cs     IPA-to-phoneme matching and source text ranges
+  VocalCustomSampleRenderer.cs   sample resampling, time stretch and pitch following
   VocalTextParser.cs            text + emphasis markers -> synthesis tokens
   VocalToken.cs                 pauses, phonemes, text and emphasis
   VocalSynthSettings.cs         settings (language, text, speed, voice, MIDI, emphasis)
@@ -74,6 +79,8 @@ ModularAudience.Forms/Modules/Dialogs/
   VocalSynthDialog.cs                 main dialog (merged Prehear/Stop button,
                                       empty-text disables buttons)
   VocalSynthDialog.Designer.cs        Windows speech and MIDI/syllable controls
+  VocalCustomSamplesDialog*.cs        modeless IPA-to-audio mapping editor
+  VocalCustomSampleStore.cs           RAM-only cloned sample cache
   VocalEmphasisSyntaxDialog.cs         emphasis marker editor
   VocalVoiceProfileDesignerDialog.cs   interactive voice color profile designer
 
@@ -224,6 +231,15 @@ so expressive repetitions remain separate in the shared renderer.
   clusters intact, with a deterministic fallback where orthography is ambiguous;
   they remain a display approximation, not linguistic syllabification. MIDI singing also works with Natural speech
   (Windows), where syllables are rendered locally, time-fitted to notes and pitch-retuned.
+- **Custom samples**: the modeless **Custom Samples...** editor maps IPA sequences
+  such as `/ka/` to audio shorter than one minute. Suggestions include audio in
+  open collections and TrackViews, and audio can be dragged onto a mapping to
+  assign or replace it. The process-wide RAM store keeps its own AudioObj clone,
+  so closing the source does not remove a mapping; replacing or deleting a row
+  disposes the old clone. Matching uses the shared phoneme inventory after
+  language phonemization, including dictionary readings of kanji and other
+  scripts. Samples are used by built-in synthesis, MIDI singing and Windows
+  Natural speech, with the selected speed and singing pitch applied.
 - **Expressive repetition**: three or more consecutive copies of a sustainable
   letter, such as `Klenkerrrrrr`, `hissssss` or `coooool`, sustain its sound.
   Ordinary double letters retain their normal pronunciation. The formant
@@ -260,8 +276,9 @@ so expressive repetitions remain separate in the shared renderer.
   multi-character markers match as exact substrings. An unmatched wrapping
   marker is ignored instead of blocking the parser.
 - Rendering is cancellable and rejects invalid settings or output exceeding
-  30 million interleaved samples. Windows speech also limits text to 100,000
-  characters and accepts speeds from 0.5 to 4.
+  4 GiB of interleaved Float32 PCM. Available memory and platform allocation
+  limits can impose a lower practical ceiling. Windows speech also limits text
+  to 100,000 characters and accepts speeds from 0.5 to 4.
 
 ## 4. Extension points / TODOs
 

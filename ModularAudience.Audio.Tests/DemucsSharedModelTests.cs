@@ -86,9 +86,30 @@ public sealed class DemucsSharedModelTests
     [TestMethod]
     public void DirectMLCacheKeyNormalizesForcedSessionOptions()
     {
-        var first = new DemucsLoadOptions { UseDirectML = true, EnableMemoryPattern = true, ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_PARALLEL };
+        var first = new DemucsLoadOptions
+        {
+            UseDirectML = true, EnableMemoryPattern = true,
+            ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_PARALLEL,
+            GraphOptimization = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+        };
         var effective = new DemucsLoadOptions { UseDirectML = true, EnableMemoryPattern = false, ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_SEQUENTIAL };
+        effective.GraphOptimization = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_BASIC;
         Assert.AreEqual(DemucsModelCache.Key("test.onnx", first), DemucsModelCache.Key("test.onnx", effective));
+    }
+
+    [TestMethod]
+    public void DirectMLBudgetGuardReservesHeadroomBeforeLoadingAndRunning()
+    {
+        const ulong gib = 1024UL * 1024 * 1024;
+        var safe = new DirectMLDevices.VideoMemoryInfo(16 * gib, 1 * gib, 0);
+        Assert.IsNull(DirectMLDevices.GetLoadMemoryWarning(safe, 316_446_953));
+
+        var lowHeadroom = new DirectMLDevices.VideoMemoryInfo(16 * gib, 4 * gib, 0);
+        StringAssert.Contains(DirectMLDevices.GetLoadMemoryWarning(lowHeadroom, 316_446_953)!, "70% safety limit");
+
+        var overloaded = new DirectMLDevices.VideoMemoryInfo(16 * gib, 12 * gib, 0);
+        StringAssert.Contains(DirectMLDevices.GetRuntimeMemoryWarning(overloaded)!, "70% safety limit");
+        Assert.IsNotNull(DirectMLDevices.GetLoadMemoryWarning(new DirectMLDevices.VideoMemoryInfo(0, 0, 0), 316_446_953));
     }
 
     [TestMethod]

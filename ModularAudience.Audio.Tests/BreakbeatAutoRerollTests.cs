@@ -225,6 +225,30 @@ public sealed class BreakbeatAutoRerollTests
     }
 
     [STATestMethod]
+    public void AutoGenerateNoteLengthLimitsFollowEditorStepsPerBar()
+    {
+        Assembly assembly = typeof(BreakbeatPatternEditorDialog).Assembly;
+        Type optionsType = assembly.GetType("ModularAudience.Forms.Modules.Dialogs.TrackAutoRerollOptions")!;
+        object autoOptions = Activator.CreateInstance(optionsType)!;
+        object generate = optionsType.GetProperty("Generate")!.GetValue(autoOptions)!;
+        generate.GetType().GetProperty("MinNoteLengthSteps")!.SetValue(generate, 128);
+        generate.GetType().GetProperty("MaxNoteLengthSteps")!.SetValue(generate, 128);
+        Type dialogType = assembly.GetType("ModularAudience.Forms.Modules.Dialogs.BreakbeatPatternGenerateDialog")!;
+
+        using var dialog = (Form)Activator.CreateInstance(dialogType, [generate, autoOptions, 128])!;
+        var minimum = (NumericUpDown)Field(dialog, "numeric_minLength");
+        var maximum = (NumericUpDown)Field(dialog, "numeric_maxLength");
+        Assert.AreEqual(128m, minimum.Maximum);
+        Assert.AreEqual(128m, maximum.Maximum);
+        Assert.AreEqual(128m, minimum.Value);
+        Assert.AreEqual(128m, maximum.Value);
+
+        object normalized = dialogType.GetProperty("Options")!.GetValue(dialog)!;
+        Assert.AreEqual(128, normalized.GetType().GetProperty("MinNoteLengthSteps")!.GetValue(normalized));
+        Assert.AreEqual(128, normalized.GetType().GetProperty("MaxNoteLengthSteps")!.GetValue(normalized));
+    }
+
+    [STATestMethod]
     public void ToggleOffStopsFutureRerolls()
     {
         using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };

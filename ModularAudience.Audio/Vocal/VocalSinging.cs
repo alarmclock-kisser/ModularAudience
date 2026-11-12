@@ -43,6 +43,29 @@ internal static class VocalSinging
                 previousSymbol = null;
                 continue;
             }
+            if (token is VocalCustomSampleToken sample)
+            {
+                if (sample.HasNucleus)
+                {
+                    FlushCurrent();
+                    if (leading.Count > 0)
+                    {
+                        current.AddRange(leading);
+                        leading.Clear();
+                    }
+                    current.Add(sample);
+                }
+                else if (current.Count > 0)
+                {
+                    current.Add(sample);
+                }
+                else
+                {
+                    leading.Add(sample);
+                }
+                previousSymbol = null;
+                continue;
+            }
             if (token is not VocalPhonemeToken phoneme) continue;
 
             if (!VocalPhonemeInventory.Contains(phoneme.Phoneme))
@@ -107,6 +130,16 @@ internal static class VocalSinging
         int sourceEnd = -1;
         foreach (VocalToken token in tokens)
         {
+            if (token is VocalCustomSampleToken sample)
+            {
+                naturalDuration += sample.DurationMilliseconds;
+                if (sample.SourceStart >= 0)
+                {
+                    sourceStart = Math.Min(sourceStart, sample.SourceStart);
+                    sourceEnd = Math.Max(sourceEnd, sample.SourceStart + sample.SourceLength);
+                }
+                continue;
+            }
             if (token is not VocalPhonemeToken phoneme) continue;
             VocalPhoneme definition = VocalPhonemeInventory.Get(phoneme.Phoneme);
             bool beat = phoneme.Phoneme.StartsWith("beat-", StringComparison.Ordinal);
@@ -124,7 +157,8 @@ internal static class VocalSinging
             Math.Max(1, naturalDuration), sourceEnd < 0 ? -1 : sourceStart, sourceEnd < 0 ? 0 : sourceEnd - sourceStart);
     }
 
-    internal static float[] RenderWindows(float[] source, VocalSynthSettings settings, CancellationToken cancellationToken)
+    internal static float[] RenderWindows(
+        float[] source, VocalSynthSettings settings, CancellationToken cancellationToken, long startFrame = 0)
     {
         int rate = settings.SampleRate;
         int hop = Math.Max(1, rate / 100);
@@ -139,7 +173,7 @@ internal static class VocalSinging
             bool voiced = pitches[i].FrequencyHz > 0;
             if (voiced)
             {
-                double seconds = i * (double)hop / rate;
+                double seconds = (startFrame + (long)i * hop) / (double)rate;
                 int note = (int)(seconds * settings.Speed / 0.32);
                 double target = settings.BasePitchHz * Math.Pow(2, Note(note) / 12.0);
                 double desired = 12 * Math.Log2(target / pitches[i].FrequencyHz);

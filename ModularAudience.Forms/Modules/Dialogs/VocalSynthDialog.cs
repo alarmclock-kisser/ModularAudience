@@ -9,7 +9,13 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 
 public sealed partial class VocalSynthDialog : Form
 {
+    private sealed record SessionSnapshot(
+        VocalSynthSettings Settings, bool ShowSyllables, string? VoiceSelection);
+
+    private static readonly object SessionSnapshotLock = new();
+    private static SessionSnapshot? lastSessionSnapshot;
     private readonly VocalEmphasisSyntaxStore emphasisStore;
+    private VocalCustomSamplesDialog? customSamplesDialog;
     private VocalEmphasisSyntax emphasisSyntax;
     private readonly VocalVoiceProfileStore profileStore;
     private readonly ComboBox languageCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
@@ -53,6 +59,7 @@ public sealed partial class VocalSynthDialog : Form
             this.data = data;
             WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
         }
+
         public int Read(Span<float> buffer)
         {
             if (pos >= data.Length)
@@ -73,20 +80,47 @@ public sealed partial class VocalSynthDialog : Form
     {
         profileStore = store ?? VocalVoiceProfileStore.Default();
         emphasisStore = estore ?? VocalEmphasisSyntaxStore.Default();
-        emphasisSyntax = emphasisStore.Load();
-
-        settings = VocalSynthSettings.FromPreset(VocalVoicePreset.BuiltIn[2], VocalLanguage.English, "");
+        SessionSnapshot? sessionSnapshot = ReadSessionSnapshot();
+        settings = sessionSnapshot?.Settings
+            ?? VocalSynthSettings.FromPreset(VocalVoicePreset.BuiltIn[2], VocalLanguage.English, "");
+        settings.CustomSampleMappings = VocalCustomSampleStore.GetMappings();
+        emphasisSyntax = sessionSnapshot is null ? emphasisStore.Load() : settings.EmphasisSyntax;
+        settings.EmphasisSyntax = emphasisSyntax;
         InitializeSpeechBackendControl();
         InitializeUnsupportedBeepControl();
         InitializeProfileControls();
         InitializeMidiControls(prehear, textEditor, create, designProfileBtn, emphasisBtn);
-        UpdateSpeechBackend();
         Text = "VocalSynth"; Name = "VocalSynthDialog";
         ClientSize = new Size(900, 650); MinimumSize = new Size(700, 500); StartPosition = FormStartPosition.CenterScreen;
 
-        // language combo
-        foreach (var lang in Enum.GetValues<VocalLanguage>()) languageCombo.Items.Add(lang.DisplayName());
-        languageCombo.SelectedIndex = 0;
+        syncing = true;
+        try
+        {
+            VocalLanguage[] languages = Enum.GetValues<VocalLanguage>();
+            foreach (VocalLanguage language in languages) languageCombo.Items.Add(language.DisplayName());
+            int languageIndex = Array.IndexOf(languages, settings.Language);
+            if (languageIndex < 0)
+            {
+                settings.Language = VocalLanguage.English;
+                languageIndex = Array.IndexOf(languages, settings.Language);
+            }
+            languageCombo.SelectedIndex = languageIndex;
+            textEditor.Text = settings.Text;
+            speed.Value = Math.Clamp((decimal)settings.Speed, speed.Minimum, speed.Maximum);
+            settings.Speed = (double)speed.Value;
+            windowsSpeechCheckBox.Checked = settings.UseWindowsSpeech;
+            unsupportedBeepCheckBox.Checked = settings.BeepForUnsupportedSounds;
+            midiSemitoneOffset.Value = Math.Clamp(
+                (decimal)settings.SingingMidiSemitoneOffset,
+                midiSemitoneOffset.Minimum,
+                midiSemitoneOffset.Maximum);
+            settings.SingingMidiSemitoneOffset = (double)midiSemitoneOffset.Value;
+            showSyllablesCheckBox.Checked = sessionSnapshot?.ShowSyllables ?? false;
+            RestoreMidiTrackNumber();
+        }
+        finally { syncing = false; }
+
+        UpdateSpeechBackend();
         languageCombo.SelectedIndexChanged += (_, _) =>
         {
             if (syncing) return;
@@ -97,8 +131,12 @@ public sealed partial class VocalSynthDialog : Form
         };
 
         // voice combo: built-ins + profiles
-        RefreshVoiceCombo();
+        string preferredVoice = sessionSnapshot?.VoiceSelection ?? "Built-in: " + settings.VoiceName;
+        RefreshVoiceCombo(preferredVoice);
+        bool restoredVoice = string.Equals(
+            voiceCombo.SelectedItem?.ToString(), preferredVoice, StringComparison.Ordinal);
         voiceCombo.SelectedIndexChanged += (_, _) => ApplyVoiceSelection();
+        if (!restoredVoice) ApplyVoiceSelection();
 
         speed.ValueChanged += (_, _) => { if (!syncing) { settings.Speed = (double)speed.Value; QueueRender(); } };
 
@@ -150,11 +188,89 @@ public sealed partial class VocalSynthDialog : Form
 
         debounce.Tick += async (_, _) => { debounce.Stop(); await RenderAsync(); };
         playbackTimer.Tick += (_, _) => { if (provider?.Finished == true) StopHear(); };
-        FormClosing += (_, _) => { rendering?.Cancel(); StopHear(); };
+        FormClosing += (_, _) => { debounce.Stop(); rendering?.Cancel(); StopHear(); };
+        FormClosed += (_, _) => SaveSessionSnapshot();
 
         settings.Text = textEditor.Text;
         UpdateButtonState();
         if (!string.IsNullOrWhiteSpace(textEditor.Text)) QueueRender();
+    }
+
+    private static SessionSnapshot? ReadSessionSnapshot()
+    {
+        lock (SessionSnapshotLock)
+        {
+            return lastSessionSnapshot is { } snapshot
+                ? snapshot with { Settings = snapshot.Settings.Clone() }
+                : null;
+        }
+    }
+
+    private void SaveSessionSnapshot()
+    {
+        settings.Language = languageCombo.SelectedIndex >= 0
+            ? (VocalLanguage)languageCombo.SelectedIndex
+            : settings.Language;
+        settings.Text = textEditor.Text;
+        settings.Speed = (double)speed.Value;
+        settings.SingingMidiSemitoneOffset = (double)midiSemitoneOffset.Value;
+        settings.EmphasisSyntax = emphasisSyntax;
+
+        lock (SessionSnapshotLock)
+        {
+            VocalSynthSettings snapshotSettings = settings.Clone();
+            snapshotSettings.CustomSampleMappings = [];
+            lastSessionSnapshot = new SessionSnapshot(
+                snapshotSettings,
+                showSyllablesCheckBox.Checked,
+                voiceCombo.SelectedItem?.ToString());
+        }
+    }
+
+    private void RestoreMidiTrackNumber()
+    {
+        MidiFileData? midi = settings.SingingMidiFile;
+        if (midi is null || midi.Tracks.Count == 0)
+        {
+            if (midi is not null)
+            {
+                settings.SingingMidiFile = null;
+                settings.SingingMidiTrackIndex = null;
+            }
+            midiTrackNumber.Value = 1;
+            UpdateMidiControls();
+            return;
+        }
+
+        int selectedPage = -1;
+        if (settings.SingingMidiTrackIndex is int selectedTrackIndex)
+        {
+            for (int page = 0; page < midi.Tracks.Count; page++)
+            {
+                if (midi.Tracks[page].Index == selectedTrackIndex)
+                {
+                    selectedPage = page;
+                    break;
+                }
+            }
+        }
+        if (selectedPage < 0)
+        {
+            for (int page = 0; page < midi.Tracks.Count; page++)
+            {
+                if (midi.Tracks[page].Notes.Count > 0)
+                {
+                    selectedPage = page;
+                    break;
+                }
+            }
+        }
+        if (selectedPage < 0) selectedPage = 0;
+
+        settings.SingingMidiTrackIndex = midi.Tracks[selectedPage].Index;
+        midiTrackNumber.Maximum = Math.Max(1, midi.Tracks.Count);
+        midiTrackNumber.Value = selectedPage + 1;
+        UpdateMidiControls();
     }
 
     private void UpdateButtonState()
@@ -252,6 +368,7 @@ public sealed partial class VocalSynthDialog : Form
         singingSettings.SingingMidiFile = midi;
         singingSettings.SingingMidiTrackIndex = midi.Tracks[pageIndex].Index;
         singingSettings.IgnoreTextPausesForMidiSinging = settings.IgnoreTextPausesForMidiSinging;
+        singingSettings.CustomSampleMappings = VocalCustomSampleStore.GetMappings();
         settings = singingSettings;
         midiSemitoneOffset.Value = (decimal)settings.SingingMidiSemitoneOffset;
 
@@ -363,8 +480,12 @@ public sealed partial class VocalSynthDialog : Form
 
                 if (showSyllablesCheckBox.Checked)
                 {
-                    IReadOnlyList<VocalSyllableTextRange> ranges = VocalTextParser.GetSyllableTextRanges(
-                        settings.Language, text, emphasisSyntax);
+                    VocalSynthSettings previewSettings = settings.Clone();
+                    previewSettings.Text = text;
+                    previewSettings.EmphasisSyntax = emphasisSyntax;
+                    previewSettings.CustomSampleMappings = VocalCustomSampleStore.GetMappings();
+                    IReadOnlyList<VocalSyllableTextRange> ranges =
+                        VocalSynth.GetSyllableTextRanges(previewSettings);
                     foreach (VocalSyllableTextRange range in ranges)
                     {
                         if ((range.Index & 1) == 0 || range.Start < 0 || range.Length <= 0
@@ -425,9 +546,11 @@ public sealed partial class VocalSynthDialog : Form
         QueueRender();
     }
 
-    private void RefreshVoiceCombo()
+    private void RefreshVoiceCombo(string? preferredSelection = null)
     {
-        string selected = voiceCombo.SelectedItem?.ToString() ?? "Built-in: " + settings.VoiceName;
+        string selected = preferredSelection
+            ?? voiceCombo.SelectedItem?.ToString()
+            ?? "Built-in: " + settings.VoiceName;
         voiceCombo.Items.Clear();
         foreach (var p in VocalVoicePreset.BuiltIn)
             voiceCombo.Items.Add("Built-in: " + p.Name);
@@ -482,6 +605,7 @@ public sealed partial class VocalSynthDialog : Form
 
     private void PreserveMidiSingingSettings(VocalSynthSettings replacement)
     {
+        replacement.CustomSampleMappings = VocalCustomSampleStore.GetMappings();
         if (settings.SingingMidiFile is null) return;
         replacement.Singing = true;
         replacement.SingingMidiFile = settings.SingingMidiFile;
@@ -520,6 +644,7 @@ public sealed partial class VocalSynthDialog : Form
             settings.Text = textEditor.Text;
             settings.Speed = (double)speed.Value;
             settings.SingingMidiSemitoneOffset = (double)midiSemitoneOffset.Value;
+            settings.CustomSampleMappings = VocalCustomSampleStore.GetMappings();
             var snapshot = settings.Clone();
             var (next, midiWarning) = await Task.Run(() =>
             {
@@ -609,6 +734,31 @@ public sealed partial class VocalSynthDialog : Form
             settings.EmphasisSyntax = emphasisSyntax;
             if (showSyllablesCheckBox.Checked) RefreshSyllablePreview();
             QueueRender();
+        }
+    }
+
+    private void OpenCustomSamplesDialog()
+    {
+        VocalCustomSamplesDialog? dialog = customSamplesDialog;
+        if (dialog is null || dialog.IsDisposed)
+        {
+            dialog = new VocalCustomSamplesDialog();
+            dialog.MappingsChanged += (_, _) =>
+            {
+                settings.CustomSampleMappings = VocalCustomSampleStore.GetMappings();
+                if (showSyllablesCheckBox.Checked) RefreshSyllablePreview();
+                QueueRender();
+            };
+            customSamplesDialog = dialog;
+        }
+
+        if (!dialog.Visible)
+            dialog.Show(this);
+        else
+        {
+            if (dialog.WindowState == FormWindowState.Minimized)
+                dialog.WindowState = FormWindowState.Normal;
+            dialog.Activate();
         }
     }
 
