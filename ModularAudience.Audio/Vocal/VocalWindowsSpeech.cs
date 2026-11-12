@@ -130,7 +130,8 @@ internal static class VocalWindowsSpeech
             foreach (VocalMidiScheduledNote note in syllableNotes)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                double frequency = VocalMidiSinging.GetFrequency(settings.SingingMidiFile!, note.NoteNumber);
+                double frequency = VocalMidiSinging.GetFrequency(
+                    settings.SingingMidiFile!, note.NoteNumber, settings.SingingMidiSemitoneOffset);
                 if (!double.IsFinite(frequency) || frequency <= 0 || frequency >= settings.SampleRate * 0.45)
                     throw new InvalidDataException($"MIDI note {note.NoteNumber} is outside the supported vocal frequency range.");
                 float[] durationMatched = FitSpeechToFrames(mono, note.DurationFrames, cancellationToken);

@@ -17,7 +17,8 @@ public static partial class VocalSynth
         {
             cancellationToken.ThrowIfCancellationRequested();
             VocalSingingSyllable syllable = plan.Syllables[note.SyllableIndex];
-            double frequency = VocalMidiSinging.GetFrequency(midi, note.NoteNumber);
+            double frequency = VocalMidiSinging.GetFrequency(
+                midi, note.NoteNumber, settings.SingingMidiSemitoneOffset);
             if (!double.IsFinite(frequency) || frequency <= 0 || frequency >= settings.SampleRate * 0.45)
                 throw new InvalidDataException($"MIDI note {note.NoteNumber} is outside the supported vocal frequency range.");
             double semitoneOffset = VocalMidiSinging.GetSemitoneOffset(frequency, settings.BasePitchHz);

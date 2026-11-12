@@ -498,23 +498,16 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         finally { creating = false; if (!disposed) create.Enabled = true; }
     }
 
-    private async Task ConfirmAsync()
+    private void Confirm()
     {
         if (creating) return;
         creating = true;
         this.button_ok.Enabled = false;
         try
         {
-            InstrumentSynthSettings snapshot = CaptureSettings();
             if (this.onInstrumentConfirmed is not null)
-            {
-                this.onInstrumentConfirmed(snapshot);
-                Close();
-            }
-            else if (await EnsureRendered())
-            {
-                AddToCollection();
-            }
+                this.onInstrumentConfirmed(CaptureSettings());
+            Close();
         }
         catch (Exception error)
         {

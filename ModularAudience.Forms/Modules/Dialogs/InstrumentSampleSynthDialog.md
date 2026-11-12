@@ -26,12 +26,13 @@ height or width enables parameter scrolling again, without automatically resizin
 - Create adds a named AudioObj to this window's family collection without closing the editor.
   Names use `Instrument · Key · Key Duration [BPM]` (for example `Sub Anchor · G#2 · 1/4 [120]`);
   repeated names get a numeric suffix. Closed output collections are recreated on the next Create.
-- OK in a standalone synthesizer behaves like Create. From the Breakbeat Pattern Editor, OK
-  stores the selected family, instrument/drum type and sound parameters in the current editor
-  session, then adds a live instrument track. Melodic notes are synthesized at their requested
-  pitch; each note uses the editor's BPM and note length as its synthesis tempo and key duration.
-  The instrument's release remains an additional tail. Drum notes retain their configured drum
-  and add the note pitch offset to that drum's tuning.
+- OK closes the dialog and never creates an AudioObj in a collection. In the Breakbeat Pattern
+  Editor, OK first stores the selected family, instrument/drum type and sound parameters in the
+  current editor session, then adds a live instrument track. Melodic notes are synthesized at
+  their requested pitch; each note uses the editor's BPM and note length as its synthesis tempo
+  and key duration. The instrument's release remains an additional tail. Drum notes retain their
+  configured drum and add the note pitch offset to that drum's tuning. Use Create to add a
+  rendered sample to the synthesizer's family collection.
 - Create Octave renders individual AudioObj notes into a new AudioCollectionView. Right-click
   the button to choose Offset (0/base, +8, +4, -4 or -8 semitones) and Step (2, 1, 0.5, 0.33
   [exactly 1/3], 0.25 or 0.125 semitones). The range includes both the selected starting

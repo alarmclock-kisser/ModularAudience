@@ -79,6 +79,53 @@ public class VocalSynthTests
     }
 
     [TestMethod]
+    public void MidiSinging_SpeedScalesMidiTempoAndDuration()
+    {
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData { NoteNumber = 60, Velocity = 100, StartTick = 0, DurationTicks = 960 });
+        VocalSynthSettings settings = CreateMidiSettings("A", midi);
+        settings.Speed = 1.5;
+
+        using AudioObj audio = VocalSynth.Render(settings);
+
+        Assert.AreEqual(180f, audio.Bpm);
+        Assert.AreEqual(2667, audio.Data.Length);
+    }
+
+    [TestMethod]
+    public void MidiSinging_SemitoneOffsetTransposesTrackPitch()
+    {
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData { NoteNumber = 69, Velocity = 100, StartTick = 0, DurationTicks = 960 });
+        VocalSynthSettings settings = CreateMidiSettings("A", midi);
+        settings.SingingMidiSemitoneOffset = 0.25;
+
+        double baseFrequency = VocalMidiSinging.GetFrequency(midi, 69);
+        double shiftedFrequency = VocalMidiSinging.GetFrequency(
+            midi, 69, settings.SingingMidiSemitoneOffset);
+
+        Assert.AreEqual(
+            baseFrequency * Math.Pow(2, 0.25 / 12),
+            shiftedFrequency,
+            1e-10);
+        Assert.AreEqual(0.25, settings.Clone().SingingMidiSemitoneOffset);
+    }
+
+    [TestMethod]
+    public void Parser_SyllableRangesUseVowelNucleiAndKeepWordOrder()
+    {
+        const string text = "hello banana";
+        IReadOnlyList<VocalSyllableTextRange> ranges = VocalTextParser.GetSyllableTextRanges(
+            VocalLanguage.English, text, VocalEmphasisSyntax.Default());
+
+        string[] syllableText = ranges
+            .Select(range => text.Substring(range.Start, range.Length))
+            .ToArray();
+
+        CollectionAssert.AreEqual(new[] { "hel", "lo", "ba", "na", "na" }, syllableText);
+    }
+
+    [TestMethod]
     public void MidiSinging_ReusesLastPitchForExtraSyllablesAndReportsWarning()
     {
         MidiFileData midi = CreateMidi(
@@ -1383,9 +1430,9 @@ public class VocalSynthTests
                     $"Profile name is not to the left of Save Profile at width {width}.");
                 if (width == 900)
                 {
-                    var lastAction = (Button)Field("emphasisBtn");
-                    Assert.IsTrue(lastAction.Top < group.Bottom && lastAction.Bottom > group.Top,
-                        "The profile row should fit on the second toolbar row at the default width.");
+                    var actionsRow = (FlowLayoutPanel)Field("vocalActionsRow");
+                    Assert.IsTrue(actionsRow.Top > group.Top,
+                        "Vocal actions should occupy the row below profile controls.");
                 }
                 foreach (var button in buttons)
                 {
@@ -1398,6 +1445,15 @@ public class VocalSynthTests
                 Assert.IsTrue(group.Right <= group.Parent.ClientSize.Width - group.Parent.Padding.Right,
                     $"The profile button row extends beyond the window at width {width}.");
             }
+
+            var vocalActionsRow = (FlowLayoutPanel)Field("vocalActionsRow");
+            var emphasisButton = (Button)Field("emphasisBtn");
+            var showSyllables = (CheckBox)Field("showSyllablesCheckBox");
+            vocalActionsRow.PerformLayout();
+            Assert.AreSame(vocalActionsRow, emphasisButton.Parent);
+            Assert.AreSame(vocalActionsRow, showSyllables.Parent);
+            Assert.IsTrue(showSyllables.Left >= emphasisButton.Right,
+                "Show syllables must be the rightmost action beside Emphasis Syntax.");
 
             nameField.Text = "Layout profile";
             var click = typeof(Button).GetMethod("OnClick", flags)!;
@@ -1424,7 +1480,7 @@ public class VocalSynthTests
             using var dialog = new VocalSynthDialog(profiles, new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json")));
             const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
             object Field(string name) => typeof(VocalSynthDialog).GetField(name, flags)!.GetValue(dialog)!;
-            var editor = (TextBox)Field("textEditor");
+            var editor = (RichTextBox)Field("textEditor");
             var profile = (TextBox)Field("profileName");
             var voice = (ComboBox)Field("voiceCombo");
             editor.AppendText("first ");
@@ -1466,7 +1522,7 @@ public class VocalSynthTests
             using var dialog = new VocalSynthDialog(profiles, new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json")));
             const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
             FieldInfo Field(string name) => typeof(VocalSynthDialog).GetField(name, flags)!;
-            var editor = (TextBox)Field("textEditor").GetValue(dialog)!;
+            var editor = (RichTextBox)Field("textEditor").GetValue(dialog)!;
             var profile = (TextBox)Field("profileName").GetValue(dialog)!;
             var voice = (ComboBox)Field("voiceCombo").GetValue(dialog)!;
             var speed = (NumericUpDown)Field("speed").GetValue(dialog)!;
@@ -1475,6 +1531,8 @@ public class VocalSynthTests
             var prehear = (Button)Field("prehear").GetValue(dialog)!;
             var parent = prehear.Parent!;
             parent.Controls.Remove(prehear);
+            dialog.Show();
+            Application.DoEvents();
             try
             {
                 editor.Text = "Hello";
@@ -1482,17 +1540,17 @@ public class VocalSynthTests
                 dialog.ActiveControl = editor;
                 Assert.IsFalse(SendCommand(editor, Keys.Enter));
                 SendMessage(editor.Handle, 0x0102, (IntPtr)'\r', IntPtr.Zero);
-                Assert.AreEqual("Hello\r\n", editor.Text);
+                Assert.AreEqual("Hello\n", editor.Text);
                 Assert.IsTrue(SendCommand(editor, Keys.Control | Keys.Z));
                 Assert.AreEqual("Hello", editor.Text);
                 Assert.IsTrue(SendCommand(editor, Keys.Control | Keys.Y));
-                Assert.AreEqual("Hello\r\n", editor.Text);
+                Assert.AreEqual("Hello\n", editor.Text);
 
                 Field("ready").SetValue(dialog, Field("revision").GetValue(dialog));
                 int clicks = 0;
                 prehear.Click += (_, _) => clicks++;
                 Assert.IsTrue(SendCommand(editor, Keys.Shift | Keys.Enter));
-                Assert.AreEqual("Hello\r\n", editor.Text);
+                Assert.AreEqual("Hello\n", editor.Text);
                 Assert.AreEqual(1, clicks);
 
                 dialog.ActiveControl = profile;
@@ -1542,10 +1600,11 @@ public class VocalSynthTests
             using var dialog = new VocalSynthDialog(profiles, new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json")));
             const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
             object Field(string name) => typeof(VocalSynthDialog).GetField(name, flags)!.GetValue(dialog)!;
-            dialog.CreateControl();
+            dialog.Show();
+            Application.DoEvents();
             ((ComboBox)Field("languageCombo")).SelectedItem = "Beatboxing";
             ((VocalSynthSettings)Field("settings")).SampleRate = 8000;
-            var editor = (TextBox)Field("textEditor");
+            var editor = (RichTextBox)Field("textEditor");
             var timer = (System.Windows.Forms.Timer)Field("debounce");
             var status = (Label)Field("status");
             var ensure = typeof(VocalSynthDialog).GetMethod("EnsureRenderedAsync", flags)!;
@@ -1564,6 +1623,80 @@ public class VocalSynthTests
             WaitForRender(task);
             Assert.IsTrue(task.GetAwaiter().GetResult(), status.Text);
             StringAssert.StartsWith(status.Text, "Rendered");
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [STATestMethod]
+    public void Dialog_MidiOffsetAndSyllableFormattingKeepTheEditorEditable()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "vocal_syllable_edit_" + Guid.NewGuid());
+        var profiles = new VocalVoiceProfileStore(directory);
+        try
+        {
+            using var dialog = new VocalSynthDialog(
+                profiles, new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json")));
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            object Field(string name) => typeof(VocalSynthDialog).GetField(name, flags)!.GetValue(dialog)!;
+
+            var row = (FlowLayoutPanel)Field("midiOptionsRow");
+            Assert.AreSame(Field("prehear"), row.Controls[0]);
+            Assert.AreSame(Field("midiButton"), row.Controls[1]);
+            Assert.AreSame(Field("editMidiButton"), row.Controls[2]);
+            Assert.AreSame(Field("midiTrackNumberLabel"), row.Controls[3]);
+            Assert.AreSame(Field("midiTrackNumber"), row.Controls[4]);
+            Assert.AreSame(Field("midiSemitoneOffsetLabel"), row.Controls[5]);
+            Assert.AreSame(Field("midiSemitoneOffset"), row.Controls[6]);
+            Assert.AreSame(Field("midiFileLabel"), row.Controls[7]);
+            Assert.IsFalse(row.Controls.Contains((Control)Field("showSyllablesCheckBox")));
+
+            var offset = (NumericUpDown)Field("midiSemitoneOffset");
+            Assert.AreEqual(-16m, offset.Minimum);
+            Assert.AreEqual(16m, offset.Maximum);
+            Assert.AreEqual(0.25m, offset.Increment);
+            Assert.AreEqual(2, offset.DecimalPlaces);
+            Assert.AreEqual(0m, offset.Value);
+            Assert.IsFalse(offset.Enabled);
+
+            var settings = (VocalSynthSettings)Field("settings");
+            MidiFileData midi = CreateMidi(
+                new MidiNoteData { NoteNumber = 60, Velocity = 100, StartTick = 0, DurationTicks = 960 });
+            settings.Singing = true;
+            settings.SingingMidiFile = midi;
+            settings.SingingMidiTrackIndex = midi.Tracks[0].Index;
+            var editor = (RichTextBox)Field("textEditor");
+            editor.Text = "banana";
+            typeof(VocalSynthDialog).GetMethod("UpdateMidiControls", flags)!.Invoke(dialog, null);
+            Assert.IsTrue(offset.Enabled);
+            offset.Value = 1.25m;
+            Assert.AreEqual(1.25, settings.SingingMidiSemitoneOffset);
+
+            var timer = (System.Windows.Forms.Timer)Field("debounce");
+            timer.Stop();
+            var showSyllables = (CheckBox)Field("showSyllablesCheckBox");
+            editor.SelectionStart = 5;
+            showSyllables.Checked = true;
+            Assert.IsFalse(editor.ReadOnly);
+            Assert.AreEqual(5, editor.SelectionStart);
+
+            IReadOnlyList<VocalSyllableTextRange> ranges = VocalTextParser.GetSyllableTextRanges(
+                settings.Language, editor.Text, settings.EmphasisSyntax);
+            VocalSyllableTextRange secondSyllable = ranges.Single(range => range.Index == 1);
+            editor.Select(secondSyllable.Start, secondSyllable.Length);
+            Assert.IsTrue(editor.SelectionFont!.Style.HasFlag(FontStyle.Underline));
+            VocalSyllableTextRange firstSyllable = ranges.Single(range => range.Index == 0);
+            editor.Select(firstSyllable.Start, firstSyllable.Length);
+            Assert.IsFalse(editor.SelectionFont!.Style.HasFlag(FontStyle.Underline));
+
+            editor.Select(editor.TextLength, 0);
+            editor.AppendText("s");
+            timer.Stop();
+            Assert.AreEqual("bananas", editor.Text);
+            Assert.AreEqual(editor.Text, settings.Text);
+            Assert.AreSame(editor, ((Panel)Field("textContentPanel")).Controls[0]);
         }
         finally
         {

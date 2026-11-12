@@ -41,12 +41,15 @@ public static class VocalTextParser
         foreach (var (word, indices) in wordGroups.OrderBy(entry => entry.Key.Start))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            int[] graphemeStarts = StringInfo.ParseCombiningCharacters(text.Substring(word.Start, word.Length));
+            string wordText = text.Substring(word.Start, word.Length);
+            int[] graphemeStarts = StringInfo.ParseCombiningCharacters(wordText);
             int graphemeCount = graphemeStarts.Length;
+            int[] boundaries = CreateSyllableBoundaries(
+                wordText, graphemeStarts, indices.Count, cancellationToken);
             for (int part = 0; part < indices.Count; part++)
             {
-                int firstGrapheme = part * graphemeCount / indices.Count;
-                int endGrapheme = (part + 1) * graphemeCount / indices.Count;
+                int firstGrapheme = boundaries[part];
+                int endGrapheme = boundaries[part + 1];
                 if (endGrapheme <= firstGrapheme) continue;
                 int start = word.Start + graphemeStarts[firstGrapheme];
                 int end = endGrapheme == graphemeCount
@@ -56,6 +59,82 @@ public static class VocalTextParser
             }
         }
         return ranges.OrderBy(range => range.Start).ToArray();
+    }
+
+    private static int[] CreateSyllableBoundaries(
+        string word, int[] graphemeStarts, int syllableCount, CancellationToken cancellationToken)
+    {
+        int graphemeCount = graphemeStarts.Length;
+        List<(int Start, int End)> vowelNuclei = [];
+        for (int index = 0; index < graphemeCount;)
+        {
+            if ((index & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (!IsVowelGrapheme(word, graphemeStarts, index))
+            {
+                index++;
+                continue;
+            }
+
+            int start = index++;
+            while (index < graphemeCount && IsVowelGrapheme(word, graphemeStarts, index))
+            {
+                if ((index & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                index++;
+            }
+            vowelNuclei.Add((start, index));
+        }
+
+        if (vowelNuclei.Count != syllableCount)
+            return CreateEvenSyllableBoundaries(graphemeCount, syllableCount, cancellationToken);
+
+        int[] boundaries = new int[syllableCount + 1];
+        boundaries[^1] = graphemeCount;
+        for (int syllable = 1; syllable < syllableCount; syllable++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            (int _, int previousEnd) = vowelNuclei[syllable - 1];
+            (int nextStart, int _) = vowelNuclei[syllable];
+            int consonantsBetweenNuclei = nextStart - previousEnd;
+            int nextOnsetLength = consonantsBetweenNuclei switch
+            {
+                0 => 0,
+                <= 2 => 1,
+                _ => 2
+            };
+            int boundary = nextStart - nextOnsetLength;
+            if (boundary <= boundaries[syllable - 1] || boundary >= graphemeCount)
+                return CreateEvenSyllableBoundaries(graphemeCount, syllableCount, cancellationToken);
+            boundaries[syllable] = boundary;
+        }
+
+        return boundaries;
+    }
+
+    private static bool IsVowelGrapheme(string word, int[] graphemeStarts, int index)
+    {
+        int start = graphemeStarts[index];
+        int end = index + 1 < graphemeStarts.Length ? graphemeStarts[index + 1] : word.Length;
+        string grapheme = word.Substring(start, end - start).Normalize(NormalizationForm.FormD);
+        foreach (char character in grapheme)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) is
+                UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark)
+                continue;
+            return "aeiouyæøœı".Contains(char.ToLowerInvariant(character));
+        }
+        return false;
+    }
+
+    private static int[] CreateEvenSyllableBoundaries(
+        int graphemeCount, int syllableCount, CancellationToken cancellationToken)
+    {
+        int[] boundaries = new int[syllableCount + 1];
+        for (int part = 0; part <= syllableCount; part++)
+        {
+            if ((part & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+            boundaries[part] = (int)((long)part * graphemeCount / syllableCount);
+        }
+        return boundaries;
     }
 
     internal static IReadOnlyList<VocalToken> ParseWindowsSpeech(

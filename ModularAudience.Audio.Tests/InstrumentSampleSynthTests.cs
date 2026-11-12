@@ -253,6 +253,27 @@ public sealed class InstrumentSampleSynthTests
         Assert.IsNotNull(confirmed);
         Assert.AreEqual(60, confirmed.MidiNote);
         Assert.AreEqual("Concert Grand", confirmed.VoiceName);
+        Assert.IsTrue(dialog.IsDisposed);
+        Assert.IsNull(typeof(InstrumentSampleSynthDialog)
+            .GetField("collection", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dialog));
+    }
+
+    [STATestMethod]
+    public void StandaloneOkClosesWithoutCreatingAnAudioCollection()
+    {
+        using var dialog = new InstrumentSampleSynthDialog(SynthFamily.Keyboard, store);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        ((System.Windows.Forms.Timer)typeof(InstrumentSampleSynthDialog)
+            .GetField("debounce", flags)!.GetValue(dialog)!).Stop();
+        var ok = dialog.Controls.Find("button_ok", true).OfType<Button>().Single();
+
+        dialog.Show();
+        ok.PerformClick();
+        Application.DoEvents();
+
+        Assert.IsTrue(dialog.IsDisposed);
+        Assert.IsNull(typeof(InstrumentSampleSynthDialog)
+            .GetField("collection", flags)!.GetValue(dialog));
     }
 
     [STATestMethod]

@@ -116,8 +116,8 @@ internal static class VocalMidiSinging
             Math.Max(0, syllables.Count - noteGroups.Length));
     }
 
-    internal static double GetFrequency(MidiFileData midi, int noteNumber) =>
-        midi.PitchFrequency * Math.Pow(2.0, (noteNumber - 69) / 12.0);
+    internal static double GetFrequency(MidiFileData midi, int noteNumber, double semitoneOffset = 0) =>
+        midi.PitchFrequency * Math.Pow(2.0, (noteNumber + semitoneOffset - 69) / 12.0);
 
     internal static double GetSemitoneOffset(double frequency, double basePitchHz) =>
         12.0 * Math.Log2(frequency / basePitchHz);

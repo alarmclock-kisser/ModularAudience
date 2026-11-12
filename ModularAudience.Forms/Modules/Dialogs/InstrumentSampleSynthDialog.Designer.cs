@@ -52,7 +52,7 @@ public sealed partial class InstrumentSampleSynthDialog
         this.octaveContextMenu.Opening += (_, _) => this.UpdateOctaveMenuChecks();
         this.button_createOctave.ContextMenuStrip = this.octaveContextMenu;
         this.button_createOctave.Click += async (_, _) => await this.CreateOctaveAsync();
-        this.button_ok.Click += async (_, _) => await this.ConfirmAsync();
+        this.button_ok.Click += (_, _) => this.Confirm();
         this.tips.SetToolTip(this.button_createOctave,
             "Click to render an octave of individual notes. Right-click to choose its starting transpose and semitone step.");
     }

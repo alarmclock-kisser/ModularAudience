@@ -66,7 +66,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             pictureBox_pattern.Dock = DockStyle.Fill;
             pictureBox_pattern.Location = new Point(0, 0);
             pictureBox_pattern.Name = "pictureBox_pattern";
-            pictureBox_pattern.Size = new Size(1048, 461);
+            pictureBox_pattern.Size = new Size(1110, 461);
             pictureBox_pattern.TabIndex = 0;
             pictureBox_pattern.TabStop = true;
             pictureBox_pattern.AllowDrop = true;
@@ -91,7 +91,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_pattern.Dock = DockStyle.Fill;
             panel_pattern.Location = new Point(0, 0);
             panel_pattern.Name = "panel_pattern";
-            panel_pattern.Size = new Size(1048, 461);
+            panel_pattern.Size = new Size(1110, 461);
             panel_pattern.TabIndex = 2;
             panel_pattern.MouseWheel += pictureBox_pattern_MouseWheel;
             //
@@ -116,8 +116,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 Name = "button_instrument",
                 Text = "+ Instrument",
-                Size = new Size(74, 25),
-                Location = new Point(456, 14),
+                Size = new Size(94, 25),
+                Location = new Point(460, 14),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
                 ContextMenuStrip = contextMenuStrip_instrument,
                 UseVisualStyleBackColor = true
@@ -127,8 +127,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Controls.Add(button_instrument);
             var button_recordBeat = new Button
             {
-                Name = "button_recordBeat", Text = "Record Beat", Size = new Size(74, 25),
-                Location = new Point(536, 14), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+                Name = "button_recordBeat", Text = "Record Beat", Size = new Size(90, 25),
+                Location = new Point(556, 14), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
                 UseVisualStyleBackColor = true
             };
             button_recordBeat.Click += (_, _) => this.RecordBeatAsync();
@@ -136,8 +136,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Controls.Add(button_recordBeat);
             var button_clearAll = new Button
             {
-                Name = "button_clearAll", Text = "Clear", Size = new Size(40, 25),
-                Location = new Point(702, 14), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+                Name = "button_clearAll", Text = "Clear", Size = new Size(52, 25),
+                Location = new Point(738, 14), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
                 UseVisualStyleBackColor = true
             };
             button_clearAll.Click += (_, _) => this.ClearAllPatternNotes();
@@ -156,13 +156,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Dock = DockStyle.Bottom;
             panel_controls.Location = new Point(0, 461);
             panel_controls.Name = "panel_controls";
-            panel_controls.Size = new Size(1048, 52);
+            panel_controls.Size = new Size(1110, 52);
             panel_controls.TabIndex = 1;
             // 
             // button_save
             // 
             button_save.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_save.Location = new Point(982, 14);
+            button_save.Location = new Point(1044, 14);
             button_save.Name = "button_save";
             button_save.Size = new Size(54, 25);
             button_save.TabIndex = 4;
@@ -173,7 +173,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 // button_help
 //
             button_help.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_help.Location = new Point(932, 14);
+            button_help.Location = new Point(994, 14);
             button_help.Name = "button_help";
             button_help.Size = new Size(48, 25);
             button_help.TabIndex = 9;
@@ -185,11 +185,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_settings
             //
             // Right-hand cluster: [+/-] stay next to "Steps / bar"; the gear groups with Help/Save.
-            //   instrument 456..530 | record 536..610 | add/remove 612..658 | roll 660..700
-            //   clear 702..742 | remix 744..790 | generate 792..860 | settings 862..930
-            //   help 932..980 | save 982..1036
+            //   instrument 460..554 | record 556..646 | add/remove 648..694 | roll 696..736
+            //   clear 738..790 | remix 792..852 | generate 854..922 | settings 924..992
+            //   help 994..1042 | save 1044..1098
             button_settings.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_settings.Location = new Point(862, 14);
+            button_settings.Location = new Point(924, 14);
             button_settings.Name = "button_settings";
             button_settings.Size = new Size(68, 25);
             button_settings.TabIndex = 10;
@@ -201,7 +201,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_generate
             //
             button_generate.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_generate.Location = new Point(792, 14);
+            button_generate.Location = new Point(854, 14);
             button_generate.Name = "button_generate";
             button_generate.Size = new Size(68, 25);
             button_generate.TabIndex = 11;
@@ -214,9 +214,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             button_remix.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             button_remix.Enabled = false;
-            button_remix.Location = new Point(744, 14);
+            button_remix.Location = new Point(792, 14);
             button_remix.Name = "button_remix";
-            button_remix.Size = new Size(46, 25);
+            button_remix.Size = new Size(60, 25);
             button_remix.TabIndex = 12;
             button_remix.Text = "Remix";
             toolTip_pattern.SetToolTip(button_remix, "Derive a variation from the selected notes (needs 2+ selected notes; Ctrl+click skips the options dialog). The dialog's bottom checkbox switches between replacing the selection and copying the remix to the clipboard.");
@@ -226,7 +226,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_roll
             //
             button_roll.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_roll.Location = new Point(660, 14);
+            button_roll.Location = new Point(696, 14);
             button_roll.Name = "button_roll";
             button_roll.Size = new Size(40, 25);
             button_roll.TabIndex = 13;
@@ -237,7 +237,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             // button_removeBar
             //
-            button_removeBar.Location = new Point(636, 14);
+            button_removeBar.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            button_removeBar.Location = new Point(672, 14);
             button_removeBar.Name = "button_removeBar";
             button_removeBar.Size = new Size(22, 25);
             button_removeBar.TabIndex = 8;
@@ -248,7 +249,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             // button_addBar
             // 
-            button_addBar.Location = new Point(612, 14);
+            button_addBar.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            button_addBar.Location = new Point(648, 14);
             button_addBar.Name = "button_addBar";
             button_addBar.Size = new Size(22, 25);
             button_addBar.TabIndex = 7;
@@ -340,7 +342,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             AcceptButton = button_save;
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1048, 513);
+            ClientSize = new Size(1110, 513);
             Controls.Add(panel_pattern);
             Controls.Add(panel_controls);
             FormBorderStyle = FormBorderStyle.Sizable;
@@ -349,7 +351,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             MaximumSize = Size.Empty;
             // The right-hand button cluster is anchored to the right edge, so the window must
             // never be narrower than its design width or it would slide over the BPM controls.
-            MinimumSize = SizeFromClientSize(new Size(1048, 360));
+            MinimumSize = SizeFromClientSize(new Size(1110, 360));
             Name = "BreakbeatPatternEditorDialog";
             StartPosition = FormStartPosition.CenterParent;
             Text = "Breakbeat Pattern Editor";

@@ -16,7 +16,7 @@ This document captures the current implementation of the **Vocalsynth** feature
   mode. Its voice color is still selected independently through the voice preset
   or a custom profile.
 - **Beatboxing** interprets a compact sequence of vocal percussion symbols.
-- Interactive text input field; **line-by-line text editor** (multiline textbox).
+- Interactive text input field; **line-by-line rich text editor** (multiline and editable).
 - Defined speech punctuation markers that modulate speech:
   `-`, `~`, `+`, `...`, `#`, `*`, `_` and friends. Markers can be
   **interpolating / wrapping** (e.g. `*strongly pronounced*`,
@@ -205,10 +205,14 @@ so expressive repetitions remain separate in the shared renderer.
   tempo, gaps and text pauses set the vocal timeline; overlapping notes are
   mixed as simultaneous voices. Extra text syllables reuse the last MIDI chord,
   while excess MIDI note groups are left silent and reported after rendering.
-  The optional syllable preview alternates black and gray highlighting. Its
-  word-internal split is a grapheme-based display approximation, not linguistic
-  syllabification. MIDI singing also works with Natural speech (Windows), where
-  syllables are rendered locally, time-fitted to notes and pitch-retuned.
+  The **Semitone offset** control transposes MIDI notes by -16…+16 semitones in
+  0.25-semitone steps. **Speed** scales MIDI note durations and the resulting BPM;
+  1.00 preserves the MIDI tempo (for example, 120 BPM stays 120 BPM). **Show
+  syllables** underlines every second syllable in the same editable text field.
+  Word-internal boundaries use matching written vowel nuclei and keep grapheme
+  clusters intact, with a deterministic fallback where orthography is ambiguous;
+  they remain a display approximation, not linguistic syllabification. MIDI singing also works with Natural speech
+  (Windows), where syllables are rendered locally, time-fitted to notes and pitch-retuned.
 - **Expressive repetition**: three or more consecutive copies of a sustainable
   letter, such as `Klenkerrrrrr`, `hissssss` or `coooool`, sustain its sound.
   Ordinary double letters retain their normal pronunciation. The formant

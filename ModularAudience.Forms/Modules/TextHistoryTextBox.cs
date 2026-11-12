@@ -41,11 +41,59 @@ internal sealed class TextHistoryTextBox : TextBox
     }
 }
 
+internal sealed class TextHistoryRichTextBox : RichTextBox
+{
+    private readonly TextEditHistory history;
+
+    public TextHistoryRichTextBox()
+    {
+        history = new TextEditHistory(this);
+    }
+
+    internal bool ProcessHistoryCommand(Keys keyData)
+    {
+        if (keyData == (Keys.Control | Keys.Z))
+        {
+            history.Undo();
+            return true;
+        }
+        if (keyData == (Keys.Control | Keys.Y))
+        {
+            history.Redo();
+            return true;
+        }
+        return false;
+    }
+
+    protected override bool ProcessCmdKey(ref Message message, Keys keyData)
+    {
+        if (ProcessHistoryCommand(keyData)) return true;
+        return base.ProcessCmdKey(ref message, keyData);
+    }
+
+    protected override void WndProc(ref Message message)
+    {
+        if (message.Msg == 0x0102 && message.WParam == (IntPtr)'\r' && !ReadOnly)
+        {
+            SelectedText = Environment.NewLine;
+            return;
+        }
+
+        base.WndProc(ref message);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) history.Dispose();
+        base.Dispose(disposing);
+    }
+}
+
 internal sealed class TextEditHistory : IDisposable
 {
     private const int MaxUndoSteps = 8192;
     private const long GroupDelayMilliseconds = 900;
-    private readonly TextBox editor;
+    private readonly TextBoxBase editor;
     private readonly LinkedList<TextEdit> undo = new();
     private readonly Stack<TextEdit> redo = new();
     private string previousText;
@@ -64,7 +112,7 @@ internal sealed class TextEditHistory : IDisposable
         long ChangedAt,
         bool CanGroup);
 
-    public TextEditHistory(TextBox editor)
+    public TextEditHistory(TextBoxBase editor)
     {
         this.editor = editor;
         previousText = editor.Text;

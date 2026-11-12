@@ -13,13 +13,21 @@ public sealed partial class VocalSynthDialog
     private Button midiButton = null!;
     private Label midiFileLabel = null!;
     private NumericUpDown midiTrackNumber = null!;
+    private Label midiTrackNumberLabel = null!;
+    private NumericUpDown midiSemitoneOffset = null!;
+    private Label midiSemitoneOffsetLabel = null!;
     private Button editMidiButton = null!;
     private CheckBox showSyllablesCheckBox = null!;
     private FlowLayoutPanel midiOptionsRow = null!;
+    private FlowLayoutPanel vocalActionsRow = null!;
     private Panel textContentPanel = null!;
-    private RichTextBox syllablePreview = null!;
 
-    private void InitializeMidiControls(Button prehear, TextBox textEditor)
+    private void InitializeMidiControls(
+        Button prehear,
+        TextHistoryRichTextBox textEditor,
+        Button create,
+        Button designProfileBtn,
+        Button emphasisBtn)
     {
         midiButton = new Button
         {
@@ -33,7 +41,7 @@ public sealed partial class VocalSynthDialog
             Text = "No MIDI loaded",
             AutoSize = true,
             AutoEllipsis = true,
-            MaximumSize = new Size(240, 0),
+            MaximumSize = new Size(180, 0),
             Margin = new Padding(4, 8, 4, 0),
             AccessibleName = "MIDI file and selected track",
         };
@@ -44,6 +52,31 @@ public sealed partial class VocalSynthDialog
             Maximum = 1,
             Value = 1,
             Width = 58,
+            Enabled = false,
+        };
+        midiTrackNumberLabel = new Label
+        {
+            Name = "midiTrackNumberLabel",
+            Text = "Track:",
+            AutoSize = true,
+            Margin = new Padding(4, 8, 0, 0),
+        };
+        midiSemitoneOffsetLabel = new Label
+        {
+            Name = "midiSemitoneOffsetLabel",
+            Text = "Semitone offset:",
+            AutoSize = true,
+            Margin = new Padding(4, 8, 0, 0),
+        };
+        midiSemitoneOffset = new NumericUpDown
+        {
+            Name = "midiSemitoneOffset",
+            Minimum = -16m,
+            Maximum = 16m,
+            Increment = 0.25m,
+            DecimalPlaces = 2,
+            Value = 0m,
+            Width = 76,
             Enabled = false,
         };
         editMidiButton = new Button
@@ -74,32 +107,32 @@ public sealed partial class VocalSynthDialog
         [
             prehear,
             midiButton,
-            midiFileLabel,
-            new Label { Text = "Track:", AutoSize = true, Margin = new Padding(4, 8, 0, 0) },
-            midiTrackNumber,
             editMidiButton,
-            showSyllablesCheckBox,
+            midiTrackNumberLabel,
+            midiTrackNumber,
+            midiSemitoneOffsetLabel,
+            midiSemitoneOffset,
+            midiFileLabel,
         ]);
         midiButton.Click += (_, _) => OpenMidiFile();
         midiTrackNumber.ValueChanged += (_, _) => MidiTrackNumberChanged();
+        midiSemitoneOffset.ValueChanged += MidiSemitoneOffsetChanged;
         editMidiButton.Click += (_, _) => EditLoadedMidi();
         showSyllablesCheckBox.CheckedChanged += (_, _) => ToggleSyllablePreview();
 
-        textContentPanel = new Panel { Dock = DockStyle.Fill };
-        syllablePreview = new RichTextBox
+        vocalActionsRow = new FlowLayoutPanel
         {
-            Name = "syllablePreview",
-            Dock = DockStyle.Fill,
-            ReadOnly = true,
-            BorderStyle = BorderStyle.FixedSingle,
-            BackColor = SystemColors.Window,
-            ForeColor = Color.Black,
-            ScrollBars = RichTextBoxScrollBars.Both,
-            Font = textEditor.Font,
-            Visible = false,
+            Name = "vocalActionsRow",
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            Margin = Padding.Empty,
         };
+        vocalActionsRow.Controls.AddRange([showSyllablesCheckBox, emphasisBtn, designProfileBtn, create]);
+
+        textContentPanel = new Panel { Dock = DockStyle.Fill };
         textContentPanel.Controls.Add(textEditor);
-        textContentPanel.Controls.Add(syllablePreview);
     }
 
     private void InitializeSpeechBackendControl()

@@ -95,7 +95,6 @@ public sealed class BreakbeatPatternWindowTests
     {
         using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
         using var editor = new BreakbeatPatternEditorDialog([new bool[16]], [sample], ["Audio"], 1, 16, 0, 120);
-        editor.PerformLayout();
         string[] controlNames =
         [
             "label_resolution", "numericUpDown_resolution", "button_instrument", "button_recordBeat",
@@ -106,15 +105,30 @@ public sealed class BreakbeatPatternWindowTests
             .Select(name => editor.Controls.Find(name, true).OfType<Control>().Single())
             .ToArray();
 
-        for (int first = 0; first < controls.Length; first++)
+        void AssertNoOverlaps()
         {
-            for (int second = first + 1; second < controls.Length; second++)
+            editor.PerformLayout();
+            for (int first = 0; first < controls.Length; first++)
             {
-                Assert.IsFalse(
-                    controls[first].Bounds.IntersectsWith(controls[second].Bounds),
-                    $"{controls[first].Name} overlaps {controls[second].Name}.");
+                for (int second = first + 1; second < controls.Length; second++)
+                {
+                    Assert.IsFalse(
+                        controls[first].Bounds.IntersectsWith(controls[second].Bounds),
+                        $"{controls[first].Name} {controls[first].Bounds} overlaps {controls[second].Name} {controls[second].Bounds}.");
+                }
             }
         }
+
+        AssertNoOverlaps();
+        foreach (string name in new[] { "button_instrument", "button_recordBeat", "button_clearAll", "button_remix" })
+        {
+            Button button = controls.OfType<Button>().Single(control => control.Name == name);
+            int minimumTextWidth = TextRenderer.MeasureText(button.Text, button.Font).Width + button.Padding.Horizontal + 8;
+            Assert.IsTrue(button.Width >= minimumTextWidth, $"{button.Name} does not have enough width for '{button.Text}'.");
+        }
+
+        editor.ClientSize = new Size(1280, editor.ClientSize.Height);
+        AssertNoOverlaps();
     }
 
     [STATestMethod]

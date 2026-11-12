@@ -14,6 +14,7 @@ public sealed class VocalSynthSettings
     public VocalEmphasisSyntax EmphasisSyntax { get; set; } = VocalEmphasisSyntax.Default();
     public MidiFileData? SingingMidiFile { get; set; }
     public int? SingingMidiTrackIndex { get; set; }
+    public double SingingMidiSemitoneOffset { get; set; }
 
     // Voice params
     public string VoiceName { get; set; } = "Adult Female";
@@ -49,6 +50,10 @@ public sealed class VocalSynthSettings
             throw new ArgumentException("Windows speech is available for English and German only.", nameof(Language));
         if (UseWindowsSpeech && Speed < 0.5)
             throw new ArgumentOutOfRangeException(nameof(Speed), "Windows speech speed must be at least 0.5.");
+        if (!double.IsFinite(SingingMidiSemitoneOffset)
+            || SingingMidiSemitoneOffset < -16
+            || SingingMidiSemitoneOffset > 16)
+            throw new ArgumentOutOfRangeException(nameof(SingingMidiSemitoneOffset));
         if (Singing && SingingMidiFile is not null)
         {
             if (SingingMidiTrackIndex is null
@@ -75,6 +80,7 @@ public sealed class VocalSynthSettings
         EmphasisSyntax = EmphasisSyntax,
         SingingMidiFile = SingingMidiFile,
         SingingMidiTrackIndex = SingingMidiTrackIndex,
+        SingingMidiSemitoneOffset = SingingMidiSemitoneOffset,
         VoiceName = VoiceName,
         BasePitchHz = BasePitchHz,
         FormantScale = FormantScale,

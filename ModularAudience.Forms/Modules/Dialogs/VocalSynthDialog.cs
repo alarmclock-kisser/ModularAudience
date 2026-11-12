@@ -15,7 +15,16 @@ public sealed partial class VocalSynthDialog : Form
     private readonly ComboBox languageCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
     private readonly ComboBox voiceCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
     private readonly NumericUpDown speed = new() { Minimum = 0.5m, Maximum = 2.0m, Increment = 0.05m, DecimalPlaces = 2, Value = 1.0m, Width = 80 };
-    private readonly TextHistoryTextBox textEditor = new() { Multiline = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Both, Font = new Font("Consolas", 11f) };
+    private readonly TextHistoryRichTextBox textEditor = new()
+    {
+        Multiline = true,
+        Dock = DockStyle.Fill,
+        ScrollBars = RichTextBoxScrollBars.Both,
+        BorderStyle = BorderStyle.FixedSingle,
+        WordWrap = false,
+        DetectUrls = false,
+        Font = new Font("Consolas", 11f),
+    };
     private readonly Label status = new() { Dock = DockStyle.Fill, AutoSize = true, Text = "Ready." };
     private readonly Button prehear = new() { Text = "Prehear", AutoSize = true };
     private readonly Button create = new() { Text = "Create", AutoSize = true };
@@ -27,7 +36,7 @@ public sealed partial class VocalSynthDialog : Form
     private AudioCollectionView? collection;
     private CancellationTokenSource? rendering;
     private int revision, ready = -1;
-    private bool disposedFlag, creating, syncing;
+    private bool disposedFlag, creating, syncing, formattingSyllables;
     private readonly System.Windows.Forms.Timer debounce = new() { Interval = 300 };
     private WaveOut? output;
     private VocalPreview? provider;
@@ -70,7 +79,7 @@ public sealed partial class VocalSynthDialog : Form
         InitializeSpeechBackendControl();
         InitializeUnsupportedBeepControl();
         InitializeProfileControls();
-        InitializeMidiControls(prehear, textEditor);
+        InitializeMidiControls(prehear, textEditor, create, designProfileBtn, emphasisBtn);
         UpdateSpeechBackend();
         Text = "VocalSynth"; Name = "VocalSynthDialog";
         ClientSize = new Size(900, 650); MinimumSize = new Size(700, 500); StartPosition = FormStartPosition.CenterScreen;
@@ -103,7 +112,8 @@ public sealed partial class VocalSynthDialog : Form
         top.Controls.Add(midiOptionsRow);
         top.SetFlowBreak(midiOptionsRow, true);
         top.Controls.Add(profileRow);
-        top.Controls.Add(create); top.Controls.Add(designProfileBtn); top.Controls.Add(emphasisBtn);
+        top.SetFlowBreak(profileRow, true);
+        top.Controls.Add(vocalActionsRow);
 
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(6) };
         bottom.Controls.Add(status);
@@ -115,7 +125,7 @@ public sealed partial class VocalSynthDialog : Form
         // events
         textEditor.TextChanged += (_, _) =>
         {
-            if (syncing) return;
+            if (syncing || formattingSyllables) return;
             settings.Text = textEditor.Text;
             UpdateButtonState();
             if (showSyllablesCheckBox.Checked) RefreshSyllablePreview();
@@ -162,6 +172,7 @@ public sealed partial class VocalSynthDialog : Form
         if (midiTrackNumber.Value > maximum) midiTrackNumber.Value = maximum;
         midiTrackNumber.Maximum = maximum;
         midiTrackNumber.Enabled = trackCount > 0;
+        midiSemitoneOffset.Enabled = trackCount > 0;
         editMidiButton.Enabled = trackCount > 0;
         showSyllablesCheckBox.Enabled = trackCount > 0;
         UpdateMidiFileLabel();
@@ -236,6 +247,7 @@ public sealed partial class VocalSynthDialog : Form
         singingSettings.SingingMidiFile = midi;
         singingSettings.SingingMidiTrackIndex = midi.Tracks[pageIndex].Index;
         settings = singingSettings;
+        midiSemitoneOffset.Value = (decimal)settings.SingingMidiSemitoneOffset;
 
         int voiceIndex = voiceCombo.Items.IndexOf("Built-in: " + preset.Name);
         if (voiceIndex >= 0) voiceCombo.SelectedIndex = voiceIndex;
@@ -248,6 +260,13 @@ public sealed partial class VocalSynthDialog : Form
         int pageIndex = Math.Clamp((int)midiTrackNumber.Value - 1, 0, midi.Tracks.Count - 1);
         settings.SingingMidiTrackIndex = midi.Tracks[pageIndex].Index;
         UpdateMidiFileLabel();
+        QueueRender();
+    }
+
+    private void MidiSemitoneOffsetChanged(object? sender, EventArgs e)
+    {
+        if (syncing) return;
+        settings.SingingMidiSemitoneOffset = (double)midiSemitoneOffset.Value;
         QueueRender();
     }
 
@@ -282,42 +301,55 @@ public sealed partial class VocalSynthDialog : Form
 
     private void ToggleSyllablePreview()
     {
-        bool show = showSyllablesCheckBox.Checked && settings.SingingMidiFile is not null;
-        if (show)
-        {
-            RefreshSyllablePreview();
-            textEditor.Visible = false;
-            syllablePreview.Visible = true;
-            syllablePreview.BringToFront();
-        }
-        else
-        {
-            syllablePreview.Visible = false;
-            textEditor.Visible = true;
-            textEditor.BringToFront();
-        }
+        RefreshSyllablePreview();
     }
 
     private void RefreshSyllablePreview()
     {
-        string text = textEditor.Text;
-        IReadOnlyList<VocalSyllableTextRange> ranges = VocalTextParser.GetSyllableTextRanges(
-            settings.Language, text, emphasisSyntax);
-        syllablePreview.Clear();
-        syllablePreview.SelectionColor = Color.Black;
-        int cursor = 0;
-        int syllableNumber = 0;
-        foreach (VocalSyllableTextRange range in ranges)
+        if (formattingSyllables) return;
+        formattingSyllables = true;
+        int selectionStart = textEditor.SelectionStart;
+        int selectionLength = textEditor.SelectionLength;
+        textEditor.SuspendLayout();
+        try
         {
-            if (range.Start < cursor || range.Start + range.Length > text.Length) continue;
-            syllablePreview.SelectionColor = Color.Black;
-            syllablePreview.AppendText(text[cursor..range.Start]);
-            syllablePreview.SelectionColor = syllableNumber++ % 2 == 0 ? Color.Black : Color.DimGray;
-            syllablePreview.AppendText(text.Substring(range.Start, range.Length));
-            cursor = range.Start + range.Length;
+            string text = textEditor.Text;
+            if (text.Length > 0)
+            {
+                using var underlinedFont = new Font(
+                    textEditor.Font, textEditor.Font.Style | FontStyle.Underline);
+                textEditor.Select(0, text.Length);
+                textEditor.SelectionFont = textEditor.Font;
+
+                if (showSyllablesCheckBox.Checked && settings.SingingMidiFile is not null)
+                {
+                    IReadOnlyList<VocalSyllableTextRange> ranges = VocalTextParser.GetSyllableTextRanges(
+                        settings.Language, text, emphasisSyntax);
+                    foreach (VocalSyllableTextRange range in ranges)
+                    {
+                        if ((range.Index & 1) == 0 || range.Start < 0 || range.Length <= 0
+                            || range.Start > text.Length - range.Length)
+                            continue;
+                        textEditor.Select(range.Start, range.Length);
+                        textEditor.SelectionFont = underlinedFont;
+                    }
+                }
+            }
         }
-        syllablePreview.SelectionColor = Color.Black;
-        syllablePreview.AppendText(text[cursor..]);
+        finally
+        {
+            try
+            {
+                int safeStart = Math.Clamp(selectionStart, 0, textEditor.TextLength);
+                int safeLength = Math.Clamp(selectionLength, 0, textEditor.TextLength - safeStart);
+                textEditor.Select(safeStart, safeLength);
+            }
+            finally
+            {
+                textEditor.ResumeLayout();
+                formattingSyllables = false;
+            }
+        }
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -414,6 +446,7 @@ public sealed partial class VocalSynthDialog : Form
         replacement.Singing = true;
         replacement.SingingMidiFile = settings.SingingMidiFile;
         replacement.SingingMidiTrackIndex = settings.SingingMidiTrackIndex;
+        replacement.SingingMidiSemitoneOffset = settings.SingingMidiSemitoneOffset;
     }
 
     public void SetCollection(AudioCollectionView? collection) => this.collection = collection;
@@ -445,6 +478,7 @@ public sealed partial class VocalSynthDialog : Form
         {
             settings.Text = textEditor.Text;
             settings.Speed = (double)speed.Value;
+            settings.SingingMidiSemitoneOffset = (double)midiSemitoneOffset.Value;
             var snapshot = settings.Clone();
             var (next, midiWarning) = await Task.Run(() =>
             {
