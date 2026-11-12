@@ -30,10 +30,15 @@ jobs:
     - name: Publish
       run: dotnet publish ModularAudience.Forms/ModularAudience.Forms.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfContained=true -p:IncludeNativeLibrariesForSelfExtract=true -p:ReleaseNumber=${{ github.run_number }} -o ./publish
 
+    - name: Package VocalSynth licenses
+      run: Compress-Archive -Path .\publish\ThirdPartyLicenses -DestinationPath .\publish\VocalSynthLicenses.zip
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        files: ./publish/ModularAudience.Forms.exe
+        files: |
+          ./publish/ModularAudience.Forms.exe
+          ./publish/VocalSynthLicenses.zip
         tag_name: release-${{ github.run_number }}
         target_commitish: ${{ github.sha }}
         generate_release_notes: true

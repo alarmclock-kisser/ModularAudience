@@ -18,7 +18,6 @@ public sealed partial class VocalSynthDialog : Form
     private readonly Label status = new() { Dock = DockStyle.Fill, AutoSize = true, Text = "Ready." };
     private readonly Button prehear = new() { Text = "Prehear", AutoSize = true };
     private readonly Button create = new() { Text = "Create", AutoSize = true };
-    private readonly Button renderBtn = new() { Text = "Render", AutoSize = true };
     private readonly Button designProfileBtn = new() { Text = "Design Profile...", AutoSize = true };
     private readonly Button emphasisBtn = new() { Text = "Emphasis Syntax...", AutoSize = true };
 
@@ -99,7 +98,7 @@ public sealed partial class VocalSynthDialog : Form
         top.Controls.Add(prehear);
         top.SetFlowBreak(prehear, true);
         top.Controls.Add(profileRow);
-        top.Controls.Add(create); top.Controls.Add(renderBtn); top.Controls.Add(designProfileBtn); top.Controls.Add(emphasisBtn);
+        top.Controls.Add(create); top.Controls.Add(designProfileBtn); top.Controls.Add(emphasisBtn);
 
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(6) };
         bottom.Controls.Add(status);
@@ -129,7 +128,6 @@ public sealed partial class VocalSynthDialog : Form
         };
         prehear.Click += async (_, _) => await ToggleHearAsync();
         create.Click += async (_, _) => await CreateAsync();
-        renderBtn.Click += async (_, _) => await RenderNowAsync();
         emphasisBtn.Click += (_, _) => OpenEmphasisDialog();
         designProfileBtn.Click += (_, _) => OpenDesignerDialog();
 
@@ -145,9 +143,19 @@ public sealed partial class VocalSynthDialog : Form
     private void UpdateButtonState()
     {
         bool hasText = !string.IsNullOrWhiteSpace(textEditor.Text);
-        renderBtn.Enabled = hasText;
-        prehear.Enabled = hasText;
+        prehear.Enabled = hasText || output is not null;
         create.Enabled = hasText;
+    }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (textEditor.ProcessHistoryCommand(keyData)) return true;
+        if (keyData == (Keys.Shift | Keys.Enter) || keyData == Keys.Enter && ActiveControl != textEditor)
+        {
+            prehear.PerformClick();
+            return true;
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     private void UpdateSpeechBackend()
@@ -260,15 +268,13 @@ public sealed partial class VocalSynthDialog : Form
         }
     }
 
-    private async Task RenderNowAsync()
-    {
-        debounce.Stop();
-        await RenderAsync();
-    }
-
     private async Task<bool> EnsureRenderedAsync()
     {
-        if (ready != revision) await RenderAsync();
+        if (ready != revision)
+        {
+            debounce.Stop();
+            await RenderAsync();
+        }
         return !disposedFlag && ready == revision && audio is not null;
     }
 
@@ -296,6 +302,7 @@ public sealed partial class VocalSynthDialog : Form
         output = null;
         provider = null;
         prehear.Text = "Prehear";
+        prehear.Enabled = !string.IsNullOrWhiteSpace(textEditor.Text);
     }
 
     private async Task CreateAsync()

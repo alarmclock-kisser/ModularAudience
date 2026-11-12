@@ -14,12 +14,26 @@
 
   <ItemGroup>
     <PackageReference Include="BunLabs.NAudio.Flac" Version="2.0.1" />
+    <PackageReference Include="DotNetG2P.Chinese" Version="1.10.0" />
+    <PackageReference Include="DotNetG2P.French" Version="1.10.0" />
+    <PackageReference Include="DotNetG2P.Spanish" Version="1.10.0" />
+    <PackageReference Include="Lucene.Net.Analysis.Kuromoji" Version="4.8.0-beta00018" />
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
     <PackageReference Include="NAudio" Version="3.3.0" />
     <PackageReference Include="NAudio.Lame" Version="2.1.0" />
     <PackageReference Include="NAudio.Midi" Version="3.3.0" />
     <PackageReference Include="System.Speech" Version="10.0.0" />
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="$(NuGetPackageRoot)dotnetg2p.chinese\1.10.0\LICENSE" Link="ThirdPartyLicenses\DotNetG2P\LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="$(NuGetPackageRoot)dotnetg2p.chinese\1.10.0\NOTICE" Link="ThirdPartyLicenses\DotNetG2P\NOTICE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="$(NuGetPackageRoot)dotnetg2p.chinese\1.10.0\THIRD-PARTY-NOTICES.md" Link="ThirdPartyLicenses\DotNetG2P\THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="$(NuGetPackageRoot)lucene.net.analysis.kuromoji\4.8.0-beta00018\LICENSE.txt" Link="ThirdPartyLicenses\Lucene\LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="$(NuGetPackageRoot)lucene.net.analysis.kuromoji\4.8.0-beta00018\NOTICE.txt" Link="ThirdPartyLicenses\Lucene\NOTICE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="$(NuGetPackageRoot)j2n\2.1.0\LICENSE.txt" Link="ThirdPartyLicenses\J2N\LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Update="Vocal\ThirdPartyLicenses\IPADIC-NOTICE.txt" Link="ThirdPartyLicenses\Lucene\IPADIC-NOTICE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 
   <ItemGroup>

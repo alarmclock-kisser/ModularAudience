@@ -3,10 +3,12 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Speech.Synthesis;
 using System.Windows.Forms;
 using System.Xml.Linq;
 using ModularAudience.Forms.Modules.Dialogs;
+using NAudio.Wave;
 
 namespace ModularAudience.Audio.Tests;
 
@@ -96,6 +98,175 @@ public class VocalSynthTests
     }
 
     [TestMethod]
+    [DataRow(VocalLanguage.French, "Bonjour, c'est l'été !", "fr-on")]
+    [DataRow(VocalLanguage.Spanish, "¡Hola, niño!", "y")]
+    [DataRow(VocalLanguage.Italian, "Ciao, città!", "tsh")]
+    [DataRow(VocalLanguage.Chinese, "你好，世界！", "ow")]
+    [DataRow(VocalLanguage.Japanese, "こんにちは、世界！", "tsh")]
+    [DataRow(VocalLanguage.Turkish, "Merhaba, çalışmak!", "tr-i")]
+    [DataRow(VocalLanguage.Arabic, "مرحبا، جهاد", "arab-h")]
+    [DataRow(VocalLanguage.Russian, "Привет, мир!", "tap-r")]
+    public void MultilingualPhrases_UseLanguageSoundsAndRenderWithVoiceProfiles(
+        VocalLanguage language, string text, string expectedSound)
+    {
+        var tokens = VocalTextParser.Parse(language, text, VocalEmphasisSyntax.Default())
+            .OfType<VocalPhonemeToken>().ToArray();
+        Assert.IsTrue(tokens.Any(token => token.Phoneme == expectedSound), $"{language}: {string.Join(" ", tokens.Select(t => t.Phoneme))}");
+        Assert.IsTrue(tokens.All(token => VocalPhonemeInventory.Contains(token.Phoneme)));
+        var profiles = VocalVoicePreset.BuiltIn.Select(preset =>
+            (preset.Name, Settings: VocalSynthSettings.FromPreset(preset, language, text))).ToList();
+        var custom = VocalVoiceProfile.FromPreset(VocalVoicePreset.BuiltIn[2], "Custom");
+        profiles.Add((custom.Name, VocalSynthSettings.FromProfile(custom, language, text)));
+        foreach (var (name, settings) in profiles)
+        {
+            settings.SampleRate = 8000;
+            using var audio = VocalSynth.Render(settings);
+            Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001), $"{language}, {name} was silent.");
+            Assert.IsTrue(audio.Data.All(float.IsFinite));
+        }
+    }
+
+    [TestMethod]
+    [DataRow(VocalLanguage.French, "été", "e\u0301te\u0301")]
+    [DataRow(VocalLanguage.Japanese, "食べる", "taberu")]
+    [DataRow(VocalLanguage.Japanese, "コーヒー", "koohii")]
+    [DataRow(VocalLanguage.Japanese, "がっこう", "gakkou")]
+    [DataRow(VocalLanguage.Japanese, "学校", "gakkou")]
+    [DataRow(VocalLanguage.Russian, "привет", "privet")]
+    [DataRow(VocalLanguage.Russian, "мир", "mir")]
+    [DataRow(VocalLanguage.Russian, "елена", "yelena")]
+    public void MultilingualSpellings_ProduceEquivalentSounds(VocalLanguage language, string native, string romanized)
+    {
+        CollectionAssert.AreEqual(
+            VocalPhonemizer.Phonemize(language, native).ToArray(),
+            VocalPhonemizer.Phonemize(language, romanized).ToArray());
+    }
+
+    [TestMethod]
+    [DataRow(VocalLanguage.Spanish, "canción", "o")]
+    [DataRow(VocalLanguage.Italian, "città", "a")]
+    [DataRow(VocalLanguage.Turkish, "kitap", "a")]
+    [DataRow(VocalLanguage.Russian, "привет", "e")]
+    public void MultilingualStress_UsesTheLanguageSpecificSyllable(VocalLanguage language, string word, string stressedSound)
+    {
+        var phones = VocalTextParser.Parse(language, word, VocalEmphasisSyntax.Default())
+            .OfType<VocalPhonemeToken>().ToArray();
+        var stressed = phones.Single(phone => phone.Stressed);
+        Assert.AreEqual(stressedSound, stressed.Phoneme);
+        Assert.AreNotSame(phones.First(phone => VocalPhonemeInventory.Get(phone.Phoneme).IsVowel), stressed);
+    }
+
+    [TestMethod]
+    public void Mandarin_TonesAndContextualHanziReadingsMatchPinyin()
+    {
+        var syntax = VocalEmphasisSyntax.Default();
+        var hanzi = VocalTextParser.Parse(VocalLanguage.Chinese, "你好", syntax)
+            .OfType<VocalPhonemeToken>().ToArray();
+        var romanized = VocalTextParser.Parse(VocalLanguage.Chinese, "ni2hao3", syntax)
+            .OfType<VocalPhonemeToken>().ToArray();
+        CollectionAssert.AreEqual(hanzi.Select(p => (p.Phoneme, p.Tone)).ToArray(),
+            romanized.Select(p => (p.Phoneme, p.Tone)).ToArray());
+        Assert.IsTrue(hanzi.Any(p => p.Tone == 2));
+        Assert.IsTrue(hanzi.Any(p => p.Tone == 3));
+        CollectionAssert.AreEqual(
+            VocalPhonemizer.Phonemize(VocalLanguage.Chinese, "银行").ToArray(),
+            VocalPhonemizer.Phonemize(VocalLanguage.Chinese, "yin2hang2").ToArray());
+        CollectionAssert.AreEqual(
+            VocalPhonemizer.Phonemize(VocalLanguage.Chinese, "nǐ").ToArray(),
+            VocalPhonemizer.Phonemize(VocalLanguage.Chinese, "ni3").ToArray());
+        CollectionAssert.AreEqual(new[] { "n" }, VocalPhonemizer.Phonemize(VocalLanguage.Chinese, "嗯").ToArray());
+    }
+
+    [TestMethod]
+    public void Arabic_VowelMarksAndSunLettersDoNotCreateExtraSounds()
+    {
+        CollectionAssert.AreEqual(
+            new[] { "m", "de-a-short", "tap-r", "arab-h", "de-a-short", "b", "de-a-short", "n" },
+            VocalPhonemizer.Phonemize(VocalLanguage.Arabic, "مَرْحَبًا").ToArray());
+        var article = VocalPhonemizer.Phonemize(VocalLanguage.Arabic, "السَّلَامُ");
+        Assert.AreEqual("s", article[1]);
+        Assert.AreEqual("s", article[2]);
+        Assert.AreEqual(1, article.Count(sound => sound == "l"));
+    }
+
+    [TestMethod]
+    public void Japanese_FinalSmallTsuRemainsAnAudibleClosure()
+    {
+        CollectionAssert.AreEqual(new[] { "a", "sil" },
+            VocalPhonemizer.Phonemize(VocalLanguage.Japanese, "あっ").ToArray());
+    }
+
+    [TestMethod]
+    public async Task MultilingualPhonemizers_AreSafeForConcurrentRendersAndCancellation()
+    {
+        var samples = new[]
+        {
+            (VocalLanguage.French, "bonjour"), (VocalLanguage.Spanish, "niño"),
+            (VocalLanguage.Chinese, "你好世界"), (VocalLanguage.Japanese, "私は学生です"),
+        };
+        var expected = samples.Select(sample => VocalPhonemizer.Phonemize(sample.Item1, sample.Item2).ToArray()).ToArray();
+        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+        {
+            for (int i = 0; i < samples.Length; i++)
+                CollectionAssert.AreEqual(expected[i], VocalPhonemizer.Phonemize(samples[i].Item1, samples[i].Item2).ToArray());
+        })));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.Throws<OperationCanceledException>(() =>
+            VocalPhonemizer.Phonemize(VocalLanguage.Japanese, "日本語", cancellation.Token));
+    }
+
+    [TestMethod]
+    [DataRow(VocalLanguage.French, "bonjour", "bonjourrrrrrr", "de-r")]
+    [DataRow(VocalLanguage.Spanish, "perro", "perrrrrro", "trill-r")]
+    [DataRow(VocalLanguage.Italian, "caro", "carrrrrro", "trill-r")]
+    [DataRow(VocalLanguage.Turkish, "merhaba", "merrrrrhaba", "tap-r")]
+    [DataRow(VocalLanguage.Russian, "мир", "миррррр", "tap-r")]
+    public void MultilingualRepeatedLetters_ProduceSustainedSounds(
+        VocalLanguage language, string normal, string extended, string sound)
+    {
+        Assert.IsTrue(VocalPhonemizer.Phonemize(language, extended).Count(phone => phone == sound) >= 3);
+        var settings = CleanVoice(language, normal);
+        settings.SampleRate = 8000;
+        using var plain = VocalSynth.Render(settings);
+        settings.Text = extended;
+        using var longer = VocalSynth.Render(settings);
+        Assert.IsTrue(longer.Duration > plain.Duration + TimeSpan.FromMilliseconds(120));
+    }
+
+    [TestMethod]
+    public void Mandarin_FallingToneChangesRenderedPitch()
+    {
+        var settings = CleanVoice(VocalLanguage.Chinese, "ma4");
+        settings.SampleRate = 16000;
+        settings.BasePitchHz = 180;
+        settings.Speed = 0.5;
+        using var audio = VocalSynth.Render(settings);
+        double early = PitchInRange(audio.Data, settings.SampleRate, 0.17, 0.23, 120, 260);
+        double late = PitchInRange(audio.Data, settings.SampleRate, 0.28, 0.34, 120, 260);
+        Assert.IsTrue(early > late * 1.08, $"The falling Mandarin tone did not fall: {early} to {late} Hz.");
+    }
+
+    [TestMethod]
+    public void MultilingualInput_CapitalizationAndUnsupportedCharactersAreExplicit()
+    {
+        foreach (var (language, text) in new[]
+        {
+            (VocalLanguage.French, "BONJOUR"), (VocalLanguage.Turkish, "IĞDIR"),
+            (VocalLanguage.Russian, "ПРИВЕТ"),
+        })
+            Assert.IsTrue(VocalTextParser.Parse(language, text, VocalEmphasisSyntax.Default())
+                .OfType<VocalPhonemeToken>().All(token => token.Capitalized));
+        Assert.IsTrue(VocalPhonemizer.Phonemize(VocalLanguage.Turkish, "IĞDIR").Contains("tr-i"));
+        Assert.Throws<ArgumentException>(() => VocalPhonemizer.Phonemize(VocalLanguage.Chinese, "你好🙂"));
+        Assert.Throws<ArgumentException>(() => VocalPhonemizer.Phonemize(VocalLanguage.Japanese, "こんにちは🙂"));
+        Assert.Throws<ArgumentException>(() => VocalPhonemizer.Phonemize(VocalLanguage.Arabic, "مرحبا🙂"));
+        CollectionAssert.AreEqual(
+            VocalPhonemizer.Phonemize(VocalLanguage.Russian, "привет").ToArray(),
+            VocalPhonemizer.Phonemize(VocalLanguage.Russian, "«привет»").ToArray());
+    }
+
+    [TestMethod]
     [DataRow("der", "d de-e-long de-r-glide")]
     [DataRow("her", "h de-e-long de-r-glide")]
     [DataRow("gehst", "g de-e-long s t")]
@@ -181,6 +352,7 @@ public class VocalSynthTests
     [DataRow("Eisenschmiede")]
     [DataRow("Gehst du mir mal den K\u00e4se holen?")]
     [DataRow("Regelversto\u00df")]
+    [DataRow("Shaitaan")]
     public void Render_GermanFeedbackPhrases_AtRequestedVoiceAndSpeed(string phrase)
     {
         var settings = VocalSynthSettings.FromPreset(
@@ -264,6 +436,202 @@ public class VocalSynthTests
         int boundary = (int)Math.Round(VocalPhonemeInventory.Get("ae").DurationMs * 1.12 * settings.SampleRate / 1000);
         Assert.IsTrue(Math.Abs(audio.Data[boundary]) > 1e-6,
             "The second vowel must not restart at a zero-amplitude boundary.");
+    }
+
+    [TestMethod]
+    [DataRow(VocalLanguage.German, "Shaitaan", "a")]
+    [DataRow(VocalLanguage.German, "Shaitaanrrrr", "a")]
+    [DataRow(VocalLanguage.German, "Zoo", "de-o-long")]
+    [DataRow(VocalLanguage.German, "taaoooo", "a")]
+    [DataRow(VocalLanguage.English, "tataat", "ae")]
+    [DataRow(VocalLanguage.English, "tataar", "ae")]
+    [DataRow(VocalLanguage.Turkish, "saati", "a")]
+    [DataRow(VocalLanguage.Japanese, "sataa", "a")]
+    [DataRow(VocalLanguage.Russian, "моот", "o")]
+    [DataRow(VocalLanguage.Russian, "моотаа", "ah")]
+    [DataRow(VocalLanguage.Russian, "меет", "e")]
+    public void Render_DoubleVowels_SustainWithoutRestartingPitch(
+        VocalLanguage language, string text, string sound)
+    {
+        var settings = CleanVoice(language, text);
+        settings.SampleRate = 48000;
+        settings.BasePitchHz = 200;
+        settings.Speed = 0.5;
+        var phones = VocalTextParser.Parse(language, text, settings.EmphasisSyntax)
+            .OfType<VocalPhonemeToken>().ToArray();
+        int pair = Enumerable.Range(0, phones.Length - 1).FirstOrDefault(i =>
+            phones[i].Phoneme == sound && phones[i + 1].Phoneme == sound, -1);
+        Assert.IsTrue(pair >= 0, $"Expected a double {sound}: {string.Join(" ", phones.Select(p => p.Phoneme))}");
+
+        using var audio = VocalSynth.Render(settings);
+        double boundary = TimeAtVowelBoundary(phones, pair + 1, settings);
+        double before = PitchInRange(audio.Data, settings.SampleRate, boundary - 0.085, boundary - 0.025, 150, 260);
+        double after = PitchInRange(audio.Data, settings.SampleRate, boundary + 0.025, boundary + 0.085, 150, 260);
+        Assert.IsTrue(after < before * 1.005,
+            $"{language} '{text}' restarted its vowel: {before} to {after} Hz.");
+    }
+
+    [TestMethod]
+    public void Render_ThreeVowels_StillRepeatAndExtendTheSound()
+    {
+        var settings = CleanVoice(VocalLanguage.German, "tata");
+        settings.SampleRate = 48000;
+        settings.BasePitchHz = 200;
+        settings.Speed = 0.5;
+        using var single = VocalSynth.Render(settings);
+        settings.Text = "tataa";
+        using var doubled = VocalSynth.Render(settings);
+        settings.Text = "tataaa";
+        using var tripled = VocalSynth.Render(settings);
+        Assert.IsTrue(doubled.Duration > single.Duration + TimeSpan.FromMilliseconds(190));
+        Assert.IsTrue(tripled.Duration > doubled.Duration + TimeSpan.FromMilliseconds(190));
+
+        var phones = VocalTextParser.Parse(settings.Language, settings.Text, settings.EmphasisSyntax)
+            .OfType<VocalPhonemeToken>().ToArray();
+        int run = Enumerable.Range(0, phones.Length - 2).First(i =>
+            phones[i].Phoneme == "a" && phones[i + 1].Phoneme == "a" && phones[i + 2].Phoneme == "a");
+        double boundary = TimeAtVowelBoundary(phones, run + 2, settings);
+        double before = PitchInRange(tripled.Data, settings.SampleRate, boundary - 0.085, boundary - 0.025, 150, 260);
+        double after = PitchInRange(tripled.Data, settings.SampleRate, boundary + 0.025, boundary + 0.085, 150, 260);
+        Assert.IsTrue(after > before * 1.01, $"The repeated vowel did not restart: {before} to {after} Hz.");
+    }
+
+    [TestMethod]
+    [DataRow(VocalLanguage.German, "mauuu", "oo")]
+    [DataRow(VocalLanguage.English, "mouuu", "uh")]
+    [DataRow(VocalLanguage.Japanese, "touuu", "oo")]
+    [DataRow(VocalLanguage.Italian, "quuuà", "oo")]
+    [DataRow(VocalLanguage.Chinese, "shiii", "ee")]
+    public void Render_ThreeVowels_AfterDiphthongRemainExpressive(
+        VocalLanguage language, string text, string sound)
+    {
+        var settings = CleanVoice(language, text);
+        settings.SampleRate = 48000;
+        settings.BasePitchHz = 200;
+        settings.Speed = 0.5;
+        var phones = VocalTextParser.Parse(settings.Language, settings.Text, settings.EmphasisSyntax)
+            .OfType<VocalPhonemeToken>().ToArray();
+        int pair = Enumerable.Range(0, phones.Length - 1).First(i =>
+            phones[i].Phoneme == sound && phones[i + 1].Phoneme == sound);
+        using var audio = VocalSynth.Render(settings);
+        double boundary = TimeAtVowelBoundary(phones, pair + 1, settings);
+        double before = PitchInRange(audio.Data, settings.SampleRate, boundary - 0.085, boundary - 0.025, 150, 260);
+        double after = PitchInRange(audio.Data, settings.SampleRate, boundary + 0.025, boundary + 0.085, 150, 260);
+        Assert.IsTrue(after > before * 1.004, $"The repeated vowel after the diphthong did not restart: {before} to {after} Hz.");
+    }
+
+    [TestMethod]
+    [DataRow(VocalLanguage.French, "sa", "saaa")]
+    [DataRow(VocalLanguage.Spanish, "sa", "saaa")]
+    [DataRow(VocalLanguage.Italian, "sa", "saaa")]
+    public void Render_ThreeVowels_ExtendAcrossLanguagePhonemizers(
+        VocalLanguage language, string normal, string extended)
+    {
+        var settings = CleanVoice(language, normal);
+        settings.SampleRate = 8000;
+        using var plain = VocalSynth.Render(settings);
+        settings.Text = extended;
+        using var longer = VocalSynth.Render(settings);
+        Assert.IsTrue(longer.Duration > plain.Duration + TimeSpan.FromMilliseconds(150),
+            $"{language}: {plain.Duration} versus {longer.Duration}.");
+    }
+
+    [TestMethod]
+    public void Render_DistinctVowelClusters_KeepTheirArticulations()
+    {
+        var settings = CleanVoice(VocalLanguage.English, "tateaea");
+        settings.SampleRate = 48000;
+        settings.BasePitchHz = 200;
+        settings.Speed = 0.5;
+        var phones = VocalTextParser.Parse(settings.Language, settings.Text, settings.EmphasisSyntax)
+            .OfType<VocalPhonemeToken>().ToArray();
+        int pair = Enumerable.Range(0, phones.Length - 1).First(i =>
+            phones[i].Phoneme == "ee" && phones[i + 1].Phoneme == "ee");
+        using var audio = VocalSynth.Render(settings);
+        double boundary = TimeAtVowelBoundary(phones, pair + 1, settings);
+        double before = PitchInRange(audio.Data, settings.SampleRate, boundary - 0.085, boundary - 0.025, 150, 260);
+        double after = PitchInRange(audio.Data, settings.SampleRate, boundary + 0.025, boundary + 0.085, 150, 260);
+        Assert.IsTrue(after > before * 1.01, $"Distinct vowel clusters were merged: {before} to {after} Hz.");
+    }
+
+    [TestMethod]
+    public void Render_SeparateMandarinTones_AreNotMerged()
+    {
+        var settings = CleanVoice(VocalLanguage.Chinese, "a4a4");
+        settings.SampleRate = 48000;
+        settings.BasePitchHz = 200;
+        settings.Speed = 0.5;
+        var phones = VocalTextParser.Parse(settings.Language, settings.Text, settings.EmphasisSyntax)
+            .OfType<VocalPhonemeToken>().ToArray();
+        Assert.AreEqual(2, phones.Length);
+        Assert.IsTrue(phones.All(phone => phone.Tone == 4));
+        using var audio = VocalSynth.Render(settings);
+        double boundary = TimeAtVowelBoundary(phones, 1, settings);
+        double before = PitchInRange(audio.Data, settings.SampleRate, boundary - 0.085, boundary - 0.025, 120, 270);
+        double after = PitchInRange(audio.Data, settings.SampleRate, boundary + 0.025, boundary + 0.085, 120, 270);
+        Assert.IsTrue(after > before * 1.15, $"The second falling tone did not restart: {before} to {after} Hz.");
+    }
+
+    [TestMethod]
+    public void Render_SeparateNeutralMandarinTones_AreNotMerged()
+    {
+        var settings = CleanVoice(VocalLanguage.Chinese, "a5a5");
+        settings.SampleRate = 48000;
+        settings.BasePitchHz = 200;
+        settings.Speed = 0.5;
+        var phones = VocalTextParser.Parse(settings.Language, settings.Text, settings.EmphasisSyntax)
+            .OfType<VocalPhonemeToken>().ToArray();
+        Assert.AreEqual(2, phones.Length);
+        using var audio = VocalSynth.Render(settings);
+        double boundary = TimeAtVowelBoundary(phones, 1, settings);
+        double before = PitchInRange(audio.Data, settings.SampleRate, boundary - 0.085, boundary - 0.025, 150, 260);
+        double after = PitchInRange(audio.Data, settings.SampleRate, boundary + 0.025, boundary + 0.085, 150, 260);
+        Assert.IsTrue(after > before * 1.01, $"The second neutral syllable did not restart: {before} to {after} Hz.");
+    }
+
+    [TestMethod]
+    public void Render_AdjacentVowels_KeepSeparateEmphasis()
+    {
+        var settings = CleanVoice(VocalLanguage.Turkish, "a*a*");
+        settings.SampleRate = 48000;
+        settings.Speed = 0.5;
+        var phones = VocalTextParser.Parse(settings.Language, settings.Text, settings.EmphasisSyntax)
+            .OfType<VocalPhonemeToken>().ToArray();
+        Assert.AreEqual(2, phones.Length);
+        Assert.AreEqual(VocalEmphasis.Strong, phones[1].Emphasis);
+        using var audio = VocalSynth.Render(settings);
+        int boundary = (int)Math.Round(TimeAtVowelBoundary(phones, 1, settings) * settings.SampleRate);
+        int window = settings.SampleRate / 20;
+        double before = Math.Sqrt(audio.Data.Skip(boundary - window - window / 2).Take(window)
+            .Average(sample => (double)sample * sample));
+        double after = Math.Sqrt(audio.Data.Skip(boundary + window / 2).Take(window)
+            .Average(sample => (double)sample * sample));
+        Assert.IsTrue(after > before * 1.1, $"The second vowel lost its emphasis: {before} to {after}.");
+    }
+
+    [TestMethod]
+    public void Render_AnimalCrossing_RepeatedVowelsStaySeparate()
+    {
+        var settings = CleanVoice(VocalLanguage.AnimalCrossing, "aa");
+        settings.SampleRate = 16000;
+        settings.Speed = 0.5;
+        using var audio = VocalSynth.Render(settings);
+        int boundary = (int)Math.Round(VocalPhonemeInventory.Get("animal-a").DurationMs
+            * settings.SampleRate / (1000 * settings.Speed));
+        Assert.AreEqual(0f, audio.Data[boundary]);
+        Assert.IsTrue(audio.Data.Skip(boundary + 1).Any(sample => Math.Abs(sample) > 0.001));
+    }
+
+    private static double TimeAtVowelBoundary(
+        IReadOnlyList<VocalPhonemeToken> phones, int count, VocalSynthSettings settings)
+    {
+        int frames = 0;
+        foreach (var phone in phones.Take(count))
+        {
+            double duration = VocalPhonemeInventory.Get(phone.Phoneme).DurationMs * (phone.Stressed ? 1.12 : 1);
+            frames += (int)Math.Round(duration * settings.SampleRate / (1000 * settings.Speed));
+        }
+        return frames / (double)settings.SampleRate;
     }
 
     [TestMethod]
@@ -618,6 +986,83 @@ public class VocalSynthTests
     }
 
     [TestMethod]
+    public void Beatboxing_RendersRequestedNotationAcrossVoicePresets()
+    {
+        const string text = "Bt't tr tr tch - bz kz b'bp'bp - k'ts' kp'p kp'p";
+        var tokens = VocalTextParser.Parse(VocalLanguage.Beatboxing, text, VocalEmphasisSyntax.Default());
+        CollectionAssert.AreEqual(
+            new[] { "beat-b", "beat-t", "beat-t", "beat-tr", "beat-tr", "beat-tch", "beat-bz", "beat-kz",
+                "beat-b", "beat-b", "beat-p", "beat-b", "beat-p", "beat-k", "beat-ts",
+                "beat-k", "beat-p", "beat-p", "beat-k", "beat-p", "beat-p" },
+            tokens.OfType<VocalPhonemeToken>().Select(t => t.Phoneme).ToArray());
+        foreach (var preset in VocalVoicePreset.BuiltIn)
+        {
+            var settings = VocalSynthSettings.FromPreset(preset, VocalLanguage.Beatboxing, text);
+            settings.SampleRate = 8000;
+            using var audio = VocalSynth.Render(settings);
+            int step = settings.SampleRate / 4;
+            Assert.AreEqual(23 * step, audio.Data.Length, preset.Name);
+            for (int i = 0; i < 23; i++)
+            {
+                var samples = audio.Data.Skip(i * step).Take(step);
+                bool audible = samples.Any(sample => Math.Abs(sample) > 0.001);
+                Assert.AreEqual(i is not (6 or 14), audible, $"{preset.Name}: step {i}.");
+            }
+            Assert.IsTrue(audio.Data.All(float.IsFinite), $"{preset.Name} produced invalid audio.");
+            if (preset.Id == "adult-female")
+            {
+                settings.Speed = 2;
+                using var fast = VocalSynth.Render(settings);
+                Assert.AreEqual(audio.Data.Length / 2, fast.Data.Length);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void Beatboxing_SeparatorsAndEmphasisRemainIndependent()
+    {
+        var syntax = VocalEmphasisSyntax.Default();
+        var tokens = VocalTextParser.Parse(VocalLanguage.Beatboxing, "*TR tch* b\u2019z BZ KZ", syntax)
+            .OfType<VocalPhonemeToken>().ToArray();
+        CollectionAssert.AreEqual(new[] { "beat-tr", "beat-tch", "beat-b", "beat-z", "beat-bz", "beat-kz" },
+            tokens.Select(t => t.Phoneme).ToArray());
+        Assert.AreEqual(VocalEmphasis.Strong, tokens[0].Emphasis);
+        Assert.IsTrue(tokens[0].Capitalized);
+        Assert.IsTrue(tokens[4].Capitalized);
+
+        syntax.Rules.Add(new VocalEmphasisRule { Marker = "'", Mode = VocalEmphasisMode.Strong, Wrapping = false });
+        var custom = VocalTextParser.Parse(VocalLanguage.Beatboxing, "b'b", syntax)
+            .OfType<VocalPhonemeToken>().ToArray();
+        Assert.AreEqual(VocalEmphasis.Strong, custom[1].Emphasis);
+        var error = Assert.ThrowsExactly<ArgumentException>(() =>
+            VocalTextParser.Parse(VocalLanguage.Beatboxing, "B X", VocalEmphasisSyntax.Default()));
+        StringAssert.Contains(error.Message, "Unsupported beatbox notation 'X'");
+    }
+
+    [TestMethod]
+    public void Beatboxing_TongueRoll_ProducesRepeatedPulses()
+    {
+        var settings = CleanVoice(VocalLanguage.Beatboxing, "tr");
+        settings.SampleRate = 16000;
+        settings.BasePitchHz = 200;
+        using var audio = VocalSynth.Render(settings);
+        int block = settings.SampleRate / 200;
+        double sum = 0, real = 0, imaginary = 0;
+        for (int start = settings.SampleRate / 100; start + block <= settings.SampleRate * 14 / 100; start += block)
+        {
+            double energy = 0;
+            for (int i = start; i < start + block; i++) energy += audio.Data[i] * audio.Data[i];
+            double level = Math.Sqrt(energy / block);
+            double phase = 2 * Math.PI * 24 * (start + block / 2.0) / settings.SampleRate;
+            sum += level;
+            real += level * Math.Cos(phase);
+            imaginary += level * Math.Sin(phase);
+        }
+        double modulation = 2 * Math.Sqrt(real * real + imaginary * imaginary) / sum;
+        Assert.IsTrue(modulation > 0.3, $"Expected a pulsing tongue roll, got modulation {modulation}.");
+    }
+
+    [TestMethod]
     public void SingingPreset_RendersMelodicSpeechAcrossLanguageModes()
     {
         var preset = VocalVoicePreset.BuiltIn.Single(p => p.Id == "singing");
@@ -702,6 +1147,7 @@ public class VocalSynthTests
             var group = (FlowLayoutPanel)Field("profileRow");
             var nameField = (TextBox)Field("profileName");
             dialog.CreateControl();
+            Assert.IsFalse(group.Parent!.Controls.OfType<Button>().Any(button => button.Text == "Render"));
             var buttons = new[]
             {
                 (Button)Field("saveProfileBtn"), (Button)Field("loadProfileBtn"),
@@ -753,6 +1199,184 @@ public class VocalSynthTests
             Directory.Delete(directory, true);
         }
     }
+
+    [STATestMethod]
+    public void Dialog_UndoRedoShortcuts_UseTextHistoryFromOtherControls()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "vocal_history_" + Guid.NewGuid());
+        var profiles = new VocalVoiceProfileStore(directory);
+        try
+        {
+            using var dialog = new VocalSynthDialog(profiles, new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json")));
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            object Field(string name) => typeof(VocalSynthDialog).GetField(name, flags)!.GetValue(dialog)!;
+            var editor = (TextBox)Field("textEditor");
+            var profile = (TextBox)Field("profileName");
+            var voice = (ComboBox)Field("voiceCombo");
+            editor.AppendText("first ");
+            editor.AppendText("second");
+            profile.Text = "Profile name";
+            profile.SelectionStart = profile.TextLength;
+            SendMessage(profile.Handle, 0x0102, (IntPtr)'!', IntPtr.Zero);
+            Assert.IsTrue(profile.CanUndo);
+
+            dialog.ActiveControl = profile;
+            Assert.IsTrue(SendCommand(profile, Keys.Control | Keys.Z));
+            Assert.AreEqual("first ", editor.Text);
+            Assert.AreEqual("Profile name!", profile.Text);
+            Assert.AreSame(profile, dialog.ActiveControl);
+            dialog.ActiveControl = voice;
+            Assert.IsTrue(SendCommand(voice, Keys.Control | Keys.Z));
+            Assert.AreEqual(string.Empty, editor.Text);
+            Assert.IsTrue(SendCommand(voice, Keys.Control | Keys.Y));
+            Assert.AreEqual("first ", editor.Text);
+            dialog.ActiveControl = editor;
+            Assert.IsTrue(SendCommand(editor, Keys.Control | Keys.Y));
+            Assert.AreEqual("first second", editor.Text);
+            Assert.IsTrue(SendCommand(editor, Keys.Control | Keys.Z));
+            Assert.AreEqual("first ", editor.Text);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [STATestMethod]
+    public void Dialog_EnterShortcuts_TogglePreviewAndPreserveEditorNewlines()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "vocal_keys_" + Guid.NewGuid());
+        var profiles = new VocalVoiceProfileStore(directory);
+        try
+        {
+            using var dialog = new VocalSynthDialog(profiles, new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json")));
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            FieldInfo Field(string name) => typeof(VocalSynthDialog).GetField(name, flags)!;
+            var editor = (TextBox)Field("textEditor").GetValue(dialog)!;
+            var profile = (TextBox)Field("profileName").GetValue(dialog)!;
+            var voice = (ComboBox)Field("voiceCombo").GetValue(dialog)!;
+            var speed = (NumericUpDown)Field("speed").GetValue(dialog)!;
+            var speedEditor = speed.Controls.OfType<TextBoxBase>().Single();
+            var button = (Button)Field("designProfileBtn").GetValue(dialog)!;
+            var prehear = (Button)Field("prehear").GetValue(dialog)!;
+            var parent = prehear.Parent!;
+            parent.Controls.Remove(prehear);
+            try
+            {
+                editor.Text = "Hello";
+                editor.SelectionStart = editor.TextLength;
+                dialog.ActiveControl = editor;
+                Assert.IsFalse(SendCommand(editor, Keys.Enter));
+                SendMessage(editor.Handle, 0x0102, (IntPtr)'\r', IntPtr.Zero);
+                Assert.AreEqual("Hello\r\n", editor.Text);
+                Assert.IsTrue(SendCommand(editor, Keys.Control | Keys.Z));
+                Assert.AreEqual("Hello", editor.Text);
+                Assert.IsTrue(SendCommand(editor, Keys.Control | Keys.Y));
+                Assert.AreEqual("Hello\r\n", editor.Text);
+
+                Field("ready").SetValue(dialog, Field("revision").GetValue(dialog));
+                int clicks = 0;
+                prehear.Click += (_, _) => clicks++;
+                Assert.IsTrue(SendCommand(editor, Keys.Shift | Keys.Enter));
+                Assert.AreEqual("Hello\r\n", editor.Text);
+                Assert.AreEqual(1, clicks);
+
+                dialog.ActiveControl = profile;
+                Assert.IsTrue(SendCommand(profile, Keys.Enter));
+                dialog.ActiveControl = voice;
+                Assert.IsTrue(SendCommand(voice, Keys.Shift | Keys.Enter));
+                dialog.ActiveControl = speed;
+                Assert.IsTrue(SendCommand(speedEditor, Keys.Enter));
+                dialog.ActiveControl = button;
+                Assert.IsTrue(SendCommand(button, Keys.Shift | Keys.Enter));
+                Assert.AreEqual(5, clicks);
+                SendCommand(button, Keys.Control | Keys.Enter);
+                Assert.AreEqual(5, clicks);
+
+                Field("output").SetValue(dialog, new WaveOut());
+                prehear.Text = "Stop";
+                editor.Text = string.Empty;
+                Assert.IsTrue(prehear.Enabled, "Stop must remain available when the text is cleared during playback.");
+                dialog.ActiveControl = editor;
+                Assert.IsTrue(SendCommand(editor, Keys.Shift | Keys.Enter));
+                Assert.IsNull(Field("output").GetValue(dialog));
+                Assert.AreEqual("Prehear", prehear.Text);
+                Assert.IsFalse(prehear.Enabled);
+                Assert.AreEqual(6, clicks);
+                Assert.IsTrue(SendCommand(editor, Keys.Shift | Keys.Enter));
+                Assert.AreEqual(6, clicks);
+            }
+            finally
+            {
+                parent.Controls.Add(prehear);
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [STATestMethod]
+    [Timeout(15000)]
+    public void Dialog_Beatboxing_RendersOnDemandAndReportsInvalidNotation()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "vocal_beatbox_" + Guid.NewGuid());
+        var profiles = new VocalVoiceProfileStore(directory);
+        try
+        {
+            using var dialog = new VocalSynthDialog(profiles, new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json")));
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            object Field(string name) => typeof(VocalSynthDialog).GetField(name, flags)!.GetValue(dialog)!;
+            dialog.CreateControl();
+            ((ComboBox)Field("languageCombo")).SelectedItem = "Beatboxing";
+            ((VocalSynthSettings)Field("settings")).SampleRate = 8000;
+            var editor = (TextBox)Field("textEditor");
+            var timer = (System.Windows.Forms.Timer)Field("debounce");
+            var status = (Label)Field("status");
+            var ensure = typeof(VocalSynthDialog).GetMethod("EnsureRenderedAsync", flags)!;
+            editor.Text = "Bt't tr tr tch - bz kz b'bp'bp - k'ts' kp'p kp'p";
+            Assert.IsTrue(timer.Enabled);
+            var task = (Task<bool>)ensure.Invoke(dialog, null)!;
+            Assert.IsFalse(timer.Enabled, "On-demand rendering must cancel the pending debounce timer.");
+            WaitForRender(task);
+            Assert.IsTrue(task.GetAwaiter().GetResult(), status.Text);
+            using var audio = (ModularAudience.Audio.AudioObj)Field("audio");
+            Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001));
+            StringAssert.StartsWith(status.Text, "Rendered");
+
+            editor.Text = "B X";
+            task = (Task<bool>)ensure.Invoke(dialog, null)!;
+            WaitForRender(task);
+            Assert.IsFalse(task.GetAwaiter().GetResult());
+            StringAssert.Contains(status.Text, "Unsupported beatbox notation 'X'");
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    private static void WaitForRender(Task task)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!task.IsCompleted && DateTime.UtcNow < deadline)
+        {
+            Application.DoEvents();
+            Thread.Sleep(10);
+        }
+        Assert.IsTrue(task.IsCompleted, "Rendering did not finish in time.");
+    }
+
+    private static bool SendCommand(Control control, Keys keyData)
+    {
+        MethodInfo method = control.GetType().GetMethod("ProcessCmdKey", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        object[] arguments = [Message.Create(control.Handle, 0x0100, (IntPtr)(keyData & Keys.KeyCode), IntPtr.Zero), keyData];
+        return (bool)method.Invoke(control, arguments)!;
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr SendMessage(IntPtr handle, int message, IntPtr wParam, IntPtr lParam);
 
     [TestMethod]
     [Timeout(30000)]

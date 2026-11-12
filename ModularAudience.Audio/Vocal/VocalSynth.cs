@@ -127,8 +127,66 @@ public static class VocalSynth
         }
         if (plan.Count == 0)
             throw new ArgumentException("Text contains no pronounceable characters or speech markers.", nameof(settings));
+        SustainVowelPairs(plan, cancellationToken);
         sampleCount = (int)samples;
         return plan;
+    }
+
+    private static void SustainVowelPairs(List<RenderUnit> plan, CancellationToken cancellationToken)
+    {
+        int read = 0, write = 0;
+        while (read < plan.Count)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var firstUnit = plan[read];
+            if (firstUnit.Token is not VocalPhonemeToken first)
+            {
+                plan[write++] = firstUnit;
+                read++;
+                continue;
+            }
+
+            var definition = VocalPhonemeInventory.Get(first.Phoneme);
+            if (!definition.IsVowel || !definition.Voiced || definition.EndFormants.Length > 0
+                || first.Phoneme.StartsWith("animal-", StringComparison.Ordinal))
+            {
+                plan[write++] = firstUnit;
+                read++;
+                continue;
+            }
+
+            int end = read + 1;
+            while (end < plan.Count && plan[end].Token is VocalPhonemeToken next && next.Phoneme == first.Phoneme)
+            {
+                if ((end & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                end++;
+            }
+            if (end == read + 2 && plan[read + 1].Token is VocalPhonemeToken second
+                && first.Emphasis == second.Emphasis && first.Capitalized == second.Capitalized
+                && first.Question == second.Question && first.Tone == second.Tone
+                && (first.Tone == 0 || first.ToneEnd == second.ToneStart)
+                && (first.SourceRepetitionLength == 0 && second.SourceRepetitionLength == 0
+                    || first.SourceRepetitionLength == 2 && second.SourceRepetitionLength == 2)
+                && firstUnit.Note == plan[read + 1].Note)
+            {
+                var sustained = first with
+                {
+                    Stressed = first.Stressed || second.Stressed,
+                    ToneEnd = second.ToneEnd,
+                };
+                plan[write++] = new RenderUnit(sustained, firstUnit.Frames + plan[read + 1].Frames, firstUnit.Note);
+                read = end;
+            }
+            else
+            {
+                while (read < end)
+                {
+                    if ((read & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                    plan[write++] = plan[read++];
+                }
+            }
+        }
+        if (write < plan.Count) plan.RemoveRange(write, plan.Count - write);
     }
 
     private static double DurationMultiplier(VocalPhonemeToken token)
@@ -162,7 +220,7 @@ public static class VocalSynth
     {
         bool animal = ph.Symbol.StartsWith("animal-", StringComparison.Ordinal);
         bool beat = IsBeat(ph.Symbol);
-        bool trill = (ph.Symbol is "r" or "de-r")
+        bool trill = ph.Symbol == "trill-r" || (ph.Symbol is "r" or "de-r")
             && (previous?.Symbol == ph.Symbol || next?.Symbol == ph.Symbol);
         bool connectedBefore = CanConnect(previous, ph);
         bool connectedAfter = CanConnect(ph, next);
@@ -195,12 +253,18 @@ public static class VocalSynth
             double progress = i / (double)Math.Max(1, frames - 1);
             double time = state.Frame / (double)s.SampleRate;
             double pitch = s.BasePitchHz * pitchMultiplier;
-            if (ph.Symbol == "beat-b")
+            if (ph.Symbol is "beat-b" or "beat-bz")
                 pitch *= 0.72 + 0.85 * Math.Exp(-i / (s.SampleRate * 0.035));
             else if (animal)
                 pitch *= 1.05 - 0.10 * progress;
             else if (!s.Singing)
                 pitch *= 1.015 - 0.03 * progress;
+            if (ph.Voiced && token.Tone is >= 1 and <= 4)
+            {
+                double toneProgress = token.ToneStart + (token.ToneEnd - token.ToneStart) * progress;
+                double tonePitch = MandarinTonePitch(token.Tone, toneProgress);
+                pitch *= s.Singing ? Math.Pow(tonePitch, 0.35) : tonePitch;
+            }
             if (token.Emphasis == VocalEmphasis.PitchUp || token.Question)
                 pitch *= 0.98 + 0.08 * progress;
             if (s.VibratoCents > 0 && token.Emphasis != VocalEmphasis.Whisper)
@@ -248,6 +312,12 @@ public static class VocalSynth
                 voiceGate *= flutter;
                 noiseGate *= flutter;
             }
+            else if (ph.Symbol == "tap-r")
+            {
+                double closure = Math.Exp(-Math.Pow((progress - 0.5) / 0.14, 2));
+                voiceGate *= 1 - 0.8 * closure;
+                noiseGate *= 1 - 0.8 * closure;
+            }
             double value = source * voiceGate + noise * noiseGate;
             if (ph.Voiced && breathiness > 0)
             {
@@ -288,13 +358,23 @@ public static class VocalSynth
         "animal-o" => 1.12, "animal-u" => 1.22, "animal-dot" => 1.3, _ => 1.0,
     };
 
+    private static double MandarinTonePitch(int tone, double progress) => tone switch
+    {
+        1 => 1.12,
+        2 => 0.90 + 0.24 * progress,
+        3 when progress < 0.55 => 0.95 - 0.25 * progress / 0.55,
+        3 => 0.70 + 0.29 * (progress - 0.55) / 0.45,
+        4 => 1.18 - 0.36 * progress,
+        _ => 1,
+    };
+
     private static bool CanConnect(VocalPhoneme? a, VocalPhoneme? b) =>
         a is { Voiced: true } && b is { Voiced: true }
         && !a.Symbol.StartsWith("animal-", StringComparison.Ordinal)
         && !b.Symbol.StartsWith("animal-", StringComparison.Ordinal)
         && !IsClosure(a.Symbol) && !IsClosure(b.Symbol);
 
-    private static bool IsClosure(string symbol) => symbol is "p" or "b" or "t" or "d" or "k" or "g"
+    private static bool IsClosure(string symbol) => symbol is "p" or "b" or "t" or "d" or "k" or "g" or "arab-q"
         or "ts" or "tsh" or "j" or "dz";
 
     private static bool IsBeat(string symbol) => symbol.StartsWith("beat-", StringComparison.Ordinal);
@@ -302,17 +382,24 @@ public static class VocalSynth
     private static void ShapeBeat(string symbol, double time, ref double voice, ref double noise)
     {
         if (symbol == "beat-b") voice *= Math.Exp(-time * 13);
+        else if (symbol is "beat-bz" or "beat-kz") voice *= Math.Exp(-time * 9);
+        if (symbol == "beat-tr")
+        {
+            double pulse = 0.25 + 0.75 * Math.Pow(0.5 + 0.5 * Math.Sin(2 * Math.PI * 24 * time), 2);
+            voice *= pulse;
+            noise *= pulse;
+        }
         double decay = symbol switch
         {
             "beat-b" => 38, "beat-p" => 28, "beat-k" => 20, "beat-t" => 48,
-            "beat-ts" => 14, "beat-pf" => 16, "beat-s" or "beat-f" => 10, _ => 12,
+            "beat-ts" => 14, "beat-pf" or "beat-tch" => 16, "beat-s" or "beat-f" => 10, _ => 12,
         };
         noise *= Math.Exp(-time * decay);
     }
 
     private static void ShapeConsonant(string symbol, double progress, double duration, ref double voice, ref double noise)
     {
-        bool stop = symbol is "p" or "b" or "t" or "d" or "k" or "g";
+        bool stop = symbol is "p" or "b" or "t" or "d" or "k" or "g" or "arab-q";
         bool affricate = symbol is "ts" or "tsh" or "j" or "dz";
         if (!stop && !affricate) return;
         double closure = stop ? 0.48 : 0.25;
@@ -372,13 +459,13 @@ public static class VocalSynth
     {
         var (low, high) = symbol switch
         {
-            "s" or "z" or "ts" or "dz" or "beat-t" or "beat-ts" or "beat-s" => (3500.0, 9500.0),
-            "sh" or "zh" or "tsh" or "j" => (1800.0, 6500.0),
+            "s" or "z" or "ts" or "dz" or "beat-t" or "beat-ts" or "beat-s" or "beat-z" => (3500.0, 9500.0),
+            "sh" or "zh" or "tsh" or "j" or "beat-tch" or "beat-tr" => (1800.0, 6500.0),
             "ich" => (2600.0, 7000.0),
             "ch" => (900.0, 4200.0),
-            "de-r" => (700.0, 3000.0),
+            "de-r" or "arab-ayn" or "arab-h" or "arab-q" => (700.0, 3000.0),
             "t" or "d" => (2500.0, 8500.0),
-            "k" or "g" or "beat-k" => (1200.0, 5500.0),
+            "k" or "g" or "beat-k" or "beat-kz" or "beat-bz" => (1200.0, 5500.0),
             "p" or "b" or "animal-dot" or "beat-b" or "beat-p" => (400.0, 3200.0),
             "beat-pf" or "beat-f" => (700.0, 6500.0),
             _ => (1000.0, 7000.0),

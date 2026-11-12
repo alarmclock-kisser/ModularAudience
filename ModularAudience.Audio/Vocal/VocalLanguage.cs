@@ -1,7 +1,6 @@
 namespace ModularAudience.Audio.Vocal;
 
-/// <summary>Supported pronunciation modes. Other spoken languages currently
-/// fall back to the English grapheme mapper.</summary>
+/// <summary>Supported local pronunciation modes.</summary>
 public enum VocalLanguage
 {
     English,
@@ -54,6 +53,5 @@ public static class VocalLanguageExtensions
         _ => language.ToString(),
     };
 
-    public static bool IsFullyImplemented(this VocalLanguage language) =>
-        language is VocalLanguage.English or VocalLanguage.German or VocalLanguage.AnimalCrossing or VocalLanguage.Beatboxing;
+    public static bool IsFullyImplemented(this VocalLanguage language) => Enum.IsDefined(language);
 }

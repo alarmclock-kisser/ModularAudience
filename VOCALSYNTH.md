@@ -10,8 +10,8 @@ This document captures the current implementation of the **Vocalsynth** feature
   top-level, bottom-most item "Vocalsynth …"** opens the dialog.
 - Highly interactive & intuitive but highly customizable.
 - Selectable languages: English, German, French, Spanish, Italian, Chinese,
-  Japanese, Turkish, Arabic, Russian, … (the independent engine has
-  language-specific **English + German** rules; others use the English fallback).
+  Japanese, Turkish, Arabic, and Russian. The independent engine has a
+  language-specific pronunciation path for each; quality varies by language.
 - **Animal Crossing** is an additional playful, non-linguistic pronunciation
   mode. Its voice color is still selected independently through the voice preset
   or a custom profile.
@@ -26,8 +26,12 @@ This document captures the current implementation of the **Vocalsynth** feature
 - NumericUpDown for **Speed**.
 - **9 hard-coded voice presets**: Child, Young Female, Adult Female, Adult Male,
   Deep Male, Robot, Whisper, Elderly, and Singing.
-- Buttons: **Render**, **Prehear / Stop**, **Create** (adds rendered audio to a
-  new AudioCollectionView).
+- Buttons: **Prehear / Stop** and **Create** (adds rendered audio to a new
+  AudioCollectionView). Audio is rendered automatically after edits or on demand.
+- **Ctrl+Z / Ctrl+Y** undo and redo speech-text edits from anywhere in the
+  dialog. **Shift+Enter** toggles Prehear/Stop in the speech text box; elsewhere,
+  **Enter** or **Shift+Enter** does so. Enter in the speech text box inserts a
+  new line.
 - User voice profiles: **savable / loadable / deletable / renamable** in AppData
   JSON, with an editor dialog.
 - **All UI strings in English.**
@@ -49,8 +53,15 @@ ModularAudience.Audio/Vocal/
   VocalVoiceProfile.cs          user profile (JSON-serializable) + FromPreset/ToPreset
   VocalVoiceProfileStore.cs     AppData folder, one JSON per profile
   VocalPhoneme.cs               acoustic descriptor
-  VocalPhonemeInventory.cs      phonemes, moving vowels and animal-style syllables
-  VocalPhonemizer.cs            language grapheme->phoneme (EN/DE + fallback)
+  VocalPhonemeInventory.cs      shared acoustic phonemes and game sounds
+  VocalPhonemizer.cs            pronunciation entry point and EN/DE rules
+  VocalMultilingualPhonemizer.cs language dispatch and shared pronunciation metadata
+  VocalIpa.cs                   IPA to acoustic inventory
+  VocalLatinLanguages.cs        Italian and Turkish spelling rules
+  VocalChinese.cs               Mandarin Hanzi and Pinyin, with lexical tones
+  VocalJapanese.cs              Japanese dictionary readings, kana, and romaji
+  VocalArabic.cs                Arabic script and Latin transliteration
+  VocalRussian.cs               Russian Cyrillic and Latin transliteration
   VocalTextParser.cs            text + emphasis markers -> synthesis tokens
   VocalToken.cs                 pauses, phonemes, text and emphasis
   VocalSynthSettings.cs         settings (language, text, speed, voice, format, emphasis)
@@ -71,6 +82,11 @@ ModularAudience.Forms/Modules/Partials/WindowMain/
 ModularAudience.Forms/WindowMain.Designer.cs
   contextMenuStrip_newTrack.Items.Add(CreateVocalSynthMenu());  // bottom-most
 ```
+
+Language phonemizers can set `SourceRepetitionLength` on pronunciation phones:
+`0` means unknown, `2` means a double letter, and `3` means three or more.
+Use `CappedRepetitionLength` when a grapheme consumes part of a longer run,
+so expressive repetitions remain separate in the shared renderer.
 
 ## 3. Current speech engines and behavior
 
@@ -105,7 +121,46 @@ ModularAudience.Forms/WindowMain.Designer.cs
   The exception for `intrigued` uses the stressed `ee` sound followed by `g d`;
   Windows speech receives an equivalent local SAPI pronunciation.
   Its output is still synthetic and its pronunciation rules are not a complete
-  dictionary. Other spoken languages continue to use the English fallback.
+  dictionary.
+- The other languages use the same local formant renderer and voice profiles:
+  - **French**: local rule-based French-to-IPA conversion, including accents,
+    nasal vowels and a uvular R. Liaison across separate words is limited.
+  - **Spanish**: Latin American rule-based IPA, including `ñ`, accent-driven
+    stress, and distinct tapped and trilled R sounds.
+  - **Italian**: spelling rules for soft/hard C and G, `gn`, `gli`, doubled
+    consonants and written stress accents. Unmarked stress is approximate.
+  - **Mandarin Chinese**: locally bundled Hanzi/phrase dictionaries select
+    Pinyin readings and apply common tone sandhi within a continuous Hanzi
+    segment. Pinyin may use tone marks or numbers, for example `nǐ hǎo` or
+    `ni3hao3`. Tones 1–4 modulate pitch; tone 5 and unmarked Pinyin use a
+    neutral contour, while explicitly marked neutral syllables stay separate.
+    Tone sandhi is not inferred across separately typed Pinyin words.
+  - **Japanese**: the bundled Kuromoji dictionary resolves common Kanji in
+    context; kana and Hepburn-style romaji are also supported. Vowel length is
+    approximated, and Japanese pitch accent is not modeled.
+  - **Turkish**: distinct `i`/`ı`, `ö`/`ü`, `ç`, `ş` and lengthening `ğ`,
+    with a general final-stress heuristic.
+  - **Arabic**: Arabic script with common vowel marks and Latin/DMG-style
+    transliteration. Missing short vowels in ordinary unvowelled script cannot
+    be recovered reliably; a small common-word list and an approximate
+    insertion heuristic make such text pronounceable, not linguistically exact.
+  - **Russian**: Cyrillic and common Latin transliterations, including `ё`,
+    basic palatalization, final devoicing, and approximate unstressed `о`
+    reduction. An acute accent can explicitly mark stress; otherwise a small
+    exception list and a general heuristic are used.
+- French, Spanish and Mandarin use the Apache-2.0 DotNetG2P packages, and
+  Japanese uses the Apache-2.0 Lucene.NET Kuromoji package (currently a beta
+  release), whose bundled IPADIC dictionary has its own included notice.
+  Their dictionaries are bundled locally; no cloud service or AI
+  model is needed. Their license and attribution files are copied to
+  `ThirdPartyLicenses` in build and publish output and are attached to releases
+  as `VocalSynthLicenses.zip`. The Japanese package adds
+  about 22 MB to the NuGet download, and Mandarin adds about 3.4 MB.
+- The multilingual rules and small formant inventory are best-effort
+  approximations, not complete pronunciation dictionaries or natural speech.
+  Unknown characters or unsupported dictionary readings report an error rather
+  than silently becoming English or disappearing. Unbroken segments are limited
+  to 4096 characters; long Hanzi segments are processed in smaller chunks.
 - The formant renderer maintains glottal phase between voiced sounds, blends
   neighboring formants, shapes stops and fricatives separately, and retains
   higher harmonics for lower-pitched voices. Voice presets, speed, and
@@ -118,22 +173,30 @@ ModularAudience.Forms/WindowMain.Designer.cs
 - **Beatboxing** uses locally synthesized mouth sounds on 250 ms eighth-note
   steps (120 BPM at speed 1). `B`/`b` is a voiced kick, `K`/`k` a snare-like
   sound, `P`/`p` a lip burst, `T`/`t` a short hi-hat, `TS`/`ts` a longer
-  hi-hat, `PF`/`pf` a lip snare, and `S`, `F`, `H` are sustained mouth noises.
-  Whitespace and `|` separate symbols without adding time; `.` and `-` each
+  hi-hat, `PF`/`pf` a lip snare, `TR` a short tongue roll, `TCH` a softer
+  hi-hat, and `Z` a voiced buzz. `BZ` and `KZ` combine a kick or snare with a
+  buzz; `S`, `F`, `H` are sustained mouth noises. Whitespace, apostrophes
+  (`'` or `’`), and `|` separate symbols without adding time; `.` and `-` each
   insert one silent step. For example, `B t K t B ts pf .` is two bars of
   eighth notes. Speed changes the tempo, uppercase symbols are accented, and
-  voice profiles and wrapping emphasis markers still apply. Unsupported
+  voice profiles and wrapping emphasis markers still apply. A configured
+  apostrophe emphasis marker takes precedence over its use as a separator. Unsupported
   symbols report an error.
 - **Singing** is a voice preset usable with every pronunciation mode. It
   generates a simple deterministic melody rather than interpreting musical
   notation. The formant engine sustains vowels on successive notes; Windows
   speech is slowed and locally pitch-tracked and retuned while unvoiced
   consonants remain mostly unprocessed. Saved profiles derived from Singing
-  retain this behavior. Actual pronunciation in other spoken languages remains
-  the existing English fallback.
+  retain this behavior. Mandarin tones are softened while singing so the
+  generated melody remains recognizable.
 - **Expressive repetition**: three or more consecutive copies of a sustainable
   letter, such as `Klenkerrrrrr`, `hissssss` or `coooool`, sustain its sound.
-  Ordinary double letters retain their normal pronunciation. The independent
+  Ordinary double letters retain their normal pronunciation. The formant
+  engine sustains a double vowel continuously instead of restarting the
+  sound; three or more remain expressive repetitions. Compatible adjacent
+  vowel sounds from other language phonemizers also share this behavior.
+  Separate Mandarin tones and the independently articulated Animal Crossing
+  syllables remain distinct. The independent
   engine gives repeated `r` a trill; Windows speech uses repeated SAPI phones
   in the selected voice. In Windows speech the deliberately extended portion
   is a separate phonetic fragment, so neighboring pronunciation may change.
@@ -147,11 +210,13 @@ ModularAudience.Forms/WindowMain.Designer.cs
   punctuation adds pauses. Windows speech retains normal single spaces and
   punctuation for its own prosody; explicit markers and longer whitespace
   still create breaks.
-- Apostrophes within words are retained for English pronunciation exceptions.
+- Apostrophes within words are retained for pronunciation, including French
+  contractions and Pinyin or romaji syllable separators. Configured emphasis
+  markers still take precedence over punctuation inside words.
 - Question and exclamation marks affect emphasis and, in Windows speech, are
   also passed through as punctuation.
-- **Empty text** disables Render/Prehear/Create buttons; Prehear and Stop are
-  merged into one toggling button.
+- **Empty text** disables Create and Prehear; the merged Prehear/Stop
+  button remains enabled to stop any current playback.
 - **Emphasis markers**: wrapping markers apply their mode to inner text;
   inline markers insert pauses / set pending emphasis for the next word. An
   unmatched wrapping marker is ignored instead of blocking the parser.
@@ -161,24 +226,21 @@ ModularAudience.Forms/WindowMain.Designer.cs
 
 ## 4. Extension points / TODOs
 
-- Add full phonemization for French, Spanish, Italian, Chinese, Japanese,
-  Turkish, Arabic, Russian (currently fall back to English). Implement in
-  `VocalPhonemizer` with language-specific digraphs/umlauts. Keep the
-  `VocalLanguage` enum and `Phonemize` signature stable.
-- Improve the independent synthesizer further with a larger pronunciation
-  dictionary, richer stress/prosody and perceptual listening tests. Its
+- Improve the independent synthesizer further with larger pronunciation
+  dictionaries, richer stress/prosody and perceptual listening tests. Its
   rule-based output should not be presented as natural speech.
 - Add per-word/line emphasis in the UI (currently text markers only).
 - Wire `SetCollection` to the active AudioCollectionView instead of creating a
   new one (mirror Sample Synthesizer if desired).
-- Add more tests: all presets render, all languages fall back without throwing,
-  pause proportionality, question-mark pitch, profile rename/delete round trips.
+- Add more tests for pause proportionality, question-mark pitch and profile
+  rename/delete round trips when extending those behaviors.
 - Consider exposing `VocalSynth` as an AudioObj generator for arrangement tracks.
 
 ## 5. Tests
 
 `ModularAudience.Audio.Tests/VocalSynthTests.cs` covers pronunciation,
-formant/fricative spectra, voiced transitions, cancellation and size limits,
+multilingual scripts, transliteration, Mandarin tones, formant/fricative spectra,
+voiced transitions, cancellation and size limits,
 animal voice presets, timed ellipsis pops, expressive letter repetition, CAPS,
 beatboxing, singing, Windows SSML and actual Windows voice output when matching
 voices are installed. The fixed-timing singing tests specifically use Microsoft

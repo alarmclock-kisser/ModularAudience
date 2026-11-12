@@ -140,6 +140,11 @@ public static class VocalTextParser
 
             if (language == VocalLanguage.Beatboxing)
             {
+                if (text[i] is '\'' or '\u2019')
+                {
+                    i++;
+                    continue;
+                }
                 string symbol = BeatboxSymbol(text, i, out int consumed);
                 bool capitalized = IsCapitalized(text.Substring(i, consumed), allowSingleLetter: true);
                 output.Add(new VocalPhonemeToken(symbol, pending, Capitalized: capitalized));
@@ -149,7 +154,7 @@ public static class VocalTextParser
                 continue;
             }
 
-            if (IsPunctuation(text[i]))
+            if (IsPunctuation(text[i], language))
             {
                 if (preserveText)
                 {
@@ -159,17 +164,19 @@ public static class VocalTextParser
                 }
                 int pause = text[i] switch
                 {
-                    ',' => 140,
-                    ';' or ':' => 180,
+                    ',' or '，' or '、' or '・' or '،' => 140,
+                    ';' or ':' or '；' or '：' or '؛' or '—' => 180,
+                    '¿' or '¡' or '(' or ')' or '（' or '）' or '「' or '」' or '『' or '』'
+                        or '《' or '》' or '【' or '】' or '«' or '»' or '“' or '”' or '"' => 0,
                     _ => 240,
                 };
-                output.Add(new VocalPauseToken(pause));
+                if (pause > 0) output.Add(new VocalPauseToken(pause));
                 i++;
                 continue;
             }
 
             var sb = new StringBuilder();
-            while (i < n && !char.IsWhiteSpace(text[i]) && !IsPunctuation(text[i])
+            while (i < n && !char.IsWhiteSpace(text[i]) && !IsPunctuation(text[i], language)
                 && !IsMarkerStart(syntax, text, i)
                 && !(language == VocalLanguage.AnimalCrossing && IsEllipsisAt(text, i)))
             {
@@ -180,8 +187,8 @@ public static class VocalTextParser
             var word = sb.ToString();
             if (!string.IsNullOrWhiteSpace(word))
             {
-                bool isQuestion = i < n && text[i] == '?';
-                bool isExclamation = i < n && text[i] == '!';
+                bool isQuestion = i < n && text[i] is '?' or '？' or '؟';
+                bool isExclamation = i < n && text[i] is '!' or '！';
                 var emphasis = pending;
                 if (emphasis == VocalEmphasis.Normal && isQuestion) emphasis = VocalEmphasis.PitchUp;
                 if (emphasis == VocalEmphasis.Normal && isExclamation) emphasis = VocalEmphasis.Strong;
@@ -193,7 +200,26 @@ public static class VocalTextParser
                 }
                 else
                 {
-                    var phonemes = VocalPhonemizer.Phonemize(language, word, cancellationToken);
+                    if (VocalMultilingualPhonemizer.Supports(language))
+                    {
+                        var phones = VocalMultilingualPhonemizer.PhonemizeWord(language, word, cancellationToken);
+                        foreach (var phone in phones)
+                            output.Add(new VocalPhonemeToken(phone.Symbol, emphasis, phone.Stressed, capitalized, isQuestion)
+                            {
+                                Tone = phone.Tone,
+                                ToneStart = phone.ToneStart,
+                                ToneEnd = phone.ToneEnd,
+                                SourceRepetitionLength = phone.SourceRepetitionLength,
+                            });
+                        pending = baseEmphasis;
+                        continue;
+                    }
+                    IReadOnlyList<int>? repetitions = null;
+                    IReadOnlyList<string> phonemes;
+                    if (language is VocalLanguage.English or VocalLanguage.German)
+                        (phonemes, repetitions) = VocalPhonemizer.PhonemizeWithRepetitions(language, word, cancellationToken);
+                    else
+                        phonemes = VocalPhonemizer.Phonemize(language, word, cancellationToken);
                     int stressed = -1;
                     if (language != VocalLanguage.AnimalCrossing && !UnstressedWords.Contains(word))
                     {
@@ -215,7 +241,10 @@ public static class VocalTextParser
                         }
                     }
                     for (int p = 0; p < phonemes.Count; p++)
-                        output.Add(new VocalPhonemeToken(phonemes[p], emphasis, p == stressed, capitalized, isQuestion));
+                        output.Add(new VocalPhonemeToken(phonemes[p], emphasis, p == stressed, capitalized, isQuestion)
+                        {
+                            SourceRepetitionLength = repetitions is null ? 0 : repetitions[p],
+                        });
                 }
                 pending = baseEmphasis;
             }
@@ -236,22 +265,32 @@ public static class VocalTextParser
 
     private static string BeatboxSymbol(string text, int index, out int consumed)
     {
+        if (text.AsSpan(index).StartsWith("tch", StringComparison.OrdinalIgnoreCase))
+        {
+            consumed = 3;
+            return "beat-tch";
+        }
         char first = char.ToLowerInvariant(text[index]);
         char next = index + 1 < text.Length ? char.ToLowerInvariant(text[index + 1]) : '\0';
-        consumed = first == 'p' && next == 'f' || first == 't' && next == 's' ? 2 : 1;
+        consumed = (first, next) is ('p', 'f') or ('t', 's') or ('t', 'r') or ('b', 'z') or ('k', 'z') ? 2 : 1;
         return (first, consumed) switch
         {
+            ('b', 2) => "beat-bz",
             ('b', _) => "beat-b",
             ('p', 2) => "beat-pf",
             ('p', _) => "beat-p",
+            ('k', 2) => "beat-kz",
             ('k', _) => "beat-k",
+            ('t', 2) when next == 'r' => "beat-tr",
             ('t', 2) => "beat-ts",
             ('t', _) => "beat-t",
             ('s', _) => "beat-s",
             ('f', _) => "beat-f",
             ('h', _) => "beat-h",
+            ('z', _) => "beat-z",
             _ => throw new ArgumentException(
-                $"Unsupported beatbox notation '{text[index]}'. Use B, P, K, T, TS, PF, S, F, H, '.' or '-'.", nameof(text)),
+                $"Unsupported beatbox notation '{text[index]}'. "
+                + "Use B, P, K, T, TS, PF, TR, TCH, Z, BZ, KZ, S, F, H, '.' or '-'.", nameof(text)),
         };
     }
 
@@ -278,7 +317,12 @@ public static class VocalTextParser
     private static bool IsEllipsisAt(string text, int index) =>
         text[index] == '\u2026' || text.AsSpan(index).StartsWith("...", StringComparison.Ordinal);
 
-    private static bool IsPunctuation(char c) => c is '.' or ',' or ';' or ':' or '?' or '!' or '\u2026';
+    private static bool IsPunctuation(char c, VocalLanguage language) =>
+        c is '.' or ',' or ';' or ':' or '?' or '!' or '\u2026'
+        || VocalMultilingualPhonemizer.Supports(language) && c is
+            '。' or '，' or '、' or '・' or '；' or '：' or '？' or '！' or '،' or '؛' or '؟'
+            or '¿' or '¡' or '—' or '(' or ')' or '（' or '）' or '「' or '」' or '『' or '』'
+            or '《' or '》' or '【' or '】' or '«' or '»' or '“' or '”' or '"';
 
     private static VocalEmphasis ModeToEmphasis(VocalEmphasisMode mode) => mode switch
     {

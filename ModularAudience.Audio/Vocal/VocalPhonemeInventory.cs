@@ -24,6 +24,12 @@ public static class VocalPhonemeInventory
         ["er"] = V("er", true, 100, [490, 1350, 1690], [1.0, 0.7, 0.4], 0.9, 0.1, true),
         ["oe"] = V("oe", true, 110, [320, 1500, 2200], [1.0, 0.75, 0.4], 0.9, 0.1, true), // ö
         ["ue"] = V("ue", true, 110, [320, 1700, 2200], [1.0, 0.75, 0.4], 0.9, 0.1, true), // ü
+        ["tr-i"] = V("tr-i", true, 95, [390, 1350, 2300], [1.0, 0.7, 0.4], 0.9, 0.1, true),
+        ["zh-apical"] = V("zh-apical", true, 95, [430, 1500, 1900], [1.0, 0.7, 0.4], 0.85, 0.16, true),
+        ["fr-an"] = V("fr-an", true, 120, [650, 1250, 2450], [0.85, 0.55, 0.3], 0.8, 0.15, true),
+        ["fr-on"] = V("fr-on", true, 120, [490, 900, 2400], [0.85, 0.5, 0.3], 0.8, 0.15, true),
+        ["fr-in"] = V("fr-in", true, 120, [520, 1800, 2450], [0.85, 0.6, 0.3], 0.8, 0.15, true),
+        ["fr-un"] = V("fr-un", true, 120, [450, 1500, 2250], [0.85, 0.6, 0.3], 0.8, 0.15, true),
         // German unstressed schwa, vocalic R, long vowels and short vowels.
         ["de-schwa"] = V("de-schwa", true, 75, [480, 1650, 2500], [0.85, 0.65, 0.35], 0.85, 0.1, true),
         ["de-er"] = V("de-er", true, 75, [610, 1450, 2450], [0.9, 0.65, 0.35], 0.85, 0.1, true),
@@ -46,6 +52,9 @@ public static class VocalPhonemeInventory
         ["l"] = V("l", true, 70, [300, 1100, 2500], [0.7, 0.4, 0.3], 0.8, 0.2, false),
         ["r"] = V("r", true, 70, [300, 1200, 1600], [0.7, 0.4, 0.3], 0.8, 0.2, false),
         ["de-r"] = V("de-r", true, 70, [350, 1150, 2400], [0.65, 0.35, 0.25], 0.65, 0.9, false),
+        ["tap-r"] = V("tap-r", true, 45, [350, 1500, 2500], [0.65, 0.4, 0.25], 0.75, 0.35, false),
+        ["trill-r"] = V("trill-r", true, 115, [350, 1500, 2500], [0.65, 0.4, 0.25], 0.75, 0.4, false),
+        ["arab-ayn"] = V("arab-ayn", true, 80, [500, 1200, 2300], [0.7, 0.35, 0.2], 0.65, 0.65, false),
         ["w"] = V("w", true, 60, [300, 600, 2200], [0.6, 0.4, 0.3], 0.7, 0.15, false),
         ["y"] = V("y", true, 60, [250, 2000, 2800], [0.6, 0.5, 0.3], 0.7, 0.15, false),
         // Fricatives (voiced)
@@ -60,6 +69,8 @@ public static class VocalPhonemeInventory
         ["ch"] = V("ch", false, 90, [], [], 0.0, 1.0, false), // loch / x
         ["ich"] = V("ich", false, 85, [], [], 0.0, 1.0, false),
         ["h"] = V("h", false, 60, [], [], 0.0, 0.8, false),
+        ["arab-h"] = V("arab-h", false, 80, [], [], 0.0, 0.9, false),
+        ["arab-q"] = V("arab-q", false, 65, [], [], 0.0, 0.9, false),
         ["th"] = V("th", false, 80, [], [], 0.0, 1.0, false),
         // Stops (unvoiced/voiced) - modeled as short noise bursts
         ["p"] = V("p", false, 60, [], [], 0.0, 0.9, false),
@@ -90,6 +101,11 @@ public static class VocalPhonemeInventory
         ["beat-s"] = V("beat-s", false, 150, [], [], 0, 1, false),
         ["beat-f"] = V("beat-f", false, 150, [], [], 0, 1, false),
         ["beat-h"] = V("beat-h", false, 140, [], [], 0, 0.8, false),
+        ["beat-tr"] = V("beat-tr", true, 150, [350, 1400, 2400], [0.4, 0.3, 0.2], 0.45, 0.95, false),
+        ["beat-tch"] = V("beat-tch", false, 130, [], [], 0, 1, false),
+        ["beat-z"] = V("beat-z", true, 140, [250, 1400, 2300], [0.4, 0.3, 0.2], 0.6, 0.85, false),
+        ["beat-bz"] = V("beat-bz", true, 170, [300, 900, 2000], [1.0, 0.4, 0.15], 0.9, 0.8, false),
+        ["beat-kz"] = V("beat-kz", true, 160, [250, 1400, 2300], [0.4, 0.3, 0.2], 0.45, 1, false),
         // Silence
         ["sil"] = V("sil", false, 40, [], [], 0.0, 0.0, false),
     };
