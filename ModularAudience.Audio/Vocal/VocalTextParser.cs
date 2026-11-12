@@ -200,6 +200,20 @@ public static class VocalTextParser
                 }
                 else
                 {
+                    if (language is not (VocalLanguage.AnimalCrossing or VocalLanguage.Beatboxing)
+                        && VocalIpa.TryParseNotation(word, cancellationToken, out var ipaPhones))
+                    {
+                        foreach (var phone in ipaPhones)
+                            output.Add(new VocalPhonemeToken(phone.Symbol, emphasis, phone.Stressed, capitalized, isQuestion)
+                            {
+                                Tone = phone.Tone,
+                                ToneStart = phone.ToneStart,
+                                ToneEnd = phone.ToneEnd,
+                                SourceRepetitionLength = phone.SourceRepetitionLength,
+                            });
+                        pending = baseEmphasis;
+                        continue;
+                    }
                     if (VocalMultilingualPhonemizer.Supports(language))
                     {
                         var phones = VocalMultilingualPhonemizer.PhonemizeWord(language, word, cancellationToken);
@@ -288,11 +302,24 @@ public static class VocalTextParser
             ('f', _) => "beat-f",
             ('h', _) => "beat-h",
             ('z', _) => "beat-z",
-            _ => throw new ArgumentException(
-                $"Unsupported beatbox notation '{text[index]}'. "
-                + "Use B, P, K, T, TS, PF, TR, TCH, Z, BZ, KZ, S, F, H, '.' or '-'.", nameof(text)),
+            _ => BestEffortBeatboxSymbol(text[index]),
         };
     }
+
+    private static string BestEffortBeatboxSymbol(char symbol) => char.ToLowerInvariant(symbol) switch
+    {
+        'a' or 'e' or 'i' or 'o' or 'u' or 'y' => "beat-h",
+        'ʘ' => "beat-p",
+        'ǀ' or 'ʇ' => "beat-t",
+        'ǃ' or 'ʗ' => "beat-k",
+        'ǂ' => "beat-tch",
+        'ǁ' => "beat-ts",
+        's' or 'ʃ' or 'ɕ' or 'ʂ' or 'x' => "beat-s",
+        'f' or 'ɸ' => "beat-f",
+        'z' or 'ʒ' or 'ʑ' or 'v' or 'm' or 'n' or 'l' or 'r' or 'w' => "beat-z",
+        _ when char.IsLetter(symbol) => "beat-k",
+        _ => "beat-h",
+    };
 
     private static VocalEmphasisRule? TryMatchWrapping(VocalEmphasisSyntax syntax, string text, int index)
     {

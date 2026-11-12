@@ -248,7 +248,7 @@ public class VocalSynthTests
     }
 
     [TestMethod]
-    public void MultilingualInput_CapitalizationAndUnsupportedCharactersAreExplicit()
+    public void MultilingualInput_CapitalizationAndUnsupportedCharactersUseBestEffortFallback()
     {
         foreach (var (language, text) in new[]
         {
@@ -258,12 +258,84 @@ public class VocalSynthTests
             Assert.IsTrue(VocalTextParser.Parse(language, text, VocalEmphasisSyntax.Default())
                 .OfType<VocalPhonemeToken>().All(token => token.Capitalized));
         Assert.IsTrue(VocalPhonemizer.Phonemize(VocalLanguage.Turkish, "IĞDIR").Contains("tr-i"));
-        Assert.Throws<ArgumentException>(() => VocalPhonemizer.Phonemize(VocalLanguage.Chinese, "你好🙂"));
-        Assert.Throws<ArgumentException>(() => VocalPhonemizer.Phonemize(VocalLanguage.Japanese, "こんにちは🙂"));
-        Assert.Throws<ArgumentException>(() => VocalPhonemizer.Phonemize(VocalLanguage.Arabic, "مرحبا🙂"));
+        foreach (var (language, text) in new[]
+        {
+            (VocalLanguage.Chinese, "你好🙂"),
+            (VocalLanguage.Japanese, "こんにちは🙂"),
+            (VocalLanguage.Arabic, "مرحبا🙂"),
+        })
+        {
+            var fallback = VocalPhonemizer.Phonemize(language, text);
+            Assert.IsTrue(fallback.Count > 0, $"{language} produced no best-effort pronunciation.");
+            Assert.IsTrue(fallback.Contains("unsupported"), $"{language} did not retain the unsupported fragment.");
+        }
         CollectionAssert.AreEqual(
             VocalPhonemizer.Phonemize(VocalLanguage.Russian, "привет").ToArray(),
             VocalPhonemizer.Phonemize(VocalLanguage.Russian, "«привет»").ToArray());
+    }
+
+    [TestMethod]
+    public void IpaNotationAndClicks_RenderIndependentlyOfSelectedLanguage()
+    {
+        const string notation = "[ˈʘŋǃ]";
+        foreach (var language in new[]
+        {
+            VocalLanguage.English, VocalLanguage.German, VocalLanguage.French, VocalLanguage.Spanish,
+            VocalLanguage.Italian, VocalLanguage.Chinese, VocalLanguage.Japanese, VocalLanguage.Turkish,
+            VocalLanguage.Arabic, VocalLanguage.Russian,
+        })
+        {
+            var tokens = VocalTextParser.Parse(language, notation, VocalEmphasisSyntax.Default())
+                .OfType<VocalPhonemeToken>().ToArray();
+            CollectionAssert.AreEqual(new[] { "beat-p", "ng", "beat-k" },
+                tokens.Select(token => token.Phoneme).ToArray(), language.ToString());
+            CollectionAssert.AreEqual(new[] { "fr-an" },
+                VocalTextParser.Parse(language, "ã", VocalEmphasisSyntax.Default())
+                    .OfType<VocalPhonemeToken>().Select(token => token.Phoneme).ToArray(), language.ToString());
+
+            var settings = VocalSynthSettings.FromPreset(VocalVoicePreset.BuiltIn[2], language, notation);
+            settings.SampleRate = 8000;
+            using var audio = VocalSynth.Render(settings);
+            Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001), $"{language} rendered silence.");
+        }
+    }
+
+    [TestMethod]
+    public void UnsupportedSounds_AreSkippedByDefaultOrCensoredAt100Hz()
+    {
+        var settings = VocalSynthSettings.FromPreset(VocalVoicePreset.BuiltIn[2], VocalLanguage.Arabic, "🙂");
+        settings.SampleRate = 8000;
+        using var skipped = VocalSynth.Render(settings);
+        Assert.AreEqual(8, skipped.Data.Length);
+        Assert.IsTrue(skipped.Data.All(sample => sample == 0));
+
+        settings.BeepForUnsupportedSounds = true;
+        using var censored = VocalSynth.Render(settings);
+        Assert.AreEqual(1200, censored.Data.Length);
+        int[] risingCrossings = Enumerable.Range(1, censored.Data.Length - 1)
+            .Where(index => censored.Data[index - 1] <= 0 && censored.Data[index] > 0)
+            .ToArray();
+        double averagePeriod = risingCrossings.Zip(risingCrossings.Skip(1),
+            (first, second) => second - first).Average();
+        Assert.AreEqual(80, averagePeriod, 1.0, "The censor tone should be 100 Hz at 8 kHz.");
+    }
+
+    [TestMethod]
+    public void MixedScriptsAndUnknownFragments_RenderWithSpeechAndBeatboxFallbacks()
+    {
+        const string text = "جهادʘ🙂";
+        foreach (var language in new[] { VocalLanguage.English, VocalLanguage.French, VocalLanguage.Arabic })
+        {
+            var tokens = VocalTextParser.Parse(language, text, VocalEmphasisSyntax.Default())
+                .OfType<VocalPhonemeToken>().ToArray();
+            Assert.IsTrue(tokens.Any(token => token.Phoneme == "beat-p"), language.ToString());
+            Assert.IsTrue(tokens.Any(token => token.Phoneme == "unsupported"), language.ToString());
+
+            var settings = VocalSynthSettings.FromPreset(VocalVoicePreset.BuiltIn[2], language, text);
+            settings.SampleRate = 8000;
+            using var audio = VocalSynth.Render(settings);
+            Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001), $"{language} rendered silence.");
+        }
     }
 
     [TestMethod]
@@ -982,7 +1054,8 @@ public class VocalSynthTests
             Assert.IsTrue(beat.Data.All(float.IsFinite), $"{preset.Name} produced invalid samples.");
         }
         settings.Text = "B X";
-        Assert.ThrowsExactly<ArgumentException>(() => VocalSynth.Render(settings));
+        using var fallback = VocalSynth.Render(settings);
+        Assert.IsTrue(fallback.Data.Any(sample => Math.Abs(sample) > 0.001));
     }
 
     [TestMethod]
@@ -1034,9 +1107,9 @@ public class VocalSynthTests
         var custom = VocalTextParser.Parse(VocalLanguage.Beatboxing, "b'b", syntax)
             .OfType<VocalPhonemeToken>().ToArray();
         Assert.AreEqual(VocalEmphasis.Strong, custom[1].Emphasis);
-        var error = Assert.ThrowsExactly<ArgumentException>(() =>
-            VocalTextParser.Parse(VocalLanguage.Beatboxing, "B X", VocalEmphasisSyntax.Default()));
-        StringAssert.Contains(error.Message, "Unsupported beatbox notation 'X'");
+        CollectionAssert.AreEqual(new[] { "beat-b", "beat-s" },
+            VocalTextParser.Parse(VocalLanguage.Beatboxing, "B X", VocalEmphasisSyntax.Default())
+                .OfType<VocalPhonemeToken>().Select(token => token.Phoneme).ToArray());
     }
 
     [TestMethod]
@@ -1098,12 +1171,18 @@ public class VocalSynthTests
             object Field(string name) => typeof(VocalSynthDialog).GetField(name, flags)!.GetValue(dialog)!;
             var language = (ComboBox)Field("languageCombo");
             var voice = (ComboBox)Field("voiceCombo");
+            var unsupportedBeep = (CheckBox)Field("unsupportedBeepCheckBox");
+            Assert.IsFalse(unsupportedBeep.Checked);
+            unsupportedBeep.Checked = true;
             language.SelectedItem = "Beatboxing";
             voice.SelectedItem = "Built-in: Singing";
             var settings = (VocalSynthSettings)Field("settings");
             Assert.AreEqual(VocalLanguage.Beatboxing, settings.Language);
             Assert.IsTrue(settings.Singing);
             Assert.IsFalse(settings.UseWindowsSpeech);
+            Assert.IsTrue(settings.BeepForUnsupportedSounds);
+            unsupportedBeep.Checked = false;
+            Assert.IsFalse(((VocalSynthSettings)Field("settings")).BeepForUnsupportedSounds);
 
             ((TextBox)Field("profileName")).Text = "Singing profile";
             typeof(VocalSynthDialog).GetMethod("SaveProfile", flags)!.Invoke(dialog, null);
@@ -1319,7 +1398,7 @@ public class VocalSynthTests
 
     [STATestMethod]
     [Timeout(15000)]
-    public void Dialog_Beatboxing_RendersOnDemandAndReportsInvalidNotation()
+    public void Dialog_Beatboxing_RendersOnDemandAndApproximatesUnknownNotation()
     {
         string directory = Path.Combine(Path.GetTempPath(), "vocal_beatbox_" + Guid.NewGuid());
         var profiles = new VocalVoiceProfileStore(directory);
@@ -1348,8 +1427,8 @@ public class VocalSynthTests
             editor.Text = "B X";
             task = (Task<bool>)ensure.Invoke(dialog, null)!;
             WaitForRender(task);
-            Assert.IsFalse(task.GetAwaiter().GetResult());
-            StringAssert.Contains(status.Text, "Unsupported beatbox notation 'X'");
+            Assert.IsTrue(task.GetAwaiter().GetResult(), status.Text);
+            StringAssert.StartsWith(status.Text, "Rendered");
         }
         finally
         {

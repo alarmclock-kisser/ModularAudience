@@ -107,6 +107,7 @@ public static class VocalPhonemeInventory
         ["beat-bz"] = V("beat-bz", true, 170, [300, 900, 2000], [1.0, 0.4, 0.15], 0.9, 0.8, false),
         ["beat-kz"] = V("beat-kz", true, 160, [250, 1400, 2300], [0.4, 0.3, 0.2], 0.45, 1, false),
         // Silence
+        ["unsupported"] = V("unsupported", false, 0, [], [], 0.0, 0.0, false),
         ["sil"] = V("sil", false, 40, [], [], 0.0, 0.0, false),
     };
 

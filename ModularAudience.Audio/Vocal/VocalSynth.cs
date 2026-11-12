@@ -34,6 +34,15 @@ public static class VocalSynth
                     state.Frame += unit.Frames;
                     continue;
                 }
+                if (phoneme.Symbol == "unsupported")
+                {
+                    if (s.BeepForUnsupportedSounds)
+                        RenderUnsupportedBeep(pcm, unit.Frames, s, state, cancellationToken);
+                    else
+                        AppendSilence(pcm, unit.Frames, s.Channels, cancellationToken);
+                    state.Frame += unit.Frames;
+                    continue;
+                }
                 var previous = GetNeighbor(plan, i - 1);
                 var next = GetNeighbor(plan, i + 1);
                 RenderPhoneme(pcm, phoneme, token, previous, next, unit.Frames, unit.Note, s, state, random, cancellationToken);
@@ -102,15 +111,24 @@ public static class VocalSynth
                 if (!VocalPhonemeInventory.Contains(phoneme.Phoneme))
                     throw new InvalidOperationException($"Unknown vocal phoneme: {phoneme.Phoneme}");
                 var definition = VocalPhonemeInventory.Get(phoneme.Phoneme);
-                bool beat = IsBeat(phoneme.Phoneme);
-                if (settings.Singing && (beat || definition.IsVowel
-                    && (settings.Language == VocalLanguage.AnimalCrossing || phoneme.Phoneme != previousSymbol)))
-                    noteIndex++;
-                milliseconds = definition.DurationMs * (beat ? 1 : DurationMultiplier(phoneme));
-                if (settings.Singing && definition.IsVowel)
-                    milliseconds *= settings.Language == VocalLanguage.AnimalCrossing ? 1.35 : 1.75;
-                minimumFrames = 4;
-                previousSymbol = phoneme.Phoneme;
+                if (phoneme.Phoneme == "unsupported")
+                {
+                    milliseconds = settings.BeepForUnsupportedSounds ? 150 : 0;
+                    minimumFrames = settings.BeepForUnsupportedSounds ? 1 : 0;
+                    previousSymbol = null;
+                }
+                else
+                {
+                    bool beat = IsBeat(phoneme.Phoneme);
+                    if (settings.Singing && (beat || definition.IsVowel
+                        && (settings.Language == VocalLanguage.AnimalCrossing || phoneme.Phoneme != previousSymbol)))
+                        noteIndex++;
+                    milliseconds = definition.DurationMs * (beat ? 1 : DurationMultiplier(phoneme));
+                    if (settings.Singing && definition.IsVowel)
+                        milliseconds *= settings.Language == VocalLanguage.AnimalCrossing ? 1.35 : 1.75;
+                    minimumFrames = 4;
+                    previousSymbol = phoneme.Phoneme;
+                }
             }
             else throw new InvalidOperationException("Unknown vocal synthesis token.");
 
@@ -127,9 +145,32 @@ public static class VocalSynth
         }
         if (plan.Count == 0)
             throw new ArgumentException("Text contains no pronounceable characters or speech markers.", nameof(settings));
+        if (samples == 0)
+        {
+            int silenceFrames = Math.Max(1, settings.SampleRate / 1000);
+            samples = (long)silenceFrames * settings.Channels;
+            plan.Add(new RenderUnit(new VocalPauseToken(1), silenceFrames, 0));
+        }
         SustainVowelPairs(plan, cancellationToken);
         sampleCount = (int)samples;
         return plan;
+    }
+
+    private static void RenderUnsupportedBeep(
+        List<float> pcm, int frames, VocalSynthSettings settings, VoiceState state,
+        CancellationToken cancellationToken)
+    {
+        int attackFrames = Math.Max(1, settings.SampleRate / 300);
+        int releaseFrames = Math.Max(1, settings.SampleRate / 100);
+        for (int i = 0; i < frames; i++)
+        {
+            if ((i & 127) == 0) cancellationToken.ThrowIfCancellationRequested();
+            double envelope = Math.Min(1, i / (double)attackFrames);
+            envelope = Math.Min(envelope, (frames - 1 - i) / (double)releaseFrames);
+            float sample = (float)(0.6 * Math.Max(0, envelope)
+                * Math.Sin(2 * Math.PI * 100 * (state.Frame + i) / settings.SampleRate));
+            for (int channel = 0; channel < settings.Channels; channel++) pcm.Add(sample);
+        }
     }
 
     private static void SustainVowelPairs(List<RenderUnit> plan, CancellationToken cancellationToken)

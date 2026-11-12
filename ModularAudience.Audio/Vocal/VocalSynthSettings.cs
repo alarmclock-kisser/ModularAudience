@@ -4,6 +4,7 @@ public sealed class VocalSynthSettings
 {
     public VocalLanguage Language { get; set; } = VocalLanguage.English;
     public bool UseWindowsSpeech { get; set; }
+    public bool BeepForUnsupportedSounds { get; set; }
     public string Text { get; set; } = string.Empty;
     public double Speed { get; set; } = 1.0;
     public int SampleRate { get; set; } = 44100;
@@ -56,6 +57,7 @@ public sealed class VocalSynthSettings
     {
         Language = Language,
         UseWindowsSpeech = UseWindowsSpeech,
+        BeepForUnsupportedSounds = BeepForUnsupportedSounds,
         Text = Text,
         Speed = Speed,
         SampleRate = SampleRate,

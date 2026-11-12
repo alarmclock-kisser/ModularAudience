@@ -26,7 +26,7 @@ internal sealed partial class ReleaseUpdateDialog : Form
         this.currentRelease = currentRelease;
         this.loadHistory = loadHistory;
         InitializeComponent();
-        historyLabel.Text = $"Commit messages since build {currentRelease} (oldest build first)";
+        historyLabel.Text = $"Commit messages since build {currentRelease} (oldest first; scroll up for up to {ReleaseCommitHistory.MaximumHistoricalReleases} previous releases)";
         historyTextBox.Text = loadHistory is null
             ? "Commit messages are unavailable in this context."
             : "Loading commit messages from GitHub...";

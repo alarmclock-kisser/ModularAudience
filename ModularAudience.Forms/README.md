@@ -68,6 +68,11 @@ offered build**, ordered by build number from oldest to newest. Message bodies,
 build numbers, commit identifiers, and available UTC timestamps are retained.
 Previously skipped intermediate releases are included when updating to a later
 release; the skip boundary controls prompting, not which changes are shown.
+The history also includes up to the 24 most recent published releases before
+the update range, including the installed build. The dialog initially scrolls
+to the changes since the installed build; scroll up to read those older notes.
+Use **Word wrap** to toggle line wrapping in the notes; wrapping hides the
+horizontal scrollbar, while the default unwrapped view keeps it available.
 
 History loads asynchronously when the dialog opens. Published `release-N` tags
 are matched to `run_number: N` in `.github/workflows/build.yml`; missing workflow

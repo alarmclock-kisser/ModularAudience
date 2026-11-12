@@ -19,11 +19,12 @@ public sealed class GitHubReleaseHistoryTests
 
         ReleaseCommitHistory history = await api.Source.GetAsync(127, 128, CancellationToken.None);
 
-        ReleaseCommitHistoryEntry entry = history.Entries.Single();
+        ReleaseCommitHistoryEntry entry = history.Entries.Single(entry => entry.ReleaseNumber == 128);
         Assert.AreEqual(128L, entry.ReleaseNumber);
         Assert.AreEqual("Add co-op\n\nSynchronize tracks in all directions.", entry.Message);
         Assert.AreEqual(Sha(128), entry.CommitSha);
         Assert.IsNotNull(entry.CommittedAt);
+        Assert.AreEqual("Older", history.Entries.Single(entry => entry.ReleaseNumber == 127).Message);
         Assert.HasCount(0, history.Warnings);
         Assert.HasCount(2, api.Requests);
         Assert.IsTrue(api.Requests.All(request => request.Uri.Scheme == "https" && request.Uri.Host == "api.github.com"));
@@ -35,12 +36,12 @@ public sealed class GitHubReleaseHistoryTests
     {
         using var api = new FakeApi(request => IsReleases(request)
             ? Json(new object[] { Tag(130), Tag(128), Tag(127), Tag(126), Tag(131), Tag(129, draft: true), Tag(125), new { tag_name = "v2.0" } })
-            : Json(new { workflow_runs = new object[] { Run(131, "Too new"), Run(130, "Newest"), Run(129, "Unpublished"), Run(128, "Middle"), Run(127, "Oldest"), Run(126, "Installed") } }));
+            : Json(new { workflow_runs = new object[] { Run(131, "Too new"), Run(130, "Newest"), Run(129, "Unpublished"), Run(128, "Middle"), Run(127, "Oldest"), Run(126, "Installed"), Run(125, "Previous") } }));
 
         ReleaseCommitHistory history = await api.Source.GetAsync(126, 130, CancellationToken.None);
 
-        CollectionAssert.AreEqual(new[] { 127L, 128L, 130L }, history.Entries.Select(entry => entry.ReleaseNumber).ToArray());
-        CollectionAssert.AreEqual(new[] { "Oldest", "Middle", "Newest" }, history.Entries.Select(entry => entry.Message).ToArray());
+        CollectionAssert.AreEqual(new[] { 125L, 126L, 127L, 128L, 130L }, history.Entries.Select(entry => entry.ReleaseNumber).ToArray());
+        CollectionAssert.AreEqual(new[] { "Previous", "Installed", "Oldest", "Middle", "Newest" }, history.Entries.Select(entry => entry.Message).ToArray());
     }
 
     [TestMethod]
@@ -48,18 +49,20 @@ public sealed class GitHubReleaseHistoryTests
     {
         using var api = new FakeApi(request =>
         {
-            bool second = request.RequestUri!.Query.Contains("page=2", StringComparison.Ordinal);
-            if (IsReleases(request)) return Json(second ? new[] { Tag(127), Tag(126) } : new[] { Tag(131), Tag(130), Tag(129), Tag(128) });
-            return Json(new { workflow_runs = second
-                ? new[] { Run(127, "First"), Run(126, "Installed") }
-                : new[] { Run(131, "Too new"), Run(130, "Too new"), Run(129, "Last"), Run(128, "Middle") } });
+            bool second = request.RequestUri!.Query.Contains("&page=2", StringComparison.Ordinal);
+            long first = second ? 104 : 131;
+            if (IsReleases(request))
+                return Json(Enumerable.Range(0, 27).Select(offset => Tag(first - offset)).ToArray());
+            return Json(new { workflow_runs = Enumerable.Range(0, 27)
+                .Select(offset => Run(first - offset, "Build " + (first - offset).ToString(CultureInfo.InvariantCulture))).ToArray() });
         });
 
         ReleaseCommitHistory history = await api.Source.GetAsync(126, 129, CancellationToken.None);
 
-        CollectionAssert.AreEqual(new[] { 127L, 128L, 129L }, history.Entries.Select(entry => entry.ReleaseNumber).ToArray());
+        CollectionAssert.AreEqual(Enumerable.Range(103, 27).Select(number => (long)number).ToArray(),
+            history.Entries.Select(entry => entry.ReleaseNumber).ToArray());
         Assert.HasCount(4, api.Requests);
-        Assert.IsTrue(api.Requests.All(request => request.Uri.Query.Contains("per_page=4", StringComparison.Ordinal)));
+        Assert.IsTrue(api.Requests.All(request => request.Uri.Query.Contains("per_page=27", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -74,9 +77,9 @@ public sealed class GitHubReleaseHistoryTests
 
         ReleaseCommitHistory history = await api.Source.GetAsync(127, 128, CancellationToken.None);
 
-        Assert.AreEqual("Message from release tag", history.Entries.Single().Message);
+        Assert.AreEqual("Message from release tag", history.Entries.Single(entry => entry.ReleaseNumber == 128).Message);
         Assert.HasCount(0, history.Warnings);
-        StringAssert.EndsWith(api.Requests.Last().Uri.AbsolutePath, "/commits/release-128");
+        Assert.IsTrue(api.Requests.Any(request => request.Uri.AbsolutePath.EndsWith("/commits/release-128", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -91,8 +94,9 @@ public sealed class GitHubReleaseHistoryTests
 
         ReleaseCommitHistory history = await api.Source.GetAsync(127, 128, CancellationToken.None);
 
-        Assert.AreEqual("Correct tagged commit", history.Entries.Single().Message);
-        Assert.AreEqual(Sha(999), history.Entries.Single().CommitSha);
+        ReleaseCommitHistoryEntry offered = history.Entries.Single(entry => entry.ReleaseNumber == 128);
+        Assert.AreEqual("Correct tagged commit", offered.Message);
+        Assert.AreEqual(Sha(999), offered.CommitSha);
     }
 
     [TestMethod]
@@ -107,7 +111,7 @@ public sealed class GitHubReleaseHistoryTests
 
         ReleaseCommitHistory history = await api.Source.GetAsync(127, 128, CancellationToken.None);
 
-        Assert.AreEqual("Recovered message", history.Entries.Single().Message);
+        Assert.AreEqual("Recovered message", history.Entries.Single(entry => entry.ReleaseNumber == 128).Message);
     }
 
     [TestMethod]
@@ -119,7 +123,7 @@ public sealed class GitHubReleaseHistoryTests
 
         ReleaseCommitHistory history = await api.Source.GetAsync(127, 130, CancellationToken.None);
 
-        CollectionAssert.AreEqual(new[] { 128L, 129L, 130L }, history.Entries.Select(entry => entry.ReleaseNumber).ToArray());
+        CollectionAssert.AreEqual(new[] { 127L, 128L, 129L, 130L }, history.Entries.Select(entry => entry.ReleaseNumber).ToArray());
         Assert.IsTrue(history.Entries.All(entry => entry.Message is null));
         Assert.IsTrue(history.Warnings.Count > 0);
         Assert.HasCount(2, api.Requests);
@@ -178,12 +182,32 @@ public sealed class GitHubReleaseHistoryTests
 
         string text = ReleaseCommitHistoryFormatter.Format(history, 127, 130);
 
-        Assert.IsFalse(text.Contains("Already installed", StringComparison.Ordinal));
+        StringAssert.Contains(text, "Already installed");
         Assert.IsFalse(text.Contains("Not offered yet", StringComparison.Ordinal));
+        Assert.IsTrue(text.IndexOf("Build 127", StringComparison.Ordinal) < text.IndexOf("Build 128", StringComparison.Ordinal));
         Assert.IsTrue(text.IndexOf("Build 128", StringComparison.Ordinal) < text.IndexOf("Build 129", StringComparison.Ordinal));
         Assert.IsTrue(text.IndexOf("Build 129", StringComparison.Ordinal) < text.IndexOf("Build 130", StringComparison.Ordinal));
         StringAssert.Contains(text, "Newest" + Environment.NewLine + Environment.NewLine + "Details äöü");
         StringAssert.Contains(text, "Commit message unavailable");
+    }
+
+    [TestMethod]
+    public void Formatting_LimitsPreviousReleasesAndStartsAtCurrentChanges()
+    {
+        var history = new ReleaseCommitHistory(
+            Enumerable.Range(1, 102)
+                .Select(number => new ReleaseCommitHistoryEntry(number, null, "Message " + number.ToString(CultureInfo.InvariantCulture), null))
+                .ToArray(),
+            []);
+
+        string text = ReleaseCommitHistoryFormatter.Format(history, 100, 102, out int currentChangesStart);
+
+        Assert.IsFalse(text.Contains("Build 76", StringComparison.Ordinal));
+        StringAssert.Contains(text, "Build 77");
+        StringAssert.Contains(text, "Build 100");
+        StringAssert.Contains(text, "Build 101");
+        StringAssert.Contains(text, "Build 102");
+        Assert.AreEqual(text.IndexOf("Build 101", StringComparison.Ordinal), currentChangesStart);
     }
 
     [TestMethod]

@@ -11,6 +11,11 @@ internal readonly record struct VocalPronunciationPhone(
     internal int SourceRepetitionLength { get; init; }
 }
 
+internal sealed class VocalUnsupportedPronunciationException : ArgumentException
+{
+    internal VocalUnsupportedPronunciationException(string message) : base(message) { }
+}
+
 internal static class VocalMultilingualPhonemizer
 {
     private static readonly Lazy<FrenchG2PEngine> French = new(() =>
@@ -21,7 +26,25 @@ internal static class VocalMultilingualPhonemizer
         VocalLanguage.French or VocalLanguage.Spanish or VocalLanguage.Italian or VocalLanguage.Chinese
         or VocalLanguage.Japanese or VocalLanguage.Turkish or VocalLanguage.Arabic or VocalLanguage.Russian;
 
+    internal static bool NeedsCrossScriptFallback(string text) =>
+        text.EnumerateRunes().Any(rune => Classify(rune, ScriptGroup.None) is
+            ScriptGroup.Arabic or ScriptGroup.Cyrillic or ScriptGroup.Han or ScriptGroup.Kana
+            or ScriptGroup.Ipa or ScriptGroup.Other);
+
     internal static IReadOnlyList<VocalPronunciationPhone> PhonemizeWord(
+        VocalLanguage language, string word, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return PhonemizeWordCore(language, word, cancellationToken);
+        }
+        catch (VocalUnsupportedPronunciationException)
+        {
+            return PhonemizeBestEffort(language, word, cancellationToken);
+        }
+    }
+
+    private static IReadOnlyList<VocalPronunciationPhone> PhonemizeWordCore(
         VocalLanguage language, string word, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -46,8 +69,148 @@ internal static class VocalMultilingualPhonemizer
         };
         cancellationToken.ThrowIfCancellationRequested();
         if (phones.Count == 0)
-            throw new ArgumentException($"No pronunciation was found for '{word}' in {language.DisplayName()}.", nameof(word));
+            throw Unsupported($"No pronunciation was found for '{word}' in {language.DisplayName()}.");
         return phones;
+    }
+
+    internal static IReadOnlyList<VocalPronunciationPhone> PhonemizeBestEffort(
+        VocalLanguage language, string word, CancellationToken cancellationToken)
+    {
+        var result = new List<VocalPronunciationPhone>();
+        var segment = new StringBuilder();
+        ScriptGroup current = ScriptGroup.None;
+
+        void FlushSegment()
+        {
+            if (segment.Length == 0) return;
+            string value = segment.ToString();
+            segment.Clear();
+            AppendScriptSegment(result, language, current, value, cancellationToken);
+        }
+
+        foreach (Rune rune in word.EnumerateRunes())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ScriptGroup next = Classify(rune, current);
+            if (next != current) FlushSegment();
+            if (next == ScriptGroup.Other)
+            {
+                AppendUnknownRune(result, rune, cancellationToken);
+                current = ScriptGroup.None;
+                continue;
+            }
+            current = next;
+            segment.Append(rune.ToString());
+        }
+        FlushSegment();
+
+        return result.Count == 0 ? [new VocalPronunciationPhone("unsupported")] : result;
+    }
+
+    private static void AppendScriptSegment(
+        List<VocalPronunciationPhone> output, VocalLanguage language, ScriptGroup script, string text,
+        CancellationToken cancellationToken)
+    {
+        if (script == ScriptGroup.Ipa)
+        {
+            VocalIpa.Append(output, text, cancellationToken);
+            return;
+        }
+
+        VocalLanguage sourceLanguage = script switch
+        {
+            ScriptGroup.Arabic => VocalLanguage.Arabic,
+            ScriptGroup.Cyrillic => VocalLanguage.Russian,
+            ScriptGroup.Han => language == VocalLanguage.Japanese ? VocalLanguage.Japanese : VocalLanguage.Chinese,
+            ScriptGroup.Kana => VocalLanguage.Japanese,
+            _ => language,
+        };
+        try
+        {
+            if (Supports(sourceLanguage))
+                output.AddRange(PhonemizeWordCore(sourceLanguage, text, cancellationToken));
+            else
+                output.AddRange(VocalPhonemizer.Phonemize(sourceLanguage, text, cancellationToken)
+                    .Select(phone => new VocalPronunciationPhone(phone)));
+            return;
+        }
+        catch (VocalUnsupportedPronunciationException)
+        {
+            foreach (Rune rune in text.EnumerateRunes())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!TryAppendRune(output, sourceLanguage, script, rune, cancellationToken))
+                    output.Add(new VocalPronunciationPhone("unsupported"));
+            }
+        }
+    }
+
+    private static bool TryAppendRune(
+        List<VocalPronunciationPhone> output, VocalLanguage sourceLanguage, ScriptGroup script, Rune rune,
+        CancellationToken cancellationToken)
+    {
+        if (VocalIpa.IsIpaSpecificCharacter(rune.Value))
+        {
+            VocalIpa.Append(output, rune.ToString(), cancellationToken);
+            return true;
+        }
+
+        int start = output.Count;
+        try
+        {
+            if (Supports(sourceLanguage))
+                output.AddRange(PhonemizeWordCore(sourceLanguage, rune.ToString(), cancellationToken));
+            else
+                output.AddRange(VocalPhonemizer.Phonemize(sourceLanguage, rune.ToString(), cancellationToken)
+                    .Select(phone => new VocalPronunciationPhone(phone)));
+        }
+        catch (VocalUnsupportedPronunciationException)
+        {
+            if (script == ScriptGroup.Latin && sourceLanguage != VocalLanguage.English)
+                output.AddRange(VocalPhonemizer.Phonemize(VocalLanguage.English, rune.ToString(), cancellationToken)
+                    .Select(phone => new VocalPronunciationPhone(phone)));
+        }
+        return output.Count > start;
+    }
+
+    private static void AppendUnknownRune(
+        List<VocalPronunciationPhone> output, Rune rune, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (VocalIpa.IsIpaSpecificCharacter(rune.Value))
+            VocalIpa.Append(output, rune.ToString(), cancellationToken);
+        else
+            output.Add(new VocalPronunciationPhone("unsupported"));
+    }
+
+    private static ScriptGroup Classify(Rune rune, ScriptGroup previous)
+    {
+        int value = rune.Value;
+        if (VocalIpa.IsIpaSpecificCharacter(value)
+            || Rune.GetUnicodeCategory(rune) is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark
+                && previous == ScriptGroup.Ipa)
+            return ScriptGroup.Ipa;
+        if (value is >= 0x0600 and <= 0x08ff) return ScriptGroup.Arabic;
+        if (value is >= 0x0400 and <= 0x052f) return ScriptGroup.Cyrillic;
+        if (value is >= 0x3040 and <= 0x30ff or >= 0x31f0 and <= 0x31ff) return ScriptGroup.Kana;
+        if (value is >= 0x3400 and <= 0x9fff or >= 0x20000 and <= 0x2fa1f) return ScriptGroup.Han;
+        if (value <= char.MaxValue
+            && (IsLatin((char)value) || char.IsAsciiLetter((char)value))) return ScriptGroup.Latin;
+        if (Rune.GetUnicodeCategory(rune) is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark)
+            return previous == ScriptGroup.None ? ScriptGroup.Other : previous;
+        return ScriptGroup.Other;
+    }
+
+    private enum ScriptGroup
+    {
+        None,
+        Latin,
+        Arabic,
+        Cyrillic,
+        Han,
+        Kana,
+        Ipa,
+        Other,
     }
 
     private static List<VocalPronunciationPhone> FromIpaEngine(
@@ -72,8 +235,11 @@ internal static class VocalMultilingualPhonemizer
         }
     }
 
-    internal static ArgumentException Unsupported(string value, VocalLanguage language) =>
+    internal static VocalUnsupportedPronunciationException Unsupported(string value, VocalLanguage language) =>
         new($"Unsupported {language.DisplayName()} character or pronunciation: '{value}'.");
+
+    private static VocalUnsupportedPronunciationException Unsupported(string message) =>
+        new(message);
 
     internal static void SetStress(List<VocalPronunciationPhone> phones, int index)
     {
@@ -102,7 +268,8 @@ internal static class VocalMultilingualPhonemizer
     }
 
     internal static bool IsLatin(char c) =>
-        c is >= 'a' and <= 'z' or >= '\u00c0' and <= '\u024f' or >= '\u1e00' and <= '\u1eff';
+        c is >= 'a' and <= 'z' or >= 'A' and <= 'Z'
+            or >= '\u00c0' and <= '\u024f' or >= '\u1e00' and <= '\u1eff';
 
     internal static bool IsCombiningMark(char c) =>
         CharUnicodeInfo.GetUnicodeCategory(c) is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark;

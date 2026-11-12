@@ -29,7 +29,10 @@ internal sealed class GitHubReleaseHistorySource
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(installedRelease);
         if (offeredRelease <= installedRelease) throw new ArgumentOutOfRangeException(nameof(offeredRelease));
         token.ThrowIfCancellationRequested();
-        int pageSize = (int)Math.Min(100L, offeredRelease - installedRelease + 1);
+        long releaseRange = offeredRelease - installedRelease;
+        int pageSize = (int)(releaseRange > 100L - ReleaseCommitHistory.MaximumHistoricalReleases
+            ? 100L
+            : releaseRange + ReleaseCommitHistory.MaximumHistoricalReleases);
         var releases = new Dictionary<long, ReleaseTag>
         {
             // The updater already verified that the offered release exists.
@@ -42,7 +45,7 @@ internal sealed class GitHubReleaseHistorySource
         }
         catch (Exception error) when (IsMetadataError(error))
         {
-            warnings.Add($"The release list could not be fully loaded; some intermediate builds may be missing. {error.Message}");
+            warnings.Add($"The release list could not be fully loaded; some intermediate builds may be missing, and some previous releases may be missing. {error.Message}");
         }
 
         var entries = new Dictionary<long, ReleaseCommitHistoryEntry>();
@@ -58,7 +61,9 @@ internal sealed class GitHubReleaseHistorySource
 
         bool fallbackAllowed = !IsRateLimit(workflowError);
         int fallbackCount = 0;
-        foreach (ReleaseTag release in releases.Values.OrderBy(release => release.Number))
+        foreach (ReleaseTag release in releases.Values
+            .OrderBy(release => release.Number <= installedRelease ? 1 : 0)
+            .ThenBy(release => release.Number <= installedRelease ? installedRelease - release.Number : release.Number))
         {
             token.ThrowIfCancellationRequested();
             if (entries.ContainsKey(release.Number)) continue;
@@ -96,25 +101,35 @@ internal sealed class GitHubReleaseHistorySource
     private async Task ReadReleasesAsync(long installedRelease, long offeredRelease, int pageSize,
         Dictionary<long, ReleaseTag> releases, List<string> warnings, CancellationToken token)
     {
+        int historicalReleasesAdded = 0;
         for (int page = 1; page <= MaximumPages; page++)
         {
             using JsonDocument document = await ReadAsync($"/releases?per_page={pageSize}&page={page}", token).ConfigureAwait(false);
             JsonElement root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Array) throw new InvalidDataException("GitHub returned an invalid release list.");
-            bool reachedInstalledRelease = false;
             foreach (JsonElement item in root.EnumerateArray())
             {
                 if (item.ValueKind != JsonValueKind.Object || True(item, "draft") || True(item, "prerelease")) continue;
                 string? tag = String(item, "tag_name");
                 if (!ApplicationRelease.TryParseTag(tag, out long number)) continue;
-                if (number == installedRelease) reachedInstalledRelease = true;
-                if (number <= installedRelease || number > offeredRelease) continue;
                 string? target = String(item, "target_commitish");
-                releases[number] = new(number, tag!, IsCommitSha(target) ? target : null);
+                var release = new ReleaseTag(number, tag!, IsCommitSha(target) ? target : null);
+                if (number <= installedRelease)
+                {
+                    if (historicalReleasesAdded < ReleaseCommitHistory.MaximumHistoricalReleases &&
+                        !releases.ContainsKey(number))
+                    {
+                        releases[number] = release;
+                        historicalReleasesAdded++;
+                    }
+                    continue;
+                }
+                if (number <= offeredRelease) releases[number] = release;
             }
-            if (reachedInstalledRelease || root.GetArrayLength() < pageSize) return;
+            if (historicalReleasesAdded >= ReleaseCommitHistory.MaximumHistoricalReleases ||
+                root.GetArrayLength() < pageSize) return;
         }
-        warnings.Add("The release-history pagination limit was reached; some older intermediate builds may be missing.");
+        warnings.Add("The release-history pagination limit was reached; some older intermediate builds or previous releases may be missing.");
     }
 
     private async Task ReadWorkflowCommitsAsync(long installedRelease, int pageSize,
@@ -127,12 +142,13 @@ internal sealed class GitHubReleaseHistorySource
             JsonElement root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("workflow_runs", out JsonElement runs) || runs.ValueKind != JsonValueKind.Array)
                 throw new InvalidDataException("GitHub returned an invalid build history.");
-            bool reachedInstalledRelease = false;
+            long oldestRelease = releases.Keys.Min();
+            bool reachedOldestRelease = false;
             foreach (JsonElement run in runs.EnumerateArray())
             {
                 if (run.ValueKind != JsonValueKind.Object || !run.TryGetProperty("run_number", out JsonElement version) ||
                     version.ValueKind != JsonValueKind.Number || !version.TryGetInt64(out long number)) continue;
-                if (number <= installedRelease) reachedInstalledRelease = true;
+                if (number <= oldestRelease) reachedOldestRelease = true;
                 if (!releases.TryGetValue(number, out ReleaseTag? release) || entries.ContainsKey(number) ||
                     !run.TryGetProperty("head_commit", out JsonElement commit) || commit.ValueKind != JsonValueKind.Object) continue;
                 string? sha = String(run, "head_sha");
@@ -141,7 +157,7 @@ internal sealed class GitHubReleaseHistorySource
                 ReleaseCommitHistoryEntry? entry = ParseCommit(number, sha, commit, null, "timestamp");
                 if (entry is not null) entries[number] = entry;
             }
-            if (entries.Count == releases.Count || reachedInstalledRelease || runs.GetArrayLength() < pageSize) return;
+            if (entries.Count == releases.Count || reachedOldestRelease || runs.GetArrayLength() < pageSize) return;
         }
         warnings.Add("The build-history pagination limit was reached; older commit messages may require release-tag lookups.");
     }

@@ -59,6 +59,16 @@ public static class VocalPhonemizer
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(text)) return [];
+        if (language is not (VocalLanguage.AnimalCrossing or VocalLanguage.Beatboxing)
+            && VocalIpa.TryParseNotation(text, cancellationToken, out var ipaPhones))
+            return ipaPhones.Select(phone => phone.Symbol).ToArray();
+        if (language is VocalLanguage.English or VocalLanguage.German
+            && VocalMultilingualPhonemizer.NeedsCrossScriptFallback(text))
+        {
+            var bestEffort = VocalMultilingualPhonemizer.PhonemizeBestEffort(language, text, cancellationToken);
+            AddRepetitions(repetitions, bestEffort.Count, 0, cancellationToken);
+            return bestEffort.Select(phone => phone.Symbol).ToArray();
+        }
         if (VocalMultilingualPhonemizer.Supports(language))
             return VocalTextParser.Parse(language, text, new VocalEmphasisSyntax(), cancellationToken)
                 .SelectMany(token => token switch

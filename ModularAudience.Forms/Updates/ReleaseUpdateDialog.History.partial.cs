@@ -18,7 +18,8 @@ internal sealed partial class ReleaseUpdateDialog
         {
             ReleaseCommitHistory history = await this.loadHistory(cancellation.Token);
             if (this.IsDisposed || this.Disposing || this.historyStopped || cancellation.IsCancellationRequested) return;
-            this.SetHistoryText(ReleaseCommitHistoryFormatter.Format(history, this.currentRelease, this.release.Number));
+            string text = ReleaseCommitHistoryFormatter.Format(history, this.currentRelease, this.release.Number, out int currentChangesStart);
+            this.SetHistoryText(text, currentChangesStart);
         }
         catch (OperationCanceledException) when (this.historyStopped)
         {
@@ -39,12 +40,18 @@ internal sealed partial class ReleaseUpdateDialog
         }
     }
 
-    private void SetHistoryText(string text)
+    private void SetHistoryText(string text, int scrollPosition = 0)
     {
         this.historyTextBox.Text = text;
-        this.historyTextBox.SelectionStart = 0;
+        this.historyTextBox.SelectionStart = Math.Clamp(scrollPosition, 0, this.historyTextBox.TextLength);
         this.historyTextBox.SelectionLength = 0;
         this.historyTextBox.ScrollToCaret();
+    }
+
+    private void WordWrap_CheckedChanged(object? sender, EventArgs e)
+    {
+        this.historyTextBox.WordWrap = this.wordWrapCheckBox.Checked;
+        this.historyTextBox.ScrollBars = this.wordWrapCheckBox.Checked ? ScrollBars.Vertical : ScrollBars.Both;
     }
 
     private void ShowHistoryUnavailable(string reason)

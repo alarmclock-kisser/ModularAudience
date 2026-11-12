@@ -3,6 +3,7 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 public sealed partial class VocalSynthDialog
 {
     private CheckBox windowsSpeechCheckBox = null!;
+    private CheckBox unsupportedBeepCheckBox = null!;
     private FlowLayoutPanel profileRow = null!;
     private TextBox profileName = null!;
     private Button saveProfileBtn = null!;
@@ -21,6 +22,19 @@ public sealed partial class VocalSynthDialog
             Margin = new Padding(6, 8, 6, 0),
         };
         windowsSpeechCheckBox.CheckedChanged += WindowsSpeechCheckedChanged;
+    }
+
+    private void InitializeUnsupportedBeepControl()
+    {
+        unsupportedBeepCheckBox = new CheckBox
+        {
+            Name = "unsupportedBeepCheckBox",
+            Text = "100 Hz beep for unsupported sounds",
+            AutoSize = true,
+            Checked = false,
+            Margin = new Padding(6, 8, 6, 0),
+        };
+        unsupportedBeepCheckBox.CheckedChanged += UnsupportedBeepCheckedChanged;
     }
 
     private void InitializeProfileControls()

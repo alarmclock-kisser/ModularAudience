@@ -67,6 +67,7 @@ public sealed partial class VocalSynthDialog : Form
 
         settings = VocalSynthSettings.FromPreset(VocalVoicePreset.BuiltIn[2], VocalLanguage.English, "");
         InitializeSpeechBackendControl();
+        InitializeUnsupportedBeepControl();
         InitializeProfileControls();
         UpdateSpeechBackend();
         Text = "VocalSynth"; Name = "VocalSynthDialog";
@@ -95,6 +96,7 @@ public sealed partial class VocalSynthDialog : Form
         Field("Voice", voiceCombo);
         Field("Speed", speed);
         top.Controls.Add(windowsSpeechCheckBox);
+        top.Controls.Add(unsupportedBeepCheckBox);
         top.Controls.Add(prehear);
         top.SetFlowBreak(prehear, true);
         top.Controls.Add(profileRow);
@@ -163,12 +165,20 @@ public sealed partial class VocalSynthDialog : Form
         bool supported = settings.Language is VocalLanguage.English or VocalLanguage.German;
         windowsSpeechCheckBox.Enabled = supported;
         settings.UseWindowsSpeech = supported && windowsSpeechCheckBox.Checked;
+        unsupportedBeepCheckBox.Enabled = !settings.UseWindowsSpeech;
     }
 
     private void WindowsSpeechCheckedChanged(object? sender, EventArgs e)
     {
         if (syncing) return;
         UpdateSpeechBackend();
+        QueueRender();
+    }
+
+    private void UnsupportedBeepCheckedChanged(object? sender, EventArgs e)
+    {
+        if (syncing) return;
+        settings.BeepForUnsupportedSounds = unsupportedBeepCheckBox.Checked;
         QueueRender();
     }
 
@@ -200,6 +210,7 @@ public sealed partial class VocalSynthDialog : Form
                 var preset = VocalVoicePreset.BuiltIn.First(p => p.Name == name);
                 var s = VocalSynthSettings.FromPreset(preset, settings.Language, settings.Text);
                 s.UseWindowsSpeech = settings.UseWindowsSpeech;
+                s.BeepForUnsupportedSounds = unsupportedBeepCheckBox.Checked;
                 s.Speed = settings.Speed;
                 s.EmphasisSyntax = settings.EmphasisSyntax;
                 settings = s;
@@ -212,6 +223,7 @@ public sealed partial class VocalSynthDialog : Form
                 {
                     var s = VocalSynthSettings.FromProfile(profile, settings.Language, settings.Text);
                     s.UseWindowsSpeech = settings.UseWindowsSpeech;
+                    s.BeepForUnsupportedSounds = unsupportedBeepCheckBox.Checked;
                     s.Speed = settings.Speed;
                     s.EmphasisSyntax = settings.EmphasisSyntax;
                     settings = s;

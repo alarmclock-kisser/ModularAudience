@@ -21,6 +21,14 @@ public sealed class ApplicationUpdateHistoryDialogTests
         Assert.AreEqual(ScrollBars.Both, history.ScrollBars);
         Assert.IsFalse(history.WordWrap);
         Assert.AreEqual(0, loads);
+
+        CheckBox wordWrap = Field<CheckBox>(dialog, "wordWrapCheckBox");
+        wordWrap.Checked = true;
+        Assert.IsTrue(history.WordWrap);
+        Assert.AreEqual(ScrollBars.Vertical, history.ScrollBars);
+        wordWrap.Checked = false;
+        Assert.IsFalse(history.WordWrap);
+        Assert.AreEqual(ScrollBars.Both, history.ScrollBars);
     }
 
     [STATestMethod]
@@ -35,7 +43,9 @@ public sealed class ApplicationUpdateHistoryDialogTests
             Application.DoEvents();
             string text = Field<TextBox>(dialog, "historyTextBox").Text;
 
-            Assert.IsTrue(text.IndexOf("Build 128", StringComparison.Ordinal) < text.IndexOf("Build 129", StringComparison.Ordinal));
+            Assert.IsTrue(text.IndexOf("Build 126", StringComparison.Ordinal) < text.IndexOf("Build 127", StringComparison.Ordinal));
+            Assert.IsTrue(text.IndexOf("Build 127", StringComparison.Ordinal) < text.IndexOf("Build 128", StringComparison.Ordinal));
+            Assert.AreEqual(text.IndexOf("Build 128", StringComparison.Ordinal), Field<TextBox>(dialog, "historyTextBox").SelectionStart);
             Assert.IsTrue(text.IndexOf("Build 129", StringComparison.Ordinal) < text.IndexOf("Build 130", StringComparison.Ordinal));
             StringAssert.Contains(text, "First change");
             StringAssert.Contains(text, "Second change");
@@ -102,7 +112,8 @@ public sealed class ApplicationUpdateHistoryDialogTests
     }
 
     private static ReleaseCommitHistory History() => new(
-        [new(130, null, "Third change", null), new(128, null, "First change", null), new(129, null, "Second change", null)], []);
+        [new(130, null, "Third change", null), new(126, null, "Previous release", null), new(127, null, "Installed release", null),
+            new(128, null, "First change", null), new(129, null, "Second change", null)], []);
 
     private static T Field<T>(ReleaseUpdateDialog dialog, string name) => (T)typeof(ReleaseUpdateDialog)
         .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dialog)!;
