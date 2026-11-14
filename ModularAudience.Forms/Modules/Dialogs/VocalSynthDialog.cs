@@ -11,12 +11,12 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 public sealed partial class VocalSynthDialog : Form
 {
     private sealed record SessionSnapshot(
-        VocalSynthSettings Settings, bool ShowSyllables, bool FollowSpokenWord,
+        VocalSynthSettings Settings, bool ShowSyllables, CheckState FollowSpokenState,
         string? LastMidiFolder, string? VoiceSelection);
 
     private readonly record struct SyllableFormattingRun(int Start, int Length, bool Underline);
-    private readonly record struct PlaybackWordRange(int TextStart, int TextLength, int StartFrame, int EndFrame);
-    private readonly record struct TextWord(int Start, int Length, int SyllableCount);
+    private readonly record struct PlaybackCursorRange(int TextStart, int TextLength, int StartFrame, int EndFrame);
+    private readonly record struct PlaybackTextUnit(int Start, int Length, int SyllableCount);
     private sealed record SyllablePreviewResult(
         IReadOnlyList<VocalSyllableTextRange> UnderlinedRanges,
         IReadOnlyList<SyllableFormattingRun> Runs);
@@ -79,19 +79,19 @@ public sealed partial class VocalSynthDialog : Form
     private sealed class VocalPreview : ISampleProvider
     {
         private readonly float[] data;
-        private readonly IReadOnlyList<PlaybackWordRange> wordRanges;
+        private readonly IReadOnlyList<PlaybackCursorRange> cursorRanges;
         private int pos, finished;
         public WaveFormat WaveFormat { get; }
         public bool Loop { get; set; }
-        public IReadOnlyList<PlaybackWordRange> WordRanges => wordRanges;
+        public IReadOnlyList<PlaybackCursorRange> CursorRanges => cursorRanges;
         public int PlayedFrames => Volatile.Read(ref pos) / WaveFormat.Channels;
         public bool Finished => Volatile.Read(ref finished) != 0;
 
         public VocalPreview(
-            float[] data, int sampleRate, int channels, IReadOnlyList<PlaybackWordRange> wordRanges)
+            float[] data, int sampleRate, int channels, IReadOnlyList<PlaybackCursorRange> cursorRanges)
         {
             this.data = data;
-            this.wordRanges = wordRanges;
+            this.cursorRanges = cursorRanges;
             WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
         }
 
@@ -164,7 +164,8 @@ public sealed partial class VocalSynthDialog : Form
                 midiSemitoneOffset.Maximum);
             settings.SingingMidiSemitoneOffset = (double)midiSemitoneOffset.Value;
             showSyllablesCheckBox.Checked = sessionSnapshot?.ShowSyllables ?? false;
-            followSpokenWordCheckBox.Checked = sessionSnapshot?.FollowSpokenWord ?? false;
+            followSpokenWordCheckBox.CheckState =
+                sessionSnapshot?.FollowSpokenState ?? CheckState.Unchecked;
             RestoreMidiTrackNumber();
         }
         finally { syncing = false; }
@@ -300,7 +301,7 @@ public sealed partial class VocalSynthDialog : Form
             lastSessionSnapshot = new SessionSnapshot(
                 snapshotSettings,
                 showSyllablesCheckBox.Checked,
-                followSpokenWordCheckBox.Checked,
+                followSpokenWordCheckBox.CheckState,
                 lastMidiFolder,
                 voiceCombo.SelectedItem?.ToString());
         }
@@ -370,6 +371,7 @@ public sealed partial class VocalSynthDialog : Form
         midiTrackNumber.Enabled = trackCount > 0;
         midiSemitoneOffset.Enabled = trackCount > 0;
         editMidiButton.Enabled = trackCount > 0;
+        clearMidiMenuItem.Enabled = midi is not null;
         showSyllablesCheckBox.Enabled = true;
         MidiTrackData? selectedTrack = midi?.Tracks.FirstOrDefault(
             track => track.Index == settings.SingingMidiTrackIndex);
@@ -435,6 +437,30 @@ public sealed partial class VocalSynthDialog : Form
             status.Text = "Could not load MIDI: " + error.Message;
             MessageBox.Show(this, error.Message, "MIDI load failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    private void ClearMidiFile()
+    {
+        if (settings.SingingMidiFile is null) return;
+
+        StopHear();
+        settings.SingingMidiFile = null;
+        settings.SingingMidiTrackIndex = null;
+        settings.SingingMidiSemitoneOffset = 0;
+        settings.IgnoreTextPausesForMidiSinging = false;
+
+        syncing = true;
+        try
+        {
+            midiTrackNumber.Maximum = 1;
+            midiTrackNumber.Value = 1;
+            midiSemitoneOffset.Value = 0;
+        }
+        finally { syncing = false; }
+
+        UpdateButtonState();
+        QueueRender();
+        status.Text = "MIDI cleared.";
     }
 
     private void SelectSingingVoiceForMidi(MidiFileData midi, int pageIndex)
@@ -947,8 +973,9 @@ public sealed partial class VocalSynthDialog : Form
             AudioObj? renderedAudio = audio;
             if (renderedAudio is null) return;
 
-            IReadOnlyList<PlaybackWordRange> wordRanges = [];
-            if (followSpokenWordCheckBox.Checked)
+            CheckState followState = followSpokenWordCheckBox.CheckState;
+            IReadOnlyList<PlaybackCursorRange> cursorRanges = [];
+            if (followState != CheckState.Unchecked)
             {
                 VocalSynthSettings previewSettings = settings.Clone();
                 previewSettings.Text = textEditor.Text;
@@ -959,10 +986,11 @@ public sealed partial class VocalSynthDialog : Form
                 preparation = tokenSource;
                 playbackPreparation?.Cancel();
                 playbackPreparation = tokenSource;
-                wordRanges = await Task.Run(
+                cursorRanges = await Task.Run(
                     () => CreatePlaybackTimeline(
                         previewSettings,
                         renderedAudio.Data.Length / renderedAudio.Channels,
+                        followState == CheckState.Indeterminate,
                         tokenSource.Token),
                     tokenSource.Token);
                 if (disposedFlag || tokenSource.IsCancellationRequested
@@ -971,9 +999,10 @@ public sealed partial class VocalSynthDialog : Form
             }
 
             if (disposedFlag) return;
-            if (!followSpokenWordCheckBox.Checked) wordRanges = [];
+            if (followSpokenWordCheckBox.CheckState == CheckState.Unchecked) cursorRanges = [];
+            FocusTextEditorForSpokenWordFollowing();
             provider = new VocalPreview(
-                renderedAudio.Data, renderedAudio.SampleRate, renderedAudio.Channels, wordRanges);
+                renderedAudio.Data, renderedAudio.SampleRate, renderedAudio.Channels, cursorRanges);
             output = new WaveOut { BufferMilliseconds = 60 };
             output.Init(provider);
             output.Play();
@@ -993,6 +1022,21 @@ public sealed partial class VocalSynthDialog : Form
         }
     }
 
+    private void FocusTextEditorForSpokenWordFollowing()
+    {
+        if (followSpokenWordCheckBox.CheckState != CheckState.Unchecked)
+            textEditor.Focus();
+    }
+
+    private void UpdateFollowSpokenWordLabel()
+    {
+        string label = followSpokenWordCheckBox.CheckState == CheckState.Indeterminate
+            ? "Follow spoken syllable"
+            : "Follow spoken word";
+        followSpokenWordCheckBox.Text = label;
+        followSpokenWordCheckBox.AccessibleName = label;
+    }
+
     private void StopHear()
     {
         playbackTimer.Stop();
@@ -1007,9 +1051,10 @@ public sealed partial class VocalSynthDialog : Form
 
     private void UpdatePlaybackCursor()
     {
-        if (!followSpokenWordCheckBox.Checked || provider is null || provider.WordRanges.Count == 0)
+        if (followSpokenWordCheckBox.CheckState == CheckState.Unchecked
+            || provider is null || provider.CursorRanges.Count == 0)
             return;
-        int position = GetPlaybackCursorTextPosition(provider.WordRanges, provider.PlayedFrames);
+        int position = GetPlaybackCursorTextPosition(provider.CursorRanges, provider.PlayedFrames);
         if (position < 0) return;
         position = Math.Clamp(position, 0, textEditor.TextLength);
         if (position == lastFollowedCursorPosition) return;
@@ -1019,11 +1064,11 @@ public sealed partial class VocalSynthDialog : Form
     }
 
     private static int GetPlaybackCursorTextPosition(
-        IReadOnlyList<PlaybackWordRange> wordRanges, int frame)
+        IReadOnlyList<PlaybackCursorRange> cursorRanges, int frame)
     {
-        if (wordRanges.Count == 0) return -1;
-        int previousEnd = wordRanges[0].TextStart + wordRanges[0].TextLength;
-        foreach (PlaybackWordRange range in wordRanges)
+        if (cursorRanges.Count == 0) return -1;
+        int previousEnd = cursorRanges[0].TextStart + cursorRanges[0].TextLength;
+        foreach (PlaybackCursorRange range in cursorRanges)
         {
             if (frame < range.StartFrame) break;
             previousEnd = range.TextStart + range.TextLength;
@@ -1032,15 +1077,17 @@ public sealed partial class VocalSynthDialog : Form
         return previousEnd;
     }
 
-    private static IReadOnlyList<PlaybackWordRange> CreatePlaybackTimeline(
-        VocalSynthSettings settings, int totalFrames, CancellationToken cancellationToken)
+    private static IReadOnlyList<PlaybackCursorRange> CreatePlaybackTimeline(
+        VocalSynthSettings settings, int totalFrames, bool followSyllables,
+        CancellationToken cancellationToken)
     {
         if (totalFrames <= 0 || string.IsNullOrWhiteSpace(settings.Text)) return [];
         IReadOnlyList<VocalSyllableTextRange> syllableRanges =
             VocalSynth.GetSyllableTextRanges(settings, cancellationToken);
-        List<TextWord> words = [];
-        bool useSyllableUnits = settings.Language is VocalLanguage.Chinese or VocalLanguage.Japanese
-            && !settings.Text.Any(char.IsWhiteSpace);
+        List<PlaybackTextUnit> units = [];
+        bool useSyllableUnits = followSyllables
+            || (settings.Language is VocalLanguage.Chinese or VocalLanguage.Japanese)
+                && !settings.Text.Any(char.IsWhiteSpace);
         if (useSyllableUnits)
         {
             foreach (VocalSyllableTextRange range in syllableRanges)
@@ -1048,7 +1095,7 @@ public sealed partial class VocalSynthDialog : Form
                 cancellationToken.ThrowIfCancellationRequested();
                 if (range.Start >= 0 && range.Length > 0
                     && range.Start <= settings.Text.Length - range.Length)
-                    words.Add(new TextWord(range.Start, range.Length, 1));
+                    units.Add(new PlaybackTextUnit(range.Start, range.Length, 1));
             }
         }
         else
@@ -1069,56 +1116,61 @@ public sealed partial class VocalSynthDialog : Form
                     VocalSyllableTextRange range = syllableRanges[index];
                     if (range.Start + range.Length > start) count++;
                 }
-                if (count > 0) words.Add(new TextWord(start, length, count));
+                if (count > 0) units.Add(new PlaybackTextUnit(start, length, count));
             }
 
-            if (words.Count == 0)
-                words.AddRange(spans.Select(span => new TextWord(span.Start, span.Length, 1)));
+            if (units.Count == 0)
+                units.AddRange(spans.Select(span => new PlaybackTextUnit(span.Start, span.Length, 1)));
         }
 
-        if (words.Count == 0)
+        if (followSyllables && units.Count == 0)
+        {
+            units.AddRange(GetTextWordSpans(settings.Text, cancellationToken)
+                .Select(span => new PlaybackTextUnit(span.Start, span.Length, 1)));
+        }
+        if (units.Count == 0)
         {
             foreach (VocalSyllableTextRange range in syllableRanges)
             {
                 if (range.Start >= 0 && range.Length > 0
                     && range.Start <= settings.Text.Length - range.Length)
-                    words.Add(new TextWord(range.Start, range.Length, 1));
+                    units.Add(new PlaybackTextUnit(range.Start, range.Length, 1));
             }
         }
-        if (words.Count == 0) return [];
+        if (units.Count == 0) return [];
 
         double totalWeight = 0;
-        for (int index = 0; index < words.Count; index++)
+        for (int index = 0; index < units.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            totalWeight += Math.Max(1, words[index].SyllableCount);
-            if (index + 1 < words.Count)
+            totalWeight += Math.Max(1, units[index].SyllableCount);
+            if (index + 1 < units.Count)
                 totalWeight += GetPunctuationPauseWeight(
                     settings.Text,
-                    words[index].Start + words[index].Length,
-                    words[index + 1].Start);
+                    units[index].Start + units[index].Length,
+                    units[index + 1].Start);
         }
         if (totalWeight <= 0) return [];
 
         double framesPerWeight = totalFrames / totalWeight;
         double elapsedWeight = 0;
-        List<PlaybackWordRange> result = new(words.Count);
-        for (int index = 0; index < words.Count; index++)
+        List<PlaybackCursorRange> result = new(units.Count);
+        for (int index = 0; index < units.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            TextWord word = words[index];
+            PlaybackTextUnit unit = units[index];
             int startFrame = (int)Math.Clamp(Math.Floor(elapsedWeight * framesPerWeight), 0, totalFrames);
-            elapsedWeight += Math.Max(1, word.SyllableCount);
+            elapsedWeight += Math.Max(1, unit.SyllableCount);
             int endFrame = (int)Math.Clamp(Math.Ceiling(elapsedWeight * framesPerWeight), 0, totalFrames);
             if (endFrame <= startFrame && startFrame < totalFrames)
                 endFrame = startFrame + 1;
             if (endFrame > startFrame)
-                result.Add(new PlaybackWordRange(word.Start, word.Length, startFrame, endFrame));
-            if (index + 1 < words.Count)
+                result.Add(new PlaybackCursorRange(unit.Start, unit.Length, startFrame, endFrame));
+            if (index + 1 < units.Count)
                 elapsedWeight += GetPunctuationPauseWeight(
                     settings.Text,
-                    word.Start + word.Length,
-                    words[index + 1].Start);
+                    unit.Start + unit.Length,
+                    units[index + 1].Start);
         }
         return result;
     }

@@ -112,6 +112,8 @@ so expressive repetitions remain separate in the shared renderer.
 - The independent synthesizer uses English/German pronunciation rules and a
   small English exception list. It distinguishes moving diphthongs, English
   `ch` and German `ch`, voiced/unvoiced consonants, and German final devoicing.
+  Word-final German `t` and devoiced `d`, including doubled `tt`, use a longer,
+  more distinct release than medial stops.
   German uses a lightly fluttering, fricated uvular consonantal R, a short
   vocalic R glide after vowels, and a more open vocalic R in unstressed `-er`.
   Words such as `der` and `her` retain their full E before the glide.

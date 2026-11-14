@@ -371,16 +371,24 @@ public static class VocalPhonemizer
                 || index + 3 == word.Length && word[index + 2] == 'e' ? "oo" : "u",
             '\u00e4' => "ae", '\u00f6' => "oe", '\u00fc' => "ue",
             'b' => next == '\0' ? "p" : "b", 'c' => "k",
-            'd' => next == '\0' ? "t" : "d", 'f' => "f",
+            'd' => next == '\0' ? "de-final-t" : "d", 'f' => "f",
             'g' => next == '\0' ? prev == 'i' && index > 1 ? "ich" : "k" : "g",
             'h' => "h", 'j' => "y", 'k' => "k", 'l' => "l", 'm' => "m", 'n' => "n",
             'p' => "p", 'q' => "k", 'r' => IsGermanVocalicR(word, index) ? "de-r-glide" : "de-r",
             's' => IsGermanVowel(next) && (index == 0 || IsGermanVowel(prev)) ? "z" : "s",
-            '\u00df' => "s", 't' => "t", 'v' => "f", 'w' => "v", 'z' => "ts", _ => null,
+            '\u00df' => "s", 't' => IsGermanFinalT(word, index) ? "de-final-t" : "t",
+            'v' => "f", 'w' => "v", 'z' => "ts", _ => null,
         });
         if (c == 'x') result.AddRange(["k", "s"]);
         else if (phoneme is not null) result.Add(phoneme);
         return 1;
+    }
+
+    private static bool IsGermanFinalT(string word, int index)
+    {
+        for (int position = index; position < word.Length; position++)
+            if (word[position] != 't') return false;
+        return true;
     }
 
     private static readonly (string Grapheme, string[] Phonemes)[] GermanClusters =

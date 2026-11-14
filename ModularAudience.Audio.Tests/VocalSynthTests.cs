@@ -795,8 +795,8 @@ public class VocalSynthTests
     [TestMethod]
     [DataRow("der", "d de-e-long de-r-glide")]
     [DataRow("her", "h de-e-long de-r-glide")]
-    [DataRow("gehst", "g de-e-long s t")]
-    [DataRow("beschaffenheit", "b de-schwa sh de-a-short f de-schwa n h eye t")]
+    [DataRow("gehst", "g de-e-long s de-final-t")]
+    [DataRow("beschaffenheit", "b de-schwa sh de-a-short f de-schwa n h eye de-final-t")]
     [DataRow("schwer", "sh v de-e-long de-r-glide")]
     [DataRow("wasser", "v de-a-short s de-er")]
     [DataRow("lieblingsfrau", "l ee b l i ng s f de-r ow")]
@@ -811,7 +811,7 @@ public class VocalSynthTests
     [DataRow("segel", "z de-e-long g de-schwa l")]
     [DataRow("riegel", "de-r ee g de-schwa l")]
     [DataRow("verstehen", "f e de-r-glide sh t de-e-long de-schwa n")]
-    [DataRow("verspielt", "f e de-r-glide sh p ee l t")]
+    [DataRow("verspielt", "f e de-r-glide sh p ee l de-final-t")]
     [DataRow("wespe", "v e s p de-schwa")]
     [DataRow("fu\u00df", "f oo s")]
     [DataRow("rosen", "de-r de-o-long z de-schwa n")]
@@ -822,12 +822,39 @@ public class VocalSynthTests
     [DataRow("dir", "d ee de-r-glide")]
     [DataRow("wir", "v ee de-r-glide")]
     [DataRow("ihr", "ee de-r-glide")]
-    [DataRow("wird", "v i de-r-glide t")]
+    [DataRow("wird", "v i de-r-glide de-final-t")]
     public void Phonemizer_GermanFeedbackWords_UseDistinctVowelsAndR(string word, string expected)
     {
         var phonemes = VocalPhonemizer.Phonemize(VocalLanguage.German, word);
         CollectionAssert.AreEqual(expected.Split(' '), phonemes.ToArray());
         Assert.IsTrue(phonemes.All(VocalPhonemeInventory.Contains));
+    }
+
+    [TestMethod]
+    [DataRow("Abgezüffelt")]
+    [DataRow("Ballett")]
+    [DataRow("Bad")]
+    public void Render_GermanWordFinalDAndT_ProducesAnAudibleFinalRelease(string word)
+    {
+        var settings = VocalSynthSettings.FromPreset(
+            VocalVoicePreset.BuiltIn[2], VocalLanguage.German, word);
+        settings.SampleRate = 16000;
+
+        IReadOnlyList<string> phonemes = VocalPhonemizer.Phonemize(VocalLanguage.German, word);
+        Assert.AreEqual("de-final-t", phonemes[^1], $"{word} did not use the German final stop.");
+
+        using var audio = VocalSynth.Render(settings);
+        int finalStopFrames = (int)Math.Round(
+            VocalPhonemeInventory.Get("de-final-t").DurationMs * settings.SampleRate
+            / (1000 * settings.Speed));
+        int start = audio.Data.Length - finalStopFrames;
+        int burstStart = start + (int)(finalStopFrames * 0.44);
+        int burstEnd = start + (int)(finalStopFrames * 0.7);
+        double energy = 0;
+        for (int index = burstStart; index < burstEnd; index++)
+            energy += audio.Data[index] * audio.Data[index];
+        double rms = Math.Sqrt(energy / (burstEnd - burstStart));
+        Assert.IsTrue(rms > 0.02, $"{word} final release was too quiet: RMS {rms}.");
     }
 
     [TestMethod]
@@ -1728,7 +1755,9 @@ public class VocalSynthTests
             Assert.AreSame(vocalActionsRow, showSyllables.Parent);
             Assert.AreSame(vocalActionsRow, fillSyllables.Parent);
             Assert.AreSame(vocalActionsRow, followSpokenWord.Parent);
-            Assert.IsFalse(followSpokenWord.Checked);
+            Assert.IsTrue(followSpokenWord.ThreeState);
+            Assert.AreEqual(CheckState.Unchecked, followSpokenWord.CheckState);
+            Assert.AreEqual("Follow spoken word", followSpokenWord.Text);
             Assert.IsTrue(showSyllables.Left >= emphasisButton.Right,
                 "Show syllables must be beside Emphasis Syntax.");
             Assert.IsTrue(fillSyllables.Left >= showSyllables.Right,
@@ -1767,7 +1796,7 @@ public class VocalSynthTests
             settings.SampleRate = 8000;
 
             object timeline = createTimeline.Invoke(
-                null, [settings, 8000, CancellationToken.None])!;
+                null, [settings, 8000, false, CancellationToken.None])!;
             Assert.IsTrue(
                 ((System.Collections.IEnumerable)timeline).Cast<object>().Any(),
                 $"{language} produced no cursor ranges.");
@@ -1778,6 +1807,73 @@ public class VocalSynthTests
                 text.Length,
                 (int)getCursorPosition.Invoke(null, [timeline, 8000])!,
                 $"{language} did not reach the end of the text.");
+        }
+    }
+
+    [STATestMethod]
+    public void Dialog_FollowSpokenSyllableBuildsOneCursorRangePerSyllable()
+    {
+        const BindingFlags flags = BindingFlags.Static | BindingFlags.NonPublic;
+        MethodInfo createTimeline = typeof(VocalSynthDialog).GetMethod("CreatePlaybackTimeline", flags)!;
+        MethodInfo getCursorPosition = typeof(VocalSynthDialog)
+            .GetMethod("GetPlaybackCursorTextPosition", flags)!;
+        const string text = "Abgezüffelt";
+        VocalSynthSettings settings = VocalSynthSettings.FromPreset(
+            VocalVoicePreset.BuiltIn[2], VocalLanguage.German, text);
+
+        object wordTimeline = createTimeline.Invoke(
+            null, [settings, 8000, false, CancellationToken.None])!;
+        object syllableTimeline = createTimeline.Invoke(
+            null, [settings, 8000, true, CancellationToken.None])!;
+        object[] wordRanges = ((System.Collections.IEnumerable)wordTimeline).Cast<object>().ToArray();
+        object[] syllableRanges = ((System.Collections.IEnumerable)syllableTimeline).Cast<object>().ToArray();
+
+        Assert.AreEqual(1, wordRanges.Length);
+        Assert.IsTrue(syllableRanges.Length > wordRanges.Length);
+        int wordPosition = (int)getCursorPosition.Invoke(null, [wordTimeline, 0])!;
+        int syllablePosition = (int)getCursorPosition.Invoke(null, [syllableTimeline, 0])!;
+        Assert.IsTrue(syllablePosition < wordPosition);
+        Assert.AreEqual(text.Length, (int)getCursorPosition.Invoke(null, [syllableTimeline, 8000])!);
+    }
+
+    [STATestMethod]
+    public void Dialog_FollowSpokenWordFocusesTheTextEditorOnlyWhenEnabled()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "vocal_cursor_focus_" + Guid.NewGuid());
+        var profiles = new VocalVoiceProfileStore(directory);
+        try
+        {
+            using var dialog = new VocalSynthDialog(
+                profiles, new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json")));
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var editor = (RichTextBox)typeof(VocalSynthDialog)
+                .GetField("textEditor", flags)!.GetValue(dialog)!;
+            var prehear = (Button)typeof(VocalSynthDialog)
+                .GetField("prehear", flags)!.GetValue(dialog)!;
+            var follow = (CheckBox)typeof(VocalSynthDialog)
+                .GetField("followSpokenWordCheckBox", flags)!.GetValue(dialog)!;
+            MethodInfo focusEditor = typeof(VocalSynthDialog)
+                .GetMethod("FocusTextEditorForSpokenWordFollowing", flags)!;
+
+            bool editorFocused = false;
+            using var timer = new System.Windows.Forms.Timer { Interval = 25 };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                prehear.Focus();
+                follow.CheckState = CheckState.Indeterminate;
+                focusEditor.Invoke(dialog, null);
+                editorFocused = editor.Focused;
+                dialog.Close();
+            };
+            timer.Start();
+            dialog.ShowDialog();
+
+            Assert.IsTrue(editorFocused);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
         }
     }
 
@@ -1809,7 +1905,7 @@ public class VocalSynthTests
             ((CheckBox)Field(dialog, "unsupportedBeepCheckBox")).Checked = true;
             ((CheckBox)Field(dialog, "windowsSpeechCheckBox")).Checked = true;
             ((CheckBox)Field(dialog, "showSyllablesCheckBox")).Checked = true;
-            ((CheckBox)Field(dialog, "followSpokenWordCheckBox")).Checked = true;
+            ((CheckBox)Field(dialog, "followSpokenWordCheckBox")).CheckState = CheckState.Indeterminate;
             ((RichTextBox)Field(dialog, "textEditor")).Text = "Guten Morgen";
 
             MidiTrackData lead = new() { Index = 4, Name = "Lead" };
@@ -1850,12 +1946,83 @@ public class VocalSynthTests
             Assert.AreEqual(1.25m, ((NumericUpDown)Field(restored, "midiSemitoneOffset")).Value);
             Assert.AreEqual("Built-in: Singing", ((ComboBox)Field(restored, "voiceCombo")).SelectedItem);
             Assert.IsTrue(((CheckBox)Field(restored, "showSyllablesCheckBox")).Checked);
-            Assert.IsTrue(((CheckBox)Field(restored, "followSpokenWordCheckBox")).Checked);
+            var restoredFollow = (CheckBox)Field(restored, "followSpokenWordCheckBox");
+            Assert.AreEqual(CheckState.Indeterminate, restoredFollow.CheckState);
+            Assert.AreEqual("Follow spoken syllable", restoredFollow.Text);
             Assert.AreEqual(directory, lastMidiFolderField.GetValue(restored));
         }
         finally
         {
             snapshotField.SetValue(null, previousSnapshot);
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [STATestMethod]
+    public void Dialog_ClearMidiContextMenuRemovesMidiAndResetsControls()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "vocal_clear_midi_" + Guid.NewGuid());
+        var profiles = new VocalVoiceProfileStore(directory);
+        try
+        {
+            using var dialog = new VocalSynthDialog(
+                profiles, new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json")));
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            object Field(string name) =>
+                typeof(VocalSynthDialog).GetField(name, flags)!.GetValue(dialog)!;
+
+            var settings = (VocalSynthSettings)Field("settings");
+            var midiButton = (Button)Field("midiButton");
+            var clearMidiMenuItem = (ToolStripMenuItem)Field("clearMidiMenuItem");
+            var midiTrackNumber = (NumericUpDown)Field("midiTrackNumber");
+            var midiSemitoneOffset = (NumericUpDown)Field("midiSemitoneOffset");
+            var fillSyllablesButton = (Button)Field("fillSyllablesButton");
+            var midiFileLabel = (Label)Field("midiFileLabel");
+            var textEditor = (RichTextBox)Field("textEditor");
+            var debounce = (System.Windows.Forms.Timer)Field("debounce");
+            MethodInfo updateMidiControls = typeof(VocalSynthDialog).GetMethod(
+                "UpdateMidiControls", flags)!;
+
+            MidiTrackData lead = new() { Index = 4, Name = "Lead" };
+            lead.Notes.Add(new MidiNoteData
+                { NoteNumber = 60, Velocity = 90, StartTick = 0, DurationTicks = 480 });
+            MidiTrackData harmony = new() { Index = 9, Name = "Harmony" };
+            harmony.Notes.Add(new MidiNoteData
+                { NoteNumber = 67, Velocity = 90, StartTick = 0, DurationTicks = 480 });
+            settings.Singing = true;
+            settings.SingingMidiFile = MidiFileData.CreateGenerated(
+                [lead, harmony], filePath: "vocal-test.mid");
+            settings.SingingMidiTrackIndex = harmony.Index;
+            settings.SingingMidiSemitoneOffset = 1.25;
+            settings.IgnoreTextPausesForMidiSinging = true;
+            midiTrackNumber.Maximum = 2;
+            midiTrackNumber.Value = 2;
+            midiSemitoneOffset.Value = 1.25m;
+            textEditor.Text = "la";
+            debounce.Stop();
+            updateMidiControls.Invoke(dialog, null);
+
+            Assert.IsNotNull(midiButton.ContextMenuStrip);
+            Assert.IsTrue(clearMidiMenuItem.Enabled);
+            clearMidiMenuItem.PerformClick();
+            debounce.Stop();
+
+            Assert.IsNull(settings.SingingMidiFile);
+            Assert.IsNull(settings.SingingMidiTrackIndex);
+            Assert.AreEqual(0, settings.SingingMidiSemitoneOffset);
+            Assert.IsFalse(settings.IgnoreTextPausesForMidiSinging);
+            Assert.AreEqual(1m, midiTrackNumber.Value);
+            Assert.AreEqual(1m, midiTrackNumber.Maximum);
+            Assert.IsFalse(midiTrackNumber.Enabled);
+            Assert.AreEqual(0m, midiSemitoneOffset.Value);
+            Assert.IsFalse(midiSemitoneOffset.Enabled);
+            Assert.IsFalse(fillSyllablesButton.Enabled);
+            Assert.IsFalse(clearMidiMenuItem.Enabled);
+            Assert.AreEqual("No MIDI loaded", midiFileLabel.Text);
+            Assert.AreEqual("MIDI cleared.", ((Label)Field("status")).Text);
+        }
+        finally
+        {
             if (Directory.Exists(directory)) Directory.Delete(directory, true);
         }
     }

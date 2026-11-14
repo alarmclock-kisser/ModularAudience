@@ -76,6 +76,7 @@ public static class VocalPhonemeInventory
         ["p"] = V("p", false, 60, [], [], 0.0, 0.9, false),
         ["b"] = V("b", true, 60, [250, 1000, 2000], [0.4, 0.2, 0.1], 0.7, 0.5, false),
         ["t"] = V("t", false, 60, [], [], 0.0, 0.9, false),
+        ["de-final-t"] = V("de-final-t", false, 90, [], [], 0.0, 1.2, false),
         ["d"] = V("d", true, 60, [250, 1500, 2300], [0.4, 0.2, 0.1], 0.7, 0.5, false),
         ["k"] = V("k", false, 60, [], [], 0.0, 0.9, false),
         ["g"] = V("g", true, 60, [250, 1500, 2300], [0.4, 0.2, 0.1], 0.7, 0.5, false),

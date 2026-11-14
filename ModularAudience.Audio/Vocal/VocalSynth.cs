@@ -567,7 +567,8 @@ public static partial class VocalSynth
         && !b.Symbol.StartsWith("animal-", StringComparison.Ordinal)
         && !IsClosure(a.Symbol) && !IsClosure(b.Symbol);
 
-    private static bool IsClosure(string symbol) => symbol is "p" or "b" or "t" or "d" or "k" or "g" or "arab-q"
+    private static bool IsClosure(string symbol) => symbol is "p" or "b" or "t" or "de-final-t"
+        or "d" or "k" or "g" or "arab-q"
         or "ts" or "tsh" or "j" or "dz";
 
     private static bool IsBeat(string symbol) => symbol.StartsWith("beat-", StringComparison.Ordinal);
@@ -592,13 +593,17 @@ public static partial class VocalSynth
 
     private static void ShapeConsonant(string symbol, double progress, double duration, ref double voice, ref double noise)
     {
-        bool stop = symbol is "p" or "b" or "t" or "d" or "k" or "g" or "arab-q";
+        bool germanFinalT = symbol == "de-final-t";
+        bool stop = symbol is "p" or "b" or "t" or "d" or "k" or "g" or "arab-q"
+            || germanFinalT;
         bool affricate = symbol is "ts" or "tsh" or "j" or "dz";
         if (!stop && !affricate) return;
-        double closure = stop ? 0.48 : 0.25;
+        double closure = germanFinalT ? 0.4 : stop ? 0.48 : 0.25;
         double releaseTime = Math.Max(0, (progress - closure) * duration);
         voice = 0.15 + 0.85 * Math.Min(1, releaseTime / 0.004);
-        noise = progress < closure ? 0 : stop ? Math.Exp(-releaseTime * 70) + 0.2 * Math.Exp(-releaseTime * 16) : 1;
+        noise = progress < closure ? 0 : germanFinalT
+            ? Math.Exp(-releaseTime * 45) + 0.25 * Math.Exp(-releaseTime * 12)
+            : stop ? Math.Exp(-releaseTime * 70) + 0.2 * Math.Exp(-releaseTime * 16) : 1;
     }
 
     private static void UpdateFormants(
@@ -657,7 +662,7 @@ public static partial class VocalSynth
             "ich" => (2600.0, 7000.0),
             "ch" => (900.0, 4200.0),
             "de-r" or "arab-ayn" or "arab-h" or "arab-q" => (700.0, 3000.0),
-            "t" or "d" => (2500.0, 8500.0),
+            "t" or "d" or "de-final-t" => (2500.0, 8500.0),
             "k" or "g" or "beat-k" or "beat-kz" or "beat-bz" => (1200.0, 5500.0),
             "p" or "b" or "animal-dot" or "beat-b" or "beat-p" => (400.0, 3200.0),
             "beat-pf" or "beat-f" => (700.0, 6500.0),

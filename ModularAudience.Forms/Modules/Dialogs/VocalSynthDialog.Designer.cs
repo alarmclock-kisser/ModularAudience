@@ -11,6 +11,7 @@ public sealed partial class VocalSynthDialog
     private Button renameProfileBtn = null!;
     private Button deleteProfileBtn = null!;
     private Button midiButton = null!;
+    private ToolStripMenuItem clearMidiMenuItem = null!;
     private Button customSamplesButton = null!;
     private Label midiFileLabel = null!;
     private NumericUpDown midiTrackNumber = null!;
@@ -38,6 +39,15 @@ public sealed partial class VocalSynthDialog
             Text = "MIDI",
             AutoSize = true,
         };
+        clearMidiMenuItem = new ToolStripMenuItem
+        {
+            Name = "clearMidiMenuItem",
+            Text = "Clear MIDI",
+            Enabled = false,
+        };
+        clearMidiMenuItem.Click += (_, _) => ClearMidiFile();
+        midiButton.ContextMenuStrip = new ContextMenuStrip();
+        midiButton.ContextMenuStrip.Items.Add(clearMidiMenuItem);
         midiFileLabel = new Label
         {
             Name = "midiFileLabel",
@@ -109,6 +119,8 @@ public sealed partial class VocalSynthDialog
             Name = "followSpokenWordCheckBox",
             Text = "Follow spoken word",
             AccessibleName = "Follow spoken word",
+            ThreeState = true,
+            CheckState = CheckState.Unchecked,
             AutoSize = true,
             Margin = new Padding(6, 8, 4, 0),
         };
@@ -145,6 +157,7 @@ public sealed partial class VocalSynthDialog
         editMidiButton.Click += (_, _) => EditLoadedMidi();
         showSyllablesCheckBox.CheckedChanged += (_, _) => ToggleSyllablePreview();
         fillSyllablesButton.Click += (_, _) => FillSyllables();
+        followSpokenWordCheckBox.CheckStateChanged += (_, _) => UpdateFollowSpokenWordLabel();
 
         vocalActionsRow = new FlowLayoutPanel
         {
