@@ -63,6 +63,9 @@ public sealed partial class VocalSynthDialog : Form
     private CancellationTokenSource? syllablePreviewCalculation;
     private CancellationTokenSource? playbackPreparation;
     private int revision, ready = -1;
+    private readonly object playbackStateLock = new();
+    private int playbackGeneration, playbackStoppedGeneration = -1;
+    private Exception? playbackError;
     private int syllablePreviewRevision;
     private bool disposedFlag, creating, syncing, formattingSyllables, fillingSyllables;
     private readonly System.Windows.Forms.Timer debounce = new() { Interval = 300 };
@@ -243,11 +246,7 @@ public sealed partial class VocalSynthDialog : Form
             syllablePreviewDebounce.Stop();
             await RefreshSyllablePreviewAsync();
         };
-        playbackTimer.Tick += (_, _) =>
-        {
-            UpdatePlaybackCursor();
-            if (provider?.Finished == true) StopHear();
-        };
+        playbackTimer.Tick += (_, _) => PlaybackTimerTick();
         FormClosing += (_, _) =>
         {
             debounce.Stop();
@@ -1003,7 +1002,23 @@ public sealed partial class VocalSynthDialog : Form
             FocusTextEditorForSpokenWordFollowing();
             provider = new VocalPreview(
                 renderedAudio.Data, renderedAudio.SampleRate, renderedAudio.Channels, cursorRanges);
+            int generation;
+            lock (playbackStateLock)
+            {
+                generation = ++playbackGeneration;
+                playbackStoppedGeneration = -1;
+                playbackError = null;
+            }
             output = new WaveOut { BufferMilliseconds = 60 };
+            output.PlaybackStopped += (_, args) =>
+            {
+                lock (playbackStateLock)
+                {
+                    if (playbackGeneration != generation) return;
+                    playbackError = args.Exception;
+                    playbackStoppedGeneration = generation;
+                }
+            };
             output.Init(provider);
             output.Play();
             prehear.Text = "Stop";
@@ -1039,14 +1054,35 @@ public sealed partial class VocalSynthDialog : Form
 
     private void StopHear()
     {
+        lock (playbackStateLock)
+        {
+            playbackGeneration++;
+            playbackStoppedGeneration = -1;
+            playbackError = null;
+        }
         playbackTimer.Stop();
-        output?.Stop();
-        output?.Dispose();
+        WaveOut? currentOutput = output;
         output = null;
         provider = null;
+        currentOutput?.Stop();
+        currentOutput?.Dispose();
         lastFollowedCursorPosition = -1;
         prehear.Text = "Prehear";
         prehear.Enabled = !string.IsNullOrWhiteSpace(textEditor.Text);
+    }
+
+    private void PlaybackTimerTick()
+    {
+        UpdatePlaybackCursor();
+        Exception? error;
+        lock (playbackStateLock)
+        {
+            if (playbackStoppedGeneration != playbackGeneration) return;
+            error = playbackError;
+            if (error is null && provider?.Finished != true) return;
+        }
+        StopHear();
+        if (error is not null) status.Text = error.Message;
     }
 
     private void UpdatePlaybackCursor()

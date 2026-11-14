@@ -490,6 +490,19 @@ internal static class VocalWindowsSpeech
     private static void WritePronunciation(XmlWriter writer, string text, CultureInfo culture, CancellationToken cancellationToken)
     {
         bool german = culture.TwoLetterISOLanguageName == "de";
+        if (german)
+        {
+            int finalStopStart = text.Length;
+            while (finalStopStart > 0
+                && (char.ToLowerInvariant(text[finalStopStart - 1]) is 't' or 'd'))
+                finalStopStart--;
+            if (finalStopStart < text.Length)
+            {
+                WritePronunciation(writer, text[..finalStopStart], culture, cancellationToken);
+                WritePhoneme(writer, text[finalStopStart..], "t");
+                return;
+            }
+        }
         if (!german && text.Equals("intrigued", StringComparison.OrdinalIgnoreCase))
         {
             WritePhoneme(writer, text, "ih n t r iy g d");

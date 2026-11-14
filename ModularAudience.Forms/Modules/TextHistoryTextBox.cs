@@ -68,18 +68,12 @@ internal sealed class TextHistoryRichTextBox : RichTextBox
     protected override bool ProcessCmdKey(ref Message message, Keys keyData)
     {
         if (ProcessHistoryCommand(keyData)) return true;
-        return base.ProcessCmdKey(ref message, keyData);
-    }
-
-    protected override void WndProc(ref Message message)
-    {
-        if (message.Msg == 0x0102 && message.WParam == (IntPtr)'\r' && !ReadOnly)
+        if (keyData == Keys.Enter && !ReadOnly)
         {
             SelectedText = "\n";
-            return;
+            return true;
         }
-
-        base.WndProc(ref message);
+        return base.ProcessCmdKey(ref message, keyData);
     }
 
     protected override void Dispose(bool disposing)

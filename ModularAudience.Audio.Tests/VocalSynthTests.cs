@@ -831,14 +831,17 @@ public class VocalSynthTests
     }
 
     [TestMethod]
-    [DataRow("Abgezüffelt")]
-    [DataRow("Ballett")]
-    [DataRow("Bad")]
-    public void Render_GermanWordFinalDAndT_ProducesAnAudibleFinalRelease(string word)
+    [DataRow("Abgezüffelt", 0.5)]
+    [DataRow("Abgezüffeld", 0.0)]
+    [DataRow("AbgezüffeltttD", 0.0)]
+    [DataRow("Ballett", 0.3)]
+    [DataRow("Bad", 0.6)]
+    public void Render_GermanWordFinalDAndT_ProducesAnAudibleFinalRelease(string word, double noise)
     {
         var settings = VocalSynthSettings.FromPreset(
             VocalVoicePreset.BuiltIn[2], VocalLanguage.German, word);
         settings.SampleRate = 16000;
+        settings.Noise = noise;
 
         IReadOnlyList<string> phonemes = VocalPhonemizer.Phonemize(VocalLanguage.German, word);
         Assert.AreEqual("de-final-t", phonemes[^1], $"{word} did not use the German final stop.");
@@ -848,13 +851,32 @@ public class VocalSynthTests
             VocalPhonemeInventory.Get("de-final-t").DurationMs * settings.SampleRate
             / (1000 * settings.Speed));
         int start = audio.Data.Length - finalStopFrames;
-        int burstStart = start + (int)(finalStopFrames * 0.44);
-        int burstEnd = start + (int)(finalStopFrames * 0.7);
+        int burstStart = start + (int)(finalStopFrames * 0.55);
+        int burstEnd = start + (int)(finalStopFrames * 0.66);
         double energy = 0;
         for (int index = burstStart; index < burstEnd; index++)
             energy += audio.Data[index] * audio.Data[index];
         double rms = Math.Sqrt(energy / (burstEnd - burstStart));
-        Assert.IsTrue(rms > 0.02, $"{word} final release was too quiet: RMS {rms}.");
+        Assert.IsTrue(rms > 0.05, $"{word} final release was too quiet: RMS {rms}.");
+    }
+
+    [TestMethod]
+    [DataRow("Abgezüffelt", "t")]
+    [DataRow("Abgezüffeld", "d")]
+    [DataRow("AbgezüffeltttD", "tttD")]
+    [DataRow("Ballett", "tt")]
+    [DataRow("Bad", "d")]
+    public void WindowsSpeech_GermanWordFinalDAndT_UsesAnExplicitTRelease(string word, string finalText)
+    {
+        var tokens = VocalTextParser.ParseWindowsSpeech(
+            VocalLanguage.German, word, VocalEmphasisSyntax.Default(), CancellationToken.None);
+        XNamespace ns = "http://www.w3.org/2001/10/synthesis";
+        var xml = XDocument.Parse(VocalWindowsSpeech.BuildSsml(
+            tokens, CultureInfo.GetCultureInfo("de-DE"), 1));
+        XElement release = xml.Descendants(ns + "phoneme")
+            .Single(element => (string?)element.Attribute("ph") == "t");
+
+        Assert.AreEqual(finalText, release.Value);
     }
 
     [TestMethod]
@@ -2095,8 +2117,7 @@ public class VocalSynthTests
                 editor.Text = "Hello";
                 editor.SelectionStart = editor.TextLength;
                 dialog.ActiveControl = editor;
-                Assert.IsFalse(SendCommand(editor, Keys.Enter));
-                SendMessage(editor.Handle, 0x0102, (IntPtr)'\r', IntPtr.Zero);
+                Assert.IsTrue(SendCommand(editor, Keys.Enter));
                 Assert.AreEqual("Hello\n", editor.Text);
                 Assert.AreEqual(2, editor.Lines.Length);
                 Assert.IsTrue(SendCommand(editor, Keys.Control | Keys.Z));
@@ -2144,6 +2165,44 @@ public class VocalSynthTests
         finally
         {
             Directory.Delete(directory, true);
+        }
+    }
+
+    [STATestMethod]
+    public void Dialog_PrehearWaitsForPlaybackBuffersToDrain()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "vocal_drain_" + Guid.NewGuid());
+        try
+        {
+            using var dialog = new VocalSynthDialog(
+                new VocalVoiceProfileStore(directory),
+                new VocalEmphasisSyntaxStore(Path.Combine(directory, "syntax.json")));
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            FieldInfo Field(string name) => typeof(VocalSynthDialog).GetField(name, flags)!;
+            Type previewType = typeof(VocalSynthDialog).GetNestedType("VocalPreview", flags)!;
+            object preview = Activator.CreateInstance(
+                previewType,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                null,
+                [new float[] { 0.1f }, 16000, 1, null],
+                null)!;
+            previewType.GetField("finished", flags)!.SetValue(preview, 1);
+            Field("provider").SetValue(dialog, preview);
+
+            var prehear = (Button)Field("prehear").GetValue(dialog)!;
+            prehear.Text = "Stop";
+            MethodInfo timerTick = typeof(VocalSynthDialog).GetMethod("PlaybackTimerTick", flags)!;
+            timerTick.Invoke(dialog, null);
+            Assert.AreEqual("Stop", prehear.Text, "Reading the final samples only queues them for playback.");
+
+            Field("playbackStoppedGeneration").SetValue(
+                dialog, Field("playbackGeneration").GetValue(dialog));
+            timerTick.Invoke(dialog, null);
+            Assert.AreEqual("Prehear", prehear.Text, "Stop only after WaveOut has drained its queued audio.");
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
         }
     }
 

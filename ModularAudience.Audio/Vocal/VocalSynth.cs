@@ -487,7 +487,10 @@ public static partial class VocalSynth
 
             double white = random.NextDouble() * 2 - 1;
             double bandNoise = noiseFilter.Process(white);
-            double noise = bandNoise * ph.Noise * s.Noise;
+            double noiseStrength = ph.Symbol == "de-final-t"
+                ? ph.Noise * Math.Max(s.Noise, 0.8)
+                : ph.Noise * s.Noise;
+            double noise = bandNoise * noiseStrength;
             double voiceGate = 1;
             double noiseGate = 1;
             ShapeConsonant(ph.Symbol, progress, frames / (double)s.SampleRate, ref voiceGate, ref noiseGate);
@@ -598,11 +601,11 @@ public static partial class VocalSynth
             || germanFinalT;
         bool affricate = symbol is "ts" or "tsh" or "j" or "dz";
         if (!stop && !affricate) return;
-        double closure = germanFinalT ? 0.4 : stop ? 0.48 : 0.25;
+        double closure = germanFinalT ? 0.55 : stop ? 0.48 : 0.25;
         double releaseTime = Math.Max(0, (progress - closure) * duration);
         voice = 0.15 + 0.85 * Math.Min(1, releaseTime / 0.004);
         noise = progress < closure ? 0 : germanFinalT
-            ? Math.Exp(-releaseTime * 45) + 0.25 * Math.Exp(-releaseTime * 12)
+            ? 2.0 * Math.Exp(-releaseTime * 160) + 0.4 * Math.Exp(-releaseTime * 35)
             : stop ? Math.Exp(-releaseTime * 70) + 0.2 * Math.Exp(-releaseTime * 16) : 1;
     }
 
