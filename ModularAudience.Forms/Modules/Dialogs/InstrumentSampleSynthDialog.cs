@@ -533,12 +533,39 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         output = new WaveOut { BufferMilliseconds = 60 }; output.Init(provider); output.Play(); hear.Text = "Stop prehear"; playbackTimer.Start();
     }
     private void StopHear() { playbackTimer.Stop(); output?.Stop(); output?.Dispose(); output = null; provider = null; hear.Text = "Prehear"; }
-    private async Task CreateAsync()
+    private async Task CreateAsync(bool closeAfterCreate = false)
     {
         if (creating) return; creating = true; create.Enabled = false;
-        try { if (await EnsureRendered()) AddToCollection(); }
+        if (closeAfterCreate) this.button_ok.Enabled = false;
+        try
+        {
+            if (await EnsureRendered())
+            {
+                AddToCollection();
+                if (closeAfterCreate) Close();
+            }
+        }
         catch (Exception error) { if (!disposed) status.Text = error.Message; }
-        finally { creating = false; if (!disposed) create.Enabled = true; }
+        finally
+        {
+            creating = false;
+            if (!disposed)
+            {
+                create.Enabled = true;
+                if (closeAfterCreate) this.button_ok.Enabled = true;
+            }
+        }
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (this.onInstrumentConfirmed is not null)
+        {
+            Confirm();
+            return;
+        }
+
+        await CreateAsync(closeAfterCreate: true);
     }
 
     private void Confirm()

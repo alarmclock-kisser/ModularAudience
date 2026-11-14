@@ -259,19 +259,40 @@ public sealed class InstrumentSampleSynthTests
     }
 
     [STATestMethod]
-    public void StandaloneOkClosesWithoutCreatingAnAudioCollection()
+    public void StandaloneOkCreatesSampleInAudioCollectionAndCloses()
     {
         using var dialog = new InstrumentSampleSynthDialog(SynthFamily.Keyboard, store);
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        ((NumericUpDown)typeof(InstrumentSampleSynthDialog)
+            .GetField("prehearDelay", flags)!.GetValue(dialog)!).Value = 0;
         var ok = dialog.Controls.Find("button_ok", true).OfType<Button>().Single();
 
         dialog.Show();
         ok.PerformClick();
-        Application.DoEvents();
+        DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+        while (!dialog.IsDisposed && DateTime.UtcNow < deadline)
+        {
+            Application.DoEvents();
+            Thread.Sleep(2);
+        }
 
         Assert.IsTrue(dialog.IsDisposed);
-        Assert.IsNull(typeof(InstrumentSampleSynthDialog)
-            .GetField("collection", flags)!.GetValue(dialog));
+        var collection = (AudioCollectionView?)typeof(InstrumentSampleSynthDialog)
+            .GetField("collection", flags)!.GetValue(dialog);
+        Assert.IsNotNull(collection);
+        try
+        {
+            Assert.AreEqual("Synthesized Keyboard", collection.Text);
+            Assert.HasCount(1, collection.AudioC.Audios);
+        }
+        finally
+        {
+            collection.Close();
+            collection.Dispose();
+            ((System.Collections.IList)typeof(WindowMain)
+                .GetField("CollectionViews", BindingFlags.NonPublic | BindingFlags.Static)!
+                .GetValue(null)!).Remove(collection);
+        }
     }
 
     [STATestMethod]
