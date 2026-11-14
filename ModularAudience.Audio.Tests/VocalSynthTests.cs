@@ -1722,14 +1722,19 @@ public class VocalSynthTests
             var emphasisButton = (Button)Field("emphasisBtn");
             var showSyllables = (CheckBox)Field("showSyllablesCheckBox");
             var fillSyllables = (Button)Field("fillSyllablesButton");
+            var followSpokenWord = (CheckBox)Field("followSpokenWordCheckBox");
             vocalActionsRow.PerformLayout();
             Assert.AreSame(vocalActionsRow, emphasisButton.Parent);
             Assert.AreSame(vocalActionsRow, showSyllables.Parent);
             Assert.AreSame(vocalActionsRow, fillSyllables.Parent);
+            Assert.AreSame(vocalActionsRow, followSpokenWord.Parent);
+            Assert.IsFalse(followSpokenWord.Checked);
             Assert.IsTrue(showSyllables.Left >= emphasisButton.Right,
                 "Show syllables must be beside Emphasis Syntax.");
             Assert.IsTrue(fillSyllables.Left >= showSyllables.Right,
                 "Fill Syllables must be immediately to the right of Show syllables.");
+            Assert.IsTrue(followSpokenWord.Left >= fillSyllables.Right,
+                "Follow spoken word must be immediately to the right of Fill Syllables.");
 
             nameField.Text = "Layout profile";
             var click = typeof(Button).GetMethod("OnClick", flags)!;
@@ -1747,11 +1752,43 @@ public class VocalSynthTests
     }
 
     [STATestMethod]
+    public void Dialog_FollowSpokenWordBuildsCursorTimelineForEveryLanguage()
+    {
+        const BindingFlags flags = BindingFlags.Static | BindingFlags.NonPublic;
+        MethodInfo createTimeline = typeof(VocalSynthDialog).GetMethod("CreatePlaybackTimeline", flags)!;
+        MethodInfo getCursorPosition = typeof(VocalSynthDialog)
+            .GetMethod("GetPlaybackCursorTextPosition", flags)!;
+
+        foreach (VocalLanguage language in Enum.GetValues<VocalLanguage>())
+        {
+            string text = language == VocalLanguage.Beatboxing ? "B t K" : "ma ma";
+            VocalSynthSettings settings = VocalSynthSettings.FromPreset(
+                VocalVoicePreset.BuiltIn[2], language, text);
+            settings.SampleRate = 8000;
+
+            object timeline = createTimeline.Invoke(
+                null, [settings, 8000, CancellationToken.None])!;
+            Assert.IsTrue(
+                ((System.Collections.IEnumerable)timeline).Cast<object>().Any(),
+                $"{language} produced no cursor ranges.");
+            Assert.IsTrue(
+                (int)getCursorPosition.Invoke(null, [timeline, 0])! > 0,
+                $"{language} did not select the first spoken unit.");
+            Assert.AreEqual(
+                text.Length,
+                (int)getCursorPosition.Invoke(null, [timeline, 8000])!,
+                $"{language} did not reach the end of the text.");
+        }
+    }
+
+    [STATestMethod]
     public void Dialog_RestoresLastSettingsAndTextWithinTheApplicationProcess()
     {
         const BindingFlags instanceFlags = BindingFlags.Instance | BindingFlags.NonPublic;
         FieldInfo snapshotField = typeof(VocalSynthDialog).GetField(
             "lastSessionSnapshot", BindingFlags.Static | BindingFlags.NonPublic)!;
+        FieldInfo lastMidiFolderField = typeof(VocalSynthDialog).GetField(
+            "lastMidiFolder", instanceFlags)!;
         object? previousSnapshot = snapshotField.GetValue(null);
         string directory = Path.Combine(Path.GetTempPath(), "vocal_session_" + Guid.NewGuid());
         var profiles = new VocalVoiceProfileStore(directory);
@@ -1772,6 +1809,7 @@ public class VocalSynthTests
             ((CheckBox)Field(dialog, "unsupportedBeepCheckBox")).Checked = true;
             ((CheckBox)Field(dialog, "windowsSpeechCheckBox")).Checked = true;
             ((CheckBox)Field(dialog, "showSyllablesCheckBox")).Checked = true;
+            ((CheckBox)Field(dialog, "followSpokenWordCheckBox")).Checked = true;
             ((RichTextBox)Field(dialog, "textEditor")).Text = "Guten Morgen";
 
             MidiTrackData lead = new() { Index = 4, Name = "Lead" };
@@ -1792,6 +1830,7 @@ public class VocalSynthTests
             ((NumericUpDown)Field(dialog, "midiTrackNumber")).Value = 2;
             ((NumericUpDown)Field(dialog, "midiSemitoneOffset")).Value = 1.25m;
             ((System.Windows.Forms.Timer)Field(dialog, "debounce")).Stop();
+            lastMidiFolderField.SetValue(dialog, directory);
 
             dialog.Close();
             Assert.IsTrue(dialog.IsDisposed);
@@ -1811,6 +1850,8 @@ public class VocalSynthTests
             Assert.AreEqual(1.25m, ((NumericUpDown)Field(restored, "midiSemitoneOffset")).Value);
             Assert.AreEqual("Built-in: Singing", ((ComboBox)Field(restored, "voiceCombo")).SelectedItem);
             Assert.IsTrue(((CheckBox)Field(restored, "showSyllablesCheckBox")).Checked);
+            Assert.IsTrue(((CheckBox)Field(restored, "followSpokenWordCheckBox")).Checked);
+            Assert.AreEqual(directory, lastMidiFolderField.GetValue(restored));
         }
         finally
         {
@@ -1890,6 +1931,7 @@ public class VocalSynthTests
                 Assert.IsFalse(SendCommand(editor, Keys.Enter));
                 SendMessage(editor.Handle, 0x0102, (IntPtr)'\r', IntPtr.Zero);
                 Assert.AreEqual("Hello\n", editor.Text);
+                Assert.AreEqual(2, editor.Lines.Length);
                 Assert.IsTrue(SendCommand(editor, Keys.Control | Keys.Z));
                 Assert.AreEqual("Hello", editor.Text);
                 Assert.IsTrue(SendCommand(editor, Keys.Control | Keys.Y));
@@ -2019,11 +2061,13 @@ public class VocalSynthTests
             var settings = (VocalSynthSettings)Field("settings");
             var editor = (RichTextBox)Field("textEditor");
             var timer = (System.Windows.Forms.Timer)Field("debounce");
+            var syllableTimer = (System.Windows.Forms.Timer)Field("syllablePreviewDebounce");
             editor.Text = "banana";
             timer.Stop();
             Assert.IsTrue(showSyllables.Enabled);
             editor.SelectionStart = 5;
             showSyllables.Checked = true;
+            WaitForSyllablePreview(dialog);
             Assert.IsFalse(editor.ReadOnly);
             Assert.AreEqual(5, editor.SelectionStart);
 
@@ -2033,9 +2077,11 @@ public class VocalSynthTests
             editor.Select(secondSyllable.Start, secondSyllable.Length);
             Assert.IsTrue(editor.SelectionFont!.Style.HasFlag(FontStyle.Underline));
             showSyllables.Checked = false;
+            WaitForSyllablePreview(dialog);
             editor.Select(secondSyllable.Start, secondSyllable.Length);
             Assert.IsFalse(editor.SelectionFont!.Style.HasFlag(FontStyle.Underline));
             showSyllables.Checked = true;
+            WaitForSyllablePreview(dialog);
 
             MidiFileData midi = CreateMidi(
                 new MidiNoteData { NoteNumber = 60, Velocity = 100, StartTick = 0, DurationTicks = 960 });
@@ -2043,6 +2089,9 @@ public class VocalSynthTests
             settings.SingingMidiFile = midi;
             settings.SingingMidiTrackIndex = midi.Tracks[0].Index;
             typeof(VocalSynthDialog).GetMethod("UpdateMidiControls", flags)!.Invoke(dialog, null);
+            Assert.AreEqual(
+                "vocal-test.mid (#1 Lead) [BPM: 120.0]",
+                ((Label)Field("midiFileLabel")).Text);
             Assert.IsTrue(offset.Enabled);
             Assert.IsTrue(showSyllables.Enabled);
             Assert.IsTrue(showSyllables.Checked);
@@ -2057,7 +2106,9 @@ public class VocalSynthTests
 
             editor.Select(editor.TextLength, 0);
             editor.AppendText("s");
+            Assert.IsTrue(syllableTimer.Enabled, "Text changes should defer syllable formatting with a debounce.");
             timer.Stop();
+            WaitForSyllablePreview(dialog);
             Assert.AreEqual("bananas", editor.Text);
             Assert.AreEqual(editor.Text, settings.Text);
             Assert.AreSame(editor, ((Panel)Field("textContentPanel")).Controls[0]);
@@ -2128,6 +2179,18 @@ public class VocalSynthTests
             Thread.Sleep(10);
         }
         Assert.IsTrue(task.IsCompleted, "Rendering did not finish in time.");
+    }
+
+    private static void WaitForSyllablePreview(VocalSynthDialog dialog)
+    {
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var timer = (System.Windows.Forms.Timer)typeof(VocalSynthDialog)
+            .GetField("syllablePreviewDebounce", flags)!.GetValue(dialog)!;
+        timer.Stop();
+        Task refresh = (Task)typeof(VocalSynthDialog)
+            .GetMethod("RefreshSyllablePreviewAsync", flags)!.Invoke(dialog, null)!;
+        WaitForRender(refresh);
+        refresh.GetAwaiter().GetResult();
     }
 
     private static bool SendCommand(Control control, Keys keyData)

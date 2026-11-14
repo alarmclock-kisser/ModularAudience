@@ -75,7 +75,7 @@ internal sealed class TextHistoryRichTextBox : RichTextBox
     {
         if (message.Msg == 0x0102 && message.WParam == (IntPtr)'\r' && !ReadOnly)
         {
-            SelectedText = Environment.NewLine;
+            SelectedText = "\n";
             return;
         }
 

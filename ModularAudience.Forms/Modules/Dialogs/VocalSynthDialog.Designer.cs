@@ -20,6 +20,7 @@ public sealed partial class VocalSynthDialog
     private Button editMidiButton = null!;
     private CheckBox showSyllablesCheckBox = null!;
     private Button fillSyllablesButton = null!;
+    private CheckBox followSpokenWordCheckBox = null!;
     private FlowLayoutPanel midiOptionsRow = null!;
     private FlowLayoutPanel vocalActionsRow = null!;
     private Panel textContentPanel = null!;
@@ -103,6 +104,14 @@ public sealed partial class VocalSynthDialog
             AutoSize = true,
             Enabled = false,
         };
+        followSpokenWordCheckBox = new CheckBox
+        {
+            Name = "followSpokenWordCheckBox",
+            Text = "Follow spoken word",
+            AccessibleName = "Follow spoken word",
+            AutoSize = true,
+            Margin = new Padding(6, 8, 4, 0),
+        };
         customSamplesButton = new Button
         {
             Name = "customSamplesButton",
@@ -147,7 +156,7 @@ public sealed partial class VocalSynthDialog
             Margin = Padding.Empty,
         };
         vocalActionsRow.Controls.AddRange(
-            [fillSyllablesButton, showSyllablesCheckBox, customSamplesButton, emphasisBtn, designProfileBtn, create]);
+            [followSpokenWordCheckBox, fillSyllablesButton, showSyllablesCheckBox, customSamplesButton, emphasisBtn, designProfileBtn, create]);
 
         textContentPanel = new Panel { Dock = DockStyle.Fill };
         textContentPanel.Controls.Add(textEditor);
