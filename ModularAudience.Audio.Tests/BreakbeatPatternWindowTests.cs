@@ -200,6 +200,33 @@ public sealed class BreakbeatPatternWindowTests
         type.GetField("previewAudio", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(editor, null);
     }
 
+    [TestMethod]
+    public void SwappingHearBufferRefreshesWholeBufferLoopPositionMapping()
+    {
+        const int channels = 2;
+        using var audio = new AudioObj
+        {
+            Data = new float[44100 * channels],
+            SampleRate = 44100,
+            Channels = channels
+        };
+        audio.UpdateLoopFraction(0, audio.Data.LongLength, audio.Data.LongLength, loopEnabled: true, adjustPosition: false);
+
+        float[] expandedBuffer = new float[audio.Data.Length * 4];
+        audio.SwapPlaybackData(expandedBuffer, audio.SampleRate, channels, 0, loopWholeBuffer: true);
+
+        Assert.IsTrue(audio.LoopEnabled);
+        Assert.AreEqual(expandedBuffer.LongLength, audio.LoopEndSamples);
+        Assert.AreEqual(expandedBuffer.LongLength * sizeof(float),
+            typeof(AudioObj).GetField("playbackLoopEndBytes", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(audio));
+
+        audio.SwapPlaybackData(expandedBuffer, audio.SampleRate, channels, 0, loopWholeBuffer: false);
+        Assert.IsFalse(audio.LoopEnabled);
+        Assert.AreEqual(0L, audio.LoopEndSamples);
+        Assert.AreEqual(0L,
+            typeof(AudioObj).GetField("playbackLoopEndBytes", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(audio));
+    }
+
     [STATestMethod]
     public void HeldRightButtonErasesNotesAcrossTracksAndUndoRestoresWholeGesture()
     {

@@ -431,6 +431,16 @@ namespace ModularAudience.Audio
             int ch = Math.Max(1, channels);
             long clampedSampleIndex = Math.Clamp(startSampleIndex, 0, Math.Max(0, data.LongLength - ch));
             this.playback.SwapRawData(data, sampleRate, channels, clampedSampleIndex, loopWholeBuffer);
+            if (loopWholeBuffer is bool loopEnabled)
+            {
+                this.LoopEnabled = loopEnabled;
+                this.LoopFraction = loopEnabled ? 1f : 0f;
+                this.loopFractionStartSamples = 0;
+                this.loopFractionEndSamples = loopEnabled ? data.LongLength : 0;
+                this.playbackLoopApplied = loopEnabled;
+                this.playbackLoopStartBytes = 0;
+                this.playbackLoopEndBytes = loopEnabled ? data.LongLength * sizeof(float) : 0;
+            }
 
             int bytesPerFrame = ch * sizeof(float);
             long startFrames = clampedSampleIndex / ch;
