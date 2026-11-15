@@ -34,6 +34,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             hScrollBar_pattern = new HScrollBar();
             panel_controls = new Panel();
             button_save = new Button();
+            checkBox_saveOnlySelectedRange = new CheckBox();
             checkBox_saveNewSolo = new CheckBox();
             checkBox_saveNewEnsemble = new CheckBox();
             button_help = new Button();
@@ -110,6 +111,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // panel_controls
             // 
             panel_controls.Controls.Add(button_save);
+            panel_controls.Controls.Add(checkBox_saveOnlySelectedRange);
             panel_controls.Controls.Add(checkBox_saveNewSolo);
             panel_controls.Controls.Add(checkBox_saveNewEnsemble);
             panel_controls.Controls.Add(button_help);
@@ -174,6 +176,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
             button_save.Text = "Save";
             button_save.UseVisualStyleBackColor = true;
             button_save.Click += button_save_Click;
+            //
+            // checkBox_saveOnlySelectedRange
+            //
+            checkBox_saveOnlySelectedRange.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            checkBox_saveOnlySelectedRange.AutoSize = true;
+            checkBox_saveOnlySelectedRange.Location = new Point(718, 10);
+            checkBox_saveOnlySelectedRange.Name = "checkBox_saveOnlySelectedRange";
+            checkBox_saveOnlySelectedRange.Size = new Size(140, 19);
+            checkBox_saveOnlySelectedRange.TabIndex = 11;
+            checkBox_saveOnlySelectedRange.Text = "Only selected range";
+            checkBox_saveOnlySelectedRange.UseVisualStyleBackColor = true;
+            toolTip_pattern.SetToolTip(checkBox_saveOnlySelectedRange,
+                "Limit Solo and Ensemble auto-saves to selected loop quarters. With no selection, the full pattern is saved.");
             //
             // checkBox_saveNewSolo
             //
@@ -413,6 +428,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Button button_remix;
         private Button button_roll;
         private Button button_save;
+        private CheckBox checkBox_saveOnlySelectedRange;
         private CheckBox checkBox_saveNewSolo;
         private CheckBox checkBox_saveNewEnsemble;
         private System.Windows.Forms.Timer timer_previewCaret;

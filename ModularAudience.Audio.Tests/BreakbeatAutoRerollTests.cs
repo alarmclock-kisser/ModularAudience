@@ -72,12 +72,18 @@ public sealed class BreakbeatAutoRerollTests
                     $"{buttons[i].Name} overlaps {buttons[j].Name}.");
         var saveNewSolo = (CheckBox)Field(editor, "checkBox_saveNewSolo");
         var saveNewEnsemble = (CheckBox)Field(editor, "checkBox_saveNewEnsemble");
+        var saveOnlySelectedRange = (CheckBox)Field(editor, "checkBox_saveOnlySelectedRange");
         Assert.IsTrue(saveNewSolo.Bottom < settings.Top);
         Assert.IsTrue(saveNewEnsemble.Bottom < settings.Top);
+        Assert.IsTrue(saveOnlySelectedRange.Bottom < settings.Top);
+        Assert.IsFalse(saveOnlySelectedRange.Bounds.IntersectsWith(saveNewSolo.Bounds)
+            || saveOnlySelectedRange.Bounds.IntersectsWith(saveNewEnsemble.Bounds),
+            "The range checkbox must not overlap the save-mode checkboxes.");
         Assert.IsFalse(saveNewSolo.Bounds.IntersectsWith(saveNewEnsemble.Bounds),
             "The Save new checkboxes must not overlap each other.");
         Assert.IsFalse(buttons.Any(button => saveNewSolo.Bounds.IntersectsWith(button.Bounds)
-            || saveNewEnsemble.Bounds.IntersectsWith(button.Bounds)),
+            || saveNewEnsemble.Bounds.IntersectsWith(button.Bounds)
+            || saveOnlySelectedRange.Bounds.IntersectsWith(button.Bounds)),
             "The Save new checkboxes must not overlap any footer button.");
         Invoke(editor, "button_roll_Click", roll, EventArgs.Empty);
         Assert.AreEqual(0L, first.GetType().GetField("CompletedLoops")!.GetValue(first));
@@ -162,6 +168,7 @@ public sealed class BreakbeatAutoRerollTests
         using var sample = new AudioObj { Data = Enumerable.Repeat(0.1f, 4800).ToArray(), SampleRate = 48000, Channels = 1 };
         using var editor = Editor(sample);
         ((HashSet<int>)Field(editor, "selectedLoopSections")).Add(0);
+        ((CheckBox)Field(editor, "checkBox_saveOnlySelectedRange")).Checked = true;
         Configure(editor, 0, 1, true, true); Configure(editor, 1, 1, true, true);
         Invoke(editor, "ResetAutoRerollClock");
         Invoke(editor, "ObserveAutoRerollLoops", 1L);
@@ -174,7 +181,11 @@ public sealed class BreakbeatAutoRerollTests
             var soloAudio = solos.Select(solo => ((AudioCollection)Field(solo, "AudioC")).Audios).ToArray();
             Assert.HasCount(1, ensembleAudio);
             Assert.HasCount(2, solos);
-            foreach (var audios in soloAudio) Assert.HasCount(1, audios);
+            foreach (var audios in soloAudio)
+            {
+                Assert.HasCount(1, audios);
+                Assert.AreEqual(0.5, audios[0].Data.Length / (double)(audios[0].SampleRate * audios[0].Channels), 0.001);
+            }
             Assert.AreEqual(0.5, ensembleAudio[0].Data.Length / (double)(ensembleAudio[0].SampleRate * ensembleAudio[0].Channels), 0.001);
             Assert.IsTrue(ensembleAudio[0].Data.Any(v => Math.Abs(v) > 0.01));
             Invoke(editor, "ObserveAutoRerollLoops", 2L);
@@ -214,7 +225,10 @@ public sealed class BreakbeatAutoRerollTests
         var collection = (AudioCollectionView)Field(editor, "autoEnsembleCollection");
         try
         {
-            Assert.HasCount(1, ((AudioCollection)Field(collection, "AudioC")).Audios);
+            var audios = ((AudioCollection)Field(collection, "AudioC")).Audios;
+            Assert.HasCount(1, audios);
+            Assert.AreEqual(2.0, audios[0].Data.Length / (double)(audios[0].SampleRate * audios[0].Channels), 0.001,
+                "With Only selected range unchecked, auto-saves retain the full pattern duration.");
         }
         finally
         {

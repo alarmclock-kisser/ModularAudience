@@ -334,7 +334,7 @@ public partial class BreakbeatPatternEditorDialog
         this.deadGroupNotes.Clear();
         this.RegisterPatternNotesChanged(before.Concat(this.notes).Select(n => (BreakbeatPatternNote?)n).ToArray());
         this.CommitHistoryAction();
-        this.QueueAutoRerollSaves(rows, sections);
+        this.QueueAutoRerollSaves(rows);
     }
     private static IEnumerable<(int Start, int End)> ContiguousSections(int[] sections)
     {
@@ -346,13 +346,13 @@ public partial class BreakbeatPatternEditorDialog
             else { yield return (start, end); start = end = section; }
         yield return (start, end);
     }
-    private void QueueAutoRerollSaves(IReadOnlyList<int> rows, int[] sections)
+    private void QueueAutoRerollSaves(IReadOnlyList<int> rows)
     {
         int[] soloRows = rows.Where(r => this.checkBox_saveNewSolo.Checked
             || this.autoRerolls[this.samples[r]].Options.SaveSolo).ToArray();
         bool ensemble = this.checkBox_saveNewEnsemble.Checked
             || rows.Any(r => this.autoRerolls[this.samples[r]].Options.SaveEnsemble);
-        this.QueuePatternSaves(soloRows, ensemble, sections);
+        this.QueuePatternSaves(soloRows, ensemble, this.AutoSaveSections());
     }
 
     private void checkBox_saveNewSolo_CheckedChanged(object? sender, EventArgs e)
@@ -370,17 +370,22 @@ public partial class BreakbeatPatternEditorDialog
     private void QueueCurrentPatternSave(bool solo, bool ensemble)
     {
         int[] soloRows = solo ? Enumerable.Range(0, this.samples.Count).ToArray() : [];
-        this.QueuePatternSaves(soloRows, ensemble, this.AutoRerollSections());
+        this.QueuePatternSaves(soloRows, ensemble, this.AutoSaveSections());
     }
+
+    private int[] AutoSaveSections() =>
+        this.checkBox_saveOnlySelectedRange.Checked ? this.GetLoopSectionsSnapshot() : [];
 
     private void QueuePatternSaves(int[] soloRows, bool ensemble, int[] sections)
     {
         var notes = this.ApplyTrackAudibility(this.GetNotesWithoutCoveredRetriggers());
         int quarterTicks = BreakbeatGenerator_V2.PatternTicksPerBar / 4;
         bool HasNotesInSections(IEnumerable<BreakbeatPatternNote> candidates) =>
-            candidates.Any(note => sections.Any(section =>
-                note.StartTick < (section + 1L) * quarterTicks
-                && (long)note.StartTick + note.DurationTicks > section * quarterTicks));
+            sections.Length == 0
+                ? candidates.Any()
+                : candidates.Any(note => sections.Any(section =>
+                    note.StartTick < (section + 1L) * quarterTicks
+                    && (long)note.StartTick + note.DurationTicks > section * quarterTicks));
         int[] solos = soloRows.Where(row =>
             HasNotesInSections(notes.Where(note => note.TrackIndex == row))).ToArray();
         ensemble = ensemble && HasNotesInSections(notes);
@@ -421,8 +426,12 @@ public partial class BreakbeatPatternEditorDialog
             if (rendered == null) return;
             try
             {
-                AudioObj excerpt = BreakbeatGenerator_V2.ExtractPatternQuarters(rendered, sections, bpm);
-                rendered.Dispose(); rendered = excerpt; rendered.Rename(name);
+                if (sections.Length > 0)
+                {
+                    AudioObj excerpt = BreakbeatGenerator_V2.ExtractPatternQuarters(rendered, sections, bpm);
+                    rendered.Dispose(); rendered = excerpt;
+                }
+                rendered.Rename(name);
                 if (this.IsDisposed || this.Disposing) return;
                 string? hash = null;
                 if (isEnsemble)
