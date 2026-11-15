@@ -19,10 +19,9 @@ it uses a dedicated tooltip so unrelated interaction hints on the same form rema
 - `HintPolicy` watches existing/new form controls, context menus and dynamic
   submenus, plus native ListView/TreeView/TabControl/DataGridView hints. Controls
   whose native tooltips were already disabled keep that state when hints return.
-- Floating AudioCollectionView waveform previews and YouTube mini-layout thumbnail
-  previews are also optional hints. Turning hints off hides them and prevents
-  pending hover work from displaying them again. Inline previews and explicit
-  editing/help windows are not hidden.
+- YouTube mini-layout thumbnail previews follow this global policy. AudioCollectionView
+  waveform previews are controlled by their Preview checkbox and remain available
+  when hints are disabled. Inline previews and explicit editing/help windows are not hidden.
 - `HintContent` documents interactions in WindowMain, TrackView, AudioCollectionView
   and the MIDI editors. Mix timeline, waveform modellers and YouTube have additional
   context-specific descriptions beside their UI construction.

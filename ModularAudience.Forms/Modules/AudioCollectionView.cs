@@ -63,7 +63,7 @@ namespace ModularAudience.Forms
         private Point lastMousePos;
         private Point contextMenuShowLocation;
         private WaveformPreview? waveformPreviewForm;
-        private bool ShowPreview => this.checkBox_preview.Checked && Hints.HintPolicy.Enabled;
+        private bool ShowPreview => this.checkBox_preview.Checked;
 
         private int FormListBoxClearance { get; set; } = 5;
         private int _resizeStartHeight;
@@ -247,7 +247,6 @@ namespace ModularAudience.Forms
 
             this.waveformPreviewTimer = new System.Windows.Forms.Timer { Interval = 333 };
             this.waveformPreviewTimer.Tick += this.WaveformPreviewTimer_Tick;
-            Hints.HintPolicy.RegisterPopup(this, () => { this.waveformPreviewTimer.Stop(); this.HideWaveformPreview(); this.waveformPreviewIndex = -1; });
             this.listBox_audios.MouseMove += this.ListBox_audios_MouseMove_WaveformPreview;
             this.listBox_audios.MouseHover += this.ListBox_audios_MouseHover_WaveformPreview;
             this.listBox_audios.MouseLeave += this.ListBox_audios_MouseLeave_WaveformPreview;

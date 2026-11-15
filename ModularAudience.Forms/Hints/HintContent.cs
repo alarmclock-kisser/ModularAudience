@@ -45,7 +45,7 @@ internal static class HintContent
     {
         ["listBox_audios"] = "Audio collection: click to select; Ctrl+click toggles individual items; Shift extends the selection.\nDouble-click opens the audio in a TrackView. Drag selected audio to another bag or a mix. Right-click for sample, effect, export and organization actions.",
         ["checkBox_autoPlay"] = "Automatically audition the selected audio (up to 10 seconds). Ctrl+click shares this preference with open and future collections. Turning visual hints off does not disable audio audition.",
-        ["checkBox_preview"] = "Show a floating waveform preview when hovering audio. Hovering selected items in a multi-selection can show their combined preview. Ctrl+click shares this choice with open and future collections. The global hints switch temporarily suppresses these popups without forgetting this choice.",
+        ["checkBox_preview"] = "Show a floating waveform preview when hovering audio. Hovering selected items in a multi-selection can show their combined preview. Ctrl+click shares this choice with open and future collections. This preview remains available when global hints are disabled.",
         ["button_export"] = "Export selected audio using the global output format and quality.\nShift+click exports every item in the collection. Ctrl+click with one selected item opens Save As; with multiple selected items it chooses a destination folder. Ctrl+Shift exports the whole collection to a chosen folder."
     };
 
