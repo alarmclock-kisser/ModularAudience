@@ -142,6 +142,73 @@ public sealed class MixEditorExtensionTests
         Assert.IsFalse((bool)Field(mix, "dragOverActive"));
     }
     [STATestMethod]
+    public void DroppedClipGetsShortEndFadeWithoutChangingSourceAudio()
+    {
+        float[] samples = Enumerable.Repeat(0.5f, 8000).ToArray();
+        using var audio = new AudioObj { Name = "Truncated note", Data = samples, SampleRate = 8000, Channels = 1, Bpm = 120 };
+        using var mix = new MixTrackView();
+        var canvas = (Control)Field(mix, "canvas");
+        _ = mix.Handle; _ = canvas.Handle;
+        var data = new DataObject(); data.SetData(typeof(AudioObj[]), new[] { audio });
+        Point target = canvas.PointToScreen(new Point(280, 50));
+        var drop = new DragEventArgs(data, 0, target.X, target.Y, DragDropEffects.Copy, DragDropEffects.Copy);
+        Call(mix, "DropAudio", canvas, drop);
+
+        MixClip clip = mix.Arrangement.Lanes.Single().Clips.Single();
+        Assert.AreEqual(0.005, clip.FadeOut, 1e-12);
+        CollectionAssert.AreEqual(samples, audio.Data);
+        using var rendered = MixRenderer.RenderAsync(mix.Arrangement).GetAwaiter().GetResult();
+        int beforeFade = (int)Math.Round((clip.Start + clip.SourceDuration - 0.01) * rendered.SampleRate);
+        Assert.IsGreaterThan(0.4f, Math.Abs(rendered.Data[beforeFade * rendered.Channels]));
+        Assert.IsLessThan(0.01f, Math.Abs(rendered.Data[^rendered.Channels]));
+    }
+    [TestMethod]
+    [DataRow(200d, 100d, true)]
+    [DataRow(200d, 50d, true)]
+    [DataRow(100d, 200d, true)]
+    [DataRow(100d, 400d, true)]
+    [DataRow(300d, 100d, true)]
+    [DataRow(200d, 99.96d, true)]
+    [DataRow(200d, 99.9d, false)]
+    [DataRow(200d, 75d, false)]
+    [DataRow(0d, 100d, false)]
+    public void BeatRelatedTemposAreRecognized(double mixBpm, double sourceBpm, bool expected) =>
+        Assert.AreEqual(expected, MixTrackView.AreTemposBeatCompatible(mixBpm, sourceBpm));
+    [STATestMethod]
+    [DataRow(200d, 100f, false)]
+    [DataRow(200d, 50f, false)]
+    [DataRow(100d, 200f, false)]
+    [DataRow(100d, 400f, false)]
+    [DataRow(200d, 75f, true)]
+    public void DragDropPromptsOnlyForNonMultipleTempos(double mixBpm, float sourceBpm, bool promptExpected)
+    {
+        using var audio = new AudioObj
+        {
+            Name = "Dropped tempo", Data = Enumerable.Repeat(0.1f, 1600).ToArray(),
+            SampleRate = 8000, Channels = 1, Bpm = sourceBpm
+        };
+        using var mix = new MixTrackView();
+        Populate(mix);
+        mix.Arrangement.Bpm = mixBpm;
+        int promptCount = 0;
+        mix.DialogPresenter = _ => { promptCount++; return Task.FromResult(DialogResult.Cancel); };
+        var canvas = (Control)Field(mix, "canvas");
+        _ = mix.Handle; _ = canvas.Handle;
+        var data = new DataObject(); data.SetData(typeof(AudioObj[]), new[] { audio });
+        Point target = canvas.PointToScreen(new Point(280, 50));
+        var drop = new DragEventArgs(data, 0, target.X, target.Y, DragDropEffects.Copy, DragDropEffects.Copy);
+        Call(mix, "DropAudio", canvas, drop);
+        Assert.AreEqual(promptExpected ? 1 : 0, promptCount);
+        Assert.AreEqual(promptExpected ? 2 : 3, mix.Arrangement.Lanes.Sum(lane => lane.Clips.Count));
+        if (!promptExpected)
+        {
+            MixClip added = mix.Arrangement.Lanes.SelectMany(lane => lane.Clips).Single(clip => clip.Name == audio.Name);
+            Assert.AreEqual(ClipTempoMode.Original, added.TempoMode);
+            Assert.AreEqual(sourceBpm, mix.Arrangement.Sources[added.SourceId].Bpm);
+            Assert.AreEqual(0.2, mix.Arrangement.ClipDuration(added), 0.0001);
+        }
+    }
+    [STATestMethod]
     public void RenderSelectionIncludesOnlySelectedClipsAndKeepsLaneGainAndTiming()
     {
         using var mix = new MixTrackView(); Populate(mix);

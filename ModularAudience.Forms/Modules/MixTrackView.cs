@@ -77,6 +77,7 @@ public sealed partial class MixTrackView : Form
     private double rulerOriginalLoopStart, rulerOriginalLoopEnd;
     private int resizeOriginalLaneHeight;
     private const int Header = 190, Ruler = 30;
+    private const double DropEndFadeSeconds = 0.005;
     private const string TimelineHint = "Mix timeline: drop audio to create clips; drag clips to move them and their edges to trim. Drag the ruler to set a loop. Shift enables temporary snapping; Ctrl+wheel zooms. Right-click a segment boundary to merge it; right-click elsewhere for context-specific actions.";
     private int LaneHeight = 100;
     private double preciseLaneHeight = 100;
@@ -335,7 +336,7 @@ public sealed partial class MixTrackView : Form
         bool firstTrack = !Arrangement.Lanes.Any(l => l.Clips.Count > 0);
         if (firstTrack) InitializeTempoFromFirstTrack(sourceBpm);
         ClipTempoMode? tempo = ClipTempoMode.Original;
-        if (!firstTrack && float.IsFinite(sourceBpm) && sourceBpm > 0 && Math.Abs(sourceBpm - Arrangement.Bpm) > 0.1)
+        if (!firstTrack && NeedsTempoMatchPrompt(sourceBpm))
             tempo = await ChooseTempoAsync(sourceBpm);
         if (tempo == null) { view.SetJoinedMix(view.JoinedMix); return; }
         PlaylistStretchSettings? stretchSettings = null;
@@ -392,6 +393,16 @@ public sealed partial class MixTrackView : Form
         try { bpm.Value = (decimal)sourceBpm; }
         finally { restoring = false; }
     }
+    internal static bool AreTemposBeatCompatible(double mixBpm, double sourceBpm)
+    {
+        if (!double.IsFinite(mixBpm) || !double.IsFinite(sourceBpm) || mixBpm <= 0 || sourceBpm <= 0) return false;
+        double lower = Math.Min(mixBpm, sourceBpm), higher = Math.Max(mixBpm, sourceBpm);
+        double multiple = Math.Round(higher / lower, MidpointRounding.AwayFromZero);
+        return double.IsFinite(multiple) && multiple >= 1 && Math.Abs(higher - lower * multiple) <= 0.1;
+    }
+    private bool NeedsTempoMatchPrompt(float sourceBpm) =>
+        float.IsFinite(sourceBpm) && sourceBpm > 0 && Math.Abs(sourceBpm - Arrangement.Bpm) > 0.1 &&
+        !AreTemposBeatCompatible(Arrangement.Bpm, sourceBpm);
     private async Task<PlaylistStretchSettings?> ConfigureImportStretchAsync(AudioObj audio, bool matchMixTempo = false)
     {
         using var snapshot = audio.Clone();
@@ -1557,7 +1568,7 @@ public sealed partial class MixTrackView : Form
             bool firstTrack = !Arrangement.Lanes.Any(l => l.Clips.Count > 0);
             float sourceBpm = audio.Bpm > 0 ? audio.Bpm : audio.ScannedBpm;
             ClipTempoMode? mode = ClipTempoMode.Original;
-            if (!firstTrack && float.IsFinite(sourceBpm) && sourceBpm > 0 && Math.Abs(sourceBpm - Arrangement.Bpm) > 0.1)
+            if (!firstTrack && NeedsTempoMatchPrompt(sourceBpm))
                 mode = await ChooseTempoAsync(sourceBpm);
             if (mode == null) continue;
             PlaylistStretchSettings? stretchSettings = mode == ClipTempoMode.TimeStretch ? await ConfigureImportStretchAsync(audio) : null;
@@ -1590,7 +1601,9 @@ public sealed partial class MixTrackView : Form
                 foreach (var existing in lane.Clips.Where(c => c.Start < start + clipDur && c.Start + Arrangement.ClipDuration(c) > start).ToList())
                     lane.Clips.Remove(existing);
             }
-            Arrangement.AddClip(lane, source, start); row++;
+            MixClip added = Arrangement.AddClip(lane, source, start);
+            added.FadeOut = Math.Min(DropEndFadeSeconds, Arrangement.ClipDuration(added));
+            row++;
         }
         Changed();
     }

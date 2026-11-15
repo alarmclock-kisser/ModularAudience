@@ -18,8 +18,10 @@
 - Click a track name in the left header to edit it inline. New tracks use the next unused
   `Track #N` name; names are saved with the `.mamix` project. Renaming a mix updates its
   title and project metadata; saving under a different filename adopts that filename.
-- When source and grid BPM differ, choose **Time-stretch**, **Varispeed**, or **Keep original tempo**.
-Unknown source BPM keeps the original tempo; set it later through the clip's context menu.
+- When source and grid BPM differ, integer-multiple/divisor tempos are considered beat-compatible
+  (within 0.1 BPM); Join and drag-and-drop keep the original timing without opening a matching
+  dialog. For other differences, choose **Time-stretch**, **Varispeed**, or **Keep original tempo**.
+  Unknown source BPM keeps the original tempo; set it later through the clip's context menu.
 - Mix context menu → **Remove Track** → select a track: the original TrackView returns.
   Removing an imported/project track opens a standalone TrackView for its first source.
 - Undo/Redo also reconciles joined-window visibility. On **closing the mix**, a joined
@@ -31,6 +33,8 @@ Unknown source BPM keeps the original tempo; set it later through the clip's con
 
 - Every lane contains independently bounded audio clips. Original sample arrays are never edited.
 - Drop one/multiple AudioCollectionView items into lanes or the empty area to add clips/tracks.
+  Dropped clips receive a non-destructive fade-out of up to 5 ms to soften clicks from
+  samples cut off at their segment end; very short clips use a proportionally shorter fade.
 - **+ Track** (or context menu **Add empty track**) creates an empty lane. Double-click empty
   lane space to select an existing source and insert it at that time; Shift / Snap applies.
 - Drag a clip's **top title handle** to move it; drop on another lane to move between tracks.
