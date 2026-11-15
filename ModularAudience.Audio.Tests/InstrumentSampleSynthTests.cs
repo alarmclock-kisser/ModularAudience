@@ -154,7 +154,12 @@ public sealed class InstrumentSampleSynthTests
         Assert.AreEqual(before.NoteBeats, after.NoteBeats, 1e-12);
         Assert.AreEqual(before.DurationMultiplier, after.DurationMultiplier, 1e-12);
         Assert.AreEqual(before.MidiNote, after.MidiNote);
-        Assert.AreNotEqual(before.GainPercent, after.GainPercent);
+        Assert.IsTrue(after.GainPercent is >= 30 and <= 100,
+            "Randomized gain must stay within 60% of the initial 75% baseline and its control limits.");
+        var baselines = (Dictionary<string, decimal>)typeof(InstrumentSampleSynthDialog)
+            .GetField("randomizationBaselines", flags)!.GetValue(dialog)!;
+        Assert.AreEqual(75m, baselines["GainPercent"],
+            "A random result must not replace the neutral value used by later randomizations.");
     }
 
     [STATestMethod]
@@ -228,6 +233,49 @@ public sealed class InstrumentSampleSynthTests
         Assert.AreEqual(before.Bpm, after.Bpm, 1e-12);
         Assert.AreEqual(before.NoteBeats, after.NoteBeats, 1e-12);
         Assert.AreEqual(before.DurationMultiplier, after.DurationMultiplier, 1e-12);
+    }
+
+    [STATestMethod]
+    public void RepeatedRandomizationUsesStableUserBaselinesAndLimitsAttackAndTail()
+    {
+        using var dialog = new InstrumentSampleSynthDialog(SynthFamily.Keyboard, store);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var numbers = (Dictionary<string, NumericUpDown>)typeof(InstrumentSampleSynthDialog)
+            .GetField("numbers", flags)!.GetValue(dialog)!;
+        numbers["AttackMs"].Value = 30m;
+        numbers["ReleaseSeconds"].Value = 0.5m;
+        numbers["PitchSemitones"].Value = 0m;
+        numbers["GainPercent"].Value = 75m;
+
+        var randomize = typeof(InstrumentSampleSynthDialog).GetMethod("RandomizeInstrument", flags)!;
+        var capture = typeof(InstrumentSampleSynthDialog).GetMethod("CaptureSettings", flags)!;
+        for (int attempt = 0; attempt < 12; attempt++)
+        {
+            randomize.Invoke(dialog, [false]);
+            var settings = (InstrumentSynthSettings)capture.Invoke(dialog, null)!;
+            Assert.IsTrue(settings.AttackMs is >= 12 and <= 48);
+            Assert.IsTrue(settings.ReleaseSeconds is >= 0.2 and <= 0.8);
+            Assert.AreEqual(0, settings.PitchSemitones,
+                "Zero-centered pitch must remain zero under percentage randomization.");
+            Assert.IsTrue(settings.GainPercent is >= 30 and <= 100);
+        }
+
+        var baselines = (Dictionary<string, decimal>)typeof(InstrumentSampleSynthDialog)
+            .GetField("randomizationBaselines", flags)!.GetValue(dialog)!;
+        Assert.AreEqual(30m, baselines["AttackMs"]);
+        Assert.AreEqual(0.5m, baselines["ReleaseSeconds"]);
+        Assert.AreEqual(75m, baselines["GainPercent"]);
+        Assert.AreEqual(0m, baselines["PitchSemitones"]);
+
+        numbers["ReleaseSeconds"].Value = 8m;
+        randomize.Invoke(dialog, [false]);
+        var randomizedTail = (InstrumentSynthSettings)capture.Invoke(dialog, null)!;
+        Assert.IsTrue(randomizedTail.ReleaseSeconds is >= 3.2 and <= 10,
+            "Release must stay within 60% of the manual baseline and the control's 10-second maximum.");
+        Assert.AreEqual(8m, baselines["ReleaseSeconds"],
+            "A randomized release must not replace the manually selected baseline.");
+
+        WaitForRender(dialog, flags);
     }
 
     private static void WaitForRender(InstrumentSampleSynthDialog dialog, BindingFlags flags)

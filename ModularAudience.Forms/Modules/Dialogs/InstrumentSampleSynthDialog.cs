@@ -29,6 +29,7 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         articulation = Combo(), format = Combo();
     private readonly DomainUpDown note = new() { ReadOnly = true, Wrap = true, Width = 90 };
     private readonly Dictionary<string, NumericUpDown> numbers = [];
+    private readonly Dictionary<string, decimal> randomizationBaselines = [];
     private readonly Label status = new() { Dock = DockStyle.Fill, AutoEllipsis = true, Text = "Preparing sample…" };
     private readonly WavePicture picture = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(22, 24, 30) };
     private readonly CheckBox loop = new() { Text = "Loop", AutoSize = true };
@@ -127,7 +128,15 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             var number = new NumericUpDown { Minimum = min, Maximum = max, Increment = increment, DecimalPlaces = increment < 1 ? 2 : 0, Width = 130 };
             numbers.Add(key, number); panel.Controls.Add(caption); panel.Controls.Add(number); parameters.Controls.Add(panel);
             tips.SetToolTip(number, tooltip); tips.SetToolTip(caption, tooltip);
-            number.ValueChanged += (_, _) => QueueRender();
+            number.ValueChanged += (_, _) =>
+            {
+                if (!syncing)
+                {
+                    randomizationBaselines[key] = number.Value;
+                }
+
+                QueueRender();
+            };
         }
         Number(nameof(settings.Bpm), "BPM", 20, 400, 0.5m, "Tempo used to calculate the musical gate length.");
         Number(nameof(settings.PitchSemitones),
@@ -215,7 +224,12 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         Shown += (_, _) => FitInitialParameterHeight(parameters);
         voice.SelectedIndexChanged += (_, _) =>
         {
-            if (syncing) return; settings.VoiceIndex = voice.SelectedIndex; settings.ApplyVoiceDefaults(); ApplyNumbers(); QueueRender();
+            if (syncing) return;
+            settings.VoiceIndex = voice.SelectedIndex;
+            settings.ApplyVoiceDefaults();
+            ApplyNumbers();
+            ResetRandomizationBaselines();
+            QueueRender();
         };
         foreach (var combo in new[] { kit, drum, duration, articulation, format }) combo.SelectedIndexChanged += (_, _) => QueueRender();
         note.SelectedItemChanged += (_, _) => QueueRender();
@@ -239,7 +253,10 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         Safe(RefreshPresets);
         this.store.PrehearDelayChanged += ReceivePrehearDelay;
         this.store.PresetsChanged += ReceivePresetsChanged;
-        ApplyNumbers(); QueueRender(); initialized = true;
+        ApplyNumbers();
+        ResetRandomizationBaselines();
+        QueueRender();
+        initialized = true;
         lock (ActiveDialogsGate) ActiveDialogs.Add(this);
     }
     private void FitInitialParameterHeight(FlowLayoutPanel parameters)
@@ -329,6 +346,7 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             ApplyNumbers();
         }
         finally { syncing = false; }
+        ResetRandomizationBaselines();
         QueueRender();
     }
     private static ComboBox Combo() => new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 170 };
@@ -341,6 +359,15 @@ public sealed partial class InstrumentSampleSynthDialog : Form
 
     private void button_random_Click(object? sender, EventArgs e) =>
         this.RandomizeInstrument((ModifierKeys & Keys.Control) == Keys.Control);
+
+    private void ResetRandomizationBaselines()
+    {
+        this.randomizationBaselines.Clear();
+        foreach (var pair in this.numbers)
+        {
+            this.randomizationBaselines[pair.Key] = pair.Value.Value;
+        }
+    }
 
     private void RandomizeInstrument(bool randomizeKeyNote)
     {
@@ -369,16 +396,15 @@ public sealed partial class InstrumentSampleSynthDialog : Form
                 this.settings.VoiceIndex = this.voice.SelectedIndex;
             }
 
-            this.settings.ApplyVoiceDefaults();
-            this.ApplyNumbers();
-            foreach (NumericUpDown number in this.numbers.Values)
+            foreach (var pair in this.numbers)
             {
-                if (number == this.numbers[nameof(this.settings.Bpm)])
+                if (pair.Key == nameof(this.settings.Bpm))
                 {
                     continue;
                 }
 
-                number.Value = RandomValueDifferentFrom(number);
+                decimal baseline = this.randomizationBaselines[pair.Key];
+                pair.Value.Value = RandomValueAroundBaseline(pair.Value, baseline);
             }
 
             if (randomizeKeyNote && this.family != SynthFamily.DrumSet)
@@ -412,24 +438,32 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         return index >= currentIndex ? index + 1 : index;
     }
 
-    private static decimal RandomValueDifferentFrom(NumericUpDown number)
+    private static decimal RandomValueAroundBaseline(NumericUpDown number, decimal baseline)
     {
         decimal increment = number.Increment;
-        decimal valueCount = decimal.Floor((number.Maximum - number.Minimum) / increment) + 1;
-        if (valueCount <= 1)
+        decimal minimum = number.Minimum;
+        decimal maximum = number.Maximum;
+        decimal deviation = Math.Abs(baseline) * 0.6m;
+        decimal lowerBound = Math.Max(minimum, baseline - deviation);
+        decimal upperBound = Math.Min(maximum, baseline + deviation);
+        if (lowerBound > upperBound)
         {
-            return number.Minimum;
+            return Math.Clamp(baseline, minimum, maximum);
         }
 
-        long count = (long)valueCount;
-        long currentIndex = (long)((number.Value - number.Minimum) / increment);
-        long index = Random.Shared.NextInt64(count - 1);
-        if (index >= currentIndex)
+        decimal firstValue = number.Minimum
+            + decimal.Ceiling((lowerBound - number.Minimum) / increment) * increment;
+        decimal lastValue = number.Minimum
+            + decimal.Floor((upperBound - number.Minimum) / increment) * increment;
+        firstValue = Math.Max(firstValue, minimum);
+        lastValue = Math.Min(lastValue, maximum);
+        if (firstValue > lastValue)
         {
-            index++;
+            return Math.Clamp(baseline, minimum, maximum);
         }
 
-        return number.Minimum + index * increment;
+        long valueCount = (long)decimal.Floor((lastValue - firstValue) / increment) + 1;
+        return firstValue + Random.Shared.NextInt64(valueCount) * increment;
     }
 
     private InstrumentSynthSettings CaptureSettings()

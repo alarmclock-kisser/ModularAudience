@@ -65,7 +65,7 @@ public sealed partial class InstrumentSampleSynthDialog
         this.tips.SetToolTip(this.button_createOctave,
             "Click to render an octave of individual notes. Right-click to choose its starting transpose and semitone step.");
         this.tips.SetToolTip(this.button_random,
-            "Randomize the instrument type and sound parameters. Ctrl-click also randomizes Key Note. Key Duration and BPM stay unchanged.");
+            "Randomize the instrument type and sound parameters within ±60% of their initial or last manually set values. Ctrl-click also randomizes Key Note. Key Duration and BPM stay unchanged.");
     }
 
 }
