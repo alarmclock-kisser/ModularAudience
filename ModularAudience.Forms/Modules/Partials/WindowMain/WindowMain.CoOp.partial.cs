@@ -96,6 +96,7 @@ namespace ModularAudience.Forms
             menu.Items.AddRange(
             [
                 ModularAudience.Forms.Modules.Dialogs.MixProjectMenu.CreateItem(),
+                ModularAudience.Forms.Modules.Dialogs.MixProjectMenu.CreateNewItem(),
                 new ToolStripSeparator(),
                 this._coOpHostItem,
                 this._coOpConnectionMenu.ConnectToAddress,

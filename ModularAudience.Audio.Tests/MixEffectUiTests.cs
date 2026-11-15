@@ -53,6 +53,111 @@ public sealed class MixEffectUiTests
     }
 
     [STATestMethod]
+    public void RightClickingAdjacentBoundary_MergesImmediatelyWithUndoRedoAndShowsActionCursor()
+    {
+        using var fixture = new Fixture(); var mix = fixture.Mix;
+        MixLane lane = mix.Arrangement.Lanes[0], otherLane = mix.Arrangement.Lanes[1];
+        lane.Clips[0].SourceDuration = 0.05;
+        fixture.Second.Start = 0.05; fixture.Second.SourceOffset = 0.05; fixture.Second.SourceDuration = 0.05;
+        otherLane.Clips.Remove(fixture.Second); lane.Clips.Add(fixture.Second);
+        Set(mix, "pixelsPerSecond", 600d); Call(mix, "Changed");
+        var canvas = (Control)Get(mix, "canvas")!;
+        int history = History(mix);
+
+        Call(mix, "MouseMoveTimeline", canvas, new MouseEventArgs(MouseButtons.None, 0, 220, 40, 0));
+        Assert.AreSame(Cursors.Hand, canvas.Cursor);
+        Assert.IsTrue(((ToolTip)Get(mix, "interactionHints")!).GetToolTip(canvas)!.Contains("remove", StringComparison.OrdinalIgnoreCase));
+        Call(mix, "MouseDownTimeline", canvas, new MouseEventArgs(MouseButtons.Right, 1, 220, 40, 0));
+
+        Assert.AreEqual(1, lane.Clips.Count); Assert.AreEqual(history + 1, History(mix));
+        Assert.IsNull(Get(mix, "timelineContextMenu"));
+        Call(mix, "Undo"); Assert.AreEqual(2, mix.Arrangement.Lanes[0].Clips.Count);
+        Call(mix, "Redo"); Assert.AreEqual(1, mix.Arrangement.Lanes[0].Clips.Count);
+    }
+
+    [STATestMethod]
+    public void MergingIncompatibleAdjacentSegments_RendersTheirAudioIntoOneClip()
+    {
+        using var fixture = new Fixture(); var mix = fixture.Mix;
+        MixLane lane = mix.Arrangement.Lanes[0], otherLane = mix.Arrangement.Lanes[1];
+        Guid originalSourceId = fixture.First.SourceId;
+        MixSource rightSource = new()
+        {
+            Name = "Other source", Data = Enumerable.Range(0, 4410).SelectMany(_ => new[] { 0.8f, -0.4f }).ToArray(),
+            Channels = 2, SampleRate = 44100, Bpm = 120
+        };
+        mix.Arrangement.Sources.Add(rightSource.Id, rightSource);
+        fixture.First.SourceDuration = 0.05; fixture.First.Gain = 0.5;
+        fixture.Second.Start = 0.05; fixture.Second.SourceId = rightSource.Id;
+        fixture.Second.SourceOffset = 0; fixture.Second.SourceDuration = 0.05; fixture.Second.Gain = 0.25;
+        otherLane.Clips.Remove(fixture.Second); lane.Clips.Add(fixture.Second);
+        Set(mix, "pixelsPerSecond", 600d); Call(mix, "Changed");
+        object boundary = Call(mix, "FindSegmentBoundary", new Point(220, 40))!;
+
+        Drain((Task)Call(mix, "MergeSegmentBoundaryAsync", boundary)!);
+
+        MixLane mergedLane = mix.Arrangement.Lanes.Single(value => value.Id == lane.Id);
+        MixClip merged = mergedLane.Clips.Single();
+        MixSource rendered = mix.Arrangement.Sources[merged.SourceId];
+        Assert.AreNotEqual(originalSourceId, rendered.Id);
+        Assert.AreEqual(2, rendered.Channels); Assert.AreEqual(4410 * 2, rendered.Data.Length);
+        Assert.AreEqual(0.1f, rendered.Data[0], 1e-6f); Assert.AreEqual(-0.05f, rendered.Data[1], 1e-6f);
+        Assert.AreEqual(0.2f, rendered.Data[4410], 1e-6f); Assert.AreEqual(-0.1f, rendered.Data[4411], 1e-6f);
+        mix.Arrangement.Validate();
+    }
+
+    [STATestMethod]
+    public void DockedClipDragStopsAtTheAdjacentSegmentBoundary()
+    {
+        using var fixture = new Fixture(); var mix = fixture.Mix; var lane = mix.Arrangement.Lanes[0];
+        Set(mix, "pixelsPerSecond", 600d);
+        MixClip obstacle = mix.Arrangement.AddClip(lane, mix.Arrangement.Sources[fixture.First.SourceId], 0.15);
+        Call(mix, "Changed"); var canvas = (Control)Get(mix, "canvas")!;
+
+        Call(mix, "MouseDownTimeline", canvas, new MouseEventArgs(MouseButtons.Left, 1, 220, 40, 0));
+        Call(mix, "MouseMoveTimeline", canvas, new MouseEventArgs(MouseButtons.Left, 0, 310, 40, 0));
+        Call(mix, "MouseUpTimeline", canvas, new MouseEventArgs(MouseButtons.Left, 1, 310, 40, 0));
+
+        Assert.AreEqual(0.05, fixture.First.Start, 1e-7);
+        Assert.AreEqual(0.15, obstacle.Start, 1e-7);
+        Assert.IsTrue(fixture.First.Start + mix.Arrangement.ClipDuration(fixture.First) <= obstacle.Start);
+    }
+
+    [STATestMethod]
+    public void MixOverlap_DrawsOverlappingClipPortionsTransparently()
+    {
+        using var fixture = new Fixture(); var mix = fixture.Mix; var lane = mix.Arrangement.Lanes[0];
+        Set(mix, "pixelsPerSecond", 600d);
+        mix.Arrangement.OverlapMode = MixOverlapMode.MixOverlap;
+        mix.Arrangement.Visual.ShowWaveforms = false; mix.Arrangement.Visual.ColorTracks = false;
+        mix.Arrangement.Visual.Clip = "#FF0000"; mix.Arrangement.Visual.SelectedClip = "#0000FF";
+        MixClip overlapping = mix.Arrangement.AddClip(lane, mix.Arrangement.Sources[fixture.First.SourceId], 0.05);
+        Set(mix, "selectedClip", overlapping.Id); Call(mix, "Changed"); Application.DoEvents();
+        var canvas = (Control)Get(mix, "canvas")!;
+        using var bitmap = new Bitmap(canvas.Width, canvas.Height);
+        canvas.DrawToBitmap(bitmap, new Rectangle(Point.Empty, canvas.Size));
+        Color overlap = bitmap.GetPixel(235, 90), solid = bitmap.GetPixel(265, 90);
+
+        Assert.AreEqual(Color.Blue.ToArgb(), solid.ToArgb());
+        Assert.AreNotEqual(Color.Blue.ToArgb(), overlap.ToArgb());
+        Assert.AreNotEqual(Color.Red.ToArgb(), overlap.ToArgb());
+    }
+
+    [STATestMethod]
+    public void AudioContextMenu_ListsMostRecentEffectAfterASeparatorAtTheRootLevel()
+    {
+        using var fixture = new Fixture(); Set(fixture.Mix, "lastSelectedMixEffect", AudioEffectKind.Gain);
+        using ContextMenuStrip menu = fixture.Mix.CreateTimelineContextMenu(new Point(192, 50));
+        ToolStripItem[] items = menu.Items.Cast<ToolStripItem>().ToArray();
+        int applyIndex = Array.FindIndex(items, item => item.Name == "menuItem_applyEffects");
+
+        Assert.IsInstanceOfType<ToolStripSeparator>(items[applyIndex + 1]);
+        Assert.AreEqual("menuItem_lastMixEffect", items[applyIndex + 2].Name);
+        Assert.AreEqual("Gain ...", items[applyIndex + 2].Text);
+        Assert.AreEqual(AudioEffectKind.Gain, items[applyIndex + 2].Tag);
+    }
+
+    [STATestMethod]
     public void RangeSelection_IncludesEmptySelectedLanesAndExactSilenceBoundaries()
     {
         using var fixture = new Fixture(); fixture.Mix.Arrangement.Lanes[1].Clips.Clear();

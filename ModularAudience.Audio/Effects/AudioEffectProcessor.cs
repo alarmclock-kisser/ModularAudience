@@ -7,7 +7,7 @@ namespace ModularAudience.Audio.Effects;
 public static partial class AudioEffectProcessor
 {
     private const long MaximumOutputPcmBytes = 4L * 1024 * 1024 * 1024;
-    private const int MaximumOutputSamples = (int)(MaximumOutputPcmBytes / sizeof(float));
+    internal const int MaximumOutputSamples = (int)(MaximumOutputPcmBytes / sizeof(float));
 
     public static Task<AudioEffectResult> ProcessAsync(ReadOnlyMemory<float> input, int sampleRate, int channels,
         AudioEffectSettings settings, IProgress<double>? progress = null, CancellationToken cancellationToken = default,
@@ -49,7 +49,11 @@ public static partial class AudioEffectProcessor
                     using var shifted = await PitchShifter.CreatePitchShiftAsync(audio, (float)snapshot["Semitones"],
                         snapshot.Choice("Method") == 0, progress, options.MaximumThreads, cancellationToken).ConfigureAwait(false);
                     result = new(shifted.Data, channels, snapshot.Choice("Method") == 1 ? ratio : null);
-                    if (snapshot.Choice("Method") == 1) context.SourceAtOutput = frame => frame * ratio;
+                    if (snapshot.Choice("Method") == 1)
+                    {
+                        context.SourceAtOutput = frame => frame * ratio;
+                        context.OutputAtSource = frame => frame / ratio;
+                    }
                 }
             }
             else if (snapshot.Effect == AudioEffectKind.TimeStretch)
@@ -73,6 +77,15 @@ public static partial class AudioEffectProcessor
                     AudioEffectKind.NoiseReduction => ReduceNoise(source, snapshot, context),
                     _ => Utility(source, snapshot, context)
                 };
+            if (result.SourceFrameToOutput is null)
+            {
+                Func<double, double>? outputAtSource = context.OutputAtSource;
+                if (outputAtSource is null && result.TempoMultiplier is double multiplier && double.IsFinite(multiplier) && multiplier > 0)
+                    outputAtSource = frame => frame / multiplier;
+                if (outputAtSource is null && snapshot.Effect == AudioEffectKind.Reverse)
+                    outputAtSource = frame => source.Length / (double)channels - frame;
+                if (outputAtSource is not null) result = result with { SourceFrameToOutput = outputAtSource };
+            }
             if (snapshot.Effect == AudioEffectKind.PitchShift)
                 MatchPitchShiftPeak(source, result.Samples, cancellationToken);
             bool outputGain = snapshot.Parameters.ContainsKey("OutputGainDb"), amountCurve = context.Automation.Has(EffectCurveTargets.Amount);
@@ -133,6 +146,7 @@ public static partial class AudioEffectProcessor
     {
         internal required EffectAutomationEvaluator Automation { get; init; }
         internal Func<double, double> SourceAtOutput { get; set; } = static frame => frame;
+        internal Func<double, double>? OutputAtSource { get; set; }
         internal bool UsedWetMix { get; set; }
         internal void Check(int frame, int total)
         {
@@ -264,6 +278,7 @@ public static partial class AudioEffectProcessor
         int inputFrames = source.Length / context.Channels;
         int targetFrames = EnsureLength(inputFrames * settings["Factor"], context.Channels);
         context.SourceAtOutput = frame => frame / settings["Factor"];
+        context.OutputAtSource = frame => frame * settings["Factor"];
         if (targetFrames == inputFrames && !settings.Flag("TrimSilence")) return new(source, context.Channels);
         int fftSize = 256 << settings.Choice("FftSize");
         float[] output;

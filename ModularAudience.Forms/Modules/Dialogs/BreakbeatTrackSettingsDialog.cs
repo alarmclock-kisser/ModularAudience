@@ -51,12 +51,26 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             this.CloneTrackRequested = true;
             this.DialogResult = DialogResult.Ignore;
+            this.Close();
         }
 
         private void button_removeTrack_Click(object? sender, EventArgs e)
         {
             this.RemoveTrackRequested = true;
             this.DialogResult = DialogResult.Ignore;
+            this.Close();
+        }
+
+        private void button_apply_Click(object? sender, EventArgs e)
+        {
+            this.DialogResult = DialogResult.OK;
+            this.Close();
+        }
+
+        private void button_cancel_Click(object? sender, EventArgs e)
+        {
+            this.DialogResult = DialogResult.Cancel;
+            this.Close();
         }
     }
 }

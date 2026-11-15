@@ -276,7 +276,7 @@ save/load and later tempo regeneration. Rendering/preview still write no audio f
 
 No implicit clipping/normalization is applied to arbitrary effects: use the limiter
 when a deliberate drive/feedback/gain combination needs a ceiling. Rendered arrays
-are bounded to 512 MiB per effect; overly large results fail rather than truncate
+are bounded to 4 GiB per effect; overly large results fail rather than truncate
 the track. Processing and preview never export temporary audio files.
 
 Each new parameterized effect has at least three distinct built-in profiles plus

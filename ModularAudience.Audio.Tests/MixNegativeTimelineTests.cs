@@ -42,4 +42,19 @@ public sealed class MixNegativeTimelineTests
         MixEffectCommit edit = session.Apply(mix, [new(result, 1)], "Gain");
         Assert.IsTrue(edit.Changed); Assert.AreEqual(-0.25, mix.Lanes[0].Clips.Single(value => edit.SelectedClipIds.Contains(value.Id)).Start); mix.Validate();
     }
+
+    [TestMethod]
+    public async Task ShortenedNegativeSelection_ClampsMappedLoopBoundsBeforeValidation()
+    {
+        using var mix = new MixArrangement { LoopStart = 0, LoopEnd = 8 };
+        var source = new MixSource { Data = Enumerable.Repeat(0.2f, 44100).ToArray(), Channels = 1, SampleRate = 44100 };
+        mix.Sources.Add(source.Id, source); var lane = new MixLane(); mix.Lanes.Add(lane); var clip = mix.AddClip(lane, source, -0.5);
+        using var session = await MixEffectEditSession.CaptureAsync(mix, [new(lane.Id, -0.25, 0.25, new HashSet<Guid> { clip.Id })]);
+        float[] shortened = Enumerable.Repeat(0.1f, 8820).ToArray();
+
+        session.Apply(mix, [new(shortened, 1)], "Shortened");
+
+        Assert.AreEqual(0, mix.LoopStart); Assert.IsTrue(mix.LoopEnd >= mix.LoopStart);
+        mix.Validate();
+    }
 }

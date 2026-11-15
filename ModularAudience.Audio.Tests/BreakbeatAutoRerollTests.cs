@@ -64,10 +64,16 @@ public sealed class BreakbeatAutoRerollTests
         Assert.IsTrue(roll.Right <= remix.Left);
         Assert.IsFalse(recordBeat.Bounds.IntersectsWith(settings.Bounds));
         Button[] buttons = ((Panel)Field(editor, "panel_controls")).Controls.OfType<Button>().ToArray();
+        foreach (Button button in buttons)
+            Assert.AreEqual(settings.Top, button.Top, $"{button.Name} must align with the Save row.");
         for (int i = 0; i < buttons.Length; i++)
             for (int j = i + 1; j < buttons.Length; j++)
                 Assert.IsFalse(buttons[i].Bounds.IntersectsWith(buttons[j].Bounds),
                     $"{buttons[i].Name} overlaps {buttons[j].Name}.");
+        var saveNew = (CheckBox)Field(editor, "checkBox_saveNew");
+        Assert.IsTrue(saveNew.Bottom < settings.Top);
+        Assert.IsFalse(buttons.Any(button => saveNew.Bounds.IntersectsWith(button.Bounds)),
+            "The Save new checkbox must not overlap any footer button.");
         Invoke(editor, "button_roll_Click", roll, EventArgs.Empty);
         Assert.AreEqual(0L, first.GetType().GetField("CompletedLoops")!.GetValue(first));
         Assert.AreEqual(3L, second.GetType().GetField("CompletedLoops")!.GetValue(second));
@@ -175,6 +181,36 @@ public sealed class BreakbeatAutoRerollTests
         {
             ensemble.Close(); ensemble.Dispose();
             foreach (var solo in solos) { solo.Close(); solo.Dispose(); }
+        }
+    }
+
+    [STATestMethod]
+    public void SaveNewCheckboxSavesAnEnsembleWhenAnyTrackIsRerolled()
+    {
+        using var sample = new AudioObj
+        {
+            Data = Enumerable.Repeat(0.1f, 4800).ToArray(),
+            SampleRate = 48000,
+            Channels = 1
+        };
+        using var editor = Editor(sample);
+        Configure(editor, 0, 1, ensemble: false, solo: false);
+        var saveNew = (CheckBox)Field(editor, "checkBox_saveNew");
+        Assert.AreEqual("Save new", saveNew.Text);
+        saveNew.Checked = true;
+
+        Invoke(editor, "ApplyTrackAutoRerolls", new[] { 0 }, new[] { 0 });
+        Drain((Task)Field(editor, "autoSaveWork"));
+
+        var collection = (AudioCollectionView)Field(editor, "autoEnsembleCollection");
+        try
+        {
+            Assert.HasCount(1, ((AudioCollection)Field(collection, "AudioC")).Audios);
+        }
+        finally
+        {
+            collection.Close();
+            collection.Dispose();
         }
     }
 

@@ -122,11 +122,28 @@ public static class MixTempoOrigins
             }
         }
         if (recipe.Effect is not null)
-            return await AudioEffectProcessor.ProcessAsync(input.Samples, MixEffectEditSession.SampleRate, input.Channels, recipe.Effect,
+        {
+            AudioEffectResult result = await AudioEffectProcessor.ProcessAsync(input.Samples, MixEffectEditSession.SampleRate, input.Channels, recipe.Effect,
                 cancellationToken: token, execution: execution).ConfigureAwait(false);
+            return SliceRecipeOutput(recipe, result);
+        }
         AutoTuneResult tuned = await AutoTuneProcessor.ProcessAsync(input.Samples, MixEffectEditSession.SampleRate, input.Channels,
             recipe.AutoTune! with { TempoBpm = Math.Clamp(targetBpm, 20, 400) }, cancellationToken: token, execution: execution).ConfigureAwait(false);
-        return new(tuned.Samples, input.Channels);
+        return SliceRecipeOutput(recipe, new(tuned.Samples, input.Channels));
+    }
+
+    private static AudioEffectResult SliceRecipeOutput(MixTempoRecipe recipe, AudioEffectResult result)
+    {
+        if (recipe.OutputStartFraction == 0 && recipe.OutputEndFraction == 1) return result;
+        int frames = result.Samples.Length / result.Channels;
+        int start = Math.Clamp((int)Math.Round(frames * recipe.OutputStartFraction), 0, frames);
+        int end = Math.Clamp((int)Math.Round(frames * recipe.OutputEndFraction), start, frames);
+        if (end <= start) throw new InvalidDataException("The tempo recipe produced an empty effect segment.");
+        return result with
+        {
+            Samples = result.Samples.AsSpan(checked(start * result.Channels), checked((end - start) * result.Channels)).ToArray(),
+            SourceFrameToOutput = result.SourceFrameToOutput is { } map ? frame => map(frame) - start : null
+        };
     }
     private static double ClipDuration(MixArrangement mix, double bpm, MixClip clip)
     {

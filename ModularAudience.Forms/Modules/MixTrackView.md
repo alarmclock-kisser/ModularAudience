@@ -10,6 +10,8 @@
 - Ordinary TrackView's **Sync Playback** is now labeled **Sync** (its existing behavior remains).
 - **Join** copies the audio into a non-destructive arrangement and hides the original TrackView.
 - Right-click **Join** to create a new mix, choose an existing mix, or open a project.
+- Right-click WindowMain's **Import** button for **Open Project (.mamix)** or **New Project**;
+  New Project opens an empty Mix Track View without showing a file picker.
 - The first audio track sets an empty mix's BPM from its known source BPM, without a tempo prompt.
   This applies to Join and audio drops. Unknown BPM retains the current grid tempo.
 - Double-click the title bar to rename the mix/project; use the maximize button to maximize.
@@ -62,7 +64,13 @@ Unknown source BPM keeps the original tempo; set it later through the clip's con
 - Click the ruler to seek. Drag across it to set the loop range; enable **Loop** to repeat.
 - Right-click clips for exact start, source offset/duration, gain, fades, and tempo mode.
 - Right-click a track for gain, multiple-solo / mute, automatic overlap crossfades, reorder, and removal.
-- Overlapping clips mix together. Output peaks above 0.98 are uniformly attenuated for headroom.
+- **Dock (no overlap)** stops clip drags at the nearest segment boundary; dropped audio is
+  placed after occupied segments without snapping back into an overlap. **Mix overlap**
+  shows both overlapping clip portions through translucent fills. Output peaks above 0.98
+  are uniformly attenuated for headroom.
+- Right-click a shared boundary between adjacent clips to remove the boundary and merge
+  them. The merge is one Undo/Redo edit; compatible source slices merge without rendering,
+  while other clips are rendered into one audio segment.
 - Source channels stay intact inside the project; display shows up to eight channel bands.
   The shared preview/export is stereo: mono duplicates, stereo stays stereo, larger channel layouts
   fold to left/right by parity. It is not a surround-device routing editor.
@@ -102,6 +110,10 @@ factory/user presets, Save/Load/Rename/Delete controls, RAM prehear/bypass/loop,
 worker budget and cancellation are shared with TrackView. Presets therefore work
 in both editors without duplicate stores. Convert to mono and Reverse are direct
 actions without dialogs.
+The most recently selected effect is also available as a direct command after a
+separator at the root of the audio context menu. Applying an effect to several
+segments preserves their boundaries; silent gaps remain silent, effect tails remain
+audible, and the captured curve scope still spans the selected range.
 
 Time & Speed contains **Time Stretch ...** followed by **Varispeed Shift ...**.
 Time Stretch's Apply Effect window is the new `TimeStretchEffectDialog`, separate

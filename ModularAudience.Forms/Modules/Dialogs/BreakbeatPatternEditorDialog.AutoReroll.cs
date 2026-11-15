@@ -349,7 +349,8 @@ public partial class BreakbeatPatternEditorDialog
     private void QueueAutoRerollSaves(IReadOnlyList<int> rows, int[] sections)
     {
         int[] solos = rows.Where(r => this.autoRerolls[this.samples[r]].Options.SaveSolo).ToArray();
-        bool ensemble = rows.Any(r => this.autoRerolls[this.samples[r]].Options.SaveEnsemble);
+        bool ensemble = this.checkBox_saveNew.Checked
+            || rows.Any(r => this.autoRerolls[this.samples[r]].Options.SaveEnsemble);
         if (!ensemble && solos.Length == 0) return;
         // Capture the final shared arrangement once AFTER all due tracks rerolled.
         // Only one ensemble is queued, regardless of how many tracks requested it.

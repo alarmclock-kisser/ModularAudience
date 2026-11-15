@@ -20,7 +20,7 @@ public sealed record MixEffectCommit(bool Changed, double NewDuration, IReadOnly
 public sealed class MixEffectEditSession : IDisposable
 {
     public const int SampleRate = 44100;
-    private const int MaximumSamples = 134_217_728;
+    private const int MaximumSamples = AudioEffectProcessor.MaximumOutputSamples;
     private sealed record SourceStamp(MixSource Source, float[] Data, int Rate, int Channels, float Bpm, byte[] Hash);
     private sealed record RenderedClip(MixClip Original, int Channels, float[] Samples);
     private readonly MixArrangement snapshot;
@@ -94,7 +94,7 @@ public sealed class MixEffectEditSession : IDisposable
             int channels = lane.Clips.Where(clip => region.ClipIds.Contains(clip.Id))
                 .Select(clip => this.snapshot.Sources[clip.SourceId].Channels).DefaultIfEmpty(2).Max();
             long samples = (long)frameCount * channels;
-            if (samples > MaximumSamples || allocated + samples > MaximumSamples) throw new InvalidOperationException("The selected lane buffers exceed 512 MiB. Select a smaller region.");
+            if (samples > MaximumSamples || allocated + samples > MaximumSamples) throw new InvalidOperationException("The selected lane buffers exceed 4 GiB. Select a smaller region.");
             float[] input = new float[(int)samples]; allocated += samples;
             var segments = new List<EffectCurveSpan>();
             foreach (MixClip clip in lane.Clips.Where(clip => lane.AutoCrossfade || region.ClipIds.Contains(clip.Id)))
@@ -103,7 +103,7 @@ public sealed class MixEffectEditSession : IDisposable
                 int sourceChannels = this.snapshot.Sources[clip.SourceId].Channels;
                 double expected = Math.Ceiling(this.snapshot.ClipDuration(clip) * SampleRate) * sourceChannels;
                 if (!double.IsFinite(expected) || expected > MaximumSamples || allocated + expected > MaximumSamples)
-                    throw new InvalidOperationException("Rendering the selected clips/envelopes exceeds 512 MiB. Trim or split very long clips first.");
+                    throw new InvalidOperationException("Rendering the selected clips/envelopes exceeds 4 GiB. Trim or split very long clips first.");
                 float[] data = await MixRenderer.RenderClipForEffectAsync(this.snapshot, lane, clip, token).ConfigureAwait(false);
                 this.renderedClips.Add(clip.Id, new(clip, sourceChannels, data)); allocated += data.Length;
                 if (!region.ClipIds.Contains(clip.Id)) continue;
@@ -122,7 +122,8 @@ public sealed class MixEffectEditSession : IDisposable
                     }
                 }
             }
-            renderedInputs.Add(new(region.LaneId, lane.Name, channels, input, EffectCurveClock.Normalize(segments, frameCount, mergeAdjacent: false)));
+            renderedInputs.Add(new(region.LaneId, lane.Name, channels, input,
+                segments.OrderBy(segment => segment.Start).ThenBy(segment => segment.End).ToArray()));
         }
         this.inputs = renderedInputs.ToArray(); token.ThrowIfCancellationRequested();
     }
@@ -168,7 +169,7 @@ public sealed class MixEffectEditSession : IDisposable
             Channels: processed is null ? input.Channels : processed[index].Channels,
             Gain: this.snapshot.Lanes.Single(lane => lane.Id == input.LaneId).Gain)).ToArray();
         int longest = Math.Max(1, buffers.Max(buffer => buffer.Samples.Length / buffer.Channels));
-        if ((long)longest * 2 > MaximumSamples) throw new InvalidOperationException("The stereo preview exceeds 512 MiB. Select a smaller region.");
+        if ((long)longest * 2 > MaximumSamples) throw new InvalidOperationException("The stereo preview exceeds 4 GiB. Select a smaller region.");
         string name = this.snapshot.Name + " — selected audio"; float bpm = (float)this.TempoBpm;
         // All lane buffers are already at the mix clock with clip envelopes
         // rendered. A sequential stereo bus avoids repeating DSP or multiplying
@@ -244,20 +245,39 @@ public sealed class MixEffectEditSession : IDisposable
                     right.SourceDuration = Math.Max(0, baked.SourceDuration - right.SourceOffset); clips.Add(right);
                 }
             }
-            var effected = new MixSource { Name = effectName + " — " + input.Name, Data = (float[])result.Samples.Clone(), Channels = result.Channels,
-                SampleRate = SampleRate, Bpm = (float)(this.TempoBpm * (result.TempoMultiplier ?? 1)) };
-            if (settings is not null || autoTune is not null)
+            int outputFrames = result.Samples.Length / result.Channels;
+            foreach ((int partStart, int partEnd) in GetOutputParts(input, result))
             {
-                EffectAutomationSettings? automation = settings?.Automation ?? autoTune?.Automation;
-                effected.TempoRecipe = MixTempoRecipe.Create(this.snapshot, this.snapshot.Lanes.Single(value => value.Id == region.LaneId),
-                    this.Start, this.End, region.ClipIds, effect: settings, autoTune: autoTune,
-                    curveScope: automation?.HasEnabledCurves == true ? this.CreateCurveScope(index, automation.Timing) : null);
+                int partFrames = partEnd - partStart;
+                if (partFrames <= 0) continue;
+                var effected = new MixSource
+                {
+                    Name = effectName + " — " + input.Name,
+                    Data = result.Samples.AsSpan(checked(partStart * result.Channels), checked(partFrames * result.Channels)).ToArray(),
+                    Channels = result.Channels, SampleRate = SampleRate,
+                    Bpm = (float)(this.TempoBpm * (result.TempoMultiplier ?? 1))
+                };
+                if (settings is not null || autoTune is not null)
+                {
+                    EffectAutomationSettings? automation = settings?.Automation ?? autoTune?.Automation;
+                    effected.TempoRecipe = MixTempoRecipe.Create(this.snapshot, this.snapshot.Lanes.Single(value => value.Id == region.LaneId),
+                        this.Start, this.End, region.ClipIds, effect: settings, autoTune: autoTune,
+                        curveScope: automation?.HasEnabledCurves == true ? this.CreateCurveScope(index, automation.Timing) : null,
+                        outputStartFraction: partStart / (double)outputFrames, outputEndFraction: partEnd / (double)outputFrames);
+                }
+                staged.Sources.Add(effected.Id, effected); added.Add(effected);
+                clips.Add(new MixClip
+                {
+                    Name = effected.Name, SourceId = effected.Id,
+                    Start = this.Start + partStart / (double)SampleRate, SourceDuration = effected.Duration,
+                    HasRenderedEnvelope = true
+                });
+                selectedIds.Add(clips[^1].Id);
             }
-            staged.Sources.Add(effected.Id, effected); added.Add(effected);
-            var replacement = new MixClip { Name = effected.Name, SourceId = effected.Id, Start = this.Start, SourceDuration = effected.Duration, HasRenderedEnvelope = true };
-            clips.Add(replacement); selectedIds.Add(replacement.Id); lane.Clips = clips.OrderBy(clip => clip.Start).ToList();
+            lane.Clips = clips.OrderBy(clip => clip.Start).ToList();
         }
-        staged.LoopStart = this.MapTime(staged.LoopStart, newDuration); staged.LoopEnd = this.MapTime(staged.LoopEnd, newDuration);
+        staged.LoopStart = Math.Max(0, this.MapTime(staged.LoopStart, newDuration));
+        staged.LoopEnd = Math.Max(staged.LoopStart, Math.Max(0, this.MapTime(staged.LoopEnd, newDuration)));
         staged.Validate(); // Build/validate everything before touching the live arrangement.
         foreach (MixSource source in added) target.Sources.Add(source.Id, source);
         target.Lanes = staged.Lanes; target.LoopStart = staged.LoopStart; target.LoopEnd = staged.LoopEnd;
@@ -278,6 +298,46 @@ public sealed class MixEffectEditSession : IDisposable
             SourceDuration = source.Duration, HasRenderedEnvelope = true };
     }
 
+    internal static IReadOnlyList<(int Start, int End)> GetOutputParts(MixEffectInput input, AudioEffectResult result)
+    {
+        int outputFrames = result.Samples.Length / result.Channels;
+        EffectCurveSpan[] segments = input.Segments?.ToArray() ?? [];
+        if (segments.Length <= 1) return [(0, outputFrames)];
+        Func<double, double> outputAtSource = result.SourceFrameToOutput ??
+            (result.TempoMultiplier is double multiplier ? frame => frame / multiplier : frame => frame);
+        var mapped = new List<EffectCurveSpan>(segments.Length);
+        int MapFrame(int sourceFrame)
+        {
+            double frame = outputAtSource(sourceFrame);
+            if (!double.IsFinite(frame)) throw new InvalidOperationException("The effect returned an invalid segment time map.");
+            return (int)Math.Clamp(Math.Round(frame), 0, outputFrames);
+        }
+        foreach (EffectCurveSpan segment in segments)
+        {
+            int start = MapFrame(segment.Start), end = MapFrame(segment.End);
+            if (end < start) (start, end) = (end, start);
+            if (end > start) mapped.Add(new(start, end));
+        }
+        int[] boundaries = [0, .. mapped.SelectMany(segment => new[] { segment.Start, segment.End }), outputFrames];
+        boundaries = boundaries.Distinct().Order().ToArray();
+        var parts = new List<(int Start, int End)>();
+        for (int index = 0; index + 1 < boundaries.Length; index++)
+        {
+            int start = boundaries[index], end = boundaries[index + 1];
+            if (end <= start) continue;
+            bool selected = mapped.Any(segment => segment.Start <= start && segment.End >= end);
+            if (selected || HasNonZeroSamples(result.Samples, result.Channels, start, end)) parts.Add((start, end));
+        }
+        return parts.Count == 0 ? [(0, outputFrames)] : parts;
+    }
+
+    private static bool HasNonZeroSamples(float[] samples, int channels, int startFrame, int endFrame)
+    {
+        for (int index = startFrame * channels; index < endFrame * channels; index++)
+            if (samples[index] != 0) return true;
+        return false;
+    }
+
     public double MapTime(double time, double newDuration) => time <= this.Start ? time : time >= this.End
         ? Math.Max(this.Start, time + newDuration - this.Duration) : this.Start + (time - this.Start) * newDuration / this.Duration;
 
@@ -288,7 +348,7 @@ public sealed class MixEffectEditSession : IDisposable
             result.Samples.Length == 0 || result.Samples.Length % result.Channels != 0 || result.Samples.Length > MaximumSamples ||
             result.Samples.Any(sample => !float.IsFinite(sample)) || result.TempoMultiplier is double tempo && (!double.IsFinite(tempo) || tempo <= 0)))
             throw new ArgumentException("The effect must return one finite, frame-aligned result per selected lane.");
-        if (results.Sum(result => (long)result.Samples.Length) > MaximumSamples) throw new InvalidOperationException("Effect results exceed 512 MiB. Select a smaller region.");
+        if (results.Sum(result => (long)result.Samples.Length) > MaximumSamples) throw new InvalidOperationException("Effect results exceed 4 GiB. Select a smaller region.");
     }
     private static MixClip Clone(MixClip clip) => JsonSerializer.Deserialize<MixClip>(JsonSerializer.Serialize(clip))!;
     private static byte[] Hash(float[] data) => SHA256.HashData(MemoryMarshal.AsBytes(data.AsSpan()));

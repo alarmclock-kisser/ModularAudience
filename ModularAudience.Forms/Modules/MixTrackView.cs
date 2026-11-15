@@ -1,5 +1,6 @@
 using ModularAudience.Audio;
 using ModularAudience.Audio.Arrangement;
+using ModularAudience.Audio.Effects;
 using System.Drawing.Drawing2D;
 using ModularAudience.Forms.Modules.Dialogs;
 using ModularAudience.Forms.Theming;
@@ -69,6 +70,7 @@ public sealed partial class MixTrackView : Form
     private readonly CheckBox overlapModeBox;
     private static double lastRepeatSelectionMultiplier = 4.0;
     private readonly Dictionary<Guid, double> dragOriginalStarts = [];
+    private readonly Dictionary<Guid, Guid> dragOriginalLanes = [];
     private bool dragOverActive;
     private int dragOverRow;
     private double dragOverTime;
@@ -76,6 +78,7 @@ public sealed partial class MixTrackView : Form
     private double rulerOriginalLoopStart, rulerOriginalLoopEnd;
     private int resizeOriginalLaneHeight;
     private const int Header = 190, Ruler = 30;
+    private const string TimelineHint = "Mix timeline: drop audio to create clips; drag clips to move them and their edges to trim. Drag the ruler to set a loop. Shift enables temporary snapping; Ctrl+wheel zooms. Right-click a segment boundary to merge it; right-click elsewhere for context-specific actions.";
     private int LaneHeight = 100;
     private double preciseLaneHeight = 100;
     private bool laneHeightCustomized;
@@ -183,7 +186,7 @@ public sealed partial class MixTrackView : Form
         };
         laneNameEditor.Leave += (_, _) => EndLaneNameEdit(commit: true);
         UpdateVerticalScrollbar();
-        this.interactionHints.SetToolTip(canvas, "Mix timeline: drop audio to create clips; drag clips to move them and their edges to trim. Drag the ruler to set a loop. Shift enables temporary snapping; Ctrl+wheel zooms. Right-click a clip or empty space for context-specific actions.");
+        this.interactionHints.SetToolTip(canvas, TimelineHint);
         this.interactionHints.SetToolTip(play, "Play or pause the mix on its shared transport. All lanes follow one clock; non-destructive edits leave source audio intact.");
         this.interactionHints.SetToolTip(bpm, "Mix tempo. Changes are applied after the tempo edit debounce and use the arrangement's tempo handling; original source audio remains available.");
         this.interactionHints.SetToolTip(snap, "Snap clip edits to the selected musical grid. Shift temporarily enables snapping during a gesture.");
@@ -735,18 +738,40 @@ public sealed partial class MixTrackView : Form
             using (var trackPen = new Pen(Color.Gray, 3)) g.DrawLine(trackPen, volume.Left, volume.Top + volume.Height / 2, volume.Right, volume.Top + volume.Height / 2);
             int vx = volume.Left + (int)(Math.Clamp(lane.Gain, 0, 2) / 2 * volume.Width);
             g.FillRectangle(Brushes.LightGray, vx - 3, volume.Top + 2, 6, Math.Max(2, volume.Height - 4));
-            foreach (var clip in lane.Clips)
+            var previousClipRects = new List<Rectangle>();
+            foreach (var clip in lane.Clips.OrderBy(clip => clip.Start).ThenBy(clip => clip.Id))
             {
                 Rectangle rect = ClipRect(row, clip); if (rect.Right < Header || rect.Left > canvas.Width) continue;
                 var saved = g.Save(); g.SetClip(new Rectangle(Header, y, canvas.Width - Header, LaneHeight));
                 bool selected = clip.Id == selectedClip || selectedClips.Contains(clip.Id);
-                using var brush = new SolidBrush(ClipColor(selected ? visual.SelectedClip : visual.Clip, row)); g.FillRectangle(brush, rect);
+                Color clipColor = ClipColor(selected ? visual.SelectedClip : visual.Clip, row);
+                bool overlaps = false;
+                if (Arrangement.OverlapMode == MixOverlapMode.MixOverlap)
+                {
+                    using var overlapRegion = new Region(); overlapRegion.MakeEmpty();
+                    foreach (Rectangle previous in previousClipRects)
+                    {
+                        Rectangle intersection = Rectangle.Intersect(rect, previous);
+                        if (intersection.Width <= 0 || intersection.Height <= 0) continue;
+                        overlaps = true; overlapRegion.Union(intersection);
+                    }
+                    using var solidRegion = new Region(rect); solidRegion.Exclude(overlapRegion);
+                    using var solidBrush = new SolidBrush(clipColor);
+                    using var overlapBrush = new SolidBrush(Color.FromArgb(150, clipColor));
+                    g.FillRegion(solidBrush, solidRegion); g.FillRegion(overlapBrush, overlapRegion);
+                }
+                else
+                {
+                    using var brush = new SolidBrush(clipColor); g.FillRectangle(brush, rect);
+                }
                 using var edge = new Pen(selected ? Color.White : Color.FromArgb(110, 150, 165)); g.DrawRectangle(edge, rect);
                 using (var handleBrush = new SolidBrush(Color.FromArgb(65, Color.Black))) g.FillRectangle(handleBrush, rect.X, rect.Y, rect.Width, Math.Min(21, rect.Height));
                 int labelX = Math.Max(Header + 4, rect.X + 4);
                 int labelWidth = Math.Max(1, rect.Right - labelX);
                 TextRenderer.DrawText(g, clip.Name, Font, new Rectangle(labelX, rect.Y + 2, labelWidth, 18), VisualColor(visual.Text), TextFormatFlags.EndEllipsis);
-                if (visual.ShowWaveforms && Arrangement.Sources.TryGetValue(clip.SourceId, out var source)) DrawWave(g, rect, clip, source);
+                if (visual.ShowWaveforms && Arrangement.Sources.TryGetValue(clip.SourceId, out var source))
+                    DrawWave(g, rect, clip, source, overlaps && Arrangement.OverlapMode == MixOverlapMode.MixOverlap);
+                previousClipRects.Add(rect);
                 g.Restore(saved);
             }
             g.DrawLine(Pens.DimGray, 0, y + LaneHeight - 1, canvas.Width, y + LaneHeight - 1);
@@ -979,7 +1004,7 @@ public sealed partial class MixTrackView : Form
     }
     private Rectangle ClipRect(int row, MixClip c) => new(TimeX(c.Start), Ruler + (row - vertical.Value) * LaneHeight + 3,
         Math.Max(2, (int)Math.Round(Arrangement.ClipDuration(c) * pixelsPerSecond)), LaneHeight - 7);
-    private void DrawWave(Graphics g, Rectangle rect, MixClip clip, MixSource source)
+    private void DrawWave(Graphics g, Rectangle rect, MixClip clip, MixSource source, bool translucent = false)
     {
         int channels = source.Channels; int top = rect.Top + 23, height = rect.Height - 25;
         if (!wavePeaks.TryGetValue((source.Id, channels), out var peaks))
@@ -990,7 +1015,8 @@ public sealed partial class MixTrackView : Form
                 for (int ch = 0; ch < peaks.Length; ch++) peaks[ch][frame / 256] = Math.Max(peaks[ch][frame / 256], Math.Abs(source.Data[frame * channels + ch]));
             wavePeaks[(source.Id, channels)] = peaks;
         }
-        using var pen = new Pen(VisualColor(Arrangement.Visual.Waveform));
+        Color waveform = VisualColor(Arrangement.Visual.Waveform);
+        using var pen = new Pen(translucent ? Color.FromArgb(175, waveform) : waveform);
         int first = Math.Max(rect.Left, Header), last = Math.Min(rect.Right, canvas.Width);
         for (int x = first; x < last; x++)
         {
@@ -1016,7 +1042,11 @@ public sealed partial class MixTrackView : Form
         if (pastePreview) { if (e.Button == MouseButtons.Left && e.X >= Header && e.Y >= Ruler) PlacePastePreview(); else if (e.Button == MouseButtons.Right) CancelPastePreview(); return; }
         // A right click must not collapse an existing range/multiselection or
         // silently retarget it to the segment/empty space under the pointer.
-        if (e.Button == MouseButtons.Right) { ShowMenu(e.Location); return; }
+        if (e.Button == MouseButtons.Right)
+        {
+            if (this.TryMergeSegmentBoundary(e.Location)) return;
+            ShowMenu(e.Location); return;
+        }
         int row = RowAt(e.Y); selectedLane = row >= 0 && row < Arrangement.Lanes.Count ? Arrangement.Lanes[row].Id : null;
         selectedClip = row >= 0 && row < Arrangement.Lanes.Count
             ? Arrangement.Lanes[row].Clips.LastOrDefault(c => e.X >= Header && ClipRect(row, c).Contains(e.Location))?.Id : null;
@@ -1063,11 +1093,17 @@ public sealed partial class MixTrackView : Form
             // Only the title handle moves clips. Waveforms are for selecting audio regions.
             dragMode = e.Y < rect.Top + 21 ? (e.X - rect.Left < 7 ? 2 : rect.Right - e.X < 7 ? 3 : 1) : 5;
             originalStart = clip.Start; originalOffset = clip.SourceOffset; originalDuration = clip.SourceDuration;
-            dragOriginalStarts.Clear();
-            if (dragMode == 1 && selectedClips.Count > 1 && selectedClips.Contains(clip.Id))
+            dragOriginalStarts.Clear(); dragOriginalLanes.Clear();
+            if (dragMode == 1)
             {
-                foreach (var grouped in Arrangement.Lanes.SelectMany(l => l.Clips).Where(c => selectedClips.Contains(c.Id)))
-                    dragOriginalStarts[grouped.Id] = grouped.Start;
+                MixClip[] moving = selectedClips.Count > 1 && selectedClips.Contains(clip.Id)
+                    ? Arrangement.Lanes.SelectMany(lane => lane.Clips).Where(value => selectedClips.Contains(value.Id)).ToArray()
+                    : [clip];
+                foreach (MixClip grouped in moving)
+                {
+                    MixLane sourceLane = Arrangement.Lanes.Single(lane => lane.Clips.Contains(grouped));
+                    dragOriginalStarts[grouped.Id] = grouped.Start; dragOriginalLanes[grouped.Id] = sourceLane.Id;
+                }
             }
             if (dragMode != 5) ClearRangeSelection();
         }
@@ -1080,12 +1116,117 @@ public sealed partial class MixTrackView : Form
         }
         canvas.Capture = dragMode != 0; canvas.Invalidate();
     }
+    private sealed record SegmentBoundary(Guid LaneId, Guid LeftClipId, Guid RightClipId);
+    private SegmentBoundary? FindSegmentBoundary(Point point)
+    {
+        if (point.X < Header) return null;
+        int row = RowAt(point.Y);
+        if (row < 0 || row >= Arrangement.Lanes.Count) return null;
+        MixLane lane = Arrangement.Lanes[row];
+        SegmentBoundary? closest = null; double closestDistance = 3.01;
+        foreach (MixClip left in lane.Clips)
+        {
+            double leftEnd = left.Start + Arrangement.ClipDuration(left);
+            foreach (MixClip right in lane.Clips)
+            {
+                if (left.Id == right.Id || right.Start < left.Start ||
+                    Math.Abs(leftEnd - right.Start) > 0.5 / MixEffectEditSession.SampleRate) continue;
+                int boundaryX = TimeX((leftEnd + right.Start) * 0.5);
+                double distance = Math.Abs(point.X - boundaryX);
+                if (distance < closestDistance)
+                {
+                    closestDistance = distance; closest = new(lane.Id, left.Id, right.Id);
+                }
+            }
+        }
+        return closest;
+    }
+
+    private bool TryFindSegmentBoundary(Point point, out SegmentBoundary boundary)
+    {
+        boundary = this.FindSegmentBoundary(point)!;
+        return boundary is not null;
+    }
+
+    private bool TryMergeSegmentBoundary(Point point)
+    {
+        if (!this.TryFindSegmentBoundary(point, out SegmentBoundary boundary)) return false;
+        MixLane lane = Arrangement.Lanes.Single(value => value.Id == boundary.LaneId);
+        MixClip left = lane.Clips.Single(value => value.Id == boundary.LeftClipId);
+        MixClip right = lane.Clips.Single(value => value.Id == boundary.RightClipId);
+        if (this.CanMergeWithoutRendering(lane, left, right))
+            this.CommitSegmentMerge(lane, left, right);
+        else _ = this.MergeSegmentBoundaryAsync(boundary);
+        return true;
+    }
+
+    private bool CanMergeWithoutRendering(MixLane lane, MixClip left, MixClip right)
+    {
+        if (left.SourceId != right.SourceId || left.TempoMode != right.TempoMode || left.Gain != right.Gain ||
+            left.FadeOut != 0 || right.FadeIn != 0 || lane.AutoCrossfade ||
+            left.HasRenderedEnvelope != right.HasRenderedEnvelope) return false;
+        MixSource source = Arrangement.Sources[left.SourceId];
+        return Math.Abs(left.SourceOffset + left.SourceDuration - right.SourceOffset) <= 0.5 / source.SampleRate;
+    }
+
+    private Task MergeSegmentBoundaryAsync(SegmentBoundary boundary) => this.RunAsync(async token =>
+    {
+        string originalAudioKey = MixAudioHistory.Key(Arrangement);
+        using var snapshot = new MixArrangement();
+        snapshot.Restore(Arrangement.Capture());
+        foreach (var source in Arrangement.Sources) snapshot.Sources.Add(source.Key, source.Value);
+        MixLane lane = snapshot.Lanes.Single(value => value.Id == boundary.LaneId);
+        MixClip left = lane.Clips.Single(value => value.Id == boundary.LeftClipId);
+        MixClip right = lane.Clips.Single(value => value.Id == boundary.RightClipId);
+        MixSource merged = await MixRenderer.RenderAdjacentClipsAsync(snapshot, lane, left, right, token);
+        token.ThrowIfCancellationRequested();
+        if (MixAudioHistory.Key(Arrangement) != originalAudioKey)
+            throw new InvalidOperationException("The mix changed while its segments were being merged. Please retry.");
+        MixLane currentLane = Arrangement.Lanes.Single(value => value.Id == boundary.LaneId);
+        MixClip currentLeft = currentLane.Clips.Single(value => value.Id == boundary.LeftClipId);
+        MixClip currentRight = currentLane.Clips.Single(value => value.Id == boundary.RightClipId);
+        if (Math.Abs(currentLeft.Start + Arrangement.ClipDuration(currentLeft) - currentRight.Start) >
+            0.5 / MixEffectEditSession.SampleRate)
+            throw new InvalidOperationException("The segment boundary changed while rendering. Please retry.");
+        this.CommitSegmentMerge(currentLane, currentLeft, currentRight, merged);
+    });
+
+    private void CommitSegmentMerge(MixLane lane, MixClip left, MixClip right, MixSource? rendered = null)
+    {
+        if (rendered is null)
+        {
+            left.SourceDuration = right.SourceOffset + right.SourceDuration - left.SourceOffset;
+            left.FadeOut = right.FadeOut;
+        }
+        else
+        {
+            Arrangement.Sources.Add(rendered.Id, rendered);
+            left.SourceId = rendered.Id; left.SourceOffset = 0; left.SourceDuration = rendered.Duration;
+            left.Gain = 1; left.FadeIn = left.FadeOut = 0; left.TempoMode = ClipTempoMode.Original;
+            left.HasRenderedEnvelope = true;
+        }
+        lane.Clips.Remove(right);
+        if (selectedClip == right.Id) selectedClip = left.Id;
+        if (selectedClips.Remove(right.Id)) selectedClips.Add(left.Id);
+        if (fullSelectedClips.Remove(right.Id)) fullSelectedClips.Add(left.Id);
+        if (additiveSelection.Remove(right.Id)) additiveSelection.Add(left.Id);
+        Changed();
+        status.Text = "Adjacent segments merged. Ctrl+Z / Ctrl+Y available.";
+    }
+
     private void MouseMoveTimeline(object? sender, MouseEventArgs e)
     {
         lastPointer = e.Location;
         if (pastePreview) { canvas.Invalidate(); return; }
         if (dragMode == 0)
         {
+            if (this.TryFindSegmentBoundary(e.Location, out _))
+            {
+                canvas.Cursor = Cursors.Hand;
+                this.interactionHints.SetToolTip(canvas, "Right-click this boundary to remove it and merge the adjacent segments.");
+                return;
+            }
+            this.interactionHints.SetToolTip(canvas, TimelineHint);
             int row = RowAt(e.Y);
             var hit = row >= 0 && row < Arrangement.Lanes.Count
                 ? Arrangement.Lanes[row].Clips.LastOrDefault(c => ClipRect(row, c).Contains(e.Location)) : null;
@@ -1130,57 +1271,151 @@ public sealed partial class MixTrackView : Form
         {
             this.AutoPanClipDrag(e.X);
             double delta = XTime(e.X) - originalPointerTime, factor = Arrangement.Rate(c);
-
-            // Move the dragged structure between lanes immediately while dragging,
-            // instead of only showing a ghost preview until mouse release.
-            if (dragMode == 1 && Arrangement.Lanes.Count > 0)
-            {
-                int targetRow = Math.Clamp(RowAt(e.Y), 0, Arrangement.Lanes.Count - 1);
-                var group = dragOriginalStarts.Count > 0
-                    ? Arrangement.Lanes.SelectMany(l => l.Clips).Where(cl => dragOriginalStarts.ContainsKey(cl.Id)).ToList()
-                    : new List<MixClip> { c };
-                int currentRow = Arrangement.Lanes.FindIndex(l => l.Clips.Contains(c));
-                if (currentRow >= 0 && targetRow != currentRow)
-                {
-                    foreach (var grouped in group)
-                    {
-                        var oldLane = Arrangement.Lanes.FirstOrDefault(l => l.Clips.Contains(grouped));
-                        if (oldLane != null && oldLane != Arrangement.Lanes[targetRow])
-                        {
-                            oldLane.Clips.Remove(grouped);
-                            Arrangement.Lanes[targetRow].Clips.Add(grouped);
-                        }
-                    }
-                    selectedLane = Arrangement.Lanes[targetRow].Id;
-                }
-            }
-
             if (dragMode == 1)
             {
-                c.Start = Arrangement.SnapTime(originalStart + delta, ModifierKeys.HasFlag(Keys.Shift));
-                if (dragOriginalStarts.Count > 0)
+                var group = Arrangement.Lanes.SelectMany(lane => lane.Clips)
+                    .Where(clip => dragOriginalStarts.ContainsKey(clip.Id)).ToList();
+                if (group.Count == 0) group.Add(c);
+                int currentRow = Arrangement.Lanes.FindIndex(lane => lane.Clips.Contains(c));
+                int targetRow = Arrangement.Lanes.Count > 0 ? Math.Clamp(RowAt(e.Y), 0, Arrangement.Lanes.Count - 1) : currentRow;
+                Dictionary<Guid, double> starts = group.ToDictionary(clip => clip.Id,
+                    clip => dragOriginalStarts.TryGetValue(clip.Id, out double start) ? start : clip.Start);
+                double requestedDelta = Arrangement.SnapTime(originalStart + delta, ModifierKeys.HasFlag(Keys.Shift)) - originalStart;
+                double moveDelta = delta;
+                if (Arrangement.OverlapMode == MixOverlapMode.DockNoOverlap && currentRow >= 0 && targetRow >= 0)
                 {
-                    foreach (var clip in Arrangement.Lanes.SelectMany(l => l.Clips).Where(cl => dragOriginalStarts.ContainsKey(cl.Id)).ToArray())
+                    MixLane targetLane = Arrangement.Lanes[targetRow];
+                    bool beganInTargetLane = dragOriginalLanes.Values.All(id => id == targetLane.Id);
+                    moveDelta = this.ClampDockedMoveDelta(targetLane, group, starts, requestedDelta, beganInTargetLane);
+                    if (!this.CanPlaceDockedGroup(targetLane, group, starts, moveDelta) && targetRow != currentRow)
                     {
-                        if (clip.Id == c.Id) continue;
-                        double groupStart = dragOriginalStarts.TryGetValue(clip.Id, out double gs) ? gs : clip.Start;
-                        clip.Start = Arrangement.SnapTime(groupStart + delta, ModifierKeys.HasFlag(Keys.Shift));
+                        targetRow = currentRow; targetLane = Arrangement.Lanes[currentRow];
+                        beganInTargetLane = dragOriginalLanes.Values.All(id => id == targetLane.Id);
+                        moveDelta = this.ClampDockedMoveDelta(targetLane, group, starts, requestedDelta, beganInTargetLane);
+                    }
+                    if (!this.CanPlaceDockedGroup(targetLane, group, starts, moveDelta)) moveDelta = 0;
+                }
+                else if (Arrangement.OverlapMode != MixOverlapMode.DockNoOverlap)
+                {
+                    moveDelta = requestedDelta;
+                }
+                if (currentRow >= 0 && targetRow >= 0 && targetRow != currentRow)
+                {
+                    MixLane targetLane = Arrangement.Lanes[targetRow];
+                    foreach (MixClip grouped in group)
+                    {
+                        MixLane? oldLane = Arrangement.Lanes.FirstOrDefault(lane => lane.Clips.Contains(grouped));
+                        if (oldLane is not null && oldLane != targetLane)
+                        { oldLane.Clips.Remove(grouped); targetLane.Clips.Add(grouped); }
+                    }
+                    selectedLane = targetLane.Id;
+                }
+                if (Arrangement.OverlapMode == MixOverlapMode.DockNoOverlap)
+                {
+                    foreach (MixClip grouped in group)
+                        grouped.Start = starts[grouped.Id] + moveDelta;
+                }
+                else
+                {
+                    c.Start = Arrangement.SnapTime(originalStart + delta, ModifierKeys.HasFlag(Keys.Shift));
+                    foreach (MixClip grouped in group)
+                    {
+                        if (grouped.Id != c.Id)
+                        {
+                            double groupStart = starts[grouped.Id];
+                            grouped.Start = Arrangement.SnapTime(groupStart + delta, ModifierKeys.HasFlag(Keys.Shift));
+                        }
                     }
                 }
             }
-            if (dragMode == 2)
+            else if (dragMode == 2)
             {
                 double start = Arrangement.SnapTime(originalStart + delta, ModifierKeys.HasFlag(Keys.Shift));
                 double offset = Math.Clamp(originalOffset + (start - originalStart) * factor, 0, originalOffset + originalDuration - 0.001);
                 c.Start = originalStart + (offset - originalOffset) / factor; c.SourceOffset = offset; c.SourceDuration = originalDuration - offset + originalOffset;
             }
-            if (dragMode == 3)
+            else if (dragMode == 3)
             {
                 double end = Arrangement.SnapTime(originalStart + originalDuration / factor + delta, ModifierKeys.HasFlag(Keys.Shift));
                 c.SourceDuration = Math.Clamp((end - c.Start) * factor, 0.001, s.Duration - c.SourceOffset);
             }
         }
         canvas.Invalidate();
+    }
+    private double ClampDockedMoveDelta(MixLane targetLane, IReadOnlyList<MixClip> moving,
+        IReadOnlyDictionary<Guid, double> originalStarts, double requestedDelta, bool beganInTargetLane)
+    {
+        if (Math.Abs(requestedDelta) < 1e-12) return 0;
+        var movingIds = moving.Select(clip => clip.Id).ToHashSet();
+        double result = requestedDelta;
+        foreach (MixClip clip in moving)
+        {
+            double start = originalStarts[clip.Id], end = start + Arrangement.ClipDuration(clip);
+            foreach (MixClip obstacle in targetLane.Clips.Where(other => !movingIds.Contains(other.Id)))
+            {
+                double obstacleEnd = obstacle.Start + Arrangement.ClipDuration(obstacle);
+                bool alreadyOverlapping = start < obstacleEnd && end > obstacle.Start;
+                if (beganInTargetLane && alreadyOverlapping) continue;
+                if (result > 0)
+                {
+                    if (beganInTargetLane && obstacle.Start >= end && obstacle.Start <= end + result)
+                        result = Math.Min(result, obstacle.Start - end);
+                    else if (!beganInTargetLane && start + result < obstacleEnd && end + result > obstacle.Start)
+                    {
+                        double before = obstacle.Start - end;
+                        if (before >= 0) result = Math.Min(result, before);
+                        else if (alreadyOverlapping) return 0;
+                    }
+                }
+                else
+                {
+                    if (beganInTargetLane && obstacleEnd <= start && obstacleEnd >= start + result)
+                        result = Math.Max(result, obstacleEnd - start);
+                    else if (!beganInTargetLane && start + result < obstacleEnd && end + result > obstacle.Start)
+                    {
+                        double after = obstacleEnd - start;
+                        if (after <= 0) result = Math.Max(result, after);
+                        else if (alreadyOverlapping) return 0;
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    private bool CanPlaceDockedGroup(MixLane targetLane, IReadOnlyList<MixClip> moving,
+        IReadOnlyDictionary<Guid, double> originalStarts, double delta)
+    {
+        for (int first = 0; first < moving.Count; first++)
+        {
+            MixClip clip = moving[first];
+            double start = originalStarts[clip.Id] + delta, end = start + Arrangement.ClipDuration(clip);
+            for (int second = first + 1; second < moving.Count; second++)
+            {
+                MixClip other = moving[second];
+                double otherStart = originalStarts[other.Id] + delta, otherEnd = otherStart + Arrangement.ClipDuration(other);
+                if (start < otherEnd && end > otherStart) return false;
+            }
+            foreach (MixClip obstacle in targetLane.Clips.Where(other => moving.All(value => value.Id != other.Id)))
+            {
+                double obstacleEnd = obstacle.Start + Arrangement.ClipDuration(obstacle);
+                if (start < obstacleEnd && end > obstacle.Start) return false;
+            }
+        }
+        return true;
+    }
+
+    private double FindDockedDropStart(MixLane lane, double desiredStart, double duration)
+    {
+        double candidate = desiredStart;
+        for (int attempt = 0; attempt <= lane.Clips.Count; attempt++)
+        {
+            MixClip? collision = lane.Clips.OrderBy(clip => clip.Start).FirstOrDefault(clip =>
+                candidate < clip.Start + Arrangement.ClipDuration(clip) && candidate + duration > clip.Start);
+            if (collision is null) return candidate;
+            candidate = collision.Start + Arrangement.ClipDuration(collision);
+        }
+        throw new InvalidOperationException("The audio could not be docked without overlapping another segment.");
     }
     private void MouseUpTimeline(object? sender, MouseEventArgs e)
     {
@@ -1201,6 +1436,12 @@ public sealed partial class MixTrackView : Form
             var group = dragOriginalStarts.Count > 0
                 ? Arrangement.Lanes.SelectMany(l => l.Clips).Where(c => dragOriginalStarts.ContainsKey(c.Id)).ToList()
                 : new List<MixClip> { clip };
+            if (Arrangement.OverlapMode == MixOverlapMode.DockNoOverlap && target >= 0 && target < Arrangement.Lanes.Count)
+            {
+                var currentStarts = group.ToDictionary(value => value.Id, value => value.Start);
+                if (!this.CanPlaceDockedGroup(Arrangement.Lanes[target], group, currentStarts, 0))
+                    target = Arrangement.Lanes.FindIndex(lane => lane.Clips.Contains(clip));
+            }
             if (target >= 0 && target < Arrangement.Lanes.Count)
             {
                 foreach (var grouped in group)
@@ -1212,7 +1453,7 @@ public sealed partial class MixTrackView : Form
                 selectedLane = Arrangement.Lanes[target].Id;
             }
         }
-        dragOriginalStarts.Clear();
+        dragOriginalStarts.Clear(); dragOriginalLanes.Clear();
         bool rulerDrag = dragMode == 4;
         bool rangeDrag = dragMode == 5;
         if (rangeDrag)
@@ -1296,18 +1537,8 @@ public sealed partial class MixTrackView : Form
             double clipDur = Math.Max(0.001, source.Duration);
             if (Arrangement.OverlapMode == MixOverlapMode.DockNoOverlap && row >= 0 && row < Arrangement.Lanes.Count)
             {
-                double candidate = start; bool changed = true; int guard = 0;
-                while (changed && guard < 200)
-                {
-                    changed = false; guard++;
-                    foreach (var existing in lane.Clips)
-                    {
-                        double eEnd = existing.Start + Arrangement.ClipDuration(existing);
-                        if (candidate < eEnd && candidate + clipDur > existing.Start)
-                        { candidate = eEnd; changed = true; break; }
-                    }
-                }
-                start = Arrangement.SnapTime(candidate, (e.KeyState & 4) != 0);
+                double candidate = Arrangement.SnapTime(start, (e.KeyState & 4) != 0);
+                start = this.FindDockedDropStart(lane, candidate, clipDur);
             }
             else if (Arrangement.OverlapMode == MixOverlapMode.AllowOverlapOverwrite && row >= 0 && row < Arrangement.Lanes.Count)
             {
@@ -1348,6 +1579,17 @@ public sealed partial class MixTrackView : Form
         Item("Undo (Ctrl+Z)", Undo, undo.Count > 0); Item("Redo (Ctrl+Y)", Redo, redo.Count > 0);
         ToolStripMenuItem effects = ModularAudience.Forms.Effects.EffectMenuFactory.CreateApplyMenu(this.OpenMixEffect);
         effects.Enabled = !busy && !closing && !this.mixEffectOpening; menu.Items.Add(effects);
+        if (this.lastSelectedMixEffect is AudioEffectKind recentEffect)
+        {
+            menu.Items.Add(new ToolStripSeparator());
+            AudioEffectDefinition definition = AudioEffectCatalog.Get(recentEffect);
+            ToolStripMenuItem recent = ModularAudience.Forms.Effects.EffectMenuFactory.Create(
+                definition.Name, definition.OpensOptions, (_, _) => this.OpenMixEffect(recentEffect));
+            recent.Name = "menuItem_lastMixEffect"; recent.Tag = recentEffect;
+            recent.ToolTipText = "Quick access to the most recently selected effect.";
+            recent.Enabled = !busy && !closing && !this.mixEffectOpening;
+            menu.Items.Add(recent);
+        }
         menu.Items.Add(new ToolStripSeparator());
         if (selectionFirstRow >= 0 && selectionEnd > selectionStart)
         {

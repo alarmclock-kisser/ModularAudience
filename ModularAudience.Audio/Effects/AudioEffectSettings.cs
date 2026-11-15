@@ -74,7 +74,10 @@ public sealed record AudioEffectSettings
         (this.Automation is null ? other.Automation is null : this.Automation.SoundEquals(other.Automation));
 }
 
-public sealed record AudioEffectResult(float[] Samples, int Channels, double? TempoMultiplier = null);
+public sealed record AudioEffectResult(float[] Samples, int Channels, double? TempoMultiplier = null)
+{
+    internal Func<double, double>? SourceFrameToOutput { get; init; }
+}
 
 public sealed record EffectPresetDefinition(string Id, string Name, AudioEffectSettings Parameters);
 

@@ -177,6 +177,8 @@ public sealed class MixRevisionUiTests
         Assert.AreEqual("ModularAudience mix (*.mamix)|*.mamix", dialog.Filter); Assert.IsFalse(dialog.Multiselect); Assert.IsTrue(dialog.CheckFileExists);
         int opened = 0; using var item = MixProjectMenu.CreateItem(() => { opened++; return Task.CompletedTask; }); item.PerformClick();
         Assert.AreEqual("Open Project (.mamix)", item.Text); Assert.AreEqual(1, opened);
+        int created = 0; using var newItem = MixProjectMenu.CreateNewItem(() => created++); newItem.PerformClick();
+        Assert.AreEqual("New Project", newItem.Text); Assert.AreEqual("newMixProject", newItem.Name); Assert.AreEqual(1, created);
     }
 
     [STATestMethod]

@@ -1,5 +1,6 @@
 using ModularAudience.Audio.Processors_V1;
 using ModularAudience.Audio.Processing;
+using ModularAudience.Audio.Effects;
 
 namespace ModularAudience.Audio.Arrangement;
 
@@ -33,7 +34,8 @@ public static class MixRenderer
         int frames = source.Data.Length / source.Channels;
         if (frames == 0) return new MixSource { Name = source.Name, Data = [], Channels = source.Channels, SampleRate = source.SampleRate, Bpm = (float)targetBpm };
         double factor = source.Bpm / targetBpm, requested = Math.Max(1, Math.Round(frames * factor));
-        if (!double.IsFinite(requested) || requested * source.Channels > 134_217_728) throw new InvalidOperationException("The stretched source exceeds 512 MiB.");
+        if (!double.IsFinite(requested) || requested * source.Channels > AudioEffectProcessor.MaximumOutputSamples)
+            throw new InvalidOperationException("The stretched source exceeds 4 GiB.");
         int targetFrames = (int)requested; float[] output = new float[checked(targetFrames * source.Channels)];
         for (int channel = 0; channel < source.Channels; channel++)
         {
@@ -202,5 +204,45 @@ public static class MixRenderer
             for (int channel = 0; channel < channels; channel++) data[frame * channels + channel] = (float)(data[frame * channels + channel] * gain);
         }
         return data;
+    }
+
+    public static Task<MixSource> RenderAdjacentClipsAsync(MixArrangement arrangement, MixLane lane, MixClip left, MixClip right,
+        CancellationToken token = default) => Task.Run(async () =>
+    {
+        ArgumentNullException.ThrowIfNull(arrangement); ArgumentNullException.ThrowIfNull(lane);
+        ArgumentNullException.ThrowIfNull(left); ArgumentNullException.ThrowIfNull(right);
+        if (left.Id == right.Id || !lane.Clips.Any(clip => clip.Id == left.Id) || !lane.Clips.Any(clip => clip.Id == right.Id) ||
+            right.Start < left.Start || Math.Abs(left.Start + arrangement.ClipDuration(left) - right.Start) > 0.5 / 44100)
+            throw new InvalidOperationException("Only adjacent audio segments can be merged.");
+        token.ThrowIfCancellationRequested();
+        int leftChannels = arrangement.Sources[left.SourceId].Channels, rightChannels = arrangement.Sources[right.SourceId].Channels;
+        float[] leftAudio = await RenderClipForEffectAsync(arrangement, lane, left, token).ConfigureAwait(false);
+        token.ThrowIfCancellationRequested();
+        float[] rightAudio = await RenderClipForEffectAsync(arrangement, lane, right, token).ConfigureAwait(false);
+        long outputFrames = leftAudio.Length / leftChannels + (long)rightAudio.Length / rightChannels;
+        long outputSamples = outputFrames * 2;
+        if (outputSamples > AudioEffectProcessor.MaximumOutputSamples)
+            throw new InvalidOperationException("The merged segment exceeds the 4 GiB audio buffer limit.");
+        float[] output = new float[(int)outputSamples];
+        CopyStereo(leftAudio, leftChannels, output, 0, token);
+        CopyStereo(rightAudio, rightChannels, output, leftAudio.Length / leftChannels, token);
+        token.ThrowIfCancellationRequested();
+        return new MixSource { Name = left.Name, Data = output, Channels = 2, SampleRate = 44100, Bpm = (float)arrangement.Bpm };
+    }, token);
+
+    private static void CopyStereo(float[] source, int channels, float[] destination, int destinationFrame, CancellationToken token)
+    {
+        int frames = source.Length / channels;
+        for (int frame = 0; frame < frames; frame++)
+        {
+            if ((frame & 8191) == 0) token.ThrowIfCancellationRequested();
+            for (int outputChannel = 0; outputChannel < 2; outputChannel++)
+            {
+                double sum = 0; int contributors = 0;
+                for (int sourceChannel = channels == 1 ? 0 : outputChannel; sourceChannel < channels; sourceChannel += channels == 1 ? 1 : 2)
+                { sum += source[frame * channels + sourceChannel]; contributors++; }
+                destination[(destinationFrame + frame) * 2 + outputChannel] = (float)(sum / Math.Max(1, contributors));
+            }
+        }
     }
 }

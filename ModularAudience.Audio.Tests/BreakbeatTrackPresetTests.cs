@@ -222,6 +222,47 @@ public sealed class BreakbeatTrackPresetTests
         Assert.IsTrue(other.Enabled);
     }
 
+    [STATestMethod]
+    public void TrackSettingsDialogIsModelessForOtherWindows()
+    {
+        using var sample = new AudioObj { Data = new float[480], SampleRate = 48000, Channels = 1 };
+        using var editor = Editor(sample);
+        using var other = new Form();
+        editor.Show();
+        other.Show();
+
+        Call(editor, "ShowTrackSettings", 0);
+
+        var dialog = editor.OwnedForms.OfType<BreakbeatTrackSettingsDialog>().Single();
+        Assert.AreSame(editor, dialog.Owner);
+        Assert.IsFalse(dialog.Modal);
+        Assert.IsFalse(editor.Enabled);
+        Assert.IsTrue(other.Enabled);
+
+        ((Button)Field(dialog, "button_cancel")).PerformClick();
+
+        Assert.IsTrue(editor.Enabled);
+        Assert.IsTrue(other.Enabled);
+        Assert.IsTrue(dialog.IsDisposed);
+    }
+
+    [STATestMethod]
+    public void TrackSettingsCanRemoveTheOnlyTrack()
+    {
+        using var sample = new AudioObj { Data = new float[480], SampleRate = 48000, Channels = 1 };
+        using var editor = Editor(sample);
+        editor.Show();
+
+        Call(editor, "ShowTrackSettings", 0);
+        var dialog = editor.OwnedForms.OfType<BreakbeatTrackSettingsDialog>().Single();
+        Assert.IsTrue(((Button)Field(dialog, "button_removeTrack")).Enabled);
+        ((Button)Field(dialog, "button_removeTrack")).PerformClick();
+
+        Assert.HasCount(0, (List<AudioObj>)Field(editor, "samples"));
+        Assert.HasCount(0, (List<BreakbeatPatternNote>)Field(editor, "notes"));
+        Assert.HasCount(0, (List<bool[]>)Field(editor, "pattern"));
+    }
+
     private static BreakbeatPatternEditorDialog Editor(AudioObj sample) => new(
         [new bool[64]], [sample], ["Test"], 4, 16, 0, 120, [], initialGridResolution: 16);
 }

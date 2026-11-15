@@ -34,6 +34,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             hScrollBar_pattern = new HScrollBar();
             panel_controls = new Panel();
             button_save = new Button();
+            checkBox_saveNew = new CheckBox();
             button_help = new Button();
             button_settings = new Button();
             button_generate = new Button();
@@ -108,6 +109,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // panel_controls
             // 
             panel_controls.Controls.Add(button_save);
+            panel_controls.Controls.Add(checkBox_saveNew);
             panel_controls.Controls.Add(button_help);
             panel_controls.Controls.Add(button_settings);
             panel_controls.Controls.Add(button_generate);
@@ -118,7 +120,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 Name = "button_instrument",
                 Text = "+ Instrument",
                 Size = new Size(94, 25),
-                Location = new Point(460, 14),
+                Location = new Point(460, 42),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
                 ContextMenuStrip = contextMenuStrip_instrument,
                 UseVisualStyleBackColor = true
@@ -129,7 +131,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             var button_recordBeat = new Button
             {
                 Name = "button_recordBeat", Text = "Record Beat", Size = new Size(90, 25),
-                Location = new Point(556, 14), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+                Location = new Point(556, 42), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
                 UseVisualStyleBackColor = true
             };
             button_recordBeat.Click += (_, _) => this.RecordBeatAsync();
@@ -138,7 +140,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             var button_clearAll = new Button
             {
                 Name = "button_clearAll", Text = "Clear", Size = new Size(52, 25),
-                Location = new Point(738, 14), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+                Location = new Point(738, 42), Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
                 UseVisualStyleBackColor = true
             };
             button_clearAll.Click += (_, _) => this.ClearAllPatternNotes();
@@ -157,24 +159,36 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Dock = DockStyle.Bottom;
             panel_controls.Location = new Point(0, 461);
             panel_controls.Name = "panel_controls";
-            panel_controls.Size = new Size(1110, 52);
+            panel_controls.Size = new Size(1110, 78);
             panel_controls.TabIndex = 1;
             // 
             // button_save
             // 
             button_save.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_save.Location = new Point(1044, 14);
+            button_save.Location = new Point(1044, 42);
             button_save.Name = "button_save";
             button_save.Size = new Size(54, 25);
             button_save.TabIndex = 4;
             button_save.Text = "Save";
             button_save.UseVisualStyleBackColor = true;
             button_save.Click += button_save_Click;
+            //
+            // checkBox_saveNew
+            //
+            checkBox_saveNew.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            checkBox_saveNew.AutoSize = true;
+            checkBox_saveNew.Location = new Point(1024, 10);
+            checkBox_saveNew.Name = "checkBox_saveNew";
+            checkBox_saveNew.Size = new Size(74, 19);
+            checkBox_saveNew.TabIndex = 12;
+            checkBox_saveNew.Text = "Save new";
+            checkBox_saveNew.UseVisualStyleBackColor = true;
+            toolTip_pattern.SetToolTip(checkBox_saveNew, "Save a new ensemble whenever any track is rerolled.");
 //
 // button_help
 //
             button_help.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_help.Location = new Point(994, 14);
+            button_help.Location = new Point(994, 42);
             button_help.Name = "button_help";
             button_help.Size = new Size(48, 25);
             button_help.TabIndex = 9;
@@ -190,7 +204,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //   clear 738..790 | remix 792..852 | generate 854..922 | settings 924..992
             //   help 994..1042 | save 1044..1098
             button_settings.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_settings.Location = new Point(924, 14);
+            button_settings.Location = new Point(924, 42);
             button_settings.Name = "button_settings";
             button_settings.Size = new Size(68, 25);
             button_settings.TabIndex = 10;
@@ -202,7 +216,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_generate
             //
             button_generate.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_generate.Location = new Point(854, 14);
+            button_generate.Location = new Point(854, 42);
             button_generate.Name = "button_generate";
             button_generate.Size = new Size(68, 25);
             button_generate.TabIndex = 11;
@@ -215,7 +229,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             button_remix.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             button_remix.Enabled = false;
-            button_remix.Location = new Point(792, 14);
+            button_remix.Location = new Point(792, 42);
             button_remix.Name = "button_remix";
             button_remix.Size = new Size(60, 25);
             button_remix.TabIndex = 12;
@@ -227,7 +241,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_roll
             //
             button_roll.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_roll.Location = new Point(696, 14);
+            button_roll.Location = new Point(696, 42);
             button_roll.Name = "button_roll";
             button_roll.Size = new Size(40, 25);
             button_roll.TabIndex = 13;
@@ -239,7 +253,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_removeBar
             //
             button_removeBar.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_removeBar.Location = new Point(672, 14);
+            button_removeBar.Location = new Point(672, 42);
             button_removeBar.Name = "button_removeBar";
             button_removeBar.Size = new Size(22, 25);
             button_removeBar.TabIndex = 8;
@@ -251,7 +265,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_addBar
             // 
             button_addBar.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_addBar.Location = new Point(648, 14);
+            button_addBar.Location = new Point(648, 42);
             button_addBar.Name = "button_addBar";
             button_addBar.Size = new Size(22, 25);
             button_addBar.TabIndex = 7;
@@ -265,7 +279,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             checkBox_preHear.AutoSize = true;
             checkBox_preHear.Checked = true;
             checkBox_preHear.CheckState = CheckState.Checked;
-            checkBox_preHear.Location = new Point(225, 18);
+            checkBox_preHear.Location = new Point(225, 45);
             checkBox_preHear.Name = "checkBox_preHear";
             checkBox_preHear.Size = new Size(71, 19);
             checkBox_preHear.TabIndex = 3;
@@ -275,7 +289,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             // button_hear
             // 
-            button_hear.Location = new Point(140, 14);
+            button_hear.Location = new Point(140, 42);
             button_hear.Name = "button_hear";
             button_hear.Size = new Size(75, 25);
             button_hear.TabIndex = 2;
@@ -287,7 +301,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             numericUpDown_bpm.DecimalPlaces = 1;
             numericUpDown_bpm.Increment = new decimal(new int[] { 1, 0, 0, 65536 });
-            numericUpDown_bpm.Location = new Point(52, 15);
+            numericUpDown_bpm.Location = new Point(52, 43);
             numericUpDown_bpm.Maximum = new decimal(new int[] { 300, 0, 0, 0 });
             numericUpDown_bpm.Minimum = new decimal(new int[] { 10, 0, 0, 0 });
             numericUpDown_bpm.Name = "numericUpDown_bpm";
@@ -299,7 +313,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // label_bpm
             // 
             label_bpm.AutoSize = true;
-            label_bpm.Location = new Point(14, 19);
+            label_bpm.Location = new Point(14, 47);
             label_bpm.Name = "label_bpm";
             label_bpm.Size = new Size(32, 15);
             label_bpm.TabIndex = 0;
@@ -307,7 +321,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             // numericUpDown_resolution
             // 
-            numericUpDown_resolution.Location = new Point(390, 15);
+            numericUpDown_resolution.Location = new Point(390, 43);
             numericUpDown_resolution.Maximum = new decimal(new int[] { 256, 0, 0, 0 });
             numericUpDown_resolution.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             numericUpDown_resolution.Name = "numericUpDown_resolution";
@@ -319,7 +333,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // label_resolution
             // 
             label_resolution.AutoSize = true;
-            label_resolution.Location = new Point(322, 19);
+            label_resolution.Location = new Point(322, 47);
             label_resolution.Name = "label_resolution";
             label_resolution.Size = new Size(63, 15);
             label_resolution.TabIndex = 5;
@@ -343,7 +357,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             AcceptButton = button_save;
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1110, 513);
+            ClientSize = new Size(1110, 539);
             Controls.Add(panel_pattern);
             Controls.Add(panel_controls);
             FormBorderStyle = FormBorderStyle.Sizable;
@@ -352,7 +366,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             MaximumSize = Size.Empty;
             // The right-hand button cluster is anchored to the right edge, so the window must
             // never be narrower than its design width or it would slide over the BPM controls.
-            MinimumSize = SizeFromClientSize(new Size(1110, 360));
+            MinimumSize = SizeFromClientSize(new Size(1110, 386));
             Name = "BreakbeatPatternEditorDialog";
             StartPosition = FormStartPosition.CenterParent;
             Text = "Breakbeat Pattern Editor";
@@ -383,6 +397,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Button button_remix;
         private Button button_roll;
         private Button button_save;
+        private CheckBox checkBox_saveNew;
         private System.Windows.Forms.Timer timer_previewCaret;
         private System.Windows.Forms.Timer timer_pasteHold;
         private System.Windows.Forms.Timer timer_pitchGestureRelease;

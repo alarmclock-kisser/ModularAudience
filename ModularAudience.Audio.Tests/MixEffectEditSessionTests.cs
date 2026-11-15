@@ -108,6 +108,28 @@ public sealed class MixEffectEditSessionTests
     }
 
     [TestMethod]
+    public async Task ApplyingToSeparatedSegments_PreservesTheirBoundariesAndSilentGap()
+    {
+        using var arrangement = new MixArrangement(); MixSource source = Source(arrangement, 0.1, 1, 0.2f);
+        MixLane lane = new(); arrangement.Lanes.Add(lane);
+        MixClip first = arrangement.AddClip(lane, source, 0);
+        MixClip second = arrangement.AddClip(lane, source, 0.2);
+        using MixEffectEditSession session = await MixEffectEditSession.CaptureAsync(arrangement,
+            [new(lane.Id, 0, 0.3, new HashSet<Guid> { first.Id, second.Id })]);
+        float[] processed = session.Inputs[0].Samples.ToArray().Select(value => value * 2).ToArray();
+
+        MixEffectCommit edit = session.Apply(arrangement, [new(processed, 1)], "Gain");
+
+        MixLane updatedLane = arrangement.Lanes.Single(value => value.Id == lane.Id);
+        Assert.AreEqual(2, edit.SelectedClipIds.Count); Assert.AreEqual(2, updatedLane.Clips.Count);
+        MixClip[] replacements = updatedLane.Clips.OrderBy(clip => clip.Start).ToArray();
+        Assert.AreEqual(0, replacements[0].Start, 1e-8); Assert.AreEqual(0.1, replacements[0].SourceDuration, 1e-7);
+        Assert.AreEqual(0.2, replacements[1].Start, 1e-7); Assert.AreEqual(0.1, replacements[1].SourceDuration, 1e-7);
+        Assert.IsTrue(replacements.All(clip => edit.SelectedClipIds.Contains(clip.Id)));
+        Assert.AreEqual(0, session.Inputs[0].Samples.Span[(int)(0.15 * MixEffectEditSession.SampleRate)]);
+    }
+
+    [TestMethod]
     public async Task NoOpOrInvalidOrStaleOutput_NeverChangesAssetsOrArrangement()
     {
         using var arrangement = new MixArrangement(); var source = Source(arrangement, 0.1, 2, 0.2f); var lane = new MixLane(); arrangement.Lanes.Add(lane);
@@ -153,7 +175,7 @@ public sealed class MixEffectEditSessionTests
             [new(lane.Id, 0, 1, new HashSet<Guid>())], cancellation.Token));
         Assert.ThrowsExactly<ArgumentException>(() => MixEffectEditSession.CaptureAsync(arrangement, []));
         await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => MixEffectEditSession.CaptureAsync(arrangement,
-            [new(lane.Id, 0, 5000, new HashSet<Guid>())]));
+            [new(lane.Id, 0, 20000, new HashSet<Guid>())]));
     }
 
     [TestMethod]

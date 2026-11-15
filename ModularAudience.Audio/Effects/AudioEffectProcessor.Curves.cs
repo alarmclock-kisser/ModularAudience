@@ -31,6 +31,7 @@ public static partial class AudioEffectProcessor
         int frames = source.Length / context.Channels;
         var map = new EffectCurveTimeMap(frames, context.Channels, frame => 1 / speedAt(frame), context.Token);
         context.SourceAtOutput = map.SourceAt;
+        context.OutputAtSource = map.OutputAtSource;
         if (map.IsIdentity) return new(source, context.Channels, 1);
         int outputFrames = EnsureLength(map.OutputFrames, context.Channels);
         var output = new float[outputFrames * context.Channels];
@@ -63,6 +64,7 @@ public static partial class AudioEffectProcessor
         int frames = source.Length / context.Channels;
         var map = new EffectCurveTimeMap(frames, context.Channels, frame => context.Automation.Value("Factor", frame), context.Token);
         context.SourceAtOutput = map.SourceAt;
+        context.OutputAtSource = map.OutputAtSource;
         if (map.IsIdentity && !settings.Flag("TrimSilence")) return new(source, context.Channels, 1);
         int targetFrames = EnsureLength(map.OutputFrames, context.Channels), size = 256 << settings.Choice("FftSize");
         // Fixed synthesis hops and continuously moving analysis centers: no independent chunk renders or splice seams.
@@ -154,6 +156,7 @@ public static partial class AudioEffectProcessor
             while (last - 1 > first && Silent(last - 1)) { context.Check(last, targetFrames); last--; }
             output = output.AsSpan(first * context.Channels, (last - first) * context.Channels).ToArray();
             context.SourceAtOutput = frame => map.SourceAt(frame + first);
+            context.OutputAtSource = frame => map.OutputAtSource(frame) - first;
         }
         return new(output, context.Channels, map.ConstantFactor is double factor ? 1 / factor : null);
     }

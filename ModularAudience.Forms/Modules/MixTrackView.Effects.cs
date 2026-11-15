@@ -14,6 +14,7 @@ public sealed partial class MixTrackView
     private ContextMenuStrip? timelineContextMenu;
     private readonly Dictionary<AudioEffectKind, Form> mixEffectDialogs = [];
     private readonly CancellationTokenSource mixEffectsLifetime = new();
+    private AudioEffectKind? lastSelectedMixEffect;
     private Task playbackStopWork = Task.CompletedTask;
     private bool mixEffectOpening, mixEffectWindowsClosed;
 
@@ -51,6 +52,7 @@ public sealed partial class MixTrackView
 
     internal async Task OpenMixEffectAsync(AudioEffectKind effect)
     {
+        this.lastSelectedMixEffect = effect;
         if (this.mixEffectDialogs.TryGetValue(effect, out Form? existing) && !existing.IsDisposed) { existing.Activate(); return; }
         if (busy || closing || released || this.mixEffectOpening || this.windowGroup.IsBlocked) return;
         MixEffectEditSession? session = null; bool ownedByDialog = false;

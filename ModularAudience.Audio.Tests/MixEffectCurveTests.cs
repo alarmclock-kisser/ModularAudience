@@ -66,7 +66,8 @@ public sealed class MixEffectCurveTests
         var lane = new MixLane(); arrangement.Lanes.Add(lane);
         MixClip a = arrangement.AddClip(lane, source, 0), b = arrangement.AddClip(lane, source, 50d / 44100), c = arrangement.AddClip(lane, source, 150d / 44100);
         using var session = await MixEffectEditSession.CaptureAsync(arrangement, [new(lane.Id, 0, 250d / 44100, new HashSet<Guid> { a.Id, b.Id, c.Id })]);
-        CollectionAssert.AreEqual(new[] { new EffectCurveSpan(0, 150), new EffectCurveSpan(150, 250) }, session.Inputs[0].Segments!.ToArray());
+        CollectionAssert.AreEqual(new[] { new EffectCurveSpan(0, 150), new EffectCurveSpan(150, 250) },
+            EffectCurveClock.Normalize(session.Inputs[0].Segments!, 250, mergeAdjacent: false));
         var clock = new EffectCurveClock(session.Inputs[0].Samples.Span, 1, 44100, new(), session.CreateCurveScope(0, new()));
         Assert.AreEqual(1d, clock.PositionAt(149)); Assert.AreEqual(0d, clock.PositionAt(150));
     }
@@ -98,8 +99,18 @@ public sealed class MixEffectCurveTests
         using var session = await MixEffectEditSession.CaptureAsync(arrangement, [new(lane.Id, 0, 0.3, new HashSet<Guid> { a.Id, b.Id })]);
         AudioEffectSettings settings = Gain(new() { Scope = EffectCurveScope.AcrossSelection, IncludeGaps = false });
         AudioEffectResult result = await Render(session, 0, settings); MixEffectCommit edit = session.Apply(arrangement, [result], "Curved gain", settings);
-        MixSource effected = arrangement.Sources[arrangement.Lanes[0].Clips.Single(clip => edit.SelectedClipIds.Contains(clip.Id)).SourceId];
+        MixClip[] effectClips = arrangement.Lanes[0].Clips.Where(clip => edit.SelectedClipIds.Contains(clip.Id)).OrderBy(clip => clip.Start).ToArray();
+        Assert.AreEqual(2, effectClips.Length);
+        MixSource effected = arrangement.Sources[effectClips[0].SourceId];
         Assert.IsNotNull(effected.TempoRecipe); Assert.IsNotNull(effected.TempoRecipe.CurveScope); Assert.IsTrue(settings.SoundEquals(effected.TempoRecipe.Effect));
+        float[] reconstructed = new float[result.Samples.Length];
+        foreach (MixClip clip in effectClips)
+        {
+            MixSource part = arrangement.Sources[clip.SourceId];
+            int offset = (int)Math.Round(clip.Start * 44100) * part.Channels;
+            part.Data.CopyTo(reconstructed, offset);
+        }
+        CollectionAssert.AreEqual(result.Samples, reconstructed);
         string file = Path.Combine(Path.GetTempPath(), "ModularAudience-curve-mix-" + Guid.NewGuid().ToString("N") + ".mamix");
         try
         {
@@ -107,12 +118,12 @@ public sealed class MixEffectCurveTests
             MixSource stored = loaded.Sources[effected.Id]; Assert.IsTrue(settings.SoundEquals(stored.TempoRecipe!.Effect));
             CollectionAssert.AreEqual(effected.TempoRecipe.CurveScope.Segments.ToArray(), stored.TempoRecipe.CurveScope!.Segments.ToArray());
             MixSource faster = await MixTempoOrigins.PrepareAsync(loaded, stored, 180, 120, ClipTempoMode.Varispeed);
-            Assert.AreEqual((int)Math.Round(result.Samples.Length * 2d / 3), faster.Data.Length, 2);
+            Assert.AreEqual((int)Math.Round(result.Samples.Length * 2d / 3 / 3), faster.Data.Length, 2);
             MixSource dry = await MixTempoOrigins.PrepareAsync(loaded, loaded.Sources[source.Id], 180, 120, ClipTempoMode.Varispeed);
             Assert.IsTrue(faster.Data.All(float.IsFinite));
             Assert.AreEqual(dry.Data[0], faster.Data[0], 1e-5f);
-            Assert.AreEqual(dry.Data[^1] * 10, faster.Data[^1], 0.001f); // Respect the existing WDL resampler's edge response.
-            CollectionAssert.AreEqual(result.Samples, stored.Data);
+            Assert.IsGreaterThan(faster.Data[0], faster.Data[^1]);
+            CollectionAssert.AreEqual(result.Samples.Take(stored.Data.Length).ToArray(), stored.Data);
         }
         finally { File.Delete(file); }
     }

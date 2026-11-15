@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.IO;
 using System.Numerics;
 using MathNet.Numerics.IntegralTransforms;
+using ModularAudience.Audio.Effects;
 
 namespace ModularAudience.Audio.Processors_V1
 {
@@ -379,8 +380,8 @@ namespace ModularAudience.Audio.Processors_V1
 
                 long outputFrames = Math.Max(1L, (long)Math.Round(inputFrames / pitchFactor));
 
-                if (outputFrames * channels > 134_217_728)
-                    throw new ArgumentOutOfRangeException(nameof(semitones), "Pitch-shift output exceeds 512 MiB; use a smaller selection.");
+                if (outputFrames * channels > AudioEffectProcessor.MaximumOutputSamples)
+                    throw new ArgumentOutOfRangeException(nameof(semitones), "Pitch-shift output exceeds 4 GiB; use a smaller selection.");
 
                 var inChannels = new float[channels][];
                 for (int c = 0; c < channels; c++)
@@ -547,7 +548,8 @@ namespace ModularAudience.Audio.Processors_V1
             if (channels <= 0 || data.Length == 0 || data.Length % channels != 0 || targetFrames < 1 ||
                 fftSize < 256 || fftSize > 16384 || (fftSize & (fftSize - 1)) != 0 || !double.IsFinite(overlap) || overlap < 0.5 || overlap > 0.95)
                 throw new ArgumentException("Invalid phase-vocoder format, frame count or window settings.");
-            if ((long)targetFrames * channels > 134_217_728) throw new ArgumentOutOfRangeException(nameof(targetFrames));
+            if ((long)targetFrames * channels > AudioEffectProcessor.MaximumOutputSamples)
+                throw new ArgumentOutOfRangeException(nameof(targetFrames), "Phase-vocoder output exceeds 4 GiB.");
             cancellationToken.ThrowIfCancellationRequested();
             if (targetFrames == data.Length / channels) return (float[])data.Clone();
             return PhaseVocoderTimeStretch(data, channels, data.Length / channels, targetFrames, progress, fftSize, overlap, cancellationToken);

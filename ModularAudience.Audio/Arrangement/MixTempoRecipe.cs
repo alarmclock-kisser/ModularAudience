@@ -20,12 +20,16 @@ public sealed class MixTempoRecipe
     public AudioEffectSettings? Effect { get; set; }
     public AutoTuneSettings? AutoTune { get; set; }
     public EffectCurveRenderScope? CurveScope { get; set; }
+    public double OutputStartFraction { get; set; }
+    public double OutputEndFraction { get; set; } = 1;
 
     internal static MixTempoRecipe Create(MixArrangement snapshot, MixLane lane, double start, double end, IEnumerable<Guid> ids,
-        Guid? frozenClip = null, AudioEffectSettings? effect = null, AutoTuneSettings? autoTune = null, EffectCurveRenderScope? curveScope = null) => new()
+        Guid? frozenClip = null, AudioEffectSettings? effect = null, AutoTuneSettings? autoTune = null,
+        EffectCurveRenderScope? curveScope = null, double outputStartFraction = 0, double outputEndFraction = 1) => new()
     {
         Bpm = snapshot.Bpm, Lane = JsonSerializer.Deserialize<MixLane>(JsonSerializer.Serialize(lane))!, Start = start, End = end,
-        ClipIds = ids.ToArray(), FrozenClipId = frozenClip, Effect = effect?.Copy(), AutoTune = autoTune?.Copy(), CurveScope = curveScope?.Copy()
+        ClipIds = ids.ToArray(), FrozenClipId = frozenClip, Effect = effect?.Copy(), AutoTune = autoTune?.Copy(), CurveScope = curveScope?.Copy(),
+        OutputStartFraction = outputStartFraction, OutputEndFraction = outputEndFraction
     };
 
     internal static IEnumerable<Guid> Dependencies(MixSource source) =>
@@ -35,6 +39,8 @@ public sealed class MixTempoRecipe
     internal void Validate(IReadOnlyDictionary<Guid, MixSource> sources)
     {
         if (!double.IsFinite(this.Bpm) || this.Bpm is < 10 or > 400 || !double.IsFinite(this.Start) || !double.IsFinite(this.End) || this.End <= this.Start ||
+            !double.IsFinite(this.OutputStartFraction) || !double.IsFinite(this.OutputEndFraction) ||
+            this.OutputStartFraction < 0 || this.OutputEndFraction > 1 || this.OutputEndFraction <= this.OutputStartFraction ||
             this.Lane is null || this.ClipIds is null || this.Lane.Clips.Any(clip => !sources.ContainsKey(clip.SourceId)) ||
             this.ClipIds.Any(id => !this.Lane.Clips.Any(clip => clip.Id == id)) ||
             this.FrozenClipId is Guid frozen && !this.Lane.Clips.Any(clip => clip.Id == frozen) ||

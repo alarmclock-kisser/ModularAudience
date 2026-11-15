@@ -149,24 +149,26 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_apply
             //
             this.button_apply.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            this.button_apply.DialogResult = DialogResult.OK;
+            this.button_apply.DialogResult = DialogResult.None;
             this.button_apply.Location = new Point(272, 165);
             this.button_apply.Name = "button_apply";
             this.button_apply.Size = new Size(75, 25);
             this.button_apply.TabIndex = 8;
             this.button_apply.Text = "Apply";
             this.button_apply.UseVisualStyleBackColor = true;
+            this.button_apply.Click += this.button_apply_Click;
             // 
             // button_cancel
             // 
             this.button_cancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            this.button_cancel.DialogResult = DialogResult.Cancel;
+            this.button_cancel.DialogResult = DialogResult.None;
             this.button_cancel.Location = new Point(353, 165);
             this.button_cancel.Name = "button_cancel";
             this.button_cancel.Size = new Size(75, 25);
             this.button_cancel.TabIndex = 9;
             this.button_cancel.Text = "Cancel";
             this.button_cancel.UseVisualStyleBackColor = true;
+            this.button_cancel.Click += this.button_cancel_Click;
             // 
             // BreakbeatTrackSettingsDialog
             // 

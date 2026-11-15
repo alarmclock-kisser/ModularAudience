@@ -216,7 +216,8 @@ public sealed class EffectCurveTests
         Assert.AreEqual(10000d, map.SourceAt(map.OutputFrames), 1e-8);
         Assert.IsTrue(new EffectCurveTimeMap(20, 1, _ => 1, default).IsIdentity);
         Assert.AreEqual(2d, new EffectCurveTimeMap(20, 1, _ => 2, default).ConstantFactor);
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new EffectCurveTimeMap(1_000_000, 64, _ => 8, default));
+        Assert.AreEqual(3_200_000d, new EffectCurveTimeMap(100_000, 64, _ => 32, default).OutputFrames, 0.1);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new EffectCurveTimeMap(100_000, 64, _ => 200, default));
         using var cts = new CancellationTokenSource(); cts.Cancel();
         Assert.ThrowsExactly<OperationCanceledException>(() => new EffectCurveTimeMap(20000, 1, _ => 1, cts.Token));
     }

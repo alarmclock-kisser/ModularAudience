@@ -1997,41 +1997,52 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             int sourceIndex = this.GetOriginalTrackIndex(row);
             bool canEditInstrument = sourceIndex >= 0 && sourceIndex < this.sourceSampleOrder.Count
                 && this.instrumentSettingsBySample.ContainsKey(this.sourceSampleOrder[sourceIndex]);
-            using BreakbeatTrackSettingsDialog dialog = new(
-                sampleName, this.trackSettings[row], this.samples.Count > 1, canEditInstrument);
+            BreakbeatTrackSettingsDialog dialog = new(
+                sampleName, this.trackSettings[row], canRemoveTrack: true, canEditInstrument);
             if (canEditInstrument)
                 dialog.EditInstrumentRequested += (_, _) => this.EditInstrumentTrack(row, dialog);
-            DialogResult result = dialog.ShowDialog(this);
-            if (dialog.CloneTrackRequested)
+            dialog.FormClosed += (_, _) =>
             {
-                this.CloneSampleTrack(row);
-                return;
-            }
+                if (this.IsDisposed || this.Disposing)
+                {
+                    return;
+                }
 
-            if (dialog.RemoveTrackRequested)
-            {
-                this.RemoveSampleTrack(row);
-                return;
-            }
+                this.Enabled = true;
+                if (dialog.CloneTrackRequested)
+                {
+                    this.CloneSampleTrack(row);
+                }
+                else if (dialog.RemoveTrackRequested)
+                {
+                    this.RemoveSampleTrack(row);
+                }
+                else if (dialog.DialogResult == DialogResult.OK && row < this.samples.Count)
+                {
+                    BreakbeatTrackSettings settings = NormalizeTrackSettings(dialog.Settings);
+                    this.trackSettings[row] = settings;
+                    int originalTrackIndex = this.GetOriginalTrackIndex(row);
+                    if (this.trackSettingsBySample is not null
+                        && originalTrackIndex >= 0
+                        && originalTrackIndex < this.sourceSampleOrder.Count)
+                    {
+                        this.trackSettingsBySample[this.sourceSampleOrder[originalTrackIndex]] = settings;
+                    }
 
-            if (result != DialogResult.OK)
-            {
-                return;
-            }
+                    this.deadGroupNotes.Clear();
+                    this.pictureBox_pattern.Invalidate();
+                    this.CommitHistoryAction();
+                }
 
-            BreakbeatTrackSettings settings = NormalizeTrackSettings(dialog.Settings);
-            this.trackSettings[row] = settings;
-            int originalTrackIndex = this.GetOriginalTrackIndex(row);
-            if (this.trackSettingsBySample is not null
-                && originalTrackIndex >= 0
-                && originalTrackIndex < this.sourceSampleOrder.Count)
-            {
-                this.trackSettingsBySample[this.sourceSampleOrder[originalTrackIndex]] = settings;
-            }
+                this.Activate();
+            };
 
-            this.deadGroupNotes.Clear();
-            this.pictureBox_pattern.Invalidate();
-            this.CommitHistoryAction();
+            dialog.StartPosition = FormStartPosition.Manual;
+            dialog.Location = new Point(
+                Math.Max(Screen.FromControl(this).WorkingArea.Left, this.Left + (this.Width - dialog.Width) / 2),
+                Math.Max(Screen.FromControl(this).WorkingArea.Top, this.Top + (this.Height - dialog.Height) / 2));
+            dialog.Show(this);
+            this.Enabled = false;
         }
 
         private void EditInstrumentTrack(int row, IWin32Window owner)
@@ -2093,7 +2104,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void RemoveSampleTrack(int row)
         {
-            if (this.samples.Count <= 1 || row < 0 || row >= this.samples.Count)
+            if (row < 0 || row >= this.samples.Count)
             {
                 return;
             }
@@ -2105,6 +2116,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             AudioObj sourceSample = this.sourceSampleOrder[sourceIndex];
+            AudioObj editorSample = this.samples[row];
             bool instrumentTrack = this.instrumentSettingsBySample.ContainsKey(sourceSample);
             PatternEditorHistoryState preRemovalState = this.CaptureHistoryState();
             BreakbeatPatternNote[] originalNotes = this.notes.ToArray();
@@ -2143,6 +2155,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             this.samples.RemoveAt(row);
+            this.autoRerolls.Remove(editorSample);
+            this.soloTracks.Remove(editorSample);
+            this.mutedTracks.Remove(editorSample);
+            this.instrumentSettingsBySample.Remove(sourceSample);
             this.originalSampleOrder.RemoveAt(sourceIndex);
             this.sourceSampleOrder.RemoveAt(sourceIndex);
             this.pattern.RemoveAt(row);
