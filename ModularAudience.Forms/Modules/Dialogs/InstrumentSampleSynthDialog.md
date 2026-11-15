@@ -22,7 +22,7 @@ height or width enables parameter scrolling again, without automatically resizin
 - Prehear on change (ms) defaults to 200. Changes restart the delay; playback starts once
   both the delay and current render are complete. At 0 the number is gray and automatic
   prehear is disabled. Manual Prehear remains available; opening the window does not autoplay.
-  The delay is shared across all twelve families, synchronized between open windows and
+  The delay is shared across all thirteen families, synchronized between open windows and
   restored from `%APPDATA%\ModularAudience\SampleSynthesizer\settings.json`.
 - Press Space outside the preset-name field to restart Prehear. Active prehears in other open
   synthesizer windows stop first; holding Space does not trigger repeated starts.
@@ -59,12 +59,17 @@ height or width enables parameter scrolling again, without automatically resizin
 | Synth Pads & Poly | Supersaw Stack, Wide Unison Saw, Warm Analog Pad, Dark Drone Pad, Hoover Rave Lead | Detuned multi-oscillator saw stacks, triangle/sub layers, sustained envelopes and resonant filtering. |
 | Synth Keys & Plucks | Digital Pluck, FM Bell, House Techno Stab | Decaying digital partials, inharmonic FM modulation and short saw/pulse stabs. |
 | Other Sound FX | 100 Hz Censor Tone, Buzzer, Synthetic Vocal Whoop, 8-Bit Coin, 8-Bit Laser, 8-Bit Power-Up, 8-Bit Game Over, DJ Scratch, Morse SOS, Sonar Ping, Boat Foghorn, Alarm Siren, Radio Static | Procedural one-shots made from oscillators, formant-weighted harmonics, pitch sweeps and seeded noise; no source recordings. |
+| Oriental Sounds | Zurna, Mey / Duduk, Kanun, Bağlama (Saz), Oud, Ney, Black Sea Kemençe, Darbuka Dum, Darbuka Tek | Nasal/formant reed tones, airy flute, resonant plucked strings, bowed harmonics and tuned hand-drum attacks. |
 
 All instruments and effects are generated procedurally, not from recordings. The synthetic vocal whoop is an original oscillator/formant sound.
 Brightness, body, noise, drive, cutoff/Q, filter envelope, room, width and output level
 are editable. Family-specific controls include strike/bow position, percussion level and drum pitch sweep.
 The Acid 303 Slide preset performs a short per-note glide into its target pitch; it does not depend on
 the previous note. Chord stabs are likewise single-note timbres and can be arranged as chords in the editor.
+Oriental Sounds is one top-level family in both Sample Synthesizer menus; its instrument selector contains
+the eight requested instruments, with separate Dum and Tek articulations for Darbuka. The Pitch control
+supports 0.25-semitone (25-cent) steps, including half-semitone quarter-tone offsets for Kanun and Bağlama.
+Oud uses a short per-note pitch scoop to suggest its fretless slides.
 
 ## Drum kits
 
@@ -106,7 +111,7 @@ Loading a sound preserves the shared prehear-delay preference.
 Files live in `%APPDATA%\ModularAudience\SampleSynthesizer\Presets\`:
 `Keyboard.json`, `DrumSet.json`, `Woodwinds.json`, `Brass.json`, `PluckedStrings.json`,
 `BowedStrings.json`, `MalletsAndBells.json`, `Organ.json`, `SynthBassAndLead.json`,
-`SynthPadsAndPoly.json`, `SynthKeysAndPlucks.json`, `OtherSoundFx.json`.
+`SynthPadsAndPoly.json`, `SynthKeysAndPlucks.json`, `OtherSoundFx.json`, `OrientalSounds.json`.
 Each document has a version, family-specific schema and family identifier. Foreign-family
 files/configurations are rejected. Instrument names are saved alongside their indices
 so catalog reordering does not silently select a different voice. Older presets without the

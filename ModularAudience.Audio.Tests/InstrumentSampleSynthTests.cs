@@ -78,6 +78,45 @@ public sealed class InstrumentSampleSynthTests
     }
 
     [STATestMethod]
+    public void EditingSynthDialogStartsFromTheInstrumentSettingsProvided()
+    {
+        var initial = Short(SynthFamily.Keyboard);
+        initial.VoiceIndex = 1;
+        initial.ApplyVoiceDefaults();
+        initial.NoteBeats = 0.25;
+        initial.DurationMultiplier = 1.5;
+        initial.GainPercent = 43;
+        initial.SampleRate = 48000;
+        initial.Channels = 2;
+        using var dialog = new InstrumentSampleSynthDialog(
+            initial.Family, store, initialSettings: initial);
+
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var voice = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("voice", flags)!.GetValue(dialog)!;
+        var duration = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("duration", flags)!.GetValue(dialog)!;
+        var articulation = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("articulation", flags)!.GetValue(dialog)!;
+        var format = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("format", flags)!.GetValue(dialog)!;
+        var numbers = (Dictionary<string, NumericUpDown>)typeof(InstrumentSampleSynthDialog)
+            .GetField("numbers", flags)!.GetValue(dialog)!;
+
+        Assert.AreEqual(1, voice.SelectedIndex);
+        Assert.AreEqual("1/16", duration.SelectedItem);
+        Assert.AreEqual(1, articulation.SelectedIndex);
+        Assert.AreEqual(1, format.SelectedIndex);
+        Assert.AreEqual(43m, numbers[nameof(initial.GainPercent)].Value);
+        var captured = (InstrumentSynthSettings)typeof(InstrumentSampleSynthDialog)
+            .GetMethod("CaptureSettings", flags)!.Invoke(dialog, null)!;
+        Assert.AreEqual(initial.VoiceIndex, captured.VoiceIndex);
+        Assert.AreEqual(initial.NoteBeats, captured.NoteBeats, 1e-12);
+        Assert.AreEqual(initial.DurationMultiplier, captured.DurationMultiplier, 1e-12);
+        Assert.AreEqual(initial.GainPercent, captured.GainPercent, 1e-12);
+    }
+
+    [STATestMethod]
     public void BothSampleSynthMenusListEveryInstrumentFamily()
     {
         using var menu = WindowMain.CreateSampleSynthesizerMenu(_ => { });
@@ -87,6 +126,28 @@ public sealed class InstrumentSampleSynthTests
             .ToArray();
 
         CollectionAssert.AreEqual(expected, actual);
+    }
+
+    [STATestMethod]
+    public void OrientalSoundsFamilyGroupsEightInstrumentsAndDarbukaArticulations()
+    {
+        string[] expected =
+        [
+            "Zurna", "Mey / Duduk", "Kanun", "Bağlama (Saz)", "Oud", "Ney",
+            "Black Sea Kemençe", "Darbuka Dum", "Darbuka Tek"
+        ];
+        string[] actual = InstrumentSynthCatalog.Voices(SynthFamily.OrientalSounds)
+            .Select(voice => voice.Name)
+            .ToArray();
+
+        CollectionAssert.AreEqual(expected, actual);
+        Assert.AreEqual("Oriental Sounds", InstrumentSynthCatalog.FamilyName(SynthFamily.OrientalSounds));
+
+        using var dialog = new InstrumentSampleSynthDialog(SynthFamily.OrientalSounds, store);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var voice = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("voice", flags)!.GetValue(dialog)!;
+        CollectionAssert.AreEqual(expected, voice.Items.Cast<SynthVoice>().Select(item => item.Name).ToArray());
     }
 
     [TestMethod]
@@ -111,6 +172,21 @@ public sealed class InstrumentSampleSynthTests
         Assert.IsFalse(first.Data.SequenceEqual(changed.Data));
         using var cts = new CancellationTokenSource(); cts.Cancel();
         Assert.ThrowsExactly<OperationCanceledException>(() => InstrumentSampleSynth.Render(drum, cts.Token));
+    }
+
+    [TestMethod]
+    public void LoudInstrumentTrackGetsReducedButAdjustableStartingVolume()
+    {
+        InstrumentSynthSettings settings = Short(SynthFamily.SynthBassAndLead);
+        settings.VoiceIndex = 0;
+        settings.ApplyVoiceDefaults();
+        settings.GainPercent = 100;
+
+        float initialVolume = BreakbeatPatternInstrumentRenderer.GetInitialTrackVolumePercent(settings);
+
+        Assert.IsTrue(initialVolume is >= 10 and < 100);
+        settings.GainPercent = 0;
+        Assert.AreEqual(100f, BreakbeatPatternInstrumentRenderer.GetInitialTrackVolumePercent(settings));
     }
 
     [TestMethod]
@@ -212,7 +288,12 @@ public sealed class InstrumentSampleSynthTests
                    "Direct"))
         {
             Assert.IsNotNull(instrumentPattern);
-            CollectionAssert.AreEqual(directPattern.Data, instrumentPattern!.Data);
+            float scale = Math.Min(
+                1f,
+                0.1f / ModularAudience.Audio.Processing.PlaylistNormalizer.MeasureRms(exactSample.Data));
+            Assert.HasCount(directPattern.Data.Length, instrumentPattern!.Data);
+            for (int i = 0; i < directPattern.Data.Length; i++)
+                Assert.AreEqual(directPattern.Data[i] * scale, instrumentPattern.Data[i], 0.000001f, $"Sample {i}");
         }
     }
 

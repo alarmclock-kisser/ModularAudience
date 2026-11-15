@@ -1,4 +1,5 @@
 using ModularAudience.Forms;
+using ModularAudience.Forms.Controls;
 
 namespace ModularAudience.Forms.Modules.Dialogs
 {
@@ -42,7 +43,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             button_addBar = new Button();
             checkBox_preHear = new CheckBox();
             button_hear = new Button();
-            numericUpDown_bpm = new NumericUpDown();
+            numericUpDown_bpm = new BreakbeatTempoNumericUpDown();
             label_bpm = new Label();
             numericUpDown_resolution = new NumericUpDown();
             label_resolution = new Label();
@@ -369,7 +370,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private HScrollBar hScrollBar_pattern;
         private Panel panel_controls;
         private Label label_bpm;
-        private NumericUpDown numericUpDown_bpm;
+        private BreakbeatTempoNumericUpDown numericUpDown_bpm;
         private Label label_resolution;
         private NumericUpDown numericUpDown_resolution;
         private Button button_hear;

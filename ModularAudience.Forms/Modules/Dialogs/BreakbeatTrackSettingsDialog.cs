@@ -4,11 +4,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
 {
     public partial class BreakbeatTrackSettingsDialog : Form
     {
-        public BreakbeatTrackSettingsDialog(string sampleName, BreakbeatTrackSettings settings, bool canRemoveTrack)
+        private readonly float instrumentLoudnessReferencePercent;
+
+        public BreakbeatTrackSettingsDialog(
+            string sampleName,
+            BreakbeatTrackSettings settings,
+            bool canRemoveTrack,
+            bool canEditInstrument = false)
         {
             this.InitializeComponent();
             this.Text = $"Track Settings: {sampleName}";
             this.button_removeTrack.Enabled = canRemoveTrack;
+            this.button_editInstrument.Enabled = canEditInstrument;
+            this.instrumentLoudnessReferencePercent = settings.InstrumentLoudnessReferencePercent;
             this.comboBox_defaultPlaybackMode.DataSource = Enum.GetValues<BreakbeatPlaybackMode>();
             this.numericUpDown_volume.Value = (decimal)Math.Clamp(settings.DefaultVolumePercent, 0f, 250f);
             this.numericUpDown_pitch.Value = (decimal)Math.Clamp(settings.DefaultPitchSemitones, -24f, 24f);
@@ -20,7 +28,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             (float)this.numericUpDown_pitch.Value,
             this.comboBox_defaultPlaybackMode.SelectedItem is BreakbeatPlaybackMode mode
                 ? mode
-                : BreakbeatPlaybackMode.TimeStretch);
+                : BreakbeatPlaybackMode.TimeStretch,
+            this.instrumentLoudnessReferencePercent);
 
         private void button_reset_Click(object? sender, EventArgs e)
         {
@@ -32,6 +41,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public bool RemoveTrackRequested { get; private set; }
 
         public bool CloneTrackRequested { get; private set; }
+
+        public event EventHandler? EditInstrumentRequested;
+
+        private void button_editInstrument_Click(object? sender, EventArgs e) =>
+            this.EditInstrumentRequested?.Invoke(this, EventArgs.Empty);
 
         private void button_cloneTrack_Click(object? sender, EventArgs e)
         {

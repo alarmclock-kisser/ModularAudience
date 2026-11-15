@@ -38,6 +38,29 @@ public sealed class BreakbeatPatternWindowTests
         Assert.AreEqual(87.5m, selectedEditor.Bpm);
     }
 
+    [TestMethod]
+    public void TrackHeaderFallsBackToSampleNameAndReservesThreeWrappedLinesBelowSummary()
+    {
+        Assert.AreEqual(
+            "Synthesized Oriental Instrument",
+            BreakbeatPatternEditorDialog.ResolveTrackHeaderLabel("", " Synthesized Oriental Instrument ", 0));
+        Assert.AreEqual(
+            "Custom Track Name",
+            BreakbeatPatternEditorDialog.ResolveTrackHeaderLabel(" Custom Track Name ", "Source Sample", 0));
+        Assert.AreEqual(
+            "Track 3",
+            BreakbeatPatternEditorDialog.ResolveTrackHeaderLabel(null, " ", 2));
+
+        RectangleF rowBounds = new(8f, 20f, 200f, 210f);
+        const float lineHeight = 12f;
+        var layout = BreakbeatPatternEditorDialog.GetTrackHeaderTextLayout(rowBounds, lineHeight, hasSummary: true);
+
+        Assert.IsTrue(layout.SummaryBounds.Height > 0);
+        Assert.IsTrue(layout.NameBounds.Top > layout.SummaryBounds.Bottom);
+        Assert.IsTrue(layout.NameBounds.Height > lineHeight);
+        Assert.IsTrue(layout.NameBounds.Height <= lineHeight * 3f);
+    }
+
     [STATestMethod]
     public void InstrumentTrackKeepsSynthConfigurationOutOfAudioSourcePattern()
     {

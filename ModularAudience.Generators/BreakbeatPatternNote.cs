@@ -9,7 +9,8 @@ namespace ModularAudience.Generators
     public sealed record BreakbeatTrackSettings(
         float DefaultVolumePercent = 100f,
         float DefaultPitchSemitones = 0f,
-        BreakbeatPlaybackMode DefaultPlaybackMode = BreakbeatPlaybackMode.TimeStretch);
+        BreakbeatPlaybackMode DefaultPlaybackMode = BreakbeatPlaybackMode.TimeStretch,
+        float InstrumentLoudnessReferencePercent = 100f);
 
     public sealed record BreakbeatPatternNote(
         int TrackIndex,

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using ModularAudience.Audio;
+using ModularAudience.Audio.Processing;
 using ModularAudience.Audio.Synthesis;
 using ModularAudience.Generators;
 
@@ -137,6 +138,31 @@ internal sealed class BreakbeatInstrumentSampleCache : IDisposable
 internal static class BreakbeatPatternInstrumentRenderer
 {
     private const long MaximumPreparedInstrumentBytes = 512L * 1024 * 1024;
+    private const float TargetInstrumentHitRms = 0.1f;
+    private const float MinimumInstrumentHitRms = 0.0001f;
+
+    private sealed class TrackHitLevels
+    {
+        public double SumSquaredRms;
+        public int Count;
+        public HashSet<int> VariantIndices { get; } = [];
+    }
+
+    internal static float GetInitialTrackVolumePercent(InstrumentSynthSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.Validate();
+        InstrumentSynthSettings reference = settings.Clone();
+        reference.Bpm = 120;
+        reference.NoteBeats = 1;
+        reference.DurationMultiplier = 1;
+        reference.ReleaseSeconds = Math.Min(reference.ReleaseSeconds, 1);
+        using AudioObj sample = InstrumentSampleSynth.Render(reference);
+        float rms = PlaylistNormalizer.MeasureRms(sample.Data);
+        if (!float.IsFinite(rms) || rms <= MinimumInstrumentHitRms) return 100;
+        double percent = Math.Clamp(TargetInstrumentHitRms / rms * 100, 10, 100);
+        return (float)Math.Clamp(Math.Round(percent / 5, MidpointRounding.AwayFromZero) * 5, 10, 100);
+    }
 
     public static async Task<AudioObj?> RenderAsync(
         IReadOnlyList<BreakbeatPatternNote> notes,
@@ -165,6 +191,8 @@ internal static class BreakbeatPatternInstrumentRenderer
         List<BreakbeatPatternNote> renderNotes = new(notes.Count);
         List<AudioObj> temporarySamples = [];
         Dictionary<string, int> variantIndices = new(StringComparer.Ordinal);
+        Dictionary<int, float> variantRms = [];
+        Dictionary<int, TrackHitLevels> trackHitLevels = [];
         long preparedBytes = 0;
 
         try
@@ -207,6 +235,21 @@ internal static class BreakbeatPatternInstrumentRenderer
                     renderTrackSettings.Add(track with { DefaultPitchSemitones = 0f });
                 }
 
+                if (!variantRms.TryGetValue(variantIndex, out float hitRms))
+                {
+                    hitRms = PlaylistNormalizer.MeasureRms(renderSamples[variantIndex].Data);
+                    variantRms.Add(variantIndex, hitRms);
+                }
+                if (!trackHitLevels.TryGetValue(note.TrackIndex, out TrackHitLevels? levels))
+                    trackHitLevels.Add(note.TrackIndex, levels = new TrackHitLevels());
+                double noteVolume = float.IsFinite(note.VolumePercent)
+                    ? Math.Clamp(note.VolumePercent, 0f, 250f) / 100d
+                    : 1;
+                double noteRms = hitRms * noteVolume;
+                levels.SumSquaredRms += noteRms * noteRms;
+                levels.Count++;
+                levels.VariantIndices.Add(variantIndex);
+
                 renderNotes.Add(note with
                 {
                     TrackIndex = variantIndex,
@@ -218,6 +261,30 @@ internal static class BreakbeatPatternInstrumentRenderer
                     HardResized = false,
                     OriginalDurationTicks = note.DurationTicks
                 });
+            }
+
+            foreach ((int trackIndex, TrackHitLevels levels) in trackHitLevels)
+            {
+                if (levels.Count == 0) continue;
+                double aggregateRms = Math.Sqrt(levels.SumSquaredRms / levels.Count);
+                if (!double.IsFinite(aggregateRms) || aggregateRms <= MinimumInstrumentHitRms) continue;
+                float referencePercent = trackIndex < trackSettings.Count
+                    && float.IsFinite(trackSettings[trackIndex].InstrumentLoudnessReferencePercent)
+                    && trackSettings[trackIndex].InstrumentLoudnessReferencePercent > 0
+                        ? trackSettings[trackIndex].InstrumentLoudnessReferencePercent
+                        : 100f;
+                float userPercent = trackIndex < trackSettings.Count
+                    && float.IsFinite(trackSettings[trackIndex].DefaultVolumePercent)
+                        ? Math.Clamp(trackSettings[trackIndex].DefaultVolumePercent, 0f, 250f)
+                        : 100f;
+                double normalizationPercent = Math.Min(100, TargetInstrumentHitRms / aggregateRms * 100);
+                float effectivePercent = (float)Math.Clamp(
+                    normalizationPercent * userPercent / referencePercent, 0, 250);
+                foreach (int variantIndex in levels.VariantIndices)
+                    renderTrackSettings[variantIndex] = renderTrackSettings[variantIndex] with
+                    {
+                        DefaultVolumePercent = effectivePercent
+                    };
             }
 
             return await BreakbeatGenerator_V2.RenderPatternNotesAsync(

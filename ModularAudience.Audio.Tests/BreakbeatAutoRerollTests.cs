@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using ModularAudience.Audio.Synthesis;
 using ModularAudience.Forms;
 using ModularAudience.Forms.Modules.Dialogs;
 using ModularAudience.Generators;
@@ -15,7 +16,13 @@ public sealed class BreakbeatAutoRerollTests
     private static object Field(object target, string name) => target.GetType().GetField(name, Private)!.GetValue(target)!;
     private static object? Invoke(object target, string name, params object[] args) => target.GetType().GetMethod(name, Private)!.Invoke(target, args);
 
-    private static void Configure(BreakbeatPatternEditorDialog editor, int row, int loops, bool ensemble, bool solo)
+    private static void Configure(
+        BreakbeatPatternEditorDialog editor,
+        int row,
+        int loops,
+        bool ensemble,
+        bool solo,
+        bool enabled = true)
     {
         var samples = (List<AudioObj>)Field(editor, "samples");
         var states = (IDictionary)Field(editor, "autoRerolls");
@@ -23,7 +30,7 @@ public sealed class BreakbeatAutoRerollTests
         object state = Activator.CreateInstance(stateType, true)!;
         object options = stateType.GetField("Options")!.GetValue(state)!;
         void Set(string key, object value) => options.GetType().GetProperty(key)!.SetValue(options, value);
-        Set("Enabled", true); Set("Loops", loops); Set("SaveEnsemble", ensemble); Set("SaveSolo", solo);
+        Set("Enabled", enabled); Set("Loops", loops); Set("SaveEnsemble", ensemble); Set("SaveSolo", solo);
         object generate = options.GetType().GetProperty("Generate")!.GetValue(options)!;
         void Gen(string key, object value) => generate.GetType().GetProperty(key)!.SetValue(generate, value);
         Gen("DensityPercent", 100); Gen("AmenFactorPercent", 0); Gen("MinNoteLengthSteps", 1); Gen("MaxNoteLengthSteps", 1);
@@ -177,16 +184,54 @@ public sealed class BreakbeatAutoRerollTests
         using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
         using var editor = Editor(sample);
         Configure(editor, 0, 7, false, true);
+        var sourceSamples = (List<AudioObj>)Field(editor, "samples");
+        var sourceState = ((IDictionary)Field(editor, "autoRerolls"))[sourceSamples[0]]!;
+        sourceState.GetType().GetField("CompletedLoops")!.SetValue(sourceState, 3L);
+        BreakbeatPatternNote[] sourceNotes = ((List<BreakbeatPatternNote>)Field(editor, "notes"))
+            .Where(note => note.TrackIndex == 0).ToArray();
         Invoke(editor, "CommitHistoryAction");
         Invoke(editor, "CloneSampleTrack", 0);
         var states = (IDictionary)Field(editor, "autoRerolls");
         var samples = (List<AudioObj>)Field(editor, "samples");
         Assert.IsTrue(states.Contains(samples[1]));
+        var cloneState = states[samples[1]]!;
+        var cloneOptions = cloneState.GetType().GetField("Options")!.GetValue(cloneState)!;
+        Assert.AreEqual(4, cloneOptions.GetType().GetProperty("Loops")!.GetValue(cloneOptions),
+            "The clone starts with the default loop interval, not the source track's N value.");
+        Assert.AreEqual(0L, cloneState.GetType().GetField("CompletedLoops")!.GetValue(cloneState));
+        Assert.AreEqual(3L, sourceState.GetType().GetField("CompletedLoops")!.GetValue(sourceState));
+        var notes = (List<BreakbeatPatternNote>)Field(editor, "notes");
+        Assert.IsFalse(sourceNotes.Select(note => note with { TrackIndex = 1 })
+            .SequenceEqual(notes.Where(note => note.TrackIndex == 1)),
+            "An enabled Auto-Roll clone should reroll rather than retain duplicate notes.");
         Invoke(editor, "UndoEditorAction");
         Assert.HasCount(2, samples);
         Assert.IsTrue(states.Contains(samples[0]));
         var options = states[samples[0]]!.GetType().GetField("Options")!.GetValue(states[samples[0]])!;
         Assert.AreEqual(7, options.GetType().GetProperty("Loops")!.GetValue(options));
+    }
+
+    [STATestMethod]
+    public void CloningAutoRollOffTrackCopiesNotesExactlyAndResetsLoopInterval()
+    {
+        using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using var editor = Editor(sample);
+        Configure(editor, 0, 7, false, false, enabled: false);
+        var samples = (List<AudioObj>)Field(editor, "samples");
+        var sourceNotes = ((List<BreakbeatPatternNote>)Field(editor, "notes"))
+            .Where(note => note.TrackIndex == 0).ToArray();
+
+        Invoke(editor, "CloneSampleTrack", 0);
+
+        var notes = (List<BreakbeatPatternNote>)Field(editor, "notes");
+        CollectionAssert.AreEqual(
+            sourceNotes.Select(note => note with { TrackIndex = 1 }).ToArray(),
+            notes.Where(note => note.TrackIndex == 1).ToArray());
+        var states = (IDictionary)Field(editor, "autoRerolls");
+        var cloneState = states[samples[1]]!;
+        var cloneOptions = cloneState.GetType().GetField("Options")!.GetValue(cloneState)!;
+        Assert.AreEqual(4, cloneOptions.GetType().GetProperty("Loops")!.GetValue(cloneOptions));
+        Assert.AreEqual(0L, cloneState.GetType().GetField("CompletedLoops")!.GetValue(cloneState));
     }
 
     [STATestMethod]
@@ -214,7 +259,7 @@ public sealed class BreakbeatAutoRerollTests
         tracks.SetValue(Activator.CreateInstance(tupleType, [2, "Snare", donor]), 0);
         dialogType.GetMethod("SetOtherTrackOptions", Private)!.Invoke(dialog, [tracks]);
         var combo = (ComboBox)Field(dialog, "combo_applyFromTracks");
-        Assert.AreEqual("#2 — Snare", combo.Items[0].ToString());
+        Assert.AreEqual("#2 — Snare", combo.Items[0]!.ToString());
         combo.SelectedIndex = 0;
         Assert.AreEqual(12m, ((NumericUpDown)Field(dialog, "numeric_loops")).Value);
         Assert.AreEqual(75m, ((NumericUpDown)Field(dialog, "numeric_density")).Value);
@@ -310,6 +355,88 @@ public sealed class BreakbeatAutoRerollTests
         Assert.AreEqual(7L, Count(0));
         Invoke(editor, "RollAutoTrack", 0, true);
         Assert.AreEqual(0L, Count(0));
+    }
+
+    [STATestMethod]
+    public void EditingActiveAutoRerollOptionsDefersGenerationAndPreservesCounter()
+    {
+        using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using var editor = Editor(sample);
+        Configure(editor, 0, 4, false, false);
+        var samples = (List<AudioObj>)Field(editor, "samples");
+        var state = ((IDictionary)Field(editor, "autoRerolls"))[samples[0]]!;
+        state.GetType().GetField("CompletedLoops")!.SetValue(state, 2L);
+        object options = state.GetType().GetField("Options")!.GetValue(state)!;
+        object updated = options.GetType().GetMethod("Clone")!.Invoke(options, null)!;
+        updated.GetType().GetProperty("Loops")!.SetValue(updated, 5);
+        var notes = (List<BreakbeatPatternNote>)Field(editor, "notes");
+        var before = notes.ToArray();
+
+        Invoke(editor, "ConfirmTrackGenerateOptions", 0, updated, false, true);
+
+        Assert.AreEqual(2L, state.GetType().GetField("CompletedLoops")!.GetValue(state));
+        Assert.AreEqual(5, updated.GetType().GetProperty("Loops")!.GetValue(
+            state.GetType().GetField("Options")!.GetValue(state)));
+        CollectionAssert.AreEqual(before, notes.ToArray());
+
+        Invoke(editor, "AdvanceAutoRerollCounters", 1L, new[] { 0, 1, 2, 3 });
+        Assert.AreEqual(3L, state.GetType().GetField("CompletedLoops")!.GetValue(state));
+        CollectionAssert.AreEqual(before, notes.ToArray());
+        Invoke(editor, "AdvanceAutoRerollCounters", 2L, new[] { 0, 1, 2, 3 });
+        Assert.AreEqual(0L, state.GetType().GetField("CompletedLoops")!.GetValue(state));
+    }
+
+    [STATestMethod]
+    public void TrackSettingsOffersInstrumentEditOnlyWhenEnabled()
+    {
+        using var sampleTrack = new BreakbeatTrackSettingsDialog("Sample", new(), canRemoveTrack: true);
+        using var instrumentTrack = new BreakbeatTrackSettingsDialog(
+            "Instrument", new(), canRemoveTrack: true, canEditInstrument: true);
+        Assert.IsFalse(((Button)Field(sampleTrack, "button_editInstrument")).Enabled);
+        Assert.IsTrue(((Button)Field(instrumentTrack, "button_editInstrument")).Enabled);
+
+        bool requested = false;
+        instrumentTrack.EditInstrumentRequested += (_, _) => requested = true;
+        Invoke(instrumentTrack, "button_editInstrument_Click", instrumentTrack, EventArgs.Empty);
+        Assert.IsTrue(requested);
+    }
+
+    [STATestMethod]
+    public void InstrumentTrackSettingsAreEditableAndUndoable()
+    {
+        using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using var editor = Editor(sample);
+        var original = new InstrumentSynthSettings { Family = SynthFamily.Keyboard };
+        original.ApplyVoiceDefaults();
+        Invoke(editor, "AddInstrumentTrack", original);
+
+        var edited = original.Clone();
+        edited.VoiceIndex = 1;
+        edited.ApplyVoiceDefaults();
+        edited.GainPercent = 43;
+        edited.SampleRate = 48000;
+        edited.NoteBeats = 2;
+        Invoke(editor, "UpdateInstrumentTrackSettings", 2, edited);
+
+        InstrumentSynthSettings?[] settings = (InstrumentSynthSettings?[])Invoke(editor, "GetInstrumentSettingsByTrack")!;
+        Assert.AreEqual(1, settings[2]!.VoiceIndex);
+        Assert.AreEqual(43, settings[2]!.GainPercent);
+        Assert.AreEqual("Keyboard - Felt Upright", ((List<string>)Field(editor, "rowLabels"))[2]);
+        var samples = (List<AudioObj>)Field(editor, "samples");
+        Assert.AreEqual(48000, samples[2].SampleRate);
+        Assert.AreEqual(1.5, samples[2].Duration.TotalSeconds, 0.0001);
+
+        Invoke(editor, "UndoEditorAction");
+        settings = (InstrumentSynthSettings?[])Invoke(editor, "GetInstrumentSettingsByTrack")!;
+        Assert.AreEqual(0, settings[2]!.VoiceIndex);
+        Assert.AreEqual(75, settings[2]!.GainPercent);
+        Assert.AreEqual("Keyboard - Concert Grand", ((List<string>)Field(editor, "rowLabels"))[2]);
+        Assert.AreEqual(44100, samples[2].SampleRate);
+
+        Invoke(editor, "RedoEditorAction");
+        settings = (InstrumentSynthSettings?[])Invoke(editor, "GetInstrumentSettingsByTrack")!;
+        Assert.AreEqual(1, settings[2]!.VoiceIndex);
+        Assert.AreEqual(48000, samples[2].SampleRate);
     }
 
     [STATestMethod]

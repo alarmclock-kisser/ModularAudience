@@ -17,6 +17,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private void InitializeComponent()
         {
             this.label_defaults = new Label();
+            this.button_editInstrument = new Button();
             this.label_volume = new Label();
             this.numericUpDown_volume = new NumericUpDown();
             this.label_pitch = new Label();
@@ -41,6 +42,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.label_defaults.Size = new Size(124, 15);
             this.label_defaults.TabIndex = 0;
             this.label_defaults.Text = "Defaults for new notes";
+            //
+            // button_editInstrument
+            //
+            this.button_editInstrument.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            this.button_editInstrument.Enabled = false;
+            this.button_editInstrument.Location = new Point(268, 12);
+            this.button_editInstrument.Name = "button_editInstrument";
+            this.button_editInstrument.Size = new Size(160, 25);
+            this.button_editInstrument.TabIndex = 12;
+            this.button_editInstrument.Text = "Edit Instrument...";
+            this.button_editInstrument.UseVisualStyleBackColor = true;
+            this.button_editInstrument.Click += this.button_editInstrument_Click;
             // 
             // label_volume
             // 
@@ -165,6 +178,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.Controls.Add(this.button_cloneTrack);
             this.Controls.Add(this.button_removeTrack);
             this.Controls.Add(this.button_reset);
+            this.Controls.Add(this.button_editInstrument);
             this.Controls.Add(this.comboBox_defaultPlaybackMode);
             this.Controls.Add(this.label_defaultPlaybackMode);
             this.Controls.Add(this.numericUpDown_pitch);
@@ -186,6 +200,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         }
 
         private Label label_defaults;
+        private Button button_editInstrument;
         private Label label_volume;
         private NumericUpDown numericUpDown_volume;
         private Label label_pitch;

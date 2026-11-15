@@ -5,8 +5,9 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 
 internal sealed class TrackAutoRerollOptions
 {
+    public const int DefaultLoops = 4;
     public bool Enabled { get; set; }
-    public int Loops { get; set; } = 4;
+    public int Loops { get; set; } = DefaultLoops;
     public bool SaveEnsemble { get; set; }
     public bool SaveSolo { get; set; }
     public BreakbeatGenerateOptions Generate { get; set; } = new();
@@ -111,6 +112,7 @@ public partial class BreakbeatPatternEditorDialog
                 state.Options.Enabled = false;
             else
             {
+                bool deferUntilNextRoll = state.Options.Enabled;
                 if (this.trackGenerateDialog is { IsDisposed: false } existing)
                 {
                     existing.Activate();
@@ -131,7 +133,8 @@ public partial class BreakbeatPatternEditorDialog
                     this.Enabled = true;
                     if (dialog.DialogResult == DialogResult.OK && this.samples.Contains(sample))
                     {
-                        this.ConfirmTrackGenerateOptions(this.samples.IndexOf(sample), dialog.AutoOptions, dialog.ApplyForAll);
+                        this.ConfirmTrackGenerateOptions(this.samples.IndexOf(sample), dialog.AutoOptions,
+                            dialog.ApplyForAll, deferUntilNextRoll);
                         this.pictureBox_pattern.Invalidate();
                         this.CommitHistoryAction();
                     }
@@ -156,7 +159,11 @@ public partial class BreakbeatPatternEditorDialog
         int[] sections = this.GetLoopSectionsSnapshot();
         return sections.Length > 0 ? sections : Enumerable.Range(0, this.bars * 4).ToArray();
     }
-    private void ConfirmTrackGenerateOptions(int row, TrackAutoRerollOptions options, bool applyForAll)
+    private void ConfirmTrackGenerateOptions(
+        int row,
+        TrackAutoRerollOptions options,
+        bool applyForAll,
+        bool deferUntilNextRoll = false)
     {
         int[] rows = applyForAll ? Enumerable.Range(0, this.samples.Count).ToArray() : [row];
         foreach (int target in rows)
@@ -165,11 +172,10 @@ public partial class BreakbeatPatternEditorDialog
                 this.autoRerolls[this.samples[target]] = state = new();
             state.Options = options.Clone();
             state.Options.Enabled = true;
-            state.CompletedLoops = 0;
+            if (!deferUntilNextRoll) state.CompletedLoops = 0;
         }
-        // Confirming options is an explicit roll, including already populated tracks.
-        // Generate together so ensemble autosaves see one final shared state.
-        this.ApplyTrackAutoRerolls(rows, this.AutoRerollSections());
+        if (!deferUntilNextRoll)
+            this.ApplyTrackAutoRerolls(rows, this.AutoRerollSections());
     }
     private void ActivateAutoReroll(int row, TrackAutoRerollOptions options)
     {

@@ -61,11 +61,17 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     public InstrumentSampleSynthDialog(
         SynthFamily family,
         InstrumentSynthStore? store = null,
-        Action<InstrumentSynthSettings>? onInstrumentConfirmed = null)
+        Action<InstrumentSynthSettings>? onInstrumentConfirmed = null,
+        InstrumentSynthSettings? initialSettings = null)
     {
         this.store = store ?? InstrumentSynthStore.Shared;
         this.onInstrumentConfirmed = onInstrumentConfirmed;
-        this.family = family; settings = new() { Family = family }; settings.ApplyVoiceDefaults();
+        this.family = family;
+        settings = initialSettings?.Clone() ?? new() { Family = family };
+        if (settings.Family != family)
+            throw new ArgumentException("The initial instrument settings must match the selected synthesizer family.", nameof(initialSettings));
+        if (initialSettings is null) settings.ApplyVoiceDefaults();
+        else settings.Validate();
         this.InitializeSynthActionControls();
         KeyPreview = true;
         KeyDown += InstrumentSampleSynthDialog_KeyDown;
@@ -81,25 +87,36 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         void Field(string label, Control control) { top.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(5, 8, 2, 0) }); top.Controls.Add(control); }
         if (family == SynthFamily.DrumSet)
         {
-            kit.Items.AddRange(InstrumentSynthCatalog.DrumKits.Cast<object>().ToArray()); kit.SelectedIndex = 0;
-            drum.Items.AddRange(Enum.GetValues<SynthDrum>().Cast<object>().ToArray()); drum.SelectedIndex = 0;
+            kit.Items.AddRange(InstrumentSynthCatalog.DrumKits.Cast<object>().ToArray()); kit.SelectedIndex = settings.KitIndex;
+            drum.Items.AddRange(Enum.GetValues<SynthDrum>().Cast<object>().ToArray()); drum.SelectedIndex = (int)settings.Drum;
             Field("Drum Set Type", kit); Field("Drum Type", drum);
         }
         else
         {
-            voice.Items.AddRange(InstrumentSynthCatalog.Voices(family).Cast<object>().ToArray()); voice.SelectedIndex = 0;
+            voice.Items.AddRange(InstrumentSynthCatalog.Voices(family).Cast<object>().ToArray()); voice.SelectedIndex = settings.VoiceIndex;
             Field(family switch
             {
                 SynthFamily.Keyboard => "Keyboard Type",
                 SynthFamily.OtherSoundFx => "Sound Effect Type",
+                SynthFamily.OrientalSounds => "Oriental Instrument",
                 _ => "Instrument Type"
             }, voice);
         }
         note.Items.AddRange(noteNames.Reverse().Cast<object>().ToArray()); note.SelectedItem = InstrumentSampleSynth.NoteName(settings.MidiNote);
         if (family != SynthFamily.DrumSet) Field("Key Note", note);
         duration.Items.AddRange(Durations.Reverse().Select(d => (object)d.Name).ToArray());
-        duration.SelectedIndex = Durations.Length - 1 - (family == SynthFamily.OtherSoundFx ? 5 : 4);
-        articulation.Items.AddRange(["Straight", "Dotted", "Triplet"]); articulation.SelectedIndex = 0;
+        int durationIndex = initialSettings is null
+            ? family == SynthFamily.OtherSoundFx ? 5 : 4
+            : Array.FindIndex(Durations, item => Math.Abs(item.Beats - settings.NoteBeats) < 1e-8);
+        if (durationIndex < 0)
+            throw new ArgumentException("The initial key duration is not supported by this dialog.", nameof(initialSettings));
+        duration.SelectedIndex = Durations.Length - 1 - durationIndex;
+        articulation.Items.AddRange(["Straight", "Dotted", "Triplet"]);
+        articulation.SelectedIndex = initialSettings is null ? 0
+            : Math.Abs(settings.DurationMultiplier - 1.5) < 1e-8 ? 1
+            : Math.Abs(settings.DurationMultiplier - 2d / 3) < 1e-8 ? 2
+            : Math.Abs(settings.DurationMultiplier - 1) < 1e-8 ? 0
+            : throw new ArgumentException("The initial key timing is not supported by this dialog.", nameof(initialSettings));
         Field("Key Duration", duration); Field("Timing", articulation);
         tips.SetToolTip(duration, "Single-note gate length at the selected BPM. Release adds a separate tail; no repeated note sequence.");
         var parameters = new FlowLayoutPanel { Name = "panel_parameters", Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true, Padding = new Padding(4) };
@@ -113,7 +130,12 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             number.ValueChanged += (_, _) => QueueRender();
         }
         Number(nameof(settings.Bpm), "BPM", 20, 400, 0.5m, "Tempo used to calculate the musical gate length.");
-        Number(nameof(settings.PitchSemitones), "Pitch (± semitones)", -16, 16, 0.25m, "Quarter-semitone pitch adjustment. Drums retain their type-specific base pitch.");
+        Number(nameof(settings.PitchSemitones),
+            family == SynthFamily.OrientalSounds ? "Pitch / microtone (± semitones)" : "Pitch (± semitones)",
+            -16, 16, 0.25m,
+            family == SynthFamily.OrientalSounds
+                ? "Microtonal tuning in 0.25-semitone (25-cent) steps; a 0.5-semitone offset is a quarter-tone."
+                : "Quarter-semitone pitch adjustment. Drums retain their type-specific base pitch.");
         Number(nameof(settings.AttackMs), "Attack (ms)", 0, 2000, 1, "Time to reach full amplitude.");
         Number(nameof(settings.DecaySeconds), "Decay (s)", 0.01m, 10, 0.01m, "Decay towards sustain; also controls partial damping and drum resonance.");
         Number(nameof(settings.SustainPercent), "Sustain (%)", 0, 100, 1, "Sustained envelope level while the key is held. Percussive presets default to zero.");
@@ -146,7 +168,12 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         Number(nameof(settings.StereoWidth), "Stereo width (%)", 0, 100, 1, "Detuned spatial component and channel-offset reflections.");
         Number(nameof(settings.GainPercent), "Output level (%)", 0, 100, 1, "Final amplitude; peak protection attenuates only.");
         Number(nameof(settings.Seed), "Seed", 0, 999999, 1, "Repeatable strike/noise generation. Change this value for a fresh variant.");
-        format.Items.AddRange(["44100 Hz · Stereo", "48000 Hz · Stereo", "22050 Hz · Mono", "44100 Hz · Mono", "96000 Hz · Stereo"]); format.SelectedIndex = 0;
+        format.Items.AddRange(["44100 Hz · Stereo", "48000 Hz · Stereo", "22050 Hz · Mono", "44100 Hz · Mono", "96000 Hz · Stereo"]);
+        format.SelectedIndex = initialSettings is null ? 0 : (settings.SampleRate, settings.Channels) switch
+        {
+            (44100, 2) => 0, (48000, 2) => 1, (22050, 1) => 2, (44100, 1) => 3, (96000, 2) => 4,
+            _ => throw new ArgumentException("The initial audio format is not supported by this dialog.", nameof(initialSettings))
+        };
         Field("Render format", format);
         Field("Prehear on change (ms)", prehearDelay);
         tips.SetToolTip(prehearDelay, "The waveform updates immediately. Wait after the last sound parameter change before playing the updated sample. 0 = off.");

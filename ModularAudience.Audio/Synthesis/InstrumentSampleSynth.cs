@@ -155,6 +155,8 @@ public static class InstrumentSampleSynth
                     double formant = 1 + Math.Exp(-Math.Pow((h * f - (350 + s.Body * 9)) / 500, 2));
                     weight *= formant * Math.Sin(Math.PI * h * (0.08 + s.StrikePosition / 500));
                 }
+                if (s.Family == SynthFamily.OrientalSounds && name == "Black Sea Kemençe")
+                    weight *= 0.65 + 1.3 * Math.Exp(-Math.Pow((h - 5) / 2.6, 2));
                 if (s.Family == SynthFamily.Organ)
                 {
                     weight = h switch { 1 => 0.8, 2 => 0.65, 3 => 0.4, 4 => 0.35, 6 => 0.25, 8 => 0.18, 12 => 0.12, _ => 0 };
@@ -171,6 +173,8 @@ public static class InstrumentSampleSynth
         }
         public double PitchMultiplier(double t)
         {
+            if (s.Family == SynthFamily.OrientalSounds && name == "Oud")
+                return Math.Pow(2, -0.75 * Math.Exp(-t * 18) / 12);
             if (s.Family == SynthFamily.OtherSoundFx && name == "Synthetic Vocal Whoop")
             {
                 double rise = 4 * (1 - Math.Exp(-t * 10));
@@ -198,6 +202,7 @@ public static class InstrumentSampleSynth
             switch (s.Family)
             {
                 case SynthFamily.DrumSet: return Drum(t, noise, highNoise);
+                case SynthFamily.OrientalSounds: return OrientalVoice(t, phase, secondPhase, noise, breath, highNoise, frequency);
                 case SynthFamily.OtherSoundFx: return SoundFx(t, phase, noise, highNoise, frequency);
                 case SynthFamily.SynthKeysAndPlucks: return SynthKeys(t, phase, secondPhase, frequency);
                 case SynthFamily.SynthPadsAndPoly: return SynthPad(phase, secondPhase, frequency);
@@ -300,6 +305,95 @@ public static class InstrumentSampleSynth
                     + square * 0.24 + Math.Sin(2 * Math.PI * phase + 1.5 * Math.Sin(4 * Math.PI * phase)) * 0.18,
                 _ => UnisonSaw(frequency, 5, s.DetuneCents) * 0.65
             };
+        }
+        private double OrientalVoice(double t, double phase, double secondPhase, double noise, double breath, double highNoise, double frequency)
+            => name switch
+            {
+                "Zurna" or "Mey / Duduk" or "Ney" => OrientalReed(phase, breath, highNoise),
+                "Kanun" or "Bağlama (Saz)" or "Oud" => OrientalPluckedString(t, secondPhase, frequency),
+                "Black Sea Kemençe" => OrientalKemençe(phase, noise, highNoise),
+                "Darbuka Dum" or "Darbuka Tek" => OrientalDarbuka(t, noise, highNoise, frequency),
+                _ => 0
+            };
+        private double OrientalReed(double phase, double breath, double highNoise)
+        {
+            double sum = 0;
+            for (int h = 1; h < harmonicWeights.Length; h++)
+            {
+                double profile = name switch
+                {
+                    "Zurna" => 0.65 + 1.6 * Math.Exp(-Math.Pow((h - 6) / 3d, 2)),
+                    "Mey / Duduk" => 0.72 + 0.8 * Math.Exp(-Math.Pow((h - 3) / 2.4, 2)),
+                    _ => 1 / Math.Pow(h, 0.55)
+                };
+                sum += harmonicWeights[h] * profile * Math.Sin(2 * Math.PI * phase * h);
+            }
+            double air = breath * s.Noise / 100 * (name == "Ney" ? 1.5 : 0.6);
+            return name switch
+            {
+                "Zurna" => Math.Tanh(sum * 0.5) * 0.95 + highNoise * s.Noise / 100 * 0.015,
+                "Mey / Duduk" => Math.Tanh(sum * 0.36) * 0.65 + air * 0.75,
+                _ => Math.Tanh(sum * 0.3) * 0.65 + air
+            };
+        }
+        private double OrientalPluckedString(double t, double secondPhase, double frequency)
+        {
+            double current = stringBuffer[stringIndex];
+            int next = (stringIndex + 1) % stringBuffer.Length;
+            double brightness = s.Brightness / 100;
+            double average = current * (0.3 + brightness * 0.55) + stringBuffer[next] * (0.7 - brightness * 0.55);
+            double damping = name == "Oud" ? 1.2 : name == "Kanun" ? 0.8 : 0.95;
+            stringBuffer[stringIndex] = average * Math.Exp(-1 / (Math.Max(20, frequency) * Math.Max(0.05, s.DecaySeconds) * damping));
+            stringIndex = next;
+            stringPrevious += (current - stringPrevious) * (0.02 + s.Body / 100 * 0.12);
+            double body = stringPrevious * s.Body / 100;
+            return name switch
+            {
+                "Kanun" => current * 0.58 + body * 0.18 + KanunResonance(t, frequency),
+                "Bağlama (Saz)" => current * 0.68 + body * 0.34
+                    + Math.Sin(2 * Math.PI * frequency * 4.8 * t) * Math.Exp(-t * 22) * 0.12
+                    + Math.Sin(2 * Math.PI * secondPhase) * Math.Exp(-t * 5) * 0.08,
+                _ => current * 0.7 + body * 0.72
+                    + Math.Sin(2 * Math.PI * frequency * 0.5 * t) * Math.Exp(-t * 3) * 0.11
+            };
+        }
+        private double KanunResonance(double t, double frequency)
+        {
+            double ring = 0;
+            for (int index = 0; index < modalRatios.Length; index++)
+            {
+                double hz = frequency * modalRatios[index];
+                if (hz >= s.SampleRate * 0.45) continue;
+                modalPhases[index] = (modalPhases[index] + hz / s.SampleRate) % 1;
+                double decay = Math.Exp(-t * (4 + index * 1.3) / Math.Max(0.1, s.DecaySeconds));
+                ring += Math.Sin(2 * Math.PI * modalPhases[index]) * modalAmplitudes[index] * decay;
+            }
+            return ring * 0.12;
+        }
+        private double OrientalKemençe(double phase, double noise, double highNoise)
+        {
+            double sum = 0;
+            for (int h = 1; h < harmonicWeights.Length; h++)
+                sum += harmonicWeights[h] * Math.Sin(2 * Math.PI * phase * h);
+            double rasp = (noise * 0.08 + highNoise * 0.55) * s.Noise / 100;
+            return Math.Tanh(sum * 0.34 + rasp * 0.3) * 0.85;
+        }
+        private double OrientalDarbuka(double t, double noise, double highNoise, double frequency)
+        {
+            double pitchScale = Math.Clamp(frequency / 261.6255653005986, 0.5, 2.5);
+            double decay = Math.Max(0.05, s.DecaySeconds);
+            if (name == "Darbuka Dum")
+            {
+                double startHz = 150 * pitchScale, endHz = 92 * pitchScale, sweep = 48;
+                double cycles = endHz * t + (startHz - endHz) * (1 - Math.Exp(-t * sweep)) / sweep;
+                double membrane = Math.Sin(2 * Math.PI * cycles) * Math.Exp(-t / (decay * 0.55));
+                double skin = Math.Sin(2 * Math.PI * endHz * 2.35 * t) * Math.Exp(-t * 34) * 0.16;
+                return membrane * 0.72 + skin + highNoise * s.Noise / 100 * Math.Exp(-t * 120) * 0.12;
+            }
+            double tek = Math.Sin(2 * Math.PI * 1450 * pitchScale * t) * 0.24
+                + Math.Sin(2 * Math.PI * 2180 * pitchScale * t) * 0.16;
+            double attack = (highNoise * 0.65 + noise * 0.15) * s.Noise / 100 * Math.Exp(-t * 95);
+            return (tek + attack) * Math.Exp(-t / (decay * 0.42));
         }
         private double SoundFx(double t, double phase, double noise, double highNoise, double frequency)
         {

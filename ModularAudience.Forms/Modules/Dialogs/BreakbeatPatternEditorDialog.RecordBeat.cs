@@ -1,7 +1,7 @@
+using System.Diagnostics;
 using ModularAudience.Audio;
 using ModularAudience.Audio.Processors_V1;
-using NAudio.CoreAudioApi;
-using System.IO;
+using ModularAudience.Generators;
 
 namespace ModularAudience.Forms.Modules.Dialogs;
 
@@ -9,130 +9,278 @@ public partial class BreakbeatPatternEditorDialog
 {
     private async void RecordBeatAsync()
     {
-        // 1. Microphone availability check (English message).
-        MMDevice[] devices = AudioRecorder.GetCaptureDevices();
-        if (devices == null || devices.Length == 0)
+        IReadOnlyList<AudioInputDevice> devices;
+        try
         {
-            MessageBox.Show(this, "No microphone / capture device is available.\nPlease connect a microphone and try again.",
+            devices = MicrophoneAudioCapture.GetInputDevices();
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, "Could not enumerate microphone devices: " + exception.Message,
+                "Record Beat", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        if (devices.Count == 0)
+        {
+            MessageBox.Show(this, "No microphone input device is available. Connect a microphone and try again.",
                 "Record Beat", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        // 2. Start recording to a temp file.
-        string tempFile = Path.Combine(Path.GetTempPath(), $"MA_RecordBeat_{Guid.NewGuid():N}.wav");
+        BreakbeatRecordBeatSettings settings = BreakbeatRecordBeatSettings.Load();
+        using BreakbeatBeatRecordingDialog recordingDialog = new(devices, settings);
+        if (recordingDialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        string recordingPath = recordingDialog.RecordingFilePath;
+        if (string.IsNullOrWhiteSpace(recordingPath) || !File.Exists(recordingPath))
+        {
+            MessageBox.Show(this, "The microphone recording is unavailable.",
+                "Record Beat", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        AudioObj? recording = null;
         try
         {
-            await AudioRecorder.StartRecording(tempFile, devices[0]);
+            recording = await AudioObj.FromFileAsync(recordingPath);
+            if (recording is null || recording.Data.Length == 0)
+            {
+                MessageBox.Show(this, "The microphone recording is empty.",
+                    "Record Beat", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            BreakbeatTapSequence sequence = await Task.Run(() =>
+                BreakbeatTapSequenceAnalyzer.Analyze(recording.Data, recording.SampleRate, recording.Channels));
+            if (sequence.HitCount == 0)
+            {
+                MessageBox.Show(this, "No taps were detected. Check the microphone level and try again.",
+                    "Record Beat", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using BreakbeatBeatPatternDialog patternDialog = new(sequence, this.samples.Count);
+            if (patternDialog.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
+
+            await this.StopWholePatternPreviewAsync();
+            await this.StopNotePreviewAsync();
+            this.ApplyRecordedBeatSequence(recording, sequence, patternDialog);
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            MessageBox.Show(this, "Could not start recording: " + ex.Message, "Record Beat", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, "Could not analyze or apply the recorded beat: " + exception.Message,
+                "Record Beat", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            recording?.Dispose();
+            DeleteTemporaryRecording(recordingPath);
+        }
+    }
+
+    private void ApplyRecordedBeatSequence(
+        AudioObj recording,
+        BreakbeatTapSequence sequence,
+        BreakbeatBeatPatternDialog options)
+    {
+        IReadOnlyList<BreakbeatTapHit> hits = options.GroupedHits;
+        if (hits.Count == 0)
+        {
             return;
         }
 
-        // 3. Simple recording dialog with Stop button + live duration.
-        using var recForm = new Form
+        int existingTrackCount = this.samples.Count;
+        int drumElementCount = hits.Max(hit => hit.GroupIndex) + 1;
+        this.CommitHistoryAction();
+        if (options.CreateNewLines)
         {
-            Text = "Recording Beat…", ClientSize = new Size(320, 120),
-            StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false, MinimizeBox = false, TopMost = true
-        };
-        var label = new Label { Dock = DockStyle.Top, Height = 40, TextAlign = ContentAlignment.MiddleCenter, Text = "Recording… speak/play your knock sequence." };
-        var stop = new Button { Text = "Stop", Dock = DockStyle.Bottom, Height = 32 };
-        recForm.Controls.Add(label); recForm.Controls.Add(stop);
-        var timer = new System.Windows.Forms.Timer { Interval = 200 };
-        timer.Tick += (_, _) =>
-        {
-            if (AudioRecorder.RecordingTime.HasValue) label.Text = "Recording… " + AudioRecorder.RecordingTime.Value.ToString(@"mm\:ss\.ff");
-        };
-        timer.Start();
-        var tcs = new TaskCompletionSource<bool>();
-        stop.Click += (_, _) => { tcs.TrySetResult(true); };
-        recForm.FormClosing += (_, e) => { if (!tcs.Task.IsCompleted) { tcs.TrySetResult(false); } };
-        timer.Start();
-        recForm.Show(this);
-        bool stopped = await tcs.Task;
-        timer.Stop();
-        recForm.Close();
-
-        AudioRecorder.StopRecording(normalizeOutput: true);
-        // Wait briefly for file finalization.
-        await Task.Delay(300);
-
-        if (!stopped || string.IsNullOrEmpty(AudioRecorder.RecordedFile) || !File.Exists(AudioRecorder.RecordedFile))
-        {
-            try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
-            return;
+            for (int group = existingTrackCount; group < drumElementCount; group++)
+            {
+                using AudioObj sample = CreateRecordedHitSample(recording, group, hits);
+                this.InsertSampleTrack(sample, this.samples.Count, this.sourceSampleOrder.Count);
+            }
         }
 
-        // 4. Load recorded AudioObj and estimate BPM.
-        AudioObj? recorded = null;
+        BreakbeatPatternNote[] previousNotes = this.notes.ToArray();
+        this.numericUpDown_bpm.Value = Math.Clamp(options.Bpm, this.numericUpDown_bpm.Minimum, this.numericUpDown_bpm.Maximum);
+        this.numericUpDown_resolution.Value = Math.Clamp(
+            options.StepsPerBar,
+            (int)this.numericUpDown_resolution.Minimum,
+            (int)this.numericUpDown_resolution.Maximum);
+        int resolution = this.currentResolution;
+        int ticksPerBar = BreakbeatGenerator_V2.PatternTicksPerBar;
+        int stepTicks = Math.Max(1, ticksPerBar / resolution);
+        double bpm = (double)this.numericUpDown_bpm.Value;
+        int firstFrame = hits.Min(hit => hit.FrameIndex);
+        Dictionary<int, double> averageRmsByGroup = hits
+            .GroupBy(hit => hit.GroupIndex)
+            .ToDictionary(group => group.Key, group => Math.Max(1e-8, group.Average(hit => hit.Rms)));
+        List<BreakbeatPatternNote> notes = [];
+        HashSet<(int Track, int StartTick)> occupiedSteps = [];
+
+        foreach (BreakbeatTapHit hit in hits)
+        {
+            int row = hit.GroupIndex;
+            if (row < 0 || row >= this.samples.Count)
+            {
+                continue;
+            }
+
+            double elapsedSeconds = Math.Max(0, hit.FrameIndex - firstFrame) / (double)recording.SampleRate;
+            double rawTicks = elapsedSeconds * bpm * ticksPerBar / 240d;
+            int startTick = Math.Max(0,
+                (int)Math.Round(rawTicks / stepTicks, MidpointRounding.AwayFromZero) * stepTicks);
+            if (!occupiedSteps.Add((row, startTick)))
+            {
+                continue;
+            }
+
+            int originalDurationTicks = Math.Max(1, BreakbeatGenerator_V2.GetMinimumNoteDurationTicks(
+                this.samples,
+                row,
+                (float)bpm,
+                resolution));
+            float volumePercent = (float)Math.Clamp(
+                hit.Rms / averageRmsByGroup[hit.GroupIndex] * 100,
+                25,
+                200);
+            notes.Add(new BreakbeatPatternNote(
+                row,
+                startTick,
+                stepTicks,
+                ManuallyResized: true,
+                OriginalDurationTicks: originalDurationTicks,
+                VolumePercent: volumePercent,
+                Truncated: stepTicks < originalDurationTicks,
+                HardResized: true));
+        }
+
+        int maximumTick = notes.Count == 0
+            ? ticksPerBar
+            : notes.Max(note => note.StartTick + note.DurationTicks);
+        this.bars = Math.Max(1, (maximumTick + ticksPerBar - 1) / ticksPerBar);
+        int patternColumns = Math.Max(1, this.bars * resolution);
+        this.pattern.Clear();
+        for (int row = 0; row < this.samples.Count; row++)
+        {
+            this.pattern.Add(new bool[patternColumns]);
+        }
+
+        foreach (BreakbeatPatternNote note in notes)
+        {
+            int column = Math.Clamp(note.StartTick / stepTicks, 0, patternColumns - 1);
+            this.pattern[note.TrackIndex][column] = true;
+        }
+
+        this.notes.Clear();
+        this.notes.AddRange(notes);
+        this.selectedNotes.Clear();
+        this.deadGroupNotes.Clear();
+        this.lastGenerate = null;
+        this.DisableAutoRerollForManualNotes(notes);
+        this.timer_historyDebounce.Stop();
+        this.ConfigurePatternScrollBar();
+        if (this.hScrollBar_pattern.Visible)
+        {
+            this.hScrollBar_pattern.Value = this.hScrollBar_pattern.Minimum;
+        }
+
+        this.RegisterPatternNotesChanged(previousNotes
+            .Concat(notes)
+            .Select(note => (BreakbeatPatternNote?)note)
+            .ToArray());
+        this.pictureBox_pattern.Invalidate();
+        this.CommitHistoryAction();
+
+        int skippedHits = hits.Count(hit => hit.GroupIndex >= this.samples.Count);
+        if (skippedHits > 0)
+        {
+            MessageBox.Show(
+                this,
+                $"{skippedHits} hit(s) from drum groups without a matching track were skipped. Enable 'Create new lines to fit drum count' to add them on the next recording.",
+                "Record Beat",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+    }
+
+    private static AudioObj CreateRecordedHitSample(
+        AudioObj recording,
+        int groupIndex,
+        IReadOnlyList<BreakbeatTapHit> hits)
+    {
+        BreakbeatTapHit[] groupHits = hits.Where(hit => hit.GroupIndex == groupIndex).ToArray();
+        if (groupHits.Length == 0)
+        {
+            throw new InvalidOperationException($"No recorded tap is available for drum group {groupIndex + 1}.");
+        }
+
+        float medianRms = groupHits.Select(hit => hit.Rms).Order().ElementAt(groupHits.Length / 2);
+        BreakbeatTapHit representative = groupHits
+            .OrderBy(hit => Math.Abs(hit.Rms - medianRms))
+            .First();
+        int channels = Math.Max(1, recording.Channels);
+        int frameCount = recording.Data.Length / channels;
+        int preRoll = Math.Max(1, recording.SampleRate / 200);
+        int startFrame = Math.Max(0, representative.FrameIndex - preRoll);
+        int maximumFrames = Math.Max(1, recording.SampleRate * 300 / 1000);
+        int endFrame = Math.Min(frameCount, startFrame + maximumFrames);
+        int nextHitFrame = hits
+            .Where(hit => hit.FrameIndex > representative.FrameIndex)
+            .Select(hit => hit.FrameIndex - Math.Max(1, recording.SampleRate / 200))
+            .DefaultIfEmpty(frameCount)
+            .Min();
+        endFrame = Math.Min(endFrame, Math.Max(startFrame + 1, nextHitFrame));
+        int selectedFrames = Math.Max(1, endFrame - startFrame);
+        float[] data = new float[checked(selectedFrames * channels)];
+        Array.Copy(recording.Data, checked(startFrame * channels), data, 0, data.Length);
+
+        float peak = data.Max(value => float.IsFinite(value) ? Math.Abs(value) : 0f);
+        if (peak > 0.00001f)
+        {
+            float gain = Math.Min(8, 0.8f / peak);
+            for (int index = 0; index < data.Length; index++)
+            {
+                data[index] = float.IsFinite(data[index]) ? Math.Clamp(data[index] * gain, -0.95f, 0.95f) : 0f;
+            }
+        }
+
+        string name = $"Recorded Drum {groupIndex + 1}";
+        AudioObj sample = new()
+        {
+            Name = name,
+            Data = data,
+            SampleRate = recording.SampleRate,
+            Channels = channels,
+            BitDepth = 32,
+            Length = data.LongLength,
+            Duration = TimeSpan.FromSeconds(selectedFrames / (double)recording.SampleRate),
+            Bpm = recording.Bpm,
+            Volume = 100
+        };
+        sample.Rename(name);
+        return sample;
+    }
+
+    private static void DeleteTemporaryRecording(string path)
+    {
         try
         {
-            recorded = await AudioObj.FromFileAsync(AudioRecorder.RecordedFile);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            MessageBox.Show(this, "Could not load recording: " + ex.Message, "Record Beat", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return;
+            Debug.WriteLine($"Unable to delete temporary Record Beat file: {exception.Message}");
         }
-        if (recorded == null || recorded.Data == null || recorded.Data.Length == 0)
-        {
-            MessageBox.Show(this, "Recording is empty.", "Record Beat", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            recorded?.Dispose();
-            return;
-        }
-
-        double estimatedBpm = 0;
-        try { estimatedBpm = await BeatScanner.ScanBpmAsync(recorded); } catch { estimatedBpm = 0; }
-        if (estimatedBpm <= 0 || !double.IsFinite(estimatedBpm)) estimatedBpm = 120;
-
-        // 5. Param dialog.
-        using var paramForm = new Form
-        {
-            Text = "Record Beat Parameters", ClientSize = new Size(360, 220),
-            StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false, MinimizeBox = false
-        };
-        var bpmLabel = new Label { Text = "Estimated BPM:", Location = new Point(12, 12), AutoSize = true };
-        var bpmNum = new NumericUpDown { Location = new Point(150, 10), Width = 120, DecimalPlaces = 2, Minimum = 40, Maximum = 240, Value = (decimal)estimatedBpm, Increment = 0.5m };
-        var granLabel = new Label { Text = "Granularity:", Location = new Point(12, 48), AutoSize = true };
-        var granCombo = new ComboBox { Location = new Point(150, 46), Width = 120, DropDownStyle = ComboBoxStyle.DropDownList };
-        foreach (var g in new[] { "1/2", "1/4", "1/8", "1/16", "1/32", "1/64", "1/128", "1/256" }) granCombo.Items.Add(g);
-        granCombo.SelectedIndex = 2; // 1/8
-        var drumLabel = new Label { Text = "Drum elements:", Location = new Point(12, 84), AutoSize = true };
-        var drumNum = new NumericUpDown { Location = new Point(150, 82), Width = 120, Minimum = 1, Maximum = 16, Value = 4, Increment = 1 };
-        var okBtn = new Button { Text = "OK", Location = new Point(150, 150), Size = new Size(70, 28), DialogResult = DialogResult.OK };
-        var cancelBtn = new Button { Text = "Cancel", Location = new Point(230, 150), Size = new Size(70, 28), DialogResult = DialogResult.Cancel };
-        paramForm.Controls.AddRange(new Control[] { bpmLabel, bpmNum, granLabel, granCombo, drumLabel, drumNum, okBtn, cancelBtn });
-        paramForm.AcceptButton = null; // Enter must not auto-confirm
-        paramForm.CancelButton = cancelBtn;
-
-        if (paramForm.ShowDialog(this) != DialogResult.OK)
-        {
-            recorded.Dispose();
-            try { File.Delete(AudioRecorder.RecordedFile); } catch { }
-            return;
-        }
-
-        double targetBpm = (double)bpmNum.Value;
-        // 6. Save the recorded sample into a new Audio Collection so it can be reused/dropped.
-        try
-        {
-            recorded.Rename("RecordedBeat");
-            var collection = new AudioCollectionView(new[] { recorded });
-            recorded = null; // collection owns it
-            collection.Show();
-            collection.Rename("Recorded Beat");
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, "Could not save recorded sample: " + ex.Message, "Record Beat", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-        finally { recorded?.Dispose(); }
-
-        // 7. Notify.
-        MessageBox.Show(this, $"Recorded beat added as sample.\nEstimated/target BPM: {targetBpm:F2}\nGranularity: {granCombo.SelectedItem}\nDrum elements: {(int)drumNum.Value}",
-            "Record Beat", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 }

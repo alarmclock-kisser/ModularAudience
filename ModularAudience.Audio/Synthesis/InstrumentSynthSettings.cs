@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace ModularAudience.Audio.Synthesis;
 
-public enum SynthFamily { Keyboard, DrumSet, Woodwinds, Brass, PluckedStrings, BowedStrings, MalletsAndBells, Organ, SynthBassAndLead, SynthPadsAndPoly, SynthKeysAndPlucks, OtherSoundFx }
+public enum SynthFamily { Keyboard, DrumSet, Woodwinds, Brass, PluckedStrings, BowedStrings, MalletsAndBells, Organ, SynthBassAndLead, SynthPadsAndPoly, SynthKeysAndPlucks, OtherSoundFx, OrientalSounds }
 public enum SynthDrum { Kick, BassDrum, Snare, Rimshot, Clap, ClosedHiHat, OpenHiHat, LowTom, MidTom, HighTom, Ride, Crash, Cowbell, Shaker, PedalHiHat }
 
 public sealed record SynthVoice(string Name, double Brightness, double Decay, double Release, double Body, double Noise, double Drive, double Detune, double Vibrato)
@@ -26,6 +26,7 @@ public static class InstrumentSynthCatalog
         SynthFamily.SynthPadsAndPoly => "Synth Pads & Poly",
         SynthFamily.SynthKeysAndPlucks => "Synth Keys & Plucks",
         SynthFamily.OtherSoundFx => "Other Sound FX",
+        SynthFamily.OrientalSounds => "Oriental Sounds",
         _ => family.ToString()
     };
     public static IReadOnlyList<SynthDrumKit> DrumKits { get; } =
@@ -63,6 +64,7 @@ public static class InstrumentSynthCatalog
         SynthFamily.SynthPadsAndPoly => SynthPads,
         SynthFamily.SynthKeysAndPlucks => SynthKeys,
         SynthFamily.OtherSoundFx => SoundFx,
+        SynthFamily.OrientalSounds => Oriental,
         _ => Keyboards
     };
     private static readonly SynthVoice[] Keyboards =
@@ -177,6 +179,18 @@ public static class InstrumentSynthCatalog
         new("Boat Foghorn", 22, 2.4, 0.5, 92, 8, 18, 0, 2),
         new("Alarm Siren", 62, 1.8, 0.2, 45, 0, 10, 0, 0),
         new("Radio Static", 95, 0.7, 0.18, 22, 95, 10, 0, 0)
+    ];
+    private static readonly SynthVoice[] Oriental =
+    [
+        new("Zurna", 96, 2.1, 0.25, 35, 18, 18, 0, 8),
+        new("Mey / Duduk", 30, 2.6, 0.65, 92, 48, 3, 0, 7),
+        new("Kanun", 88, 2.2, 0.7, 42, 8, 2, 1, 0),
+        new("Bağlama (Saz)", 82, 1.2, 0.35, 54, 18, 8, 2, 5),
+        new("Oud", 36, 2.2, 0.7, 92, 15, 4, 1, 2),
+        new("Ney", 22, 3.5, 0.9, 60, 58, 0, 0, 18),
+        new("Black Sea Kemençe", 92, 1.0, 0.22, 35, 42, 20, 4, 45),
+        new("Darbuka Dum", 32, 0.4, 0.08, 88, 48, 6, 0, 0),
+        new("Darbuka Tek", 92, 0.3, 0.06, 28, 62, 10, 0, 0)
     ];
 }
 
@@ -316,6 +330,41 @@ public sealed class InstrumentSynthSettings
                 "Radio Static" => (10500, 0, 0),
                 _ => (8000, 0, 0)
             };
+        }
+        if (Family == SynthFamily.OrientalSounds)
+        {
+            switch (voice.Name)
+            {
+                case "Zurna":
+                    AttackMs = 8; SustainPercent = 72; CutoffHz = 15000; Resonance = 1.1;
+                    break;
+                case "Mey / Duduk":
+                    AttackMs = 28; SustainPercent = 78; CutoffHz = 8500; Resonance = 0.8;
+                    break;
+                case "Kanun":
+                    AttackMs = 1; SustainPercent = 0; CutoffHz = 15000; StrikePosition = 16;
+                    break;
+                case "Bağlama (Saz)":
+                    AttackMs = 1; SustainPercent = 0; CutoffHz = 12500; StrikePosition = 12;
+                    break;
+                case "Oud":
+                    AttackMs = 3; SustainPercent = 0; CutoffHz = 7200; StrikePosition = 30;
+                    break;
+                case "Ney":
+                    AttackMs = 35; SustainPercent = 72; CutoffHz = 11000; Resonance = 0.75;
+                    break;
+                case "Black Sea Kemençe":
+                    AttackMs = 8; SustainPercent = 68; CutoffHz = 14500; Resonance = 1.2;
+                    break;
+                case "Darbuka Dum":
+                    AttackMs = 1; SustainPercent = 0; DecaySeconds = 0.34; ReleaseSeconds = 0.08;
+                    CutoffHz = 9500; FilterEnvelope = 0;
+                    break;
+                case "Darbuka Tek":
+                    AttackMs = 1; SustainPercent = 0; DecaySeconds = 0.26; ReleaseSeconds = 0.06;
+                    CutoffHz = 16000; FilterEnvelope = 0;
+                    break;
+            }
         }
         if (Family == SynthFamily.DrumSet) { DecaySeconds = 0.5; ReleaseSeconds = 0.25; AttackMs = 1; Noise = 50; }
     }

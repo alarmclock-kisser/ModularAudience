@@ -202,9 +202,16 @@ public sealed class BreakbeatTrackPresetTests
         Call(editor, "TryClickAutoReroll", new MouseEventArgs(MouseButtons.Right, 1, bounds.X + 2, bounds.Y + 2, 0));
         dialog = (Form)Field(editor, "trackGenerateDialog");
         var oldNotes = ((List<BreakbeatPatternNote>)Field(editor, "notes")).ToArray();
+        long oldCompletedLoops = (long)state.GetType().GetField("CompletedLoops")!.GetValue(state)!;
         ((NumericUpDown)Field(dialog, "numeric_density")).Value = 0;
         dialog.DialogResult = DialogResult.OK; dialog.Close();
-        Assert.HasCount(0, (List<BreakbeatPatternNote>)Field(editor, "notes"), "OK must regenerate even a populated track.");
+        Assert.AreEqual(oldCompletedLoops, (long)state.GetType().GetField("CompletedLoops")!.GetValue(state)!,
+            "Editing an enabled track must not reset its roll counter.");
+        CollectionAssert.AreEqual(oldNotes, ((List<BreakbeatPatternNote>)Field(editor, "notes")).ToArray(),
+            "Editing an enabled track must apply only at its next manual or automatic roll.");
+        Call(editor, "RollAutoTrack", 0, true);
+        Assert.HasCount(0, (List<BreakbeatPatternNote>)Field(editor, "notes"),
+            "The next manual roll must use the newly confirmed settings.");
         Call(editor, "UndoEditorAction");
         CollectionAssert.AreEqual(oldNotes, ((List<BreakbeatPatternNote>)Field(editor, "notes")).ToArray());
 

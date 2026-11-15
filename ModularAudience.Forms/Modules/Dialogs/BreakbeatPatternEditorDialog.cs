@@ -126,6 +126,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             int Bars,
             int Resolution,
             decimal Bpm,
+            KeyValuePair<AudioObj, InstrumentSynthSettings>[] InstrumentSettings,
             KeyValuePair<AudioObj, TrackAutoRerollOptions>[] AutoRerolls,
             AudioObj[] SoloTracks, AudioObj[] MutedTracks);
 
@@ -429,6 +430,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.bars,
             this.currentResolution,
             this.numericUpDown_bpm.Value,
+            this.sourceSampleOrder
+                .Where(this.instrumentSettingsBySample.ContainsKey)
+                .Select(sample => new KeyValuePair<AudioObj, InstrumentSynthSettings>(
+                    sample, this.instrumentSettingsBySample[sample].Clone()))
+                .ToArray(),
             this.autoRerolls.Select(p => new KeyValuePair<AudioObj, TrackAutoRerollOptions>(p.Key, p.Value.Options.Clone())).ToArray(),
             this.soloTracks.ToArray(), this.mutedTracks.ToArray());
 
@@ -511,6 +517,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 && first.Bars == second.Bars
                 && first.Resolution == second.Resolution
                 && first.Bpm == second.Bpm
+                && ReferenceSequenceEqual(first.InstrumentSettings.Select(p => p.Key).ToArray(),
+                    second.InstrumentSettings.Select(p => p.Key).ToArray())
+                && System.Text.Json.JsonSerializer.Serialize(first.InstrumentSettings.Select(p => p.Value))
+                    == System.Text.Json.JsonSerializer.Serialize(second.InstrumentSettings.Select(p => p.Value))
                 && first.SoloTracks.ToHashSet().SetEquals(second.SoloTracks)
                 && first.MutedTracks.ToHashSet().SetEquals(second.MutedTracks)
                 && System.Text.Json.JsonSerializer.Serialize(first.AutoRerolls.Select(p => new { p.Key.Id, p.Value }))
@@ -610,6 +620,19 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 ReplaceContents(this.trackSettings, state.TrackSettings);
                 ReplaceContents(this.rowLabels, state.RowLabels);
                 ReplaceContents(this.notes, state.Notes);
+                this.instrumentSettingsBySample.Clear();
+                foreach (var pair in state.InstrumentSettings)
+                    this.instrumentSettingsBySample.Add(pair.Key, pair.Value.Clone());
+                for (int row = 0; row < this.samples.Count; row++)
+                {
+                    int sourceIndex = this.GetOriginalTrackIndex(row);
+                    if (sourceIndex >= 0 && sourceIndex < this.sourceSampleOrder.Count
+                        && this.instrumentSettingsBySample.TryGetValue(this.sourceSampleOrder[sourceIndex], out var settings))
+                    {
+                        ApplyInstrumentTrackMetadata(this.samples[row], settings);
+                        ApplyInstrumentTrackMetadata(this.sourceSampleOrder[sourceIndex], settings);
+                    }
+                }
                 this.autoRerolls.Clear();
                 this.soloTracks.Clear(); this.soloTracks.UnionWith(state.SoloTracks);
                 this.mutedTracks.Clear(); this.mutedTracks.UnionWith(state.MutedTracks);
@@ -747,26 +770,27 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 float y = grid.Top + row * cellHeight;
                 this.PaintAutoReroll(e.Graphics, row);
                 float nameLeft = this.TrackButtonBounds(row, 2).Right + 6;
-                float maxLabelHeight = Math.Min(cellHeight, labelFont.GetHeight(e.Graphics) * 3);
-                RectangleF labelBounds = new(nameLeft, y, Math.Max(1, grid.Left - nameLeft - 8), Math.Max(1f, maxLabelHeight));
-                string label = row < this.rowLabels.Count ? this.rowLabels[row] : $"Track {row + 1}";
+                RectangleF textBounds = new(nameLeft, y, Math.Max(1, grid.Left - nameLeft - 8), cellHeight);
+                string label = ResolveTrackHeaderLabel(
+                    row < this.rowLabels.Count ? this.rowLabels[row] : null,
+                    this.samples[row].Name,
+                    row);
                 string summary = row < this.trackSettings.Count
                     ? FormatTrackSettingsSummary(this.trackSettings[row])
                     : string.Empty;
                 float lineHeight = labelFont.GetHeight(e.Graphics);
-                float summaryHeight = string.IsNullOrEmpty(summary) ? 0f : lineHeight + 1f;
-                float combinedHeight = lineHeight + summaryHeight;
-                if (string.IsNullOrEmpty(summary) || combinedHeight > cellHeight - 2f)
+                var headerTextLayout = GetTrackHeaderTextLayout(
+                    textBounds,
+                    lineHeight,
+                    !string.IsNullOrEmpty(summary));
+                if (string.IsNullOrEmpty(summary))
                 {
-                    e.Graphics.DrawString(label, labelFont, labelBrush, labelBounds, labelFormat);
+                    e.Graphics.DrawString(label, labelFont, labelBrush, headerTextLayout.NameBounds, labelFormat);
                     continue;
                 }
 
-                float textTop = y + (cellHeight - combinedHeight) / 2f;
-                RectangleF nameBounds = new(labelBounds.X, textTop, labelBounds.Width, lineHeight);
-                RectangleF summaryBounds = new(labelBounds.X, textTop + lineHeight + 1f, labelBounds.Width, lineHeight);
-                e.Graphics.DrawString(label, labelFont, labelBrush, nameBounds, labelFormat);
-                e.Graphics.DrawString(summary, labelFont, trackSettingsSummaryBrush, summaryBounds, labelFormat);
+                e.Graphics.DrawString(summary, labelFont, trackSettingsSummaryBrush, headerTextLayout.SummaryBounds, labelFormat);
+                e.Graphics.DrawString(label, labelFont, labelBrush, headerTextLayout.NameBounds, labelFormat);
             }
 
             GraphicsState gridState = e.Graphics.Save();
@@ -1001,9 +1025,10 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             graphics.DrawRectangle(ghostBorderPen, ghostRow.X, ghostRow.Y, ghostRow.Width, ghostRow.Height);
 
             RectangleF labelBounds = new(8f, ghostTop, Math.Max(1, grid.Left - 16), cellHeight);
-            string label = this.rowReorderSource < this.rowLabels.Count
-                ? this.rowLabels[this.rowReorderSource]
-                : $"Track {this.rowReorderSource + 1}";
+            string label = ResolveTrackHeaderLabel(
+                this.rowReorderSource < this.rowLabels.Count ? this.rowLabels[this.rowReorderSource] : null,
+                this.samples[this.rowReorderSource].Name,
+                this.rowReorderSource);
             graphics.DrawString(label, SystemFonts.DefaultFont, ghostLabelBrush, labelBounds);
 
             double patternTicks = this.bars * (double)BreakbeatGenerator_V2.PatternTicksPerBar;
@@ -1060,6 +1085,38 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             return (semitones < 0 ? "-" : "+") + value;
         }
 
+        internal static string ResolveTrackHeaderLabel(string? rowLabel, string? sampleName, int row)
+        {
+            if (!string.IsNullOrWhiteSpace(rowLabel)) return rowLabel.Trim();
+            if (!string.IsNullOrWhiteSpace(sampleName)) return sampleName.Trim();
+            return $"Track {row + 1}";
+        }
+
+        internal static (RectangleF NameBounds, RectangleF SummaryBounds) GetTrackHeaderTextLayout(
+            RectangleF rowBounds,
+            float lineHeight,
+            bool hasSummary)
+        {
+            float maxNameHeight = Math.Min(rowBounds.Height, lineHeight * 3f);
+            RectangleF nameBounds = new(rowBounds.X, rowBounds.Y, rowBounds.Width, maxNameHeight);
+            if (!hasSummary) return (nameBounds, RectangleF.Empty);
+
+            float summaryTop = rowBounds.Y + (rowBounds.Height - (lineHeight * 2f + 1f)) / 2f + lineHeight + 1f;
+            RectangleF summaryBounds = new(rowBounds.X, summaryTop, rowBounds.Width, lineHeight);
+            float nameTop = summaryBounds.Bottom + 1f;
+            float availableNameHeight = Math.Max(0f, rowBounds.Bottom - nameTop - 2f);
+            maxNameHeight = Math.Min(lineHeight * 3f, availableNameHeight);
+            if (maxNameHeight < lineHeight && rowBounds.Height >= lineHeight * 2f + 2f)
+            {
+                summaryBounds.Y = rowBounds.Y;
+                nameTop = summaryBounds.Bottom + 1f;
+                maxNameHeight = Math.Min(lineHeight * 3f, Math.Max(0f, rowBounds.Bottom - nameTop - 2f));
+            }
+
+            nameBounds = new(rowBounds.X, nameTop, rowBounds.Width, maxNameHeight);
+            return (nameBounds, summaryBounds);
+        }
+
         private static string FormatTrackSettingsSummary(BreakbeatTrackSettings settings)
         {
             List<string> values = [];
@@ -1090,10 +1147,13 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             float pitch = float.IsFinite(settings.DefaultPitchSemitones)
                 ? Math.Clamp(settings.DefaultPitchSemitones, -24f, 24f)
                 : 0f;
+            float loudnessReference = float.IsFinite(settings.InstrumentLoudnessReferencePercent)
+                ? Math.Clamp(settings.InstrumentLoudnessReferencePercent, 10f, 100f)
+                : 100f;
             BreakbeatPlaybackMode mode = Enum.IsDefined(settings.DefaultPlaybackMode)
                 ? settings.DefaultPlaybackMode
                 : BreakbeatPlaybackMode.TimeStretch;
-            return new BreakbeatTrackSettings(volume, pitch, mode);
+            return new BreakbeatTrackSettings(volume, pitch, mode, loudnessReference);
         }
 
         private static void DrawPitchMark(
@@ -1930,8 +1990,17 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 return;
             }
 
-            string sampleName = row < this.rowLabels.Count ? this.rowLabels[row] : this.samples[row].Name;
-            using BreakbeatTrackSettingsDialog dialog = new(sampleName, this.trackSettings[row], this.samples.Count > 1);
+            string sampleName = ResolveTrackHeaderLabel(
+                row < this.rowLabels.Count ? this.rowLabels[row] : null,
+                this.samples[row].Name,
+                row);
+            int sourceIndex = this.GetOriginalTrackIndex(row);
+            bool canEditInstrument = sourceIndex >= 0 && sourceIndex < this.sourceSampleOrder.Count
+                && this.instrumentSettingsBySample.ContainsKey(this.sourceSampleOrder[sourceIndex]);
+            using BreakbeatTrackSettingsDialog dialog = new(
+                sampleName, this.trackSettings[row], this.samples.Count > 1, canEditInstrument);
+            if (canEditInstrument)
+                dialog.EditInstrumentRequested += (_, _) => this.EditInstrumentTrack(row, dialog);
             DialogResult result = dialog.ShowDialog(this);
             if (dialog.CloneTrackRequested)
             {
@@ -1963,6 +2032,63 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.deadGroupNotes.Clear();
             this.pictureBox_pattern.Invalidate();
             this.CommitHistoryAction();
+        }
+
+        private void EditInstrumentTrack(int row, IWin32Window owner)
+        {
+            if (row < 0 || row >= this.samples.Count) return;
+            int sourceIndex = this.GetOriginalTrackIndex(row);
+            if (sourceIndex < 0 || sourceIndex >= this.sourceSampleOrder.Count
+                || !this.instrumentSettingsBySample.TryGetValue(this.sourceSampleOrder[sourceIndex], out var settings))
+                return;
+
+            using InstrumentSampleSynthDialog dialog = new(
+                settings.Family,
+                onInstrumentConfirmed: updated => this.UpdateInstrumentTrackSettings(row, updated),
+                initialSettings: settings);
+            dialog.ShowDialog(owner);
+        }
+
+        private void UpdateInstrumentTrackSettings(int row, InstrumentSynthSettings settings)
+        {
+            if (row < 0 || row >= this.samples.Count) return;
+            int sourceIndex = this.GetOriginalTrackIndex(row);
+            if (sourceIndex < 0 || sourceIndex >= this.sourceSampleOrder.Count) return;
+            AudioObj sourceSample = this.sourceSampleOrder[sourceIndex];
+            if (!this.instrumentSettingsBySample.ContainsKey(sourceSample)) return;
+
+            InstrumentSynthSettings snapshot = settings.Clone();
+            snapshot.Validate();
+            this.instrumentSettingsBySample[sourceSample] = snapshot;
+            ApplyInstrumentTrackMetadata(this.samples[row], snapshot);
+            ApplyInstrumentTrackMetadata(sourceSample, snapshot);
+            BreakbeatTrackSettings track = this.trackSettings[row];
+            if (Math.Abs(track.DefaultVolumePercent - track.InstrumentLoudnessReferencePercent) < 0.5f)
+            {
+                float newReference = BreakbeatPatternInstrumentRenderer.GetInitialTrackVolumePercent(snapshot);
+                this.trackSettings[row] = track with
+                {
+                    DefaultVolumePercent = newReference,
+                    InstrumentLoudnessReferencePercent = newReference
+                };
+            }
+
+            string label = $"{InstrumentSynthCatalog.FamilyName(snapshot.Family)} - {snapshot.VoiceName}";
+            while (this.rowLabels.Count <= row) this.rowLabels.Add($"Track {this.rowLabels.Count + 1}");
+            this.rowLabels[row] = label;
+            this.deadGroupNotes.Clear();
+            this.pictureBox_pattern.Invalidate();
+            this.CommitHistoryAction();
+        }
+
+        private static void ApplyInstrumentTrackMetadata(AudioObj sample, InstrumentSynthSettings settings)
+        {
+            sample.SampleRate = settings.SampleRate;
+            sample.Channels = settings.Channels;
+            sample.BitDepth = 32;
+            sample.Length = 0;
+            sample.Duration = TimeSpan.FromSeconds(settings.GateSeconds + settings.ReleaseSeconds);
+            sample.Bpm = (float)settings.Bpm;
         }
 
         private void RemoveSampleTrack(int row)
@@ -2095,8 +2221,20 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             this.samples.Insert(displayIndex, newEditorSample);
+            bool rerollClone = false;
             if (this.autoRerolls.TryGetValue(this.samples[row], out var originalAuto))
-                this.autoRerolls[newEditorSample] = new TrackAutoRerollState { Options = originalAuto.Options.Clone() };
+            {
+                TrackAutoRerollOptions clonedOptions = originalAuto.Options.Clone();
+                clonedOptions.Loops = TrackAutoRerollOptions.DefaultLoops;
+                if (clonedOptions.Enabled)
+                {
+                    int cloneSeed = newSourceSample.Id.GetHashCode();
+                    clonedOptions.Generate.Seed = cloneSeed == 0 ? 1 : cloneSeed;
+                    rerollClone = true;
+                }
+
+                this.autoRerolls[newEditorSample] = new TrackAutoRerollState { Options = clonedOptions };
+            }
             this.originalSampleOrder.Insert(newSourceIndex, newEditorSample);
             this.sourceSampleOrder.Insert(newSourceIndex, newSourceSample);
             bool[] clonedPatternRow;
@@ -2131,6 +2269,22 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             this.notes.AddRange(duplicatedNotes);
+            if (rerollClone)
+            {
+                bool wasRestoringHistory = this.restoringHistory;
+                this.restoringHistory = true;
+                try
+                {
+                    this.ApplyTrackAutoRerolls(
+                        [displayIndex],
+                        Enumerable.Range(0, Math.Max(1, this.bars * 4)).ToArray());
+                }
+                finally
+                {
+                    this.restoringHistory = wasRestoringHistory;
+                }
+            }
+
             this.deadGroupNotes.Clear();
             if (!isInstrumentTrack)
             {
@@ -2392,6 +2546,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             snapshot.Validate();
             string label = $"{InstrumentSynthCatalog.FamilyName(snapshot.Family)} - {snapshot.VoiceName}";
             double durationSeconds = snapshot.GateSeconds + snapshot.ReleaseSeconds;
+            float initialVolume = BreakbeatPatternInstrumentRenderer.GetInitialTrackVolumePercent(snapshot);
             AudioObj sourceSample = new()
             {
                 Name = label,
@@ -2413,7 +2568,9 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.sourceSampleOrder.Add(sourceSample);
             this.instrumentSettingsBySample.Add(sourceSample, snapshot);
             this.pattern.Add(new bool[patternColumns]);
-            this.trackSettings.Add(new BreakbeatTrackSettings());
+            this.trackSettings.Add(new BreakbeatTrackSettings(
+                DefaultVolumePercent: initialVolume,
+                InstrumentLoudnessReferencePercent: initialVolume));
             this.rowLabels.Add(label);
             this.deadGroupNotes.Clear();
             this.ConfigurePatternScrollBar();
