@@ -149,6 +149,24 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public async Task RenderPatternNotesAsync_KeepsPatternLengthFixedWhenLastHitWouldExtendPastEnd()
+        {
+            using AudioObj sample = CreateToneSample(sampleRate: 44100, frequency: 440, durationSeconds: 1);
+            int lastQuarterStart = BreakbeatGenerator_V2.PatternTicksPerBar * 3 / 4;
+            BreakbeatPatternNote earlyNote = new(TrackIndex: 0, StartTick: 0, DurationTicks: 64);
+            BreakbeatPatternNote lastNote = earlyNote with { StartTick = lastQuarterStart };
+
+            using AudioObj earlyRendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [earlyNote], [sample], bars: 1, bpm: 120, resolution: 16, swing: 0);
+            using AudioObj lastRendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [lastNote], [sample], bars: 1, bpm: 120, resolution: 16, swing: 0);
+
+            Assert.AreEqual(earlyRendered.Data.Length, lastRendered.Data.Length);
+            Assert.AreEqual(2 * 44100 * 2, lastRendered.Data.Length);
+            Assert.AreEqual(earlyRendered.Duration, lastRendered.Duration);
+        }
+
+        [TestMethod]
         public async Task RenderPatternNotesAsync_VarispeedLengtheningLowersPitchAndShorteningRaisesPitch()
         {
             using AudioObj sample = CreateToneSample(sampleRate: 44100, frequency: 440, durationSeconds: 0.25);

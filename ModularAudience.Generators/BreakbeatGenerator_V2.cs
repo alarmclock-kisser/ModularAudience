@@ -1012,8 +1012,12 @@ namespace ModularAudience.Generators
                 int stepIndex = (int)Math.Round(note.StartTick / (double)ticksPerStep);
                 if (swing > 0 && stepIndex % 2 == 1)
                     startFrame += Math.Max(0, (int)Math.Round(secondsPerStep * swing * outputSampleRate));
-                int requiredSamples = checked((startFrame + clipFrames) * outputChannels);
-                if (requiredSamples > mixBuffer.Length) Array.Resize(ref mixBuffer, requiredSamples);
+                if (startFrame >= initialFrames)
+                {
+                    continue;
+                }
+
+                clipFrames = Math.Min(clipFrames, initialFrames - startFrame);
                 float volume = samples[note.TrackIndex].Volume;
                 if (volume <= 0f || !float.IsFinite(volume)) volume = 1f;
                 volume = Math.Clamp(volume, 0f, 1f);
