@@ -70,10 +70,15 @@ public sealed class BreakbeatAutoRerollTests
             for (int j = i + 1; j < buttons.Length; j++)
                 Assert.IsFalse(buttons[i].Bounds.IntersectsWith(buttons[j].Bounds),
                     $"{buttons[i].Name} overlaps {buttons[j].Name}.");
-        var saveNew = (CheckBox)Field(editor, "checkBox_saveNew");
-        Assert.IsTrue(saveNew.Bottom < settings.Top);
-        Assert.IsFalse(buttons.Any(button => saveNew.Bounds.IntersectsWith(button.Bounds)),
-            "The Save new checkbox must not overlap any footer button.");
+        var saveNewSolo = (CheckBox)Field(editor, "checkBox_saveNewSolo");
+        var saveNewEnsemble = (CheckBox)Field(editor, "checkBox_saveNewEnsemble");
+        Assert.IsTrue(saveNewSolo.Bottom < settings.Top);
+        Assert.IsTrue(saveNewEnsemble.Bottom < settings.Top);
+        Assert.IsFalse(saveNewSolo.Bounds.IntersectsWith(saveNewEnsemble.Bounds),
+            "The Save new checkboxes must not overlap each other.");
+        Assert.IsFalse(buttons.Any(button => saveNewSolo.Bounds.IntersectsWith(button.Bounds)
+            || saveNewEnsemble.Bounds.IntersectsWith(button.Bounds)),
+            "The Save new checkboxes must not overlap any footer button.");
         Invoke(editor, "button_roll_Click", roll, EventArgs.Empty);
         Assert.AreEqual(0L, first.GetType().GetField("CompletedLoops")!.GetValue(first));
         Assert.AreEqual(3L, second.GetType().GetField("CompletedLoops")!.GetValue(second));
@@ -185,7 +190,7 @@ public sealed class BreakbeatAutoRerollTests
     }
 
     [STATestMethod]
-    public void SaveNewCheckboxSavesAnEnsembleWhenAnyTrackIsRerolled()
+    public void SaveNewEnsembleCheckboxSkipsEmptyCurrentPatternAndSavesOnReroll()
     {
         using var sample = new AudioObj
         {
@@ -194,12 +199,83 @@ public sealed class BreakbeatAutoRerollTests
             Channels = 1
         };
         using var editor = Editor(sample);
+        ((List<BreakbeatPatternNote>)Field(editor, "notes")).Clear();
         Configure(editor, 0, 1, ensemble: false, solo: false);
-        var saveNew = (CheckBox)Field(editor, "checkBox_saveNew");
-        Assert.AreEqual("Save new", saveNew.Text);
+        var saveNew = (CheckBox)Field(editor, "checkBox_saveNewEnsemble");
+        Assert.AreEqual("Save new Ensemble", saveNew.Text);
         saveNew.Checked = true;
+        Drain((Task)Field(editor, "autoSaveWork"));
+        Assert.IsNull(Field(editor, "autoEnsembleCollection"),
+            "Enabling ensemble saving must not create an empty collection.");
 
         Invoke(editor, "ApplyTrackAutoRerolls", new[] { 0 }, new[] { 0 });
+        Drain((Task)Field(editor, "autoSaveWork"));
+
+        var collection = (AudioCollectionView)Field(editor, "autoEnsembleCollection");
+        try
+        {
+            Assert.HasCount(1, ((AudioCollection)Field(collection, "AudioC")).Audios);
+        }
+        finally
+        {
+            collection.Close();
+            collection.Dispose();
+        }
+    }
+
+    [STATestMethod]
+    public void SaveNewSoloCheckboxSavesEachNonEmptyTrackToItsOwnCollectionImmediately()
+    {
+        using var sample = new AudioObj
+        {
+            Data = Enumerable.Repeat(0.1f, 4800).ToArray(),
+            SampleRate = 48000,
+            Channels = 1
+        };
+        using var editor = Editor(sample);
+        var notes = (List<BreakbeatPatternNote>)Field(editor, "notes");
+        notes.Clear();
+        notes.Add(new BreakbeatPatternNote(TrackIndex: 0, StartTick: 0, DurationTicks: 24));
+
+        var saveNewSolo = (CheckBox)Field(editor, "checkBox_saveNewSolo");
+        Assert.AreEqual("Save new Solo", saveNewSolo.Text);
+        saveNewSolo.Checked = true;
+        Drain((Task)Field(editor, "autoSaveWork"));
+
+        var collections = ((IDictionary)Field(editor, "autoSoloCollections"))
+            .Values.Cast<AudioCollectionView>().ToArray();
+        try
+        {
+            Assert.HasCount(1, collections, "The empty track must not create a solo collection.");
+            Assert.HasCount(1, ((AudioCollection)Field(collections[0], "AudioC")).Audios);
+            Assert.IsNull(Field(editor, "autoEnsembleCollection"),
+                "Solo-only saving must not create an ensemble.");
+        }
+        finally
+        {
+            foreach (var collection in collections)
+            {
+                collection.Close();
+                collection.Dispose();
+            }
+        }
+    }
+
+    [STATestMethod]
+    public void SaveNewEnsembleCheckboxSavesCurrentNonEmptyPatternImmediately()
+    {
+        using var sample = new AudioObj
+        {
+            Data = Enumerable.Repeat(0.1f, 4800).ToArray(),
+            SampleRate = 48000,
+            Channels = 1
+        };
+        using var editor = Editor(sample);
+        var notes = (List<BreakbeatPatternNote>)Field(editor, "notes");
+        notes.Clear();
+        notes.Add(new BreakbeatPatternNote(TrackIndex: 0, StartTick: 0, DurationTicks: 24));
+
+        ((CheckBox)Field(editor, "checkBox_saveNewEnsemble")).Checked = true;
         Drain((Task)Field(editor, "autoSaveWork"));
 
         var collection = (AudioCollectionView)Field(editor, "autoEnsembleCollection");

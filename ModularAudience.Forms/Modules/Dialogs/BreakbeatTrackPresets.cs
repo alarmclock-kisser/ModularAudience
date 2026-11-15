@@ -75,8 +75,11 @@ internal static class BreakbeatTrackPresets
     public static IEnumerable<Hit> Generate(BreakbeatTrackPreset preset, BreakbeatGenerateOptions options,
         int first, int last, int resolution, Random random)
     {
-        double intensity = options.PresetIntensityPercent / 100d;
-        int phraseSteps = options.PhraseBars * resolution;
+        double intensity = Math.Clamp(options.PresetIntensityPercent, 0, 100) / 100d;
+        int phraseSteps = Math.Max(1, options.PhraseBars * resolution);
+        resolution = Math.Max(1, resolution);
+        double density = Math.Clamp(options.DensityPercent, 0, 100) / 100d;
+        double amen = Math.Clamp(options.AmenFactorPercent, 0, 100) / 100d;
         var motifNoise = new Dictionary<int, double>();
         for (int column = first; column <= last; column++)
         {
@@ -92,17 +95,19 @@ internal static class BreakbeatTrackPresets
             bool burst = (preset.Name is "JungleRoller" or "RatchetPressure" or "GlitchShards")
                 && answer && sixteenth >= 12;
             char accent = substep && !burst ? '.' : mask[sixteenth];
-            double weight = accent == 'X' ? 1 : accent == 'o' ? 0.48 : 0.015;
-            double amen = options.AmenFactorPercent / 100d;
-            double legacy = options.DensityPercent / 100d * (column % 2 == 0 ? 1 - amen : 1);
-            double structured = Math.Min(1, options.DensityPercent / 100d * weight * 1.8)
-                * (accent == 'X' || column % 2 != 0 ? 1 : 1 - amen);
             int motifIndex = column % options.MotifLengthSteps;
             double noise;
             if (motifNoise.TryGetValue(motifIndex, out double previous) && random.Next(100) < options.MotifRepeatPercent)
                 noise = previous;
             else { noise = random.NextDouble(); motifNoise[motifIndex] = noise; }
-            if (noise >= legacy * (1 - intensity) + structured * intensity) continue;
+            double legacyWeight = column % 2 == 0 ? 1 - amen : 1;
+            double presetWeight = accent == 'X' ? 1 : accent == 'o' ? 0.48 : 0.015;
+            double structuredWeight = Math.Min(1, presetWeight * 1.8)
+                * (accent == 'X' || column % 2 != 0 ? 1 : 1 - amen);
+            // Apply density after shaping so strong preset accents cannot saturate its scale.
+            double probability = density
+                * (legacyWeight * (1 - intensity) + structuredWeight * intensity);
+            if (noise >= probability) continue;
 
             int min = options.MinNoteLengthSteps, max = options.MaxNoteLengthSteps;
             int randomLength = random.Next(min, max + 1);

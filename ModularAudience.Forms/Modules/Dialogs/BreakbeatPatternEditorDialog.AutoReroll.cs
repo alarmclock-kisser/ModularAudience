@@ -348,13 +348,45 @@ public partial class BreakbeatPatternEditorDialog
     }
     private void QueueAutoRerollSaves(IReadOnlyList<int> rows, int[] sections)
     {
-        int[] solos = rows.Where(r => this.autoRerolls[this.samples[r]].Options.SaveSolo).ToArray();
-        bool ensemble = this.checkBox_saveNew.Checked
+        int[] soloRows = rows.Where(r => this.checkBox_saveNewSolo.Checked
+            || this.autoRerolls[this.samples[r]].Options.SaveSolo).ToArray();
+        bool ensemble = this.checkBox_saveNewEnsemble.Checked
             || rows.Any(r => this.autoRerolls[this.samples[r]].Options.SaveEnsemble);
+        this.QueuePatternSaves(soloRows, ensemble, sections);
+    }
+
+    private void checkBox_saveNewSolo_CheckedChanged(object? sender, EventArgs e)
+    {
+        if (this.checkBox_saveNewSolo.Checked && !this.initializing)
+            this.QueueCurrentPatternSave(solo: true, ensemble: false);
+    }
+
+    private void checkBox_saveNewEnsemble_CheckedChanged(object? sender, EventArgs e)
+    {
+        if (this.checkBox_saveNewEnsemble.Checked && !this.initializing)
+            this.QueueCurrentPatternSave(solo: false, ensemble: true);
+    }
+
+    private void QueueCurrentPatternSave(bool solo, bool ensemble)
+    {
+        int[] soloRows = solo ? Enumerable.Range(0, this.samples.Count).ToArray() : [];
+        this.QueuePatternSaves(soloRows, ensemble, this.AutoRerollSections());
+    }
+
+    private void QueuePatternSaves(int[] soloRows, bool ensemble, int[] sections)
+    {
+        var notes = this.ApplyTrackAudibility(this.GetNotesWithoutCoveredRetriggers());
+        int quarterTicks = BreakbeatGenerator_V2.PatternTicksPerBar / 4;
+        bool HasNotesInSections(IEnumerable<BreakbeatPatternNote> candidates) =>
+            candidates.Any(note => sections.Any(section =>
+                note.StartTick < (section + 1L) * quarterTicks
+                && (long)note.StartTick + note.DurationTicks > section * quarterTicks));
+        int[] solos = soloRows.Where(row =>
+            HasNotesInSections(notes.Where(note => note.TrackIndex == row))).ToArray();
+        ensemble = ensemble && HasNotesInSections(notes);
         if (!ensemble && solos.Length == 0) return;
         // Capture the final shared arrangement once AFTER all due tracks rerolled.
         // Only one ensemble is queued, regardless of how many tracks requested it.
-        var notes = this.ApplyTrackAudibility(this.GetNotesWithoutCoveredRetriggers());
         var samples = this.samples.Select(CloneSampleWithMetadata).ToArray();
         var instruments = this.GetInstrumentSettingsByTrack();
         var trackIdentities = this.samples.ToArray();

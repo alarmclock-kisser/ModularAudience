@@ -98,12 +98,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             AddNumeric("Preset intensity (%)", this.numeric_presetIntensity, options.PresetIntensityPercent, 0, 100, 5, 0,
-                "0 = legacy random generation; 100 = strongest preset rhythm, pitch contour and dynamics. All option limits still apply.");
+                "0 = legacy random generation; higher values strengthen preset rhythm, pitch contour and dynamics. Density and note-length limits remain independent.");
             AddNumeric("Phrase length (bars)", this.numeric_phraseBars, options.PhraseBars, 1, 16, 1, 0,
                 "Preset phrase cycle, with an answer/fill in its last bar. Uses the existing selection; does not resize the song.");
             this.numeric_presetIntensity.Enabled = this.numeric_phraseBars.Enabled = this.combo_preset.SelectedIndex > 0;
             AddNumeric("Density (%)", this.numeric_density, options.DensityPercent, 0, 100, 5, 0,
-                "Probability per enclosed cell to place a note.");
+                "Scales note-placement probabilities linearly, independently of preset intensity.");
             AddNumeric("Amen break factor (%)", this.numeric_amen, options.AmenFactorPercent, 0, 100, 5, 0,
                 "Share of placements on offbeat/syncopated positions (odd steps).");
             AddNumeric("Sub-pattern length (steps)", this.numeric_motifLength, options.MotifLengthSteps, 1, 64, 1, 0,

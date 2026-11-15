@@ -34,7 +34,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             hScrollBar_pattern = new HScrollBar();
             panel_controls = new Panel();
             button_save = new Button();
-            checkBox_saveNew = new CheckBox();
+            checkBox_saveNewSolo = new CheckBox();
+            checkBox_saveNewEnsemble = new CheckBox();
             button_help = new Button();
             button_settings = new Button();
             button_generate = new Button();
@@ -109,7 +110,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // panel_controls
             // 
             panel_controls.Controls.Add(button_save);
-            panel_controls.Controls.Add(checkBox_saveNew);
+            panel_controls.Controls.Add(checkBox_saveNewSolo);
+            panel_controls.Controls.Add(checkBox_saveNewEnsemble);
             panel_controls.Controls.Add(button_help);
             panel_controls.Controls.Add(button_settings);
             panel_controls.Controls.Add(button_generate);
@@ -173,17 +175,31 @@ namespace ModularAudience.Forms.Modules.Dialogs
             button_save.UseVisualStyleBackColor = true;
             button_save.Click += button_save_Click;
             //
-            // checkBox_saveNew
+            // checkBox_saveNewSolo
             //
-            checkBox_saveNew.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            checkBox_saveNew.AutoSize = true;
-            checkBox_saveNew.Location = new Point(1024, 10);
-            checkBox_saveNew.Name = "checkBox_saveNew";
-            checkBox_saveNew.Size = new Size(74, 19);
-            checkBox_saveNew.TabIndex = 12;
-            checkBox_saveNew.Text = "Save new";
-            checkBox_saveNew.UseVisualStyleBackColor = true;
-            toolTip_pattern.SetToolTip(checkBox_saveNew, "Save a new ensemble whenever any track is rerolled.");
+            checkBox_saveNewSolo.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            checkBox_saveNewSolo.AutoSize = true;
+            checkBox_saveNewSolo.Location = new Point(866, 10);
+            checkBox_saveNewSolo.Name = "checkBox_saveNewSolo";
+            checkBox_saveNewSolo.Size = new Size(96, 19);
+            checkBox_saveNewSolo.TabIndex = 12;
+            checkBox_saveNewSolo.Text = "Save new Solo";
+            checkBox_saveNewSolo.UseVisualStyleBackColor = true;
+            checkBox_saveNewSolo.CheckedChanged += checkBox_saveNewSolo_CheckedChanged;
+            toolTip_pattern.SetToolTip(checkBox_saveNewSolo, "Save each rerolled track separately to its own collection.");
+            //
+            // checkBox_saveNewEnsemble
+            //
+            checkBox_saveNewEnsemble.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            checkBox_saveNewEnsemble.AutoSize = true;
+            checkBox_saveNewEnsemble.Location = new Point(970, 10);
+            checkBox_saveNewEnsemble.Name = "checkBox_saveNewEnsemble";
+            checkBox_saveNewEnsemble.Size = new Size(132, 19);
+            checkBox_saveNewEnsemble.TabIndex = 13;
+            checkBox_saveNewEnsemble.Text = "Save new Ensemble";
+            checkBox_saveNewEnsemble.UseVisualStyleBackColor = true;
+            checkBox_saveNewEnsemble.CheckedChanged += checkBox_saveNewEnsemble_CheckedChanged;
+            toolTip_pattern.SetToolTip(checkBox_saveNewEnsemble, "Save a new ensemble whenever any track is rerolled.");
 //
 // button_help
 //
@@ -397,7 +413,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Button button_remix;
         private Button button_roll;
         private Button button_save;
-        private CheckBox checkBox_saveNew;
+        private CheckBox checkBox_saveNewSolo;
+        private CheckBox checkBox_saveNewEnsemble;
         private System.Windows.Forms.Timer timer_previewCaret;
         private System.Windows.Forms.Timer timer_pasteHold;
         private System.Windows.Forms.Timer timer_pitchGestureRelease;

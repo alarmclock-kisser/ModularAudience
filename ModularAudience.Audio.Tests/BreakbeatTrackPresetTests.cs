@@ -21,9 +21,9 @@ public sealed class BreakbeatTrackPresetTests
     private static object[] Presets => ((IEnumerable)TypeOf("BreakbeatTrackPresets").GetProperty("All")!.GetValue(null)!).Cast<object>().ToArray();
     private static object Options() => Activator.CreateInstance(TypeOf("BreakbeatGenerateOptions"))!;
     private static object Defaults(object preset, int stepsPerBar = 16) => preset.GetType().GetMethod("Defaults")!.Invoke(preset, [Options(), stepsPerBar])!;
-    private static object[] Hits(object preset, object options, int resolution = 32) =>
+    private static object[] Hits(object preset, object options, int resolution = 32, int seed = 87) =>
         ((IEnumerable)TypeOf("BreakbeatTrackPresets").GetMethod("Generate")!.Invoke(null,
-            [preset, options, 0, (int)Get(options, "PhraseBars") * resolution - 1, resolution, new Random(87)])!).Cast<object>().ToArray();
+            [preset, options, 0, (int)Get(options, "PhraseBars") * resolution - 1, resolution, new Random(seed)])!).Cast<object>().ToArray();
 
     [TestMethod]
     public void PresetsHaveDistinctRhythmsReproducibleSeedsAndBoundedOptions()
@@ -55,6 +55,49 @@ public sealed class BreakbeatTrackPresetTests
     }
 
     [TestMethod]
+    public void PresetIntensityDoesNotOverrideDensityScalingOrLengthBounds()
+    {
+        object preset = Presets.Single(p => (string)Get(p, "Name") == "JungleRoller");
+        double AverageHits(int density, int intensity)
+        {
+            double total = 0;
+            for (int seed = 0; seed < 256; seed++)
+            {
+                object options = Defaults(preset, 16);
+                Set(options, "DensityPercent", density);
+                Set(options, "AmenFactorPercent", 0);
+                Set(options, "MotifRepeatPercent", 0);
+                Set(options, "PresetIntensityPercent", intensity);
+                Set(options, "AllowPitchedNotes", false);
+                total += Hits(preset, options, resolution: 16, seed).Length;
+            }
+            return total / 256;
+        }
+
+        foreach (int intensity in new[] { 0, 100 })
+        {
+            double halfDensity = AverageHits(50, intensity);
+            double fullDensity = AverageHits(100, intensity);
+            Assert.AreEqual(halfDensity * 2, fullDensity, 1.5,
+                $"Density should scale hit probability linearly at {intensity}% preset intensity.");
+        }
+
+        object boundedOptions = Defaults(preset, 16);
+        Set(boundedOptions, "PresetIntensityPercent", 100);
+        Set(boundedOptions, "DensityPercent", 100);
+        Set(boundedOptions, "AmenFactorPercent", 0);
+        Set(boundedOptions, "MinNoteLengthSteps", 4);
+        Set(boundedOptions, "MaxNoteLengthSteps", 6);
+        int lastColumn = (int)Get(boundedOptions, "PhraseBars") * 16 - 1;
+        var boundedHits = Hits(preset, boundedOptions, resolution: 16)
+            .Where(hit => (int)Get(hit, "Column") <= lastColumn - 5)
+            .ToArray();
+        Assert.IsTrue(boundedHits.Length > 0);
+        Assert.IsTrue(boundedHits.All(hit => (int)Get(hit, "Length") is >= 4 and <= 6),
+            "Preset intensity must preserve the configured minimum and maximum note lengths.");
+    }
+
+    [TestMethod]
     public void PitchPermissionsAndPhraseEndAnswersAreEffective()
     {
         foreach (object preset in Presets)
@@ -67,7 +110,7 @@ public sealed class BreakbeatTrackPresetTests
         }
         object roller = Presets.Single(p => (string)Get(p, "Name") == "JungleRoller");
         object rollerOptions = Defaults(roller);
-        Set(rollerOptions, "DensityPercent", 100); Set(rollerOptions, "AmenFactorPercent", 0);
+        Set(rollerOptions, "DensityPercent", 70); Set(rollerOptions, "AmenFactorPercent", 0);
         Set(rollerOptions, "MotifRepeatPercent", 0);
         var columns = Hits(roller, rollerOptions).Select(h => (int)Get(h, "Column")).ToArray();
         Assert.IsTrue(columns.Count(c => c >= 120) > columns.Count(c => c >= 24 && c < 32), "Last-bar roll must use finer retriggers.");
@@ -153,6 +196,9 @@ public sealed class BreakbeatTrackPresetTests
         combo.SelectedIndex = 1;
         Assert.IsTrue(intensity.Enabled);
         Assert.AreEqual("AmenSnareLadder", Get(Get(dialog, "Options"), "Preset"));
+        Assert.AreEqual(72, Get(Get(dialog, "Options"), "DensityPercent"));
+        Assert.AreEqual(1, Get(Get(dialog, "Options"), "MinNoteLengthSteps"));
+        Assert.AreEqual(2, Get(Get(dialog, "Options"), "MaxNoteLengthSteps"));
         intensity.Value = 65;
         ((NumericUpDown)Field(dialog, "numeric_density")).Value = 23;
         object edited = Get(dialog, "Options");
