@@ -30,6 +30,8 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     private readonly DomainUpDown note = new() { ReadOnly = true, Wrap = true, Width = 90 };
     private readonly Dictionary<string, NumericUpDown> numbers = [];
     private readonly Dictionary<string, decimal> randomizationBaselines = [];
+    private readonly Stack<RandomizationSnapshot> randomizationUndo = [];
+    private readonly Stack<RandomizationSnapshot> randomizationRedo = [];
     private readonly Label status = new() { Dock = DockStyle.Fill, AutoEllipsis = true, Text = "Preparing sample…" };
     private readonly WavePicture picture = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(22, 24, 30) };
     private readonly CheckBox loop = new() { Text = "Loop", AutoSize = true };
@@ -58,6 +60,11 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     private double octaveStepSemitones = 1;
     private double[] overviewMin = [], overviewMax = [];
     private float peak;
+
+    private readonly record struct RandomizationSnapshot(
+        InstrumentSynthSettings Settings,
+        bool ChangesInstrumentType,
+        bool ChangesKeyNote);
 
     public InstrumentSampleSynthDialog(
         SynthFamily family,
@@ -358,7 +365,9 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     }
 
     private void button_random_Click(object? sender, EventArgs e) =>
-        this.RandomizeInstrument((ModifierKeys & Keys.Control) == Keys.Control);
+        this.RandomizeInstrumentWithOptions(
+            (ModifierKeys & Keys.Control) == Keys.Control,
+            (ModifierKeys & Keys.Shift) == Keys.Shift);
 
     private void ResetRandomizationBaselines()
     {
@@ -370,6 +379,9 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     }
 
     private void RandomizeInstrument(bool randomizeKeyNote)
+        => this.RandomizeInstrumentWithOptions(randomizeKeyNote, preserveInstrumentType: false);
+
+    private void RandomizeInstrumentWithOptions(bool randomizeKeyNote, bool preserveInstrumentType)
     {
         if (this.syncing || this.disposed)
         {
@@ -377,6 +389,8 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         }
 
         InstrumentSynthSettings current = this.CaptureSettings();
+        InstrumentSynthSettings beforeRandomization = current.Clone();
+        bool changesKeyNote = randomizeKeyNote && this.family != SynthFamily.DrumSet;
         this.StopHear();
         this.CancelAutoHear();
         this.syncing = true;
@@ -385,12 +399,16 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             this.settings = current;
             if (this.family == SynthFamily.DrumSet)
             {
-                this.kit.SelectedIndex = RandomIndexDifferentFrom(this.kit.Items.Count, this.kit.SelectedIndex);
-                this.drum.SelectedIndex = RandomIndexDifferentFrom(this.drum.Items.Count, this.drum.SelectedIndex);
+                if (!preserveInstrumentType)
+                {
+                    this.kit.SelectedIndex = RandomIndexDifferentFrom(this.kit.Items.Count, this.kit.SelectedIndex);
+                    this.drum.SelectedIndex = RandomIndexDifferentFrom(this.drum.Items.Count, this.drum.SelectedIndex);
+                }
+
                 this.settings.KitIndex = this.kit.SelectedIndex;
                 this.settings.Drum = (SynthDrum)this.drum.SelectedIndex;
             }
-            else
+            else if (!preserveInstrumentType)
             {
                 this.voice.SelectedIndex = RandomIndexDifferentFrom(this.voice.Items.Count, this.voice.SelectedIndex);
                 this.settings.VoiceIndex = this.voice.SelectedIndex;
@@ -407,12 +425,95 @@ public sealed partial class InstrumentSampleSynthDialog : Form
                 pair.Value.Value = RandomValueAroundBaseline(pair.Value, baseline);
             }
 
-            if (randomizeKeyNote && this.family != SynthFamily.DrumSet)
+            if (changesKeyNote)
             {
                 string currentNote = this.note.SelectedItem?.ToString() ?? string.Empty;
                 string[] availableNotes = this.noteNames.Where(name => name != currentNote).ToArray();
                 this.note.SelectedItem = availableNotes[Random.Shared.Next(availableNotes.Length)];
             }
+        }
+        finally
+        {
+            this.syncing = false;
+        }
+
+        this.randomizationUndo.Push(new RandomizationSnapshot(beforeRandomization, !preserveInstrumentType, changesKeyNote));
+        this.randomizationRedo.Clear();
+        this.QueueRender();
+    }
+
+    private void UndoRandomization()
+    {
+        if (this.randomizationUndo.Count == 0)
+        {
+            return;
+        }
+
+        RandomizationSnapshot snapshot = this.randomizationUndo.Pop();
+        this.randomizationRedo.Push(this.CaptureRandomizationSnapshot(snapshot));
+        this.ApplyRandomizationSnapshot(snapshot);
+    }
+
+    private void RedoRandomization()
+    {
+        if (this.randomizationRedo.Count == 0)
+        {
+            return;
+        }
+
+        RandomizationSnapshot snapshot = this.randomizationRedo.Pop();
+        this.randomizationUndo.Push(this.CaptureRandomizationSnapshot(snapshot));
+        this.ApplyRandomizationSnapshot(snapshot);
+    }
+
+    private RandomizationSnapshot CaptureRandomizationSnapshot(RandomizationSnapshot template) =>
+        new(this.CaptureSettings(), template.ChangesInstrumentType, template.ChangesKeyNote);
+
+    private void ApplyRandomizationSnapshot(RandomizationSnapshot snapshot)
+    {
+        InstrumentSynthSettings restored = this.CaptureSettings();
+        InstrumentSynthSettings values = snapshot.Settings;
+        this.StopHear();
+        this.CancelAutoHear();
+        this.syncing = true;
+        try
+        {
+            if (snapshot.ChangesInstrumentType)
+            {
+                if (this.family == SynthFamily.DrumSet)
+                {
+                    this.kit.SelectedIndex = values.KitIndex;
+                    this.drum.SelectedIndex = (int)values.Drum;
+                    restored.KitIndex = values.KitIndex;
+                    restored.Drum = values.Drum;
+                }
+                else
+                {
+                    this.voice.SelectedIndex = values.VoiceIndex;
+                    restored.VoiceIndex = values.VoiceIndex;
+                }
+            }
+
+            foreach (var pair in this.numbers)
+            {
+                if (pair.Key == nameof(this.settings.Bpm))
+                {
+                    continue;
+                }
+
+                var property = typeof(InstrumentSynthSettings).GetProperty(pair.Key)!;
+                object value = property.GetValue(values)!;
+                property.SetValue(restored, value);
+                pair.Value.Value = Convert.ToDecimal(value);
+            }
+
+            if (snapshot.ChangesKeyNote)
+            {
+                restored.MidiNote = values.MidiNote;
+                this.note.SelectedItem = InstrumentSampleSynth.NoteName(values.MidiNote);
+            }
+
+            this.settings = restored;
         }
         finally
         {
@@ -581,6 +682,25 @@ public sealed partial class InstrumentSampleSynthDialog : Form
 
     private async void InstrumentSampleSynthDialog_KeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Control && !e.Alt && !this.presetName.Focused && !this.numbers.Values.Any(number => number.Focused))
+        {
+            if (e.KeyCode == Keys.Z)
+            {
+                this.UndoRandomization();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                return;
+            }
+
+            if (e.KeyCode == Keys.Y)
+            {
+                this.RedoRandomization();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                return;
+            }
+        }
+
         if (e.KeyCode != Keys.Space || e.Alt || presetName.Focused)
         {
             return;

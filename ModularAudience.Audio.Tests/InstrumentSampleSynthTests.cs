@@ -236,6 +236,81 @@ public sealed class InstrumentSampleSynthTests
     }
 
     [STATestMethod]
+    public void RandomizationShiftModePreservesInstrumentSubtype()
+    {
+        using var dialog = new InstrumentSampleSynthDialog(SynthFamily.SynthBassAndLead, store);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var voice = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("voice", flags)!.GetValue(dialog)!;
+        int initialVoice = voice.SelectedIndex;
+
+        typeof(InstrumentSampleSynthDialog).GetMethod("RandomizeInstrumentWithOptions", flags)!
+            .Invoke(dialog, [false, true]);
+        WaitForRender(dialog, flags);
+
+        Assert.AreEqual(initialVoice, voice.SelectedIndex);
+    }
+
+    [STATestMethod]
+    public void RandomizationShiftModePreservesDrumKitAndDrumType()
+    {
+        using var dialog = new InstrumentSampleSynthDialog(SynthFamily.DrumSet, store);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var kit = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("kit", flags)!.GetValue(dialog)!;
+        var drum = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("drum", flags)!.GetValue(dialog)!;
+        int initialKit = kit.SelectedIndex;
+        int initialDrum = drum.SelectedIndex;
+
+        typeof(InstrumentSampleSynthDialog).GetMethod("RandomizeInstrumentWithOptions", flags)!
+            .Invoke(dialog, [false, true]);
+        WaitForRender(dialog, flags);
+
+        Assert.AreEqual(initialKit, kit.SelectedIndex);
+        Assert.AreEqual(initialDrum, drum.SelectedIndex);
+    }
+
+    [STATestMethod]
+    public void CtrlZAndCtrlYUndoAndRedoRandomizationOnly()
+    {
+        using var dialog = new InstrumentSampleSynthDialog(SynthFamily.SynthBassAndLead, store);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var numbers = (Dictionary<string, NumericUpDown>)typeof(InstrumentSampleSynthDialog)
+            .GetField("numbers", flags)!.GetValue(dialog)!;
+        var voice = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("voice", flags)!.GetValue(dialog)!;
+        int initialVoice = voice.SelectedIndex;
+        var randomize = typeof(InstrumentSampleSynthDialog).GetMethod("RandomizeInstrumentWithOptions", flags)!;
+        var capture = typeof(InstrumentSampleSynthDialog).GetMethod("CaptureSettings", flags)!;
+        var keyDown = typeof(InstrumentSampleSynthDialog).GetMethod("InstrumentSampleSynthDialog_KeyDown", flags)!;
+
+        randomize.Invoke(dialog, [false, false]);
+        WaitForRender(dialog, flags);
+        InstrumentSynthSettings randomized = (InstrumentSynthSettings)capture.Invoke(dialog, null)!;
+        numbers["Bpm"].Value = 175m;
+        WaitForRender(dialog, flags);
+
+        var undoArgs = new KeyEventArgs(Keys.Control | Keys.Z);
+        keyDown.Invoke(dialog, [dialog, undoArgs]);
+        WaitForRender(dialog, flags);
+        InstrumentSynthSettings undone = (InstrumentSynthSettings)capture.Invoke(dialog, null)!;
+
+        Assert.IsTrue(undoArgs.Handled);
+        Assert.AreEqual(initialVoice, voice.SelectedIndex);
+        Assert.AreEqual(175, undone.Bpm, 1e-12);
+
+        var redoArgs = new KeyEventArgs(Keys.Control | Keys.Y);
+        keyDown.Invoke(dialog, [dialog, redoArgs]);
+        WaitForRender(dialog, flags);
+        InstrumentSynthSettings redone = (InstrumentSynthSettings)capture.Invoke(dialog, null)!;
+
+        Assert.IsTrue(redoArgs.Handled);
+        Assert.AreEqual(randomized.VoiceIndex, redone.VoiceIndex);
+        Assert.AreEqual(175, redone.Bpm, 1e-12);
+    }
+
+    [STATestMethod]
     public void RepeatedRandomizationUsesStableUserBaselinesAndLimitsAttackAndTail()
     {
         using var dialog = new InstrumentSampleSynthDialog(SynthFamily.Keyboard, store);
