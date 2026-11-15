@@ -117,6 +117,135 @@ public sealed class InstrumentSampleSynthTests
     }
 
     [STATestMethod]
+    public void RandomButtonChangesVoiceAndParametersWithoutChangingKeyDuration()
+    {
+        using var dialog = new InstrumentSampleSynthDialog(SynthFamily.Keyboard, store);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var numbers = (Dictionary<string, NumericUpDown>)typeof(InstrumentSampleSynthDialog)
+            .GetField("numbers", flags)!.GetValue(dialog)!;
+        var duration = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("duration", flags)!.GetValue(dialog)!;
+        var articulation = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("articulation", flags)!.GetValue(dialog)!;
+        var note = (DomainUpDown)typeof(InstrumentSampleSynthDialog)
+            .GetField("note", flags)!.GetValue(dialog)!;
+        var randomButton = (Button)typeof(InstrumentSampleSynthDialog)
+            .GetField("button_random", flags)!.GetValue(dialog)!;
+        var syncing = typeof(InstrumentSampleSynthDialog).GetField("syncing", flags)!;
+        syncing.SetValue(dialog, true);
+        numbers["Bpm"].Value = 137.5m;
+        duration.SelectedIndex = 2;
+        articulation.SelectedIndex = 1;
+        note.SelectedItem = InstrumentSampleSynth.NoteName(55);
+        syncing.SetValue(dialog, false);
+
+        InstrumentSynthSettings before = (InstrumentSynthSettings)typeof(InstrumentSampleSynthDialog)
+            .GetMethod("CaptureSettings", flags)!.Invoke(dialog, null)!;
+        dialog.Show();
+        Application.DoEvents();
+        randomButton.PerformClick();
+        WaitForRender(dialog, flags);
+        InstrumentSynthSettings after = (InstrumentSynthSettings)typeof(InstrumentSampleSynthDialog)
+            .GetMethod("CaptureSettings", flags)!.Invoke(dialog, null)!;
+
+        Assert.AreEqual("Random", randomButton.Text);
+        Assert.AreNotEqual(before.VoiceIndex, after.VoiceIndex);
+        Assert.AreEqual(before.Bpm, after.Bpm, 1e-12);
+        Assert.AreEqual(before.NoteBeats, after.NoteBeats, 1e-12);
+        Assert.AreEqual(before.DurationMultiplier, after.DurationMultiplier, 1e-12);
+        Assert.AreEqual(before.MidiNote, after.MidiNote);
+        Assert.AreNotEqual(before.GainPercent, after.GainPercent);
+    }
+
+    [STATestMethod]
+    public void RandomizationCtrlModeChangesKeyNoteButPreservesDurationAndBpm()
+    {
+        using var dialog = new InstrumentSampleSynthDialog(SynthFamily.SynthBassAndLead, store);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var numbers = (Dictionary<string, NumericUpDown>)typeof(InstrumentSampleSynthDialog)
+            .GetField("numbers", flags)!.GetValue(dialog)!;
+        var duration = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("duration", flags)!.GetValue(dialog)!;
+        var articulation = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("articulation", flags)!.GetValue(dialog)!;
+        var note = (DomainUpDown)typeof(InstrumentSampleSynthDialog)
+            .GetField("note", flags)!.GetValue(dialog)!;
+        var syncing = typeof(InstrumentSampleSynthDialog).GetField("syncing", flags)!;
+        syncing.SetValue(dialog, true);
+        numbers["Bpm"].Value = 132m;
+        duration.SelectedIndex = 3;
+        articulation.SelectedIndex = 2;
+        note.SelectedItem = InstrumentSampleSynth.NoteName(60);
+        syncing.SetValue(dialog, false);
+        InstrumentSynthSettings before = (InstrumentSynthSettings)typeof(InstrumentSampleSynthDialog)
+            .GetMethod("CaptureSettings", flags)!.Invoke(dialog, null)!;
+
+        typeof(InstrumentSampleSynthDialog).GetMethod("RandomizeInstrument", flags)!
+            .Invoke(dialog, [true]);
+        WaitForRender(dialog, flags);
+        InstrumentSynthSettings after = (InstrumentSynthSettings)typeof(InstrumentSampleSynthDialog)
+            .GetMethod("CaptureSettings", flags)!.Invoke(dialog, null)!;
+
+        Assert.AreNotEqual(before.VoiceIndex, after.VoiceIndex);
+        Assert.AreNotEqual(before.MidiNote, after.MidiNote);
+        Assert.AreEqual(before.Bpm, after.Bpm, 1e-12);
+        Assert.AreEqual(before.NoteBeats, after.NoteBeats, 1e-12);
+        Assert.AreEqual(before.DurationMultiplier, after.DurationMultiplier, 1e-12);
+    }
+
+    [STATestMethod]
+    public void DrumSetRandomizationChangesKitAndDrumWhileKeepingDuration()
+    {
+        using var dialog = new InstrumentSampleSynthDialog(SynthFamily.DrumSet, store);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var numbers = (Dictionary<string, NumericUpDown>)typeof(InstrumentSampleSynthDialog)
+            .GetField("numbers", flags)!.GetValue(dialog)!;
+        var duration = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("duration", flags)!.GetValue(dialog)!;
+        var articulation = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("articulation", flags)!.GetValue(dialog)!;
+        var kit = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("kit", flags)!.GetValue(dialog)!;
+        var drum = (ComboBox)typeof(InstrumentSampleSynthDialog)
+            .GetField("drum", flags)!.GetValue(dialog)!;
+        var syncing = typeof(InstrumentSampleSynthDialog).GetField("syncing", flags)!;
+        syncing.SetValue(dialog, true);
+        numbers["Bpm"].Value = 144m;
+        duration.SelectedIndex = 1;
+        articulation.SelectedIndex = 1;
+        syncing.SetValue(dialog, false);
+        InstrumentSynthSettings before = (InstrumentSynthSettings)typeof(InstrumentSampleSynthDialog)
+            .GetMethod("CaptureSettings", flags)!.Invoke(dialog, null)!;
+
+        typeof(InstrumentSampleSynthDialog).GetMethod("RandomizeInstrument", flags)!
+            .Invoke(dialog, [false]);
+        WaitForRender(dialog, flags);
+        InstrumentSynthSettings after = (InstrumentSynthSettings)typeof(InstrumentSampleSynthDialog)
+            .GetMethod("CaptureSettings", flags)!.Invoke(dialog, null)!;
+
+        Assert.AreNotEqual(before.KitIndex, after.KitIndex);
+        Assert.AreNotEqual(before.Drum, after.Drum);
+        Assert.AreEqual(before.Bpm, after.Bpm, 1e-12);
+        Assert.AreEqual(before.NoteBeats, after.NoteBeats, 1e-12);
+        Assert.AreEqual(before.DurationMultiplier, after.DurationMultiplier, 1e-12);
+    }
+
+    private static void WaitForRender(InstrumentSampleSynthDialog dialog, BindingFlags flags)
+    {
+        Task render = (Task)typeof(InstrumentSampleSynthDialog)
+            .GetField("renderTask", flags)!.GetValue(dialog)!;
+        DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+        while (!render.IsCompleted && DateTime.UtcNow < deadline)
+        {
+            Application.DoEvents();
+            Thread.Sleep(2);
+        }
+
+        Assert.IsTrue(render.IsCompleted, "The randomized instrument preview did not finish rendering.");
+        render.GetAwaiter().GetResult();
+    }
+
+    [STATestMethod]
     public void BothSampleSynthMenusListEveryInstrumentFamily()
     {
         using var menu = WindowMain.CreateSampleSynthesizerMenu(_ => { });

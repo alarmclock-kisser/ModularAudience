@@ -70,7 +70,6 @@ public sealed partial class MixTrackView : Form
     private readonly CheckBox overlapModeBox;
     private static double lastRepeatSelectionMultiplier = 4.0;
     private readonly Dictionary<Guid, double> dragOriginalStarts = [];
-    private readonly Dictionary<Guid, Guid> dragOriginalLanes = [];
     private bool dragOverActive;
     private int dragOverRow;
     private double dragOverTime;
@@ -501,7 +500,7 @@ public sealed partial class MixTrackView : Form
         double value = lastRepeatSelectionMultiplier;
         using var form = new Form { Text = "Repeat selection", ClientSize = new Size(300, 100), StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
         var label = new Label { Text = "Repeat count (N):", Location = new Point(12, 14), AutoSize = true };
-        var num = new NumericUpDown { Location = new Point(140, 12), Width = 120, Minimum = 0.25m, Maximum = 64m, DecimalPlaces = 2, Increment = 0.25m, Value = (decimal)value };
+        var num = new NumericUpDown { Location = new Point(140, 12), Width = 120, Minimum = 1m, Maximum = 64m, DecimalPlaces = 2, Increment = 0.25m, Value = (decimal)Math.Max(1, value) };
         var ok = new Button { Text = "OK", Location = new Point(140, 56), Size = new Size(60, 26), DialogResult = DialogResult.OK };
         var cancel = new Button { Text = "Cancel", Location = new Point(210, 56), Size = new Size(60, 26), DialogResult = DialogResult.Cancel };
         form.Controls.AddRange(new Control[] { label, num, ok, cancel });
@@ -538,33 +537,66 @@ public sealed partial class MixTrackView : Form
                 { targets.Add((row, System.Text.Json.JsonSerializer.Deserialize<MixClip>(System.Text.Json.JsonSerializer.Serialize(c))!)); break; }
         }
         if (targets.Count == 0) return;
-
-        foreach (var (row, clip) in targets)
-        {
-            if (row < 0 || row >= Arrangement.Lanes.Count) continue;
-            var lane = Arrangement.Lanes[row];
-            double clipDur = Arrangement.ClipDuration(clip);
-            if (clipDur <= 0) continue;
-            int fullCopies = (int)Math.Floor(n);
-            double remainder = n - fullCopies;
-            for (int i = 1; i < fullCopies; i++)
-            {
-                var copy = System.Text.Json.JsonSerializer.Deserialize<MixClip>(System.Text.Json.JsonSerializer.Serialize(clip))!;
-                copy.Id = Guid.NewGuid();
-                copy.Start = clip.Start + i * clipDur;
-                lane.Clips.Add(copy);
-            }
-            if (remainder > 0.001)
-            {
-                var copy = System.Text.Json.JsonSerializer.Deserialize<MixClip>(System.Text.Json.JsonSerializer.Serialize(clip))!;
-                copy.Id = Guid.NewGuid();
-                copy.Start = clip.Start + fullCopies * clipDur;
-                copy.SourceDuration = clip.SourceDuration * remainder;
-                lane.Clips.Add(copy);
-            }
-        }
+        bool rangeOnly = selectionFirstRow >= 0 && selectionEnd > selectionStart && fullSelectedClips.Count == 0;
+        double groupStart = rangeOnly ? selectionStart : targets.Min(target => target.Clip.Start);
+        foreach (var (row, copy) in BuildRepeatCopies(Arrangement, targets, groupStart, n))
+            Arrangement.Lanes[row].Clips.Add(copy);
         Changed();
     }
+
+    internal static IReadOnlyList<(int Row, MixClip Clip)> BuildRepeatCopies(MixArrangement arrangement,
+        IReadOnlyList<(int Row, MixClip Clip)> targets, double groupStart, double totalCopies)
+    {
+        ArgumentNullException.ThrowIfNull(arrangement); ArgumentNullException.ThrowIfNull(targets);
+        if (!double.IsFinite(groupStart)) throw new ArgumentOutOfRangeException(nameof(groupStart));
+        if (!double.IsFinite(totalCopies) || totalCopies < 1 || totalCopies > 64)
+            throw new ArgumentOutOfRangeException(nameof(totalCopies));
+        if (targets.Count == 0) return [];
+
+        double groupEnd = targets.Max(target => target.Clip.Start + arrangement.ClipDuration(target.Clip));
+        double groupDuration = groupEnd - groupStart;
+        if (!double.IsFinite(groupDuration) || groupDuration <= 0) return [];
+
+        int fullCopies = (int)Math.Floor(totalCopies);
+        double remainder = totalCopies - fullCopies;
+        var copies = new List<(int Row, MixClip Clip)>();
+        static MixClip Clone(MixClip clip) =>
+            System.Text.Json.JsonSerializer.Deserialize<MixClip>(System.Text.Json.JsonSerializer.Serialize(clip))!;
+
+        for (int repeat = 1; repeat < fullCopies; repeat++)
+            foreach ((int row, MixClip clip) in targets)
+            {
+                MixClip copy = Clone(clip);
+                copy.Id = Guid.NewGuid(); copy.Start = clip.Start + repeat * groupDuration;
+                copies.Add((row, copy));
+            }
+
+        if (remainder > 0.001)
+        {
+            double repeatStart = groupStart + fullCopies * groupDuration;
+            double repeatEnd = repeatStart + remainder * groupDuration;
+            foreach ((int row, MixClip clip) in targets)
+            {
+                double clipDuration = arrangement.ClipDuration(clip);
+                double clipStart = clip.Start + fullCopies * groupDuration;
+                double clipEnd = clipStart + clipDuration;
+                double visibleStart = Math.Max(clipStart, repeatStart), visibleEnd = Math.Min(clipEnd, repeatEnd);
+                if (visibleEnd <= visibleStart) continue;
+
+                MixClip copy = Clone(clip);
+                double rate = arrangement.Rate(clip);
+                copy.Id = Guid.NewGuid(); copy.Start = visibleStart;
+                copy.SourceOffset += (visibleStart - clipStart) * rate;
+                copy.SourceDuration = (visibleEnd - visibleStart) * rate;
+                if (visibleStart > clipStart) copy.FadeIn = 0;
+                if (visibleEnd < clipEnd) copy.FadeOut = 0;
+                copies.Add((row, copy));
+            }
+        }
+
+        return copies;
+    }
+
     private void Changed()
     {
         if (restoring) return;
@@ -1093,7 +1125,7 @@ public sealed partial class MixTrackView : Form
             // Only the title handle moves clips. Waveforms are for selecting audio regions.
             dragMode = e.Y < rect.Top + 21 ? (e.X - rect.Left < 7 ? 2 : rect.Right - e.X < 7 ? 3 : 1) : 5;
             originalStart = clip.Start; originalOffset = clip.SourceOffset; originalDuration = clip.SourceDuration;
-            dragOriginalStarts.Clear(); dragOriginalLanes.Clear();
+            dragOriginalStarts.Clear();
             if (dragMode == 1)
             {
                 MixClip[] moving = selectedClips.Count > 1 && selectedClips.Contains(clip.Id)
@@ -1101,8 +1133,7 @@ public sealed partial class MixTrackView : Form
                     : [clip];
                 foreach (MixClip grouped in moving)
                 {
-                    MixLane sourceLane = Arrangement.Lanes.Single(lane => lane.Clips.Contains(grouped));
-                    dragOriginalStarts[grouped.Id] = grouped.Start; dragOriginalLanes[grouped.Id] = sourceLane.Id;
+                    dragOriginalStarts[grouped.Id] = grouped.Start;
                 }
             }
             if (dragMode != 5) ClearRangeSelection();
@@ -1285,13 +1316,11 @@ public sealed partial class MixTrackView : Form
                 if (Arrangement.OverlapMode == MixOverlapMode.DockNoOverlap && currentRow >= 0 && targetRow >= 0)
                 {
                     MixLane targetLane = Arrangement.Lanes[targetRow];
-                    bool beganInTargetLane = dragOriginalLanes.Values.All(id => id == targetLane.Id);
-                    moveDelta = this.ClampDockedMoveDelta(targetLane, group, starts, requestedDelta, beganInTargetLane);
+                    moveDelta = this.ClampDockedMoveDelta(targetLane, group, starts, requestedDelta);
                     if (!this.CanPlaceDockedGroup(targetLane, group, starts, moveDelta) && targetRow != currentRow)
                     {
                         targetRow = currentRow; targetLane = Arrangement.Lanes[currentRow];
-                        beganInTargetLane = dragOriginalLanes.Values.All(id => id == targetLane.Id);
-                        moveDelta = this.ClampDockedMoveDelta(targetLane, group, starts, requestedDelta, beganInTargetLane);
+                        moveDelta = this.ClampDockedMoveDelta(targetLane, group, starts, requestedDelta);
                     }
                     if (!this.CanPlaceDockedGroup(targetLane, group, starts, moveDelta)) moveDelta = 0;
                 }
@@ -1343,44 +1372,60 @@ public sealed partial class MixTrackView : Form
         canvas.Invalidate();
     }
     private double ClampDockedMoveDelta(MixLane targetLane, IReadOnlyList<MixClip> moving,
-        IReadOnlyDictionary<Guid, double> originalStarts, double requestedDelta, bool beganInTargetLane)
+        IReadOnlyDictionary<Guid, double> originalStarts, double requestedDelta)
     {
         if (Math.Abs(requestedDelta) < 1e-12) return 0;
         var movingIds = moving.Select(clip => clip.Id).ToHashSet();
-        double result = requestedDelta;
+        var blocked = new List<(double Start, double End)>();
         foreach (MixClip clip in moving)
         {
             double start = originalStarts[clip.Id], end = start + Arrangement.ClipDuration(clip);
             foreach (MixClip obstacle in targetLane.Clips.Where(other => !movingIds.Contains(other.Id)))
             {
-                double obstacleEnd = obstacle.Start + Arrangement.ClipDuration(obstacle);
-                bool alreadyOverlapping = start < obstacleEnd && end > obstacle.Start;
-                if (beganInTargetLane && alreadyOverlapping) continue;
-                if (result > 0)
-                {
-                    if (beganInTargetLane && obstacle.Start >= end && obstacle.Start <= end + result)
-                        result = Math.Min(result, obstacle.Start - end);
-                    else if (!beganInTargetLane && start + result < obstacleEnd && end + result > obstacle.Start)
-                    {
-                        double before = obstacle.Start - end;
-                        if (before >= 0) result = Math.Min(result, before);
-                        else if (alreadyOverlapping) return 0;
-                    }
-                }
-                else
-                {
-                    if (beganInTargetLane && obstacleEnd <= start && obstacleEnd >= start + result)
-                        result = Math.Max(result, obstacleEnd - start);
-                    else if (!beganInTargetLane && start + result < obstacleEnd && end + result > obstacle.Start)
-                    {
-                        double after = obstacleEnd - start;
-                        if (after <= 0) result = Math.Max(result, after);
-                        else if (alreadyOverlapping) return 0;
-                    }
-                }
+                double obstacleStart = obstacle.Start, obstacleEnd = obstacleStart + Arrangement.ClipDuration(obstacle);
+                double blockedStart = obstacleStart - end, blockedEnd = obstacleEnd - start;
+                if (blockedEnd > blockedStart) blocked.Add((blockedStart, blockedEnd));
             }
         }
-        return result;
+
+        if (requestedDelta > 0)
+        {
+            double escape = blocked.Where(interval => interval.Start < 0 && interval.End > 0)
+                .Select(interval => interval.End).DefaultIfEmpty(0).Max();
+            if (escape > 0)
+            {
+                double previous;
+                do
+                {
+                    previous = escape;
+                    foreach ((double start, double end) in blocked)
+                        if (start < escape && end > escape) escape = end;
+                } while (escape > previous);
+                return requestedDelta <= escape ? escape : blocked
+                    .Where(interval => interval.Start >= escape && interval.Start < requestedDelta)
+                    .Select(interval => interval.Start).DefaultIfEmpty(requestedDelta).Min();
+            }
+            return blocked.Where(interval => interval.Start >= 0 && interval.Start < requestedDelta && interval.End > 0)
+                .Select(interval => interval.Start).DefaultIfEmpty(requestedDelta).Min();
+        }
+
+        double leftEscape = blocked.Where(interval => interval.Start < 0 && interval.End > 0)
+            .Select(interval => interval.Start).DefaultIfEmpty(0).Min();
+        if (leftEscape < 0)
+        {
+            double previous;
+            do
+            {
+                previous = leftEscape;
+                foreach ((double start, double end) in blocked)
+                    if (end > leftEscape && start < leftEscape) leftEscape = start;
+            } while (leftEscape < previous);
+            return requestedDelta >= leftEscape ? leftEscape : blocked
+                .Where(interval => interval.End <= leftEscape && interval.End > requestedDelta)
+                .Select(interval => interval.End).DefaultIfEmpty(requestedDelta).Max();
+        }
+        return blocked.Where(interval => interval.End <= 0 && interval.End > requestedDelta)
+            .Select(interval => interval.End).DefaultIfEmpty(requestedDelta).Max();
     }
 
     private bool CanPlaceDockedGroup(MixLane targetLane, IReadOnlyList<MixClip> moving,
@@ -1453,7 +1498,7 @@ public sealed partial class MixTrackView : Form
                 selectedLane = Arrangement.Lanes[target].Id;
             }
         }
-        dragOriginalStarts.Clear(); dragOriginalLanes.Clear();
+        dragOriginalStarts.Clear();
         bool rulerDrag = dragMode == 4;
         bool rangeDrag = dragMode == 5;
         if (rangeDrag)

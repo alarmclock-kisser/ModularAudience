@@ -65,12 +65,15 @@ Unknown source BPM keeps the original tempo; set it later through the clip's con
 - Right-click clips for exact start, source offset/duration, gain, fades, and tempo mode.
 - Right-click a track for gain, multiple-solo / mute, automatic overlap crossfades, reorder, and removal.
 - **Dock (no overlap)** stops clip drags at the nearest segment boundary; dropped audio is
-  placed after occupied segments without snapping back into an overlap. **Mix overlap**
-  shows both overlapping clip portions through translucent fills. Output peaks above 0.98
-  are uniformly attenuated for headroom.
+  placed after occupied segments without snapping back into an overlap. A clip that was
+  already overlapping when Dock is re-enabled snaps out to the first free boundary in the
+  drag direction. **Mix overlap** shows both overlapping clip portions through translucent
+  fills. Output peaks above 0.98 are uniformly attenuated for headroom.
 - Right-click a shared boundary between adjacent clips to remove the boundary and merge
   them. The merge is one Undo/Redo edit; compatible source slices merge without rendering,
   while other clips are rendered into one audio segment.
+- **Repeat selection** repeats all selected segments as one time span, preserving silence
+  between clips while excluding silence after the last selected segment.
 - Source channels stay intact inside the project; display shows up to eight channel bands.
   The shared preview/export is stereo: mono duplicates, stereo stays stereo, larger channel layouts
   fold to left/right by parity. It is not a surround-device routing editor.

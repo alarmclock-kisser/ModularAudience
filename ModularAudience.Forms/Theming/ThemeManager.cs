@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using ModularAudience.Forms;
 
 namespace ModularAudience.Forms.Theming;
 
@@ -38,7 +39,10 @@ public static class ThemeManager
     {
         Forms.RemoveWhere(f => f.IsDisposed);
         foreach (Form form in Application.OpenForms.Cast<Form>().ToArray())
+        {
+            WindowIconManager.Apply(form);
             if (Forms.Add(form)) Apply(form);
+        }
     }
     public static void SetTheme(ColorTheme? theme, bool persist = false)
     {

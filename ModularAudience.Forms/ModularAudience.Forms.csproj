@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <Content Include="ModularAudience_favicon.ico" />
+    <EmbeddedResource Include="ModularAudience_favicon.ico" LogicalName="ModularAudience.Forms.ModularAudience_favicon.ico" />
     <EmbeddedResource Include="appsettings.json" LogicalName="ModularAudience.Forms.appsettings.json" />
     <EmbeddedResource Include="BrowserBridge\*" LogicalName="ModularAudience.BrowserBridge.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Quantum\TranspileCircuit.py" LogicalName="ModularAudience.Quantum.TranspileCircuit.py" />

@@ -186,9 +186,8 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         picture.Paint += PaintWave;
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
         bottom.Controls.Add(hear); bottom.Controls.Add(loop); bottom.Controls.Add(create);
+        bottom.Controls.Add(this.button_random);
         bottom.Controls.Add(this.button_createOctave); bottom.Controls.Add(this.button_ok);
-        var randomize = new Button { Text = "New variation", AutoSize = true }; bottom.Controls.Add(randomize);
-        randomize.Click += (_, _) => numbers[nameof(settings.Seed)].Value = Random.Shared.Next(1, 999999);
         bottom.Controls.Add(status); status.Width = 560; status.Height = 45; status.Dock = DockStyle.None;
         var presetBar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
         presetBar.Controls.Add(new Label { Text = "Saved presets", AutoSize = true, Margin = new Padding(5, 8, 2, 0) });
@@ -339,6 +338,100 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         try { foreach (var pair in numbers) pair.Value.Value = Math.Clamp(Convert.ToDecimal(typeof(InstrumentSynthSettings).GetProperty(pair.Key)!.GetValue(settings)), pair.Value.Minimum, pair.Value.Maximum); }
         finally { syncing = previousSyncing; }
     }
+
+    private void button_random_Click(object? sender, EventArgs e) =>
+        this.RandomizeInstrument((ModifierKeys & Keys.Control) == Keys.Control);
+
+    private void RandomizeInstrument(bool randomizeKeyNote)
+    {
+        if (this.syncing || this.disposed)
+        {
+            return;
+        }
+
+        InstrumentSynthSettings current = this.CaptureSettings();
+        this.StopHear();
+        this.CancelAutoHear();
+        this.syncing = true;
+        try
+        {
+            this.settings = current;
+            if (this.family == SynthFamily.DrumSet)
+            {
+                this.kit.SelectedIndex = RandomIndexDifferentFrom(this.kit.Items.Count, this.kit.SelectedIndex);
+                this.drum.SelectedIndex = RandomIndexDifferentFrom(this.drum.Items.Count, this.drum.SelectedIndex);
+                this.settings.KitIndex = this.kit.SelectedIndex;
+                this.settings.Drum = (SynthDrum)this.drum.SelectedIndex;
+            }
+            else
+            {
+                this.voice.SelectedIndex = RandomIndexDifferentFrom(this.voice.Items.Count, this.voice.SelectedIndex);
+                this.settings.VoiceIndex = this.voice.SelectedIndex;
+            }
+
+            this.settings.ApplyVoiceDefaults();
+            this.ApplyNumbers();
+            foreach (NumericUpDown number in this.numbers.Values)
+            {
+                if (number == this.numbers[nameof(this.settings.Bpm)])
+                {
+                    continue;
+                }
+
+                number.Value = RandomValueDifferentFrom(number);
+            }
+
+            if (randomizeKeyNote && this.family != SynthFamily.DrumSet)
+            {
+                string currentNote = this.note.SelectedItem?.ToString() ?? string.Empty;
+                string[] availableNotes = this.noteNames.Where(name => name != currentNote).ToArray();
+                this.note.SelectedItem = availableNotes[Random.Shared.Next(availableNotes.Length)];
+            }
+        }
+        finally
+        {
+            this.syncing = false;
+        }
+
+        this.QueueRender();
+    }
+
+    private static int RandomIndexDifferentFrom(int count, int currentIndex)
+    {
+        if (count <= 1)
+        {
+            return Math.Max(0, currentIndex);
+        }
+
+        if (currentIndex < 0 || currentIndex >= count)
+        {
+            return Random.Shared.Next(count);
+        }
+
+        int index = Random.Shared.Next(count - 1);
+        return index >= currentIndex ? index + 1 : index;
+    }
+
+    private static decimal RandomValueDifferentFrom(NumericUpDown number)
+    {
+        decimal increment = number.Increment;
+        decimal valueCount = decimal.Floor((number.Maximum - number.Minimum) / increment) + 1;
+        if (valueCount <= 1)
+        {
+            return number.Minimum;
+        }
+
+        long count = (long)valueCount;
+        long currentIndex = (long)((number.Value - number.Minimum) / increment);
+        long index = Random.Shared.NextInt64(count - 1);
+        if (index >= currentIndex)
+        {
+            index++;
+        }
+
+        return number.Minimum + index * increment;
+    }
+
     private InstrumentSynthSettings CaptureSettings()
     {
         var snapshot = settings.Clone();

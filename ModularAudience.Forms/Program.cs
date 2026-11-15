@@ -79,6 +79,7 @@ namespace ModularAudience.Forms
             Theming.ThemeManager.Install();
 
             var window = new WindowMain(logger, serviceProvider);
+            WindowIconManager.Apply(window);
             window.Shown += async (_, _) => await ApplicationUpdater.CheckAtStartupAsync(window);
             Application.Run(window);
         }

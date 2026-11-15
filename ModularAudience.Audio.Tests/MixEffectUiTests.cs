@@ -4,9 +4,11 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio.Arrangement;
 using ModularAudience.Audio.Effects;
 using ModularAudience.Audio.Effects.Curves;
+using ModularAudience.Forms;
 using ModularAudience.Forms.Effects;
 using ModularAudience.Forms.Modules;
 using ModularAudience.Forms.Modules.Dialogs;
+using ModularAudience.Forms.Theming;
 
 namespace ModularAudience.Audio.Tests;
 
@@ -14,6 +16,19 @@ namespace ModularAudience.Audio.Tests;
 public sealed class MixEffectUiTests
 {
     private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
+
+    [STATestMethod]
+    public void FormsDiscoveredLaterReceiveTheSharedModularAudienceIcon()
+    {
+        using var context = new WinFormsTestContext();
+        using var first = new Form();
+        first.Show(); Application.DoEvents(); ThemeManager.DiscoverForms();
+        Assert.AreSame(WindowIconManager.SharedIcon, first.Icon);
+
+        using var second = new Form();
+        second.Show(); Application.DoEvents(); ThemeManager.DiscoverForms();
+        Assert.AreSame(WindowIconManager.SharedIcon, second.Icon);
+    }
 
     [STATestMethod]
     public void EmptySpaceAndAudioTargets_OpenDistinctMenusWithIdenticalSharedEffectHierarchy()
@@ -50,6 +65,30 @@ public sealed class MixEffectUiTests
         MixEffectRegion[] clips = fixture.Mix.CaptureEffectRegions();
         Assert.AreEqual(2, clips.Length); Assert.AreEqual(2, clips.Sum(region => region.ClipIds.Count));
         CollectionAssert.AreEquivalent(new[] { fixture.First.Id, fixture.Second.Id }, clips.SelectMany(region => region.ClipIds).ToArray());
+    }
+
+    [STATestMethod]
+    public void RepeatingMultiClipSelection_RepeatsAllSegmentsAndInternalSilenceWithoutTrailingSilence()
+    {
+        using var arrangement = new MixArrangement();
+        MixSource source = new()
+        {
+            Data = new float[4410 * 2], Channels = 2, SampleRate = 44100, Bpm = 120
+        };
+        arrangement.Sources.Add(source.Id, source);
+        MixLane lane = new(); arrangement.Lanes.Add(lane);
+        MixClip first = arrangement.AddClip(lane, source, 0), second = arrangement.AddClip(lane, source, 0.2);
+
+        IReadOnlyList<(int Row, MixClip Clip)> copies = MixTrackView.BuildRepeatCopies(arrangement,
+            [(0, first), (0, second)], 0, 3);
+
+        Assert.AreEqual(4, copies.Count);
+        Assert.AreEqual(0.3, copies[0].Clip.Start, 1e-8);
+        Assert.AreEqual(0.5, copies[1].Clip.Start, 1e-8);
+        Assert.AreEqual(0.6, copies[2].Clip.Start, 1e-8);
+        Assert.AreEqual(0.8, copies[3].Clip.Start, 1e-8);
+        Assert.AreEqual(0.1, copies[1].Clip.Start - copies[0].Clip.Start - 0.1, 1e-8);
+        Assert.AreEqual(0.9, copies[^1].Clip.Start + arrangement.ClipDuration(copies[^1].Clip), 1e-8);
     }
 
     [STATestMethod]
@@ -121,6 +160,30 @@ public sealed class MixEffectUiTests
         Assert.AreEqual(0.05, fixture.First.Start, 1e-7);
         Assert.AreEqual(0.15, obstacle.Start, 1e-7);
         Assert.IsTrue(fixture.First.Start + mix.Arrangement.ClipDuration(fixture.First) <= obstacle.Start);
+    }
+
+    [STATestMethod]
+    [DataRow(MixOverlapMode.MixOverlap, true)]
+    [DataRow(MixOverlapMode.MixOverlap, false)]
+    [DataRow(MixOverlapMode.AllowOverlapOverwrite, true)]
+    [DataRow(MixOverlapMode.AllowOverlapOverwrite, false)]
+    public void DockedClipDragEscapesAnExistingOverlap(MixOverlapMode previousMode, bool moveRight)
+    {
+        using var fixture = new Fixture(); var mix = fixture.Mix;
+        MixLane lane = mix.Arrangement.Lanes[0], otherLane = mix.Arrangement.Lanes[1];
+        fixture.Second.Start = 0.05;
+        otherLane.Clips.Remove(fixture.Second); lane.Clips.Add(fixture.Second);
+        mix.Arrangement.OverlapMode = previousMode; Set(mix, "pixelsPerSecond", 600d); Call(mix, "Changed");
+        mix.Arrangement.OverlapMode = MixOverlapMode.DockNoOverlap;
+        var canvas = (Control)Get(mix, "canvas")!;
+
+        Call(mix, "MouseDownTimeline", canvas, new MouseEventArgs(MouseButtons.Left, 1, 250, 40, 0));
+        Call(mix, "MouseMoveTimeline", canvas, new MouseEventArgs(MouseButtons.Left, 0, 250 + (moveRight ? 1 : -1), 40, 0));
+
+        Assert.AreEqual(moveRight ? 0.1 : -0.1, fixture.Second.Start, 1e-7);
+        Assert.IsTrue(fixture.Second.Start >= fixture.First.Start + mix.Arrangement.ClipDuration(fixture.First) ||
+            fixture.Second.Start + mix.Arrangement.ClipDuration(fixture.Second) <= fixture.First.Start);
+        Call(mix, "MouseUpTimeline", canvas, new MouseEventArgs(MouseButtons.Left, 1, 250 + (moveRight ? 1 : -1), 40, 0));
     }
 
     [STATestMethod]

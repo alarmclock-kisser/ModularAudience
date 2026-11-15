@@ -5,6 +5,7 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 public sealed partial class InstrumentSampleSynthDialog
 {
     private System.ComponentModel.IContainer? components;
+    private Button button_random = null!;
     private Button button_createOctave = null!;
     private Button button_ok = null!;
     private ContextMenuStrip octaveContextMenu = null!;
@@ -14,6 +15,13 @@ public sealed partial class InstrumentSampleSynthDialog
     private void InitializeSynthActionControls()
     {
         this.components = new System.ComponentModel.Container();
+        this.button_random = new Button
+        {
+            Name = "button_random",
+            Text = "Random",
+            AutoSize = true,
+            UseVisualStyleBackColor = true
+        };
         this.button_createOctave = new Button
         {
             Name = "button_createOctave",
@@ -53,8 +61,11 @@ public sealed partial class InstrumentSampleSynthDialog
         this.button_createOctave.ContextMenuStrip = this.octaveContextMenu;
         this.button_createOctave.Click += async (_, _) => await this.CreateOctaveAsync();
         this.button_ok.Click += async (_, _) => await this.ConfirmAsync();
+        this.button_random.Click += this.button_random_Click;
         this.tips.SetToolTip(this.button_createOctave,
             "Click to render an octave of individual notes. Right-click to choose its starting transpose and semitone step.");
+        this.tips.SetToolTip(this.button_random,
+            "Randomize the instrument type and sound parameters. Ctrl-click also randomizes Key Note. Key Duration and BPM stay unchanged.");
     }
 
 }
