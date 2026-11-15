@@ -1,6 +1,7 @@
 using ModularAudience.Audio;
 using ModularAudience.CoOp;
 using ModularAudience.CoOp.Networking;
+using ModularAudience.CoOp.Protocol;
 using ModularAudience.CoOp.Synchronization;
 using ModularAudience.Forms.Helpers;
 using System.ComponentModel;
@@ -15,10 +16,12 @@ namespace ModularAudience.Forms
         private CoOpConnectionMenu? _coOpConnectionMenu;
         private ToolStripMenuItem? _coOpDisconnectItem;
         private ToolStripMenuItem? _coOpCopyAddressItem;
+        private ToolStripMenuItem? _coOpSynchronizePresetsItem;
         private ToolStripMenuItem? _coOpStatusItem;
         private CancellationTokenSource? _coOpDiscoveryCts;
         private int _coOpDiscoveryGeneration;
         private bool _coOpMenuBusy;
+        private bool _coOpPresetSyncBusy;
         private bool _coOpShutdownStarted;
         private bool _coOpShutdownCompleted;
         private string _coOpDiscoveryStatus = "Not connected";
@@ -87,6 +90,12 @@ namespace ModularAudience.Forms
             this._coOpCopyAddressItem = new ToolStripMenuItem("Copy co-op address");
             this._coOpCopyAddressItem.Click += (_, _) => this.CopyCoOpAddress();
 
+            this._coOpSynchronizePresetsItem = new ToolStripMenuItem("Synchronize Presets")
+            {
+                Enabled = false
+            };
+            this._coOpSynchronizePresetsItem.Click += async (_, _) => await this.SynchronizePresetsAsync();
+
             this._coOpStatusItem = new ToolStripMenuItem("Not connected")
             {
                 Enabled = false
@@ -101,6 +110,8 @@ namespace ModularAudience.Forms
                 this._coOpHostItem,
                 this._coOpConnectionMenu.ConnectToAddress,
                 this._coOpConnectionMenu.Hosts,
+                new ToolStripSeparator(),
+                this._coOpSynchronizePresetsItem,
                 this._coOpDisconnectItem,
                 this._coOpCopyAddressItem,
                 new ToolStripSeparator(),
@@ -169,6 +180,15 @@ namespace ModularAudience.Forms
                 this._coOpCopyAddressItem.Enabled = hosting && !this._coOpMenuBusy;
             }
 
+            if (this._coOpSynchronizePresetsItem != null)
+            {
+                this._coOpSynchronizePresetsItem.Enabled =
+                    controller != null &&
+                    controller.ConnectedPeerCount > 0 &&
+                    !this._coOpMenuBusy &&
+                    !this._coOpPresetSyncBusy;
+            }
+
             if (this._coOpStatusItem != null)
             {
                 if (hosting)
@@ -183,6 +203,58 @@ namespace ModularAudience.Forms
                 {
                     this._coOpStatusItem.Text = this._coOpDiscoveryStatus;
                 }
+            }
+        }
+
+        private async Task SynchronizePresetsAsync()
+        {
+            CoOpUiController? controller = this._coOpController;
+            if (controller == null ||
+                this._coOpMenuBusy ||
+                this._coOpPresetSyncBusy ||
+                this._coOpShutdownStarted ||
+                controller.ConnectedPeerCount == 0)
+            {
+                return;
+            }
+
+            this._coOpPresetSyncBusy = true;
+            this.UpdateCoOpMenuState();
+
+            try
+            {
+                IReadOnlyList<CoOpPresetSyncItem> presets = await Task.Run(
+                    () => new CoOpPresetSynchronizer().Capture());
+                if (this._coOpShutdownStarted)
+                {
+                    return;
+                }
+
+                if (presets.Count == 0)
+                {
+                    LogManager.LogInfo("Preset synchronization skipped: no user-created presets were found.");
+                    return;
+                }
+
+                int peerCount = controller.ConnectedPeerCount;
+                LogManager.LogInfo(
+                    $"Preset synchronization started: sending {presets.Count} preset(s) to {peerCount} co-op peer(s).");
+                await controller.PushPresetsAsync(presets);
+                LogManager.LogSuccess(
+                    $"Preset synchronization sent {presets.Count} preset(s) to {peerCount} co-op peer(s).");
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log("Preset synchronization failed.", ex);
+                if (!this._coOpShutdownStarted)
+                {
+                    WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "Preset synchronization failed", ex);
+                }
+            }
+            finally
+            {
+                this._coOpPresetSyncBusy = false;
+                this.UpdateCoOpMenuState();
             }
         }
 

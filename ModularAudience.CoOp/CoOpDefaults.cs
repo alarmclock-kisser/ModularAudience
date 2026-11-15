@@ -5,7 +5,10 @@ namespace ModularAudience.CoOp;
 /// </summary>
 public static class CoOpDefaults
 {
-    public const int ProtocolVersion = 1;
+    public const int ProtocolVersion = 2;
+
+    public const int MaxPresetSyncEntries = 65_536;
+    public const int MaxPresetSyncBytes = 32 * 1024 * 1024;
 
     public const int DefaultPort = 47823;
     public const int PortSearchCount = 20;

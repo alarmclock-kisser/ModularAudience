@@ -29,6 +29,11 @@ public sealed class CoOpPeerEventArgs(CoOpPeerInfo peer) : EventArgs
     public CoOpPeerInfo Peer { get; } = peer;
 }
 
+public sealed class CoOpPresetSyncEventArgs(CoOpPresetSyncMessage message) : EventArgs
+{
+    public CoOpPresetSyncMessage Message { get; } = message;
+}
+
 public sealed class CoOpLogEventArgs(string message, Exception? exception = null) : EventArgs
 {
     public string Message { get; } = message;

@@ -1,6 +1,7 @@
 using ModularAudience.Audio;
 using ModularAudience.CoOp.Networking;
 using ModularAudience.CoOp.Protocol;
+using System.Text;
 
 namespace ModularAudience.CoOp.Synchronization;
 
@@ -86,11 +87,37 @@ public sealed class CoOpSessionManager : IAsyncDisposable
         }
     }
 
+    public int ConnectedPeerCount
+    {
+        get
+        {
+            if (this.state == CoOpSessionState.Hosting)
+            {
+                lock (this.peerGate)
+                {
+                    return this.peers.Count(peer => peer.PeerId != Guid.Empty && peer.Connection.IsConnected);
+                }
+            }
+
+            if (this.state == CoOpSessionState.Connected && this.hostConnection?.IsConnected == true)
+            {
+                lock (this.peerGate)
+                {
+                    return 1 + this.peers.Count(peer => peer.PeerId != Guid.Empty);
+                }
+            }
+
+            return 0;
+        }
+    }
+
     public event EventHandler<CoOpStateChangedEventArgs>? StateChanged;
 
     public event EventHandler<CoOpPeerEventArgs>? PeerJoined;
 
     public event EventHandler<CoOpPeerEventArgs>? PeerLeft;
+
+    public event EventHandler<CoOpPresetSyncEventArgs>? PresetSyncReceived;
 
     public event EventHandler<CoOpRemoteCollectionEventArgs>? RemoteCollectionAdded;
 
@@ -261,6 +288,33 @@ public sealed class CoOpSessionManager : IAsyncDisposable
             this.RaiseStateChanged();
             throw;
         }
+    }
+
+    public Task PushPresetsAsync(
+        IReadOnlyCollection<CoOpPresetSyncItem> presets,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(presets);
+        return this.RunExclusiveAsync(async () =>
+        {
+            ObjectDisposedException.ThrowIf(this.disposed, this);
+            if (!this.IsSessionActive)
+            {
+                throw new InvalidOperationException("Join a co-op session before synchronizing presets.");
+            }
+
+            if (this.ConnectedPeerCount == 0)
+            {
+                throw new InvalidOperationException("Connect to at least one co-op peer before synchronizing presets.");
+            }
+
+            var message = new CoOpPresetSyncMessage(
+                this.localPeerId,
+                this.options.DisplayName,
+                presets.ToArray());
+            ValidatePresetSyncMessage(message);
+            await this.SendToSessionAsync(message, null, cancellationToken);
+        }, cancellationToken);
     }
 
     public Task<CoOpLocalShare> ShareCollectionAsync(
@@ -653,6 +707,10 @@ public sealed class CoOpSessionManager : IAsyncDisposable
                 this.hostPeer = new CoOpPeerInfo(welcome.PeerId, welcome.DisplayName);
                 this.pendingWelcome?.TrySetResult(welcome);
                 break;
+            case CoOpPresetSyncMessage presetSync:
+                ValidatePresetSyncMessage(presetSync);
+                this.PresetSyncReceived?.Invoke(this, new CoOpPresetSyncEventArgs(presetSync));
+                break;
             case ShareCollectionMessage share:
                 this.HandleShareCollectionMessage(share, null);
                 break;
@@ -708,6 +766,17 @@ public sealed class CoOpSessionManager : IAsyncDisposable
         {
             case HelloMessage hello:
                 await this.HandleHelloAsync(peer, hello);
+                break;
+            case CoOpPresetSyncMessage presetSync:
+                ValidatePresetSyncMessage(presetSync);
+                var forwardedPresetSync = presetSync with
+                {
+                    SourcePeerId = peer.PeerId,
+                    SourceDisplayName = peer.DisplayName
+                };
+                ValidatePresetSyncMessage(forwardedPresetSync);
+                this.PresetSyncReceived?.Invoke(this, new CoOpPresetSyncEventArgs(forwardedPresetSync));
+                await this.BroadcastAsync(forwardedPresetSync, peer.Connection, CancellationToken.None);
                 break;
             case ShareCollectionMessage share:
                 await this.HandleClientShareAsync(peer, share);
@@ -1684,6 +1753,39 @@ public sealed class CoOpSessionManager : IAsyncDisposable
     private void RaiseLog(string message, Exception? exception = null)
     {
         this.Log?.Invoke(this, new CoOpLogEventArgs(message, exception));
+    }
+
+    private static void ValidatePresetSyncMessage(CoOpPresetSyncMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        if (message.SourcePeerId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(message.SourceDisplayName) ||
+            message.SourceDisplayName.Length > 256 ||
+            message.Presets is null ||
+            message.Presets.Length == 0 ||
+            message.Presets.Length > CoOpDefaults.MaxPresetSyncEntries)
+        {
+            throw new CoOpProtocolException("The preset synchronization message has invalid metadata.");
+        }
+
+        long totalBytes = 0;
+        foreach (CoOpPresetSyncItem? preset in message.Presets)
+        {
+            if (preset is null ||
+                string.IsNullOrWhiteSpace(preset.StoreId) ||
+                preset.StoreId.Length > 128 ||
+                string.IsNullOrWhiteSpace(preset.Json))
+            {
+                throw new CoOpProtocolException("The preset synchronization message contains an invalid preset.");
+            }
+
+            totalBytes += Encoding.UTF8.GetByteCount(preset.StoreId);
+            totalBytes += Encoding.UTF8.GetByteCount(preset.Json);
+            if (totalBytes > CoOpDefaults.MaxPresetSyncBytes)
+            {
+                throw new CoOpProtocolException("The preset synchronization payload exceeds the supported size.");
+            }
+        }
     }
 
     private enum CoOpChangeKind

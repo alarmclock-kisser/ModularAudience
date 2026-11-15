@@ -1,6 +1,7 @@
 using ModularAudience.Audio;
 using ModularAudience.CoOp;
 using ModularAudience.CoOp.Networking;
+using ModularAudience.CoOp.Protocol;
 using ModularAudience.CoOp.Synchronization;
 using ModularAudience.CoOp.Windows;
 
@@ -16,6 +17,7 @@ namespace ModularAudience.Forms
         private readonly CoOpSessionManager session;
         private readonly CoOpDiscoveryClient discoveryClient = new();
         private readonly Dictionary<Guid, AudioCollectionView> remoteViews = [];
+        private readonly SemaphoreSlim presetImportGate = new(1, 1);
         private bool disposed;
 
         public CoOpUiController(SynchronizationContext uiContext)
@@ -32,6 +34,7 @@ namespace ModularAudience.Forms
             this.session.Log += this.Session_Log;
             this.session.PeerJoined += this.Session_PeerJoined;
             this.session.PeerLeft += this.Session_PeerLeft;
+            this.session.PresetSyncReceived += this.Session_PresetSyncReceived;
         }
 
         public event EventHandler<CoOpStateChangedEventArgs>? StateChanged;
@@ -39,6 +42,8 @@ namespace ModularAudience.Forms
         public CoOpSessionState State => this.session.State;
 
         public bool IsSessionActive => this.session.IsSessionActive;
+
+        public int ConnectedPeerCount => this.session.ConnectedPeerCount;
 
         public string? SessionAddress => this.session.SessionAddress;
 
@@ -93,6 +98,13 @@ namespace ModularAudience.Forms
             return this.discoveryClient.DiscoverAsync(
                 TimeSpan.FromMilliseconds(CoOpDefaults.DefaultDiscoveryTimeoutMilliseconds),
                 cancellationToken);
+        }
+
+        public Task PushPresetsAsync(
+            IReadOnlyCollection<CoOpPresetSyncItem> presets,
+            CancellationToken cancellationToken = default)
+        {
+            return this.session.PushPresetsAsync(presets, cancellationToken);
         }
 
         public CoOpLocalShare? FindLocalShare(AudioCollection collection)
@@ -220,11 +232,47 @@ namespace ModularAudience.Forms
         private void Session_PeerJoined(object? sender, CoOpPeerEventArgs e)
         {
             LogManager.Log($"Co-op peer joined: {e.Peer.DisplayName}.");
+            WindowMain.RaiseCoOpVisualsChanged();
         }
 
         private void Session_PeerLeft(object? sender, CoOpPeerEventArgs e)
         {
             LogManager.Log($"Co-op peer left: {e.Peer.DisplayName}.");
+            WindowMain.RaiseCoOpVisualsChanged();
+        }
+
+        private void Session_PresetSyncReceived(object? sender, CoOpPresetSyncEventArgs e)
+        {
+            _ = this.ImportPresetsAsync(e.Message);
+        }
+
+        private async Task ImportPresetsAsync(CoOpPresetSyncMessage message)
+        {
+            await this.presetImportGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                string sourceName = message.SourceDisplayName;
+                LogManager.LogInfo(
+                    $"Preset synchronization started: receiving {message.Presets.Length} preset(s) from '{sourceName}'.");
+
+                try
+                {
+                    var synchronizer = new CoOpPresetSynchronizer();
+                    CoOpPresetSyncResult result = await Task.Run(
+                        () => synchronizer.Import(sourceName, message.Presets)).ConfigureAwait(false);
+                    LogManager.LogSuccess(
+                        $"Preset synchronization completed: {result.CreatedCount} new preset(s) created from '{sourceName}'; " +
+                        $"{result.DuplicatesSkipped} duplicate(s) skipped.");
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Log($"Preset synchronization from '{sourceName}' failed.", ex);
+                }
+            }
+            finally
+            {
+                this.presetImportGate.Release();
+            }
         }
 
         private void OpenRemoteCollectionView(CoOpRemoteCollection collection)

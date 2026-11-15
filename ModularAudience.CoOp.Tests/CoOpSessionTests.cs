@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio;
+using ModularAudience.CoOp.Protocol;
 using ModularAudience.CoOp.Synchronization;
 
 namespace ModularAudience.CoOp.Tests;
@@ -7,6 +8,45 @@ namespace ModularAudience.CoOp.Tests;
 [TestClass]
 public sealed class CoOpSessionTests
 {
+    [TestMethod]
+    public async Task ClientPresetPush_RelaysToOtherPeersWithoutSendingPresetsBackToSender()
+    {
+        await using var scope = new SessionTestScope();
+        CoOpSessionManager host = scope.CreateManager("Host");
+        CoOpSessionManager source = scope.CreateManager("Source");
+        CoOpSessionManager recipient = scope.CreateManager("Recipient");
+        var hostReceived = NewCompletionSource<CoOpPresetSyncMessage>();
+        var recipientReceived = NewCompletionSource<CoOpPresetSyncMessage>();
+        int sourceReceivedCount = 0;
+
+        host.PresetSyncReceived += (_, e) => hostReceived.TrySetResult(e.Message);
+        source.PresetSyncReceived += (_, _) => Interlocked.Increment(ref sourceReceivedCount);
+        recipient.PresetSyncReceived += (_, e) => recipientReceived.TrySetResult(e.Message);
+
+        Assert.AreEqual(0, host.ConnectedPeerCount);
+        CoOpHostInfo hostInfo = await host.StartHostingAsync();
+        Assert.AreEqual(0, host.ConnectedPeerCount);
+        await source.ConnectAsync("127.0.0.1", hostInfo.Port);
+        Assert.AreEqual(1, source.ConnectedPeerCount);
+        await recipient.ConnectAsync("127.0.0.1", hostInfo.Port);
+        await TestAudio.WaitUntilAsync(
+            () => host.ConnectedPeerCount == 2 && source.ConnectedPeerCount == 2);
+
+        var preset = new CoOpPresetSyncItem("effects:Gain", "{\"Name\":\"Punch\",\"Parameters\":{}}");
+        await source.PushPresetsAsync([preset]);
+
+        CoOpPresetSyncMessage receivedByHost = await hostReceived.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        CoOpPresetSyncMessage receivedByRecipient = await recipientReceived.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+
+        Assert.AreEqual(source.LocalPeerId, receivedByHost.SourcePeerId);
+        Assert.AreEqual("Source", receivedByHost.SourceDisplayName);
+        Assert.AreEqual("Source", receivedByRecipient.SourceDisplayName);
+        Assert.AreEqual("effects:Gain", receivedByRecipient.Presets.Single().StoreId);
+        Assert.AreEqual(preset.Json, receivedByRecipient.Presets.Single().Json);
+        Assert.AreEqual(0, sourceReceivedCount);
+    }
+
     [TestMethod]
     public async Task HostShare_ClientReceivesTracksAndSamples()
     {

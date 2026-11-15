@@ -23,6 +23,7 @@ namespace ModularAudience.CoOp.Protocol;
 [JsonDerivedType(typeof(ErrorMessage), "error")]
 [JsonDerivedType(typeof(PingMessage), "ping")]
 [JsonDerivedType(typeof(PongMessage), "pong")]
+[JsonDerivedType(typeof(CoOpPresetSyncMessage), "presetSync")]
 public abstract record CoOpMessage;
 
 public sealed record HelloMessage(
@@ -65,3 +66,10 @@ public sealed record ErrorMessage(string Message, string? Code = null) : CoOpMes
 public sealed record PingMessage(long Timestamp) : CoOpMessage;
 
 public sealed record PongMessage(long Timestamp) : CoOpMessage;
+
+public sealed record CoOpPresetSyncItem(string StoreId, string Json);
+
+public sealed record CoOpPresetSyncMessage(
+    Guid SourcePeerId,
+    string SourceDisplayName,
+    CoOpPresetSyncItem[] Presets) : CoOpMessage;
