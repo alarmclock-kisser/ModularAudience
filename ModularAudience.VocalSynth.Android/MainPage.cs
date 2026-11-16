@@ -215,7 +215,6 @@ public sealed partial class MainPage : ContentPage
             Text = $"{(isExpanded ? "-" : "+")}  {title}",
             FontAttributes = FontAttributes.Bold,
             HorizontalOptions = LayoutOptions.Fill,
-            HorizontalTextAlignment = TextAlignment.Start,
             BackgroundColor = Colors.Transparent,
         };
         VerticalStackLayout body = new()
