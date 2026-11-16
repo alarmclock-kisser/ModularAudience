@@ -1,9 +1,8 @@
-using ModularAudience.Audio.Midi;
 using System.Runtime.ExceptionServices;
 
 namespace ModularAudience.Audio.Vocal;
 
-public static partial class VocalSynth
+public static partial class VocalSynthEngine
 {
     private const int MidiAudioChunkSize = 16_384;
 
@@ -11,11 +10,11 @@ public static partial class VocalSynth
         VocalSynthSettings settings, string existingText, CancellationToken cancellationToken = default) =>
         VocalMidiSyllableFiller.FillMissing(settings, existingText, cancellationToken);
 
-    private static AudioObj RenderMidi(
+    private static VocalAudioData RenderMidi(
         VocalSynthSettings settings, IReadOnlyList<VocalToken> tokens, CancellationToken cancellationToken)
     {
         VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, tokens, cancellationToken);
-        MidiFileData midi = settings.SingingMidiFile!;
+        IVocalMidiFile midi = settings.SingingMidiFile!;
         int channels = settings.Channels;
         int sampleCount = checked(plan.OutputFrames * channels);
         var output = new float[sampleCount];
@@ -38,13 +37,13 @@ public static partial class VocalSynth
             }
         }
 
-        AudioObj result = CreateAudio(output, settings, cancellationToken);
+        VocalAudioData result = CreateAudio(output, settings, cancellationToken);
         result.Bpm = (float)(midi.DefaultBpm * settings.Speed);
         return result;
     }
 
     private static float[] RenderMidiNote(
-        VocalMidiSingingPlan plan, VocalMidiScheduledNote note, MidiFileData midi,
+        VocalMidiSingingPlan plan, VocalMidiScheduledNote note, IVocalMidiFile midi,
         VocalSynthSettings settings, CancellationToken cancellationToken)
     {
         VocalSingingSyllable syllable = plan.Syllables[note.SyllableIndex];

@@ -308,7 +308,7 @@ public sealed partial class VocalSynthDialog : Form
 
     private void RestoreMidiTrackNumber()
     {
-        MidiFileData? midi = settings.SingingMidiFile;
+        MidiFileData? midi = settings.SingingMidiFile as MidiFileData;
         if (midi is null || midi.Tracks.Count == 0)
         {
             if (midi is not null)
@@ -362,7 +362,7 @@ public sealed partial class VocalSynthDialog : Form
 
     private void UpdateMidiControls()
     {
-        MidiFileData? midi = settings.SingingMidiFile;
+        MidiFileData? midi = settings.SingingMidiFile as MidiFileData;
         int trackCount = midi?.Tracks.Count ?? 0;
         decimal maximum = Math.Max(1, trackCount);
         if (midiTrackNumber.Value > maximum) midiTrackNumber.Value = maximum;
@@ -381,7 +381,7 @@ public sealed partial class VocalSynthDialog : Form
 
     private void UpdateMidiFileLabel()
     {
-        MidiFileData? midi = settings.SingingMidiFile;
+        MidiFileData? midi = settings.SingingMidiFile as MidiFileData;
         if (midi is null || midi.Tracks.Count == 0)
         {
             midiFileLabel.Text = "No MIDI loaded";
@@ -500,7 +500,7 @@ public sealed partial class VocalSynthDialog : Form
 
     private void EditLoadedMidi()
     {
-        MidiFileData? midi = settings.SingingMidiFile;
+        MidiFileData? midi = settings.SingingMidiFile as MidiFileData;
         if (midi is null || midi.Tracks.Count == 0) return;
 
         int pageNumber = Math.Clamp((int)midiTrackNumber.Value, 1, midi.Tracks.Count);

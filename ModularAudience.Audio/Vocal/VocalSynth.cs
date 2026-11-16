@@ -1,6 +1,6 @@
 namespace ModularAudience.Audio.Vocal;
 
-public static partial class VocalSynth
+public static partial class VocalSynthEngine
 {
     internal const long MaxOutputPcmBytes = 4L * 1024 * 1024 * 1024;
     internal const int MaxOutputSamples = (int)(MaxOutputPcmBytes / sizeof(float));
@@ -57,12 +57,13 @@ public static partial class VocalSynth
             settings.Language, settings.Text, settings.EmphasisSyntax, tokens, cancellationToken);
     }
 
-    public static AudioObj Render(VocalSynthSettings settings, CancellationToken cancellationToken = default)
+    public static VocalAudioData Render(VocalSynthSettings settings, CancellationToken cancellationToken = default)
     {
         settings.Validate();
         cancellationToken.ThrowIfCancellationRequested();
         var s = settings.Clone();
-        if (s.UseWindowsSpeech) return VocalWindowsSpeech.Render(s, cancellationToken);
+        if (s.UseWindowsSpeech)
+            throw new PlatformNotSupportedException("Windows speech is available only in the Windows desktop application.");
         IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
             s.Language, s.Text, s.EmphasisSyntax, cancellationToken);
         tokens = VocalCustomSampleMapper.Apply(
@@ -141,7 +142,7 @@ public static partial class VocalSynth
         return null;
     }
 
-    internal static AudioObj CreateAudio(float[] data, VocalSynthSettings s, CancellationToken cancellationToken)
+    internal static VocalAudioData CreateAudio(float[] data, VocalSynthSettings s, CancellationToken cancellationToken)
     {
         bool parallelizeMidi = s.Singing && s.SingingMidiFile is not null
             && GetMidiMaxDegreeOfParallelism() > 1
@@ -153,7 +154,7 @@ public static partial class VocalSynth
         if (peak > 0.95f)
             ScaleAudio(data, 0.95f / peak, parallelizeMidi, chunkCount, cancellationToken);
 
-        var result = new AudioObj
+        var result = new VocalAudioData
         {
             Data = data,
             SampleRate = s.SampleRate,

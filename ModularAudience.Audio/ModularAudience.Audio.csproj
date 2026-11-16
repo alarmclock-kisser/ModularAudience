@@ -9,6 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Vocal\**\*.cs" />
+    <Compile Include="Vocal\VocalWindowsSpeech.cs" />
+    <Compile Remove="Processors_V4\Pyin*.cs" />
     <InternalsVisibleTo Include="ModularAudience.Audio.Tests" />
   </ItemGroup>
 
@@ -133,6 +136,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ModularAudience.Audio.VocalCore\ModularAudience.Audio.VocalCore.csproj" />
     <ProjectReference Include="..\ModularAudience.Shared\ModularAudience.Shared.csproj" />
   </ItemGroup>
 

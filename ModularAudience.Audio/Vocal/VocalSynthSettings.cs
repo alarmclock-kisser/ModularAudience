@@ -1,5 +1,3 @@
-using ModularAudience.Audio.Midi;
-
 namespace ModularAudience.Audio.Vocal;
 
 public sealed class VocalSynthSettings
@@ -12,7 +10,7 @@ public sealed class VocalSynthSettings
     public int SampleRate { get; set; } = 44100;
     public int Channels { get; set; } = 1;
     public VocalEmphasisSyntax EmphasisSyntax { get; set; } = VocalEmphasisSyntax.Default();
-    public MidiFileData? SingingMidiFile { get; set; }
+    public IVocalMidiFile? SingingMidiFile { get; set; }
     public int? SingingMidiTrackIndex { get; set; }
     public double SingingMidiSemitoneOffset { get; set; }
     public bool IgnoreTextPausesForMidiSinging { get; set; }

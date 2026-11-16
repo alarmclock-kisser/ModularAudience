@@ -1,4 +1,5 @@
 using NAudio.Midi;
+using ModularAudience.Audio.Vocal;
 
 namespace ModularAudience.Audio.Midi;
 
@@ -9,7 +10,7 @@ public enum MidiConversionPreset
     Polyphonic
 }
 
-public sealed class MidiNoteData
+public sealed class MidiNoteData : IVocalMidiNote
 {
     public int NoteNumber { get; init; }
     public int Channel { get; init; }
@@ -19,12 +20,13 @@ public sealed class MidiNoteData
     public double StartBeat => this.StartTick;
 }
 
-public sealed class MidiTrackData
+public sealed class MidiTrackData : IVocalMidiTrack
 {
     public int Index { get; init; }
     public string Name { get; init; } = string.Empty;
     public List<MidiNoteData> Notes { get; } = [];
     public long LengthTicks { get; internal set; }
+    IReadOnlyList<IVocalMidiNote> IVocalMidiTrack.Notes => this.Notes;
 
     public void ExtendLengthTo(long lengthTicks)
     {
@@ -50,7 +52,7 @@ public sealed class MidiEditSelection
     }
 }
 
-public sealed class MidiFileData
+public sealed class MidiFileData : IVocalMidiFile
 {
     public static bool IsMidiPath(string? filePath)
     {
@@ -68,6 +70,7 @@ public sealed class MidiFileData
         1L,
         (long)this.TicksPerQuarterNote * this.TimeSignatureNumerator * 4 / this.TimeSignatureDenominator);
     public IReadOnlyList<MidiTrackData> Tracks { get; }
+    IReadOnlyList<IVocalMidiTrack> IVocalMidiFile.Tracks => this.Tracks;
     public long LengthTicks => this.Tracks.Count == 0 ? 0 : this.Tracks.Max(track => track.LengthTicks);
     public double LengthBeats => this.LengthTicks / (double)Math.Max(1, this.TicksPerQuarterNote);
 

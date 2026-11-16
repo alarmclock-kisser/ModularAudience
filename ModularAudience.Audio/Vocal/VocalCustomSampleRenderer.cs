@@ -1,5 +1,3 @@
-using ModularAudience.Audio.Processors_V1;
-
 namespace ModularAudience.Audio.Vocal;
 
 internal static class VocalCustomSampleRenderer
@@ -9,7 +7,7 @@ internal static class VocalCustomSampleRenderer
     {
         double frames = token.SampleFrameCount * (double)targetSampleRate
             / token.Mapping.SampleRate / speed;
-        if (!double.IsFinite(frames) || frames > VocalSynth.MaxOutputSamples / targetChannels)
+        if (!double.IsFinite(frames) || frames > VocalSynthEngine.MaxOutputSamples / targetChannels)
             throw new InvalidOperationException("The custom sample would exceed the supported vocal output size.");
         return Math.Max(1, (int)Math.Round(frames));
     }
@@ -37,7 +35,7 @@ internal static class VocalCustomSampleRenderer
 
         double convertedFrameCount = sourceFrames * (double)settings.SampleRate / mapping.SampleRate;
         if (!double.IsFinite(convertedFrameCount)
-            || convertedFrameCount > VocalSynth.MaxOutputSamples / targetChannels)
+            || convertedFrameCount > VocalSynthEngine.MaxOutputSamples / targetChannels)
             throw new InvalidOperationException("The custom sample would exceed the supported vocal output size.");
         int convertedFrames = Math.Max(1, (int)Math.Round(convertedFrameCount));
         float[] converted = new float[checked(convertedFrames * targetChannels)];
@@ -89,7 +87,7 @@ internal static class VocalCustomSampleRenderer
             int fftSize = 256;
             int maximumFftSize = Math.Min(4096, Math.Min(sourceFrames, targetFrames));
             while (fftSize * 2 <= maximumFftSize) fftSize *= 2;
-            return PitchShifter.StretchPhaseVocoder(
+            return VocalTimeStretcher.Stretch(
                 samples, channels, targetFrames, fftSize, cancellationToken: cancellationToken);
         }
 

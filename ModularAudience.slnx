@@ -1,7 +1,9 @@
 <Solution>
   <Project Path="BenchmarkSuite1/BenchmarkSuite1.csproj" />
   <Project Path="ModularAudience.Audio.Tests/ModularAudience.Audio.Tests.csproj" />
+  <Project Path="ModularAudience.Audio.VocalCore/ModularAudience.Audio.VocalCore.csproj" />
   <Project Path="ModularAudience.Audio/ModularAudience.Audio.csproj" />
+  <Project Path="ModularAudience.VocalSynth.Android/ModularAudience.VocalSynth.Android.csproj" />
   <Project Path="ModularAudience.CoOp/ModularAudience.CoOp.csproj" />
   <Project Path="ModularAudience.CoOp.Tests/ModularAudience.CoOp.Tests.csproj" />
   <Project Path="ModularAudience.Cuda/ModularAudience.Cuda.csproj" Id="48e6abf6-de92-410b-8a76-3739fbbf0abf" />

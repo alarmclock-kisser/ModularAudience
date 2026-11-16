@@ -1,4 +1,4 @@
-using ModularAudience.Audio.Effects.AutoTune;
+using ModularAudience.Audio.VocalCore.Dsp;
 using ModularAudience.Audio.Processors_V4;
 
 namespace ModularAudience.Audio.Vocal;
@@ -143,7 +143,7 @@ internal static class VocalSinging
             if (token is not VocalPhonemeToken phoneme) continue;
             VocalPhoneme definition = VocalPhonemeInventory.Get(phoneme.Phoneme);
             bool beat = phoneme.Phoneme.StartsWith("beat-", StringComparison.Ordinal);
-            double milliseconds = definition.DurationMs * (beat ? 1 : VocalSynth.DurationMultiplier(phoneme));
+            double milliseconds = definition.DurationMs * (beat ? 1 : VocalSynthEngine.DurationMultiplier(phoneme));
             if (definition.IsVowel)
                 milliseconds *= language == VocalLanguage.AnimalCrossing ? 1.35 : 1.75;
             naturalDuration += milliseconds;
@@ -186,20 +186,8 @@ internal static class VocalSinging
         }
         if (!haveShift) return source;
 
-        var quality = new AutoTuneSettings
-        {
-            FftSize = rate < 12000 ? 1024 : rate >= 96000 ? 4096 : 2048,
-            Overlap = 8,
-            FormantPreservationPercent = 70,
-        };
-        var curve = new AutoTuneCorrectionCurve(shifts, wet, hop, 0, 0);
-        float[] shifted = AutoTunePhaseVocoder.Render(source, rate, 1, quality, curve, 1, null, cancellationToken);
-        for (int i = 0; i < source.Length; i++)
-        {
-            if ((i & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
-            double amount = curve.WetAt(i);
-            shifted[i] = (float)(source[i] + (shifted[i] - source[i]) * amount);
-        }
+        float[] shifted = VocalPitchPhaseVocoder.Render(
+            source, rate, hop, shifts, wet, rate < 12000 ? 1024 : rate >= 96000 ? 4096 : 2048, 70, cancellationToken);
         return shifted;
     }
 
@@ -229,20 +217,8 @@ internal static class VocalSinging
         }
         if (!haveShift) return source;
 
-        var quality = new AutoTuneSettings
-        {
-            FftSize = rate < 12000 ? 1024 : rate >= 96000 ? 4096 : 2048,
-            Overlap = 8,
-            FormantPreservationPercent = 70,
-        };
-        var curve = new AutoTuneCorrectionCurve(shifts, wet, hop, 0, 0);
-        float[] shifted = AutoTunePhaseVocoder.Render(source, rate, 1, quality, curve, 1, null, cancellationToken);
-        for (int i = 0; i < source.Length; i++)
-        {
-            if ((i & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
-            double amount = curve.WetAt(i);
-            shifted[i] = (float)(source[i] + (shifted[i] - source[i]) * amount);
-        }
+        float[] shifted = VocalPitchPhaseVocoder.Render(
+            source, rate, hop, shifts, wet, rate < 12000 ? 1024 : rate >= 96000 ? 4096 : 2048, 70, cancellationToken);
         return shifted;
     }
 }

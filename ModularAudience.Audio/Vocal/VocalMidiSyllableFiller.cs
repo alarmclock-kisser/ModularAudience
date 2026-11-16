@@ -1,6 +1,4 @@
 using System.Text;
-using ModularAudience.Audio.Midi;
-
 namespace ModularAudience.Audio.Vocal;
 
 public sealed record VocalMidiSyllableFillResult(
@@ -120,11 +118,11 @@ internal static class VocalMidiSyllableFiller
         ArgumentNullException.ThrowIfNull(existingText);
         if (!settings.Singing)
             throw new InvalidOperationException("Fill Syllables requires the Singing voice.");
-        MidiFileData midi = settings.SingingMidiFile
+        IVocalMidiFile midi = settings.SingingMidiFile
             ?? throw new InvalidOperationException("Load a MIDI file before filling syllables.");
         if (settings.SingingMidiTrackIndex is not int trackIndex)
             throw new InvalidOperationException("Select a MIDI track before filling syllables.");
-        MidiTrackData track = midi.Tracks.FirstOrDefault(candidate => candidate.Index == trackIndex)
+        IVocalMidiTrack track = midi.Tracks.FirstOrDefault(candidate => candidate.Index == trackIndex)
             ?? throw new InvalidOperationException("The selected MIDI track does not exist.");
         if (track.Notes.Count == 0)
             throw new InvalidOperationException("The selected MIDI track contains no notes.");
@@ -137,7 +135,7 @@ internal static class VocalMidiSyllableFiller
 
         IReadOnlyList<VocalSyllableTextRange> existingRanges = VocalTextParser.GetSyllableTextRanges(
             settings.Language, existingText, settings.EmphasisSyntax, cancellationToken);
-        MidiNoteData[][] noteGroups = VocalMidiSinging.GroupNotesByStartTick(track, cancellationToken);
+        IVocalMidiNote[][] noteGroups = VocalMidiSinging.GroupNotesByStartTick(track, cancellationToken);
         if (existingRanges.Count >= noteGroups.Length)
         {
             return new VocalMidiSyllableFillResult(
@@ -150,9 +148,9 @@ internal static class VocalMidiSyllableFiller
         for (int groupIndex = 0; groupIndex < noteGroups.Length; groupIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            MidiNoteData[] group = noteGroups[groupIndex];
+            IVocalMidiNote[] group = noteGroups[groupIndex];
             double pitchSum = 0;
-            foreach (MidiNoteData note in group)
+            foreach (IVocalMidiNote note in group)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 pitchSum += note.NoteNumber + settings.SingingMidiSemitoneOffset;
@@ -210,7 +208,7 @@ internal static class VocalMidiSyllableFiller
     }
 
     private static int GetVowelCharacterCount(
-        IReadOnlyList<MidiNoteData> chord, MidiFileData midi, double speed, SyllableTemplate template)
+        IReadOnlyList<IVocalMidiNote> chord, IVocalMidiFile midi, double speed, SyllableTemplate template)
     {
         if (template.RepeatUnit.Length == 0) return template.Vowel.Length;
         long durationTicks = chord.Max(note => Math.Max(1, note.DurationTicks));
@@ -230,8 +228,8 @@ internal static class VocalMidiSyllableFiller
         string existingText,
         int existingSyllableCount,
         int groupIndex,
-        IReadOnlyList<MidiNoteData[]> noteGroups,
-        MidiFileData midi)
+        IReadOnlyList<IVocalMidiNote[]> noteGroups,
+        IVocalMidiFile midi)
     {
         if (existingText.Length == 0 || char.IsWhiteSpace(existingText[^1])) return string.Empty;
         if (existingSyllableCount == 0) return " ";
@@ -241,7 +239,7 @@ internal static class VocalMidiSyllableFiller
     }
 
     private static string GetMidiSeparator(
-        IReadOnlyList<MidiNoteData> previous, IReadOnlyList<MidiNoteData> current, MidiFileData midi)
+        IReadOnlyList<IVocalMidiNote> previous, IReadOnlyList<IVocalMidiNote> current, IVocalMidiFile midi)
     {
         long previousStart = previous[0].StartTick;
         long currentStart = current[0].StartTick;

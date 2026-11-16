@@ -4,6 +4,12 @@ on:
   push:
     branches: [ "master" ]
   workflow_dispatch:
+    inputs:
+      build_android:
+        description: Build and attach the signed Android APK
+        type: boolean
+        required: false
+        default: false
 
 # HIER sind die neuen Berechtigungen hinzugefügt
 permissions:
@@ -22,7 +28,7 @@ jobs:
         dotnet-version: 10.0.x
 
     - name: Restore dependencies
-      run: dotnet restore
+      run: dotnet restore ModularAudience.Forms/ModularAudience.Forms.csproj
 
     - name: Build --Release
       run: dotnet build ModularAudience.Forms/ModularAudience.Forms.csproj --configuration Release --no-restore -p:ReleaseNumber=${{ github.run_number }}
@@ -44,3 +50,128 @@ jobs:
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  android_changes:
+    runs-on: ubuntu-latest
+    outputs:
+      android: ${{ steps.filter.outputs.android || steps.manual.outputs.android }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Detect Android project changes
+      id: filter
+      if: github.event_name == 'push'
+      uses: dorny/paths-filter@v3
+      with:
+        filters: |
+          android:
+            - 'ModularAudience.VocalSynth.Android/**'
+            - 'ModularAudience.Audio.VocalCore/**'
+            - 'ModularAudience.Audio/Vocal/**'
+            - 'ModularAudience.Audio/Processors_V4/Pyin*.cs'
+            - 'ModularAudience.slnx'
+
+    - name: Read manual Android build selection
+      id: manual
+      if: github.event_name == 'workflow_dispatch'
+      run: echo "android=${{ inputs.build_android }}" >> "$GITHUB_OUTPUT"
+
+  android:
+    needs: [build, android_changes]
+    if: needs.android_changes.outputs.android == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: 17
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install Android platform
+      run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+    - name: Install Android workload
+      run: dotnet workload install maui-android
+
+    - name: Select APK signing mode
+      id: signing
+      env:
+        ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+        ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+        ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+        ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+      run: |
+        if [[ -n "$ANDROID_SIGNING_KEYSTORE_BASE64" \
+          && -n "$ANDROID_SIGNING_KEY_ALIAS" \
+          && -n "$ANDROID_SIGNING_STORE_PASSWORD" \
+          && -n "$ANDROID_SIGNING_KEY_PASSWORD" ]]; then
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+        elif [[ -z "$ANDROID_SIGNING_KEYSTORE_BASE64" \
+          && -z "$ANDROID_SIGNING_KEY_ALIAS" \
+          && -z "$ANDROID_SIGNING_STORE_PASSWORD" \
+          && -z "$ANDROID_SIGNING_KEY_PASSWORD" ]]; then
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "Configure all four Android signing secrets, or leave all four unset." >&2
+          exit 1
+        fi
+
+    - name: Restore and publish APK
+      id: publish
+      env:
+        ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+        ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+        ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+        ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+        APK_SIGNING_ENABLED: ${{ steps.signing.outputs.enabled }}
+      run: |
+        apk_suffix=Debug
+        configuration=Debug
+        publish_args=()
+        if [[ "$APK_SIGNING_ENABLED" == "true" ]]; then
+          key_store="$RUNNER_TEMP/modular-audience-android.keystore"
+          printf '%s' "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$key_store"
+          apk_suffix=Signed
+          configuration=Release
+          publish_args+=(
+            "-p:AndroidKeyStore=true"
+            "-p:AndroidSigningKeyStore=$key_store"
+            "-p:AndroidSigningKeyAlias=$ANDROID_SIGNING_KEY_ALIAS"
+            "-p:AndroidSigningStorePass=$ANDROID_SIGNING_STORE_PASSWORD"
+            "-p:AndroidSigningKeyPass=$ANDROID_SIGNING_KEY_PASSWORD"
+          )
+        fi
+
+        dotnet restore ModularAudience.VocalSynth.Android/ModularAudience.VocalSynth.Android.csproj
+        dotnet publish ModularAudience.VocalSynth.Android/ModularAudience.VocalSynth.Android.csproj \
+          --configuration "$configuration" \
+          --framework net10.0-android \
+          --output "$RUNNER_TEMP/android-publish" \
+          -p:AndroidPackageFormat=apk \
+          "${publish_args[@]}"
+        apk_path="$(find "$RUNNER_TEMP/android-publish" -type f -name '*.apk' -print -quit)"
+        test -n "$apk_path" || (echo "The Android publish did not produce an APK." >&2; exit 1)
+        cp "$apk_path" "$RUNNER_TEMP/ModularAudience.VocalSynth-$apk_suffix.apk"
+
+    - name: Attach APK to release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        apk_suffix=Debug
+        if [[ "${{ steps.signing.outputs.enabled }}" == "true" ]]; then
+          apk_suffix=Signed
+        fi
+        gh release upload "release-${GITHUB_RUN_NUMBER}" \
+          "$RUNNER_TEMP/ModularAudience.VocalSynth-$apk_suffix.apk" --clobber
