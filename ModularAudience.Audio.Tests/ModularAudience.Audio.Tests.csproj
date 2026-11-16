@@ -13,6 +13,7 @@
 	<PackageReference Include="MSTest.TestFramework" Version="4.5.1" />
   </ItemGroup>
   <ItemGroup>
+	<ProjectReference Include="..\ModularAudience.Audio.VocalCore\ModularAudience.Audio.VocalCore.csproj" />
 	<ProjectReference Include="..\ModularAudience.Audio\ModularAudience.Audio.csproj" />
 	<ProjectReference Include="..\ModularAudience.Forms\ModularAudience.Forms.csproj" />
   </ItemGroup>

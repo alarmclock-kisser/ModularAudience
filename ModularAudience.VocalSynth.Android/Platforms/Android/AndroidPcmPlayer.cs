@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Android.Media;
 using ModularAudience.Audio.Vocal;
 using AudioEncoding = Android.Media.Encoding;
@@ -59,6 +60,17 @@ internal sealed class AndroidPcmPlayer : IDisposable
                     position += written;
                 }
             }, playback.Token);
+
+            long frameCount = audio.Data.LongLength / audio.Channels;
+            TimeSpan drainTimeout = audio.Duration + TimeSpan.FromSeconds(2);
+            Stopwatch drainTimer = Stopwatch.StartNew();
+            while (output.PlaybackHeadPosition < frameCount)
+            {
+                playback.Token.ThrowIfCancellationRequested();
+                if (drainTimer.Elapsed > drainTimeout)
+                    throw new InvalidOperationException("Android audio playback did not reach the end of the audio.");
+                await Task.Delay(10, playback.Token);
+            }
         }
         finally
         {

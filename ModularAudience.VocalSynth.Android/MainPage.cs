@@ -43,6 +43,7 @@ public sealed partial class MainPage : ContentPage
     private readonly Switch showSyllablesSwitch = new();
     private readonly Slider speedSlider = new() { Minimum = 0.5, Maximum = 2, Value = 1 };
     private readonly Slider midiOffsetSlider = new() { Minimum = -16, Maximum = 16, Value = 0 };
+    private readonly Slider wavTrailingSilenceSlider = new() { Minimum = 0, Maximum = 5000, Value = 1000 };
     private readonly Button renderButton = new() { Text = "Preview" };
     private readonly Button createButton = new() { Text = "Create and share WAV" };
     private readonly Button stopButton = new() { Text = "Stop", IsEnabled = false, IsVisible = false };
@@ -54,7 +55,6 @@ public sealed partial class MainPage : ContentPage
     private readonly Button loadMidiButton = new() { Text = "Load MIDI" };
     private readonly Button clearMidiButton = new() { Text = "Clear MIDI" };
     private VocalMidiFileData? midi;
-    private VocalAudioData? renderedAudio;
     private CancellationTokenSource? renderCancellation;
     private bool syncing;
 
@@ -68,8 +68,11 @@ public sealed partial class MainPage : ContentPage
         emphasisStore = new VocalEmphasisSyntaxStore(Path.Combine(appData, "EmphasisSyntax.json"));
         BuildPage();
         LoadInitialSettings();
+        RefreshVoicePicker(Preferences.Default.Get("vocal.voice", "Built-in: " + settings.VoiceName));
+        RestorePersistedOptions();
         WireEvents();
-        RefreshVoicePicker("Built-in: " + settings.VoiceName);
+        if (showSyllablesSwitch.IsToggled)
+            _ = UpdateSyllablesAsync();
     }
 
     private void BuildPage()
@@ -128,6 +131,23 @@ public sealed partial class MainPage : ContentPage
                     CreateSwitchRow("Singing voice", singingSwitch),
                     CreateSwitchRow("Android natural speech", androidSpeechSwitch),
                     CreateSwitchRow("Beep for unsupported sounds", unsupportedBeepSwitch),
+                },
+            }));
+
+        content.Children.Add(CreateCollapsibleSection(
+            "WAV export",
+            new VerticalStackLayout
+            {
+                Spacing = 8,
+                Children =
+                {
+                    CreateSliderRow("Trailing silence (ms)", wavTrailingSilenceSlider, "0"),
+                    new Label
+                    {
+                        Text = "Added only to shared WAV files.",
+                        FontSize = 13,
+                        TextColor = Colors.Gray,
+                    },
                 },
             }));
 
@@ -216,6 +236,7 @@ public sealed partial class MainPage : ContentPage
             FontAttributes = FontAttributes.Bold,
             HorizontalOptions = LayoutOptions.Fill,
             BackgroundColor = Colors.Transparent,
+            TextColor = Colors.White,
         };
         VerticalStackLayout body = new()
         {
@@ -292,9 +313,14 @@ public sealed partial class MainPage : ContentPage
         {
             languagePicker.ItemsSource = Enum.GetValues<VocalLanguage>()
                 .Select(language => language.DisplayName()).ToList();
-            languagePicker.SelectedIndex = (int)settings.Language;
+            int languageIndex = Preferences.Default.Get("vocal.language", (int)settings.Language);
+            languagePicker.SelectedIndex = languageIndex >= 0
+                && languageIndex < Enum.GetValues<VocalLanguage>().Length
+                ? languageIndex
+                : (int)settings.Language;
             textEditor.Text = Preferences.Default.Get("vocal.text", settings.Text);
             speedSlider.Value = Math.Clamp(Preferences.Default.Get("vocal.speed", 1.0), 0.5, 2);
+            settings.Language = (VocalLanguage)languagePicker.SelectedIndex;
             settings.Text = textEditor.Text;
             settings.Speed = speedSlider.Value;
             VocalEmphasisSyntax syntax = emphasisStore.Load();
@@ -304,7 +330,39 @@ public sealed partial class MainPage : ContentPage
         {
             syncing = false;
         }
-        RefreshVoicePicker("Built-in: " + settings.VoiceName);
+    }
+
+    private void RestorePersistedOptions()
+    {
+        voiceSliders["BasePitchHz"].Value = Math.Clamp(
+            Preferences.Default.Get("vocal.voice.BasePitchHz", settings.BasePitchHz), 60, 400);
+        voiceSliders["FormantScale"].Value = Math.Clamp(
+            Preferences.Default.Get("vocal.voice.FormantScale", settings.FormantScale), 0.5, 2);
+        voiceSliders["Breathiness"].Value = Math.Clamp(
+            Preferences.Default.Get("vocal.voice.Breathiness", settings.Breathiness), 0, 1);
+        voiceSliders["Roughness"].Value = Math.Clamp(
+            Preferences.Default.Get("vocal.voice.Roughness", settings.Roughness), 0, 1);
+        voiceSliders["VibratoCents"].Value = Math.Clamp(
+            Preferences.Default.Get("vocal.voice.VibratoCents", settings.VibratoCents), 0, 40);
+        voiceSliders["VibratoHz"].Value = Math.Clamp(
+            Preferences.Default.Get("vocal.voice.VibratoHz", settings.VibratoHz), 0, 15);
+        voiceSliders["Voicing"].Value = Math.Clamp(
+            Preferences.Default.Get("vocal.voice.Voicing", settings.Voicing), 0, 1);
+        voiceSliders["Noise"].Value = Math.Clamp(
+            Preferences.Default.Get("vocal.voice.Noise", settings.Noise), 0, 1);
+        singingSwitch.IsToggled = Preferences.Default.Get("vocal.singing", settings.Singing);
+        androidSpeechSwitch.IsToggled = Preferences.Default.Get("vocal.androidSpeech", false)
+            && !singingSwitch.IsToggled;
+        androidSpeechSwitch.IsEnabled = !singingSwitch.IsToggled;
+        unsupportedBeepSwitch.IsToggled = Preferences.Default.Get(
+            "vocal.unsupportedBeep", settings.BeepForUnsupportedSounds);
+        showSyllablesSwitch.IsToggled = Preferences.Default.Get("vocal.showSyllables", false);
+        midiOffsetSlider.Value = Math.Clamp(
+            Preferences.Default.Get("vocal.midiOffset", settings.SingingMidiSemitoneOffset), -16, 16);
+        wavTrailingSilenceSlider.Value = Math.Clamp(
+            Preferences.Default.Get("vocal.wavTrailingSilenceMs", 1000), 0, 5000);
+        wavTrailingSilenceSlider.Value = Math.Round(wavTrailingSilenceSlider.Value / 100) * 100;
+        ApplyControlsToSettings();
     }
 
     private void WireEvents()
@@ -316,28 +374,65 @@ public sealed partial class MainPage : ContentPage
             PersistSession();
             _ = UpdateSyllablesAsync();
         };
-        voicePicker.SelectedIndexChanged += (_, _) => ApplyVoiceSelection();
+        voicePicker.SelectedIndexChanged += (_, _) =>
+        {
+            if (syncing) return;
+            ApplyVoiceSelection();
+            PersistSession();
+        };
         speedSlider.ValueChanged += (_, _) =>
         {
             settings.Speed = speedSlider.Value;
             PersistSession();
         };
+        foreach (Slider slider in voiceSliders.Values)
+            slider.ValueChanged += (_, _) =>
+            {
+                if (!syncing) PersistSession();
+            };
         singingSwitch.Toggled += (_, args) =>
         {
             settings.Singing = args.Value;
             androidSpeechSwitch.IsEnabled = !args.Value;
             midiTrackPicker.IsEnabled = args.Value && midi is not null;
+            if (!syncing) PersistSession();
         };
-        unsupportedBeepSwitch.Toggled += (_, args) => settings.BeepForUnsupportedSounds = args.Value;
+        unsupportedBeepSwitch.Toggled += (_, args) =>
+        {
+            settings.BeepForUnsupportedSounds = args.Value;
+            if (!syncing) PersistSession();
+        };
         androidSpeechSwitch.Toggled += (_, _) =>
         {
             if (androidSpeechSwitch.IsToggled && singingSwitch.IsToggled)
                 androidSpeechSwitch.IsToggled = false;
+            if (!syncing) PersistSession();
         };
         midiOffsetSlider.ValueChanged += (_, args) =>
+        {
             settings.SingingMidiSemitoneOffset = args.NewValue;
-        midiTrackPicker.SelectedIndexChanged += (_, _) => ApplySelectedMidiTrack();
-        showSyllablesSwitch.Toggled += async (_, _) => await UpdateSyllablesAsync();
+            if (!syncing) PersistSession();
+        };
+        wavTrailingSilenceSlider.ValueChanged += (_, args) =>
+        {
+            double snapped = Math.Round(args.NewValue / 100) * 100;
+            if (Math.Abs(wavTrailingSilenceSlider.Value - snapped) > 0.001)
+            {
+                wavTrailingSilenceSlider.Value = snapped;
+                return;
+            }
+            Preferences.Default.Set("vocal.wavTrailingSilenceMs", (int)snapped);
+        };
+        midiTrackPicker.SelectedIndexChanged += (_, _) =>
+        {
+            ApplySelectedMidiTrack();
+            if (!syncing) PersistSession();
+        };
+        showSyllablesSwitch.Toggled += async (_, _) =>
+        {
+            if (!syncing) PersistSession();
+            await UpdateSyllablesAsync();
+        };
         renderButton.Clicked += async (_, _) => await PreviewAsync();
         createButton.Clicked += async (_, _) => await CreateAndShareAsync();
         stopButton.Clicked += (_, _) => StopPlayback();
@@ -358,7 +453,24 @@ public sealed partial class MainPage : ContentPage
     private void PersistSession()
     {
         Preferences.Default.Set("vocal.text", textEditor.Text ?? string.Empty);
+        if (languagePicker.SelectedIndex >= 0)
+            Preferences.Default.Set("vocal.language", languagePicker.SelectedIndex);
         Preferences.Default.Set("vocal.speed", speedSlider.Value);
+        if (voicePicker.SelectedIndex >= 0 && voicePicker.SelectedIndex < voiceOptions.Count)
+            Preferences.Default.Set("vocal.voice", voiceOptions[voicePicker.SelectedIndex]);
+        foreach ((string key, Slider slider) in voiceSliders)
+            Preferences.Default.Set("vocal.voice." + key, slider.Value);
+        Preferences.Default.Set("vocal.singing", singingSwitch.IsToggled);
+        Preferences.Default.Set("vocal.androidSpeech", androidSpeechSwitch.IsToggled);
+        Preferences.Default.Set("vocal.unsupportedBeep", unsupportedBeepSwitch.IsToggled);
+        Preferences.Default.Set("vocal.showSyllables", showSyllablesSwitch.IsToggled);
+        Preferences.Default.Set("vocal.midiOffset", midiOffsetSlider.Value);
+        Preferences.Default.Set("vocal.wavTrailingSilenceMs", (int)wavTrailingSilenceSlider.Value);
+        int midiTrackIndex = midi is not null && midiTrackPicker.SelectedIndex >= 0
+            && midiTrackPicker.SelectedIndex < midi.Tracks.Count
+                ? midi.Tracks[midiTrackPicker.SelectedIndex].Index
+                : -1;
+        Preferences.Default.Set("vocal.midiTrackIndex", midiTrackIndex);
     }
 
     protected override void OnDisappearing()

@@ -49,6 +49,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ModularAudience.Audio.VocalCore\ModularAudience.Audio.VocalCore.csproj" />
     <ProjectReference Include="..\ModularAudience.Audio\ModularAudience.Audio.csproj" />
     <ProjectReference Include="..\ModularAudience.CoOp\ModularAudience.CoOp.csproj" />
     <ProjectReference Include="..\ModularAudience.Cuda\ModularAudience.Cuda.csproj" />

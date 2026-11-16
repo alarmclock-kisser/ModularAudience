@@ -183,6 +183,7 @@ public sealed partial class MainPage
             VocalMidiFileData loaded = await Task.Run(() => VocalMidiFileData.Load(cachePath));
             midi = loaded;
             settings.SingingMidiFile = loaded;
+            int preferredTrack = Preferences.Default.Get("vocal.midiTrackIndex", -1);
             List<string> tracks = loaded.Tracks.Select((track, index) =>
             {
                 string name = string.IsNullOrWhiteSpace(track.Name) ? $"Track {index + 1}" : track.Name;
@@ -190,7 +191,10 @@ public sealed partial class MainPage
             }).ToList();
             midiTrackPicker.ItemsSource = tracks;
             midiTrackPicker.SelectedIndex = Enumerable.Range(0, loaded.Tracks.Count)
-                .FirstOrDefault(index => loaded.Tracks[index].Notes.Count > 0, -1);
+                .FirstOrDefault(index => loaded.Tracks[index].Index == preferredTrack, -1);
+            if (midiTrackPicker.SelectedIndex < 0)
+                midiTrackPicker.SelectedIndex = Enumerable.Range(0, loaded.Tracks.Count)
+                    .FirstOrDefault(index => loaded.Tracks[index].Notes.Count > 0, -1);
             midiTrackPicker.IsEnabled = tracks.Count > 0;
             clearMidiButton.IsEnabled = true;
             singingSwitch.IsToggled = true;
@@ -218,6 +222,7 @@ public sealed partial class MainPage
         midiFileLabel.Text = "No MIDI loaded.";
         midiTrackInfoLabel.Text = "Load a MIDI file to see track details.";
         syllableLabel.Text = "Syllable preview is off.";
+        PersistSession();
         statusLabel.Text = "MIDI cleared.";
     }
 
@@ -301,6 +306,7 @@ public sealed partial class MainPage
             };
             profileStore.Save(profile);
             RefreshVoicePicker("Profile: " + profile.Name);
+            PersistSession();
             statusLabel.Text = $"Saved profile '{profile.Name}'.";
         }
         catch (Exception error) when (error is ArgumentException or IOException or UnauthorizedAccessException)
@@ -322,6 +328,7 @@ public sealed partial class MainPage
             if (!profileStore.Delete(name))
                 throw new FileNotFoundException("The selected voice profile no longer exists.");
             RefreshVoicePicker("Built-in: " + settings.VoiceName);
+            PersistSession();
             statusLabel.Text = $"Deleted profile '{name}'.";
         }
         catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException)
@@ -427,13 +434,17 @@ public sealed partial class MainPage
             if (baseName.Length > 48) baseName = baseName[..48];
             string fileName = $"{baseName}-{Guid.NewGuid():N}.wav";
             string path = Path.Combine(FileSystem.CacheDirectory, fileName);
-            await WaveFileWriter.WritePcm16Async(path, audio, CancellationToken.None);
+            int trailingSilenceMilliseconds = (int)wavTrailingSilenceSlider.Value;
+            await WaveFileWriter.WritePcm16Async(
+                path, audio, trailingSilenceMilliseconds, CancellationToken.None);
             await Share.Default.RequestAsync(new ShareFileRequest
             {
                 Title = "Share VocalSynth audio",
                 File = new ShareFile(path, "audio/wav"),
             });
-            statusLabel.Text = $"Created {fileName} ({audio.Duration.TotalSeconds:0.00}s).";
+            double exportedDuration = audio.Duration.TotalSeconds + trailingSilenceMilliseconds / 1000d;
+            statusLabel.Text =
+                $"Created {fileName} ({exportedDuration:0.00}s, including {trailingSilenceMilliseconds} ms trailing silence).";
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
         {
@@ -456,7 +467,6 @@ public sealed partial class MainPage
             VocalSynthSettings snapshot = settings.Clone();
             VocalAudioData audio = await Task.Run(
                 () => VocalSynthEngine.Render(snapshot, cancellation.Token), cancellation.Token);
-            renderedAudio = audio;
             statusLabel.Text = $"Ready: {audio.Duration.TotalSeconds:0.00}s | {audio.Name}";
             return audio;
         }

@@ -356,6 +356,11 @@ public static class VocalPhonemizer
         char c = word[index];
         char next = index + 1 < word.Length ? word[index + 1] : '\0';
         char prev = index > 0 ? word[index - 1] : '\0';
+        if (c == 'd' && next == 't' && IsGermanFinalT(word, index + 1))
+        {
+            result.Add("de-final-t");
+            return word.Length - index;
+        }
         if (index > 0 && c == prev && !IsGermanVowel(c)) return 1;
         if (c == 'h' && IsGermanVowel(prev)) return 1;
         string? shortVowel = IsGermanVowel(c) && c != prev && c != next && HasShortVowelSpelling(word, index)

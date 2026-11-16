@@ -834,8 +834,23 @@ public class VocalSynthTests
     }
 
     [TestMethod]
+    [DataRow("Abgezüffelt")]
+    [DataRow("Abgezüffeld")]
+    [DataRow("Abgezüffeldt")]
+    [DataRow("Stadt")]
+    public void Phonemizer_GermanWordFinalDAndDT_ProducesOneAudibleFinalStop(string word)
+    {
+        IReadOnlyList<string> phonemes = VocalPhonemizer.Phonemize(VocalLanguage.German, word);
+        Assert.AreEqual("de-final-t", phonemes[^1], $"{word} did not retain its final stop.");
+        Assert.AreEqual(1, phonemes.Count(phoneme => phoneme == "de-final-t"),
+            $"{word} should have one final stop rather than an extra voiced D.");
+    }
+
+    [TestMethod]
     [DataRow("Abgezüffelt", 0.5)]
     [DataRow("Abgezüffeld", 0.0)]
+    [DataRow("Abgezüffeldt", 0.5)]
+    [DataRow("Stadt", 0.5)]
     [DataRow("AbgezüffeltttD", 0.0)]
     [DataRow("Ballett", 0.3)]
     [DataRow("Bad", 0.6)]
