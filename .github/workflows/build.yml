@@ -140,21 +140,38 @@ jobs:
       run: |
         apk_suffix=Debug
         configuration=Debug
-        publish_args=()
         if [[ "$APK_SIGNING_ENABLED" == "true" ]]; then
           key_store="$RUNNER_TEMP/modular-audience-android.keystore"
           printf '%s' "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$key_store"
+          key_alias="$ANDROID_SIGNING_KEY_ALIAS"
+          store_password="$ANDROID_SIGNING_STORE_PASSWORD"
+          key_password="$ANDROID_SIGNING_KEY_PASSWORD"
           apk_suffix=Signed
           configuration=Release
-          publish_args+=(
-            "-p:AndroidKeyStore=true"
-            "-p:AndroidSigningKeyStore=$key_store"
-            "-p:AndroidSigningKeyAlias=$ANDROID_SIGNING_KEY_ALIAS"
-            "-p:AndroidSigningStorePass=$ANDROID_SIGNING_STORE_PASSWORD"
-            "-p:AndroidSigningKeyPass=$ANDROID_SIGNING_KEY_PASSWORD"
-          )
+        else
+          key_store="$RUNNER_TEMP/modular-audience-debug.keystore"
+          key_alias=androiddebugkey
+          store_password=android
+          key_password=android
+          keytool -genkeypair -noprompt \
+            -keystore "$key_store" \
+            -storetype JKS \
+            -storepass "$store_password" \
+            -alias "$key_alias" \
+            -keypass "$key_password" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=ModularAudience,C=US"
         fi
 
+        publish_args=(
+          "-p:AndroidKeyStore=true"
+          "-p:AndroidSigningKeyStore=$key_store"
+          "-p:AndroidSigningKeyAlias=$key_alias"
+          "-p:AndroidSigningStorePass=$store_password"
+          "-p:AndroidSigningKeyPass=$key_password"
+        )
         dotnet restore ModularAudience.VocalSynth.Android/ModularAudience.VocalSynth.Android.csproj
         dotnet publish ModularAudience.VocalSynth.Android/ModularAudience.VocalSynth.Android.csproj \
           --configuration "$configuration" \
@@ -164,6 +181,10 @@ jobs:
           "${publish_args[@]}"
         apk_path="$(find "$RUNNER_TEMP/android-publish" -type f -name '*.apk' -print -quit)"
         test -n "$apk_path" || (echo "The Android publish did not produce an APK." >&2; exit 1)
+        sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+        apksigner="$(find "$sdk_root/build-tools" -type f -name apksigner -print -quit)"
+        test -n "$apksigner" || (echo "Android apksigner was not found." >&2; exit 1)
+        "$apksigner" verify --verbose "$apk_path"
         cp "$apk_path" "$RUNNER_TEMP/ModularAudience.VocalSynth-$apk_suffix.apk"
 
     - name: Attach APK to release
