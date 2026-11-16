@@ -15,4 +15,8 @@
     <ProjectReference Include="..\ModularAudience.Audio\ModularAudience.Audio.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ModularAudience.Audio.Tests" />
+  </ItemGroup>
+
 </Project>

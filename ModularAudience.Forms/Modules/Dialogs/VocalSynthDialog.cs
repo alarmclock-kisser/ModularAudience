@@ -77,12 +77,17 @@ public sealed partial class VocalSynthDialog : Form
     private IReadOnlyList<VocalSyllableTextRange> displayedSyllableRanges = [];
     private string lastMidiFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
     private bool startingHear;
+    private bool prehearStartFromCursorClick;
+    private bool restorePlaybackSelection;
+    private int playbackSelectionStart;
+    private int playbackSelectionLength;
     private int lastFollowedCursorPosition = -1;
 
     private sealed class VocalPreview : ISampleProvider
     {
         private readonly float[] data;
         private readonly IReadOnlyList<PlaybackCursorRange> cursorRanges;
+        private readonly int initialPosition;
         private int pos, finished;
         public WaveFormat WaveFormat { get; }
         public bool Loop { get; set; }
@@ -92,10 +97,22 @@ public sealed partial class VocalSynthDialog : Form
 
         public VocalPreview(
             float[] data, int sampleRate, int channels, IReadOnlyList<PlaybackCursorRange> cursorRanges)
+            : this(data, sampleRate, channels, cursorRanges, 0)
+        {
+        }
+
+        public VocalPreview(
+            float[] data, int sampleRate, int channels, IReadOnlyList<PlaybackCursorRange> cursorRanges,
+            int startFrame)
         {
             this.data = data;
             this.cursorRanges = cursorRanges;
             WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
+            long startPosition = (long)startFrame * channels;
+            if (startFrame < 0 || startPosition >= data.Length)
+                throw new ArgumentOutOfRangeException(nameof(startFrame));
+            initialPosition = (int)startPosition;
+            pos = initialPosition;
         }
 
         public int Read(Span<float> buffer)
@@ -105,8 +122,8 @@ public sealed partial class VocalSynthDialog : Form
             {
                 if (Loop)
                 {
-                    position = 0;
-                    Volatile.Write(ref pos, 0);
+                    position = initialPosition;
+                    Volatile.Write(ref pos, initialPosition);
                     Volatile.Write(ref finished, 0);
                 }
                 else
@@ -235,7 +252,24 @@ public sealed partial class VocalSynthDialog : Form
             }
             QueueRender();
         };
-        prehear.Click += async (_, _) => await ToggleHearAsync();
+        prehear.MouseDown += (_, args) =>
+        {
+            prehearStartFromCursorClick = args.Button == MouseButtons.Left
+                && (Control.ModifierKeys & Keys.Control) != 0;
+        };
+        prehear.Click += async (_, _) =>
+        {
+            bool startFromCursor = prehearStartFromCursorClick;
+            prehearStartFromCursorClick = false;
+            await ToggleHearAsync(startFromCursor);
+        };
+        textEditor.KeyDown += async (_, args) =>
+        {
+            if (args.KeyCode != Keys.Enter || !args.Shift || args.Control || args.Alt) return;
+            args.Handled = true;
+            args.SuppressKeyPress = true;
+            await ToggleHearAsync(startFromCursor: true);
+        };
         create.Click += async (_, _) => await CreateAsync();
         emphasisBtn.Click += (_, _) => OpenEmphasisDialog();
         designProfileBtn.Click += (_, _) => OpenDesignerDialog();
@@ -960,12 +994,14 @@ public sealed partial class VocalSynthDialog : Form
         return !disposedFlag && ready == revision && audio is not null;
     }
 
-    private async Task ToggleHearAsync()
+    private async Task ToggleHearAsync(bool startFromCursor = false)
     {
         if (output != null) { StopHear(); return; }
         if (startingHear) return;
         startingHear = true;
         CancellationTokenSource? preparation = null;
+        int originalSelectionStart = textEditor.SelectionStart;
+        int originalSelectionLength = textEditor.SelectionLength;
         try
         {
             if (!await EnsureRenderedAsync()) return;
@@ -974,7 +1010,8 @@ public sealed partial class VocalSynthDialog : Form
 
             CheckState followState = followSpokenWordCheckBox.CheckState;
             IReadOnlyList<PlaybackCursorRange> cursorRanges = [];
-            if (followState != CheckState.Unchecked)
+            int startFrame = 0;
+            if (followState != CheckState.Unchecked || startFromCursor)
             {
                 VocalSynthSettings previewSettings = settings.Clone();
                 previewSettings.Text = textEditor.Text;
@@ -995,13 +1032,30 @@ public sealed partial class VocalSynthDialog : Form
                 if (disposedFlag || tokenSource.IsCancellationRequested
                     || ready != revision || !ReferenceEquals(audio, renderedAudio))
                     return;
+                if (startFromCursor)
+                {
+                    int? selectedStartFrame = GetPlaybackStartFrame(cursorRanges, originalSelectionStart);
+                    if (selectedStartFrame is not int frame
+                        || frame >= renderedAudio.Data.Length / renderedAudio.Channels)
+                    {
+                        status.Text = "The cursor is at the end of the text.";
+                        return;
+                    }
+                    startFrame = frame;
+                }
             }
 
             if (disposedFlag) return;
             if (followSpokenWordCheckBox.CheckState == CheckState.Unchecked) cursorRanges = [];
+            else
+            {
+                playbackSelectionStart = originalSelectionStart;
+                playbackSelectionLength = originalSelectionLength;
+                restorePlaybackSelection = true;
+            }
             FocusTextEditorForSpokenWordFollowing();
             provider = new VocalPreview(
-                renderedAudio.Data, renderedAudio.SampleRate, renderedAudio.Channels, cursorRanges);
+                renderedAudio.Data, renderedAudio.SampleRate, renderedAudio.Channels, cursorRanges, startFrame);
             int generation;
             lock (playbackStateLock)
             {
@@ -1067,8 +1121,21 @@ public sealed partial class VocalSynthDialog : Form
         currentOutput?.Stop();
         currentOutput?.Dispose();
         lastFollowedCursorPosition = -1;
-        prehear.Text = "Prehear";
-        prehear.Enabled = !string.IsNullOrWhiteSpace(textEditor.Text);
+        if (!disposedFlag && !prehear.IsDisposed)
+        {
+            prehear.Text = "Prehear";
+            prehear.Enabled = !string.IsNullOrWhiteSpace(textEditor.Text);
+        }
+        bool shouldRestoreSelection = restorePlaybackSelection;
+        restorePlaybackSelection = false;
+        if (shouldRestoreSelection && !disposedFlag && !textEditor.IsDisposed && textEditor.IsHandleCreated)
+        {
+            int selectionStart = Math.Clamp(playbackSelectionStart, 0, textEditor.TextLength);
+            int selectionLength = Math.Clamp(
+                playbackSelectionLength, 0, textEditor.TextLength - selectionStart);
+            textEditor.Select(selectionStart, selectionLength);
+            textEditor.ScrollToCaret();
+        }
     }
 
     private void PlaybackTimerTick()
@@ -1175,6 +1242,31 @@ public sealed partial class VocalSynthDialog : Form
         }
         if (units.Count == 0) return [];
 
+        if (!settings.UseWindowsSpeech || settings.Singing && settings.SingingMidiFile is not null)
+        {
+            IReadOnlyList<VocalPlaybackTextRange> syllableTimeline =
+                VocalSynth.GetPlaybackTimeline(settings, cancellationToken);
+            List<PlaybackCursorRange> exactRanges = new(units.Count);
+            foreach (PlaybackTextUnit unit in units)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                int unitEnd = unit.Start + unit.Length;
+                int startFrame = int.MaxValue;
+                int endFrame = 0;
+                foreach (VocalPlaybackTextRange range in syllableTimeline)
+                {
+                    if (range.TextStart >= unitEnd) break;
+                    if (range.TextStart + range.TextLength <= unit.Start) continue;
+                    startFrame = Math.Min(startFrame, range.StartFrame);
+                    endFrame = Math.Max(endFrame, range.EndFrame);
+                }
+                if (startFrame < endFrame)
+                    exactRanges.Add(new PlaybackCursorRange(
+                        unit.Start, unit.Length, startFrame, endFrame));
+            }
+            if (exactRanges.Count > 0) return exactRanges;
+        }
+
         double totalWeight = 0;
         for (int index = 0; index < units.Count; index++)
         {
@@ -1209,6 +1301,15 @@ public sealed partial class VocalSynthDialog : Form
                     units[index + 1].Start);
         }
         return result;
+    }
+
+    private static int? GetPlaybackStartFrame(
+        IReadOnlyList<PlaybackCursorRange> cursorRanges, int textPosition)
+    {
+        foreach (PlaybackCursorRange range in cursorRanges)
+            if (textPosition < range.TextStart + range.TextLength)
+                return range.StartFrame;
+        return null;
     }
 
     private static List<(int Start, int Length)> GetTextWordSpans(

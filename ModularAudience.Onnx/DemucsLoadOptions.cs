@@ -13,6 +13,9 @@ public sealed class DemucsLoadOptions
     public int FourierWorkers { get; set; } = Math.Max(1, Environment.ProcessorCount / 2);
     public double ChunkOverlap { get; set; } = 0.25;
     public int CudaDeviceId { get; set; }
+    public bool UseCudaCuFft { get; set; } = true;
+    public int CudaToolkitVersion { get; set; }
+    public long? DeviceLuid { get; set; }
     public GraphOptimizationLevel GraphOptimization { get; set; } = GraphOptimizationLevel.ORT_ENABLE_BASIC;
     public ExecutionMode ExecutionMode { get; set; } = ExecutionMode.ORT_SEQUENTIAL;
     public bool EnableMemoryPattern { get; set; }
@@ -67,13 +70,13 @@ public sealed class DemucsLoadOptions
         this.IntraOpThreads = Math.Clamp(this.IntraOpThreads, 0, Environment.ProcessorCount);
         this.InterOpThreads = Math.Clamp(this.InterOpThreads, 0, Environment.ProcessorCount);
         this.ChunkOverlap = double.IsFinite(this.ChunkOverlap) ? Math.Clamp(this.ChunkOverlap, 0, 0.75) : 0.25;
+        if (this.CudaToolkitVersion is not (0 or 12 or 13)) this.CudaToolkitVersion = 0;
     }
 
     public void NormalizeForProvider(bool directML)
     {
         this.NormalizeWorkers();
         if (!directML) return;
-        this.GraphOptimization = GraphOptimizationLevel.ORT_ENABLE_BASIC;
         this.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
         this.EnableMemoryPattern = false;
     }

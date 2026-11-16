@@ -216,7 +216,7 @@ Live streams are excluded. Duration matching is enforced by yt-dlp metadata filt
 
 Each download converts in a new job directory below the system temporary directory. Temporary results own that directory: keep the result alive while using or tagging the file, then dispose it. Dispose is idempotent after successful cleanup; if a file is still locked, cleanup throws and may be retried after closing it. Async disposal performs the same local directory cleanup synchronously.
 
-Saved results are published through a unique staging file in the destination directory, then renamed without overwrite. Names include a sanitized title, video ID, and random suffix. `FilePath` is already the **final saved path when DownloadAsync returns**; callers can delay before invoking external taggers without reconstructing the path. Disposing a saved result never deletes the saved file. Failed/canceled work cleans its job and partial-save files on a best-effort basis. No finalizer is used; callers must dispose temporary results.
+Saved results are published through a unique staging file in the destination directory, then renamed without overwrite. Saved filenames use the sanitized video title and converted format. An existing file or directory at that path is rejected before yt-dlp starts; a collision that occurs during the download is rejected at publish time and is not retried. `FilePath` is already the **final saved path when DownloadAsync returns**; callers can delay before invoking external taggers without reconstructing the path. Disposing a saved result never deletes the saved file. Failed/canceled work cleans its job and partial-save files on a best-effort basis. No finalizer is used; callers must dispose temporary results.
 
 ### YtdlpParser
 

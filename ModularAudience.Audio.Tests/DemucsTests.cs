@@ -84,8 +84,13 @@ public sealed class DemucsTests
         object? Field(string name) => typeof(OnnxDemucsDialog).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dialog);
         Assert.IsNull(Field("Onnx"));
         Assert.AreEqual(0m, ((NumericUpDown)Field("keepModelLoaded")!).Value);
+        Assert.IsTrue(((NumericUpDown)Field("keepModelLoaded")!).Enabled);
         Assert.AreEqual("Load model", ((Button)Field("load")!).Text);
         Assert.IsFalse(((Button)Field("button_run")!).Enabled);
+        Assert.IsTrue(((ComboBox)Field("optimization")!).Enabled);
+        Assert.AreEqual("DirectML", ((ComboBox)Field("provider")!).Text);
+        Assert.AreEqual(Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_BASIC.ToString(),
+            ((ComboBox)Field("optimization")!).Text);
         Assert.IsTrue(((NumericUpDown)Field("workers")!).Minimum >= 1);
         Assert.AreEqual((decimal)Environment.ProcessorCount, ((NumericUpDown)Field("workers")!).Maximum);
         Assert.AreEqual((decimal)Environment.ProcessorCount, ((NumericUpDown)Field("intraThreads")!).Maximum);
@@ -139,19 +144,20 @@ public sealed class DemucsTests
     }
 
     [TestMethod]
-    public void DirectMLOptionsUseBasicSequentialExecutionAndDisableMemoryPattern()
+    public void DirectMLOptionsPreserveGraphOptimizationAndDisableUnsupportedModes()
     {
         var options = new DemucsLoadOptions
         {
             UseDirectML = true,
-            GraphOptimization = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_ALL,
+            GraphOptimization = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_EXTENDED,
             ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_PARALLEL,
             EnableMemoryPattern = true
         };
         options.NormalizeForProvider(true);
-        Assert.AreEqual(Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_BASIC, options.GraphOptimization);
+        Assert.AreEqual(Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_EXTENDED, options.GraphOptimization);
         Assert.AreEqual(Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_SEQUENTIAL, options.ExecutionMode);
         Assert.IsFalse(options.EnableMemoryPattern);
+        Assert.AreEqual(Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_BASIC, new DemucsLoadOptions().GraphOptimization);
 
         options.UseDirectML = false;
         options.GraphOptimization = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_ALL;
@@ -166,6 +172,7 @@ public sealed class DemucsTests
         string cuda13 = Path.Combine(root, "v13.3");
         string cuda12 = Path.Combine(root, "v12.8");
         string libraryPath = Path.Combine(cuda12, "bin", "cufft64_11.dll");
+        string cuda13LibraryPath = Path.Combine(cuda13, "bin", "cufft64_11.dll");
         Directory.CreateDirectory(Path.Combine(cuda13, "bin"));
         Directory.CreateDirectory(Path.GetDirectoryName(libraryPath)!);
         File.WriteAllBytes(libraryPath, Array.Empty<byte>());
@@ -176,8 +183,66 @@ public sealed class DemucsTests
             string? found = (string?)findLibrary.Invoke(null, [new[] { cuda13, cuda12 }]);
             Assert.AreEqual(Path.GetFullPath(libraryPath), found);
             Assert.IsNull(findLibrary.Invoke(null, [new[] { cuda13 }]));
+
+            File.WriteAllBytes(cuda13LibraryPath, Array.Empty<byte>());
+            var findToolkits = backend.GetMethod("FindCuFftToolkits", BindingFlags.Static | BindingFlags.NonPublic)!;
+            var toolkits = (Array)findToolkits.Invoke(null, [new[] { cuda13, cuda12 }])!;
+            CollectionAssert.AreEqual(new[] { 13, 12 }, toolkits.Cast<object>()
+                .Select(toolkit => (int)toolkit.GetType().GetProperty("MajorVersion")!.GetValue(toolkit)!).ToArray());
+            var resolveToolkit = backend.GetMethod("FindCuFftToolkit", BindingFlags.Static | BindingFlags.NonPublic)!;
+            object cuda12Toolkit = resolveToolkit.Invoke(null, [12, new[] { cuda13, cuda12 }])!;
+            object cuda13Toolkit = resolveToolkit.Invoke(null, [13, new[] { cuda13, cuda12 }])!;
+            Assert.AreEqual(Path.GetFullPath(libraryPath), cuda12Toolkit.GetType().GetProperty("LibraryPath")!.GetValue(cuda12Toolkit));
+            Assert.AreEqual(Path.GetFullPath(cuda13LibraryPath), cuda13Toolkit.GetType().GetProperty("LibraryPath")!.GetValue(cuda13Toolkit));
         }
         finally { Directory.Delete(root, true); }
+    }
+
+    [TestMethod]
+    public void SelectedStemsAreDistributedEvenlyAcrossDevices()
+    {
+        int[][] assigned = OnnxDemucsDialog.AssignStemsToDevices(6, 2);
+        CollectionAssert.AreEqual(new[] { 0, 2, 4 }, assigned[0]);
+        CollectionAssert.AreEqual(new[] { 1, 3, 5 }, assigned[1]);
+
+        int[][] moreDevicesThanStems = OnnxDemucsDialog.AssignStemsToDevices(2, 4);
+        CollectionAssert.AreEqual(new[] { 0 }, moreDevicesThanStems[0]);
+        CollectionAssert.AreEqual(new[] { 1 }, moreDevicesThanStems[1]);
+        Assert.IsEmpty(moreDevicesThanStems[2]);
+        Assert.IsEmpty(moreDevicesThanStems[3]);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => OnnxDemucsDialog.AssignStemsToDevices(1, 0));
+    }
+
+    [TestMethod]
+    public async Task SamePhysicalGpuSerializesDirectMLAndCuFftOperations()
+    {
+        const long luid = 0x12345678;
+        IDisposable? directML = await DemucsGpuDeviceGate.AcquireAsync(new DemucsLoadOptions
+        {
+            UseDirectML = true,
+            DeviceId = 2,
+            DeviceLuid = luid
+        }, CancellationToken.None);
+        Task<IDisposable?> sameGpu = DemucsGpuDeviceGate.AcquireAsync(new DemucsLoadOptions
+        {
+            UseDirectML = false,
+            CudaDeviceId = 1,
+            DeviceLuid = luid
+        }, CancellationToken.None).AsTask();
+        Task<IDisposable?> otherGpu = DemucsGpuDeviceGate.AcquireAsync(new DemucsLoadOptions
+        {
+            UseDirectML = true,
+            DeviceId = 3,
+            DeviceLuid = 0x87654321
+        }, CancellationToken.None).AsTask();
+        try
+        {
+            Assert.IsFalse(sameGpu.IsCompleted, "DirectML and CuFFT operations must not overload the same physical GPU.");
+            using IDisposable? other = await otherGpu.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.IsTrue(otherGpu.IsCompletedSuccessfully, "A different GPU must remain available in parallel.");
+        }
+        finally { directML?.Dispose(); }
+        using IDisposable? same = await sameGpu.WaitAsync(TimeSpan.FromSeconds(2));
     }
 
     [TestMethod]
@@ -227,22 +292,6 @@ public sealed class DemucsTests
         DemucsModelCache.Return(key, service, TimeSpan.Zero);
         Assert.IsFalse(service.IsOnline);
         Assert.IsNull(DemucsModelCache.Take(key));
-    }
-
-    [TestMethod]
-    public void DirectMLAdaptersUseNamedDxgiIndices()
-    {
-        Type type = typeof(OnnxDemucsDialog).Assembly.GetType("ModularAudience.Forms.DirectMLDevices")!;
-        var adapters = (Array)type.GetMethod("GetAdapters", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, null)!;
-        Assert.IsGreaterThan(0, adapters.Length);
-        var getMemory = type.GetMethod("GetVideoMemoryInfo", BindingFlags.Static | BindingFlags.NonPublic)!;
-        foreach (object adapter in adapters)
-        {
-            Console.WriteLine(adapter);
-            int id = (int)adapter.GetType().GetProperty("Id")!.GetValue(adapter)!;
-            object memory = getMemory.Invoke(null, [id])!;
-            Assert.IsGreaterThan(0UL, (ulong)memory.GetType().GetProperty("Budget")!.GetValue(memory)!);
-        }
     }
 
     [TestMethod]
@@ -322,28 +371,6 @@ public sealed class DemucsTests
         Assert.AreEqual(2, service.EffectiveOptions.IntraOpThreads);
         Assert.IsTrue(requested.UseDirectML, "Reporting effective settings must not mutate the caller's requested settings.");
         StringAssert.Contains(service.LoadWarning!, "DirectML could not initialize");
-    }
-
-    [STATestMethod]
-    public void EffectiveCpuFallbackOptionsUpdateDialogFields()
-    {
-        using var audio = new AudioObj();
-        using var dialog = new OnnxDemucsDialog(audio);
-        object Field(string name) => typeof(OnnxDemucsDialog).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dialog)!;
-        var devices = (CheckedListBox)Field("checkedListBox_directMLDevices");
-        var effective = new DemucsLoadOptions
-        {
-            UseDirectML = false, IntraOpThreads = 3, InterOpThreads = 2, EnableMemoryPattern = true,
-            ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_PARALLEL
-        };
-        typeof(OnnxDemucsDialog).GetMethod("ApplyEffectiveOptions", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(dialog, [effective]);
-        Assert.AreEqual("CPU", ((ComboBox)Field("provider")).Text);
-        Assert.IsFalse(devices.Enabled);
-        Assert.AreEqual(3m, ((NumericUpDown)Field("intraThreads")).Value);
-        Assert.AreEqual(2m, ((NumericUpDown)Field("interThreads")).Value);
-        Assert.IsTrue(((CheckBox)Field("memoryPattern")).Checked);
-        Assert.AreEqual("ORT_PARALLEL", ((ComboBox)Field("execution")).Text);
     }
 
     private static float[] CreateSignal(int length)

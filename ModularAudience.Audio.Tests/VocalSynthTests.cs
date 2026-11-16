@@ -29,6 +29,14 @@ public class VocalSynthTests
             [track], 960, 120, "vocal-test.mid", 440, timeSignatureNumerator, timeSignatureDenominator);
     }
 
+    private static MidiFileData CreateMidiAtTempo(double bpm, params MidiNoteData[] notes)
+    {
+        var track = new MidiTrackData { Index = 4, Name = "Lead" };
+        track.Notes.AddRange(notes);
+        track.ExtendLengthTo(notes.Max(note => note.StartTick + note.DurationTicks));
+        return MidiFileData.CreateGenerated([track], 960, bpm, "vocal-test.mid", 440);
+    }
+
     private static VocalSynthSettings CreateMidiSettings(string text, MidiFileData midi)
     {
         var settings = VocalSynthSettings.FromPreset(
@@ -103,6 +111,41 @@ public class VocalSynthTests
 
         Assert.AreEqual(180f, audio.Bpm);
         Assert.AreEqual(2667, audio.Data.Length);
+    }
+
+    [TestMethod]
+    public void PlaybackTimeline_MapsRenderedSyllablesToAudioFrames()
+    {
+        VocalSynthSettings settings = VocalSynthSettings.FromPreset(
+            VocalVoicePreset.BuiltIn[2], VocalLanguage.English, "hello world");
+        settings.SampleRate = 8000;
+
+        VocalAudioData audio = VocalSynthEngine.Render(settings);
+        IReadOnlyList<VocalPlaybackTextRange> timeline = VocalSynthEngine.GetPlaybackTimeline(settings);
+
+        Assert.IsTrue(timeline.Count > 1);
+        Assert.AreEqual(0, timeline[0].StartFrame);
+        Assert.AreEqual(audio.Data.Length / audio.Channels, timeline[^1].EndFrame);
+        Assert.IsTrue(timeline.Zip(timeline.Skip(1))
+            .All(pair => pair.First.StartFrame <= pair.Second.StartFrame));
+    }
+
+    [TestMethod]
+    public void MidiSinging_PlaybackTimelineUsesTempoAndSpeedForCursorStart()
+    {
+        MidiFileData midi = CreateMidiAtTempo(90,
+            new MidiNoteData { NoteNumber = 60, Velocity = 100, StartTick = 0, DurationTicks = 960 },
+            new MidiNoteData { NoteNumber = 64, Velocity = 100, StartTick = 960, DurationTicks = 960 });
+        VocalSynthSettings settings = CreateMidiSettings("a e", midi);
+        settings.Speed = 1.5;
+        settings.IgnoreTextPausesForMidiSinging = true;
+
+        IReadOnlyList<VocalPlaybackTextRange> timeline = VocalSynthEngine.GetPlaybackTimeline(settings);
+
+        Assert.AreEqual(2, timeline.Count);
+        Assert.AreEqual(0, timeline[0].StartFrame);
+        Assert.AreEqual(3556, timeline[1].StartFrame);
+        Assert.AreEqual(2, timeline[1].TextStart);
     }
 
     [TestMethod]
@@ -303,6 +346,81 @@ public class VocalSynthTests
         Assert.AreEqual(plan.OutputFrames, audio.Data.Length);
         Assert.IsTrue(audio.Data.All(float.IsFinite));
         Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001f));
+    }
+
+    [TestMethod]
+    public void MidiSinging_ConsolidatesRapidThirtySecondRunsWithoutMovingNotes()
+    {
+        MidiNoteData[] notes = Enumerable.Range(0, 8)
+            .Select(index => new MidiNoteData
+            {
+                NoteNumber = 60 + index,
+                Velocity = 90,
+                StartTick = index * 120,
+                DurationTicks = 96,
+            })
+            .Append(new MidiNoteData
+            {
+                NoteNumber = 72,
+                Velocity = 90,
+                StartTick = 1200,
+                DurationTicks = 120,
+            })
+            .ToArray();
+        MidiFileData midi = CreateMidi(notes);
+        VocalSynthSettings settings = CreateMidiSettings("a e i o u a", midi);
+        settings.IgnoreTextPausesForMidiSinging = true;
+        IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
+            settings.Language, settings.Text, settings.EmphasisSyntax);
+
+        VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, tokens, CancellationToken.None);
+        VocalMidiSyllableFillResult fill = VocalMidiSyllableFiller.FillMissing(
+            settings, string.Empty, CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { 0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 5000 },
+            plan.Notes.Take(notes.Length).Select(note => note.StartFrame).ToArray());
+        Assert.IsTrue(plan.Notes.Take(8).Select(note => note.SyllableIndex).Distinct().Count() < 8);
+        Assert.IsTrue(plan.Notes.Skip(1).Take(7).Any(note => note.IsSyllableContinuation));
+        Assert.IsTrue(plan.Notes[8].SyllableIndex > plan.Notes[7].SyllableIndex);
+        Assert.IsGreaterThanOrEqualTo(5500, plan.OutputFrames);
+        Assert.IsLessThan(notes.Length, fill.MidiSyllables);
+        Assert.AreEqual(fill.MidiSyllables, VocalTextParser.GetSyllableTextRanges(
+            settings.Language, fill.AppendedText, settings.EmphasisSyntax).Count);
+
+        settings.Speed = 0.1;
+        VocalMidiSingingPlan slowedPlan = VocalMidiSinging.CreatePlan(
+            settings, tokens, CancellationToken.None);
+        Assert.IsGreaterThan(plan.UnusedMidiGroups, slowedPlan.UnusedMidiGroups);
+    }
+
+    [TestMethod]
+    public void MidiSinging_ExtendedVowelDurationAllowsLongerMelisma()
+    {
+        MidiNoteData[] notes = Enumerable.Range(0, 23)
+            .Select(index => new MidiNoteData
+            {
+                NoteNumber = 60 + index % 12,
+                Velocity = 90,
+                StartTick = index * 120,
+                DurationTicks = 96,
+            })
+            .ToArray();
+        MidiFileData midi = CreateMidi(notes);
+        VocalSynthSettings settings = CreateMidiSettings("aaaaaaaa", midi);
+        IReadOnlyList<VocalToken> extendedVowel = VocalTextParser.Parse(
+            settings.Language, settings.Text, settings.EmphasisSyntax);
+
+        VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(
+            settings, extendedVowel, CancellationToken.None);
+
+        Assert.AreEqual(1, plan.Syllables.Count);
+        Assert.AreEqual(23, plan.Notes.Count);
+        Assert.AreEqual(0, plan.UnusedMidiGroups);
+        Assert.IsTrue(plan.Notes.Skip(1).All(note => note.IsSyllableContinuation));
+        VocalMidiSyllableFillResult fill = VocalMidiSyllableFiller.FillMissing(
+            settings, settings.Text, CancellationToken.None);
+        Assert.AreEqual(0, fill.AddedSyllables);
+        Assert.AreEqual(1, fill.MidiSyllables);
     }
 
     [TestMethod]
@@ -1940,7 +2058,7 @@ public class VocalSynthTests
                 editorFocused = editor.Focused;
                 dialog.Close();
             };
-            timer.Start();
+            dialog.Shown += (_, _) => timer.Start();
             dialog.ShowDialog();
 
             Assert.IsTrue(editorFocused);

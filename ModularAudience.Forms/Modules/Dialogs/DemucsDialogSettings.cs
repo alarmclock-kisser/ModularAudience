@@ -19,10 +19,11 @@ internal sealed class DemucsDialogSettings
         WriteIndented = true, Converters = { new JsonStringEnumConverter() }
     };
 
-    internal static DemucsDialogSettings Load()
+    internal static DemucsDialogSettings Load(string? path = null)
     {
-        if (!File.Exists(SettingsPath)) return new();
-        var result = JsonSerializer.Deserialize<DemucsDialogSettings>(File.ReadAllText(SettingsPath), JsonOptions) ?? new();
+        path ??= SettingsPath;
+        if (!File.Exists(path)) return new();
+        var result = JsonSerializer.Deserialize<DemucsDialogSettings>(File.ReadAllText(path), JsonOptions) ?? new();
         result.ModelDirectories ??= ["D:/Models/Demucs"];
         result.Options ??= new();
         result.SelectedDirectMLDeviceIds ??= [];
@@ -31,11 +32,13 @@ internal sealed class DemucsDialogSettings
         return result;
     }
 
-    internal void Save()
+    internal void Save(string? path = null)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-        string temporary = SettingsPath + ".tmp";
+        path ??= SettingsPath;
+        string fullPath = Path.GetFullPath(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        string temporary = fullPath + ".tmp";
         File.WriteAllText(temporary, JsonSerializer.Serialize(this, JsonOptions));
-        File.Move(temporary, SettingsPath, true);
+        File.Move(temporary, fullPath, true);
     }
 }

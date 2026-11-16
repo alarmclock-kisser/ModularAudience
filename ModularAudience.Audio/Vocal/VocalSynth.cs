@@ -57,6 +57,95 @@ public static partial class VocalSynthEngine
             settings.Language, settings.Text, settings.EmphasisSyntax, tokens, cancellationToken);
     }
 
+    public static IReadOnlyList<VocalPlaybackTextRange> GetPlaybackTimeline(
+        VocalSynthSettings settings, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.Validate();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        VocalSynthSettings snapshot = settings.Clone();
+        IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
+            snapshot.Language, snapshot.Text, snapshot.EmphasisSyntax, cancellationToken);
+        tokens = VocalCustomSampleMapper.Apply(
+            snapshot.Language, snapshot.Text, snapshot.EmphasisSyntax,
+            tokens, snapshot.CustomSampleMappings, snapshot.Singing, cancellationToken);
+        if (snapshot.Singing && snapshot.SingingMidiFile is not null)
+            return CreateMidiPlaybackTimeline(snapshot, tokens, cancellationToken);
+        if (snapshot.UseWindowsSpeech)
+            throw new PlatformNotSupportedException(
+                "Windows speech playback timing is available only in the Windows desktop application.");
+
+        IReadOnlyList<VocalSingingSyllable> syllables =
+            VocalSinging.CreateSyllables(snapshot.Language, tokens, cancellationToken).Syllables;
+        IReadOnlyList<VocalSyllableTextRange> textRanges = VocalTextParser.GetSyllableTextRangesForTokens(
+            snapshot.Language, snapshot.Text, snapshot.EmphasisSyntax, tokens, cancellationToken);
+        List<RenderUnit> renderPlan = CreateRenderPlan(tokens, snapshot, cancellationToken, out _);
+        Dictionary<VocalToken, (int StartFrame, int EndFrame)> tokenFrames =
+            new(ReferenceEqualityComparer.Instance);
+        int frame = 0;
+        foreach (RenderUnit unit in renderPlan)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            tokenFrames.TryAdd(unit.Token, (frame, checked(frame + unit.Frames)));
+            frame = checked(frame + unit.Frames);
+        }
+
+        List<VocalPlaybackTextRange> result = new(textRanges.Count);
+        foreach (VocalSyllableTextRange textRange in textRanges)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (textRange.Index < 0 || textRange.Index >= syllables.Count) continue;
+            int startFrame = int.MaxValue;
+            int endFrame = 0;
+            foreach (VocalToken token in syllables[textRange.Index].Tokens)
+            {
+                if (!tokenFrames.TryGetValue(token, out var tokenRange)) continue;
+                startFrame = Math.Min(startFrame, tokenRange.StartFrame);
+                endFrame = Math.Max(endFrame, tokenRange.EndFrame);
+            }
+            if (startFrame < endFrame)
+                result.Add(new VocalPlaybackTextRange(
+                    textRange.Start, textRange.Length, startFrame, endFrame));
+        }
+        return result;
+    }
+
+    private static IReadOnlyList<VocalPlaybackTextRange> CreateMidiPlaybackTimeline(
+        VocalSynthSettings settings, IReadOnlyList<VocalToken> tokens, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<VocalToken> timelineTokens = settings.IgnoreTextPausesForMidiSinging
+            ? tokens.Where(token => token is not VocalPauseToken).ToArray()
+            : tokens.Where(token => token is not VocalPauseToken { IsLineBreak: true }).ToArray();
+        IReadOnlyList<VocalSyllableTextRange> textRanges = VocalTextParser.GetSyllableTextRangesForTokens(
+            settings.Language, settings.Text, settings.EmphasisSyntax, timelineTokens, cancellationToken);
+        VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, tokens, cancellationToken);
+        int[] startFrames = Enumerable.Repeat(int.MaxValue, plan.Syllables.Count).ToArray();
+        int[] endFrames = new int[plan.Syllables.Count];
+        foreach (VocalMidiScheduledNote note in plan.Notes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (note.SyllableIndex < 0 || note.SyllableIndex >= startFrames.Length) continue;
+            startFrames[note.SyllableIndex] = Math.Min(startFrames[note.SyllableIndex], note.StartFrame);
+            endFrames[note.SyllableIndex] = Math.Max(
+                endFrames[note.SyllableIndex], checked(note.StartFrame + note.DurationFrames));
+        }
+
+        List<VocalPlaybackTextRange> result = new(textRanges.Count);
+        foreach (VocalSyllableTextRange textRange in textRanges)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int syllableIndex = textRange.Index;
+            if (syllableIndex < 0 || syllableIndex >= startFrames.Length
+                || startFrames[syllableIndex] >= endFrames[syllableIndex])
+                continue;
+            result.Add(new VocalPlaybackTextRange(
+                textRange.Start, textRange.Length,
+                startFrames[syllableIndex], endFrames[syllableIndex]));
+        }
+        return result;
+    }
+
     public static VocalAudioData Render(VocalSynthSettings settings, CancellationToken cancellationToken = default)
     {
         settings.Validate();

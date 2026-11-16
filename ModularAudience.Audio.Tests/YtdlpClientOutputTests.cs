@@ -44,9 +44,34 @@ public sealed class YtdlpClientOutputTests
                 TimeSpan.Zero, CancellationToken.None));
             Assert.HasCount(0, Directory.GetDirectories(output));
             byte[] existing = File.ReadAllBytes(actual);
-            await Assert.ThrowsAsync<IOException>(async () => await (Task<string>)save.Invoke(null,
+            var collision = await Assert.ThrowsExactlyAsync<YtdlpOutputFileExistsException>(async () => await (Task<string>)save.Invoke(null,
                 [source, output, new YtdlpVideo { Title = title }, "wav", CancellationToken.None])!);
+            Assert.AreEqual(expected, collision.OutputPath);
             CollectionAssert.AreEqual(existing, File.ReadAllBytes(actual), "A title collision must not overwrite an existing file.");
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [TestMethod]
+    public void EnsureOutputAvailable_RejectsExistingFileOrDirectory()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "ytdlp-existing-output-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string existingFile = Path.Combine(root, "existing.wav");
+        string existingDirectory = Path.Combine(root, "directory.wav");
+        try
+        {
+            File.WriteAllText(existingFile, "preserve");
+            Directory.CreateDirectory(existingDirectory);
+            var ensure = typeof(YtdlpClient).GetMethod("EnsureOutputAvailable", BindingFlags.Static | BindingFlags.NonPublic)!;
+
+            foreach (string path in new[] { existingFile, existingDirectory })
+            {
+                var error = Assert.ThrowsExactly<TargetInvocationException>(() => ensure.Invoke(null, [path]));
+                Assert.IsInstanceOfType<YtdlpOutputFileExistsException>(error.InnerException);
+            }
+
+            Assert.AreEqual("preserve", File.ReadAllText(existingFile));
         }
         finally { Directory.Delete(root, true); }
     }

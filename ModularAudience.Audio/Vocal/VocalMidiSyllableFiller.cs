@@ -133,9 +133,22 @@ internal static class VocalMidiSyllableFiller
         if (!Templates.TryGetValue(settings.Language, out SyllableTemplate[]? palette))
             throw new ArgumentOutOfRangeException(nameof(settings), settings.Language, "The selected language is not supported.");
 
-        IReadOnlyList<VocalSyllableTextRange> existingRanges = VocalTextParser.GetSyllableTextRanges(
+        IReadOnlyList<VocalToken> existingTokens = VocalTextParser.Parse(
             settings.Language, existingText, settings.EmphasisSyntax, cancellationToken);
-        IVocalMidiNote[][] noteGroups = VocalMidiSinging.GroupOverlappingNotes(track, cancellationToken);
+        IReadOnlyList<VocalSingingSyllable> existingSyllables = VocalSinging.CreateSyllables(
+            settings.Language, existingTokens, cancellationToken).Syllables;
+        IReadOnlyList<VocalSyllableTextRange> existingRanges = VocalTextParser.GetSyllableTextRangesForTokens(
+            settings.Language, existingText, settings.EmphasisSyntax, existingTokens, cancellationToken);
+        double fallbackSyllableDurationMilliseconds = GetTemplateNaturalDurationMilliseconds(
+            settings.Language, settings.EmphasisSyntax, palette[0], cancellationToken);
+        IVocalMidiNote[][] noteGroups = VocalMidiSinging.GroupSingingNoteGroups(
+            track,
+            midi.TicksPerQuarterNote,
+            midi.DefaultBpm,
+            settings.Speed,
+            existingSyllables.Select(syllable => syllable.NaturalDurationMilliseconds).ToArray(),
+            fallbackSyllableDurationMilliseconds,
+            cancellationToken);
         if (existingRanges.Count >= noteGroups.Length)
         {
             return new VocalMidiSyllableFillResult(
@@ -195,6 +208,23 @@ internal static class VocalMidiSyllableFiller
             string vowel = syllable[1..];
             return new SyllableTemplate("d", vowel, vowel, "", "l");
         }).ToArray();
+
+    private static double GetTemplateNaturalDurationMilliseconds(
+        VocalLanguage language,
+        VocalEmphasisSyntax emphasisSyntax,
+        SyllableTemplate template,
+        CancellationToken cancellationToken)
+    {
+        string text = template.Build(template.Vowel.Length, phraseEnd: false);
+        IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
+            language, text, emphasisSyntax, cancellationToken);
+        IReadOnlyList<VocalSingingSyllable> syllables =
+            VocalSinging.CreateSyllables(language, tokens, cancellationToken).Syllables;
+        if (syllables.Count != 1)
+            throw new InvalidDataException(
+                $"The generated {language.DisplayName()} syllable template did not produce exactly one syllable.");
+        return syllables[0].NaturalDurationMilliseconds;
+    }
 
     private static int GetPaletteIndex(
         double pitch, double lowestPitch, double highestPitch, int paletteLength)

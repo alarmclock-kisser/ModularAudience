@@ -35,6 +35,8 @@
             this.button_run = new Button();
             this.checkedListBox_stems = new CheckedListBox();
             this.checkedListBox_directMLDevices = new CheckedListBox();
+            this.useCudaCuFft = new CheckBox();
+            this.comboBox_cudaToolkitVersion = new ComboBox();
             this.gpuCacheTimer = new System.Windows.Forms.Timer(this.components);
             this.SuspendLayout();
             // 
@@ -84,6 +86,26 @@
             this.checkedListBox_directMLDevices.ItemCheck += this.DirectMLDevices_ItemCheck;
             this.components.Add(this.checkedListBox_directMLDevices);
             //
+            // useCudaCuFft
+            //
+            this.useCudaCuFft.AutoSize = false;
+            this.useCudaCuFft.Checked = true;
+            this.useCudaCuFft.Dock = DockStyle.Fill;
+            this.useCudaCuFft.Name = "useCudaCuFft";
+            this.useCudaCuFft.Text = "Use CUDA CuFFT";
+            this.useCudaCuFft.UseVisualStyleBackColor = true;
+            this.useCudaCuFft.CheckedChanged += this.useCudaCuFft_CheckedChanged;
+            //
+            // comboBox_cudaToolkitVersion
+            //
+            this.comboBox_cudaToolkitVersion.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.comboBox_cudaToolkitVersion.Dock = DockStyle.Fill;
+            this.comboBox_cudaToolkitVersion.FormattingEnabled = true;
+            this.comboBox_cudaToolkitVersion.Name = "comboBox_cudaToolkitVersion";
+            this.comboBox_cudaToolkitVersion.TabIndex = 5;
+            this.comboBox_cudaToolkitVersion.AccessibleName = "CUDA toolkit version";
+            this.comboBox_cudaToolkitVersion.SelectedIndexChanged += this.comboBox_cudaToolkitVersion_SelectedIndexChanged;
+            //
             // gpuCacheTimer
             //
             this.gpuCacheTimer.Interval = 1000;
@@ -112,6 +134,8 @@
         private Button button_run;
         private CheckedListBox checkedListBox_stems;
         private CheckedListBox checkedListBox_directMLDevices;
+        private CheckBox useCudaCuFft;
+        private ComboBox comboBox_cudaToolkitVersion;
         private System.Windows.Forms.Timer gpuCacheTimer;
     }
 }

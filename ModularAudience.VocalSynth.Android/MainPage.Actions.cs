@@ -452,7 +452,75 @@ public sealed partial class MainPage
         }
     }
 
-    private async Task<VocalAudioData?> RenderAsync()
+    private async Task HearFromCursorAsync()
+    {
+        string text = textEditor.Text ?? string.Empty;
+        int textPosition = Math.Clamp(textEditor.CursorPosition, 0, text.Length);
+        if (string.IsNullOrWhiteSpace(text[textPosition..]))
+        {
+            statusLabel.Text = "There is no text at or after the cursor.";
+            return;
+        }
+
+        if (androidSpeechSwitch.IsToggled)
+        {
+            try
+            {
+                StopPlayback();
+                await TextToSpeech.Default.SpeakAsync(text[textPosition..].TrimStart());
+                statusLabel.Text = "Android speech finished.";
+            }
+            catch (Exception error) when (error is ArgumentException or InvalidOperationException
+                or FeatureNotSupportedException)
+            {
+                await ShowErrorAsync("Android speech failed", error);
+            }
+            return;
+        }
+
+        ApplyControlsToSettings();
+        VocalSynthSettings snapshot = settings.Clone();
+        VocalAudioData? audio = await RenderAsync(snapshot);
+        if (audio is null) return;
+        try
+        {
+            IReadOnlyList<VocalPlaybackTextRange> timeline = await Task.Run(
+                () => VocalSynthEngine.GetPlaybackTimeline(snapshot));
+            int? startFrame = GetPlaybackStartFrame(timeline, textPosition);
+            if (startFrame is not int frame || frame >= audio.Data.Length / audio.Channels)
+            {
+                statusLabel.Text = "There is no text at or after the cursor.";
+                return;
+            }
+
+            stopButton.IsEnabled = stopButton.IsVisible = true;
+            await player.PlayAsync(audio, renderCancellation?.Token ?? CancellationToken.None, frame);
+            statusLabel.Text = "Preview from cursor finished.";
+        }
+        catch (OperationCanceledException)
+        {
+            statusLabel.Text = "Playback stopped.";
+        }
+        catch (Exception error)
+        {
+            await ShowErrorAsync("Playback failed", error);
+        }
+        finally
+        {
+            stopButton.IsEnabled = stopButton.IsVisible = false;
+        }
+    }
+
+    private static int? GetPlaybackStartFrame(
+        IReadOnlyList<VocalPlaybackTextRange> timeline, int textPosition)
+    {
+        foreach (VocalPlaybackTextRange range in timeline)
+            if (textPosition < range.TextStart + range.TextLength)
+                return range.StartFrame;
+        return null;
+    }
+
+    private async Task<VocalAudioData?> RenderAsync(VocalSynthSettings? requestedSettings = null)
     {
         try
         {
@@ -462,9 +530,9 @@ public sealed partial class MainPage
             CancellationTokenSource cancellation = new();
             renderCancellation = cancellation;
             busyIndicator.IsVisible = busyIndicator.IsRunning = true;
-            renderButton.IsEnabled = createButton.IsEnabled = false;
+            renderButton.IsEnabled = hearFromCursorButton.IsEnabled = createButton.IsEnabled = false;
             statusLabel.Text = "Synthesizing...";
-            VocalSynthSettings snapshot = settings.Clone();
+            VocalSynthSettings snapshot = requestedSettings?.Clone() ?? settings.Clone();
             VocalAudioData audio = await Task.Run(
                 () => VocalSynthEngine.Render(snapshot, cancellation.Token), cancellation.Token);
             statusLabel.Text = $"Ready: {audio.Duration.TotalSeconds:0.00}s | {audio.Name}";
@@ -485,7 +553,7 @@ public sealed partial class MainPage
             renderCancellation?.Dispose();
             renderCancellation = null;
             busyIndicator.IsVisible = busyIndicator.IsRunning = false;
-            renderButton.IsEnabled = createButton.IsEnabled = true;
+            renderButton.IsEnabled = hearFromCursorButton.IsEnabled = createButton.IsEnabled = true;
         }
     }
 

@@ -45,6 +45,7 @@ public sealed partial class MainPage : ContentPage
     private readonly Slider midiOffsetSlider = new() { Minimum = -16, Maximum = 16, Value = 0 };
     private readonly Slider wavTrailingSilenceSlider = new() { Minimum = 0, Maximum = 5000, Value = 1000 };
     private readonly Button renderButton = new() { Text = "Preview" };
+    private readonly Button hearFromCursorButton = new() { Text = "Hear from cursor" };
     private readonly Button createButton = new() { Text = "Create and share WAV" };
     private readonly Button stopButton = new() { Text = "Stop", IsEnabled = false, IsVisible = false };
     private readonly Button fillSyllablesButton = new() { Text = "Fill missing syllables" };
@@ -99,10 +100,19 @@ public sealed partial class MainPage : ContentPage
                 new ColumnDefinition(GridLength.Star),
                 new ColumnDefinition(GridLength.Star),
             },
+            RowDefinitions =
+            {
+                new RowDefinition(GridLength.Auto),
+                new RowDefinition(GridLength.Auto),
+            },
             ColumnSpacing = 8,
+            RowSpacing = 8,
         };
         actionButtons.Children.Add(renderButton);
-        Grid.SetColumn(createButton, 1);
+        Grid.SetColumn(hearFromCursorButton, 1);
+        actionButtons.Children.Add(hearFromCursorButton);
+        Grid.SetRow(createButton, 1);
+        Grid.SetColumnSpan(createButton, 2);
         actionButtons.Children.Add(createButton);
         content.Children.Add(actionButtons);
         content.Children.Add(stopButton);
@@ -443,6 +453,7 @@ public sealed partial class MainPage : ContentPage
             await UpdateSyllablesAsync();
         };
         renderButton.Clicked += async (_, _) => await PreviewAsync();
+        hearFromCursorButton.Clicked += async (_, _) => await HearFromCursorAsync();
         createButton.Clicked += async (_, _) => await CreateAndShareAsync();
         stopButton.Clicked += (_, _) => StopPlayback();
         loadMidiButton.Clicked += async (_, _) => await LoadMidiAsync();

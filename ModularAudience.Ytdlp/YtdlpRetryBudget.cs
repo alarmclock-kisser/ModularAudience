@@ -23,6 +23,7 @@ public sealed class YtdlpRetryBudget
             token.ThrowIfCancellationRequested();
             try { return await action(token); }
             catch (Exception error) when (error is not OperationCanceledException && !token.IsCancellationRequested
+                && error is not YtdlpOutputFileExistsException
                 && this.RetriesUsed < this.MaxRetries && (canRetry?.Invoke(error) ?? true))
             {
                 this.RetriesUsed++;

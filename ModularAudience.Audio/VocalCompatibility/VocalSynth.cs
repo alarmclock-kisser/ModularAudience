@@ -13,6 +13,10 @@ public static class VocalSynth
         VocalSynthSettings settings, CancellationToken cancellationToken = default) =>
         VocalSynthEngine.GetSyllableTextRanges(settings, cancellationToken);
 
+    public static IReadOnlyList<VocalPlaybackTextRange> GetPlaybackTimeline(
+        VocalSynthSettings settings, CancellationToken cancellationToken = default) =>
+        VocalSynthEngine.GetPlaybackTimeline(settings, cancellationToken);
+
     public static AudioObj Render(VocalSynthSettings settings, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(settings);

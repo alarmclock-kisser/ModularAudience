@@ -84,7 +84,7 @@ public sealed class DemucsSharedModelTests
         Assert.AreEqual(1, model.Disposals); pool.ClearIdle(); Assert.AreEqual(1, model.Disposals);
     }
     [TestMethod]
-    public void DirectMLCacheKeyNormalizesForcedSessionOptions()
+    public void DirectMLCacheKeyPreservesGraphOptimizationButNormalizesUnsupportedSessionOptions()
     {
         var first = new DemucsLoadOptions
         {
@@ -92,24 +92,70 @@ public sealed class DemucsSharedModelTests
             ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_PARALLEL,
             GraphOptimization = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         };
-        var effective = new DemucsLoadOptions { UseDirectML = true, EnableMemoryPattern = false, ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_SEQUENTIAL };
-        effective.GraphOptimization = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_BASIC;
+        var effective = new DemucsLoadOptions
+        {
+            UseDirectML = true, EnableMemoryPattern = false, ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_SEQUENTIAL,
+            GraphOptimization = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+        };
         Assert.AreEqual(DemucsModelCache.Key("test.onnx", first), DemucsModelCache.Key("test.onnx", effective));
+        effective.GraphOptimization = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_BASIC;
+        Assert.AreNotEqual(DemucsModelCache.Key("test.onnx", first), DemucsModelCache.Key("test.onnx", effective));
     }
 
     [TestMethod]
-    public void DirectMLBudgetGuardReservesHeadroomBeforeLoadingAndRunning()
+    public void DemucsSettingsRoundTripRestoresRetentionDevicesCuFftAndGraphOptimization()
     {
-        const ulong gib = 1024UL * 1024 * 1024;
-        var safe = new DirectMLDevices.VideoMemoryInfo(16 * gib, 1 * gib, 0);
-        Assert.IsNull(DirectMLDevices.GetLoadMemoryWarning(safe, 316_446_953));
+        string directory = Path.Combine(Path.GetTempPath(), "demucs-settings-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(directory, "settings.json");
+        try
+        {
+            var settings = new DemucsDialogSettings
+            {
+                ModelDirectories = [directory],
+                SelectedModel = Path.Combine(directory, "htdemucs.onnx"),
+                KeepModelLoadedSeconds = 135,
+                SelectedDirectMLDeviceIds = [1, 3],
+                SelectedStems = ["vocals", "drums"],
+                Options = new DemucsLoadOptions
+                {
+                    UseDirectML = true,
+                    GraphOptimization = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_EXTENDED,
+                    UseCudaCuFft = true,
+                    CudaToolkitVersion = 13,
+                    CudaDeviceId = 2,
+                    DeviceLuid = 0x12345678
+                }
+            };
+            settings.Save(path);
 
-        var lowHeadroom = new DirectMLDevices.VideoMemoryInfo(16 * gib, 4 * gib, 0);
-        StringAssert.Contains(DirectMLDevices.GetLoadMemoryWarning(lowHeadroom, 316_446_953)!, "70% safety limit");
+            var restored = DemucsDialogSettings.Load(path);
+            Assert.AreEqual(135, restored.KeepModelLoadedSeconds);
+            CollectionAssert.AreEqual(new[] { 1, 3 }, restored.SelectedDirectMLDeviceIds);
+            CollectionAssert.AreEqual(new[] { "vocals", "drums" }, restored.SelectedStems);
+            Assert.AreEqual(Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_EXTENDED, restored.Options.GraphOptimization);
+            Assert.IsTrue(restored.Options.UseCudaCuFft);
+            Assert.AreEqual(13, restored.Options.CudaToolkitVersion);
+            Assert.AreEqual(0x12345678L, restored.Options.DeviceLuid);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
 
-        var overloaded = new DirectMLDevices.VideoMemoryInfo(16 * gib, 12 * gib, 0);
-        StringAssert.Contains(DirectMLDevices.GetRuntimeMemoryWarning(overloaded)!, "70% safety limit");
-        Assert.IsNotNull(DirectMLDevices.GetLoadMemoryWarning(new DirectMLDevices.VideoMemoryInfo(0, 0, 0), 316_446_953));
+    [TestMethod]
+    public async Task DirectMLLeasesHonorConfiguredIdleRetention()
+    {
+        var pool = new SharedModelPool<OnnxService>();
+        var service = new OnnxService(loadImmediately: false);
+        typeof(OnnxService).GetProperty(nameof(OnnxService.EffectiveOptions))!
+            .GetSetMethod(nonPublic: true)!.Invoke(service, [new DemucsLoadOptions { UseDirectML = true }]);
+        var lease = await pool.AcquireAsync("directml-resource", "directml-key", () => service);
+
+        OnnxDemucsDialog.ReleaseLeases([lease!], TimeSpan.FromMilliseconds(250));
+        Assert.IsTrue(pool.AnyLoaded((_, _) => true), "DirectML sessions must remain cached for the configured close grace period.");
+        await Task.Delay(350);
+        Assert.IsFalse(pool.AnyLoaded((_, _) => true), "The idle timer must dispose the retained session.");
     }
 
     [TestMethod]

@@ -8,7 +8,7 @@ namespace ModularAudience.Onnx;
 public sealed class DemucsFourier
 {
     private readonly DemucsLoadOptions options;
-    private readonly string? cudaLibraryPath;
+    private readonly DemucsCudaToolkit? cudaToolkit;
     private bool cudaFailed;
     public string Backend { get; private set; }
     public int Workers => Math.Clamp(this.options.FourierWorkers, 1, Environment.ProcessorCount);
@@ -17,13 +17,15 @@ public sealed class DemucsFourier
     {
         this.options = options ?? new DemucsLoadOptions { CudaDeviceId = -1 };
         this.options.NormalizeWorkers();
-        this.cudaLibraryPath = this.options.CudaDeviceId >= 0 ? CudaToolkitFourier.ResolveCuFftLibrary() : null;
-        this.cudaFailed = this.options.CudaDeviceId >= 0 && this.cudaLibraryPath is null;
+        this.cudaToolkit = this.options.UseCudaCuFft && this.options.CudaDeviceId >= 0
+            ? CudaToolkitFourier.ResolveCuFftToolkit(this.options.CudaToolkitVersion)
+            : null;
+        this.cudaFailed = this.options.UseCudaCuFft && this.options.CudaDeviceId >= 0 && this.cudaToolkit is null;
         this.Backend = this.cudaFailed
-            ? $"Parallel CPU FFT ({this.Workers} workers); no CuFFT library found in CUDA toolkits or environment paths"
-            : this.cudaLibraryPath is null
+            ? $"Parallel CPU FFT ({this.Workers} workers); no compatible CUDA 12/13 CuFFT toolkit found"
+            : this.cudaToolkit is null
                 ? $"Parallel CPU FFT ({this.Workers} workers)"
-                : $"CUDA CuFFT ({Path.GetFileName(this.cudaLibraryPath)}; device {this.options.CudaDeviceId})";
+                : this.FormatCudaBackend();
     }
 
     internal void Transform(Complex[][] frames, bool inverse, CancellationToken token)
@@ -33,8 +35,8 @@ public sealed class DemucsFourier
         {
             try
             {
-                CudaToolkitFourier.Transform(frames, inverse, this.options.CudaDeviceId, this.cudaLibraryPath!);
-                this.Backend = $"CUDA CuFFT ({Path.GetFileName(this.cudaLibraryPath)}; device {this.options.CudaDeviceId})";
+                CudaToolkitFourier.Transform(frames, inverse, this.options.CudaDeviceId, this.cudaToolkit!.LibraryPath);
+                this.Backend = this.FormatCudaBackend();
                 token.ThrowIfCancellationRequested();
                 return;
             }
@@ -53,6 +55,9 @@ public sealed class DemucsFourier
                 return provider;
             }, _ => { });
     }
+
+    private string FormatCudaBackend() =>
+        $"CUDA {this.cudaToolkit!.MajorVersion} CuFFT ({Path.GetFileName(this.cudaToolkit.LibraryPath)}; device {this.options.CudaDeviceId})";
 }
 
 // Batched CUDA CuFFT. The library is discovered from CUDA environment variables,
@@ -60,6 +65,8 @@ public sealed class DemucsFourier
 // Every context, plan and buffer is scoped to the calling background thread.
 internal static class CudaToolkitFourier
 {
+    private sealed record ToolkitRoot(string Path, Version Version);
+
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int Init(uint flags);
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int DeviceGetCount(out int count);
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate int DeviceGet(out int device, int ordinal);
@@ -97,26 +104,84 @@ internal static class CudaToolkitFourier
         return null;
     }
 
-    internal static string? ResolveCuFftLibrary()
+    internal static DemucsCudaToolkit[] FindCuFftToolkits(IEnumerable<string> toolkitRoots) =>
+        FindCuFftToolkitsWithVersions(toolkitRoots.Select(path => new ToolkitRoot(path, CudaVersionFromPath(path))));
+
+    internal static DemucsCudaToolkit? FindCuFftToolkit(int requestedVersion, IEnumerable<string> toolkitRoots) =>
+        SelectCuFftToolkit(requestedVersion, FindCuFftToolkits(toolkitRoots));
+
+    private static DemucsCudaToolkit[] FindCuFftToolkitsWithVersions(IEnumerable<ToolkitRoot> toolkitRoots)
     {
-        var environmentRoots = Environment.GetEnvironmentVariables().Cast<DictionaryEntry>()
+        var toolkits = new Dictionary<int, (Version Version, string LibraryPath)>();
+        foreach (var root in toolkitRoots)
+        {
+            if (root.Version.Major is not (12 or 13)) continue;
+            string? library = FindCuFftLibrary([root.Path]);
+            if (library is null) continue;
+            if (!toolkits.TryGetValue(root.Version.Major, out var current) || root.Version > current.Version)
+                toolkits[root.Version.Major] = (root.Version, library);
+        }
+        return toolkits.OrderByDescending(item => item.Key)
+            .Select(item => new DemucsCudaToolkit(item.Key, item.Value.LibraryPath)).ToArray();
+    }
+
+    private static DemucsCudaToolkit[] EnumerateCuFftToolkits() =>
+        FindCuFftToolkitsWithVersions(ResolveToolkitRoots());
+
+    internal static DemucsCudaToolkit? ResolveCuFftToolkit(int requestedVersion)
+    {
+        return SelectCuFftToolkit(requestedVersion, EnumerateCuFftToolkits());
+    }
+
+    private static DemucsCudaToolkit? SelectCuFftToolkit(int requestedVersion, IEnumerable<DemucsCudaToolkit> available)
+    {
+        DemucsCudaToolkit[] toolkits = available.ToArray();
+        return requestedVersion is 12 or 13
+            ? toolkits.FirstOrDefault(toolkit => toolkit.MajorVersion == requestedVersion)
+            : toolkits.FirstOrDefault();
+    }
+
+    private static ToolkitRoot[] ResolveToolkitRoots()
+    {
+        var roots = new List<ToolkitRoot>();
+        void AddRoot(string path, Version? declaredVersion = null)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            Version version = declaredVersion is { Major: > 0 } ? declaredVersion : CudaVersionFromPath(path);
+            if (version.Major > 0)
+            {
+                roots.Add(new ToolkitRoot(path, version));
+                return;
+            }
+            if (!Directory.Exists(path)) return;
+            foreach (string subdirectory in Directory.GetDirectories(path, "v*"))
+            {
+                Version subdirectoryVersion = CudaVersionFromPath(subdirectory);
+                if (subdirectoryVersion.Major > 0) roots.Add(new ToolkitRoot(subdirectory, subdirectoryVersion));
+            }
+        }
+
+        foreach (var entry in Environment.GetEnvironmentVariables().Cast<DictionaryEntry>()
             .Select(entry => (Name: entry.Key?.ToString() ?? "", Path: entry.Value?.ToString() ?? ""))
             .Where(entry => entry.Name.StartsWith("CUDA_PATH", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(entry.Path))
-            .OrderByDescending(entry => CudaVersion(entry.Name))
-            .Select(entry => entry.Path);
+            .OrderByDescending(entry => CudaVersion(entry.Name)))
+            AddRoot(entry.Path, CudaVersion(entry.Name));
 
-        var roots = environmentRoots.ToList();
         string installationRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
             "NVIDIA GPU Computing Toolkit", "CUDA");
         if (Directory.Exists(installationRoot))
-            roots.AddRange(Directory.GetDirectories(installationRoot, "v*")
-                .OrderByDescending(CudaVersionFromPath));
+            foreach (string subdirectory in Directory.GetDirectories(installationRoot, "v*"))
+                AddRoot(subdirectory);
 
-        roots.AddRange((Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+        foreach (string path in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(path => path.Trim().Trim('"')));
-        return FindCuFftLibrary(roots);
+            .Select(path => path.Trim().Trim('"')))
+            AddRoot(path);
+
+        return roots
+            .DistinctBy(root => (Path.GetFullPath(root.Path), root.Version))
+            .OrderByDescending(root => root.Version).ToArray();
     }
 
     internal static DemucsCudaDeviceCatalog EnumerateDevices()
@@ -175,8 +240,14 @@ internal static class CudaToolkitFourier
         {
             if (driver != IntPtr.Zero) NativeLibrary.Free(driver);
         }
+        DemucsCudaToolkit[] toolkits = EnumerateCuFftToolkits();
+        if (toolkits.Length == 0)
+            warnings.Add("No CUDA 12/13 CuFFT toolkit was found; parallel CPU FFT will be used.");
         return new DemucsCudaDeviceCatalog(devices.AsReadOnly(),
-            warnings.Count == 0 ? null : string.Join(" ", warnings.Distinct(StringComparer.Ordinal)));
+            warnings.Count == 0 ? null : string.Join(" ", warnings.Distinct(StringComparer.Ordinal)))
+        {
+            CuFftToolkits = toolkits
+        };
     }
 
     internal static void Transform(Complex[][] frames, bool inverse, int deviceId, string libraryPath)
@@ -245,9 +316,13 @@ internal static class CudaToolkitFourier
 
     private static Version CudaVersionFromPath(string path)
     {
-        string name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
-        return name.StartsWith('v') && Version.TryParse(name[1..], out Version? version)
-            ? version
-            : new Version(0, 0);
+        string? current = Path.GetFullPath(path);
+        for (int depth = 0; depth < 8 && current is not null; depth++, current = Path.GetDirectoryName(current))
+        {
+            string name = Path.GetFileName(Path.TrimEndingDirectorySeparator(current));
+            if (name.StartsWith('v') && Version.TryParse(name[1..], out Version? version))
+                return version;
+        }
+        return new Version(0, 0);
     }
 }

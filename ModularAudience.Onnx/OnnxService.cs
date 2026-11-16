@@ -45,6 +45,7 @@ namespace ModularAudience.Onnx
             loadOptions = JsonSerializer.Deserialize<DemucsLoadOptions>(JsonSerializer.Serialize(loadOptions ?? new()))!;
             loadOptions.NormalizeForProvider(loadOptions.UseDirectML);
             bool directMLRequested = loadOptions.UseDirectML;
+            using IDisposable? gpuLoadGate = directMLRequested ? DemucsGpuDeviceGate.Acquire(loadOptions) : null;
             this.EffectiveOptions = null;
             string? fallbackWarning = null;
             InferenceSession? session = null;
@@ -61,7 +62,7 @@ namespace ModularAudience.Onnx
                     using var cpuOptions = loadOptions.Create(false);
                     session = new InferenceSession(modelPath, cpuOptions);
                     this.ExecutionProvider = "CPU";
-                    fallbackWarning = $"DirectML could not initialize: {error.Message} CPU is used instead.";
+                    fallbackWarning = $"DirectML could not initialize on device {loadOptions.DeviceId}: {error.Message} CPU is used instead.";
                 }
 
                 // This export has two real inputs/outputs: waveform and complex-as-channels STFT.
@@ -102,6 +103,7 @@ namespace ModularAudience.Onnx
                 if (directMLRequested && !this.ExecutionProvider.StartsWith("DirectML", StringComparison.Ordinal))
                 {
                     loadOptions.CudaDeviceId = -1;
+                    loadOptions.DeviceLuid = null;
                     this.fourier = new DemucsFourier(loadOptions);
                 }
                 loadOptions.UseDirectML = this.ExecutionProvider.StartsWith("DirectML", StringComparison.Ordinal);
@@ -138,6 +140,8 @@ namespace ModularAudience.Onnx
             int[] indices = selected.Select(name => this.AvailableStems.FindIndex(s => s.Equals(name, StringComparison.OrdinalIgnoreCase))).ToArray();
             if (indices.Any(i => i < 0)) throw new ArgumentException("The selected stem is not available in this model.");
             if (selected.Length == 0) throw new ArgumentException("Select at least one stem.");
+            using IDisposable? gpuOperationGate = await DemucsGpuDeviceGate.AcquireAsync(this.EffectiveOptions, cancellationToken)
+                .ConfigureAwait(false);
 
             // Prepare a private copy. Separation must never resample or normalize the source track.
             using AudioObj prepared = await audio.CloneAsync().ConfigureAwait(false);
@@ -336,7 +340,7 @@ namespace ModularAudience.Onnx
                 this._session = cpu;
                 cpu = null!;
                 this.ExecutionProvider = "CPU (DirectML verification fallback)";
-                this.LoadWarning = "DirectML produced incorrect values on the selected device. The verified CPU session is used instead.";
+                this.LoadWarning = $"DirectML produced incorrect values on device {options.DeviceId}. The verified CPU session is used instead.";
             }
             finally { cpu?.Dispose(); }
         }

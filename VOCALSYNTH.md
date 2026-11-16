@@ -32,9 +32,11 @@ This document captures the current implementation of the **Vocalsynth** feature
 - Buttons: **Prehear / Stop** and **Create** (adds rendered audio to a new
   AudioCollectionView). Audio is rendered automatically after edits or on demand.
 - **Ctrl+Z / Ctrl+Y** undo and redo speech-text edits from anywhere in the
-  dialog. **Shift+Enter** toggles Prehear/Stop in the speech text box; elsewhere,
-  **Enter** or **Shift+Enter** does so. Enter in the speech text box inserts a
-  new line.
+  dialog. **Shift+Enter** in the speech text box and **Ctrl-click** on Prehear
+  start playback at the text cursor; a normal Prehear starts at the beginning.
+  Follow-word and follow-syllable playback restore the original selection when
+  playback stops. The Android app has a **Hear from cursor** button beside
+  Preview.
 - User voice profiles: **savable / loadable / deletable / renamable** in AppData
   JSON, with an editor dialog.
 - **All UI strings in English.**
@@ -212,9 +214,12 @@ so expressive repetitions remain separate in the shared renderer.
   page/name and the Edit button opens the MIDI inspector/editor on that page.
   Notes whose durations overlap form one polyphonic lyric event, even when they
   start at different times, so they share a text syllable instead of consuming
-  the next one. In the generated Singing voice, later notes join on the current
-  vowel rather than restarting its consonant. Each note keeps its MIDI onset and
-  duration. MIDI onset, duration, tempo and gaps set the vocal timeline; explicit
+  the next one. Very short consecutive notes are also grouped into brief
+  melismas until they cover the syllable's natural duration; elongated written
+  vowels therefore allow longer runs. The grouping follows playback speed and
+  separates at rests, while each note keeps its own onset and pitch. In the
+  generated Singing voice, later notes join on the current vowel rather than
+  restarting its consonant. MIDI onset, duration, tempo and gaps set the vocal timeline; explicit
   punctuation/emphasis pauses remain supported, but lyric line breaks do not add
   audible pauses. Text filled
   from MIDI keeps its commas and line breaks for display without shifting note

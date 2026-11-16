@@ -108,6 +108,24 @@ public sealed class YtdlpPipelineRetryTests
         Assert.AreEqual(0, budget.RetriesUsed);
     }
 
+    [TestMethod]
+    public async Task RetryBudgetDoesNotRetryExistingOutputCollision()
+    {
+        var budget = new YtdlpRetryBudget(3, (_, _) => Task.CompletedTask);
+        int attempts = 0;
+
+        var error = await Assert.ThrowsExactlyAsync<YtdlpOutputFileExistsException>(() =>
+            budget.RunAsync<string>(_ =>
+            {
+                attempts++;
+                return Task.FromException<string>(new YtdlpOutputFileExistsException("C:\\output\\track.wav"));
+            }, CancellationToken.None));
+
+        Assert.AreEqual(1, attempts);
+        Assert.AreEqual(0, budget.RetriesUsed);
+        Assert.AreEqual("C:\\output\\track.wav", error.OutputPath);
+    }
+
     private static TaskCompletionSource Gate() => new(TaskCreationOptions.RunContinuationsAsynchronously);
     private static async Task Drain(Task task)
     {

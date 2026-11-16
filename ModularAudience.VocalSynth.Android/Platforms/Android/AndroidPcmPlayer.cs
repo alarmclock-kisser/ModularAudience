@@ -11,9 +11,14 @@ internal sealed class AndroidPcmPlayer : IDisposable
     private AudioTrack? track;
     private CancellationTokenSource? playbackCancellation;
 
-    internal async Task PlayAsync(VocalAudioData audio, CancellationToken cancellationToken)
+    internal async Task PlayAsync(
+        VocalAudioData audio, CancellationToken cancellationToken, int startFrame = 0)
     {
         ArgumentNullException.ThrowIfNull(audio);
+        long startSamplePosition = (long)startFrame * audio.Channels;
+        if (startFrame < 0 || startSamplePosition >= audio.Data.LongLength)
+            throw new ArgumentOutOfRangeException(nameof(startFrame));
+        int startSample = (int)startSamplePosition;
         Stop();
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -44,7 +49,7 @@ internal sealed class AndroidPcmPlayer : IDisposable
             output.Play();
             await Task.Run(() =>
             {
-                int position = 0;
+                int position = startSample;
                 while (position < audio.Data.Length)
                 {
                     playback.Token.ThrowIfCancellationRequested();
@@ -61,8 +66,9 @@ internal sealed class AndroidPcmPlayer : IDisposable
                 }
             }, playback.Token);
 
-            long frameCount = audio.Data.LongLength / audio.Channels;
-            TimeSpan drainTimeout = audio.Duration + TimeSpan.FromSeconds(2);
+            long frameCount = (audio.Data.LongLength - startSample) / audio.Channels;
+            TimeSpan drainTimeout = TimeSpan.FromSeconds(frameCount / (double)audio.SampleRate)
+                + TimeSpan.FromSeconds(2);
             Stopwatch drainTimer = Stopwatch.StartNew();
             while (output.PlaybackHeadPosition < frameCount)
             {

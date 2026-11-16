@@ -118,6 +118,8 @@ public sealed partial class YtdlpClient
         var format = ValidateOptions(options);
         var url = ValidateVideo(video);
         var outputDirectory = options.SaveToDisk ? Path.GetFullPath(options.OutputDirectory) : null;
+        if (outputDirectory is not null)
+            EnsureOutputAvailable(GetSavedPath(outputDirectory, video, format));
         var output = CreateDownloadProgress(progress, downloadProgress);
         await EnsureAvailableAsync(output, cancellationToken);
         var job = CreateJobDirectory();
@@ -251,9 +253,10 @@ public sealed partial class YtdlpClient
     private static async Task<string> SaveAsync(string source, string outputDirectory, YtdlpVideo video,
         string format, CancellationToken token)
     {
+        string destination = GetSavedPath(outputDirectory, video, format);
+        EnsureOutputAvailable(destination);
         Directory.CreateDirectory(outputDirectory);
-        var name = $"{SafeTitle(video.Title)}.{format}";
-        var destination = Path.Combine(outputDirectory, name);
+        var name = Path.GetFileName(destination);
         var stagingDirectory = Path.Combine(outputDirectory, ".ytdlp-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(stagingDirectory);
         var staging = Path.Combine(stagingDirectory, name);
@@ -263,13 +266,29 @@ public sealed partial class YtdlpClient
             token.ThrowIfCancellationRequested();
             // Publish a fully closed file from another directory. Destination-folder watchers receive
             // a Created event, rather than only a .partial -> audio extension rename.
-            File.Move(staging, destination, overwrite: false);
+            try
+            {
+                File.Move(staging, destination, overwrite: false);
+            }
+            catch (IOException error) when (File.Exists(destination) || Directory.Exists(destination))
+            {
+                throw new YtdlpOutputFileExistsException(destination, error);
+            }
             return destination;
         }
         finally
         {
             YtdlpBinaryManager.DeleteStaging(stagingDirectory);
         }
+    }
+
+    private static string GetSavedPath(string outputDirectory, YtdlpVideo video, string format) =>
+        Path.Combine(outputDirectory, $"{SafeTitle(video.Title)}.{format}");
+
+    private static void EnsureOutputAvailable(string path)
+    {
+        if (File.Exists(path) || Directory.Exists(path))
+            throw new YtdlpOutputFileExistsException(path);
     }
 
     private static async Task CopyFileAsync(string source, string destination, CancellationToken token)

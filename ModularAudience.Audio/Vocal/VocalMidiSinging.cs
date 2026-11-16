@@ -17,6 +17,10 @@ internal sealed record VocalMidiSingingPlan(
 
 internal static class VocalMidiSinging
 {
+    private readonly record struct SyllableGroupingTiming(
+        long NaturalDurationTicks,
+        long ShortNoteLimitTicks);
+
     internal static VocalMidiSingingPlan CreatePlan(
         VocalSynthSettings settings, IReadOnlyList<VocalToken> tokens, CancellationToken cancellationToken)
     {
@@ -35,7 +39,17 @@ internal static class VocalMidiSinging
         if (syllables.Count == 0)
             throw new InvalidOperationException("The text contains no singable syllables.");
 
-        IVocalMidiNote[][] noteGroups = GroupOverlappingNotes(track, cancellationToken);
+        double[] syllableDurationsMilliseconds = syllables
+            .Select(syllable => syllable.NaturalDurationMilliseconds)
+            .ToArray();
+        IVocalMidiNote[][] noteGroups = GroupSingingNoteGroups(
+            track,
+            midi.TicksPerQuarterNote,
+            midi.DefaultBpm,
+            settings.Speed,
+            syllableDurationsMilliseconds,
+            syllableDurationsMilliseconds[^1],
+            cancellationToken);
         if (noteGroups.Length == 0)
             throw new InvalidOperationException("The selected MIDI page contains no notes.");
 
@@ -135,33 +149,116 @@ internal static class VocalMidiSinging
     internal static double GetSemitoneOffset(double frequency, double basePitchHz) =>
         12.0 * Math.Log2(frequency / basePitchHz);
 
-    internal static IVocalMidiNote[][] GroupOverlappingNotes(
-        IVocalMidiTrack track, CancellationToken cancellationToken)
+    internal static IVocalMidiNote[][] GroupSingingNoteGroups(
+        IVocalMidiTrack track,
+        int ticksPerQuarterNote,
+        double bpm,
+        double speed,
+        IReadOnlyList<double> syllableDurationsMilliseconds,
+        double fallbackSyllableDurationMilliseconds,
+        CancellationToken cancellationToken)
     {
+        if (ticksPerQuarterNote <= 0 || !double.IsFinite(bpm) || bpm <= 0
+            || !double.IsFinite(speed) || speed <= 0
+            || !double.IsFinite(fallbackSyllableDurationMilliseconds)
+            || fallbackSyllableDurationMilliseconds <= 0)
+            throw new InvalidDataException("The MIDI timing is invalid for syllable grouping.");
+
         IVocalMidiNote[] orderedNotes = track.Notes
             .OrderBy(note => note.StartTick)
             .ThenBy(note => note.NoteNumber)
             .ToArray();
+        long quarterTicks = Math.Max(1, ticksPerQuarterNote);
         List<IVocalMidiNote[]> noteGroups = [];
         List<IVocalMidiNote> currentGroup = [];
         long currentGroupEndTick = long.MinValue;
+        long currentAttackStartTick = long.MinValue;
+        long currentAttackDurationTicks = 0;
+        bool currentGroupContainsLongNote = false;
         foreach (IVocalMidiNote note in orderedNotes)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (currentGroup.Count > 0 && note.StartTick >= currentGroupEndTick)
+            long noteDurationTicks = Math.Max(1, note.DurationTicks);
+            long noteEndTick = checked(note.StartTick + noteDurationTicks);
+            SyllableGroupingTiming timing = GetSyllableGroupingTiming(
+                noteGroups.Count,
+                syllableDurationsMilliseconds,
+                fallbackSyllableDurationMilliseconds,
+                bpm,
+                quarterTicks,
+                speed);
+            long previousAttackDurationTicks = currentGroup.Count == 0
+                ? 0
+                : Math.Max(
+                    currentAttackDurationTicks,
+                    checked(currentGroupEndTick - currentAttackStartTick));
+            bool continuesRapidMelisma = currentGroup.Count > 0
+                && !currentGroupContainsLongNote
+                && noteDurationTicks <= timing.ShortNoteLimitTicks
+                && note.StartTick >= currentGroupEndTick
+                && note.StartTick - currentGroupEndTick
+                    <= GetMaximumArticulationGapTicks(previousAttackDurationTicks, noteDurationTicks)
+                && currentGroupEndTick - currentGroup[0].StartTick < timing.NaturalDurationTicks;
+            if (currentGroup.Count > 0 && note.StartTick >= currentGroupEndTick && !continuesRapidMelisma)
             {
                 noteGroups.Add(currentGroup.ToArray());
                 currentGroup.Clear();
+                currentGroupEndTick = long.MinValue;
+                currentAttackStartTick = long.MinValue;
+                currentAttackDurationTicks = 0;
+                currentGroupContainsLongNote = false;
+                timing = GetSyllableGroupingTiming(
+                    noteGroups.Count,
+                    syllableDurationsMilliseconds,
+                    fallbackSyllableDurationMilliseconds,
+                    bpm,
+                    quarterTicks,
+                    speed);
             }
 
             currentGroup.Add(note);
-            currentGroupEndTick = Math.Max(
-                currentGroupEndTick,
-                checked(note.StartTick + Math.Max(1, note.DurationTicks)));
+            if (note.StartTick > currentAttackStartTick)
+            {
+                currentAttackStartTick = note.StartTick;
+                currentAttackDurationTicks = noteDurationTicks;
+            }
+            else if (note.StartTick == currentAttackStartTick)
+            {
+                currentAttackDurationTicks = Math.Max(currentAttackDurationTicks, noteDurationTicks);
+            }
+            currentGroupContainsLongNote |= noteDurationTicks > timing.ShortNoteLimitTicks;
+            currentGroupEndTick = Math.Max(currentGroupEndTick, noteEndTick);
         }
 
         if (currentGroup.Count > 0)
             noteGroups.Add(currentGroup.ToArray());
         return noteGroups.ToArray();
     }
+
+    private static SyllableGroupingTiming GetSyllableGroupingTiming(
+        int syllableIndex,
+        IReadOnlyList<double> syllableDurationsMilliseconds,
+        double fallbackSyllableDurationMilliseconds,
+        double bpm,
+        long quarterTicks,
+        double speed)
+    {
+        double durationMilliseconds = syllableIndex < syllableDurationsMilliseconds.Count
+            ? syllableDurationsMilliseconds[syllableIndex]
+            : fallbackSyllableDurationMilliseconds;
+        if (!double.IsFinite(durationMilliseconds) || durationMilliseconds <= 0)
+            throw new InvalidDataException("A MIDI singing syllable has an invalid natural duration.");
+
+        double naturalDurationTicksValue =
+            durationMilliseconds * bpm * quarterTicks * speed / 60_000.0;
+        if (!double.IsFinite(naturalDurationTicksValue) || naturalDurationTicksValue >= long.MaxValue)
+            throw new InvalidDataException("The MIDI syllable duration exceeds the supported timing range.");
+        long naturalDurationTicks = Math.Max(1, (long)Math.Ceiling(naturalDurationTicksValue));
+        return new SyllableGroupingTiming(
+            naturalDurationTicks,
+            Math.Max(1, naturalDurationTicks / 2));
+    }
+
+    private static long GetMaximumArticulationGapTicks(long previousDurationTicks, long nextDurationTicks) =>
+        Math.Max(1, Math.Min(previousDurationTicks, nextDurationTicks) / 2);
 }
