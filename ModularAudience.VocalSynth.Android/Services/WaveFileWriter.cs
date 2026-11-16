@@ -43,5 +43,10 @@ internal static class WaveFileWriter
             await stream.WriteAsync(samples.AsMemory(0, count * 2), cancellationToken);
             offset += count;
         }
+
+        await stream.FlushAsync(cancellationToken);
+        long expectedLength = 44L + audio.Data.LongLength * sizeof(short);
+        if (stream.Length != expectedLength)
+            throw new IOException("The exported WAV file does not contain all generated audio samples.");
     }
 }

@@ -45,7 +45,7 @@ public sealed partial class MainPage : ContentPage
     private readonly Slider midiOffsetSlider = new() { Minimum = -16, Maximum = 16, Value = 0 };
     private readonly Button renderButton = new() { Text = "Preview" };
     private readonly Button createButton = new() { Text = "Create and share WAV" };
-    private readonly Button stopButton = new() { Text = "Stop", IsEnabled = false };
+    private readonly Button stopButton = new() { Text = "Stop", IsEnabled = false, IsVisible = false };
     private readonly Button fillSyllablesButton = new() { Text = "Fill missing syllables" };
     private readonly Button saveProfileButton = new() { Text = "Save profile" };
     private readonly Button deleteProfileButton = new() { Text = "Delete profile" };
@@ -88,76 +88,148 @@ public sealed partial class MainPage : ContentPage
             TextColor = Colors.Gray,
         });
 
-        content.Children.Add(SectionTitle("Text and voice"));
-        content.Children.Add(languagePicker);
-        content.Children.Add(voicePicker);
         content.Children.Add(textEditor);
-        content.Children.Add(CreateSliderRow("Speed", speedSlider, "0.00x"));
-        content.Children.Add(CreateSliderRow("Base pitch (Hz)", AddVoiceSlider("BasePitchHz", 60, 400, 195), "0"));
-        content.Children.Add(CreateSliderRow("Formant scale", AddVoiceSlider("FormantScale", 0.5, 2, 1), "0.00"));
-        content.Children.Add(CreateSliderRow("Breathiness", AddVoiceSlider("Breathiness", 0, 1, 0.2), "0.00"));
-        content.Children.Add(CreateSliderRow("Roughness", AddVoiceSlider("Roughness", 0, 1, 0.08), "0.00"));
-        content.Children.Add(CreateSliderRow("Vibrato (cents)", AddVoiceSlider("VibratoCents", 0, 40, 10), "0.0"));
-        content.Children.Add(CreateSliderRow("Vibrato rate (Hz)", AddVoiceSlider("VibratoHz", 0, 15, 5), "0.0"));
-        content.Children.Add(CreateSliderRow("Voicing", AddVoiceSlider("Voicing", 0, 1, 0.85), "0.00"));
-        content.Children.Add(CreateSliderRow("Consonant noise", AddVoiceSlider("Noise", 0, 1, 0.5), "0.00"));
-        content.Children.Add(CreateSwitchRow("Singing voice", singingSwitch));
-        content.Children.Add(CreateSwitchRow("Android natural speech", androidSpeechSwitch));
-        content.Children.Add(CreateSwitchRow("Beep for unsupported sounds", unsupportedBeepSwitch));
-
-        content.Children.Add(SectionTitle("MIDI singing"));
-        content.Children.Add(new HorizontalStackLayout
+        Grid actionButtons = new()
         {
-            Spacing = 8,
-            Children = { loadMidiButton, clearMidiButton },
-        });
-        content.Children.Add(midiFileLabel);
-        content.Children.Add(midiTrackPicker);
-        content.Children.Add(midiTrackInfoLabel);
-        content.Children.Add(CreateSliderRow("Semitone offset", midiOffsetSlider, "+0.00"));
-        content.Children.Add(new HorizontalStackLayout
-        {
-            Spacing = 8,
-            Children =
+            ColumnDefinitions =
             {
-                new Label { Text = "Show syllables", VerticalOptions = LayoutOptions.Center },
-                showSyllablesSwitch,
-                fillSyllablesButton,
+                new ColumnDefinition(GridLength.Star),
+                new ColumnDefinition(GridLength.Star),
             },
-        });
-        content.Children.Add(syllableLabel);
+            ColumnSpacing = 8,
+        };
+        actionButtons.Children.Add(renderButton);
+        Grid.SetColumn(createButton, 1);
+        actionButtons.Children.Add(createButton);
+        content.Children.Add(actionButtons);
+        content.Children.Add(stopButton);
 
-        content.Children.Add(SectionTitle("Custom sample"));
-        content.Children.Add(customSampleIpa);
-        content.Children.Add(addCustomSampleButton);
-        content.Children.Add(customSampleFileLabel);
+        content.Children.Add(CreateCollapsibleSection(
+            "Language and voice",
+            new VerticalStackLayout { Spacing = 8, Children = { languagePicker, voicePicker } },
+            isExpanded: true));
 
-        content.Children.Add(SectionTitle("Voice profiles"));
-        content.Children.Add(profileName);
-        content.Children.Add(new HorizontalStackLayout
-        {
-            Spacing = 8,
-            Children = { saveProfileButton, deleteProfileButton },
-        });
+        content.Children.Add(CreateCollapsibleSection(
+            "Voice settings",
+            new VerticalStackLayout
+            {
+                Spacing = 8,
+                Children =
+                {
+                    CreateSliderRow("Speed", speedSlider, "0.00x"),
+                    CreateSliderRow("Base pitch (Hz)", AddVoiceSlider("BasePitchHz", 60, 400, 195), "0"),
+                    CreateSliderRow("Formant scale", AddVoiceSlider("FormantScale", 0.5, 2, 1), "0.00"),
+                    CreateSliderRow("Breathiness", AddVoiceSlider("Breathiness", 0, 1, 0.2), "0.00"),
+                    CreateSliderRow("Roughness", AddVoiceSlider("Roughness", 0, 1, 0.08), "0.00"),
+                    CreateSliderRow("Vibrato (cents)", AddVoiceSlider("VibratoCents", 0, 40, 10), "0.0"),
+                    CreateSliderRow("Vibrato rate (Hz)", AddVoiceSlider("VibratoHz", 0, 15, 5), "0.0"),
+                    CreateSliderRow("Voicing", AddVoiceSlider("Voicing", 0, 1, 0.85), "0.00"),
+                    CreateSliderRow("Consonant noise", AddVoiceSlider("Noise", 0, 1, 0.5), "0.00"),
+                    CreateSwitchRow("Singing voice", singingSwitch),
+                    CreateSwitchRow("Android natural speech", androidSpeechSwitch),
+                    CreateSwitchRow("Beep for unsupported sounds", unsupportedBeepSwitch),
+                },
+            }));
 
-        content.Children.Add(SectionTitle("Emphasis syntax JSON"));
-        content.Children.Add(new Label
-        {
-            Text = "Edit marker rules used by the phonemizer and renderer.",
-            FontSize = 13,
-            TextColor = Colors.Gray,
-        });
-        content.Children.Add(emphasisEditor);
-        content.Children.Add(saveEmphasisButton);
+        content.Children.Add(CreateCollapsibleSection(
+            "MIDI singing",
+            new VerticalStackLayout
+            {
+                Spacing = 8,
+                Children =
+                {
+                    new HorizontalStackLayout
+                    {
+                        Spacing = 8,
+                        Children = { loadMidiButton, clearMidiButton },
+                    },
+                    midiFileLabel,
+                    midiTrackPicker,
+                    midiTrackInfoLabel,
+                    CreateSliderRow("Semitone offset", midiOffsetSlider, "+0.00"),
+                    new HorizontalStackLayout
+                    {
+                        Spacing = 8,
+                        Children =
+                        {
+                            new Label { Text = "Show syllables", VerticalOptions = LayoutOptions.Center },
+                            showSyllablesSwitch,
+                            fillSyllablesButton,
+                        },
+                    },
+                    syllableLabel,
+                },
+            }));
 
-        content.Children.Add(new HorizontalStackLayout
-        {
-            Spacing = 8,
-            Children = { renderButton, createButton, stopButton },
-        });
+        content.Children.Add(CreateCollapsibleSection(
+            "Custom samples",
+            new VerticalStackLayout
+            {
+                Spacing = 8,
+                Children = { customSampleIpa, addCustomSampleButton, customSampleFileLabel },
+            }));
+
+        content.Children.Add(CreateCollapsibleSection(
+            "Voice profiles",
+            new VerticalStackLayout
+            {
+                Spacing = 8,
+                Children =
+                {
+                    profileName,
+                    new HorizontalStackLayout
+                    {
+                        Spacing = 8,
+                        Children = { saveProfileButton, deleteProfileButton },
+                    },
+                },
+            }));
+
+        content.Children.Add(CreateCollapsibleSection(
+            "Emphasis syntax JSON",
+            new VerticalStackLayout
+            {
+                Spacing = 8,
+                Children =
+                {
+                    new Label
+                    {
+                        Text = "Edit marker rules used by the phonemizer and renderer.",
+                        FontSize = 13,
+                        TextColor = Colors.Gray,
+                    },
+                    emphasisEditor,
+                    saveEmphasisButton,
+                },
+            }));
+
         content.Children.Add(busyIndicator);
         content.Children.Add(statusLabel);
         Content = new ScrollView { Content = content };
+    }
+
+    private static View CreateCollapsibleSection(string title, View sectionContent, bool isExpanded = false)
+    {
+        Button header = new()
+        {
+            Text = $"{(isExpanded ? "-" : "+")}  {title}",
+            FontAttributes = FontAttributes.Bold,
+            HorizontalOptions = LayoutOptions.Fill,
+            HorizontalTextAlignment = TextAlignment.Start,
+            BackgroundColor = Colors.Transparent,
+        };
+        VerticalStackLayout body = new()
+        {
+            IsVisible = isExpanded,
+            Margin = new Thickness(8, 0, 0, 0),
+        };
+        body.Children.Add(sectionContent);
+        header.Clicked += (_, _) =>
+        {
+            body.IsVisible = !body.IsVisible;
+            header.Text = $"{(body.IsVisible ? "-" : "+")}  {title}";
+        };
+        return new VerticalStackLayout { Spacing = 4, Children = { header, body } };
     }
 
     private Slider AddVoiceSlider(string key, double minimum, double maximum, double value)

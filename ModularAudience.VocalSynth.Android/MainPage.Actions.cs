@@ -399,7 +399,7 @@ public sealed partial class MainPage
         if (audio is null) return;
         try
         {
-            stopButton.IsEnabled = true;
+            stopButton.IsEnabled = stopButton.IsVisible = true;
             await player.PlayAsync(audio, renderCancellation?.Token ?? CancellationToken.None);
             statusLabel.Text = "Preview finished.";
         }
@@ -413,7 +413,7 @@ public sealed partial class MainPage
         }
         finally
         {
-            stopButton.IsEnabled = false;
+            stopButton.IsEnabled = stopButton.IsVisible = false;
         }
     }
 
@@ -423,7 +423,9 @@ public sealed partial class MainPage
         if (audio is null) return;
         try
         {
-            string fileName = SafeFileName(audio.Name) + ".wav";
+            string baseName = SafeFileName(audio.Name);
+            if (baseName.Length > 48) baseName = baseName[..48];
+            string fileName = $"{baseName}-{Guid.NewGuid():N}.wav";
             string path = Path.Combine(FileSystem.CacheDirectory, fileName);
             await WaveFileWriter.WritePcm16Async(path, audio, CancellationToken.None);
             await Share.Default.RequestAsync(new ShareFileRequest
@@ -431,7 +433,7 @@ public sealed partial class MainPage
                 Title = "Share VocalSynth audio",
                 File = new ShareFile(path, "audio/wav"),
             });
-            statusLabel.Text = $"Created {fileName}.";
+            statusLabel.Text = $"Created {fileName} ({audio.Duration.TotalSeconds:0.00}s).";
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
         {
@@ -481,7 +483,7 @@ public sealed partial class MainPage
     {
         renderCancellation?.Cancel();
         player.Stop();
-        stopButton.IsEnabled = false;
+        stopButton.IsEnabled = stopButton.IsVisible = false;
     }
 
     private static string SafeFileName(string name)
