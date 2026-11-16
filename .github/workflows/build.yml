@@ -96,11 +96,12 @@ jobs:
         distribution: temurin
         java-version: 17
 
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-
     - name: Install Android platform
-      run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+      run: |
+        sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+        sdkmanager="$(find "$sdk_root/cmdline-tools" -type f -name sdkmanager -print -quit)"
+        test -n "$sdkmanager" || (echo "Android sdkmanager was not found." >&2; exit 1)
+        "$sdkmanager" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
     - name: Install Android workload
       run: dotnet workload install maui-android
