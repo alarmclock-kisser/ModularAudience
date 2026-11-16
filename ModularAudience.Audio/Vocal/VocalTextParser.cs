@@ -399,8 +399,9 @@ public static class VocalTextParser
                     if (language != VocalLanguage.AnimalCrossing && !UnstressedWords.Contains(word))
                     {
                         int stressStart = 0;
+                        string[] onsetR = ["de-r-glide", "de-r-tap", "de-r-trill", "de-r"];
                         if (language == VocalLanguage.German && word.StartsWith("ver", StringComparison.OrdinalIgnoreCase)
-                            && phonemes.Count > 3 && phonemes[0] == "f" && phonemes[1] == "e" && phonemes[2] == "de-r-glide"
+                            && phonemes.Count > 3 && phonemes[0] == "f" && phonemes[1] == "e" && onsetR.Contains(phonemes[2])
                             && phonemes.Skip(3).Any(p => p != "de-schwa" && VocalPhonemeInventory.Get(p).IsVowel))
                             stressStart = 3;
                         for (int p = stressStart; p < phonemes.Count; p++)

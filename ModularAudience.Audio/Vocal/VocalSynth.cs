@@ -413,7 +413,7 @@ public static partial class VocalSynth
     {
         bool animal = ph.Symbol.StartsWith("animal-", StringComparison.Ordinal);
         bool beat = IsBeat(ph.Symbol);
-        bool trill = ph.Symbol == "trill-r" || (ph.Symbol is "r" or "de-r")
+        bool trill = ph.Symbol == "trill-r" || ph.Symbol == "de-r-trill" || (ph.Symbol is "r" or "de-r")
             && (previous?.Symbol == ph.Symbol || next?.Symbol == ph.Symbol);
         bool connectedBefore = CanConnect(previous, ph);
         bool connectedAfter = CanConnect(ph, next);
@@ -497,18 +497,25 @@ public static partial class VocalSynth
             if (beat) ShapeBeat(ph.Symbol, i / (double)s.SampleRate, ref voiceGate, ref noiseGate);
             if (trill)
             {
-                double flutter = 0.25 + 0.75 * (0.5 + 0.5 * Math.Sin(2 * Math.PI * 22 * time));
+                double rate = ph.Symbol == "de-r-trill" ? 22 : 22;
+                double depth = ph.Symbol == "de-r-trill" ? 0.97 : 0.75;
+                // A real trill is a near on/off amplitude flutter (uvula/tongue making and
+                // releasing contact). A pure sinusoid only reaches ~depth/2 modulation, too
+                // weak to read as a roll, so square it to push the minima toward silence.
+                double wave = 0.5 + 0.5 * Math.Sin(2 * Math.PI * rate * time);
+                double flutter = (1 - depth) + depth * (wave * wave);
                 voiceGate *= flutter;
                 noiseGate *= flutter;
             }
             else if (ph.Symbol == "de-r")
             {
-                double edge = Math.Min(1, Math.Min(progress, 1 - progress) / 0.15);
-                double flutter = 1 - 0.3 * edge * (0.5 - 0.5 * Math.Cos(2 * Math.PI * 22 * time));
+                // Voiced uvular [ʁ]: steady low-frequency voicing with a gentle guttural
+                // flutter; the rumble comes from the low noise band rather than a 3 kHz hiss.
+                double flutter = 1 - 0.35 * (0.5 - 0.5 * Math.Cos(2 * Math.PI * 24 * time));
                 voiceGate *= flutter;
                 noiseGate *= flutter;
             }
-            else if (ph.Symbol == "tap-r")
+            else if (ph.Symbol is "de-r-tap" or "de-r-trill" or "tap-r")
             {
                 double closure = Math.Exp(-Math.Pow((progress - 0.5) / 0.14, 2));
                 voiceGate *= 1 - 0.8 * closure;
@@ -615,6 +622,10 @@ public static partial class VocalSynth
     {
         double glide = Math.Clamp((progress - 0.2) / 0.65, 0, 1);
         glide = glide * glide * (3 - 2 * glide);
+        // Vowels carry the perceived identity, so scale them only part-way toward the consonant
+        // range. A pure multiply (e.g. 0.82 for a deep male) drags every vowel toward the low/back
+        // "u" region, which is why a long "o" (hole) came out as "hule". Consonants still scale fully.
+        double vowelScale = scale >= 1 ? scale : (scale + 1) / 2;
         for (int f = 0; f < formants.Length; f++)
         {
             double start = ph.Formants[f];
@@ -634,7 +645,7 @@ public static partial class VocalSynth
                 double boundary = (end + next.Formants[f]) * 0.5;
                 value += (boundary - value) * (progress - 0.75) / 0.25;
             }
-            formants[f] = value * scale;
+            formants[f] = value * (ph.IsVowel ? vowelScale : scale);
         }
     }
 
@@ -664,7 +675,9 @@ public static partial class VocalSynth
             "sh" or "zh" or "tsh" or "j" or "beat-tch" or "beat-tr" => (1800.0, 6500.0),
             "ich" => (2600.0, 7000.0),
             "ch" => (900.0, 4200.0),
-            "de-r" or "arab-ayn" or "arab-h" or "arab-q" => (700.0, 3000.0),
+            // Guttural R/Arabic rumble lives in the low band (~1 kHz), not the 3 kHz sibilant hiss.
+            "de-r" or "de-r-trill" or "arab-ayn" or "arab-h" or "arab-q" => (450.0, 1600.0),
+            "de-r-tap" or "tap-r" => (900.0, 2600.0),
             "t" or "d" or "de-final-t" => (2500.0, 8500.0),
             "k" or "g" or "beat-k" or "beat-kz" or "beat-bz" => (1200.0, 5500.0),
             "p" or "b" or "animal-dot" or "beat-b" or "beat-p" => (400.0, 3200.0),

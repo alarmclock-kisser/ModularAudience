@@ -374,7 +374,7 @@ public static class VocalPhonemizer
             'd' => next == '\0' ? "de-final-t" : "d", 'f' => "f",
             'g' => next == '\0' ? prev == 'i' && index > 1 ? "ich" : "k" : "g",
             'h' => "h", 'j' => "y", 'k' => "k", 'l' => "l", 'm' => "m", 'n' => "n",
-            'p' => "p", 'q' => "k", 'r' => IsGermanVocalicR(word, index) ? "de-r-glide" : "de-r",
+            'p' => "p", 'q' => "k", 'r' => GermanR(word, index),
             's' => IsGermanVowel(next) && (index == 0 || IsGermanVowel(prev)) ? "z" : "s",
             '\u00df' => "s", 't' => IsGermanFinalT(word, index) ? "de-final-t" : "t",
             'v' => "f", 'w' => "v", 'z' => "ts", _ => null,
@@ -440,6 +440,19 @@ public static class VocalPhonemizer
         'o' => "de-o-short", 'u' => "de-u-short", '\u00e4' => "de-ae-short",
         '\u00f6' => "de-oe-short", '\u00fc' => "de-ue-short", _ => null,
     };
+
+    /// <summary>
+    /// Chooses the R realization: a written geminate "rr" rolls (alveolar trill), a single
+    /// R before a vowel is a tapped alveolar onset, and a vocalic/coda R is the uvular glide [ʁ].
+    /// </summary>
+    private static string GermanR(string word, int index)
+    {
+        char next = index + 1 < word.Length ? word[index + 1] : '\0';
+        if (next == 'r') return "de-r-trill";
+        if (IsGermanVocalicR(word, index)) return "de-r-glide";
+        char previous = index > 0 ? word[index - 1] : '\0';
+        return previous == '\0' || IsGermanVowel(previous) ? "de-r-tap" : "de-r";
+    }
 
     private static bool IsGermanVocalicR(string word, int index)
     {

@@ -32,8 +32,8 @@ public static class VocalPhonemeInventory
         ["fr-un"] = V("fr-un", true, 120, [450, 1500, 2250], [0.85, 0.6, 0.3], 0.8, 0.15, true),
         // German unstressed schwa, vocalic R, long vowels and short vowels.
         ["de-schwa"] = V("de-schwa", true, 75, [480, 1650, 2500], [0.85, 0.65, 0.35], 0.85, 0.1, true),
-        ["de-er"] = V("de-er", true, 75, [610, 1450, 2450], [0.9, 0.65, 0.35], 0.85, 0.1, true),
-        ["de-r-glide"] = V("de-r-glide", true, 55, [610, 1450, 2450], [0.9, 0.65, 0.35], 0.85, 0.1, true),
+        ["de-er"] = V("de-er", true, 105, [610, 1450, 2450], [0.9, 0.65, 0.35], 0.9, 0.08, true),
+        ["de-r-glide"] = V("de-r-glide", true, 75, [610, 1450, 2450], [0.9, 0.65, 0.35], 0.9, 0.08, true),
         ["de-e-long"] = V("de-e-long", true, 130, [400, 1950, 2550], [1.0, 0.75, 0.4], 0.9, 0.1, true),
         ["de-o-long"] = V("de-o-long", true, 130, [360, 900, 2400], [1.0, 0.65, 0.4], 0.9, 0.1, true),
         ["de-a-short"] = V("de-a-short", true, 65, [730, 1090, 2440], [1.0, 0.7, 0.4], 0.9, 0.1, true),
@@ -51,9 +51,15 @@ public static class VocalPhonemeInventory
         // Liquids/glides
         ["l"] = V("l", true, 70, [300, 1100, 2500], [0.7, 0.4, 0.3], 0.8, 0.2, false),
         ["r"] = V("r", true, 70, [300, 1200, 1600], [0.7, 0.4, 0.3], 0.8, 0.2, false),
-        ["de-r"] = V("de-r", true, 70, [350, 1150, 2400], [0.65, 0.35, 0.25], 0.65, 0.9, false),
+        // Voiced uvular approximant [ʁ]: voiced with a low, guttural rumble rather than the
+        // previous high-band "ch"-like hiss. Used for German coda/final R and Arabic غ/ġ.
+        ["de-r"] = V("de-r", true, 80, [300, 1300, 1700], [0.7, 0.4, 0.3], 0.85, 0.5, false),
+        // Alveolar tapped onset [ɾ] for a single German R (crisp, clear; not the American [ɹ]).
+        ["de-r-tap"] = V("de-r-tap", true, 50, [300, 1300, 2500], [0.7, 0.45, 0.3], 0.8, 0.25, false),
+        // Alveolar trill [r] for a written geminate Rr: longer and more strongly modulated.
+        ["de-r-trill"] = V("de-r-trill", true, 140, [300, 1400, 2500], [0.7, 0.45, 0.3], 0.85, 0.35, false),
         ["tap-r"] = V("tap-r", true, 45, [350, 1500, 2500], [0.65, 0.4, 0.25], 0.75, 0.35, false),
-        ["trill-r"] = V("trill-r", true, 115, [350, 1500, 2500], [0.65, 0.4, 0.25], 0.75, 0.4, false),
+        ["trill-r"] = V("trill-r", true, 115, [350, 1500, 2500], [0.65, 0.4, 0.25], 0.8, 0.4, false),
         ["arab-ayn"] = V("arab-ayn", true, 80, [500, 1200, 2300], [0.7, 0.35, 0.2], 0.65, 0.65, false),
         ["w"] = V("w", true, 60, [300, 600, 2200], [0.6, 0.4, 0.3], 0.7, 0.15, false),
         ["y"] = V("y", true, 60, [250, 2000, 2800], [0.6, 0.5, 0.3], 0.7, 0.15, false),
