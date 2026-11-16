@@ -165,27 +165,26 @@ jobs:
             -dname "CN=Android Debug,O=ModularAudience,C=US"
         fi
 
-        publish_args=(
-          "-p:AndroidKeyStore=true"
-          "-p:AndroidSigningKeyStore=$key_store"
-          "-p:AndroidSigningKeyAlias=$key_alias"
-          "-p:AndroidSigningStorePass=$store_password"
-          "-p:AndroidSigningKeyPass=$key_password"
-        )
         dotnet restore ModularAudience.VocalSynth.Android/ModularAudience.VocalSynth.Android.csproj
         dotnet publish ModularAudience.VocalSynth.Android/ModularAudience.VocalSynth.Android.csproj \
           --configuration "$configuration" \
           --framework net10.0-android \
           --output "$RUNNER_TEMP/android-publish" \
-          -p:AndroidPackageFormat=apk \
-          "${publish_args[@]}"
+          -p:AndroidPackageFormat=apk
         apk_path="$(find "$RUNNER_TEMP/android-publish" -type f -name '*.apk' -print -quit)"
         test -n "$apk_path" || (echo "The Android publish did not produce an APK." >&2; exit 1)
         sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
         apksigner="$(find "$sdk_root/build-tools" -type f -name apksigner -print -quit)"
         test -n "$apksigner" || (echo "Android apksigner was not found." >&2; exit 1)
-        "$apksigner" verify --verbose "$apk_path"
-        cp "$apk_path" "$RUNNER_TEMP/ModularAudience.VocalSynth-$apk_suffix.apk"
+        signed_apk="$RUNNER_TEMP/ModularAudience.VocalSynth-$apk_suffix.apk"
+        "$apksigner" sign \
+          --ks "$key_store" \
+          --ks-key-alias "$key_alias" \
+          --ks-pass "pass:$store_password" \
+          --key-pass "pass:$key_password" \
+          --out "$signed_apk" \
+          "$apk_path"
+        "$apksigner" verify --verbose "$signed_apk"
 
     - name: Attach APK to release
       env:
