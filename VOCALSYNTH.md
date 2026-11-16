@@ -210,13 +210,17 @@ so expressive repetitions remain separate in the shared renderer.
 - **MIDI singing**: load a `.mid` or `.midi` file from the user's Music folder.
   Loading selects the Singing voice; the track selector shows the current
   page/name and the Edit button opens the MIDI inspector/editor on that page.
-  Same-tick notes form a chord for one vocal syllable. MIDI onset, duration,
-  tempo and gaps set the vocal timeline; explicit punctuation/emphasis pauses
-  remain supported, but lyric line breaks do not add audible pauses. Text filled
+  Notes whose durations overlap form one polyphonic lyric event, even when they
+  start at different times, so they share a text syllable instead of consuming
+  the next one. In the generated Singing voice, later notes join on the current
+  vowel rather than restarting its consonant. Each note keeps its MIDI onset and
+  duration. MIDI onset, duration, tempo and gaps set the vocal timeline; explicit
+  punctuation/emphasis pauses remain supported, but lyric line breaks do not add
+  audible pauses. Text filled
   from MIDI keeps its commas and line breaks for display without shifting note
   timing. MIDI note velocity controls the rendered level, and overlapping notes are
   mixed as simultaneous voices. Extra text syllables reuse the last MIDI chord,
-  while excess MIDI note groups are left silent and reported after rendering;
+  while excess overlapping-note groups are left silent and reported after rendering;
   they do not extend the rendered audio past the final sung syllable.
   The **Semitone offset** control transposes MIDI notes by -16…+16 semitones in
   0.25-semitone steps. **Speed** scales MIDI note durations and the resulting BPM;
@@ -224,7 +228,7 @@ so expressive repetitions remain separate in the shared renderer.
   syllables** underlines every second syllable in the same editable text field,
   whether or not a MIDI file is loaded. **Fill Syllables** is available for a
   selected Singing MIDI track; it appends only the missing syllables, counting
-  same-tick chords once. Its language-appropriate vowel color follows the MIDI
+  overlapping notes once. Its language-appropriate vowel color follows the MIDI
   pitches, and repeatable vowels are lengthened up to eight characters based on
   note duration. Rest gaps and the MIDI time signature guide comma and line
   formatting without adding extra time in the aligned MIDI render. The first

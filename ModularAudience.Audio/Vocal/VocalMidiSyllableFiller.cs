@@ -135,7 +135,7 @@ internal static class VocalMidiSyllableFiller
 
         IReadOnlyList<VocalSyllableTextRange> existingRanges = VocalTextParser.GetSyllableTextRanges(
             settings.Language, existingText, settings.EmphasisSyntax, cancellationToken);
-        IVocalMidiNote[][] noteGroups = VocalMidiSinging.GroupNotesByStartTick(track, cancellationToken);
+        IVocalMidiNote[][] noteGroups = VocalMidiSinging.GroupOverlappingNotes(track, cancellationToken);
         if (existingRanges.Count >= noteGroups.Length)
         {
             return new VocalMidiSyllableFillResult(
@@ -211,7 +211,10 @@ internal static class VocalMidiSyllableFiller
         IReadOnlyList<IVocalMidiNote> chord, IVocalMidiFile midi, double speed, SyllableTemplate template)
     {
         if (template.RepeatUnit.Length == 0) return template.Vowel.Length;
-        long durationTicks = chord.Max(note => Math.Max(1, note.DurationTicks));
+        long groupStartTick = chord[0].StartTick;
+        long groupEndTick = chord.Max(
+            note => checked(note.StartTick + Math.Max(1, note.DurationTicks)));
+        long durationTicks = Math.Max(1, checked(groupEndTick - groupStartTick));
         double durationMilliseconds = durationTicks * 60_000.0
             / (midi.DefaultBpm * midi.TicksPerQuarterNote * speed);
         if (!double.IsFinite(durationMilliseconds))

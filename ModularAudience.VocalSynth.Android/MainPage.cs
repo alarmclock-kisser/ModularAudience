@@ -367,6 +367,15 @@ public sealed partial class MainPage : ContentPage
 
     private void WireEvents()
     {
+        foreach (Slider slider in voiceSliders.Values
+            .Prepend(speedSlider)
+            .Prepend(midiOffsetSlider)
+            .Prepend(wavTrailingSilenceSlider))
+        {
+            slider.Focused += (_, _) => textEditor.Unfocus();
+            slider.DragStarted += (_, _) => textEditor.Unfocus();
+        }
+
         languagePicker.SelectedIndexChanged += (_, _) =>
         {
             if (syncing || languagePicker.SelectedIndex < 0) return;

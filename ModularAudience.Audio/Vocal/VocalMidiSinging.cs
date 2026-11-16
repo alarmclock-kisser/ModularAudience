@@ -5,7 +5,8 @@ internal sealed record VocalMidiScheduledNote(
     int NoteNumber,
     int Velocity,
     int StartFrame,
-    int DurationFrames);
+    int DurationFrames,
+    bool IsSyllableContinuation);
 
 internal sealed record VocalMidiSingingPlan(
     IReadOnlyList<VocalSingingSyllable> Syllables,
@@ -34,7 +35,7 @@ internal static class VocalMidiSinging
         if (syllables.Count == 0)
             throw new InvalidOperationException("The text contains no singable syllables.");
 
-        IVocalMidiNote[][] noteGroups = GroupNotesByStartTick(track, cancellationToken);
+        IVocalMidiNote[][] noteGroups = GroupOverlappingNotes(track, cancellationToken);
         if (noteGroups.Length == 0)
             throw new InvalidOperationException("The selected MIDI page contains no notes.");
 
@@ -65,7 +66,10 @@ internal static class VocalMidiSinging
                 track.LengthTicks,
                 track.Notes.Max(note => note.StartTick + Math.Max(1, note.DurationTicks)));
             midiEndFrame = FramesForTicks(midiEndTick);
-            long repeatedDurationTicks = Math.Max(1, noteGroups[^1].Max(note => note.DurationTicks));
+            long repeatedGroupStartTick = noteGroups[^1][0].StartTick;
+            long repeatedGroupEndTick = noteGroups[^1].Max(
+                note => checked(note.StartTick + Math.Max(1, note.DurationTicks)));
+            long repeatedDurationTicks = Math.Max(1, checked(repeatedGroupEndTick - repeatedGroupStartTick));
             repeatedDurationFrames = Math.Max(1, FramesForTicks(repeatedDurationTicks));
         }
         int accumulatedPauseFrames = 0;
@@ -80,23 +84,28 @@ internal static class VocalMidiSinging
             accumulatedPauseFrames = checked(accumulatedPauseFrames + pauseBeforeFrames);
             bool repeated = syllableIndex >= noteGroups.Length;
             IReadOnlyList<IVocalMidiNote> chord = repeated ? noteGroups[^1] : noteGroups[syllableIndex];
+            long groupStartTick = chord[0].StartTick;
             int startFrame = repeated
                 ? Math.Max(checked(midiEndFrame + accumulatedPauseFrames), checked(repeatedCursor + pauseBeforeFrames))
-                : checked(FramesForTicks(chord[0].StartTick) + accumulatedPauseFrames);
+                : checked(FramesForTicks(groupStartTick) + accumulatedPauseFrames);
 
             foreach (IVocalMidiNote note in chord)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (note.NoteNumber is < 0 or > 127)
                     throw new InvalidDataException($"MIDI note number {note.NoteNumber} is outside the supported range.");
+                int noteStartFrame = repeated
+                    ? checked(startFrame + FramesForTicks(checked(note.StartTick - groupStartTick)))
+                    : checked(FramesForTicks(note.StartTick) + accumulatedPauseFrames);
                 int durationFrames = Math.Max(1, FramesForTicks(Math.Max(1, note.DurationTicks)));
                 scheduledNotes.Add(new VocalMidiScheduledNote(
                     syllableIndex,
                     note.NoteNumber,
                     Math.Clamp(note.Velocity, 1, 127),
-                    startFrame,
-                    durationFrames));
-                latestVoiceEnd = Math.Max(latestVoiceEnd, checked(startFrame + durationFrames));
+                    noteStartFrame,
+                    durationFrames,
+                    note.StartTick > groupStartTick));
+                latestVoiceEnd = Math.Max(latestVoiceEnd, checked(noteStartFrame + durationFrames));
             }
 
             if (repeated)
@@ -126,7 +135,7 @@ internal static class VocalMidiSinging
     internal static double GetSemitoneOffset(double frequency, double basePitchHz) =>
         12.0 * Math.Log2(frequency / basePitchHz);
 
-    internal static IVocalMidiNote[][] GroupNotesByStartTick(
+    internal static IVocalMidiNote[][] GroupOverlappingNotes(
         IVocalMidiTrack track, CancellationToken cancellationToken)
     {
         IVocalMidiNote[] orderedNotes = track.Notes
@@ -134,15 +143,25 @@ internal static class VocalMidiSinging
             .ThenBy(note => note.NoteNumber)
             .ToArray();
         List<IVocalMidiNote[]> noteGroups = [];
-        for (int first = 0; first < orderedNotes.Length;)
+        List<IVocalMidiNote> currentGroup = [];
+        long currentGroupEndTick = long.MinValue;
+        foreach (IVocalMidiNote note in orderedNotes)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            int end = first + 1;
-            while (end < orderedNotes.Length && orderedNotes[end].StartTick == orderedNotes[first].StartTick)
-                end++;
-            noteGroups.Add(orderedNotes[first..end]);
-            first = end;
+            if (currentGroup.Count > 0 && note.StartTick >= currentGroupEndTick)
+            {
+                noteGroups.Add(currentGroup.ToArray());
+                currentGroup.Clear();
+            }
+
+            currentGroup.Add(note);
+            currentGroupEndTick = Math.Max(
+                currentGroupEndTick,
+                checked(note.StartTick + Math.Max(1, note.DurationTicks)));
         }
+
+        if (currentGroup.Count > 0)
+            noteGroups.Add(currentGroup.ToArray());
         return noteGroups.ToArray();
     }
 }

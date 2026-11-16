@@ -272,6 +272,40 @@ public class VocalSynthTests
     }
 
     [TestMethod]
+    public void MidiSinging_StaggeredOverlappingNotesShareLyricsAndKeepTheirTiming()
+    {
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData { NoteNumber = 60, Velocity = 100, StartTick = 0, DurationTicks = 960 },
+            new MidiNoteData { NoteNumber = 64, Velocity = 90, StartTick = 240, DurationTicks = 480 },
+            new MidiNoteData { NoteNumber = 67, Velocity = 80, StartTick = 720, DurationTicks = 240 },
+            new MidiNoteData { NoteNumber = 72, Velocity = 100, StartTick = 960, DurationTicks = 480 });
+        VocalSynthSettings settings = CreateMidiSettings("a e", midi);
+        settings.IgnoreTextPausesForMidiSinging = true;
+        IReadOnlyList<VocalToken> tokens = VocalTextParser.Parse(
+            settings.Language, settings.Text, settings.EmphasisSyntax);
+
+        VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(settings, tokens, CancellationToken.None);
+        VocalMidiSyllableFillResult fill = VocalMidiSyllableFiller.FillMissing(
+            settings, string.Empty, CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { 0, 0, 0, 1 },
+            plan.Notes.Select(note => note.SyllableIndex).ToArray());
+        CollectionAssert.AreEqual(new[] { 0, 1000, 3000, 4000 },
+            plan.Notes.Select(note => note.StartFrame).ToArray());
+        CollectionAssert.AreEqual(new[] { false, true, true, false },
+            plan.Notes.Select(note => note.IsSyllableContinuation).ToArray());
+        Assert.AreEqual(6000, plan.OutputFrames);
+        Assert.AreEqual(2, fill.MidiSyllables);
+        Assert.AreEqual(2, fill.AddedSyllables);
+        Assert.AreEqual(2, VocalTextParser.GetSyllableTextRanges(
+            settings.Language, fill.AppendedText, settings.EmphasisSyntax).Count);
+        using AudioObj audio = VocalSynth.Render(settings);
+        Assert.AreEqual(plan.OutputFrames, audio.Data.Length);
+        Assert.IsTrue(audio.Data.All(float.IsFinite));
+        Assert.IsTrue(audio.Data.Any(sample => Math.Abs(sample) > 0.001f));
+    }
+
+    [TestMethod]
     public void MidiSinging_AddsTextPausesToNoteTimeline()
     {
         MidiFileData midi = CreateMidi(

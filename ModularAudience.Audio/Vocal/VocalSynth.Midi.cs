@@ -47,6 +47,8 @@ public static partial class VocalSynthEngine
         VocalSynthSettings settings, CancellationToken cancellationToken)
     {
         VocalSingingSyllable syllable = plan.Syllables[note.SyllableIndex];
+        if (note.IsSyllableContinuation)
+            syllable = GetMidiContinuationSyllable(syllable, settings.Language);
         double frequency = VocalMidiSinging.GetFrequency(
             midi, note.NoteNumber, settings.SingingMidiSemitoneOffset);
         if (!double.IsFinite(frequency) || frequency <= 0 || frequency >= settings.SampleRate * 0.45)
@@ -55,6 +57,34 @@ public static partial class VocalSynthEngine
         List<RenderUnit> units = CreateMidiSyllablePlan(syllable, settings, semitoneOffset, cancellationToken);
         FitMidiSyllableToDuration(units, note.DurationFrames, cancellationToken);
         return RenderMidiSyllable(units, note, settings, cancellationToken);
+    }
+
+    private static VocalSingingSyllable GetMidiContinuationSyllable(
+        VocalSingingSyllable syllable, VocalLanguage language)
+    {
+        VocalToken? nucleus = syllable.Tokens.FirstOrDefault(token =>
+            token is VocalPhonemeToken phoneme
+                && (VocalPhonemeInventory.Get(phoneme.Phoneme).IsVowel
+                    || phoneme.Phoneme.StartsWith("beat-", StringComparison.Ordinal))
+            || token is VocalCustomSampleToken sample && sample.HasNucleus);
+        if (nucleus is null) return syllable;
+
+        double naturalDurationMilliseconds = nucleus switch
+        {
+            VocalCustomSampleToken sample => sample.DurationMilliseconds,
+            VocalPhonemeToken phoneme => VocalPhonemeInventory.Get(phoneme.Phoneme).DurationMs
+                * DurationMultiplier(phoneme)
+                * (VocalPhonemeInventory.Get(phoneme.Phoneme).IsVowel
+                    ? language == VocalLanguage.AnimalCrossing ? 1.35 : 1.75
+                    : 1),
+            _ => syllable.NaturalDurationMilliseconds,
+        };
+        return syllable with
+        {
+            Tokens = [nucleus],
+            PauseBeforeMilliseconds = 0,
+            NaturalDurationMilliseconds = Math.Max(1, naturalDurationMilliseconds),
+        };
     }
 
     private static int GetMidiMaxDegreeOfParallelism() =>
