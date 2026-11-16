@@ -6,7 +6,8 @@ internal sealed record VocalMidiScheduledNote(
     int Velocity,
     int StartFrame,
     int DurationFrames,
-    bool IsSyllableContinuation);
+    bool IsSyllableContinuation,
+    int PreSyllableSilenceFrames);
 
 internal sealed record VocalMidiSingingPlan(
     IReadOnlyList<VocalSingingSyllable> Syllables,
@@ -99,26 +100,38 @@ internal static class VocalMidiSinging
             bool repeated = syllableIndex >= noteGroups.Length;
             IReadOnlyList<IVocalMidiNote> chord = repeated ? noteGroups[^1] : noteGroups[syllableIndex];
             long groupStartTick = chord[0].StartTick;
+            int onsetNoteIndex = GetSyllableOnsetNoteIndex(chord);
+            IVocalMidiNote onsetNote = chord[onsetNoteIndex];
             int startFrame = repeated
                 ? Math.Max(checked(midiEndFrame + accumulatedPauseFrames), checked(repeatedCursor + pauseBeforeFrames))
                 : checked(FramesForTicks(groupStartTick) + accumulatedPauseFrames);
+            int syllableOnsetFrame = repeated
+                ? checked(startFrame + FramesForTicks(checked(onsetNote.StartTick - groupStartTick)))
+                : checked(FramesForTicks(onsetNote.StartTick) + accumulatedPauseFrames);
 
-            foreach (IVocalMidiNote note in chord)
+            for (int noteIndex = 0; noteIndex < chord.Count; noteIndex++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                IVocalMidiNote note = chord[noteIndex];
                 if (note.NoteNumber is < 0 or > 127)
                     throw new InvalidDataException($"MIDI note number {note.NoteNumber} is outside the supported range.");
                 int noteStartFrame = repeated
                     ? checked(startFrame + FramesForTicks(checked(note.StartTick - groupStartTick)))
                     : checked(FramesForTicks(note.StartTick) + accumulatedPauseFrames);
                 int durationFrames = Math.Max(1, FramesForTicks(Math.Max(1, note.DurationTicks)));
+                int preSyllableSilenceFrames = noteIndex != onsetNoteIndex
+                    && note.StartTick < onsetNote.StartTick
+                    && IsLessProminentLeadIn(note, onsetNote)
+                        ? Math.Clamp(syllableOnsetFrame - noteStartFrame, 0, durationFrames)
+                        : 0;
                 scheduledNotes.Add(new VocalMidiScheduledNote(
                     syllableIndex,
                     note.NoteNumber,
                     Math.Clamp(note.Velocity, 1, 127),
                     noteStartFrame,
                     durationFrames,
-                    note.StartTick > groupStartTick));
+                    noteIndex != onsetNoteIndex,
+                    preSyllableSilenceFrames));
                 latestVoiceEnd = Math.Max(latestVoiceEnd, checked(noteStartFrame + durationFrames));
             }
 
@@ -141,6 +154,33 @@ internal static class VocalMidiSinging
             outputFrames,
             Math.Max(0, noteGroups.Length - syllables.Count),
             Math.Max(0, syllables.Count - noteGroups.Length));
+    }
+
+    private static int GetSyllableOnsetNoteIndex(IReadOnlyList<IVocalMidiNote> notes)
+    {
+        int onsetIndex = 0;
+        for (int index = 1; index < notes.Count; index++)
+        {
+            IVocalMidiNote candidate = notes[index];
+            IVocalMidiNote onset = notes[onsetIndex];
+            int candidateVelocity = Math.Clamp(candidate.Velocity, 1, 127);
+            int onsetVelocity = Math.Clamp(onset.Velocity, 1, 127);
+            long candidateDuration = Math.Max(1, candidate.DurationTicks);
+            long onsetDuration = Math.Max(1, onset.DurationTicks);
+            if (candidateVelocity > onsetVelocity
+                || candidateVelocity == onsetVelocity && candidateDuration > onsetDuration)
+                onsetIndex = index;
+        }
+        return onsetIndex;
+    }
+
+    private static bool IsLessProminentLeadIn(IVocalMidiNote note, IVocalMidiNote onsetNote)
+    {
+        int velocity = Math.Clamp(note.Velocity, 1, 127);
+        int onsetVelocity = Math.Clamp(onsetNote.Velocity, 1, 127);
+        return velocity < onsetVelocity
+            || velocity == onsetVelocity
+                && Math.Max(1, note.DurationTicks) < Math.Max(1, onsetNote.DurationTicks);
     }
 
     internal static double GetFrequency(IVocalMidiFile midi, int noteNumber, double semitoneOffset = 0) =>

@@ -218,12 +218,17 @@ so expressive repetitions remain separate in the shared renderer.
   melismas until they cover the syllable's natural duration; elongated written
   vowels therefore allow longer runs. The grouping follows playback speed and
   separates at rests, while each note keeps its own onset and pitch. In the
-  generated Singing voice, later notes join on the current vowel rather than
-  restarting its consonant. MIDI onset, duration, tempo and gaps set the vocal timeline; explicit
+  generated Singing voice, one prominent note carries the syllable onset and
+  later notes join on the current vowel rather than restarting its consonant.
+  Relative MIDI velocity selects that onset note, with longer duration breaking
+  ties; weaker lead-in notes stay silent until the onset and then join on the
+  vowel for any remaining note duration. MIDI onset, duration, tempo and gaps set the vocal timeline; explicit
   punctuation/emphasis pauses remain supported, but lyric line breaks do not add
   audible pauses. Text filled
   from MIDI keeps its commas and line breaks for display without shifting note
-  timing. MIDI note velocity controls the rendered level, and overlapping notes are
+  timing. After Fill Syllables, generated punctuation is ignored for MIDI timing
+  while the MIDI rests remain; editing the text restores text-pause behavior.
+  MIDI note velocity controls the rendered level, and overlapping notes are
   mixed as simultaneous voices. Extra text syllables reuse the last MIDI chord,
   while excess overlapping-note groups are left silent and reported after rendering;
   they do not extend the rendered audio past the final sung syllable.

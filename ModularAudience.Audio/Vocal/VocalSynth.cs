@@ -126,7 +126,9 @@ public static partial class VocalSynthEngine
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (note.SyllableIndex < 0 || note.SyllableIndex >= startFrames.Length) continue;
-            startFrames[note.SyllableIndex] = Math.Min(startFrames[note.SyllableIndex], note.StartFrame);
+            int audibleStartFrame = checked(note.StartFrame + note.PreSyllableSilenceFrames);
+            if (note.PreSyllableSilenceFrames < note.DurationFrames)
+                startFrames[note.SyllableIndex] = Math.Min(startFrames[note.SyllableIndex], audibleStartFrame);
             endFrames[note.SyllableIndex] = Math.Max(
                 endFrames[note.SyllableIndex], checked(note.StartFrame + note.DurationFrames));
         }

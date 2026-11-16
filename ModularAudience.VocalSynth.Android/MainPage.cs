@@ -369,6 +369,8 @@ public sealed partial class MainPage : ContentPage
         showSyllablesSwitch.IsToggled = Preferences.Default.Get("vocal.showSyllables", false);
         midiOffsetSlider.Value = Math.Clamp(
             Preferences.Default.Get("vocal.midiOffset", settings.SingingMidiSemitoneOffset), -16, 16);
+        settings.IgnoreTextPausesForMidiSinging = Preferences.Default.Get(
+            "vocal.ignoreTextPausesForMidiSinging", settings.IgnoreTextPausesForMidiSinging);
         wavTrailingSilenceSlider.Value = Math.Clamp(
             Preferences.Default.Get("vocal.wavTrailingSilenceMs", 1000), 0, 5000);
         wavTrailingSilenceSlider.Value = Math.Round(wavTrailingSilenceSlider.Value / 100) * 100;
@@ -466,6 +468,7 @@ public sealed partial class MainPage : ContentPage
         textEditor.TextChanged += (_, _) =>
         {
             settings.Text = textEditor.Text;
+            settings.IgnoreTextPausesForMidiSinging = false;
             PersistSession();
         };
     }
@@ -485,6 +488,8 @@ public sealed partial class MainPage : ContentPage
         Preferences.Default.Set("vocal.unsupportedBeep", unsupportedBeepSwitch.IsToggled);
         Preferences.Default.Set("vocal.showSyllables", showSyllablesSwitch.IsToggled);
         Preferences.Default.Set("vocal.midiOffset", midiOffsetSlider.Value);
+        Preferences.Default.Set(
+            "vocal.ignoreTextPausesForMidiSinging", settings.IgnoreTextPausesForMidiSinging);
         Preferences.Default.Set("vocal.wavTrailingSilenceMs", (int)wavTrailingSilenceSlider.Value);
         int midiTrackIndex = midi is not null && midiTrackPicker.SelectedIndex >= 0
             && midiTrackPicker.SelectedIndex < midi.Tracks.Count

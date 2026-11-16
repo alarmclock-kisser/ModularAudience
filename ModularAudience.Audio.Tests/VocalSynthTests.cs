@@ -349,6 +349,35 @@ public class VocalSynthTests
     }
 
     [TestMethod]
+    public void MidiSinging_UsesProminentNoteAsSyllableOnsetAndDelaysQuietLeadIn()
+    {
+        MidiFileData midi = CreateMidi(
+            new MidiNoteData { NoteNumber = 60, Velocity = 35, StartTick = 0, DurationTicks = 480 },
+            new MidiNoteData { NoteNumber = 72, Velocity = 110, StartTick = 240, DurationTicks = 960 },
+            new MidiNoteData { NoteNumber = 67, Velocity = 100, StartTick = 1440, DurationTicks = 480 });
+        VocalSynthSettings settings = CreateMidiSettings("a e", midi);
+        settings.IgnoreTextPausesForMidiSinging = true;
+
+        VocalMidiSingingPlan plan = VocalMidiSinging.CreatePlan(
+            settings, VocalTextParser.Parse(settings.Language, settings.Text, settings.EmphasisSyntax),
+            CancellationToken.None);
+        IReadOnlyList<VocalPlaybackTextRange> timeline = VocalSynth.GetPlaybackTimeline(settings);
+        int onsetFrame = plan.Notes[1].StartFrame;
+
+        Assert.AreEqual(onsetFrame - plan.Notes[0].StartFrame,
+            plan.Notes[0].PreSyllableSilenceFrames);
+        Assert.AreEqual(0, plan.Notes[1].PreSyllableSilenceFrames);
+        CollectionAssert.AreEqual(new[] { true, false, false },
+            plan.Notes.Select(note => note.IsSyllableContinuation).ToArray());
+        Assert.AreEqual(onsetFrame, timeline[0].StartFrame);
+
+        using AudioObj audio = VocalSynth.Render(settings);
+        Assert.IsTrue(audio.Data.Take(onsetFrame * audio.Channels).All(sample => sample == 0));
+        Assert.IsTrue(audio.Data.Skip(onsetFrame * audio.Channels)
+            .Any(sample => Math.Abs(sample) > 0.001f));
+    }
+
+    [TestMethod]
     public void MidiSinging_ConsolidatesRapidThirtySecondRunsWithoutMovingNotes()
     {
         MidiNoteData[] notes = Enumerable.Range(0, 8)
@@ -2009,6 +2038,8 @@ public class VocalSynthTests
         MethodInfo createTimeline = typeof(VocalSynthDialog).GetMethod("CreatePlaybackTimeline", flags)!;
         MethodInfo getCursorPosition = typeof(VocalSynthDialog)
             .GetMethod("GetPlaybackCursorTextPosition", flags)!;
+        MethodInfo getCursorRange = typeof(VocalSynthDialog)
+            .GetMethod("GetPlaybackCursorRange", flags)!;
         const string text = "Abgezüffelt";
         VocalSynthSettings settings = VocalSynthSettings.FromPreset(
             VocalVoicePreset.BuiltIn[2], VocalLanguage.German, text);
@@ -2025,7 +2056,21 @@ public class VocalSynthTests
         int wordPosition = (int)getCursorPosition.Invoke(null, [wordTimeline, 0])!;
         int syllablePosition = (int)getCursorPosition.Invoke(null, [syllableTimeline, 0])!;
         Assert.IsTrue(syllablePosition < wordPosition);
-        Assert.AreEqual(text.Length, (int)getCursorPosition.Invoke(null, [syllableTimeline, 8000])!);
+        int finalFrame = (int)syllableRanges[^1].GetType()
+            .GetProperty("EndFrame")!.GetValue(syllableRanges[^1])!;
+        Assert.AreEqual(text.Length,
+            (int)getCursorPosition.Invoke(null, [syllableTimeline, finalFrame])!);
+        AssertCursorRangeMatches(wordRanges[0], getCursorRange.Invoke(null, [wordTimeline, 0])!);
+        AssertCursorRangeMatches(syllableRanges[0], getCursorRange.Invoke(null, [syllableTimeline, 0])!);
+    }
+
+    private static void AssertCursorRangeMatches(object expectedRange, object actualRange)
+    {
+        Type type = expectedRange.GetType();
+        Assert.AreEqual(type.GetProperty("TextStart")!.GetValue(expectedRange),
+            type.GetProperty("TextStart")!.GetValue(actualRange));
+        Assert.AreEqual(type.GetProperty("TextLength")!.GetValue(expectedRange),
+            type.GetProperty("TextLength")!.GetValue(actualRange));
     }
 
     [STATestMethod]

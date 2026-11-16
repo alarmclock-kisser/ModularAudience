@@ -46,6 +46,10 @@ public static partial class VocalSynthEngine
         VocalMidiSingingPlan plan, VocalMidiScheduledNote note, IVocalMidiFile midi,
         VocalSynthSettings settings, CancellationToken cancellationToken)
     {
+        int preSyllableSilenceFrames = note.PreSyllableSilenceFrames;
+        if (preSyllableSilenceFrames >= note.DurationFrames)
+            return [];
+
         VocalSingingSyllable syllable = plan.Syllables[note.SyllableIndex];
         if (note.IsSyllableContinuation)
             syllable = GetMidiContinuationSyllable(syllable, settings.Language);
@@ -55,8 +59,8 @@ public static partial class VocalSynthEngine
             throw new InvalidDataException($"MIDI note {note.NoteNumber} is outside the supported vocal frequency range.");
         double semitoneOffset = VocalMidiSinging.GetSemitoneOffset(frequency, settings.BasePitchHz);
         List<RenderUnit> units = CreateMidiSyllablePlan(syllable, settings, semitoneOffset, cancellationToken);
-        FitMidiSyllableToDuration(units, note.DurationFrames, cancellationToken);
-        return RenderMidiSyllable(units, note, settings, cancellationToken);
+        FitMidiSyllableToDuration(units, note.DurationFrames - preSyllableSilenceFrames, cancellationToken);
+        return RenderMidiSyllable(units, note, settings, preSyllableSilenceFrames, cancellationToken);
     }
 
     private static VocalSingingSyllable GetMidiContinuationSyllable(
@@ -241,10 +245,12 @@ public static partial class VocalSynthEngine
 
     private static float[] RenderMidiSyllable(
         IReadOnlyList<RenderUnit> plan, VocalMidiScheduledNote note, VocalSynthSettings settings,
-        CancellationToken cancellationToken)
+        int preSyllableSilenceFrames, CancellationToken cancellationToken)
     {
         var pcm = new PcmBuffer(checked(note.DurationFrames * settings.Channels));
-        var state = new VoiceState { Frame = note.StartFrame };
+        if (preSyllableSilenceFrames > 0)
+            AppendSilence(pcm, preSyllableSilenceFrames, settings.Channels, cancellationToken);
+        var state = new VoiceState { Frame = checked(note.StartFrame + preSyllableSilenceFrames) };
         var random = new Random(unchecked(StableSeed(settings) ^ note.NoteNumber * 16777619 ^ note.SyllableIndex));
         for (int i = 0; i < plan.Count; i++)
         {

@@ -60,6 +60,7 @@ public sealed partial class MainPage
         replacement.SingingMidiFile = midi;
         replacement.SingingMidiTrackIndex = settings.SingingMidiTrackIndex;
         replacement.SingingMidiSemitoneOffset = midiOffsetSlider.Value;
+        replacement.IgnoreTextPausesForMidiSinging = settings.IgnoreTextPausesForMidiSinging;
         replacement.CustomSampleMappings = customSamples.ToArray();
         replacement.EmphasisSyntax = LoadEmphasisSyntaxFromEditor();
         replacement.UseWindowsSpeech = false;
@@ -269,6 +270,8 @@ public sealed partial class MainPage
             if (result.AppendedText.Length > 0)
                 textEditor.Text = (textEditor.Text ?? string.Empty) + result.AppendedText;
             settings.Text = textEditor.Text ?? string.Empty;
+            settings.IgnoreTextPausesForMidiSinging = result.ExistingSyllables <= result.MidiSyllables;
+            PersistSession();
             statusLabel.Text = result.AddedSyllables > 0
                 ? $"Added {result.AddedSyllables} syllables to match the MIDI track."
                 : "The text already matches the selected MIDI track.";

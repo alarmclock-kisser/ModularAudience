@@ -81,7 +81,7 @@ public sealed partial class VocalSynthDialog : Form
     private bool restorePlaybackSelection;
     private int playbackSelectionStart;
     private int playbackSelectionLength;
-    private int lastFollowedCursorPosition = -1;
+    private PlaybackCursorRange? lastFollowedRange;
 
     private sealed class VocalPreview : ISampleProvider
     {
@@ -1076,7 +1076,7 @@ public sealed partial class VocalSynthDialog : Form
             output.Init(provider);
             output.Play();
             prehear.Text = "Stop";
-            lastFollowedCursorPosition = -1;
+            lastFollowedRange = null;
             playbackTimer.Start();
             UpdatePlaybackCursor();
         }
@@ -1120,7 +1120,7 @@ public sealed partial class VocalSynthDialog : Form
         provider = null;
         currentOutput?.Stop();
         currentOutput?.Dispose();
-        lastFollowedCursorPosition = -1;
+        lastFollowedRange = null;
         if (!disposedFlag && !prehear.IsDisposed)
         {
             prehear.Text = "Prehear";
@@ -1157,27 +1157,39 @@ public sealed partial class VocalSynthDialog : Form
         if (followSpokenWordCheckBox.CheckState == CheckState.Unchecked
             || provider is null || provider.CursorRanges.Count == 0)
             return;
-        int position = GetPlaybackCursorTextPosition(provider.CursorRanges, provider.PlayedFrames);
-        if (position < 0) return;
-        position = Math.Clamp(position, 0, textEditor.TextLength);
-        if (position == lastFollowedCursorPosition) return;
-        textEditor.Select(position, 0);
+        PlaybackCursorRange? activeRange = GetPlaybackCursorRange(
+            provider.CursorRanges, provider.PlayedFrames);
+        if (activeRange is not PlaybackCursorRange range
+            || range.TextStart < 0 || range.TextLength <= 0
+            || range.TextStart > textEditor.TextLength - range.TextLength
+            || activeRange == lastFollowedRange)
+            return;
+        textEditor.Select(range.TextStart, range.TextLength);
         textEditor.ScrollToCaret();
-        lastFollowedCursorPosition = position;
+        lastFollowedRange = range;
     }
 
     private static int GetPlaybackCursorTextPosition(
         IReadOnlyList<PlaybackCursorRange> cursorRanges, int frame)
     {
-        if (cursorRanges.Count == 0) return -1;
-        int previousEnd = cursorRanges[0].TextStart + cursorRanges[0].TextLength;
+        PlaybackCursorRange? activeRange = GetPlaybackCursorRange(cursorRanges, frame);
+        return activeRange is PlaybackCursorRange range
+            ? range.TextStart + range.TextLength
+            : -1;
+    }
+
+    private static PlaybackCursorRange? GetPlaybackCursorRange(
+        IReadOnlyList<PlaybackCursorRange> cursorRanges, int frame)
+    {
+        if (cursorRanges.Count == 0) return null;
+        PlaybackCursorRange previous = cursorRanges[0];
         foreach (PlaybackCursorRange range in cursorRanges)
         {
             if (frame < range.StartFrame) break;
-            previousEnd = range.TextStart + range.TextLength;
-            if (frame < range.EndFrame) return previousEnd;
+            previous = range;
+            if (frame < range.EndFrame) return range;
         }
-        return previousEnd;
+        return previous;
     }
 
     private static IReadOnlyList<PlaybackCursorRange> CreatePlaybackTimeline(
