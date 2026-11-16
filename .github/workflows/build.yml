@@ -138,8 +138,8 @@ jobs:
         ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
         APK_SIGNING_ENABLED: ${{ steps.signing.outputs.enabled }}
       run: |
-        apk_suffix=Debug
-        configuration=Debug
+        apk_suffix=Test
+        configuration=Release
         if [[ "$APK_SIGNING_ENABLED" == "true" ]]; then
           key_store="$RUNNER_TEMP/modular-audience-android.keystore"
           printf '%s' "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$key_store"
@@ -170,10 +170,14 @@ jobs:
           --configuration "$configuration" \
           --framework net10.0-android \
           --output "$RUNNER_TEMP/android-publish" \
-          -p:AndroidPackageFormat=apk
+          -p:AndroidPackageFormat=apk \
+          -p:EmbedAssembliesIntoApk=true
         apk_path="$(find "$RUNNER_TEMP/android-publish" -type f -name '*.apk' -print -quit)"
         test -n "$apk_path" || (echo "The Android publish did not produce an APK." >&2; exit 1)
         sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+        aapt2="$(find "$sdk_root/build-tools" -type f -name aapt2 -print -quit)"
+        test -n "$aapt2" || (echo "Android aapt2 was not found." >&2; exit 1)
+        "$aapt2" dump badging "$apk_path" | grep -q "application-icon"
         apksigner="$(find "$sdk_root/build-tools" -type f -name apksigner -print -quit)"
         test -n "$apksigner" || (echo "Android apksigner was not found." >&2; exit 1)
         signed_apk="$RUNNER_TEMP/ModularAudience.VocalSynth-$apk_suffix.apk"
@@ -190,7 +194,7 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        apk_suffix=Debug
+        apk_suffix=Test
         if [[ "${{ steps.signing.outputs.enabled }}" == "true" ]]; then
           apk_suffix=Signed
         fi
