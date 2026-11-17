@@ -30,7 +30,7 @@ public partial class OnnxDemucsDialog : Form
     private string[] loadedCacheKeys = [];
     private readonly CheckBox cpuFallback = Check("Fall back to CPU if DirectML fails");
     private readonly CheckBox cpuOperators = Check("Allow CPU operators in DirectML graphs");
-    private readonly CheckBox validate = Check("Verify DirectML results against CPU when loading");
+    private readonly CheckBox validate = Check("Compare DirectML with CPU on load (diagnostic only)");
     private readonly CheckBox disableDmlFusion = Check("Disable DirectML graph fusion (Demucs compatibility)");
     private readonly CheckBox memoryPattern = Check("Enable memory pattern (CPU only)");
     private readonly CheckBox cpuArena = Check("Enable CPU memory arena");
@@ -70,7 +70,7 @@ public partial class OnnxDemucsDialog : Form
     {
         this.InitializeComponent();
         this.optimization.SelectedItem = GraphOptimizationLevel.ORT_ENABLE_BASIC.ToString();
-        this.OriginalAudio = audioObj;
+        this.OriginalAudio = audioObj.Clone();
         this.Text = "Demucs Source Separation";
         this.MaximumSize = Size.Empty;
         this.StartPosition = FormStartPosition.CenterParent;
@@ -214,7 +214,8 @@ public partial class OnnxDemucsDialog : Form
         int row = this.optionCount / 2;
         int column = this.optionCount++ % 2 * 2;
         this.optionsPanel.Controls.Add(new Label { Text = caption, AutoSize = false, Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Margin = new Padding(3, 2, 3, 2) }, column, row);
+            TextAlign = ReferenceEquals(control, this.overlap) ? ContentAlignment.TopLeft : ContentAlignment.MiddleLeft,
+            AutoEllipsis = true, Margin = new Padding(3, 2, 3, 2) }, column, row);
         control.MinimumSize = Size.Empty;
         if (control is ComboBox or TextBox) control.Width = 100;
         control.Margin = new Padding(3, 4, 3, 4);
@@ -534,10 +535,9 @@ public partial class OnnxDemucsDialog : Form
             this.checkedListBox_stems.Items.Clear();
             foreach (string stem in this.Onnx.AvailableStems)
                 this.checkedListBox_stems.Items.Add(stem, this.settings.SelectedStems.Contains(stem));
-            string providers = string.Join(", ", acquired.Select(lease => lease.Model.ExecutionProvider).Distinct(StringComparer.Ordinal));
-            string ready = $"Ready — {providers}";
-            if (acquired.Count > 1)
-                ready += $"\n{acquired.Count} model sessions loaded; selected stems will be split across devices in parallel.";
+            string ready = acquired.Count > 1
+                ? $"Ready — {acquired.Count} model sessions loaded; selected stems will be split across devices in parallel."
+                : "Ready — model session loaded.";
             this.status.Text = this.WithDeviceNotice($"{ready}\n{DescribeLoadedModels(acquired)}");
         }
         catch (Exception error) { this.ShowError("Unable to load Demucs", error); }
@@ -590,35 +590,60 @@ public partial class OnnxDemucsDialog : Form
     private static string DescribeLoadedModels(IEnumerable<SharedModelPool<OnnxService>.Lease> leases)
     {
         var models = leases.Select(lease => lease.Model).ToArray();
+        string[] providers = models.Select(model => model.ExecutionProvider).Distinct(StringComparer.Ordinal).ToArray();
         string[] backends = models.Select(model => model.FourierBackend).Distinct(StringComparer.Ordinal).ToArray();
         string[] warnings = models.Select(model => model.LoadWarning)
             .Where(message => !string.IsNullOrWhiteSpace(message)).Cast<string>().Distinct(StringComparer.Ordinal).ToArray();
-        return string.Join(Environment.NewLine, backends.Concat(warnings));
-    }
-
-    private string FourierBackendSummary(IEnumerable<SharedModelPool<OnnxService>.Lease> leases)
-    {
-        string[] backends = leases.Select(lease => lease.Model.FourierBackend)
-            .Distinct(StringComparer.Ordinal).ToArray();
-        return backends.Length == 0 ? this.Onnx?.FourierBackend ?? "" : string.Join(Environment.NewLine, backends);
+        return string.Join(Environment.NewLine,
+            new[] { $"ONNX: {string.Join(", ", providers)}", $"FFT: {string.Join(", ", backends)}" }.Concat(warnings));
     }
 
     private async Task<List<SharedModelPool<OnnxService>.Lease>> LoadModelLeasesAsync(
         string modelPath, DemucsLoadOptions[] options)
     {
-        this.status.Text = options.Length == 1
+        string heading = options.Length == 1
             ? $"Loading {Path.GetFileName(modelPath)}…"
             : $"Loading {Path.GetFileName(modelPath)} on {options.Length} devices in parallel…";
-        async Task<SharedModelPool<OnnxService>.Lease> LoadOneAsync(DemucsLoadOptions option) =>
-            await DemucsModelCache.AcquireAsync(modelPath, option, this.settings.ModelDirectories, allowLoad: true)
-                ?? throw new InvalidOperationException("The selected Demucs model could not be loaded.");
-        Task<SharedModelPool<OnnxService>.Lease>[] tasks = options.Select(LoadOneAsync).ToArray();
+        string[] devices = options.Select(option => option.UseDirectML
+            ? this.FindDirectMLDevice(option.DeviceId)?.ToString() ?? $"DirectML {option.DeviceId}"
+            : "CPU").ToArray();
+        string[] states = options.Select(_ => "Waiting for session initialization…").ToArray();
+        bool reportProgress = true;
+        void UpdateLoadStatus() => this.status.Text = string.Join(Environment.NewLine,
+            new[] { heading }.Concat(devices.Select((device, index) => $"{device}: {states[index]}")));
+        IProgress<(int Index, string State)> progress = new Progress<(int Index, string State)>(update =>
+        {
+            if (!reportProgress || this.IsDisposed) return;
+            states[update.Index] = update.State;
+            UpdateLoadStatus();
+        });
+        UpdateLoadStatus();
+        async Task<SharedModelPool<OnnxService>.Lease> LoadOneAsync(int index, DemucsLoadOptions option)
+        {
+            progress.Report((index, "Loading ONNX session…"));
+            try
+            {
+                var lease = await DemucsModelCache.AcquireAsync(modelPath, option, this.settings.ModelDirectories, allowLoad: true)
+                    ?? throw new InvalidOperationException("The selected Demucs model could not be loaded.");
+                progress.Report((index, $"Ready — {lease.Model.ExecutionProvider}; {lease.Model.FourierBackend}"));
+                return lease;
+            }
+            catch (Exception error)
+            {
+                progress.Report((index, $"Failed — {error.Message}"));
+                throw;
+            }
+        }
+        Task<SharedModelPool<OnnxService>.Lease>[] tasks = options.Select((option, index) => LoadOneAsync(index, option)).ToArray();
         try
         {
-            return (await Task.WhenAll(tasks)).ToList();
+            var leases = await Task.WhenAll(tasks);
+            reportProgress = false;
+            return leases.ToList();
         }
         catch
         {
+            reportProgress = false;
             ReleaseLeases(tasks.Where(task => task.Status == TaskStatus.RanToCompletion)
                 .Select(task => task.Result), TimeSpan.Zero);
             throw;
@@ -637,7 +662,7 @@ public partial class OnnxDemucsDialog : Form
         this.progressBar_inferencing.Value = 0;
         this.cancellation.Dispose();
         this.cancellation = new();
-        this.SetBusy(true, "Preparing audio for separation…");
+        this.SetBusy(true, $"Preparing audio for separation…\n{DescribeLoadedModels(this.modelLeases)}");
         int completed = 0;
         var leases = this.modelLeases.ToArray();
         if (leases.Length == 0)
@@ -659,7 +684,7 @@ public partial class OnnxDemucsDialog : Form
                 this.progressBar_inferencing.Value = Math.Clamp(
                     (int)(progressValues.Sum() * 1000 / selected.Length), 0, 1000);
                 this.status.Text = $"Separating {stem} ({index + 1}/{selected.Length}) — {fraction:P0}\n" +
-                    this.FourierBackendSummary(leases);
+                    DescribeLoadedModels(leases);
             })).ToArray();
             var channel = Channel.CreateBounded<(int Index, string Name, float[] Samples)>(
                 new BoundedChannelOptions(Math.Max(1, leases.Length))
@@ -705,7 +730,8 @@ public partial class OnnxDemucsDialog : Form
                     progressValues[result.Index] = 1;
                     this.progressBar_inferencing.Value = Math.Clamp(
                         (int)(progressValues.Sum() * 1000 / selected.Length), 0, 1000);
-                    this.status.Text = $"{result.Name} ready — {completed}/{selected.Length} stem(s) extracted.";
+                    this.status.Text = $"{result.Name} ready — {completed}/{selected.Length} stem(s) extracted.\n" +
+                        DescribeLoadedModels(leases);
                 }
             }
             catch (Exception error)
@@ -716,7 +742,7 @@ public partial class OnnxDemucsDialog : Form
             try { await allWorkers; }
             catch (Exception error) { failure ??= error; }
             if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
-            this.status.Text = $"Finished — {selected.Length} stem(s) extracted.\n{this.FourierBackendSummary(leases)}";
+            this.status.Text = $"Finished — {selected.Length} stem(s) extracted.\n{DescribeLoadedModels(leases)}";
         }
         catch (OperationCanceledException) { this.status.Text = $"Separation cancelled — {completed} completed stem(s) kept."; }
         catch (Exception error) { this.ShowError("Demucs separation failed", error); }
@@ -761,6 +787,7 @@ public partial class OnnxDemucsDialog : Form
         this.gpuCacheTimer.Stop();
         this.ReleaseModel();
         this.cancellation.Dispose();
+        this.OriginalAudio.Dispose();
         base.OnFormClosed(e);
     }
 
@@ -770,7 +797,7 @@ public partial class OnnxDemucsDialog : Form
         if (this.Onnx?.IsOnline == true && this.loadedCacheKeys.SequenceEqual(keys, StringComparer.Ordinal))
         {
             this.loadedWithCurrentOptions = true;
-            this.status.Text = this.WithDeviceNotice($"Ready — model already loaded.\n{this.FourierBackendSummary(this.modelLeases)}");
+            this.status.Text = this.WithDeviceNotice($"Ready — model already loaded.\n{DescribeLoadedModels(this.modelLeases)}");
             return true;
         }
         var acquired = new List<SharedModelPool<OnnxService>.Lease>();

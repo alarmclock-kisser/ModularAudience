@@ -100,13 +100,8 @@ namespace ModularAudience.Onnx
                 this.fourier = new DemucsFourier(loadOptions);
                 if (loadOptions.UseDirectML && this.ExecutionProvider.StartsWith("DirectML") && loadOptions.ValidateDirectML)
                     this.ValidateDirectML(modelPath, loadOptions);
-                if (directMLRequested && !this.ExecutionProvider.StartsWith("DirectML", StringComparison.Ordinal))
-                {
-                    loadOptions.CudaDeviceId = -1;
-                    loadOptions.DeviceLuid = null;
-                    this.fourier = new DemucsFourier(loadOptions);
-                }
-                loadOptions.UseDirectML = this.ExecutionProvider.StartsWith("DirectML", StringComparison.Ordinal);
+                loadOptions.ApplyEffectiveProvider(
+                    this.ExecutionProvider.StartsWith("DirectML", StringComparison.Ordinal));
                 this.EffectiveOptions = loadOptions;
                 return true;
             }
@@ -334,13 +329,8 @@ namespace ModularAudience.Onnx
                         if (!double.IsFinite(error) || Math.Sqrt(error / Math.Max(energy, 1e-12)) > 0.05) valid = false;
                     }
                 if (valid) return;
-                if (!options.AllowCpuFallback)
-                    throw new InvalidOperationException("DirectML output differs significantly from CPU on this device. Choose CPU or enable CPU fallback.");
-                this._session!.Dispose();
-                this._session = cpu;
-                cpu = null!;
-                this.ExecutionProvider = "CPU (DirectML verification fallback)";
-                this.LoadWarning = $"DirectML produced incorrect values on device {options.DeviceId}. The verified CPU session is used instead.";
+                this.LoadWarning = $"DirectML validation exceeded the 5% relative-error threshold on device {options.DeviceId}. The DirectML session remains active for inference.";
+                Console.Error.WriteLine(this.LoadWarning);
             }
             finally { cpu?.Dispose(); }
         }

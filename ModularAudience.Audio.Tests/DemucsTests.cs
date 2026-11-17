@@ -132,6 +132,31 @@ public sealed class DemucsTests
         }
     }
 
+    [STATestMethod]
+    public void DialogUsesAnIndependentAudioSnapshot()
+    {
+        float[] samples = [0.1f, 0.2f, -0.3f, 0.4f];
+        var source = new AudioObj
+        {
+            Name = "Source track",
+            OriginalName = "source.wav",
+            Data = (float[])samples.Clone(),
+            SampleRate = 44100,
+            Channels = 2
+        };
+        using var dialog = new OnnxDemucsDialog(source);
+        var snapshot = (AudioObj)typeof(OnnxDemucsDialog)
+            .GetField("OriginalAudio", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(dialog)!;
+
+        source.Dispose();
+
+        Assert.AreNotSame(source, snapshot);
+        CollectionAssert.AreEqual(samples, snapshot.Data);
+        Assert.AreEqual("source.wav", snapshot.OriginalName);
+        snapshot.Dispose();
+    }
+
     [TestMethod]
     public void WorkerLimitsAlsoApplyToLoadedSettingsAndBackend()
     {
@@ -163,6 +188,36 @@ public sealed class DemucsTests
         options.GraphOptimization = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_ALL;
         options.NormalizeForProvider(false);
         Assert.AreEqual(Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_ALL, options.GraphOptimization);
+    }
+
+    [TestMethod]
+    public void CpuEffectiveProviderPreservesIndependentCudaCuFftDevice()
+    {
+        const long luid = 0x12345678;
+        var options = new DemucsLoadOptions
+        {
+            UseDirectML = true,
+            UseCudaCuFft = true,
+            CudaDeviceId = 1,
+            DeviceLuid = luid
+        };
+
+        options.ApplyEffectiveProvider(false);
+
+        Assert.IsFalse(options.UseDirectML);
+        Assert.IsTrue(options.UseCudaCuFft);
+        Assert.AreEqual(1, options.CudaDeviceId);
+        Assert.AreEqual(luid, options.DeviceLuid);
+
+        var cpuOnly = new DemucsLoadOptions
+        {
+            UseDirectML = true,
+            UseCudaCuFft = true,
+            CudaDeviceId = -1,
+            DeviceLuid = luid
+        };
+        cpuOnly.ApplyEffectiveProvider(false);
+        Assert.IsNull(cpuOnly.DeviceLuid);
     }
 
     [TestMethod]
@@ -304,6 +359,7 @@ public sealed class DemucsTests
         if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
         using var service = new OnnxService(loadImmediately: false);
         service.LoadModel(model, new DemucsLoadOptions { UseDirectML = directML, DeviceId = 0, GraphOptimization = optimization });
+        string initializedProvider = service.ExecutionProvider;
         Console.WriteLine(service.ExecutionProvider + " " + service.LoadWarning);
         if (directML) StringAssert.StartsWith(service.ExecutionProvider, "DirectML");
         Assert.AreEqual(directML, service.EffectiveOptions!.UseDirectML);
@@ -316,6 +372,8 @@ public sealed class DemucsTests
         }
         float[] original = (float[])source.Data.Clone();
         var stems = await service.ExtractStemsAsync(source, service.AvailableStems);
+        Assert.AreEqual(initializedProvider, service.ExecutionProvider, "Inference must keep the provider initialized during loading.");
+        Assert.IsTrue(service.IsOnline, "Inference must not dispose the initialized ONNX session.");
         Assert.HasCount(6, stems);
         foreach (var (name, samples) in stems)
         {
@@ -363,11 +421,21 @@ public sealed class DemucsTests
         const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
         if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
         using var service = new OnnxService(loadImmediately: false);
-        var requested = new DemucsLoadOptions { DeviceId = int.MaxValue, AllowCpuFallback = true, IntraOpThreads = 2 };
+        const long luid = 0x12345678;
+        var requested = new DemucsLoadOptions
+        {
+            DeviceId = int.MaxValue,
+            AllowCpuFallback = true,
+            IntraOpThreads = 2,
+            UseCudaCuFft = true,
+            CudaDeviceId = 1,
+            DeviceLuid = luid
+        };
         service.LoadModel(model, requested);
         Assert.AreEqual("CPU", service.ExecutionProvider);
         Assert.IsFalse(service.EffectiveOptions!.UseDirectML);
-        Assert.AreEqual(-1, service.EffectiveOptions.CudaDeviceId);
+        Assert.AreEqual(1, service.EffectiveOptions.CudaDeviceId);
+        Assert.AreEqual(luid, service.EffectiveOptions.DeviceLuid);
         Assert.AreEqual(2, service.EffectiveOptions.IntraOpThreads);
         Assert.IsTrue(requested.UseDirectML, "Reporting effective settings must not mutate the caller's requested settings.");
         StringAssert.Contains(service.LoadWarning!, "DirectML could not initialize");

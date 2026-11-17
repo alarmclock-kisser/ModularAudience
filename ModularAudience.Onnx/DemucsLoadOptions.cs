@@ -80,4 +80,12 @@ public sealed class DemucsLoadOptions
         this.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
         this.EnableMemoryPattern = false;
     }
+
+    internal void ApplyEffectiveProvider(bool directML)
+    {
+        this.UseDirectML = directML;
+        if (!directML && (!this.UseCudaCuFft || this.CudaDeviceId < 0))
+            this.DeviceLuid = null;
+        this.NormalizeForProvider(directML);
+    }
 }
