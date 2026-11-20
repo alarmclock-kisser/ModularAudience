@@ -73,7 +73,7 @@ public partial class OnnxDemucsDialog : Form
         this.OriginalAudio = audioObj.Clone();
         this.Text = "Demucs Source Separation";
         this.MaximumSize = Size.Empty;
-        this.StartPosition = FormStartPosition.CenterParent;
+        this.StartPosition = FormStartPosition.CenterScreen;
         this.Controls.Clear();
         this.comboBox_models.DropDownStyle = ComboBoxStyle.DropDownList;
         this.comboBox_models.DisplayMember = nameof(ModelItem.Name);
@@ -198,6 +198,12 @@ public partial class OnnxDemucsDialog : Form
             if (control is TextBox text) text.TextChanged += (_, _) => this.OptionsChanged();
         }
         this.SetBusy(false);
+    }
+
+    internal void ShowIndependent()
+    {
+        this.Owner = null;
+        this.Show();
     }
 
     private static ComboBox DropDown(string[] values)

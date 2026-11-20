@@ -157,6 +157,46 @@ public sealed class DemucsTests
         snapshot.Dispose();
     }
 
+    [STATestMethod]
+    public void DemucsDialogOutlivesItsSourceCollection()
+    {
+        float[] samples = [0.1f, 0.2f, -0.3f, 0.4f];
+        using var source = new AudioObj
+        {
+            Name = "Source track",
+            OriginalName = "source.wav",
+            Data = (float[])samples.Clone(),
+            SampleRate = 44100,
+            Channels = 2
+        };
+        using var owner = new Form();
+        using var dialog = new DemucsDialogWithoutInitialization(source);
+        var snapshot = (AudioObj)typeof(OnnxDemucsDialog)
+            .GetField("OriginalAudio", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(dialog)!;
+
+        owner.Show();
+        dialog.Owner = owner;
+        dialog.ShowIndependent();
+        source.Dispose();
+        owner.Close();
+
+        Assert.IsNull(dialog.Owner);
+        Assert.IsFalse(dialog.IsDisposed);
+        Assert.IsTrue(dialog.Visible);
+        CollectionAssert.AreEqual(samples, snapshot.Data);
+
+        typeof(OnnxDemucsDialog)
+            .GetField("initializing", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(dialog, true);
+        dialog.Close();
+    }
+
+    private sealed class DemucsDialogWithoutInitialization(AudioObj audioObj) : OnnxDemucsDialog(audioObj)
+    {
+        protected override void OnShown(EventArgs e) { }
+    }
+
     [TestMethod]
     public void WorkerLimitsAlsoApplyToLoadedSettingsAndBackend()
     {

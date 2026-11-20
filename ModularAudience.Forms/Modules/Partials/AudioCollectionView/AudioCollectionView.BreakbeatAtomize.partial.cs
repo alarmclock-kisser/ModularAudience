@@ -424,7 +424,7 @@ namespace ModularAudience.Forms
                 WindowMain.Instance?.UpdateTrackDependentUI();
                 WindowMain.Instance?.RefreshAllCollectionViews();
             };
-            separationForm.Show(this);
+            separationForm.ShowIndependent();
         }
 
         private void menuToolStripItem_sourceSeparateAnalog_Click(object sender, EventArgs e)
