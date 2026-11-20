@@ -400,7 +400,8 @@
             contextMenuStrip_newTrack.Items.AddRange(new ToolStripItem[] { toolStripMenuItem_browseYoutube });
             contextMenuStrip_newTrack.Items.Add(new ToolStripMenuItem("Model Waveform", null, ModelWaveform_Click) { Name = "toolStripMenuItem_modelWaveform" });
             contextMenuStrip_newTrack.Items.Add(CreateSampleSynthesizerMenu());
-contextMenuStrip_newTrack.Items.Add(CreateVocalSynthMenu());
+            contextMenuStrip_newTrack.Items.Add(CreateMidiEditorMenuItem(this.OpenCustomMidiEditor));
+            contextMenuStrip_newTrack.Items.Add(CreateVocalSynthMenu());
             contextMenuStrip_newTrack.Name = "contextMenuStrip_newTrack";
             contextMenuStrip_newTrack.Size = new Size(142, 26);
             // 

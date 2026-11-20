@@ -333,6 +333,27 @@ internal static class BreakbeatPatternInstrumentRenderer
         return ApplyPitch(source, trackPitch + note.PitchSemitones, bpm, noteBeats);
     }
 
+    internal static InstrumentSynthSettings CreateSettingsForMidiNote(
+        InstrumentSynthSettings source,
+        int midiNote,
+        long durationTicks,
+        int ticksPerQuarterNote,
+        double bpm,
+        double pitchFrequency = 440.0)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (midiNote is < 0 or > 127) throw new ArgumentOutOfRangeException(nameof(midiNote));
+        if (durationTicks <= 0) throw new ArgumentOutOfRangeException(nameof(durationTicks));
+        if (ticksPerQuarterNote <= 0) throw new ArgumentOutOfRangeException(nameof(ticksPerQuarterNote));
+        if (!double.IsFinite(pitchFrequency) || pitchFrequency <= 0)
+            throw new ArgumentOutOfRangeException(nameof(pitchFrequency));
+
+        double tuningSemitones = 12 * Math.Log2(pitchFrequency / 440.0);
+        double semitones = midiNote - source.MidiNote + tuningSemitones;
+        double noteBeats = durationTicks / (double)ticksPerQuarterNote;
+        return ApplyPitch(source, semitones, (float)bpm, noteBeats);
+    }
+
     private static InstrumentSynthSettings ApplyPitch(
         InstrumentSynthSettings source,
         double semitones,

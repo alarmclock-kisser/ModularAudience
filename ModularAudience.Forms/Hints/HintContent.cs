@@ -12,7 +12,7 @@ internal static class HintContent
     internal static readonly Dictionary<string, string> Main = new()
     {
         ["button_import"] = "Import audio or MIDI files into the current import workflow.\nClick: select files. Shift+click: select a folder. The Structure and One Bag options control how imported files are grouped.",
-        ["button_newTrack"] = "Create a new audio track.\nRight-click: browse YouTube, synthesize an instrument sample or open the Waveform Modeller. These tools create audio objects without replacing existing tracks.",
+        ["button_newTrack"] = "Create a new audio track.\nRight-click: browse YouTube, synthesize an instrument sample, open the Waveform Modeller or launch the standalone MIDI Editor. These tools create audio objects without replacing existing tracks.",
         ["button_newBag"] = "Create an empty audio collection (bag). Drag audio between collections to organize sources for playback, editing and mixes.",
         ["button_export"] = "Export audio using the global format and quality below. Export creates files; it does not change the audio currently held in RAM.",
         ["comboBox_exportFormat"] = "Global audio export format. WAV uses PCM bit depth; MP3 uses bitrate in kbps. Format and quality are saved in AppData and shared with other application instances.",
@@ -79,5 +79,20 @@ internal static class HintContent
         ["button_play"] = "Preview the edited MIDI page using its source renderer's instrument and tempo. Click again to stop. A red caret follows playback.",
         ["numericUpDown_pitchFrequency"] = "Reference tuning for MIDI note A4 in hertz (normally 440 Hz). The edited file retains this tuning for subsequent audio rendering.",
         ["domainUpDown_noteGranularity"] = "Select the note-placement grid. Finer grids permit shorter notes and smaller time steps; existing notes are not automatically quantized."
+    };
+
+    internal static readonly Dictionary<string, string> CustomMidiEditor = new()
+    {
+        ["pictureBox_editor"] = "Piano roll: left-drag adds notes; right-drag deletes notes; Shift+left-drag selects a range for Remix/Generate. Ctrl+drag pans; Ctrl+wheel zooms; wheel scrolls horizontally.\nCtrl+C/X copies or cuts the selection. Ctrl+V previews a ghost at the pointer; hold Ctrl+V for clipboard history. Click places; Esc or right-click cancels.",
+        ["button_instrument"] = "Choose a built-in MIDI sound, a Custom Sample/Collection, or open Instrument Synth to configure a procedural instrument. Configured synths are rendered per MIDI note using that note's pitch and gate length; they are not stretched from a single sample.",
+        ["numericUpDown_resolution"] = "Grid divisions per quarter note. Higher values allow finer note placement.",
+        ["numericUpDown_bpm"] = "Tempo for MIDI preview and audio rendering.",
+        ["domainUpDown_minKey"] = "Lowest visible piano-roll note. The range is kept at least one octave wide.",
+        ["domainUpDown_maxKey"] = "Highest visible piano-roll note. The range is kept at least one octave wide.",
+        ["button_play"] = "Play/stop the whole arrangement using the selected instrument and BPM.",
+        ["checkBox_preview"] = "Audition the note after drawing it.",
+        ["button_save"] = "Click to render the arrangement into a matching CustomMidi collection. The collection is reused for the same BPM and instrument; melody sample names are made unique. Right-click for MIDI file export.",
+        ["button_remix"] = "Remix the selected range (or whole arrangement) and create a ghost preview to place without replacing existing notes.",
+        ["button_generate"] = "Generate notes for the selected range (or a new arrangement) and create a ghost preview to place."
     };
 }
