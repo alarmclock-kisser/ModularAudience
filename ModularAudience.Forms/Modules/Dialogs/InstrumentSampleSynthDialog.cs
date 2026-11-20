@@ -70,7 +70,8 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         SynthFamily family,
         InstrumentSynthStore? store = null,
         Action<InstrumentSynthSettings>? onInstrumentConfirmed = null,
-        InstrumentSynthSettings? initialSettings = null)
+        InstrumentSynthSettings? initialSettings = null,
+        double? initialBpm = null)
     {
         this.store = store ?? InstrumentSynthStore.Shared;
         this.onInstrumentConfirmed = onInstrumentConfirmed;
@@ -80,6 +81,12 @@ public sealed partial class InstrumentSampleSynthDialog : Form
             throw new ArgumentException("The initial instrument settings must match the selected synthesizer family.", nameof(initialSettings));
         if (initialSettings is null) settings.ApplyVoiceDefaults();
         else settings.Validate();
+        if (initialBpm is double bpm)
+        {
+            if (!double.IsFinite(bpm) || bpm is < 10 or > 400)
+                throw new ArgumentOutOfRangeException(nameof(initialBpm), "The initial BPM must be between 10 and 400.");
+            settings.Bpm = bpm;
+        }
         this.InitializeSynthActionControls();
         KeyPreview = true;
         KeyDown += InstrumentSampleSynthDialog_KeyDown;
@@ -96,7 +103,8 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         if (family == SynthFamily.DrumSet)
         {
             kit.Items.AddRange(InstrumentSynthCatalog.DrumKits.Cast<object>().ToArray()); kit.SelectedIndex = settings.KitIndex;
-            drum.Items.AddRange(Enum.GetValues<SynthDrum>().Cast<object>().ToArray()); drum.SelectedIndex = (int)settings.Drum;
+            drum.Items.AddRange(Enum.GetValues<SynthDrum>().Select(d => (object)InstrumentSynthCatalog.DrumName(d)).ToArray());
+            drum.SelectedIndex = (int)settings.Drum;
             Field("Drum Set Type", kit); Field("Drum Type", drum);
         }
         else
@@ -145,7 +153,7 @@ public sealed partial class InstrumentSampleSynthDialog : Form
                 QueueRender();
             };
         }
-        Number(nameof(settings.Bpm), "BPM", 20, 400, 0.5m, "Tempo used to calculate the musical gate length.");
+        Number(nameof(settings.Bpm), "BPM", 10, 400, 0.5m, "Tempo used to calculate the musical gate length.");
         Number(nameof(settings.PitchSemitones),
             family == SynthFamily.OrientalSounds ? "Pitch / microtone (± semitones)" : "Pitch (± semitones)",
             -16, 16, 0.25m,
@@ -1033,7 +1041,7 @@ public sealed partial class InstrumentSampleSynthDialog : Form
         if (collection == null || collection.IsDisposed) collection = new AudioCollectionView([], "Synthesized " + InstrumentSynthCatalog.FamilyName(family));
         var created = audio.Clone();
         if (family == SynthFamily.DrumSet)
-            created.Tag = GetDrumsetElement((SynthDrum)drum.SelectedItem!);
+            created.Tag = GetDrumsetElement((SynthDrum)drum.SelectedIndex);
         string basis = audio.Name, name = basis; int index = 2;
         while (collection.AudioC.Audios.Any(a => a.Name == name)) name = basis + " " + index++;
         created.Rename(name); collection.AudioC.Audios.Add(created); collection.Show();
@@ -1044,6 +1052,7 @@ public sealed partial class InstrumentSampleSynthDialog : Form
     {
         SynthDrum.Kick or SynthDrum.BassDrum => DrumsetElement.Kick,
         SynthDrum.Snare => DrumsetElement.Snare,
+        SynthDrum.SnareRattle => DrumsetElement.SnareRattle,
         SynthDrum.Clap => DrumsetElement.Clap,
         SynthDrum.Rimshot => DrumsetElement.Rim,
         SynthDrum.PedalHiHat => DrumsetElement.HiHatClosed,

@@ -3,7 +3,7 @@ using System.Globalization;
 namespace ModularAudience.Audio.Synthesis;
 
 public enum SynthFamily { Keyboard, DrumSet, Woodwinds, Brass, PluckedStrings, BowedStrings, MalletsAndBells, Organ, SynthBassAndLead, SynthPadsAndPoly, SynthKeysAndPlucks, OtherSoundFx, OrientalSounds }
-public enum SynthDrum { Kick, BassDrum, Snare, Rimshot, Clap, ClosedHiHat, OpenHiHat, LowTom, MidTom, HighTom, Ride, Crash, Cowbell, Shaker, PedalHiHat }
+public enum SynthDrum { Kick, BassDrum, Snare, SnareRattle, Rimshot, Clap, ClosedHiHat, OpenHiHat, LowTom, MidTom, HighTom, Ride, Crash, Cowbell, Shaker, PedalHiHat }
 
 public sealed record SynthVoice(string Name, double Brightness, double Decay, double Release, double Body, double Noise, double Drive, double Detune, double Vibrato)
 {
@@ -28,6 +28,11 @@ public static class InstrumentSynthCatalog
         SynthFamily.OtherSoundFx => "Other Sound FX",
         SynthFamily.OrientalSounds => "Oriental Sounds",
         _ => family.ToString()
+    };
+    public static string DrumName(SynthDrum drum) => drum switch
+    {
+        SynthDrum.SnareRattle => "Snare (Rattle)",
+        _ => drum.ToString()
     };
     public static IReadOnlyList<SynthDrumKit> DrumKits { get; } =
     [
@@ -234,7 +239,7 @@ public sealed class InstrumentSynthSettings
     public int SampleRate { get; set; } = 44100;
     public int Channels { get; set; } = 2;
     public double GateSeconds => 60 / Bpm * NoteBeats * DurationMultiplier;
-    public string VoiceName => Family == SynthFamily.DrumSet ? $"{InstrumentSynthCatalog.DrumKits[KitIndex].Name} {Drum}" : InstrumentSynthCatalog.Voices(Family)[VoiceIndex].Name;
+    public string VoiceName => Family == SynthFamily.DrumSet ? $"{InstrumentSynthCatalog.DrumKits[KitIndex].Name} {InstrumentSynthCatalog.DrumName(Drum)}" : InstrumentSynthCatalog.Voices(Family)[VoiceIndex].Name;
     public string KeyDurationName
     {
         get

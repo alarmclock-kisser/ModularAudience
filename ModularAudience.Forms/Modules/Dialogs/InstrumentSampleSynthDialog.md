@@ -10,6 +10,8 @@ height or width enables parameter scrolling again, without automatically resizin
 ## Timing and preview
 
 - BPM and Key Duration specify the gate length of **one note**, not a sequence.
+- Opened via **+ Instrument** in the Breakbeat Pattern Editor, a new instrument starts at that
+  editor's current BPM instead of the default 120. Existing instrument tracks keep their own BPM.
 - Durations run from 1/64 through 4 Bars (4/4); Straight, Dotted and Triplet timing are supported.
 - Other Sound FX opens with a 1/2-note gate (one second at 120 BPM) so timed signals such as Morse SOS are audible; choose a shorter duration for quick hits.
 - Attack/Decay/Sustain control the held sound; Release adds a separate tail to the output sample.
@@ -48,7 +50,7 @@ height or width enables parameter scrolling again, without automatically resizin
 | Family | Presets | Synthesis |
 | --- | --- | --- |
 | Keyboard | Concert Grand, Felt Upright, Bright Honky-Tonk, Tine Electric, Reed Electric, Glass FM Keys, Toy Piano, Dark Velvet | Decaying inharmonic partials, partial detuning, strike noise and electric-key FM components. |
-| Drum Set | Nineteen kits below, each with fifteen drums | Swept membrane tones, noise snares/claps/shakers, inharmonic metal partials, transient and kit-specific colour. |
+| Drum Set | Nineteen kits below, each with sixteen drums | Swept membrane tones, dry shell and rattled snares, claps/shakers, inharmonic metal partials, transient and kit-specific colour. |
 | Woodwinds | Concert Flute, Breathy Alto Flute, Clarinet, Oboe, Bassoon, Pan Pipes, Tenor Sax | Harmonic profiles, odd-harmonic emphasis, body formants, breath and delayed vibrato. |
 | Brass | Trumpet, Muted Trumpet, French Horn, Trombone, Tuba, Brass Section | Dynamic harmonic attack, formant weighting, saturation, detuned section and vibrato. |
 | Plucked Strings | Nylon Guitar, Steel Guitar, Harp, Koto, Muted Bass, Banjo | Karplus–Strong-style feedback strings, pluck position, damping and body resonance. |
@@ -93,8 +95,10 @@ Oud uses a short per-note pitch scoop to suggest its fretless slides.
 - **Neurofunk**: dense metallic content, sharper sweeps and controlled drive.
 - **Jump-Up**: bright, punchy attacks with a bouncy, slightly crushed edge.
 
-Every kit offers Kick, BassDrum, Snare, Rimshot, Clap, ClosedHiHat, OpenHiHat,
+Every kit offers Kick, BassDrum, Snare, Snare (Rattle), Rimshot, Clap, ClosedHiHat, OpenHiHat,
 LowTom, MidTom, HighTom, Ride, Crash, Cowbell, Shaker and PedalHiHat.
+Snare synthesizes the dry shell and stick attack without snare wires; Snare (Rattle) adds the
+sustained wire rattle. Snare maps to the snare DrumsetElement, Snare (Rattle) to SnareRattle.
 PedalHiHat carries the closed-hi-hat DrumsetElement tag for Breakbeat Generator use.
 Genre kits alter individual drum hits; they do not generate break loops or use sampled breaks.
 

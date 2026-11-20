@@ -575,7 +575,11 @@ public static class InstrumentSampleSynth
             {
                 SynthDrum.Kick => sine(48, 180 * sweep, 45) * Math.Exp(-t / decay) + highNoise * snap * Math.Exp(-t * 450) * 0.55,
                 SynthDrum.BassDrum => sine(35, 80 * sweep, 22) * Math.Exp(-t / (decay * 1.4)) + pitchedNoise * snap * Math.Exp(-t * 180) * 0.2,
-                SynthDrum.Snare => (sine(175, 70 * sweep, 40) * Math.Exp(-t / (decay * 0.3)) * 0.5 + pitchedNoise * Math.Exp(-t / (decay * 0.45)) * 0.8),
+                SynthDrum.Snare => sine(175, 70 * sweep, 40) * Math.Exp(-t / (decay * 0.3)) * 0.6
+                    + sine(330, 45 * sweep, 55) * Math.Exp(-t / (decay * 0.16)) * 0.22
+                    + pitchedNoise * Math.Exp(-t * 280) * 0.25
+                    + highNoise * snap * Math.Exp(-t * 380) * 0.35,
+                SynthDrum.SnareRattle => (sine(175, 70 * sweep, 40) * Math.Exp(-t / (decay * 0.3)) * 0.5 + pitchedNoise * Math.Exp(-t / (decay * 0.45)) * 0.8),
                 SynthDrum.Rimshot => (sine(380, 100 * sweep, 80) + sine(830, 0, 1) * 0.6) * Math.Exp(-t / (decay * 0.12)),
                 SynthDrum.Clap => pitchedNoise * (Math.Exp(-t * 100) + Pulse(t, 0.012, 150) + Pulse(t, 0.025, 110) + Pulse(t, 0.04, 25 / decay)) * 0.7,
                 SynthDrum.ClosedHiHat => (metal * 0.7 + highNoise * kit.Noise * 0.3) * Math.Exp(-t / (decay * 0.12)),

@@ -109,7 +109,7 @@ internal static class BreakbeatTrackPresets
                 "LiquidDnB" => instrument.Drum switch
                 {
                     ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "EuclidFive",
-                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "DnBTwoStep",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.SnareRattle or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "DnBTwoStep",
                     ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat => "ElasticOrbit",
                     ModularAudience.Audio.Synthesis.SynthDrum.OpenHiHat or ModularAudience.Audio.Synthesis.SynthDrum.Ride or ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "EuclidFive",
                     ModularAudience.Audio.Synthesis.SynthDrum.LowTom or ModularAudience.Audio.Synthesis.SynthDrum.MidTom or ModularAudience.Audio.Synthesis.SynthDrum.HighTom => "DubEchoSteps",
@@ -118,7 +118,7 @@ internal static class BreakbeatTrackPresets
                 "JungleRoller" => instrument.Drum switch
                 {
                     ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "EuclidFive",
-                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "AmenSnareLadder",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.SnareRattle or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "AmenSnareLadder",
                     ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat => "RatchetPressure",
                     ModularAudience.Audio.Synthesis.SynthDrum.OpenHiHat or ModularAudience.Audio.Synthesis.SynthDrum.Ride => "JungleRoller",
                     ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "EuclidFive",
@@ -128,7 +128,7 @@ internal static class BreakbeatTrackPresets
                 "Breakcore" => instrument.Drum switch
                 {
                     ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "EuclidFive",
-                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "GlitchShards",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.SnareRattle or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "GlitchShards",
                     ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat or
                     ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "RatchetPressure",
                     ModularAudience.Audio.Synthesis.SynthDrum.OpenHiHat or ModularAudience.Audio.Synthesis.SynthDrum.Ride => "GlitchShards",
@@ -138,7 +138,7 @@ internal static class BreakbeatTrackPresets
                 "Ragga" => instrument.Drum switch
                 {
                     ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "HalfTimeTitan",
-                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "RaggaOffbeat",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.SnareRattle or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "RaggaOffbeat",
                     ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat or
                     ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "TresilloChop",
                     ModularAudience.Audio.Synthesis.SynthDrum.LowTom or ModularAudience.Audio.Synthesis.SynthDrum.MidTom or ModularAudience.Audio.Synthesis.SynthDrum.HighTom => "TribalTomSpiral",
@@ -147,7 +147,7 @@ internal static class BreakbeatTrackPresets
                 "Neurofunk" => instrument.Drum switch
                 {
                     ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "EuclidFive",
-                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "NeuroMachine",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.SnareRattle or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "NeuroMachine",
                     ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat or
                     ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "RatchetPressure",
                     ModularAudience.Audio.Synthesis.SynthDrum.OpenHiHat or ModularAudience.Audio.Synthesis.SynthDrum.Ride => "GlitchShards",
@@ -157,7 +157,7 @@ internal static class BreakbeatTrackPresets
                 "HalfTimeDnB" => instrument.Drum switch
                 {
                     ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "HalfTimeTitan",
-                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "HalfTimeTitan",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.SnareRattle or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "HalfTimeTitan",
                     ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat or
                     ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "EuclidFive",
                     ModularAudience.Audio.Synthesis.SynthDrum.LowTom or ModularAudience.Audio.Synthesis.SynthDrum.MidTom or ModularAudience.Audio.Synthesis.SynthDrum.HighTom => "TapeDive",
@@ -166,7 +166,7 @@ internal static class BreakbeatTrackPresets
                 _ => instrument.Drum switch
                 {
                     ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "EuclidFive",
-                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "AmenSnareLadder",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.SnareRattle or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "AmenSnareLadder",
                     ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat or
                     ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "EuclidFive",
                     ModularAudience.Audio.Synthesis.SynthDrum.OpenHiHat or ModularAudience.Audio.Synthesis.SynthDrum.Ride => "ElasticOrbit",

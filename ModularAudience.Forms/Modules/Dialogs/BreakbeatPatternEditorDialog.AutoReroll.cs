@@ -299,7 +299,7 @@ public partial class BreakbeatPatternEditorDialog
                 or SynthFamily.SynthKeysAndPlucks
                 or SynthFamily.MalletsAndBells;
             bool pitchedDrum = instruments[row]?.Family == SynthFamily.DrumSet
-                && instruments[row]!.Drum is SynthDrum.Snare or SynthDrum.Rimshot
+                && instruments[row]!.Drum is SynthDrum.Snare or SynthDrum.SnareRattle or SynthDrum.Rimshot
                 or SynthDrum.LowTom or SynthDrum.MidTom or SynthDrum.HighTom;
             generate.AllowPitchedNotes = pitchedInstrument || pitchedDrum;
             generate.PitchChancePercent = generate.AllowPitchedNotes ? 65 : 0;

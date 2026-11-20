@@ -62,6 +62,25 @@ public sealed class BreakbeatPatternWindowTests
     }
 
     [STATestMethod]
+    public void NewInstrumentDialogUsesCurrentEditorBpm()
+    {
+        using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using var editor = new BreakbeatPatternEditorDialog(
+            [new bool[16]], [sample], ["Audio"], 1, 16, 0, 87.5m);
+        using var dialog = editor.CreateInstrumentDialog(SynthFamily.DrumSet);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var numbers = (Dictionary<string, NumericUpDown>)typeof(InstrumentSampleSynthDialog)
+            .GetField("numbers", flags)!.GetValue(dialog)!;
+        var captured = (InstrumentSynthSettings)typeof(InstrumentSampleSynthDialog)
+            .GetMethod("CaptureSettings", flags)!.Invoke(dialog, null)!;
+
+        Assert.AreEqual(87.5m, numbers["Bpm"].Value);
+        Assert.AreEqual(87.5, captured.Bpm, 1e-12);
+        Assert.AreEqual(0.5, captured.DecaySeconds, 1e-12,
+            "The editor tempo must not bypass the drum voice defaults.");
+    }
+
+    [STATestMethod]
     public void InstrumentTrackKeepsSynthConfigurationOutOfAudioSourcePattern()
     {
         using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };

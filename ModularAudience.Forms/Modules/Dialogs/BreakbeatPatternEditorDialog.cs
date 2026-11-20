@@ -2594,9 +2594,12 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             this.CommitHistoryAction();
         }
 
+        internal InstrumentSampleSynthDialog CreateInstrumentDialog(SynthFamily family)
+            => new(family, onInstrumentConfirmed: this.AddInstrumentTrack, initialBpm: (double)this.Bpm);
+
         private void OpenInstrumentSampleSynth(SynthFamily family)
         {
-            InstrumentSampleSynthDialog dialog = new(family, onInstrumentConfirmed: this.AddInstrumentTrack);
+            InstrumentSampleSynthDialog dialog = this.CreateInstrumentDialog(family);
             dialog.Show(this);
         }
 

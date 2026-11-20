@@ -78,6 +78,42 @@ public sealed class InstrumentSampleSynthTests
     }
 
     [STATestMethod]
+    public void SnareRattleUsesSnareRattleBreakbeatTag()
+    {
+        var mapping = typeof(InstrumentSampleSynthDialog).GetMethod(
+            "GetDrumsetElement",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        DrumsetElement tag = (DrumsetElement)mapping.Invoke(null, [SynthDrum.SnareRattle])!;
+
+        Assert.AreEqual(DrumsetElement.SnareRattle, tag);
+        Assert.AreEqual("Snare (Rattle)", InstrumentSynthCatalog.DrumName(SynthDrum.SnareRattle));
+    }
+
+    [TestMethod]
+    public void DrySnareAndRattleVariantAreDistinctForEveryKit()
+    {
+        for (int kit = 0; kit < InstrumentSynthCatalog.DrumKits.Count; kit++)
+        {
+            var drySettings = Short(SynthFamily.DrumSet);
+            drySettings.KitIndex = kit;
+            drySettings.Drum = SynthDrum.Snare;
+            drySettings.DecaySeconds = 0.4;
+            var rattleSettings = drySettings.Clone();
+            rattleSettings.Drum = SynthDrum.SnareRattle;
+
+            using var dry = InstrumentSampleSynth.Render(drySettings);
+            using var rattle = InstrumentSampleSynth.Render(rattleSettings);
+
+            Assert.AreNotEqual(
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                    System.Runtime.InteropServices.MemoryMarshal.AsBytes(dry.Data.AsSpan()))),
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                    System.Runtime.InteropServices.MemoryMarshal.AsBytes(rattle.Data.AsSpan()))),
+                InstrumentSynthCatalog.DrumKits[kit].Name);
+        }
+    }
+
+    [STATestMethod]
     public void EditingSynthDialogStartsFromTheInstrumentSettingsProvided()
     {
         var initial = Short(SynthFamily.Keyboard);
