@@ -56,41 +56,47 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         // Destination
         public bool CopyToClipboard { get; set; } = BreakbeatPatternRemixSettings.DefaultCopyToClipboard;
+        public Dictionary<int, int> TrackLoops { get; set; } = new();
 
-        public BreakbeatRemixOptions Clone() => (BreakbeatRemixOptions)this.MemberwiseClone();
+        public BreakbeatRemixOptions Clone()
+        {
+            BreakbeatRemixOptions clone = (BreakbeatRemixOptions)this.MemberwiseClone();
+            clone.TrackLoops = this.TrackLoops.ToDictionary(pair => pair.Key, pair => pair.Value);
+            return clone;
+        }
     }
 
     internal static class BreakbeatPatternRemixSettings
     {
-        public const int DefaultVariationPercent = 70;
+        public const int DefaultVariationPercent = 25;
         public const int DefaultSeed = 0;
 
         public const int DefaultMinPatternLengthSteps = 2;
         public const int DefaultMaxPatternLengthSteps = 8;
         public const int DefaultMinPatternRepeats = 2;
-        public const int DefaultPatternReusePercent = 50;
-        public const int DefaultMirrorPercent = 25;
-        public const int DefaultSwapHalvesPercent = 25;
-        public const int DefaultRotateChancePercent = 25;
-        public const int DefaultRotateSteps = 2;
-        public const int DefaultLaneShiftChancePercent = 20;
+        public const int DefaultPatternReusePercent = 75;
+        public const int DefaultMirrorPercent = 8;
+        public const int DefaultSwapHalvesPercent = 8;
+        public const int DefaultRotateChancePercent = 15;
+        public const int DefaultRotateSteps = 1;
+        public const int DefaultLaneShiftChancePercent = 10;
         public const int DefaultLaneShiftSteps = 1;
-        public const int DefaultHumanizeChancePercent = 15;
-        public const int DefaultHumanizeAmountPercent = 15;
+        public const int DefaultHumanizeChancePercent = 10;
+        public const int DefaultHumanizeAmountPercent = 8;
 
-        public const int DefaultGhostChancePercent = 25;
-        public const int DefaultGhostVolumePercent = 60;
-        public const int DefaultRollChancePercent = 20;
+        public const int DefaultGhostChancePercent = 12;
+        public const int DefaultGhostVolumePercent = 55;
+        public const int DefaultRollChancePercent = 8;
         public const int DefaultRollPartsMax = 4;
         public const float DefaultRollPitchStepSemitones = 1f;
-        public const int DefaultMergeChancePercent = 15;
+        public const int DefaultMergeChancePercent = 8;
         public const int DefaultMergeGapSteps = 1;
-        public const int DefaultThinChancePercent = 15;
-        public const int DefaultTrackShufflePercent = 20;
-        public const int DefaultPitchChancePercent = 25;
-        public const float DefaultPitchRangeSemitones = 3f;
-        public const int DefaultVolumeChancePercent = 30;
-        public const float DefaultVolumeRangePercent = 15f;
+        public const int DefaultThinChancePercent = 8;
+        public const int DefaultTrackShufflePercent = 5;
+        public const int DefaultPitchChancePercent = 12;
+        public const float DefaultPitchRangeSemitones = 1f;
+        public const int DefaultVolumeChancePercent = 15;
+        public const float DefaultVolumeRangePercent = 8f;
         public const bool DefaultAllowNoteKindChange = false;
 
         public const bool DefaultCopyToClipboard = false;
@@ -159,6 +165,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public static BreakbeatRemixOptions Normalize(BreakbeatRemixOptions options)
         {
+            options.TrackLoops ??= new Dictionary<int, int>();
+            foreach (int track in options.TrackLoops.Keys.ToArray())
+                options.TrackLoops[track] = Math.Clamp(options.TrackLoops[track], 1, 100000);
             options.VariationPercent = Math.Clamp(options.VariationPercent, 0, 100);
             options.Seed = Math.Max(0, options.Seed);
 

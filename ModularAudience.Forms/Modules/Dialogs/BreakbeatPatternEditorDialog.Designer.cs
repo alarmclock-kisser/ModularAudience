@@ -37,6 +37,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             checkBox_saveOnlySelectedRange = new CheckBox();
             checkBox_saveNewSolo = new CheckBox();
             checkBox_saveNewEnsemble = new CheckBox();
+            checkBox_liveBreakbeat = new CheckBox();
+            combo_liveBreakbeatPreset = new ComboBox();
             button_help = new Button();
             button_settings = new Button();
             button_generate = new Button();
@@ -114,6 +116,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Controls.Add(checkBox_saveOnlySelectedRange);
             panel_controls.Controls.Add(checkBox_saveNewSolo);
             panel_controls.Controls.Add(checkBox_saveNewEnsemble);
+            panel_controls.Controls.Add(checkBox_liveBreakbeat);
+            panel_controls.Controls.Add(combo_liveBreakbeatPreset);
             panel_controls.Controls.Add(button_help);
             panel_controls.Controls.Add(button_settings);
             panel_controls.Controls.Add(button_generate);
@@ -215,6 +219,37 @@ namespace ModularAudience.Forms.Modules.Dialogs
             checkBox_saveNewEnsemble.UseVisualStyleBackColor = true;
             checkBox_saveNewEnsemble.CheckedChanged += checkBox_saveNewEnsemble_CheckedChanged;
             toolTip_pattern.SetToolTip(checkBox_saveNewEnsemble, "Save a new ensemble whenever any track is rerolled.");
+            //
+            // checkBox_liveBreakbeat
+            //
+            checkBox_liveBreakbeat.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            checkBox_liveBreakbeat.AutoSize = true;
+            checkBox_liveBreakbeat.Location = new Point(620, 10);
+            checkBox_liveBreakbeat.Name = "checkBox_liveBreakbeat";
+            checkBox_liveBreakbeat.Size = new Size(91, 19);
+            checkBox_liveBreakbeat.TabIndex = 14;
+            checkBox_liveBreakbeat.Text = "Live Breakbeat";
+            checkBox_liveBreakbeat.UseVisualStyleBackColor = true;
+            checkBox_liveBreakbeat.CheckedChanged += checkBox_liveBreakbeat_CheckedChanged;
+            checkBox_liveBreakbeat.MouseUp += checkBox_liveBreakbeat_MouseUp;
+            toolTip_pattern.SetToolTip(checkBox_liveBreakbeat,
+                "Continuously reroll every drum track once per loop pass. Right-click to configure and apply live generation options.");
+            foreach (var preset in BreakbeatTrackPresets.LiveEnsemblePresets)
+                combo_liveBreakbeatPreset.Items.Add(preset);
+            combo_liveBreakbeatPreset.SelectedIndex = 0;
+            //
+            // combo_liveBreakbeatPreset
+            //
+            combo_liveBreakbeatPreset.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            combo_liveBreakbeatPreset.DropDownStyle = ComboBoxStyle.DropDownList;
+            combo_liveBreakbeatPreset.Location = new Point(500, 8);
+            combo_liveBreakbeatPreset.Name = "combo_liveBreakbeatPreset";
+            combo_liveBreakbeatPreset.Size = new Size(112, 23);
+            combo_liveBreakbeatPreset.TabIndex = 15;
+            combo_liveBreakbeatPreset.Enabled = false;
+            combo_liveBreakbeatPreset.SelectedIndexChanged += combo_liveBreakbeatPreset_SelectedIndexChanged;
+            toolTip_pattern.SetToolTip(combo_liveBreakbeatPreset,
+                "Live ensemble preset. Tracks are routed by enabled Drum Set element or Synth family.");
 //
 // button_help
 //
@@ -259,13 +294,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // button_remix
             //
             button_remix.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            button_remix.Enabled = false;
+            button_remix.Enabled = true;
             button_remix.Location = new Point(792, 42);
             button_remix.Name = "button_remix";
             button_remix.Size = new Size(60, 25);
             button_remix.TabIndex = 12;
             button_remix.Text = "Remix";
-            toolTip_pattern.SetToolTip(button_remix, "Derive a variation from the selected notes (needs 2+ selected notes; Ctrl+click skips the options dialog). The dialog's bottom checkbox switches between replacing the selection and copying the remix to the clipboard.");
+            toolTip_pattern.SetToolTip(button_remix, "Remix the selected notes, or the whole pattern when nothing is selected. Ctrl+click uses the last settings.");
             button_remix.UseVisualStyleBackColor = true;
             button_remix.Click += button_remix_Click;
             //
@@ -431,6 +466,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private CheckBox checkBox_saveOnlySelectedRange;
         private CheckBox checkBox_saveNewSolo;
         private CheckBox checkBox_saveNewEnsemble;
+        private CheckBox checkBox_liveBreakbeat;
+        private ComboBox combo_liveBreakbeatPreset;
         private System.Windows.Forms.Timer timer_previewCaret;
         private System.Windows.Forms.Timer timer_pasteHold;
         private System.Windows.Forms.Timer timer_pitchGestureRelease;

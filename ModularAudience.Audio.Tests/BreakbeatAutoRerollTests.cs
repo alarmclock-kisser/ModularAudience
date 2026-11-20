@@ -112,6 +112,76 @@ public sealed class BreakbeatAutoRerollTests
     }
 
     [STATestMethod]
+    public void RemixButtonIsAlwaysEnabledAndWholePatternRemixNeedsNoSelection()
+    {
+        using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using var editor = Editor(sample);
+        var selected = (HashSet<BreakbeatPatternNote>)Field(editor, "selectedNotes");
+        var button = (Button)Field(editor, "button_remix");
+        Invoke(editor, "UpdateRemixButtonState");
+        Assert.IsTrue(button.Enabled);
+        selected.Clear();
+        Invoke(editor, "UpdateRemixButtonState");
+        Assert.IsTrue(button.Enabled);
+
+        var notes = (List<BreakbeatPatternNote>)Field(editor, "notes");
+        BreakbeatRemixOptions options = new()
+        {
+            VariationPercent = 25,
+            PatternReusePercent = 75,
+            TrackLoops = new Dictionary<int, int> { [0] = 2, [1] = 3 }
+        };
+        Invoke(editor, "ApplyRemix", options);
+        Assert.IsTrue(notes.Count > 0);
+    }
+
+    [STATestMethod]
+    public void LivePresetRoutesDrumElementsAndSynthFamilies()
+    {
+        var kick = new InstrumentSynthSettings { Family = SynthFamily.DrumSet, Drum = SynthDrum.Kick };
+        var snare = new InstrumentSynthSettings { Family = SynthFamily.DrumSet, Drum = SynthDrum.Snare };
+        var hat = new InstrumentSynthSettings { Family = SynthFamily.DrumSet, Drum = SynthDrum.ClosedHiHat };
+        var bass = new InstrumentSynthSettings { Family = SynthFamily.SynthBassAndLead };
+        var pad = new InstrumentSynthSettings { Family = SynthFamily.SynthPadsAndPoly };
+
+        Assert.AreEqual("EuclidFive", BreakbeatTrackPresets.ResolveLivePreset("JungleRoller", kick, 0));
+        Assert.AreEqual("AmenSnareLadder", BreakbeatTrackPresets.ResolveLivePreset("JungleRoller", snare, 1));
+        Assert.AreEqual("RatchetPressure", BreakbeatTrackPresets.ResolveLivePreset("JungleRoller", hat, 2));
+        Assert.AreEqual("TapeDive", BreakbeatTrackPresets.ResolveLivePreset("JungleRoller", bass, 3));
+        Assert.AreEqual("ElasticOrbit", BreakbeatTrackPresets.ResolveLivePreset("JungleRoller", pad, 4));
+    }
+
+    [STATestMethod]
+    public void LiveBreakbeatEnablesEveryTrackForOneLoopAndCanBeDisabled()
+    {
+        using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using var editor = Editor(sample);
+        var live = (CheckBox)Field(editor, "checkBox_liveBreakbeat");
+
+        live.Checked = true;
+
+        var states = (IDictionary)Field(editor, "autoRerolls");
+        Assert.AreEqual(2, states.Count);
+        foreach (DictionaryEntry entry in states)
+        {
+            var state = entry.Value!;
+            var options = state.GetType().GetField("Options")!.GetValue(state)!;
+            Assert.IsTrue((bool)options.GetType().GetProperty("Enabled")!.GetValue(options)!);
+            Assert.AreEqual(1, options.GetType().GetProperty("Loops")!.GetValue(options)!);
+            var generate = options.GetType().GetProperty("Generate")!.GetValue(options)!;
+            Assert.IsNotNull(generate.GetType().GetProperty("Preset")!.GetValue(generate));
+        }
+
+        live.Checked = false;
+        foreach (DictionaryEntry entry in states)
+        {
+            var state = entry.Value!;
+            var options = state.GetType().GetField("Options")!.GetValue(state)!;
+            Assert.IsFalse((bool)options.GetType().GetProperty("Enabled")!.GetValue(options)!);
+        }
+    }
+
+    [STATestMethod]
     public void ManualPlacementDisablesOnlyItsTrackAndUndoRestoresReroll()
     {
         using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };

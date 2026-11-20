@@ -5675,17 +5675,15 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void button_remix_Click(object? sender, EventArgs e)
         {
-            if (this.selectedNotes.Count < 2)
-            {
-                return;
-            }
-
             this.CancelPastePreview();
             bool ctrlHeld = (ModifierKeys & Keys.Control) == Keys.Control;
             BreakbeatRemixOptions options = BreakbeatPatternRemixSettings.Load();
             if (!ctrlHeld)
             {
-                using BreakbeatPatternRemixDialog dialog = new(options);
+                string[] trackNames = Enumerable.Range(0, this.samples.Count)
+                    .Select(row => row < this.rowLabels.Count ? this.rowLabels[row] : $"Track {row + 1}")
+                    .ToArray();
+                using BreakbeatPatternRemixDialog dialog = new(options, trackNames);
                 if (dialog.ShowDialog(this) != DialogResult.OK)
                 {
                     return;
@@ -5695,6 +5693,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 BreakbeatPatternRemixSettings.Save(options);
             }
 
+            foreach (var state in this.autoRerolls.Values)
+            {
+                state.RemixOptions = options.Clone();
+                state.RemixCompletedLoops = 0;
+            }
             this.ApplyRemix(options);
         }
 
@@ -5709,7 +5712,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 return;
             }
 
-            bool enabled = this.selectedNotes.Count >= 2;
+            bool enabled = true;
             if (this.button_remix.Enabled != enabled)
             {
                 this.button_remix.Enabled = enabled;
@@ -5754,18 +5757,19 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
         private void ApplyRemix(BreakbeatRemixOptions rawOptions)
         {
             BreakbeatRemixOptions options = BreakbeatPatternRemixSettings.Normalize(rawOptions.Clone());
+            bool remixWholePattern = this.selectedNotes.Count == 0;
             List<BreakbeatPatternNote> selection = this.notes
-                .Where(this.selectedNotes.Contains)
+                .Where(note => remixWholePattern || this.selectedNotes.Contains(note))
                 .OrderBy(note => note.TrackIndex)
                 .ThenBy(note => note.StartTick)
                 .ToList();
-            if (selection.Count < 2 || this.samples.Count == 0)
+            if (selection.Count == 0 || this.samples.Count == 0)
             {
                 return;
             }
 
             List<BreakbeatPatternNote> outside = this.notes
-                .Where(note => !this.selectedNotes.Contains(note))
+                .Where(note => !selection.Contains(note))
                 .ToList();
             Random rand = options.Seed == 0 ? new Random() : new Random(options.Seed);
             int ticksPerStep = this.GetTicksPerStep();
@@ -5803,7 +5807,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             }
 
             BreakbeatPatternNote[] before = this.notes.ToArray();
-            this.notes.RemoveAll(note => this.selectedNotes.Contains(note));
+            this.notes.RemoveAll(note => selection.Contains(note));
             this.notes.AddRange(remixed);
             this.selectedNotes.Clear();
             foreach (BreakbeatPatternNote note in remixed)

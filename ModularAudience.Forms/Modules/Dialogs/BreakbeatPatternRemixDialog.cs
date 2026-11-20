@@ -40,8 +40,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private readonly NumericUpDown numeric_seed = new();
         private readonly CheckBox check_noteKinds = new();
         private readonly CheckBox check_copyToClipboard = new();
+        private readonly List<(int Track, NumericUpDown Numeric)> trackLoopControls = [];
 
         public BreakbeatPatternRemixDialog(BreakbeatRemixOptions options)
+            : this(options, null)
+        {
+        }
+
+        public BreakbeatPatternRemixDialog(BreakbeatRemixOptions options, IReadOnlyList<string>? trackNames)
         {
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.StartPosition = FormStartPosition.CenterParent;
@@ -173,6 +179,36 @@ namespace ModularAudience.Forms.Modules.Dialogs
             AddNumeric("Seed (0 = random)", this.numeric_seed, options.Seed, 0, 999999, 1, 0,
                 "0 rolls fresh every time, a fixed value makes results reproducible.");
 
+            if (trackNames is { Count: > 0 })
+            {
+                Label trackHeader = new()
+                {
+                    Text = "Remix interval per track (loops)",
+                    AutoSize = true,
+                    Anchor = AnchorStyles.Left,
+                    Font = new Font(this.Font, FontStyle.Bold)
+                };
+                grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                grid.Controls.Add(trackHeader, 0, row);
+                grid.SetColumnSpan(trackHeader, 2);
+                row++;
+                for (int track = 0; track < trackNames.Count; track++)
+                {
+                    NumericUpDown numeric = new()
+                    {
+                        Minimum = 1,
+                        Maximum = 100000,
+                        Increment = 1,
+                        DecimalPlaces = 0,
+                        Dock = DockStyle.Fill,
+                        Value = options.TrackLoops.TryGetValue(track, out int loops) ? Math.Clamp(loops, 1, 100000) : 4
+                    };
+                    AddNumeric(trackNames[track], numeric, numeric.Value, 1, 100000, 1, 0,
+                        "Remix this track after this many completed playback loops.");
+                    this.trackLoopControls.Add((track, numeric));
+                }
+            }
+
             AddCheck("Allow note kind change (TimeStretch / Varispeed)",
                 this.check_noteKinds,
                 "On: remixed notes may switch between time-stretch and varispeed playback.");
@@ -238,40 +274,53 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numeric_seed.Value = options.Seed;
             this.check_noteKinds.Checked = options.AllowNoteKindChange;
             this.check_copyToClipboard.Checked = options.CopyToClipboard;
+            foreach ((int track, NumericUpDown numeric) in this.trackLoopControls)
+                numeric.Value = options.TrackLoops.TryGetValue(track, out int loops)
+                    ? Math.Clamp(loops, 1, 100000)
+                    : 4;
         }
 
-        public BreakbeatRemixOptions Options => BreakbeatPatternRemixSettings.Normalize(new BreakbeatRemixOptions
+        public BreakbeatRemixOptions Options
         {
-            VariationPercent = (int)this.numeric_variation.Value,
-            MinPatternLengthSteps = (int)this.numeric_minPatternLength.Value,
-            MaxPatternLengthSteps = (int)this.numeric_maxPatternLength.Value,
-            MinPatternRepeats = (int)this.numeric_minPatternRepeats.Value,
-            PatternReusePercent = (int)this.numeric_patternReuse.Value,
-            MirrorPercent = (int)this.numeric_mirror.Value,
-            SwapHalvesPercent = (int)this.numeric_swapHalves.Value,
-            RotateChancePercent = (int)this.numeric_rotateChance.Value,
-            RotateSteps = (int)this.numeric_rotateSteps.Value,
-            LaneShiftChancePercent = (int)this.numeric_laneShiftChance.Value,
-            LaneShiftSteps = (int)this.numeric_laneShiftSteps.Value,
-            HumanizeChancePercent = (int)this.numeric_humanizeChance.Value,
-            HumanizeAmountPercent = (int)this.numeric_humanizeAmount.Value,
-            GhostChancePercent = (int)this.numeric_ghostChance.Value,
-            GhostVolumePercent = (int)this.numeric_ghostVolume.Value,
-            RollChancePercent = (int)this.numeric_rollChance.Value,
-            RollPartsMax = (int)this.numeric_rollParts.Value,
-            RollPitchMode = (BreakbeatRollPitchMode)this.combo_rollPitchMode.SelectedIndex,
-            RollPitchStepSemitones = (float)this.numeric_rollPitchStep.Value,
-            MergeChancePercent = (int)this.numeric_mergeChance.Value,
-            MergeGapSteps = (int)this.numeric_mergeGap.Value,
-            ThinChancePercent = (int)this.numeric_thin.Value,
-            TrackShufflePercent = (int)this.numeric_trackShuffle.Value,
-            PitchChancePercent = (int)this.numeric_pitchChance.Value,
-            PitchRangeSemitones = (float)this.numeric_pitchRange.Value,
-            VolumeChancePercent = (int)this.numeric_volumeChance.Value,
-            VolumeRangePercent = (float)this.numeric_volumeRange.Value,
-            Seed = (int)this.numeric_seed.Value,
-            AllowNoteKindChange = this.check_noteKinds.Checked,
-            CopyToClipboard = this.check_copyToClipboard.Checked
-        });
+            get
+            {
+                var result = BreakbeatPatternRemixSettings.Normalize(new BreakbeatRemixOptions
+                {
+                    VariationPercent = (int)this.numeric_variation.Value,
+                    MinPatternLengthSteps = (int)this.numeric_minPatternLength.Value,
+                    MaxPatternLengthSteps = (int)this.numeric_maxPatternLength.Value,
+                    MinPatternRepeats = (int)this.numeric_minPatternRepeats.Value,
+                    PatternReusePercent = (int)this.numeric_patternReuse.Value,
+                    MirrorPercent = (int)this.numeric_mirror.Value,
+                    SwapHalvesPercent = (int)this.numeric_swapHalves.Value,
+                    RotateChancePercent = (int)this.numeric_rotateChance.Value,
+                    RotateSteps = (int)this.numeric_rotateSteps.Value,
+                    LaneShiftChancePercent = (int)this.numeric_laneShiftChance.Value,
+                    LaneShiftSteps = (int)this.numeric_laneShiftSteps.Value,
+                    HumanizeChancePercent = (int)this.numeric_humanizeChance.Value,
+                    HumanizeAmountPercent = (int)this.numeric_humanizeAmount.Value,
+                    GhostChancePercent = (int)this.numeric_ghostChance.Value,
+                    GhostVolumePercent = (int)this.numeric_ghostVolume.Value,
+                    RollChancePercent = (int)this.numeric_rollChance.Value,
+                    RollPartsMax = (int)this.numeric_rollParts.Value,
+                    RollPitchMode = (BreakbeatRollPitchMode)this.combo_rollPitchMode.SelectedIndex,
+                    RollPitchStepSemitones = (float)this.numeric_rollPitchStep.Value,
+                    MergeChancePercent = (int)this.numeric_mergeChance.Value,
+                    MergeGapSteps = (int)this.numeric_mergeGap.Value,
+                    ThinChancePercent = (int)this.numeric_thin.Value,
+                    TrackShufflePercent = (int)this.numeric_trackShuffle.Value,
+                    PitchChancePercent = (int)this.numeric_pitchChance.Value,
+                    PitchRangeSemitones = (float)this.numeric_pitchRange.Value,
+                    VolumeChancePercent = (int)this.numeric_volumeChance.Value,
+                    VolumeRangePercent = (float)this.numeric_volumeRange.Value,
+                    Seed = (int)this.numeric_seed.Value,
+                    AllowNoteKindChange = this.check_noteKinds.Checked,
+                    CopyToClipboard = this.check_copyToClipboard.Checked
+                });
+                foreach ((int track, NumericUpDown numeric) in this.trackLoopControls)
+                    result.TrackLoops[track] = (int)numeric.Value;
+                return result;
+            }
+        }
     }
 }

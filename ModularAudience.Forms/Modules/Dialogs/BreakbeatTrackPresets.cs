@@ -70,6 +70,168 @@ internal static class BreakbeatTrackPresets
     public static BreakbeatTrackPreset? Find(BreakbeatGenerateOptions options) =>
         options.PresetIntensityPercent > 0 ? All.FirstOrDefault(p => p.Name == options.Preset) : null;
 
+    internal sealed record LiveBreakbeatPreset(string Name, string Description)
+    {
+        public override string ToString() => Name;
+    }
+
+    public static IReadOnlyList<LiveBreakbeatPreset> LiveEnsemblePresets { get; } =
+    [
+        new("LiquidDnB", "Musical, spacious and rolling: soft hats, steady two-step kick/snare, warm bass, pad atmospheres."),
+        new("JungleRoller", "Fast broken rollers with amen ladders, dense hats and ragged low-end accents."),
+        new("Breakcore", "Extreme, unstable breaks with ratchets, glitch shards and violent tom redistribution."),
+        new("Ragga", "Heavy offbeat skanks, ragga toms, dub echoes and deep syncopated bass."),
+        new("Neurofunk", "Mechanical neuro breaks, clipped stabs, aggressive hats and distorted resequenced bass."),
+        new("HalfTimeDnB", "Slow, enormous half-time beats with sparse Euclidean kicks and long synth tails."),
+        new("EuclidPocket", "Interlocking Euclidean rhythm parts for controlled, mathematical groove variation.")
+    ];
+
+    public static string ResolveLivePreset(string ensemblePreset, ModularAudience.Audio.Synthesis.InstrumentSynthSettings? instrument,
+        int trackIndex)
+    {
+        if (instrument is null)
+        {
+            return ensemblePreset switch
+            {
+                "Breakcore" or "JungleRoller" => trackIndex % 4 == 0 ? "EuclidFive" : "AmenSnareLadder",
+                "Ragga" => "RaggaOffbeat",
+                "Neurofunk" => "NeuroMachine",
+                "HalfTimeDnB" => "HalfTimeTitan",
+                "EuclidPocket" => "EuclidFive",
+                _ => "DnBTwoStep"
+            };
+        }
+
+        if (instrument.Family == ModularAudience.Audio.Synthesis.SynthFamily.DrumSet)
+        {
+            return ensemblePreset switch
+            {
+                "LiquidDnB" => instrument.Drum switch
+                {
+                    ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "EuclidFive",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "DnBTwoStep",
+                    ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat => "ElasticOrbit",
+                    ModularAudience.Audio.Synthesis.SynthDrum.OpenHiHat or ModularAudience.Audio.Synthesis.SynthDrum.Ride or ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "EuclidFive",
+                    ModularAudience.Audio.Synthesis.SynthDrum.LowTom or ModularAudience.Audio.Synthesis.SynthDrum.MidTom or ModularAudience.Audio.Synthesis.SynthDrum.HighTom => "DubEchoSteps",
+                    _ => "ElasticOrbit"
+                },
+                "JungleRoller" => instrument.Drum switch
+                {
+                    ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "EuclidFive",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "AmenSnareLadder",
+                    ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat => "RatchetPressure",
+                    ModularAudience.Audio.Synthesis.SynthDrum.OpenHiHat or ModularAudience.Audio.Synthesis.SynthDrum.Ride => "JungleRoller",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "EuclidFive",
+                    ModularAudience.Audio.Synthesis.SynthDrum.LowTom or ModularAudience.Audio.Synthesis.SynthDrum.MidTom or ModularAudience.Audio.Synthesis.SynthDrum.HighTom => "TribalTomSpiral",
+                    _ => "JungleRoller"
+                },
+                "Breakcore" => instrument.Drum switch
+                {
+                    ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "EuclidFive",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "GlitchShards",
+                    ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat or
+                    ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "RatchetPressure",
+                    ModularAudience.Audio.Synthesis.SynthDrum.OpenHiHat or ModularAudience.Audio.Synthesis.SynthDrum.Ride => "GlitchShards",
+                    ModularAudience.Audio.Synthesis.SynthDrum.LowTom or ModularAudience.Audio.Synthesis.SynthDrum.MidTom or ModularAudience.Audio.Synthesis.SynthDrum.HighTom => "TribalTomSpiral",
+                    _ => "GlitchShards"
+                },
+                "Ragga" => instrument.Drum switch
+                {
+                    ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "HalfTimeTitan",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "RaggaOffbeat",
+                    ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat or
+                    ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "TresilloChop",
+                    ModularAudience.Audio.Synthesis.SynthDrum.LowTom or ModularAudience.Audio.Synthesis.SynthDrum.MidTom or ModularAudience.Audio.Synthesis.SynthDrum.HighTom => "TribalTomSpiral",
+                    _ => "DubEchoSteps"
+                },
+                "Neurofunk" => instrument.Drum switch
+                {
+                    ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "EuclidFive",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "NeuroMachine",
+                    ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat or
+                    ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "RatchetPressure",
+                    ModularAudience.Audio.Synthesis.SynthDrum.OpenHiHat or ModularAudience.Audio.Synthesis.SynthDrum.Ride => "GlitchShards",
+                    ModularAudience.Audio.Synthesis.SynthDrum.LowTom or ModularAudience.Audio.Synthesis.SynthDrum.MidTom or ModularAudience.Audio.Synthesis.SynthDrum.HighTom => "TribalTomSpiral",
+                    _ => "NeuroMachine"
+                },
+                "HalfTimeDnB" => instrument.Drum switch
+                {
+                    ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "HalfTimeTitan",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "HalfTimeTitan",
+                    ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat or
+                    ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "EuclidFive",
+                    ModularAudience.Audio.Synthesis.SynthDrum.LowTom or ModularAudience.Audio.Synthesis.SynthDrum.MidTom or ModularAudience.Audio.Synthesis.SynthDrum.HighTom => "TapeDive",
+                    _ => "DubEchoSteps"
+                },
+                _ => instrument.Drum switch
+                {
+                    ModularAudience.Audio.Synthesis.SynthDrum.Kick or ModularAudience.Audio.Synthesis.SynthDrum.BassDrum => "EuclidFive",
+                    ModularAudience.Audio.Synthesis.SynthDrum.Snare or ModularAudience.Audio.Synthesis.SynthDrum.Rimshot or ModularAudience.Audio.Synthesis.SynthDrum.Clap => "AmenSnareLadder",
+                    ModularAudience.Audio.Synthesis.SynthDrum.ClosedHiHat or ModularAudience.Audio.Synthesis.SynthDrum.PedalHiHat or
+                    ModularAudience.Audio.Synthesis.SynthDrum.Shaker => "EuclidFive",
+                    ModularAudience.Audio.Synthesis.SynthDrum.OpenHiHat or ModularAudience.Audio.Synthesis.SynthDrum.Ride => "ElasticOrbit",
+                    ModularAudience.Audio.Synthesis.SynthDrum.LowTom or ModularAudience.Audio.Synthesis.SynthDrum.MidTom or ModularAudience.Audio.Synthesis.SynthDrum.HighTom => "TribalTomSpiral",
+                    _ => "EuclidFive"
+                }
+            };
+        }
+
+        return ensemblePreset switch
+        {
+            "LiquidDnB" => instrument.Family switch
+            {
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthBassAndLead => "DubEchoSteps",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthPadsAndPoly => "ElasticOrbit",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthKeysAndPlucks => "RaggaOffbeat",
+                _ => "ElasticOrbit"
+            },
+            "JungleRoller" => instrument.Family switch
+            {
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthBassAndLead => "TapeDive",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthPadsAndPoly => "ElasticOrbit",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthKeysAndPlucks => "RatchetPressure",
+                ModularAudience.Audio.Synthesis.SynthFamily.MalletsAndBells => "TribalTomSpiral",
+                _ => "JungleRoller"
+            },
+            "Breakcore" => instrument.Family switch
+            {
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthBassAndLead => "NeuroMachine",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthPadsAndPoly => "GlitchShards",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthKeysAndPlucks => "GlitchShards",
+                ModularAudience.Audio.Synthesis.SynthFamily.OtherSoundFx => "RatchetPressure",
+                _ => "GlitchShards"
+            },
+            "Ragga" => instrument.Family switch
+            {
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthBassAndLead => "DubEchoSteps",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthPadsAndPoly => "DubEchoSteps",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthKeysAndPlucks => "RaggaOffbeat",
+                _ => "RaggaOffbeat"
+            },
+            "Neurofunk" => instrument.Family switch
+            {
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthBassAndLead => "NeuroMachine",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthPadsAndPoly => "GlitchShards",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthKeysAndPlucks => "NeuroMachine",
+                _ => "NeuroMachine"
+            },
+            "HalfTimeDnB" => instrument.Family switch
+            {
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthBassAndLead => "HalfTimeTitan",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthPadsAndPoly => "TapeDive",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthKeysAndPlucks => "DubEchoSteps",
+                _ => "HalfTimeTitan"
+            },
+            _ => instrument.Family switch
+            {
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthBassAndLead => "EuclidFive",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthPadsAndPoly => "ElasticOrbit",
+                ModularAudience.Audio.Synthesis.SynthFamily.SynthKeysAndPlucks => "EuclidFive",
+                _ => "DnBTwoStep"
+            }
+        };
+    }
+
     internal sealed record Hit(int Column, int Length, float Pitch, float Volume, BreakbeatGenerateOptions Kinds);
 
     public static IEnumerable<Hit> Generate(BreakbeatTrackPreset preset, BreakbeatGenerateOptions options,
