@@ -12,6 +12,8 @@ internal sealed class SoundboardEditorPage : ContentPage
     private readonly Slider trimEnd = new() { Minimum = 0.01, Maximum = 1, Value = 1 };
     private readonly Slider fadeIn = new() { Minimum = 0, Maximum = 1, Value = 0 };
     private readonly Slider fadeOut = new() { Minimum = 0, Maximum = 1, Value = 0 };
+    private readonly Slider leadingSilence = new() { Minimum = 0, Maximum = 2000, Value = 0 };
+    private readonly Slider trailingSilence = new() { Minimum = 0, Maximum = 2000, Value = 0 };
     private readonly Slider rate = new() { Minimum = 0.5, Maximum = 2, Value = 1 };
     private readonly Picker modePicker = new() { Title = "Edit mode" };
     private readonly Entry nameEntry = new() { Placeholder = "Sample name" };
@@ -58,6 +60,8 @@ internal sealed class SoundboardEditorPage : ContentPage
                 CreateSlider("Trim end", this.trimEnd),
                 CreateSlider("Fade in", this.fadeIn),
                 CreateSlider("Fade out", this.fadeOut),
+                CreateSlider("Leading silence (ms)", this.leadingSilence, "0"),
+                CreateSlider("Trailing silence (ms)", this.trailingSilence, "0"),
                 this.modePicker,
                 CreateSlider("Rate / pitch", this.rate),
                 new HorizontalStackLayout { Spacing = 8, Children = { previewButton, saveButton } },
@@ -125,7 +129,7 @@ internal sealed class SoundboardEditorPage : ContentPage
             2 => AudioEditMode.PitchShift,
             _ => AudioEditMode.TempoPreserving,
         };
-        return BasicAudioEditor.Process(
+        VocalAudioData edited = BasicAudioEditor.Process(
             this.source,
             this.trimStart.Value,
             this.trimEnd.Value,
@@ -133,6 +137,36 @@ internal sealed class SoundboardEditorPage : ContentPage
             this.fadeOut.Value,
             mode,
             this.rate.Value);
+        return AddSilence(
+            edited,
+            (int)Math.Round(this.leadingSilence.Value),
+            (int)Math.Round(this.trailingSilence.Value));
+    }
+
+    private static VocalAudioData AddSilence(
+        VocalAudioData source,
+        int leadingMilliseconds,
+        int trailingMilliseconds)
+    {
+        if (leadingMilliseconds == 0 && trailingMilliseconds == 0)
+            return source;
+
+        int channels = source.Channels;
+        int sourceFrames = source.Data.Length / channels;
+        int leadingFrames = (int)Math.Round(source.SampleRate * leadingMilliseconds / 1000d);
+        int trailingFrames = (int)Math.Round(source.SampleRate * trailingMilliseconds / 1000d);
+        int outputFrames = checked(sourceFrames + leadingFrames + trailingFrames);
+        float[] samples = new float[checked(outputFrames * channels)];
+        Array.Copy(source.Data, 0, samples, leadingFrames * channels, source.Data.Length);
+        return new VocalAudioData
+        {
+            Data = samples,
+            SampleRate = source.SampleRate,
+            Channels = channels,
+            BitDepth = source.BitDepth,
+            Length = samples.LongLength,
+            Duration = TimeSpan.FromSeconds(outputFrames / (double)source.SampleRate),
+        };
     }
 
     private void ClampTrim()
@@ -146,11 +180,11 @@ internal sealed class SoundboardEditorPage : ContentPage
         }
     }
 
-    private static View CreateSlider(string title, Slider slider)
+    private static View CreateSlider(string title, Slider slider, string valueFormat = "0.00")
     {
-        Label value = new() { Text = slider.Value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), WidthRequest = 54 };
+        Label value = new() { Text = slider.Value.ToString(valueFormat, System.Globalization.CultureInfo.InvariantCulture), WidthRequest = 54 };
         slider.ValueChanged += (_, args) =>
-            value.Text = args.NewValue.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+            value.Text = args.NewValue.ToString(valueFormat, System.Globalization.CultureInfo.InvariantCulture);
         return new VerticalStackLayout
         {
             Spacing = 0,

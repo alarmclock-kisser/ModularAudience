@@ -1,5 +1,6 @@
 using ModularAudience.Audio.Vocal;
 using ModularAudience.VocalSynth.Android.Services;
+using Microsoft.Maui.ApplicationModel.DataTransfer;
 using Microsoft.Maui.Layouts;
 using Microsoft.Maui.Storage;
 
@@ -205,11 +206,14 @@ public sealed class SoundboardPage : ContentPage
     private async Task ShowItemActionsAsync(SoundboardItem item)
     {
         string action = await this.DisplayActionSheetAsync(
-            item.Name, "Cancel", null, "Edit", "Rename", "Move to group", "Delete");
+            item.Name, "Cancel", null, "Edit", "Share", "Rename", "Move to group", "Delete");
         switch (action)
         {
             case "Edit":
                 await Shell.Current.Navigation.PushAsync(new SoundboardEditorPage(this.store, item));
+                break;
+            case "Share":
+                await this.ShareItemAsync(item);
                 break;
             case "Rename":
                 string? name = await this.DisplayPromptAsync("Rename sample", "Enter a new sample name:", "Save", "Cancel", item.Name);
@@ -229,6 +233,28 @@ public sealed class SoundboardPage : ContentPage
                     await this.ReloadAsync();
                 }
                 break;
+        }
+    }
+
+    private async Task ShareItemAsync(SoundboardItem item)
+    {
+        string safeName = string.Concat(item.Name.Select(character =>
+            Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
+        string fileName = $"{safeName}-{Guid.NewGuid():N}.wav";
+        string path = Path.Combine(FileSystem.CacheDirectory, fileName);
+        try
+        {
+            VocalAudioData audio = await this.store.ReadAudioAsync(item);
+            await WaveFileWriter.WritePcm16Async(path, audio, 0, CancellationToken.None);
+            await Share.Default.RequestAsync(new ShareFileRequest
+            {
+                Title = $"Share {item.Name}",
+                File = new ShareFile(path, "audio/wav"),
+            });
+        }
+        catch (Exception ex)
+        {
+            await this.DisplayAlertAsync("Sharing failed", ex.ToString(), "OK");
         }
     }
 

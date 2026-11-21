@@ -51,6 +51,7 @@ internal sealed class SoundboardStore
             throw new InvalidDataException("The received audio has an unsupported sample format.");
         }
 
+        samples = AddShortSampleSafetyPadding(samples, snapshot.SampleRate, snapshot.Channels);
         var audio = new VocalAudioData
         {
             Data = samples,
@@ -408,6 +409,23 @@ internal sealed class SoundboardStore
             samples[index] = BitConverter.Int32BitsToSingle(bits);
         }
         return samples;
+    }
+
+    private static float[] AddShortSampleSafetyPadding(float[] samples, int sampleRate, int channels)
+    {
+        double durationMilliseconds = samples.Length * 1000d / channels / sampleRate;
+        if (durationMilliseconds >= 150)
+            return samples;
+
+        int paddingFrames = (int)Math.Ceiling(sampleRate * 0.05d);
+        int paddingSamples = checked(paddingFrames * channels);
+        long paddedLength = samples.LongLength + 2L * paddingSamples;
+        if (paddedLength > Array.MaxLength)
+            throw new InvalidDataException("The short sample requires too much memory for playback padding.");
+
+        var padded = new float[(int)paddedLength];
+        Array.Copy(samples, 0, padded, paddingSamples, samples.Length);
+        return padded;
     }
 
     private static string NormalizeName(string? name)
