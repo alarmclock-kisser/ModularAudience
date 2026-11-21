@@ -217,6 +217,8 @@ jobs:
           --configuration "$configuration" \
           --framework net10.0-android \
           --output "$RUNNER_TEMP/android-publish" \
+          -p:ApplicationVersion=${{ github.run_number }} \
+          -p:ApplicationDisplayVersion=1.0.${{ github.run_number }} \
           -p:AndroidPackageFormat=apk \
           -p:EmbedAssembliesIntoApk=true
         apk_path="$(find "$RUNNER_TEMP/android-publish" -type f -name '*.apk' -print -quit)"
