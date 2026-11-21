@@ -208,6 +208,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             IDictionary<AudioObj, BreakbeatTrackSettings>? trackSettingsBySample = null)
         {
             this.InitializeComponent();
+            this.LayoutNameTemplateControls();
             this.LoadTrackNameFontSize();
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.MaximizeBox = true;

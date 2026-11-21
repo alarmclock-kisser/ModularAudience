@@ -38,6 +38,37 @@ public sealed class BreakbeatPatternWindowTests
         Assert.AreEqual(100m, selectedEditor.Bpm);
     }
 
+    [STATestMethod]
+    public void NameTemplateComboResizesWithinSpaceBeforeDeduplicateButton()
+    {
+        using var sample = new AudioObj { Data = new float[4800], SampleRate = 48000, Channels = 1 };
+        using var editor = new BreakbeatPatternEditorDialog(
+            [new bool[16]], [sample], ["Audio"], 1, 16, 0, 120);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var combo = (ComboBox)typeof(BreakbeatPatternEditorDialog)
+            .GetField("comboBox_nameTemplate", flags)!.GetValue(editor)!;
+        var help = (Button)typeof(BreakbeatPatternEditorDialog)
+            .GetField("button_nameTemplateHelp", flags)!.GetValue(editor)!;
+        var deduplicate = (Button)typeof(BreakbeatPatternEditorDialog)
+            .GetField("button_deduplicate", flags)!.GetValue(editor)!;
+        int initialWidth = combo.Width;
+
+        Assert.IsTrue(combo.Right <= help.Left);
+        Assert.IsTrue(help.Right <= deduplicate.Left);
+
+        editor.ClientSize = new Size(1300, editor.ClientSize.Height);
+        Application.DoEvents();
+        Assert.IsTrue(combo.Width > initialWidth);
+        Assert.IsTrue(combo.Right <= help.Left);
+        Assert.IsTrue(help.Right <= deduplicate.Left);
+
+        editor.ClientSize = new Size(1110, editor.ClientSize.Height);
+        Application.DoEvents();
+        Assert.IsTrue(combo.Width < 320);
+        Assert.IsTrue(combo.Right <= help.Left);
+        Assert.IsTrue(help.Right <= deduplicate.Left);
+    }
+
     [TestMethod]
     public void TrackHeaderFallsBackToSampleNameAndReservesThreeWrappedLinesBelowSummary()
     {
