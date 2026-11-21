@@ -50,6 +50,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Point? rectangleSelectionEnd;
         private Point? selectionDragStart;
         private Point? selectionDragEnd;
+        private Point? pendingNoteClickStart;
+        private MidiNoteData? pendingNoteClick;
         private Point? selectionMoveStart;
         private long selectionMoveAnchorTick;
         private int selectionMoveAnchorNote;
@@ -791,6 +793,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return true;
             }
 
+            if (key == Keys.Delete
+                && this.noteSelection is not null
+                && this.ActiveControl is not (NumericUpDown or DomainUpDown or TextBoxBase or ComboBox))
+            {
+                this.DeleteSelectedNotes();
+                return true;
+            }
+
             if (key == Keys.Escape && this.ghostPreviewActive)
             {
                 this.CancelGhostPreview();
@@ -896,10 +906,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
             List<MidiNoteData> remaining = this.Track.Notes.Where(note => !removal.Contains(note)).ToList();
             MidiTrackData replacement = new() { Index = this.Track.Index, Name = this.Track.Name };
             replacement.Notes.AddRange(remaining);
+            List<MidiTrackData> tracks = [.. this.midiFile.Tracks];
+            tracks[this.selectedTrackPosition] = replacement;
             this.midiFile = MidiFileData.CreateGenerated(
-                [replacement],
+                tracks,
                 this.midiFile.TicksPerQuarterNote,
                 this.Bpm,
+                this.midiFile.FilePath,
                 pitchFrequency: this.PitchFrequency,
                 timeSignatureNumerator: this.midiFile.TimeSignatureNumerator,
                 timeSignatureDenominator: this.midiFile.TimeSignatureDenominator);
@@ -909,6 +922,28 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.SetView(this.viewStartTick, this.viewEndTick);
             this.CommitHistoryTransaction();
             this.UpdateScrollBar();
+            this.pictureBox_editor.Invalidate();
+        }
+
+        private void DeleteSelectedNotes()
+        {
+            List<MidiNoteData> selected = this.GetSelectedNotes();
+            if (selected.Count == 0)
+            {
+                this.noteSelection = null;
+                this.noteSelectionNotes = null;
+                this.pictureBox_editor.Invalidate();
+                return;
+            }
+
+            long previousLength = this.Track.LengthTicks;
+            this.BeginHistoryTransaction();
+            HashSet<MidiNoteData> removal = selected.ToHashSet();
+            this.Track.Notes.RemoveAll(removal.Contains);
+            this.noteSelection = null;
+            this.noteSelectionNotes = null;
+            this.UpdateEditorLengthAfterNoteChange(previousLength);
+            this.CommitHistoryTransaction();
             this.pictureBox_editor.Invalidate();
         }
 
@@ -925,6 +960,66 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             return this.Track.Notes.Where(note => this.IsNoteSelected(note)).ToList();
+        }
+
+        private void SetNoteSelection(IEnumerable<MidiNoteData> notes)
+        {
+            List<MidiNoteData> selected = notes.ToList();
+            if (selected.Count == 0)
+            {
+                this.noteSelection = null;
+                this.noteSelectionNotes = null;
+                return;
+            }
+
+            long startTick = selected.Min(note => note.StartTick);
+            long endTick = Math.Max(startTick + this.GridTicks,
+                selected.Max(note => note.StartTick + note.DurationTicks));
+            this.noteSelection = new MidiSelection(
+                startTick,
+                endTick,
+                selected.Min(note => note.NoteNumber),
+                selected.Max(note => note.NoteNumber));
+            this.noteSelectionNotes = new HashSet<MidiNoteData>(selected);
+        }
+
+        private bool ToggleNoteSelection(MidiNoteData note)
+        {
+            HashSet<MidiNoteData> selected = new(this.GetSelectedNotes());
+            bool selectedNow = selected.Add(note);
+            if (!selectedNow)
+            {
+                selected.Remove(note);
+            }
+
+            this.SetNoteSelection(selected);
+            return selectedNow;
+        }
+
+        internal static MidiNoteData? GetSingleNoteForPrehear(IReadOnlyList<MidiNoteData> notes) =>
+            notes.Count == 1 ? notes[0] : null;
+
+        private async Task PrehearNoteIfEnabledAsync(MidiNoteData note)
+        {
+            if (!this.checkBox_preview.Checked)
+            {
+                return;
+            }
+
+            try
+            {
+                await this.PreviewNoteAsync(note);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                if (!this.IsDisposed)
+                {
+                    WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI note preview failed", ex);
+                }
+            }
         }
 
         private void StoreClipboardHistory(IEnumerable<MidiNoteData> notes)
@@ -1055,7 +1150,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 note.NoteNumber is >= 0 and <= 127 && note.StartTick >= 0 && note.DurationTicks > 0);
         }
 
-        private void PlaceGhostPreview()
+        private async void PlaceGhostPreview()
         {
             if (!this.ghostPreviewActive || !this.ghostPreviewValid)
             {
@@ -1066,16 +1161,20 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.BeginHistoryTransaction();
             this.Track.Notes.AddRange(placed);
             this.Track.ExtendLengthTo(placed.Max(note => note.StartTick + note.DurationTicks));
-            this.noteSelection = null;
-            this.noteSelectionNotes = null;
             this.ghostPreviewActive = false;
             this.ghostPreviewValid = false;
             this.ghostNotes.Clear();
             this.CommitHistoryTransaction();
+            this.SetNoteSelection(placed);
             this.editorLengthTicks = Math.Max(this.editorLengthTicks, this.GetRequiredEditorLength());
             this.SetView(this.viewStartTick, this.viewEndTick);
             this.UpdateScrollBar();
             this.pictureBox_editor.Invalidate();
+            MidiNoteData? noteToPrehear = GetSingleNoteForPrehear(placed);
+            if (noteToPrehear is not null)
+            {
+                await this.PrehearNoteIfEnabledAsync(noteToPrehear);
+            }
         }
 
         private void CancelGhostPreview()
@@ -1432,6 +1531,26 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
+            if (e.Button == MouseButtons.Left
+                && (ModifierKeys & Keys.Control) != Keys.None
+                && (ModifierKeys & Keys.Shift) == Keys.None
+                && this.IsPianoRollPoint(e.Location))
+            {
+                Point point = this.ClampToEditor(e.Location);
+                MidiNoteData? clickedNote = this.FindNoteAt(point);
+                if (clickedNote is not null)
+                {
+                    bool selected = this.ToggleNoteSelection(clickedNote);
+                    this.pictureBox_editor.Invalidate();
+                    if (selected)
+                    {
+                        _ = this.PrehearNoteIfEnabledAsync(clickedNote);
+                    }
+
+                    return;
+                }
+            }
+
             if ((ModifierKeys & Keys.Control) != Keys.None)
             {
                 this.panning = true;
@@ -1447,6 +1566,20 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 this.BeginSelectionDrag(e.Location);
                 return;
+            }
+
+            if (e.Button == MouseButtons.Left)
+            {
+                Point point = this.ClampToEditor(e.Location);
+                MidiNoteData? clickedNote = this.FindNoteAt(point);
+                if (clickedNote is not null
+                    && (this.noteSelection is not MidiSelection || !this.IsPointInSelectionRectangle(point)))
+                {
+                    this.pendingNoteClickStart = point;
+                    this.pendingNoteClick = clickedNote;
+                    this.pictureBox_editor.Capture = true;
+                    return;
+                }
             }
 
             if (e.Button == MouseButtons.Left
@@ -1525,6 +1658,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.BeginRightErase(pendingPoint);
             }
 
+            if (this.pendingNoteClickStart is Point noteClickStart && this.pendingNoteClick is not null)
+            {
+                if (!HasExceededDragThreshold(noteClickStart, e.Location))
+                {
+                    return;
+                }
+
+                this.pendingNoteClickStart = null;
+                this.pendingNoteClick = null;
+                this.BeginNoteDrawing(noteClickStart);
+            }
+
             if (this.panning)
             {
                 this.PanView(e.Location.X - this.panStart.X);
@@ -1594,6 +1739,20 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.pictureBox_editor.Capture = true;
         }
 
+        private void BeginNoteDrawing(Point point)
+        {
+            this.noteSelection = null;
+            this.noteSelectionNotes = null;
+            this.editStart = this.ClampToEditor(point);
+            this.editButton = MouseButtons.Left;
+            this.editNote = this.PointToNote(this.editStart.Value.Y);
+            this.editPreviousLength = this.editorLengthTicks;
+            this.BeginHistoryTransaction();
+            this.pictureBox_editor.Capture = true;
+            this.ApplyNoteRange(this.editStart.Value, this.editStart.Value, add: true, updateView: false);
+            this.pictureBox_editor.Invalidate();
+        }
+
         private void BeginSelectionDrag(Point point)
         {
             this.BeginHistoryTransaction();
@@ -1638,6 +1797,26 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.pictureBox_editor.Capture = false;
                 this.pictureBox_editor.Cursor = Cursors.Cross;
                 return;
+            }
+
+            if (this.pendingNoteClickStart is Point noteClickStart
+                && this.pendingNoteClick is MidiNoteData clickedNote
+                && e.Button == MouseButtons.Left)
+            {
+                this.pendingNoteClickStart = null;
+                this.pendingNoteClick = null;
+                if (HasExceededDragThreshold(noteClickStart, e.Location))
+                {
+                    this.BeginNoteDrawing(noteClickStart);
+                }
+                else
+                {
+                    this.pictureBox_editor.Capture = false;
+                    this.SetNoteSelection([clickedNote]);
+                    this.pictureBox_editor.Invalidate();
+                    await this.PrehearNoteIfEnabledAsync(clickedNote);
+                    return;
+                }
             }
 
             if (this.rectangleSelectionStart is Point rectangleStart && e.Button == MouseButtons.Right)
@@ -1687,15 +1866,21 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     return;
                 }
 
+                MidiNoteData? noteAtSelectionStart = this.FindNoteAt(selectionMoveStart);
                 this.ClearSelectionMoveState();
+                if (noteAtSelectionStart is not null)
+                {
+                    this.pictureBox_editor.Capture = false;
+                    this.pictureBox_editor.Cursor = Cursors.Cross;
+                    this.SetNoteSelection([noteAtSelectionStart]);
+                    this.pictureBox_editor.Invalidate();
+                    await this.PrehearNoteIfEnabledAsync(noteAtSelectionStart);
+                    return;
+                }
+
                 this.noteSelection = null;
                 this.noteSelectionNotes = null;
-                this.editStart = selectionMoveStart;
-                this.editButton = MouseButtons.Left;
-                this.editNote = this.PointToNote(selectionMoveStart.Y);
-                this.editPreviousLength = this.editorLengthTicks;
-                this.BeginHistoryTransaction();
-                this.ApplyNoteRange(selectionMoveStart, selectionMoveStart, add: true, updateView: false);
+                this.BeginNoteDrawing(selectionMoveStart);
             }
 
             if (this.editStart is not Point start || e.Button != this.editButton)
@@ -1710,26 +1895,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.CommitHistoryTransaction();
             this.pictureBox_editor.Invalidate();
 
-            if (this.checkBox_preview.Checked && this.editButton == MouseButtons.Left)
+            if (this.editButton == MouseButtons.Left)
             {
                 Point previewPoint = new((start.X + end.X) / 2, start.Y);
                 MidiNoteData? previewNote = this.FindNoteAt(previewPoint);
                 if (previewNote != null)
                 {
-                    try
-                    {
-                        await this.PreviewNoteAsync(previewNote);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                    }
-                    catch (Exception ex)
-                    {
-                        if (!this.IsDisposed)
-                        {
-                            WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI note preview failed", ex);
-                        }
-                    }
+                    this.SetNoteSelection([previewNote]);
+                    await this.PrehearNoteIfEnabledAsync(previewNote);
                 }
             }
         }

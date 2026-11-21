@@ -166,10 +166,11 @@ public sealed class CustomMidiEditorDialogTests
     }
 
     [STATestMethod]
-    public void SettingANoteClearsAnExistingSelection()
+    public void SettingANoteSelectsTheCreatedNote()
     {
         using CustomMidiEditorDialog editor = new();
         PictureBox pianoRoll = Field<PictureBox>(editor, "pictureBox_editor");
+        Field<CheckBox>(editor, "checkBox_preview").Checked = false;
         editor.CreateControl();
         pianoRoll.CreateControl();
 
@@ -181,7 +182,8 @@ public sealed class CustomMidiEditorDialogTests
         Invoke(editor, "pictureBox_editor_MouseUp", pianoRoll,
             new MouseEventArgs(MouseButtons.Left, 1, 700, 400, 0));
 
-        Assert.IsNull(Field<object?>(editor, "noteSelection"));
+        Assert.IsNotNull(Field<object?>(editor, "noteSelection"));
+        Assert.AreEqual(1, ((List<MidiNoteData>)Invoke(editor, "GetSelectedNotes")).Count);
     }
 
     [STATestMethod]
@@ -220,15 +222,18 @@ public sealed class CustomMidiEditorDialogTests
     }
 
     [STATestMethod]
-    public void ClickingInsideSelectionAddsANoteInsteadOfMovingTheSelection()
+    public void ClickingInsideSelectionAddsAndSelectsANoteInsteadOfMovingTheSelection()
     {
         using CustomMidiEditorDialog editor = new();
         PictureBox pianoRoll = Field<PictureBox>(editor, "pictureBox_editor");
         CheckBox preview = Field<CheckBox>(editor, "checkBox_preview");
         preview.Checked = false;
+        editor.CreateControl();
+        pianoRoll.CreateControl();
+        int clickedNote = (int)Invoke(editor, "PointToNote", 200);
         MidiNoteData existing = new()
         {
-            NoteNumber = 60,
+            NoteNumber = clickedNote + 1,
             Channel = 0,
             Velocity = 100,
             StartTick = 0,
@@ -236,13 +241,10 @@ public sealed class CustomMidiEditorDialogTests
         };
         editor.SelectedTrack.Notes.Add(existing);
         editor.SelectedTrack.ExtendLengthTo(120);
-        editor.CreateControl();
-        pianoRoll.CreateControl();
 
         object selection = Invoke(editor, "CreateSelection", new Point(50, 100), new Point(150, 300));
         typeof(CustomMidiEditorDialog).GetField("noteSelection", PrivateInstance)!.SetValue(editor, selection);
         Point click = new(80, 200);
-        int clickedNote = (int)Invoke(editor, "PointToNote", click.Y);
         long clickedTick = (long)Invoke(editor, "PointToTick", click.X);
 
         Invoke(editor, "pictureBox_editor_MouseDown", pianoRoll,
@@ -250,10 +252,112 @@ public sealed class CustomMidiEditorDialogTests
         Invoke(editor, "pictureBox_editor_MouseUp", pianoRoll,
             new MouseEventArgs(MouseButtons.Left, 1, click.X, click.Y, 0));
 
-        Assert.IsNull(Field<object?>(editor, "noteSelection"));
+        Assert.IsNotNull(Field<object?>(editor, "noteSelection"));
         Assert.IsTrue(editor.SelectedTrack.Notes.Contains(existing));
-        Assert.IsTrue(editor.SelectedTrack.Notes.Any(note =>
-            !ReferenceEquals(note, existing) && note.NoteNumber == clickedNote && note.StartTick == clickedTick));
+        MidiNoteData selected = ((List<MidiNoteData>)Invoke(editor, "GetSelectedNotes")).Single();
+        Assert.AreNotSame(existing, selected);
+        Assert.AreEqual(clickedNote, selected.NoteNumber);
+        Assert.AreEqual(clickedTick, selected.StartTick);
+    }
+
+    [STATestMethod]
+    public void ClickingAnExistingNoteSelectsOnlyIt()
+    {
+        using CustomMidiEditorDialog editor = new();
+        PictureBox pianoRoll = Field<PictureBox>(editor, "pictureBox_editor");
+        Field<CheckBox>(editor, "checkBox_preview").Checked = false;
+        editor.CreateControl();
+        pianoRoll.CreateControl();
+        Point click = new(80, 200);
+        MidiNoteData clicked = new()
+        {
+            NoteNumber = (int)Invoke(editor, "PointToNote", click.Y),
+            Channel = 0,
+            Velocity = 100,
+            StartTick = (long)Invoke(editor, "PointToTick", click.X),
+            DurationTicks = 120
+        };
+        MidiNoteData other = new()
+        {
+            NoteNumber = clicked.NoteNumber + 1,
+            Channel = 0,
+            Velocity = 100,
+            StartTick = clicked.StartTick,
+            DurationTicks = 120
+        };
+        editor.SelectedTrack.Notes.AddRange([clicked, other]);
+        editor.SelectedTrack.ExtendLengthTo(240);
+
+        Invoke(editor, "pictureBox_editor_MouseDown", pianoRoll,
+            new MouseEventArgs(MouseButtons.Left, 1, click.X, click.Y, 0));
+        Invoke(editor, "pictureBox_editor_MouseUp", pianoRoll,
+            new MouseEventArgs(MouseButtons.Left, 1, click.X, click.Y, 0));
+
+        List<MidiNoteData> selected = (List<MidiNoteData>)Invoke(editor, "GetSelectedNotes");
+        Assert.AreEqual(1, selected.Count);
+        Assert.AreSame(clicked, selected[0]);
+    }
+
+    [STATestMethod]
+    public void TogglingIndividualNotesPreservesOtherSelections()
+    {
+        using CustomMidiEditorDialog editor = new();
+        MidiNoteData first = new() { NoteNumber = 60, Channel = 0, Velocity = 100, StartTick = 0, DurationTicks = 120 };
+        MidiNoteData second = new() { NoteNumber = 64, Channel = 0, Velocity = 100, StartTick = 240, DurationTicks = 120 };
+        editor.SelectedTrack.Notes.AddRange([first, second]);
+
+        Assert.IsTrue((bool)Invoke(editor, "ToggleNoteSelection", first));
+        Assert.IsTrue((bool)Invoke(editor, "ToggleNoteSelection", second));
+        CollectionAssert.AreEquivalent(
+            new[] { first, second },
+            ((List<MidiNoteData>)Invoke(editor, "GetSelectedNotes")).ToArray());
+
+        Assert.IsFalse((bool)Invoke(editor, "ToggleNoteSelection", first));
+        CollectionAssert.AreEqual(
+            new[] { second },
+            ((List<MidiNoteData>)Invoke(editor, "GetSelectedNotes")).ToArray());
+
+        Assert.IsFalse((bool)Invoke(editor, "ToggleNoteSelection", second));
+        Assert.IsNull(Field<object?>(editor, "noteSelection"));
+    }
+
+    [STATestMethod]
+    public void DeleteKeyRemovesSelectedNotesAndKeepsUnselectedNotes()
+    {
+        using CustomMidiEditorDialog editor = new();
+        MidiNoteData selected = new()
+        {
+            NoteNumber = 60,
+            Channel = 0,
+            Velocity = 100,
+            StartTick = 0,
+            DurationTicks = 120
+        };
+        MidiNoteData unselected = new()
+        {
+            NoteNumber = 72,
+            Channel = 0,
+            Velocity = 100,
+            StartTick = 960,
+            DurationTicks = 120
+        };
+        editor.SelectedTrack.Notes.AddRange([selected, unselected]);
+        editor.SelectedTrack.ExtendLengthTo(1080);
+        Invoke(editor, "SetNoteSelection", (object)new[] { selected });
+
+        Message message = Message.Create(IntPtr.Zero, 0, IntPtr.Zero, IntPtr.Zero);
+        Assert.IsTrue((bool)Invoke(editor, "ProcessCmdKey", message, Keys.Delete));
+
+        Assert.AreEqual(1, editor.SelectedTrack.Notes.Count);
+        Assert.AreSame(unselected, editor.SelectedTrack.Notes.Single());
+        Assert.IsNull(Field<object?>(editor, "noteSelection"));
+
+        Invoke(editor, "Undo");
+        Assert.AreEqual(2, editor.SelectedTrack.Notes.Count);
+        Assert.IsTrue(editor.SelectedTrack.Notes.Contains(selected));
+        Invoke(editor, "Redo");
+        Assert.AreEqual(1, editor.SelectedTrack.Notes.Count);
+        Assert.IsTrue(editor.SelectedTrack.Notes.Contains(unselected));
     }
 
     [STATestMethod]
@@ -387,6 +491,7 @@ public sealed class CustomMidiEditorDialogTests
     public void ClipboardGhostPlacementAddsNotesAndSupportsUndoRedo()
     {
         using CustomMidiEditorDialog editor = new();
+        Field<CheckBox>(editor, "checkBox_preview").Checked = false;
         MidiTrackData track = editor.SelectedTrack;
         track.Notes.Add(new MidiNoteData
         {
@@ -409,11 +514,24 @@ public sealed class CustomMidiEditorDialogTests
         Invoke(editor, "UpdateGhostPreview", new Point(500, 60));
         Invoke(editor, "PlaceGhostPreview");
         Assert.AreEqual(2, editor.SelectedTrack.Notes.Count);
+        Assert.AreEqual(1, ((List<MidiNoteData>)Invoke(editor, "GetSelectedNotes")).Count);
 
         Invoke(editor, "Undo");
         Assert.AreEqual(1, editor.SelectedTrack.Notes.Count);
         Invoke(editor, "Redo");
         Assert.AreEqual(2, editor.SelectedTrack.Notes.Count);
+    }
+
+    [TestMethod]
+    public void PrehearPolicyAllowsOnlySingleNotePlacements()
+    {
+        MidiNoteData first = new() { NoteNumber = 60, DurationTicks = 120 };
+        MidiNoteData second = new() { NoteNumber = 64, DurationTicks = 120 };
+        MethodInfo getSingleNote = typeof(CustomMidiEditorDialog)
+            .GetMethod("GetSingleNoteForPrehear", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)!;
+
+        Assert.AreSame(first, getSingleNote.Invoke(null, [new[] { first }]));
+        Assert.IsNull(getSingleNote.Invoke(null, [new[] { first, second }]));
     }
 
     [TestMethod]

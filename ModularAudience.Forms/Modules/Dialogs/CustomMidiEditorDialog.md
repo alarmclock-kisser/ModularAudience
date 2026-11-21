@@ -10,6 +10,9 @@ Open the modeless piano roll from **+ Track → Midi Editor**. It owns its MIDI 
 - **Ctrl + drag** pans and **Ctrl + mouse wheel** zooms horizontally. The mouse wheel scrolls horizontally.
 - The Min/Max Key controls update the visible range immediately and always leave at least one octave.
 - Resolution is grid divisions per quarter note. BPM and A4 tuning affect preview and rendered audio.
+- Clicking an existing note selects only that note; clicking empty space places and selects a note. **Delete** removes the selected note(s), and the change can be undone/redone with **Ctrl+Z** and **Ctrl+Y**.
+- **Ctrl + click** toggles an individual note in or out of the current selection.
+- When **Prehear set note** is enabled, selecting or placing one note prehears that note. Placing a multi-note paste selects the pasted notes but does not prehear them.
 - The instrument button chooses a built-in sound, a sample from an open collection, or an open sample collection. Its **Instrument Synth** submenu opens the same family-based Sample Synthesizer used elsewhere in the app. A configured synth is rendered individually for each MIDI note using that note's MIDI pitch, gate length and the editor BPM; it is not rendered once and then pitch/time-stretched as a static sample.
 
 ## Clipboard and history
