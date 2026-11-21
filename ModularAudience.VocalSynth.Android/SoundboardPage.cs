@@ -1,5 +1,6 @@
 using ModularAudience.Audio.Vocal;
 using ModularAudience.VocalSynth.Android.Services;
+using Microsoft.Maui.Layouts;
 using Microsoft.Maui.Storage;
 
 namespace ModularAudience.VocalSynth.Android;
@@ -87,7 +88,6 @@ public sealed class SoundboardPage : ContentPage
             BackgroundColor = Colors.Transparent,
             TextColor = Colors.White,
             HorizontalOptions = LayoutOptions.Fill,
-            HorizontalTextAlignment = TextAlignment.Start,
         };
         AttachLongPress(
             header,
