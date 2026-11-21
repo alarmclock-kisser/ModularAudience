@@ -364,7 +364,8 @@ public static class AudioDecompilePipeline
         {
             Name = $"{GetSourceName(source)} - Decompiled",
             Bpm = bpm,
-            Snap = false,
+            Snap = options.SnapToGrid,
+            SnapDivision = options.SnapDivision,
             OverlapMode = MixOverlapMode.MixOverlap,
             LoopEnd = source.Duration.TotalSeconds > 0
                 ? source.Duration.TotalSeconds
@@ -419,7 +420,7 @@ public static class AudioDecompilePipeline
                     MixClip clip = arrangement.AddClip(
                         stemLanes[laneAssignments[atomicIndex]],
                         projectSource,
-                        offset,
+                        arrangement.SnapTime(offset),
                         offset,
                         duration);
                     clip.Name = atomic.Name;

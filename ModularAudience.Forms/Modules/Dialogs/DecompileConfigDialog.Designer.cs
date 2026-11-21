@@ -126,6 +126,8 @@ partial class DecompileConfigDialog
         this.comboBox_projectOverlap = new ComboBox();
         this.label_projectAttack = new Label();
         this.numeric_projectAttack = new NumericUpDown();
+        this.checkBox_projectSnap = new CheckBox();
+        this.comboBox_projectSnap = new ComboBox();
         this.checkBox_collectionDeduplicate = new CheckBox();
         this.label_workers = new Label();
         this.numeric_workers = new NumericUpDown();
@@ -446,6 +448,8 @@ partial class DecompileConfigDialog
         this.tabPage_output.Controls.Add(this.comboBox_projectOverlap);
         this.tabPage_output.Controls.Add(this.label_projectAttack);
         this.tabPage_output.Controls.Add(this.numeric_projectAttack);
+        this.tabPage_output.Controls.Add(this.checkBox_projectSnap);
+        this.tabPage_output.Controls.Add(this.comboBox_projectSnap);
         this.tabPage_output.Controls.Add(this.checkBox_collectionDeduplicate);
         this.tabPage_output.Name = "tabPage_output";
         this.tabPage_output.Padding = new Padding(12);
@@ -497,18 +501,30 @@ partial class DecompileConfigDialog
         this.checkBox_collectionDeduplicate.Checked = true;
         this.checkBox_collectionDeduplicate.Size = new Size(310, 40);
         this.checkBox_collectionDeduplicate.Text = "Deduplicate repeated samples in atomic collections";
+        this.checkBox_projectSnap.AutoSize = true;
+        this.checkBox_projectSnap.Location = new Point(12, 244);
+        this.checkBox_projectSnap.Text = "Snap project clips to grid";
+        this.checkBox_projectSnap.CheckedChanged += this.checkBox_projectSnap_CheckedChanged;
+        this.comboBox_projectSnap.DropDownStyle = ComboBoxStyle.DropDownList;
+        this.comboBox_projectSnap.Location = new Point(210, 240);
+        this.comboBox_projectSnap.Size = new Size(90, 23);
+        this.comboBox_projectSnap.Items.AddRange(new object[]
+        {
+            "1/4", "1/8", "1/16", "1/32", "1/64", "1/128", "1/256"
+        });
+        this.comboBox_projectSnap.SelectedIndex = 2;
         this.label_workers.AutoSize = true;
-        this.label_workers.Location = new Point(12, 244);
+        this.label_workers.Location = new Point(12, 284);
         this.label_workers.Text = $"Maximum workers (1-{Environment.ProcessorCount})";
-        this.numeric_workers.Location = new Point(300, 240);
+        this.numeric_workers.Location = new Point(300, 280);
         this.numeric_workers.Minimum = 1;
         this.numeric_workers.Maximum = Environment.ProcessorCount;
         this.numeric_workers.Value = Math.Max(1, Environment.ProcessorCount / 2);
         this.label_bpm.AutoSize = true;
-        this.label_bpm.Location = new Point(12, 286);
+        this.label_bpm.Location = new Point(12, 326);
         this.label_bpm.MaximumSize = new Size(740, 0);
         this.label_bpm.Text = "BPM: resolving from tag, scanned value or estimator at run time.";
-        this.label_outputNote.Location = new Point(12, 328);
+        this.label_outputNote.Location = new Point(12, 368);
         this.label_outputNote.Size = new Size(740, 95);
         this.label_outputNote.Text = "Project and Collection output can be enabled together. Project clips use the complete atomic pool with a short onset fade; Collections can optionally deduplicate repeated atomics.";
 
@@ -770,6 +786,8 @@ partial class DecompileConfigDialog
     private ComboBox comboBox_projectOverlap = null!;
     private Label label_projectAttack = null!;
     private NumericUpDown numeric_projectAttack = null!;
+    private CheckBox checkBox_projectSnap = null!;
+    private ComboBox comboBox_projectSnap = null!;
     private CheckBox checkBox_collectionDeduplicate = null!;
     private Label label_workers = null!;
     private NumericUpDown numeric_workers = null!;

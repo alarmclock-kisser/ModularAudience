@@ -123,7 +123,7 @@ public sealed partial class MixTrackView : Form
         }
         Tool("Stop", () => { operation?.Cancel(); StopPlayback(); caret = 0; canvas.Invalidate(); });
         toolbar.Controls.Add(new Label { Text = "BPM", AutoSize = true, Margin = new Padding(3, 8, 3, 3) }); toolbar.Controls.Add(bpm);
-        division.Items.AddRange(new object[] { "1/1", "1/2", "1/4", "1/8", "1/16", "1/32", "1/64" }); division.SelectedIndex = 3;
+        division.Items.AddRange(new object[] { "1/1", "1/2", "1/4", "1/8", "1/16", "1/32", "1/64", "1/128", "1/256" }); division.SelectedIndex = 3;
         toolbar.Controls.Add(division); toolbar.Controls.Add(snap); toolbar.Controls.Add(loop); toolbar.Controls.Add(autoScroll);
         autoScroll.Click += (_, _) =>
         {
@@ -1785,6 +1785,8 @@ public sealed partial class MixTrackView : Form
             Item("Render selected range → Collection", async () => await ExportSelectedRangeAsync(), SelectedParts().Count > 0);
         }
         else Item("Render selection → Collection", async () => await ExportSelectionAsync(), SelectedParts().Count > 0);
+        Item("Open selection in Breakbeat Pattern Editor…", async () =>
+            await OpenSelectionInBreakbeatPatternEditorAsync(), SelectedParts().Count > 0);
         Item("Copy selection (Ctrl+C)", CopySelection, SelectedParts().Count > 0);
         Item("Cut selection (Ctrl+X)", CutSelection, SelectedParts().Count > 0);
         Item("Repeat selection…", RepeatSelection, SelectedParts().Count > 0 || Clip != null);

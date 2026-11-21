@@ -90,6 +90,21 @@ public sealed class MixEditorExtensionTests
         Assert.IsNull(Field(mix, "selectedClip"));
     }
     [STATestMethod]
+    public void SelectedAudioContextMenuOffersPatternEditor()
+    {
+        using var mix = new MixTrackView();
+        Populate(mix);
+        Call(mix, "SelectWholeClip", mix.Arrangement.Lanes[0].Clips[0].Id, false);
+
+        using ContextMenuStrip menu = (ContextMenuStrip)Call(
+            mix,
+            "CreateAudioContextMenu")!;
+
+        Assert.IsTrue(menu.Items.OfType<ToolStripMenuItem>().Any(item =>
+            item.Text == "Open selection in Breakbeat Pattern Editor…"
+            && item.Enabled));
+    }
+    [STATestMethod]
     public void RangeCopyTrimsUnlessWholeClipModifierIsActive()
     {
         using var mix = new MixTrackView(); Populate(mix);

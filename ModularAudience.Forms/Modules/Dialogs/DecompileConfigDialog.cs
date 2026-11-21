@@ -10,6 +10,7 @@ public sealed partial class DecompileConfigDialog : Form
 {
     private readonly AudioObj sourceSnapshot;
     private CancellationTokenSource? activeCancellation;
+    private CancellationTokenSource? snapEstimateCancellation;
     private ProgressDialog? activeProgressDialog;
     private Task? activeRun;
     private Task? demucsInitializationTask;
@@ -89,9 +90,11 @@ public sealed partial class DecompileConfigDialog : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         this.SavePersistentSettings();
+        this.snapEstimateCancellation?.Cancel();
         bool workIsRunning = this.activeRun is { IsCompleted: false }
             || this.analogBandAnalysis is { IsCompleted: false }
-            || this.demucsInitializationTask is { IsCompleted: false };
+            || this.demucsInitializationTask is { IsCompleted: false }
+            || this.snapEstimateCancellation is not null;
         if (workIsRunning && !this.closingAcceptedRun)
         {
             this.closeRequested = true;

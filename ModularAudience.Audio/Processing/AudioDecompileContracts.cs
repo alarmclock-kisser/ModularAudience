@@ -38,6 +38,8 @@ public sealed record AudioDecompileOptions
     public AudioDecompileProjectDetail ProjectDetail { get; init; } = AudioDecompileProjectDetail.Transients;
     public AudioDecompileOverlapPolicy ProjectOverlap { get; init; } = AudioDecompileOverlapPolicy.Allow;
     public int ProjectAttackMs { get; init; } = 1;
+    public bool SnapToGrid { get; init; }
+    public int SnapDivision { get; init; } = 16;
     public bool DeduplicateCollections { get; init; } = true;
     public int MaxWorkers { get; init; } = Math.Max(1, Environment.ProcessorCount / 2);
     public int BeatsPerBar { get; init; } = 4;
@@ -67,6 +69,11 @@ public sealed record AudioDecompileOptions
         if (this.ProjectAttackMs is < 1 or > 100)
         {
             throw new ArgumentOutOfRangeException(nameof(this.ProjectAttackMs));
+        }
+
+        if (this.SnapDivision is not (4 or 8 or 16 or 32 or 64 or 128 or 256))
+        {
+            throw new ArgumentOutOfRangeException(nameof(this.SnapDivision));
         }
 
         if (this.LegacySimilarityThreshold is float threshold

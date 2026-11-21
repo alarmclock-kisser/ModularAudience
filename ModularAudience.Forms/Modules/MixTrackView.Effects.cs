@@ -197,6 +197,10 @@ public sealed partial class MixTrackView
 
     private void CloseMixEffectWindows()
     {
+        if (this.mixPatternEditor is { IsDisposed: false } editor)
+        {
+            editor.Close();
+        }
         if (this.mixEffectWindowsClosed) return;
         this.mixEffectWindowsClosed = true; this.mixEffectsLifetime.Cancel();
         foreach (Form dialog in this.mixEffectDialogs.Values.ToArray()) dialog.Close();

@@ -165,6 +165,65 @@ public sealed class AudioDecompileTests
     }
 
     [TestMethod]
+    public async Task ProjectSnapChangesTimelineStartWithoutChangingSourceOffset()
+    {
+        const int sampleRate = 16000;
+        using AudioTestScope scope = new();
+        AudioObj source = scope.Create(
+            AudioTestData.Track(
+                sampleRate,
+                12000,
+                (1000, AudioTestData.Hit(sampleRate), 1f)),
+            sampleRate);
+        source.Bpm = 120;
+        var options = new AudioDecompileOptions
+        {
+            Output = AudioDecompileOutputKind.Project,
+            ProjectDetail = AudioDecompileProjectDetail.Transients,
+            SnapToGrid = true,
+            SnapDivision = 256,
+            MaxWorkers = 1,
+            V4Settings = LoopAtomizerSettings.Default with
+            {
+                EnableDeduplication = false,
+                MinimumRmsLevel = 0,
+                MinimumAtomicDurationMs = 0,
+                MaxWorkers = 1
+            }
+        };
+
+        using AudioDecompileResult result = await AudioDecompilePipeline.RunAsync(
+            source,
+            new TestStemSeparator("drums"),
+            options);
+        using MixArrangement project = result.TakeProject()
+            ?? throw new AssertFailedException("The project result is missing.");
+        MixClip clip = project.Lanes[0].Clips.Single();
+        double step = 240d / 120d / 256d;
+
+        Assert.IsTrue(project.Snap);
+        Assert.AreEqual(256, project.SnapDivision);
+        Assert.IsGreaterThan(0, clip.SourceOffset);
+        Assert.AreEqual(
+            Math.Round(clip.SourceOffset / step, MidpointRounding.AwayFromZero) * step,
+            clip.Start,
+            0.000001);
+    }
+
+    [TestMethod]
+    public void ArrangementValidationAcceptsFineSnapDivisions()
+    {
+        using var mix = new MixArrangement
+        {
+            Bpm = 120,
+            SnapDivision = 128
+        };
+        mix.Validate();
+        mix.SnapDivision = 256;
+        mix.Validate();
+    }
+
+    [TestMethod]
     public async Task SeparationProgressEndsAtEightyFivePercentBeforeAtomizing()
     {
         using AudioTestScope scope = new();

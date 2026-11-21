@@ -25,6 +25,8 @@ internal sealed class DecompileDialogSettings
     public int ProjectDetail { get; set; }
     public int ProjectOverlap { get; set; }
     public int ProjectAttackMs { get; set; } = 1;
+    public bool ProjectSnapToGrid { get; set; }
+    public int ProjectSnapDivision { get; set; } = 16;
     public bool DeduplicateCollections { get; set; } = true;
     public int MaxWorkers { get; set; } = Math.Max(1, Environment.ProcessorCount / 2);
 
@@ -70,6 +72,11 @@ internal sealed class DecompileDialogSettings
         settings.DeterministicProfiles ??= [];
         settings.MaxWorkers = Math.Clamp(settings.MaxWorkers, 1, Environment.ProcessorCount);
         settings.ProjectAttackMs = Math.Clamp(settings.ProjectAttackMs, 1, 100);
+        settings.ProjectSnapDivision = settings.ProjectSnapDivision switch
+        {
+            4 or 8 or 16 or 32 or 64 or 128 or 256 => settings.ProjectSnapDivision,
+            _ => 16
+        };
         if (settings.MaxVariantsPerCluster < 1)
         {
             settings.MaxVariantsPerCluster = 2;

@@ -162,7 +162,8 @@ public sealed class MixArrangement : IDisposable
     }
     public void Validate()
     {
-        if (!double.IsFinite(Bpm) || Bpm is < 10 or > 400 || SnapDivision is not (1 or 2 or 4 or 8 or 16 or 32 or 64))
+        if (!double.IsFinite(Bpm) || Bpm is < 10 or > 400
+            || SnapDivision is not (1 or 2 or 4 or 8 or 16 or 32 or 64 or 128 or 256))
             throw new InvalidDataException("Invalid tempo or snap division.");
         if (DisplayLaneHeight is < 32 or > 600) throw new InvalidDataException("Invalid track display height.");
         if (Visual == null || !double.IsFinite(Visual.Hue) || Visual.Hue is < 0 or > 360

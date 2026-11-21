@@ -122,13 +122,15 @@ Overlapping segments can be handled in either of two ways:
 
 The project **segment onset attack** is configurable from 1 to 100 ms and is stored as a clip fade-in. It avoids first-sample clicks without modifying the source stem or atomic waveform.
 
+**Snap project clips to grid** snaps project clip starts without changing their source offsets. The grid can be set from 1/4 through 1/256. When snapping is enabled in the configuration dialog, the resolution is estimated from the shortest detected source onset/atomic spacing and rounded upward to the next supported division, favoring a finer grid over a coarse one. The same Snap state and division are applied to the opened Mix Track View. With snapping off, clip placement remains exact and unsnapped.
+
 Beat and bar boundaries are derived from the resolved BPM. Project clips use full-frame precision from the untouched stem, so beat/bar output preserves the complete separated stem waveform. Transient output intentionally omits regions that the selected atomizer does not classify as events.
 
 Project output:
 
 - Always disables deduplication.
 - Uses `MixOverlapMode.MixOverlap`.
-- Leaves timeline snapping off.
+- Applies the configured timeline snapping state.
 - Sets the resolved BPM on every stem and source.
 - Adds no source-reference lane.
 
@@ -138,7 +140,7 @@ If a stem has no detectable atomics in transient mode, the whole stem is retaine
 
 The configuration window closes immediately after a valid Decompile run is started. Ownership of its private source snapshot is transferred to the running operation and released after success, cancellation, or failure.
 
-All configuration controls, including separation method, ONNX options, analog bands, deterministic DSP/profile settings, atomizer values, output selection, overlap handling, attack and worker count, are stored in `%APPDATA%/ModularAudience/decompile-settings.json` and restored on the next open.
+All configuration controls, including separation method, ONNX options, analog bands, deterministic DSP/profile settings, atomizer values, output selection, overlap handling, attack, grid snapping and worker count, are stored in `%APPDATA%/ModularAudience/decompile-settings.json` and restored on the next open.
 
 Demucs model loading and ONNX separation occupy 5–85% of the operation progress. Atomization and collection preparation occupy the remaining 15%; ETA uses a smoothed observed progress rate instead of a direct elapsed/fraction jump.
 
@@ -153,6 +155,18 @@ Right-clicking an internal boundary in `MixOverlap` or `AllowOverlapOverwrite` r
 - `MixOverlap` sums all clips with their gain/fades.
 - `AllowOverlapOverwrite` follows the same visual top-to-bottom order as the timeline; the visibly top clip replaces underlying sample regions.
 - A special four-direction merge cursor and tooltip appear only on mergeable boundaries.
+
+## Mix selection in the Breakbeat Pattern Editor
+
+The selection context menu in Mix Track View includes **Open selection in Breakbeat Pattern Editor...**. Each selected clip is rendered independently with its clip gain, fades, pitch/tempo mode and source offset.
+
+The selected segments are first probed as atomics. If every segment produces a single event, it opens directly in the editor. Otherwise, a compact atomization dialog provides sensitivity, minimum slice/tail/duration, RMS and single-atom fallback controls before the event rows are created.
+
+Every usable atomic receives an editor track. Start ticks preserve the clip's original position relative to the selected timeline, BPM comes from the Mix arrangement, and the editor bars/resolution are inferred conservatively from the shortest event spacing (up to 1/256).
+
+Saving the editor renders every enabled Pattern Editor track separately and inserts those lanes at the original selection start. The original selected clips/ranges are replaced in one undo entry, while portions outside a selected range are retained. Repeated saves replace the lanes from the previous Pattern Editor save, and Ctrl+Z / Ctrl+Y remains available in the Mix Track View.
+
+The editor stays modeless and is not registered as a child of the source collection. Closing Mix Track View closes this associated editor session; its temporary atomic/source objects are then released.
 
 ## Workers and memory
 
@@ -186,5 +200,7 @@ Focused tests cover:
 - Project frame timing from V4 atomics.
 - Collection deduplication on/off without modifying the source.
 - Cancellation before output publication.
+- Project grid snapping through 1/256 without changing source offsets.
+- Mix selection Pattern Editor context-menu routing.
 
 The regression tests are CPU-only and do not use ONNX playback, GPU execution, or interactive audio playback.
