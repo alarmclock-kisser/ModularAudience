@@ -82,6 +82,32 @@ public partial class BreakbeatPatternEditorDialog
         MessageBox.Show(this, help, "Name Template Help", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
+    private void panel_controls_Resize(object? sender, EventArgs e)
+    {
+        this.LayoutNameTemplateControls();
+    }
+
+    private void LayoutNameTemplateControls()
+    {
+        int dpi = Math.Max(96, this.DeviceDpi);
+        int gap = Math.Max(6, (int)Math.Round(6d * dpi / 96d));
+        int minimumComboWidth = Math.Max(60, (int)Math.Round(80d * dpi / 96d));
+        int maximumComboWidth = Math.Max(minimumComboWidth, (int)Math.Round(320d * dpi / 96d));
+        int availableBeforeDeduplicate = this.button_deduplicate.Left - this.comboBox_nameTemplate.Left - gap;
+        int widthWithHelp = availableBeforeDeduplicate - this.button_nameTemplateHelp.Width - gap;
+
+        if (widthWithHelp >= minimumComboWidth)
+        {
+            this.comboBox_nameTemplate.Width = Math.Min(maximumComboWidth, widthWithHelp);
+            this.button_nameTemplateHelp.Visible = true;
+            this.button_nameTemplateHelp.Left = this.comboBox_nameTemplate.Right + gap;
+            return;
+        }
+
+        this.button_nameTemplateHelp.Visible = false;
+        this.comboBox_nameTemplate.Width = Math.Max(1, availableBeforeDeduplicate);
+    }
+
     private string GetSavedPatternName(
         IReadOnlyList<BreakbeatPatternNote> notes,
         decimal bpm,

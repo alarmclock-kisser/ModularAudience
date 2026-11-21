@@ -397,7 +397,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             comboBox_nameTemplate.Location = new Point(140, 16);
             comboBox_nameTemplate.MaxLength = 512;
             comboBox_nameTemplate.Name = "comboBox_nameTemplate";
-            comboBox_nameTemplate.Size = new Size(320, 23);
+            comboBox_nameTemplate.Size = new Size(210, 23);
             comboBox_nameTemplate.TabIndex = 8;
             comboBox_nameTemplate.TextChanged += comboBox_nameTemplate_TextChanged;
             comboBox_nameTemplate.SelectionChangeCommitted += comboBox_nameTemplate_SelectionChangeCommitted;
@@ -414,7 +414,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             //
             // button_nameTemplateHelp
             //
-            button_nameTemplateHelp.Location = new Point(466, 15);
+            button_nameTemplateHelp.Location = new Point(356, 15);
             button_nameTemplateHelp.Name = "button_nameTemplateHelp";
             button_nameTemplateHelp.Size = new Size(52, 25);
             button_nameTemplateHelp.TabIndex = 9;
@@ -521,6 +521,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_pattern.ResumeLayout(false);
             panel_controls.ResumeLayout(false);
             panel_controls.PerformLayout();
+            panel_controls.Resize += panel_controls_Resize;
             ((System.ComponentModel.ISupportInitialize)numericUpDown_attack).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_bpm).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_resolution).EndInit();
