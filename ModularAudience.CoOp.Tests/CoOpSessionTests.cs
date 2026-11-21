@@ -25,6 +25,38 @@ public sealed class CoOpSessionTests
     }
 
     [TestMethod]
+    public async Task PasswordlessHost_AcceptsClientAfterLocalOnlyConfirmation()
+    {
+        await using var scope = new SessionTestScope();
+        CoOpSessionManager host = scope.CreateManager("Host", password: string.Empty);
+        CoOpSessionManager client = scope.CreateManager(
+            "Client",
+            password: string.Empty,
+            confirmPasswordlessSession: (_, _) => true);
+        CoOpHostInfo hostInfo = await host.StartHostingAsync();
+
+        await client.ConnectAsync("127.0.0.1", hostInfo.Port);
+
+        Assert.AreEqual(CoOpSessionState.Connected, client.State);
+        Assert.AreEqual(1, host.ConnectedPeerCount);
+    }
+
+    [TestMethod]
+    public async Task PasswordlessHost_RequiresExplicitClientConfirmation()
+    {
+        await using var scope = new SessionTestScope();
+        CoOpSessionManager host = scope.CreateManager("Host", password: string.Empty);
+        CoOpSessionManager client = scope.CreateManager("Client", password: string.Empty);
+        CoOpHostInfo hostInfo = await host.StartHostingAsync();
+
+        await Assert.ThrowsAsync<CoOpProtocolException>(
+            () => client.ConnectAsync("127.0.0.1", hostInfo.Port));
+
+        Assert.AreEqual(CoOpSessionState.Disconnected, client.State);
+        Assert.AreEqual(0, host.ConnectedPeerCount);
+    }
+
+    [TestMethod]
     public async Task Client_RejectsUntrustedHostCertificateBeforeAuthentication()
     {
         await using var scope = new SessionTestScope();

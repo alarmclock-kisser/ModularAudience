@@ -5,7 +5,7 @@ namespace ModularAudience.CoOp;
 /// </summary>
 public static class CoOpDefaults
 {
-    public const int ProtocolVersion = 3;
+    public const int ProtocolVersion = 4;
 
     public const int MaxPresetSyncEntries = 65_536;
     public const int MaxPresetSyncBytes = 32 * 1024 * 1024;

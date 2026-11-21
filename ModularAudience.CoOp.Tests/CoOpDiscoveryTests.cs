@@ -14,7 +14,7 @@ public sealed class CoOpDiscoveryTests
     public async Task Discovery_FindsHostAndDeduplicatesRepeatedProbes()
     {
         Guid peerId = Guid.NewGuid();
-        await using var responder = new CoOpDiscoveryResponder(peerId, "Local host", 49123);
+        await using var responder = new CoOpDiscoveryResponder(peerId, "Local host", 49123, requiresPassword: false);
         responder.Start(0, 1);
         int port = responder.Ports.Single();
         var client = new CoOpDiscoveryClient(port, 1, [IPAddress.Loopback, IPAddress.Loopback]);
@@ -26,6 +26,8 @@ public sealed class CoOpDiscoveryTests
         Assert.AreEqual("Local host", host.DisplayName);
         Assert.AreEqual("127.0.0.1", host.Address);
         Assert.AreEqual(49123, host.Port);
+        Assert.IsFalse(host.RequiresPassword);
+        StringAssert.Contains(host.ToString(), "LAN only, no password");
     }
 
     [TestMethod]

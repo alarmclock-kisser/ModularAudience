@@ -1,3 +1,4 @@
+using System.Net;
 using ModularAudience.Audio;
 using ModularAudience.CoOp.Networking;
 using ModularAudience.CoOp.Protocol;
@@ -147,13 +148,15 @@ public sealed class CoOpSessionManager : IAsyncDisposable
 
     public event EventHandler<CoOpLogEventArgs>? Log;
 
-    public void SetSessionPassword(string password)
+    public void SetSessionPassword(string? password)
     {
-        if (!CoOpSecurity.IsValidSessionPassword(password))
-            throw new ArgumentException("The co-op session password must contain 8 to 128 characters.", nameof(password));
+        if (!string.IsNullOrEmpty(password) && !CoOpSecurity.IsValidSessionPassword(password))
+            throw new ArgumentException(
+                "A session password must be 8–128 characters. Leave it empty to host or connect without a password on the local network.",
+                nameof(password));
         if (this.IsSessionActive)
             throw new InvalidOperationException("The session password cannot be changed while a co-op session is active.");
-        this.sessionPassword = password;
+        this.sessionPassword = password ?? string.Empty;
     }
 
     public Task<CoOpHostInfo> StartHostingAsync(CancellationToken cancellationToken = default)
@@ -165,8 +168,10 @@ public sealed class CoOpSessionManager : IAsyncDisposable
             {
                 throw new InvalidOperationException("A co-op session is already active.");
             }
-            if (!CoOpSecurity.IsValidSessionPassword(this.sessionPassword))
-                throw new InvalidOperationException("Set a co-op session password of 8 to 128 characters before hosting.");
+            bool isLanOnly = string.IsNullOrEmpty(this.sessionPassword);
+            if (!isLanOnly && !CoOpSecurity.IsValidSessionPassword(this.sessionPassword))
+                throw new InvalidOperationException(
+                    "A session password must be 8–128 characters. Clear it to host without a password on the local network.");
 
             this.ClearSessionState();
 
@@ -195,7 +200,8 @@ public sealed class CoOpSessionManager : IAsyncDisposable
                         this.discoveryResponder = new CoOpDiscoveryResponder(
                             this.localPeerId,
                             this.options.DisplayName,
-                            this.sessionPort);
+                            this.sessionPort,
+                            requiresPassword: !isLanOnly);
                         this.discoveryResponder.Start(
                             this.options.DiscoveryPort,
                             this.options.DiscoveryPortSearchCount);
@@ -230,10 +236,10 @@ public sealed class CoOpSessionManager : IAsyncDisposable
         {
             throw new InvalidOperationException("A co-op session is already active.");
         }
-        if (!CoOpSecurity.IsValidSessionPassword(this.sessionPassword))
-        {
-            throw new InvalidOperationException("Set a co-op session password of 8 to 128 characters before connecting.");
-        }
+        bool hasSessionPassword = !string.IsNullOrEmpty(this.sessionPassword);
+        if (hasSessionPassword && !CoOpSecurity.IsValidSessionPassword(this.sessionPassword))
+            throw new InvalidOperationException(
+                "A session password must be 8–128 characters. Clear it only to connect to a passwordless host on the local network.");
 
         await this.RunExclusiveAsync(() =>
         {
@@ -273,14 +279,34 @@ public sealed class CoOpSessionManager : IAsyncDisposable
 
             AuthChallengeMessage challenge = await challengeSource.Task
                 .WaitAsync(this.options.ConnectTimeout, cancellationToken);
+            byte[]? passwordProof = null;
+            if (challenge.RequiresPassword)
+            {
+                if (!CoOpSecurity.IsValidSessionPassword(this.sessionPassword))
+                    throw new CoOpProtocolException("This host requires a session password of 8–128 characters.");
+                passwordProof = CoOpSecurity.CreatePasswordProof(
+                    this.sessionPassword!,
+                    challenge,
+                    this.localPeerId);
+            }
+            else
+            {
+                if (!challenge.IsLanOnly)
+                    throw new CoOpProtocolException("The host does not require a password but is not restricted to the local network.");
+                if (hasSessionPassword)
+                    throw new CoOpProtocolException("This host does not use a session password. Clear the password field and reconnect.");
+                if (this.options.ConfirmPasswordlessSession == null
+                    || !this.options.ConfirmPasswordlessSession(host, port))
+                {
+                    throw new CoOpProtocolException("Connection to the passwordless, local-network-only host was not confirmed.");
+                }
+            }
+
             await connection.SendAsync(
                 new HelloMessage(
                     this.localPeerId,
                     this.options.DisplayName,
-                    PasswordProof: CoOpSecurity.CreatePasswordProof(
-                        this.sessionPassword ?? string.Empty,
-                        challenge,
-                        this.localPeerId)),
+                    PasswordProof: passwordProof),
                 cancellationToken);
 
             WelcomeMessage welcome = await welcomeSource.Task
@@ -658,7 +684,12 @@ public sealed class CoOpSessionManager : IAsyncDisposable
 
     private void Server_ClientConnected(object? sender, CoOpServerEventArgs e)
     {
-        var peer = new PeerSession(e.Connection, CoOpSecurity.CreateChallenge());
+        bool requiresPassword = !string.IsNullOrEmpty(this.sessionPassword);
+        var peer = new PeerSession(
+            e.Connection,
+            CoOpSecurity.CreateChallenge(
+                requiresPassword,
+                isLanOnly: !requiresPassword));
         lock (this.peerGate)
         {
             this.peers.Add(peer);
@@ -897,14 +928,38 @@ public sealed class CoOpSessionManager : IAsyncDisposable
             return;
         }
 
-        if (peer.AuthChallenge == null ||
-            !CoOpSecurity.VerifyPasswordProof(
-                this.sessionPassword ?? string.Empty,
-                peer.AuthChallenge,
-                hello.PeerId,
-                hello.PasswordProof ?? []))
+        AuthChallengeMessage? challenge = peer.AuthChallenge;
+        string? authenticationError = null;
+        string? errorCode = null;
+        if (challenge == null)
         {
-            await peer.Connection.SendAsync(new ErrorMessage("The co-op session password is incorrect.", "authentication"));
+            authenticationError = "The host authentication challenge was missing. Disconnect and update both co-op clients.";
+            errorCode = "challenge";
+        }
+        else if (challenge.RequiresPassword &&
+                 (!CoOpSecurity.IsValidSessionPassword(this.sessionPassword) ||
+                  !CoOpSecurity.VerifyPasswordProof(
+                      this.sessionPassword!,
+                      challenge,
+                      hello.PeerId,
+                      hello.PasswordProof ?? [])))
+        {
+            authenticationError = "The session password is incorrect. Check the host's password and try again.";
+            errorCode = "authentication";
+        }
+        else if (!challenge.RequiresPassword &&
+                 (!challenge.IsLanOnly ||
+                  hello.PasswordProof is { Length: > 0 } ||
+                  peer.Connection.RemoteAddress is not IPAddress remoteAddress ||
+                  !CoOpNetworkUtilities.IsLocalNetworkAddress(remoteAddress)))
+        {
+            authenticationError = "This host accepts passwordless connections only from its local subnet. Connect to the same LAN or use a session password.";
+            errorCode = "lanOnly";
+        }
+
+        if (authenticationError != null)
+        {
+            await peer.Connection.SendAsync(new ErrorMessage(authenticationError, errorCode));
             await peer.Connection.DisposeAsync();
             return;
         }

@@ -2,6 +2,7 @@ using ModularAudience.Audio;
 using ModularAudience.CoOp;
 using ModularAudience.CoOp.Networking;
 using ModularAudience.CoOp.Protocol;
+using ModularAudience.CoOp.Security;
 using ModularAudience.CoOp.Synchronization;
 using ModularAudience.Forms.Helpers;
 using System.ComponentModel;
@@ -290,7 +291,7 @@ namespace ModularAudience.Forms
 
                 this._coOpDiscoveryStatus = hosts.Count > 0
                     ? $"{hosts.Count} co-op host(s) found"
-                    : "No co-op hosts found";
+                    : "No co-op hosts found; enter the host's local IP and port manually if needed";
             }
             catch (OperationCanceledException)
             {
@@ -343,20 +344,50 @@ namespace ModularAudience.Forms
                 {
                     using var passwordDialog = new ModularAudience.Forms.Modules.Dialogs.CoOpPasswordDialog(
                         "Set a co-op session password",
-                        "Share this password with peers through a trusted channel.");
-                    if (passwordDialog.ShowDialog(this) != DialogResult.OK)
+                        "Use 8–128 characters, or leave this blank to allow passwordless connections from the local subnet only.",
+                        controller.SessionPassword);
+                    DialogResult passwordResult = passwordDialog.ShowDialog(this);
+                    string password = passwordDialog.Password;
+                    controller.RememberSessionPassword(password);
+                    if (passwordResult != DialogResult.OK)
                     {
                         return;
                     }
 
-                    string password = passwordDialog.Password;
+                    if (!string.IsNullOrEmpty(password) && !CoOpSecurity.IsValidSessionPassword(password))
+                    {
+                        MessageBox.Show(
+                            this,
+                            "A session password must be 8–128 characters. Clear the field for a local-network-only session.",
+                            "Session password is too short",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
+                        return;
+                    }
+
+                    if (string.IsNullOrEmpty(password) &&
+                        MessageBox.Show(
+                            this,
+                            "No password will be required. The host will accept connections only from its local subnet. " +
+                            "Devices on other networks must use a password-protected session.\n\nHost without a password?",
+                            "Confirm passwordless local hosting",
+                            MessageBoxButtons.YesNo,
+                            MessageBoxIcon.Warning,
+                            MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                    {
+                        return;
+                    }
+
                     CoOpHostInfo info = await controller.StartHostingAsync(password);
                     string address = $"{info.Address}:{info.Port}";
+                    string passwordSummary = string.IsNullOrEmpty(password)
+                        ? "None (local network only)"
+                        : password;
                     this._lastCoOpAddress = address;
                     LogManager.LogSuccess($"Co-op hosting started. Address: {address}");
                     MessageBox.Show(
                         this,
-                        $"Co-op hosting started.\n\nShare this address and session password with trusted peers:\n{address}\n\nSession password:\n{password}\n\nHost certificate SHA-256 fingerprint:\n{controller.HostCertificateFingerprint}",
+                        $"Co-op hosting started.\n\nShare this address and session password with trusted peers:\n{address}\n\nSession password:\n{passwordSummary}\n\nHost certificate SHA-256 fingerprint:\n{controller.HostCertificateFingerprint}",
                         "Co-op hosting",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
@@ -422,13 +453,28 @@ namespace ModularAudience.Forms
             {
                 using var passwordDialog = new ModularAudience.Forms.Modules.Dialogs.CoOpPasswordDialog(
                     "Enter the co-op session password",
-                    $"Enter the password supplied by the host at {endpoint}.");
-                if (passwordDialog.ShowDialog(this) != DialogResult.OK)
+                    $"Enter the password supplied by the host at {endpoint}. Leave blank only for a passwordless host on your local network.",
+                    controller.SessionPassword);
+                DialogResult passwordResult = passwordDialog.ShowDialog(this);
+                string password = passwordDialog.Password;
+                controller.RememberSessionPassword(password);
+                if (passwordResult != DialogResult.OK)
                 {
                     return;
                 }
 
-                await controller.ConnectAsync(endpoint, passwordDialog.Password);
+                if (!string.IsNullOrEmpty(password) && !CoOpSecurity.IsValidSessionPassword(password))
+                {
+                    MessageBox.Show(
+                        this,
+                        "A session password must be 8–128 characters. Clear the field only for a passwordless host on your local network.",
+                        "Session password is too short",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
+
+                await controller.ConnectAsync(endpoint, password);
                 this._lastCoOpAddress = endpoint.ToString();
                 LogManager.LogSuccess($"Connected to co-op host {endpoint}.");
             }

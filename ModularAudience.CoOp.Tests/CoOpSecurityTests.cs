@@ -30,6 +30,19 @@ public sealed class CoOpSecurityTests
     }
 
     [TestMethod]
+    public void PasswordlessChallenge_IsExplicitlyMarkedLocalOnly()
+    {
+        AuthChallengeMessage challenge = CoOpSecurity.CreateChallenge(
+            requiresPassword: false,
+            isLanOnly: true);
+
+        Assert.IsFalse(challenge.RequiresPassword);
+        Assert.IsTrue(challenge.IsLanOnly);
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            CoOpSecurity.CreateChallenge(requiresPassword: false, isLanOnly: false));
+    }
+
+    [TestMethod]
     public void HostCertificate_IsPersistentAndHasStableSha256Fingerprint()
     {
         string directory = Path.Combine(Path.GetTempPath(), "ModularAudience-CoOp-Security", Guid.NewGuid().ToString("N"));

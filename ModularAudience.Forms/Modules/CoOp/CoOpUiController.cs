@@ -5,6 +5,7 @@ using ModularAudience.CoOp.Protocol;
 using ModularAudience.CoOp.Security;
 using ModularAudience.CoOp.Synchronization;
 using ModularAudience.CoOp.Windows;
+using ModularAudience.Forms.Modules.CoOp;
 
 namespace ModularAudience.Forms
 {
@@ -17,6 +18,7 @@ namespace ModularAudience.Forms
     {
         private readonly CoOpSessionManager session;
         private readonly CoOpCertificateTrustStore certificateTrustStore;
+        private readonly CoOpPasswordStore passwordStore;
         private readonly CoOpDiscoveryClient discoveryClient = new();
         private readonly Dictionary<Guid, AudioCollectionView> remoteViews = [];
         private readonly SemaphoreSlim presetImportGate = new(1, 1);
@@ -32,10 +34,27 @@ namespace ModularAudience.Forms
                 "CoOp");
             this.certificateTrustStore = new CoOpCertificateTrustStore(
                 Path.Combine(coOpDirectory, "trusted-hosts.json"));
+            this.passwordStore = new CoOpPasswordStore(Path.Combine(coOpDirectory, "session-password.dat"));
+            try
+            {
+                this.SessionPassword = this.passwordStore.Load();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log("Loading the saved co-op session password failed.", ex);
+                MessageBox.Show(
+                    "The saved co-op password could not be decrypted. You can enter a new password; it will replace the saved value.\n\n" +
+                    ex.Message,
+                    "Could not load co-op password",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                this.SessionPassword = string.Empty;
+            }
             this.session = new CoOpSessionManager(new CoOpSessionOptions
             {
                 CertificatePath = Path.Combine(coOpDirectory, "host-certificate.pfx"),
                 ConfirmServerCertificate = this.ConfirmServerCertificate,
+                ConfirmPasswordlessSession = this.ConfirmPasswordlessSession,
             }, uiContext);
             this.session.StateChanged += this.Session_StateChanged;
             this.session.SharesChanged += this.Session_SharesChanged;
@@ -63,8 +82,17 @@ namespace ModularAudience.Forms
 
         public string? HostCertificateFingerprint => this.session.HostCertificateFingerprint;
 
+        public string SessionPassword { get; private set; } = string.Empty;
+
+        public void RememberSessionPassword(string password)
+        {
+            this.passwordStore.Save(password);
+            this.SessionPassword = password;
+        }
+
         public async Task<CoOpHostInfo> StartHostingAsync(string password, CancellationToken cancellationToken = default)
         {
+            this.RememberSessionPassword(password);
             this.session.SetSessionPassword(password);
             try
             {
@@ -101,6 +129,7 @@ namespace ModularAudience.Forms
             string password,
             CancellationToken cancellationToken = default)
         {
+            this.RememberSessionPassword(password);
             this.session.SetSessionPassword(password);
             await this.session.ConnectAsync(endpoint.Host, endpoint.Port, cancellationToken).ConfigureAwait(true);
             WindowMain.RaiseCoOpVisualsChanged();
@@ -130,6 +159,17 @@ namespace ModularAudience.Forms
 
             this.certificateTrustStore.Trust(host, port, fingerprint);
             return true;
+        }
+
+        private bool ConfirmPasswordlessSession(string host, int port)
+        {
+            return MessageBox.Show(
+                $"The host at {host}:{port} does not require a password and accepts connections only from its local subnet. " +
+                "Only continue if you trust this host and are connected to the same LAN.\n\nConnect anyway?",
+                "Confirm passwordless local session",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2) == DialogResult.Yes;
         }
 
         public async Task StopAsync(CancellationToken cancellationToken = default)

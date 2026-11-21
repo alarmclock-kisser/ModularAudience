@@ -60,11 +60,16 @@ public static class CoOpSecurity
         return !string.IsNullOrWhiteSpace(password) && password.Length is >= 8 and <= 128;
     }
 
-    public static AuthChallengeMessage CreateChallenge()
+    public static AuthChallengeMessage CreateChallenge(
+        bool requiresPassword = true,
+        bool isLanOnly = false)
     {
+        if (!requiresPassword && !isLanOnly)
+            throw new ArgumentException("Passwordless co-op sessions must be restricted to the local network.", nameof(isLanOnly));
+
         byte[] salt = RandomNumberGenerator.GetBytes(16);
         byte[] nonce = RandomNumberGenerator.GetBytes(32);
-        return new AuthChallengeMessage(salt, nonce, PasswordKeyIterations);
+        return new AuthChallengeMessage(salt, nonce, PasswordKeyIterations, requiresPassword, isLanOnly);
     }
 
     public static byte[] CreatePasswordProof(string password, AuthChallengeMessage challenge, Guid peerId)

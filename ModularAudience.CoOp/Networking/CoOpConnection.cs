@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using ModularAudience.CoOp.Protocol;
 
@@ -45,12 +46,15 @@ public sealed class CoOpConnection : IAsyncDisposable
         this.stream = transportStream ?? throw new ArgumentNullException(nameof(transportStream));
         this.LocalEndPoint = client.Client.LocalEndPoint?.ToString() ?? "unknown";
         this.RemoteEndPoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown";
+        this.RemoteAddress = (client.Client.RemoteEndPoint as IPEndPoint)?.Address;
         this.RemoteCertificateFingerprint = remoteCertificateFingerprint;
     }
 
     public Guid ConnectionId { get; } = Guid.NewGuid();
 
     public string RemoteEndPoint { get; }
+
+    public IPAddress? RemoteAddress { get; }
 
     public string LocalEndPoint { get; }
 

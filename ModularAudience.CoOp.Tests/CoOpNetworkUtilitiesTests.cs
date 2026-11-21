@@ -81,6 +81,19 @@ public sealed class CoOpNetworkUtilitiesTests
     }
 
     [TestMethod]
+    public void DiscoveryProbeTargets_KeepPointToPointSubnetLinksAvailable()
+    {
+        CoOpLocalIPv4Network pointToPoint = Network("192.168.43.2") with { IsLanAdapter = false };
+
+        IReadOnlyList<CoOpDiscoveryProbeTarget> targets =
+            CoOpNetworkUtilities.GetDiscoveryProbeTargets([pointToPoint]);
+
+        Assert.IsTrue(targets.Contains(new CoOpDiscoveryProbeTarget(
+            IPAddress.Parse("192.168.43.2"),
+            IPAddress.Parse("192.168.43.255"))));
+    }
+
+    [TestMethod]
     public void DiscoveryTargets_KeepLoopbackAndLimitedBroadcastFallbackWithoutAdapterInformation()
     {
         IReadOnlyList<IPAddress> addresses = CoOpNetworkUtilities.GetDiscoveryBroadcastAddresses([]);

@@ -43,12 +43,6 @@ internal sealed class SoundboardEditorPage : ContentPage
         Button saveButton = new() { Text = "Save local edit" };
         previewButton.Clicked += async (_, _) => await this.PreviewAsync();
         saveButton.Clicked += async (_, _) => await this.SaveAsync();
-        this.ToolbarItems.Add(new ToolbarItem
-        {
-            Text = "☰",
-            Order = ToolbarItemOrder.Primary,
-            Command = new Command(() => Shell.Current.FlyoutIsPresented = true),
-        });
 
         VerticalStackLayout content = new()
         {

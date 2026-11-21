@@ -52,14 +52,23 @@ public static class CoOpClient
                         fingerprint = CoOpSecurity.GetCertificateFingerprint(certificate);
                         return true;
                     });
-                await secureStream.AuthenticateAsClientAsync(
-                    new SslClientAuthenticationOptions
-                    {
-                        TargetHost = host,
-                        EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
-                        CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
-                    },
-                    linked.Token).ConfigureAwait(false);
+                try
+                {
+                    await secureStream.AuthenticateAsClientAsync(
+                        new SslClientAuthenticationOptions
+                        {
+                            TargetHost = host,
+                            EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                            CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
+                        },
+                        linked.Token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is AuthenticationException or IOException)
+                {
+                    throw new AuthenticationException(
+                        $"The TLS handshake with {host}:{port} failed. Verify the co-op port, update both applications, and allow ModularAudience through the host firewall. Details: {ex.Message}",
+                        ex);
+                }
                 if (fingerprint == null)
                     throw new AuthenticationException("The co-op host did not present a TLS certificate.");
                 return new CoOpConnection(client, serializer, secureStream, fingerprint);
@@ -78,6 +87,13 @@ public static class CoOpClient
             }
         }
 
-        throw lastError ?? new SocketException((int)SocketError.HostNotFound);
+        if (lastError != null)
+        {
+            throw new IOException(
+                $"Could not connect to co-op host {host}:{port}. Check the address, port, network connection, and host firewall. Details: {lastError.Message}",
+                lastError);
+        }
+
+        throw new IOException($"No reachable address was found for co-op host {host}:{port}.");
     }
 }

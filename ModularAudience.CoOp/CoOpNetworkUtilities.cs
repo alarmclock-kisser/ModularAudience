@@ -48,7 +48,7 @@ public static class CoOpNetworkUtilities
                         networks.Add(new CoOpLocalIPv4Network(unicast.Address, unicast.IPv4Mask, hasGateway,
                             type is NetworkInterfaceType.Ethernet or NetworkInterfaceType.Wireless80211 or
                                 NetworkInterfaceType.GigabitEthernet or NetworkInterfaceType.FastEthernetT or NetworkInterfaceType.FastEthernetFx,
-                            type is NetworkInterfaceType.Tunnel or NetworkInterfaceType.Ppp));
+                            type == NetworkInterfaceType.Tunnel));
                     }
                 }
             }
@@ -74,6 +74,17 @@ public static class CoOpNetworkUtilities
     public static string GetPreferredLocalAddress()
     {
         return GetLocalIPv4Addresses().FirstOrDefault()?.ToString() ?? IPAddress.Loopback.ToString();
+    }
+
+    public static bool IsLocalNetworkAddress(IPAddress address)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        if (IPAddress.IsLoopback(address))
+            return true;
+        if (address.IsIPv4MappedToIPv6)
+            address = address.MapToIPv4();
+        return address.AddressFamily == AddressFamily.InterNetwork &&
+            GetLocalIPv4Networks().Any(network => !network.IsTunnel && IsInSameSubnet(address, network));
     }
 
     public static IReadOnlyList<IPAddress> GetDiscoveryBroadcastAddresses()

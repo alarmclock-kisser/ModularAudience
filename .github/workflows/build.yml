@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   build:
+    needs: [android_changes]
     runs-on: windows-latest
 
     steps:
@@ -39,6 +40,38 @@ jobs:
     - name: Package VocalSynth licenses
       run: Compress-Archive -Path .\publish\ThirdPartyLicenses -DestinationPath .\publish\VocalSynthLicenses.zip
 
+    - name: Include the latest Android APK when Android is unchanged
+      id: reuse_android_apk
+      if: needs.android_changes.outputs.android != 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: bash
+      run: |
+        mapfile -t release_tags < <(
+          gh release list --limit 1000 --json tagName,isDraft \
+            --jq '.[] | select(.isDraft == false) | .tagName'
+        )
+        for tag in "${release_tags[@]}"; do
+          [[ "$tag" == release-* ]] || continue
+          assets="$(gh release view "$tag" --json assets --jq '.assets[].name')"
+          apk_name="$(printf '%s\n' "$assets" | grep -E '^ModularAudience\.VocalSynth-(Test|Signed)\.apk$' | head -n 1 || true)"
+          if [[ -z "$apk_name" ]]; then
+            continue
+          fi
+
+          gh release download "$tag" --pattern "$apk_name" --dir "./publish"
+          apk_variant="${apk_name#ModularAudience.VocalSynth-}"
+          apk_variant="${apk_variant%.apk}"
+          source_build="${tag#release-}"
+          carried_apk="./publish/ModularAudience.VocalSynth-$apk_variant-from-$source_build.apk"
+          mv "./publish/$apk_name" "$carried_apk"
+          echo "asset=$carried_apk" >> "$GITHUB_OUTPUT"
+          echo "Included Android $apk_variant APK from release $tag."
+          exit 0
+        done
+
+        echo "No previous release with an Android APK was found; Windows release will continue without one."
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
@@ -50,6 +83,13 @@ jobs:
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Attach carried-forward Android APK
+      if: steps.reuse_android_apk.outputs.asset != ''
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: bash
+      run: gh release upload "release-${GITHUB_RUN_NUMBER}" "${{ steps.reuse_android_apk.outputs.asset }}" --clobber
 
   android_changes:
     runs-on: ubuntu-latest

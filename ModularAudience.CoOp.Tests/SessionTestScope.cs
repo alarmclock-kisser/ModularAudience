@@ -14,7 +14,8 @@ internal sealed class SessionTestScope : IAsyncDisposable
     public CoOpSessionManager CreateManager(
         string displayName,
         string password = "test-session-password",
-        Func<string, int, string, bool>? confirmCertificate = null)
+        Func<string, int, string, bool>? confirmCertificate = null,
+        Func<string, int, bool>? confirmPasswordlessSession = null)
     {
         var manager = new CoOpSessionManager(new CoOpSessionOptions
         {
@@ -26,6 +27,7 @@ internal sealed class SessionTestScope : IAsyncDisposable
             SessionPassword = password,
             CertificatePath = Path.Combine(this.Root, "host-certificate.pfx"),
             ConfirmServerCertificate = confirmCertificate ?? ((_, _, _) => true),
+            ConfirmPasswordlessSession = confirmPasswordlessSession,
         });
 
         this.managers.Add(manager);

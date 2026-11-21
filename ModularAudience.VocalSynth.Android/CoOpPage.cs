@@ -14,7 +14,7 @@ public sealed class CoOpPage : ContentPage
     private readonly Entry hostEntry = new() { Placeholder = "Host IP or name", Keyboard = Keyboard.Text };
     private readonly Entry portEntry = new() { Text = "47823", Placeholder = "Port", Keyboard = Keyboard.Numeric };
     private readonly Entry displayNameEntry = new() { Placeholder = "Device name" };
-    private readonly Entry passwordEntry = new() { Placeholder = "Session password (8–128 characters)", IsPassword = true };
+    private readonly Entry passwordEntry = new() { Placeholder = "Session password (optional; 8–128 characters)", IsPassword = true };
     private readonly Label statusLabel = new() { Text = "Not connected", LineBreakMode = LineBreakMode.WordWrap };
     private readonly Label transferLabel = new() { Text = "Select saved samples to send." };
     private readonly VerticalStackLayout sampleList = new() { Spacing = 6 };
@@ -24,7 +24,11 @@ public sealed class CoOpPage : ContentPage
     private readonly Button disconnectButton = new() { Text = "Disconnect", IsEnabled = false };
     private readonly Button sendButton = new() { Text = "Send selected samples", IsEnabled = false };
     private readonly Dictionary<Guid, CheckBox> selections = [];
+    private readonly SemaphoreSlim passwordSaveGate = new(1, 1);
+    private Task passwordSaveTask = Task.CompletedTask;
     private bool busy;
+    private bool passwordLoaded;
+    private bool passwordSaveErrorShown;
 
     internal CoOpPage(CoOpAndroidSession session, SoundboardStore store)
     {
@@ -35,14 +39,9 @@ public sealed class CoOpPage : ContentPage
         this.displayNameEntry.Text = this.session.DisplayName;
         this.session.ConfirmIncomingTransfer = this.ConfirmAndSaveIncomingBatchAsync;
         this.session.ConfirmServerCertificate = this.ConfirmServerCertificateAsync;
+        this.session.ConfirmPasswordlessSession = this.ConfirmPasswordlessSessionAsync;
         this.session.StateChanged += this.Session_StateChanged;
         this.session.StatusChanged += this.Session_StatusChanged;
-        this.ToolbarItems.Add(new ToolbarItem
-        {
-            Text = "☰",
-            Order = ToolbarItemOrder.Primary,
-            Command = new Command(() => Shell.Current.FlyoutIsPresented = true),
-        });
 
         this.discoverButton.Clicked += async (_, _) => await this.RefreshHostsAsync();
         this.hostPicker.SelectedIndexChanged += (_, _) =>
@@ -61,6 +60,12 @@ public sealed class CoOpPage : ContentPage
         {
             if (!string.IsNullOrWhiteSpace(args.NewTextValue))
                 this.session.DisplayName = args.NewTextValue.Trim();
+        };
+        this.passwordEntry.TextChanged += (_, args) =>
+        {
+            string password = args.NewTextValue ?? string.Empty;
+            this.session.SessionPassword = password;
+            this.passwordSaveTask = this.SavePasswordAsync(password);
         };
 
         var hostAndPort = new Grid
@@ -108,10 +113,56 @@ public sealed class CoOpPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
+        await this.LoadPasswordAsync();
         await this.ReloadSamplesAsync();
         if (this.hostPicker.ItemsSource == null)
             await this.RefreshHostsAsync();
         this.UpdateControls();
+    }
+
+    protected override async void OnDisappearing()
+    {
+        await this.passwordSaveTask;
+        base.OnDisappearing();
+    }
+
+    private async Task LoadPasswordAsync()
+    {
+        if (this.passwordLoaded)
+            return;
+        this.passwordLoaded = true;
+        try
+        {
+            string? password = await SecureStorage.Default.GetAsync("coop.sessionPassword");
+            this.passwordEntry.Text = password ?? string.Empty;
+            this.session.SessionPassword = password ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            await this.ShowErrorAsync("Could not load the saved co-op password", ex);
+        }
+    }
+
+    private async Task SavePasswordAsync(string password)
+    {
+        await this.passwordSaveGate.WaitAsync();
+        try
+        {
+            await SecureStorage.Default.SetAsync("coop.sessionPassword", password);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Saving the co-op password failed: {ex}");
+            if (!this.passwordSaveErrorShown)
+            {
+                this.passwordSaveErrorShown = true;
+                await this.ShowErrorAsync("Could not save the co-op password", ex);
+            }
+        }
+        finally
+        {
+            this.passwordSaveGate.Release();
+        }
     }
 
     private async Task RefreshHostsAsync()
@@ -144,9 +195,14 @@ public sealed class CoOpPage : ContentPage
             await this.DisplayAlertAsync("Invalid port", "Enter a port between 1 and 65535.", "OK");
             return;
         }
+        string password = this.passwordEntry.Text ?? string.Empty;
+        if (!await this.ConfirmPasswordChoiceAsync(password, hosting: false))
+            return;
+        await this.passwordSaveTask;
+
         await this.RunBusyAsync(async () =>
         {
-            this.session.SessionPassword = this.passwordEntry.Text ?? string.Empty;
+            this.session.SessionPassword = password;
             await this.session.ConnectAsync(this.hostEntry.Text ?? string.Empty, port);
             await this.DisplayAlertAsync("Co-op connected", "The connection is direct. Internet hosts must be reachable on the selected port.", "OK");
         });
@@ -154,18 +210,48 @@ public sealed class CoOpPage : ContentPage
 
     private async Task HostAsync()
     {
+        string password = this.passwordEntry.Text ?? string.Empty;
+        if (!await this.ConfirmPasswordChoiceAsync(password, hosting: true))
+            return;
+        await this.passwordSaveTask;
+
         await this.RunBusyAsync(async () =>
         {
             this.session.DisplayName = string.IsNullOrWhiteSpace(this.displayNameEntry.Text)
                 ? this.session.DisplayName
                 : this.displayNameEntry.Text.Trim();
-            this.session.SessionPassword = this.passwordEntry.Text ?? string.Empty;
+            this.session.SessionPassword = password;
             await this.session.HostAsync();
+            string passwordSummary = string.IsNullOrEmpty(password)
+                ? "None (local network only)"
+                : password;
             await this.DisplayAlertAsync(
                 "Co-op hosting started",
-                $"Address: {this.session.Address}:{this.session.Port}\n\nSession password: {this.session.SessionPassword}\n\nHost certificate SHA-256 fingerprint:\n{this.session.HostCertificateFingerprint}",
+                $"Address: {this.session.Address}:{this.session.Port}\n\nSession password: {passwordSummary}\n\nHost certificate SHA-256 fingerprint:\n{this.session.HostCertificateFingerprint}",
                 "OK");
         });
+    }
+
+    private async Task<bool> ConfirmPasswordChoiceAsync(string password, bool hosting)
+    {
+        if (!string.IsNullOrEmpty(password) && !ModularAudience.CoOp.Security.CoOpSecurity.IsValidSessionPassword(password))
+        {
+            await this.DisplayAlertAsync(
+                "Session password is too short",
+                "Use 8–128 characters, or clear the field to continue without a password. Passwordless sessions are restricted to the local network.",
+                "OK");
+            return false;
+        }
+
+        if (!hosting || !string.IsNullOrEmpty(password))
+            return true;
+
+        string action = hosting ? "host" : "connect to";
+        return await this.DisplayAlertAsync(
+            "Passwordless co-op session",
+            $"You are about to {action} without a session password. This is limited to devices on the same local network and offers less protection than a password-protected session. Continue?",
+            "Continue",
+            "Cancel");
     }
 
     private async Task DisconnectAsync()
@@ -271,6 +357,15 @@ public sealed class CoOpPage : ContentPage
         return trusted;
     }
 
+    private Task<bool> ConfirmPasswordlessSessionAsync(string host, int port)
+    {
+        return MainThread.InvokeOnMainThreadAsync(() => this.DisplayAlertAsync(
+            "Passwordless local session",
+            $"The host at {host}:{port} does not require a password and accepts connections only from its local subnet. Continue?",
+            "Connect",
+            "Cancel"));
+    }
+
     private async Task RunBusyAsync(Func<Task> action)
     {
         if (this.busy)
@@ -295,7 +390,7 @@ public sealed class CoOpPage : ContentPage
     private async Task ShowErrorAsync(string title, Exception exception)
     {
         System.Diagnostics.Debug.WriteLine($"{title}: {exception}");
-        await this.DisplayAlertAsync(title, exception.ToString(), "OK");
+        await this.DisplayAlertAsync(title, exception.Message, "OK");
     }
 
     private void Session_StateChanged(object? sender, EventArgs e)
@@ -314,6 +409,7 @@ public sealed class CoOpPage : ContentPage
         this.statusLabel.Text = this.session.State;
         this.connectButton.IsEnabled = !this.busy && !active;
         this.hostButton.IsEnabled = !this.busy && !active;
+        this.passwordEntry.IsEnabled = !this.busy && !active;
         this.disconnectButton.IsEnabled = !this.busy && active;
         this.sendButton.IsEnabled = !this.busy && active
             && this.session.ConnectedPeerCount > 0

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Runtime.InteropServices;
 using ModularAudience.CoOp;
 using ModularAudience.CoOp.Networking;
@@ -48,6 +49,7 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
 
     internal Func<CoOpIncomingTransfer, Task<bool>>? ConfirmIncomingTransfer { get; set; }
     internal Func<string, int, string, Task<bool>>? ConfirmServerCertificate { get; set; }
+    internal Func<string, int, Task<bool>>? ConfirmPasswordlessSession { get; set; }
     internal event EventHandler? StateChanged;
     internal event Action<string>? StatusChanged;
     internal int ConnectedPeerCount => this.hostConnection?.IsConnected == true
@@ -68,14 +70,18 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
     {
         if (this.IsHosting || this.hostConnection?.IsConnected == true)
             throw new InvalidOperationException("Disconnect before starting a new co-op session.");
-        if (!CoOpSecurity.IsValidSessionPassword(this.SessionPassword))
-            throw new InvalidOperationException("Set a co-op session password between 8 and 128 characters before hosting.");
+        bool requiresPassword = !string.IsNullOrEmpty(this.SessionPassword);
+        if (requiresPassword && !CoOpSecurity.IsValidSessionPassword(this.SessionPassword))
+            throw new InvalidOperationException(
+                "A session password must be 8–128 characters. Clear it to host without a password on the local network.");
 
         string certificatePath = Path.Combine(FileSystem.AppDataDirectory, "CoOp", "host-certificate.pfx");
         X509Certificate2 certificate = CoOpSecurity.LoadOrCreateHostCertificate(certificatePath);
         var newServer = new CoOpServer(this.serializer, certificate);
         newServer.ClientConnected += this.Server_ClientConnected;
         newServer.ClientDisconnected += this.Server_ClientDisconnected;
+        newServer.ConnectionRejected += (_, e) =>
+            this.StatusChanged?.Invoke($"A co-op TLS connection was rejected: {e.Error.Message}");
         try
         {
             await newServer.StartAsync(
@@ -94,7 +100,11 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
         this.Port = newServer.Port;
         this.Address = CoOpNetworkUtilities.GetPreferredLocalAddress();
 
-        var responder = new CoOpDiscoveryResponder(this.localPeerId, this.DisplayName, this.Port);
+        var responder = new CoOpDiscoveryResponder(
+            this.localPeerId,
+            this.DisplayName,
+            this.Port,
+            requiresPassword);
         try
         {
             responder.Start();
@@ -115,50 +125,84 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
             throw new InvalidOperationException("Disconnect before joining another co-op session.");
         if (string.IsNullOrWhiteSpace(host) || port is <= 0 or > 65535)
             throw new ArgumentException("Enter a valid host address and port.");
-        if (!CoOpSecurity.IsValidSessionPassword(this.SessionPassword))
-            throw new InvalidOperationException("Enter a co-op session password between 8 and 128 characters.");
+        bool hasSessionPassword = !string.IsNullOrEmpty(this.SessionPassword);
+        if (hasSessionPassword && !CoOpSecurity.IsValidSessionPassword(this.SessionPassword))
+            throw new InvalidOperationException(
+                "A session password must be 8–128 characters. Clear it only to connect to a passwordless host on the local network.");
 
         this.SetState("Connecting...");
         var authChallenge = new TaskCompletionSource<AuthChallengeMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         this.pendingAuthChallenge = authChallenge;
-        CoOpConnection connection = await CoOpClient.ConnectAsync(
-            host,
-            port,
-            this.serializer,
-            TimeSpan.FromSeconds(8),
-            cancellationToken);
-        string fingerprint = connection.RemoteCertificateFingerprint
-            ?? throw new IOException("The co-op host did not present a TLS certificate.");
-        bool trusted = this.ConfirmServerCertificate != null
-            && await this.ConfirmServerCertificate(host, port, fingerprint);
-        if (!trusted)
+        CoOpConnection? connection = null;
+        try
         {
-            await connection.DisposeAsync();
+            connection = await CoOpClient.ConnectAsync(
+                host,
+                port,
+                this.serializer,
+                TimeSpan.FromSeconds(8),
+                cancellationToken);
+            string fingerprint = connection.RemoteCertificateFingerprint
+                ?? throw new IOException("The co-op host did not present a TLS certificate.");
+            bool trusted = this.ConfirmServerCertificate != null
+                && await this.ConfirmServerCertificate(host, port, fingerprint);
+            if (!trusted)
+                throw new CoOpCertificateTrustException(host, port, fingerprint);
+
+            this.hostConnection = connection;
+            connection.MessageReceived += this.Connection_MessageReceived;
+            connection.Closed += this.Connection_Closed;
+            await connection.StartAsync(cancellationToken);
+            var welcome = new TaskCompletionSource<WelcomeMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+            this.pendingWelcome = welcome;
+            AuthChallengeMessage challenge = await authChallenge.Task.WaitAsync(TimeSpan.FromSeconds(8), cancellationToken);
+
+            byte[]? passwordProof = null;
+            if (challenge.RequiresPassword)
+            {
+                if (!CoOpSecurity.IsValidSessionPassword(this.SessionPassword))
+                    throw new CoOpProtocolException("This host requires a session password of 8–128 characters.");
+                passwordProof = CoOpSecurity.CreatePasswordProof(this.SessionPassword, challenge, this.localPeerId);
+            }
+            else
+            {
+                if (!challenge.IsLanOnly)
+                    throw new CoOpProtocolException("The host does not require a password but is not restricted to the local network.");
+                if (hasSessionPassword)
+                    throw new CoOpProtocolException("This host does not use a session password. Clear the password field and reconnect.");
+                if (this.ConfirmPasswordlessSession == null
+                    || !await this.ConfirmPasswordlessSession(host, port))
+                {
+                    throw new CoOpProtocolException("Connection to the passwordless, local-network-only host was not confirmed.");
+                }
+            }
+
+            await connection.SendAsync(
+                new HelloMessage(
+                    this.localPeerId,
+                    this.DisplayName,
+                    SupportsBatchTransfers: true,
+                    PasswordProof: passwordProof),
+                cancellationToken);
+            WelcomeMessage hostInfo = await welcome.Task.WaitAsync(TimeSpan.FromSeconds(8), cancellationToken);
+            if (hostInfo.ProtocolVersion != CoOpDefaults.ProtocolVersion)
+                throw new CoOpProtocolException($"The host uses unsupported co-op protocol version {hostInfo.ProtocolVersion}.");
+            this.hostSupportsBatchTransfers = hostInfo.SupportsBatchTransfers;
+            this.pendingWelcome = null;
             this.pendingAuthChallenge = null;
-            throw new CoOpCertificateTrustException(host, port, fingerprint);
+            this.SetState($"Connected to {hostInfo.DisplayName} ({host}:{port})");
+            await this.SendOutgoingCollectionsAsync(connection, this.hostSupportsBatchTransfers, cancellationToken);
         }
-        this.hostConnection = connection;
-        connection.MessageReceived += this.Connection_MessageReceived;
-        connection.Closed += this.Connection_Closed;
-        await connection.StartAsync(cancellationToken);
-        var welcome = new TaskCompletionSource<WelcomeMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
-        this.pendingWelcome = welcome;
-        AuthChallengeMessage challenge = await authChallenge.Task.WaitAsync(TimeSpan.FromSeconds(8), cancellationToken);
-        await connection.SendAsync(
-            new HelloMessage(
-                this.localPeerId,
-                this.DisplayName,
-                SupportsBatchTransfers: true,
-                PasswordProof: CoOpSecurity.CreatePasswordProof(this.SessionPassword, challenge, this.localPeerId)),
-            cancellationToken);
-        WelcomeMessage hostInfo = await welcome.Task.WaitAsync(TimeSpan.FromSeconds(8), cancellationToken);
-        if (hostInfo.ProtocolVersion != CoOpDefaults.ProtocolVersion)
-            throw new CoOpProtocolException($"The host uses unsupported co-op protocol version {hostInfo.ProtocolVersion}.");
-        this.hostSupportsBatchTransfers = hostInfo.SupportsBatchTransfers;
-        this.pendingWelcome = null;
-        this.pendingAuthChallenge = null;
-        this.SetState($"Connected to {hostInfo.DisplayName} ({host}:{port})");
-        await this.SendOutgoingCollectionsAsync(connection, this.hostSupportsBatchTransfers, cancellationToken);
+        catch
+        {
+            if (connection != null)
+                await connection.DisposeAsync();
+            this.hostConnection = null;
+            this.pendingWelcome = null;
+            this.pendingAuthChallenge = null;
+            this.SetState("Not connected");
+            throw;
+        }
     }
 
     internal async Task ShareItemsAsync(
@@ -270,7 +314,10 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
         lock (this.gate)
         {
             this.peerConnections.Add(e.Connection);
-            this.peerChallenges[e.Connection] = CoOpSecurity.CreateChallenge();
+            bool requiresPassword = !string.IsNullOrEmpty(this.SessionPassword);
+            this.peerChallenges[e.Connection] = CoOpSecurity.CreateChallenge(
+                requiresPassword,
+                isLanOnly: !requiresPassword);
         }
         e.Connection.MessageReceived += this.Connection_MessageReceived;
         e.Connection.Closed += this.Connection_Closed;
@@ -311,10 +358,18 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
         if (ReferenceEquals(sender, this.hostConnection))
         {
             this.hostConnection = null;
+            IOException closedError = e.Error as IOException
+                ?? new IOException("The co-op host closed the connection during the handshake.", e.Error);
+            this.pendingWelcome?.TrySetException(closedError);
+            this.pendingAuthChallenge?.TrySetException(closedError);
             this.SetState("Connection closed");
         }
         if (e.Error != null)
+        {
+            this.pendingWelcome?.TrySetException(e.Error);
+            this.pendingAuthChallenge?.TrySetException(e.Error);
             this.StatusChanged?.Invoke($"Co-op connection error: {e.Error.Message}");
+        }
     }
 
     private void Connection_MessageReceived(object? sender, CoOpMessageReceivedEventArgs e)
@@ -361,13 +416,30 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
                         if (!this.peerChallenges.TryGetValue(connection, out challenge))
                             return;
                     }
-                    if (!CoOpSecurity.VerifyPasswordProof(
-                        this.SessionPassword,
-                        challenge,
-                        hello.PeerId,
-                        hello.PasswordProof ?? []))
+
+                    bool authenticated;
+                    if (challenge.RequiresPassword)
                     {
-                        await connection.SendAsync(new ErrorMessage("The co-op session password is incorrect.", "authentication"));
+                        authenticated = CoOpSecurity.IsValidSessionPassword(this.SessionPassword)
+                            && CoOpSecurity.VerifyPasswordProof(
+                                this.SessionPassword,
+                                challenge,
+                                hello.PeerId,
+                                hello.PasswordProof ?? []);
+                    }
+                    else
+                    {
+                        authenticated = challenge.IsLanOnly
+                            && hello.PasswordProof is not { Length: > 0 }
+                            && connection.RemoteAddress is IPAddress remoteAddress
+                            && CoOpNetworkUtilities.IsLocalNetworkAddress(remoteAddress);
+                    }
+                    if (!authenticated)
+                    {
+                        string error = challenge.RequiresPassword
+                            ? "The session password is incorrect. Check the host's password and try again."
+                            : "This host accepts passwordless connections only from its local subnet. Connect to the same LAN or use a session password.";
+                        await connection.SendAsync(new ErrorMessage(error, challenge.RequiresPassword ? "authentication" : "lanOnly"));
                         await connection.DisposeAsync();
                         return;
                     }
@@ -439,6 +511,8 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
                     break;
                 case ErrorMessage error:
                     this.StatusChanged?.Invoke($"Co-op error: {error.Message}");
+                    if (ReferenceEquals(connection, this.hostConnection))
+                        this.pendingWelcome?.TrySetException(new CoOpProtocolException(error.Message));
                     break;
             }
         }

@@ -11,11 +11,13 @@ public sealed record CoOpDiscoveredHost(
     string DisplayName,
     string Address,
     int Port,
-    int ProtocolVersion)
+    int ProtocolVersion,
+    bool RequiresPassword = true)
 {
     public override string ToString()
     {
-        return $"{this.DisplayName} ({this.Address}:{this.Port})";
+        string passwordNote = this.RequiresPassword ? string.Empty : " — LAN only, no password";
+        return $"{this.DisplayName} ({this.Address}:{this.Port}){passwordNote}";
     }
 }
 
@@ -23,7 +25,8 @@ internal sealed record CoOpDiscoveryResponse(
     Guid PeerId,
     string DisplayName,
     int Port,
-    int ProtocolVersion);
+    int ProtocolVersion,
+    bool RequiresPassword = true);
 
 /// <summary>
 /// Broadcasts a discovery probe into the local network and collects the
@@ -222,7 +225,8 @@ public sealed class CoOpDiscoveryClient : ICoOpDiscoveryClient
                     response.DisplayName,
                     address,
                     response.Port,
-                    response.ProtocolVersion);
+                    response.ProtocolVersion,
+                    response.RequiresPassword);
                 results.AddOrUpdate(response.PeerId, host, (_, existing) =>
                     !IPAddress.IsLoopback(IPAddress.Parse(existing.Address)) &&
                     IPAddress.IsLoopback(IPAddress.Parse(address))
@@ -264,13 +268,18 @@ public sealed class CoOpDiscoveryResponder : IAsyncDisposable
     private readonly List<Task> loops = [];
     private readonly CoOpDiscoveryResponse response;
 
-    public CoOpDiscoveryResponder(Guid peerId, string displayName, int tcpPort)
+    public CoOpDiscoveryResponder(
+        Guid peerId,
+        string displayName,
+        int tcpPort,
+        bool requiresPassword = true)
     {
         this.response = new CoOpDiscoveryResponse(
             peerId,
             displayName,
             tcpPort,
-            CoOpDefaults.ProtocolVersion);
+            CoOpDefaults.ProtocolVersion,
+            requiresPassword);
     }
 
     public IReadOnlyList<int> Ports { get; private set; } = [];

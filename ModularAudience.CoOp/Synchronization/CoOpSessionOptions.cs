@@ -46,4 +46,6 @@ public sealed class CoOpSessionOptions
     public string? SessionPassword { get; init; }
 
     public Func<string, int, string, bool>? ConfirmServerCertificate { get; init; }
+
+    public Func<string, int, bool>? ConfirmPasswordlessSession { get; init; }
 }

@@ -22,12 +22,6 @@ public sealed class SoundboardPage : ContentPage
         this.BackgroundColor = Color.FromArgb("#171717");
         this.lockSwitch.IsToggled = Preferences.Default.Get("soundboard.locked", false);
         this.publicStorageSwitch.IsToggled = this.store.UsesPublicMusicFolder;
-        this.ToolbarItems.Add(new ToolbarItem
-        {
-            Text = "☰",
-            Order = ToolbarItemOrder.Primary,
-            Command = new Command(() => Shell.Current.FlyoutIsPresented = true),
-        });
 
         Button importButton = new() { Text = "Import WAV" };
         importButton.Clicked += async (_, _) => await this.ImportWavAsync();

@@ -52,7 +52,12 @@ public sealed record ShareCollectionCompletedMessage(Guid CollectionId) : CoOpMe
 
 public sealed record ShareBatchCompletedMessage(Guid BatchId) : CoOpMessage;
 
-public sealed record AuthChallengeMessage(byte[] Salt, byte[] Nonce, int Iterations) : CoOpMessage;
+public sealed record AuthChallengeMessage(
+    byte[] Salt,
+    byte[] Nonce,
+    int Iterations,
+    bool RequiresPassword = true,
+    bool IsLanOnly = false) : CoOpMessage;
 
 public sealed record AudioAddedMessage(Guid CollectionId, CoOpAudioSnapshot Audio) : CoOpMessage;
 
