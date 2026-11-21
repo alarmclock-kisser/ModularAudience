@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ModularAudience.CoOp</RootNamespace>
+    <AssemblyName>ModularAudience.CoOp.Shared</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ModularAudience.CoOp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\ModularAudience.CoOp\CoOpDefaults.cs" Link="CoOpDefaults.cs" />
+    <Compile Include="..\ModularAudience.CoOp\CoOpEndpoint.cs" Link="CoOpEndpoint.cs" />
+    <Compile Include="..\ModularAudience.CoOp\CoOpNetworkUtilities.cs" Link="CoOpNetworkUtilities.cs" />
+    <Compile Include="..\ModularAudience.CoOp\Networking\**\*.cs" Link="Networking\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\ModularAudience.CoOp\Protocol\**\*.cs" Link="Protocol\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\ModularAudience.CoOp\Security\**\*.cs" Link="Security\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

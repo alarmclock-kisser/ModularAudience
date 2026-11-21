@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
+using System.Net.Security;
 using ModularAudience.CoOp.Protocol;
 
 namespace ModularAudience.CoOp.Networking;
@@ -9,6 +12,11 @@ public sealed class CoOpServerEventArgs(CoOpConnection connection) : EventArgs
     public CoOpConnection Connection { get; } = connection;
 }
 
+public sealed class CoOpConnectionRejectedEventArgs(Exception error) : EventArgs
+{
+    public Exception Error { get; } = error;
+}
+
 /// <summary>
 /// Accepts incoming co-op TCP connections. The actual protocol handling is
 /// performed by <see cref="Synchronization.CoOpSessionManager"/>.
@@ -16,15 +24,17 @@ public sealed class CoOpServerEventArgs(CoOpConnection connection) : EventArgs
 public sealed class CoOpServer : IAsyncDisposable
 {
     private readonly ICoOpMessageSerializer serializer;
+    private readonly X509Certificate2 certificate;
     private readonly List<CoOpConnection> connections = [];
     private readonly object connectionsGate = new();
     private readonly CancellationTokenSource lifetime = new();
     private TcpListener? listener;
     private Task? acceptTask;
 
-    public CoOpServer(ICoOpMessageSerializer serializer)
+    public CoOpServer(ICoOpMessageSerializer serializer, X509Certificate2 certificate)
     {
         this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        this.certificate = certificate ?? throw new ArgumentNullException(nameof(certificate));
     }
 
     public int Port { get; private set; }
@@ -32,6 +42,8 @@ public sealed class CoOpServer : IAsyncDisposable
     public event EventHandler<CoOpServerEventArgs>? ClientConnected;
 
     public event EventHandler<CoOpServerEventArgs>? ClientDisconnected;
+
+    public event EventHandler<CoOpConnectionRejectedEventArgs>? ConnectionRejected;
 
     public Task StartAsync(
         int preferredPort = CoOpDefaults.DefaultPort,
@@ -156,7 +168,41 @@ public sealed class CoOpServer : IAsyncDisposable
             }
             catch { }
 
-            var connection = new CoOpConnection(tcpClient, this.serializer);
+            SslStream secureStream = new(tcpClient.GetStream(), leaveInnerStreamOpen: false);
+            try
+            {
+                await secureStream.AuthenticateAsServerAsync(
+                    new SslServerAuthenticationOptions
+                    {
+                        ServerCertificate = this.certificate,
+                        ClientCertificateRequired = false,
+                        EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                        CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
+                    },
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                secureStream.Dispose();
+                tcpClient.Dispose();
+                return;
+            }
+            catch (AuthenticationException ex)
+            {
+                secureStream.Dispose();
+                tcpClient.Dispose();
+                this.ConnectionRejected?.Invoke(this, new CoOpConnectionRejectedEventArgs(ex));
+                continue;
+            }
+            catch (IOException ex)
+            {
+                secureStream.Dispose();
+                tcpClient.Dispose();
+                this.ConnectionRejected?.Invoke(this, new CoOpConnectionRejectedEventArgs(ex));
+                continue;
+            }
+
+            var connection = new CoOpConnection(tcpClient, this.serializer, secureStream, null);
             lock (this.connectionsGate)
             {
                 this.connections.Add(connection);

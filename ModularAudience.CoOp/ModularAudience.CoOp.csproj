@@ -13,6 +13,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="CoOpDefaults.cs" />
+    <Compile Remove="CoOpEndpoint.cs" />
+    <Compile Remove="CoOpNetworkUtilities.cs" />
+    <Compile Remove="Networking\**\*.cs" />
+    <Compile Remove="Protocol\**\*.cs" />
+    <Compile Remove="Security\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ModularAudience.CoOp.Shared\ModularAudience.CoOp.Shared.csproj" />
     <ProjectReference Include="..\ModularAudience.Audio\ModularAudience.Audio.csproj" />
   </ItemGroup>
 

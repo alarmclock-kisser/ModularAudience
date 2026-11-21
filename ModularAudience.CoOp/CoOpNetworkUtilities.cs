@@ -11,6 +11,8 @@ internal sealed record CoOpLocalIPv4Network(
     bool IsLanAdapter,
     bool IsTunnel);
 
+internal sealed record CoOpDiscoveryProbeTarget(IPAddress SourceAddress, IPAddress BroadcastAddress);
+
 public static class CoOpNetworkUtilities
 {
     public static IReadOnlyList<IPAddress> GetLocalIPv4Addresses()
@@ -97,6 +99,33 @@ public static class CoOpNetworkUtilities
         // whichever adapter (possibly a VPN) owns the default route.
         if (addresses.Count == 1) addresses.Add(IPAddress.Broadcast);
         return addresses;
+    }
+
+    internal static IReadOnlyList<CoOpDiscoveryProbeTarget> GetDiscoveryProbeTargets(
+        IEnumerable<CoOpLocalIPv4Network> networks)
+    {
+        var targets = new List<CoOpDiscoveryProbeTarget>
+        {
+            new(IPAddress.Loopback, IPAddress.Loopback),
+        };
+        foreach (CoOpLocalIPv4Network network in OrderLocalNetworks(networks))
+        {
+            if (network.IsTunnel)
+            {
+                continue;
+            }
+
+            IPAddress? broadcast = GetBroadcastAddress(network.Address, network.SubnetMask);
+            if (broadcast != null)
+            {
+                targets.Add(new CoOpDiscoveryProbeTarget(network.Address, broadcast));
+            }
+        }
+
+        targets.Add(new CoOpDiscoveryProbeTarget(IPAddress.Any, IPAddress.Broadcast));
+        return targets
+            .DistinctBy(target => (target.SourceAddress, target.BroadcastAddress))
+            .ToList();
     }
 
     internal static IReadOnlyList<IPAddress> SelectConnectionAddresses(

@@ -62,6 +62,12 @@ public sealed partial class MainPage : ContentPage
     public MainPage()
     {
         Title = "VocalSynth";
+        ToolbarItems.Add(new ToolbarItem
+        {
+            Text = "☰",
+            Order = ToolbarItemOrder.Primary,
+            Command = new Command(() => Shell.Current.FlyoutIsPresented = true),
+        });
         settings = VocalSynthSettings.FromPreset(
             VocalVoicePreset.BuiltIn[2], VocalLanguage.English, "Hello world.");
         string appData = FileSystem.AppDataDirectory;

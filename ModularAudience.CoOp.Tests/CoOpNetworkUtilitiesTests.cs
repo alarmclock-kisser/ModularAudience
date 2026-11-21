@@ -69,6 +69,18 @@ public sealed class CoOpNetworkUtilitiesTests
     }
 
     [TestMethod]
+    public void DiscoveryProbeTargets_BindHotspotBroadcastToItsLocalInterface()
+    {
+        IReadOnlyList<CoOpDiscoveryProbeTarget> targets = CoOpNetworkUtilities.GetDiscoveryProbeTargets(
+            [Network("10.8.0.10", tunnel: true), Network("192.168.43.1")]);
+
+        Assert.IsTrue(targets.Contains(new CoOpDiscoveryProbeTarget(
+            IPAddress.Parse("192.168.43.1"),
+            IPAddress.Parse("192.168.43.255"))));
+        Assert.IsFalse(targets.Any(target => target.SourceAddress.Equals(IPAddress.Parse("10.8.0.10"))));
+    }
+
+    [TestMethod]
     public void DiscoveryTargets_KeepLoopbackAndLimitedBroadcastFallbackWithoutAdapterInformation()
     {
         IReadOnlyList<IPAddress> addresses = CoOpNetworkUtilities.GetDiscoveryBroadcastAddresses([]);

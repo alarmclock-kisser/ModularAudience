@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio;
+using ModularAudience.CoOp.Security;
 using ModularAudience.CoOp.Protocol;
 using ModularAudience.CoOp.Synchronization;
 
@@ -8,6 +9,36 @@ namespace ModularAudience.CoOp.Tests;
 [TestClass]
 public sealed class CoOpSessionTests
 {
+    [TestMethod]
+    public async Task Client_RejectsIncorrectSessionPassword()
+    {
+        await using var scope = new SessionTestScope();
+        CoOpSessionManager host = scope.CreateManager("Host");
+        CoOpSessionManager client = scope.CreateManager("Client", "wrong-session-password");
+        CoOpHostInfo hostInfo = await host.StartHostingAsync();
+
+        await Assert.ThrowsAsync<CoOpProtocolException>(
+            () => client.ConnectAsync("127.0.0.1", hostInfo.Port));
+        await TestAudio.WaitUntilAsync(() => host.ConnectedPeerCount == 0);
+
+        Assert.AreEqual(CoOpSessionState.Disconnected, client.State);
+    }
+
+    [TestMethod]
+    public async Task Client_RejectsUntrustedHostCertificateBeforeAuthentication()
+    {
+        await using var scope = new SessionTestScope();
+        CoOpSessionManager host = scope.CreateManager("Host");
+        CoOpSessionManager client = scope.CreateManager("Client", confirmCertificate: (_, _, _) => false);
+        CoOpHostInfo hostInfo = await host.StartHostingAsync();
+
+        await Assert.ThrowsAsync<CoOpCertificateTrustException>(
+            () => client.ConnectAsync("127.0.0.1", hostInfo.Port));
+        await TestAudio.WaitUntilAsync(() => host.ConnectedPeerCount == 0);
+
+        Assert.AreEqual(CoOpSessionState.Disconnected, client.State);
+    }
+
     [TestMethod]
     public async Task ClientPresetPush_RelaysToOtherPeersWithoutSendingPresetsBackToSender()
     {
