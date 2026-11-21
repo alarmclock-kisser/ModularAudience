@@ -72,6 +72,13 @@ public sealed partial class DecompileConfigDialog : Form
     protected override async void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        if (this.checkBox_projectSnap.Checked
+            && this.snapEstimateCancellation is null
+            && !this.closeRequested)
+        {
+            this.checkBox_projectSnap_CheckedChanged(this, EventArgs.Empty);
+        }
+
         this.demucsInitializationTask = this.InitializeDemucsUiAsync();
         try
         {

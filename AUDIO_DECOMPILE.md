@@ -122,7 +122,7 @@ Overlapping segments can be handled in either of two ways:
 
 The project **segment onset attack** is configurable from 1 to 100 ms and is stored as a clip fade-in. It avoids first-sample clicks without modifying the source stem or atomic waveform.
 
-**Snap project clips to grid** snaps project clip starts without changing their source offsets. The grid can be set from 1/4 through 1/256. When snapping is enabled in the configuration dialog, the resolution is estimated from the shortest detected source onset/atomic spacing and rounded upward to the next supported division, favoring a finer grid over a coarse one. The same Snap state and division are applied to the opened Mix Track View. With snapping off, clip placement remains exact and unsnapped.
+**Snap project clips to grid** snaps project clip starts without changing their source offsets. The grid can be set from 1/4 through 1/256. Whenever snapping is enabled, including when the saved checkbox state is already checked on dialog open, the resolution is freshly estimated from the shortest detected source onset/atomic spacing and rounded upward to the next supported division. Only the checkbox state is persisted; a prior grid division is never reused. The newly estimated division is applied to the opened Mix Track View. With snapping off, clip placement remains exact and unsnapped.
 
 Beat and bar boundaries are derived from the resolved BPM. Project clips use full-frame precision from the untouched stem, so beat/bar output preserves the complete separated stem waveform. Transient output intentionally omits regions that the selected atomizer does not classify as events.
 
@@ -140,7 +140,7 @@ If a stem has no detectable atomics in transient mode, the whole stem is retaine
 
 The configuration window closes immediately after a valid Decompile run is started. Ownership of its private source snapshot is transferred to the running operation and released after success, cancellation, or failure.
 
-All configuration controls, including separation method, ONNX options, analog bands, deterministic DSP/profile settings, atomizer values, output selection, overlap handling, attack, grid snapping and worker count, are stored in `%APPDATA%/ModularAudience/decompile-settings.json` and restored on the next open.
+All configuration controls, including separation method, ONNX options, analog bands, deterministic DSP/profile settings, atomizer values, output selection, overlap handling, attack, the grid snapping checkbox state and worker count, are stored in `%APPDATA%/ModularAudience/decompile-settings.json` and restored on the next open. Grid resolution is re-estimated instead of persisted.
 
 Demucs model loading and ONNX separation occupy 5–85% of the operation progress. Atomization and collection preparation occupy the remaining 15%; ETA uses a smoothed observed progress rate instead of a direct elapsed/fraction jump.
 

@@ -68,7 +68,6 @@ public sealed partial class DecompileConfigDialog
         SetSelectedIndex(this.comboBox_projectOverlap, settings.ProjectOverlap);
         this.numeric_projectAttack.Value = ClampNumeric(settings.ProjectAttackMs, this.numeric_projectAttack);
         this.checkBox_projectSnap.Checked = settings.ProjectSnapToGrid;
-        SetSelectedIndex(this.comboBox_projectSnap, $"1/{settings.ProjectSnapDivision}");
         this.checkBox_collectionDeduplicate.Checked = settings.DeduplicateCollections;
         this.numeric_workers.Value = ClampNumeric(settings.MaxWorkers, this.numeric_workers);
 
@@ -132,11 +131,6 @@ public sealed partial class DecompileConfigDialog
             ProjectOverlap = this.comboBox_projectOverlap.SelectedIndex,
             ProjectAttackMs = (int)this.numeric_projectAttack.Value,
             ProjectSnapToGrid = this.checkBox_projectSnap.Checked,
-            ProjectSnapDivision = this.comboBox_projectSnap.SelectedItem is string value
-                && value.StartsWith("1/", StringComparison.Ordinal)
-                && int.TryParse(value.AsSpan(2), out int division)
-                ? division
-                : 16,
             DeduplicateCollections = this.checkBox_collectionDeduplicate.Checked,
             MaxWorkers = (int)this.numeric_workers.Value,
             AnalogWindowSize = (int)this.numeric_analogWindow.Value,
