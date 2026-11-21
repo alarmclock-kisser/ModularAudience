@@ -14,7 +14,7 @@ public sealed class SoundboardPage : ContentPage
     private readonly Switch publicStorageSwitch = new();
     private CancellationTokenSource? heldPlaybackCancellation;
 
-    public SoundboardPage(SoundboardStore store)
+    internal SoundboardPage(SoundboardStore store)
     {
         this.store = store;
         this.Title = "Soundboard";

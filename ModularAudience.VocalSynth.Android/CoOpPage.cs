@@ -26,7 +26,7 @@ public sealed class CoOpPage : ContentPage
     private readonly Dictionary<Guid, CheckBox> selections = [];
     private bool busy;
 
-    public CoOpPage(CoOpAndroidSession session, SoundboardStore store)
+    internal CoOpPage(CoOpAndroidSession session, SoundboardStore store)
     {
         this.session = session;
         this.store = store;
