@@ -30,60 +30,49 @@ internal sealed class AndroidBuildHistoryService
             stream,
             cancellationToken: cancellationToken);
 
+        JsonElement root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("workflow_runs", out JsonElement runs) ||
+            runs.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidDataException("GitHub returned an invalid build history.");
+        }
+
         List<AndroidBuildEntry> entries = [];
         HashSet<string> seenCommits = [];
-        foreach (JsonElement run in document.RootElement.EnumerateArray())
+        foreach (JsonElement run in runs.EnumerateArray())
         {
             if (entries.Count >= MaxEntries)
                 break;
-            if (!run.TryGetProperty("jobs", out JsonElement jobs) ||
-                !JobsIncludeAndroid(jobs))
-            {
+            if (run.ValueKind != JsonValueKind.Object)
                 continue;
-            }
 
-            string? sha = run.TryGetProperty("head_sha", out JsonElement shaElement)
-                ? shaElement.GetString()
-                : null;
+            string? sha = GetStringProperty(run, "head_sha");
             if (sha != null && !seenCommits.Add(sha))
                 continue;
 
-            int buildNumber = run.TryGetProperty("run_number", out JsonElement runNumberElement)
-                ? runNumberElement.GetInt32()
-                : 0;
-            if (buildNumber <= 0)
+            if (!run.TryGetProperty("run_number", out JsonElement runNumberElement) ||
+                runNumberElement.ValueKind != JsonValueKind.Number ||
+                !runNumberElement.TryGetInt32(out int buildNumber) ||
+                buildNumber <= 0)
+            {
                 continue;
+            }
 
             string message = run.TryGetProperty("head_commit", out JsonElement headCommit) &&
-                headCommit.TryGetProperty("message", out JsonElement messageElement)
-                ? messageElement.GetString() ?? string.Empty
+                headCommit.ValueKind == JsonValueKind.Object
+                ? GetStringProperty(headCommit, "message") ?? string.Empty
                 : string.Empty;
             DateTime createdAt = DateTime.Now;
-            if (run.TryGetProperty("created_at", out JsonElement createdAtElement) &&
-                DateTime.TryParse(createdAtElement.GetString(), out DateTime parsed))
+            if (DateTime.TryParse(GetStringProperty(run, "created_at"), out DateTime parsed))
             {
                 createdAt = parsed;
             }
-            string? conclusion = run.TryGetProperty("conclusion", out JsonElement conclusionElement)
-                ? conclusionElement.GetString()
-                : null;
+            string? conclusion = GetStringProperty(run, "conclusion");
             entries.Add(new AndroidBuildEntry(buildNumber, message, sha, createdAt, conclusion));
         }
 
         return entries;
-    }
-
-    private static bool JobsIncludeAndroid(JsonElement jobs)
-    {
-        foreach (JsonElement job in jobs.EnumerateArray())
-        {
-            if (job.TryGetProperty("name", out JsonElement nameElement) &&
-                string.Equals(nameElement.GetString(), "android", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static HttpClient CreateHttpClient()
@@ -94,5 +83,14 @@ internal sealed class AndroidBuildHistoryService
         client.DefaultRequestHeaders.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         return client;
+    }
+
+    private static string? GetStringProperty(JsonElement element, string propertyName)
+    {
+        return element.ValueKind == JsonValueKind.Object &&
+            element.TryGetProperty(propertyName, out JsonElement value) &&
+            value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
     }
 }
