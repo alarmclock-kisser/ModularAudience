@@ -324,7 +324,9 @@ internal sealed class SoundboardStore
             var values = new ContentValues();
             values.Put(MediaStore.MediaColumns.DisplayName, $"{id:N}-{SafeFileName(name)}.wav");
             values.Put(MediaStore.MediaColumns.MimeType, "audio/wav");
-            values.Put(MediaStore.Audio.Media.InterfaceConsts.RelativePath, $"{global::Android.OS.Environment.DirectoryMusic}/ModularAudience");
+            values.Put(
+                MediaStore.Audio.Media.InterfaceConsts.RelativePath,
+                global::Android.OS.Environment.DirectoryMusic + "/ModularAudience");
             values.Put(MediaStore.MediaColumns.IsPending, 1);
             global::Android.Net.Uri? uri = resolver.Insert(MediaStore.Audio.Media.ExternalContentUri, values);
             if (uri == null)
