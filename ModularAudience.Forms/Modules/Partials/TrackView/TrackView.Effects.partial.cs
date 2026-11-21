@@ -119,7 +119,8 @@ public partial class TrackView
             AudioEffectEditSession session = AudioEffectEditSession.Capture(this.OriginalAudio);
             var defaults = new AutoTuneSettings
             {
-                TempoBpm = AutoTuneTempoResolver.Resolve(this.OriginalAudio.Bpm, this.OriginalAudio.ScannedBpm),
+                TempoBpm = AutoTuneTempoResolver.Resolve(this.OriginalAudio.Bpm, this.OriginalAudio.ScannedBpm,
+                    WorkingBpmResolver.GetWorkingBpm([this.OriginalAudio])),
                 MaximumFrequencyHz = Math.Min(1200, session.SampleRate * 0.4)
             };
             var context = new AutoTuneDialogContext(session, this.OriginalAudio.Name, defaults,

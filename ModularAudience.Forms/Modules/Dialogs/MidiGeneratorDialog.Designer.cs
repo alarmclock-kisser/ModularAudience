@@ -128,7 +128,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_tempo.Name = "numericUpDown_tempo";
             this.numericUpDown_tempo.Size = new Size(120, 23);
             this.numericUpDown_tempo.TabIndex = 3;
-            this.numericUpDown_tempo.Value = new decimal(new int[] { 120, 0, 0, 0 });
+            this.numericUpDown_tempo.Value = new decimal(new int[] { 100, 0, 0, 0 });
             // 
             // label_intensity
             // 

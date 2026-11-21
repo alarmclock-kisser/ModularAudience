@@ -179,7 +179,7 @@ public partial class QuantumBeatEngineDialog
         var table = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Padding = new Padding(3) };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 63)); table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 37));
         void Row(string caption, Control input) { int row = table.RowCount++; table.RowStyles.Add(new RowStyle(SizeType.AutoSize)); table.Controls.Add(Caption(caption), 0, row); table.Controls.Add(input, 1, row); input.Anchor = AnchorStyles.Left | AnchorStyles.Right; }
-        Row("Tempo (BPM)", this.Num("Bpm", 20, 400, 120, 2)); Row("Bars", this.Num("Bars", 1, 16, 2)); Row("Steps per bar / resolution", this.Num("StepsPerBar", 4, 64, 16));
+        Row("Tempo (BPM)", this.Num("Bpm", 20, 400, 100, 2)); Row("Bars", this.Num("Bars", 1, 16, 2)); Row("Steps per bar / resolution", this.Num("StepsPerBar", 4, 64, 16));
         this.arrangementCombo = Drop("comboBox_arrangement", ["Independent bars", "Repeat first bar", "Alternate A / B bars"], 170); Row("Arrangement", this.arrangementCombo);
         Row("Post-map density %", this.Num("Density", 0, 100, 80)); Row("Swing % (odd steps)", this.Num("Swing", 0, 49, 0, 1));
         Row("Modifier starting qubit", this.Num("ModifierQubit", 0, 15, 2));

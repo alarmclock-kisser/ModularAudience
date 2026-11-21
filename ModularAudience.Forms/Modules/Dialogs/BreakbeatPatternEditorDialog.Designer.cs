@@ -388,7 +388,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             numericUpDown_bpm.Name = "numericUpDown_bpm";
             numericUpDown_bpm.Size = new Size(72, 23);
             numericUpDown_bpm.TabIndex = 1;
-            numericUpDown_bpm.Value = new decimal(new int[] { 120, 0, 0, 0 });
+            numericUpDown_bpm.Value = new decimal(new int[] { 100, 0, 0, 0 });
             numericUpDown_bpm.ValueChanged += numericUpDown_bpm_ValueChanged;
             // 
             // label_bpm

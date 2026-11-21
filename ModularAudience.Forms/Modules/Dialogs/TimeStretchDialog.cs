@@ -51,9 +51,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private decimal previousStretchFactorValue;
 
 
-        private static float LastTargetBpm = 120f;
-        private static float LastInitialBpm = 120f;
-        private const decimal DefaultInitialBpm = 120m;
+        private const decimal DefaultInitialBpm = 100m;
 
         // Reuse this dialog for selection-aware effects, without passing a live
         // AudioObj to either in-place legacy stretcher. Existing batch and
@@ -104,11 +102,15 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false, WindowMain.CurrentScreenId);
 
             this.numericUpDown_chunkSize.Tag = (int)this.numericUpDown_chunkSize.Value;
-            this.numericUpDown_initialBpm.Value = this.Tracks.Count != 0 ? this.GetSafeInitialBpm(this.Tracks.First()) : (decimal)LastInitialBpm;
+            decimal workingBpm = Math.Clamp(
+                (decimal)WorkingBpmResolver.GetWorkingBpm(this.Tracks),
+                this.numericUpDown_initialBpm.Minimum,
+                this.numericUpDown_initialBpm.Maximum);
+            this.numericUpDown_initialBpm.Value = this.Tracks.Count != 0 ? this.GetSafeInitialBpm(this.Tracks.First()) : workingBpm;
             this.numericUpDown_threads.Minimum = 1;
             this.numericUpDown_threads.Maximum = Math.Max(Environment.ProcessorCount, 1);
             this.numericUpDown_threads.Value = Math.Max(Environment.ProcessorCount / 2, 1);
-            this.numericUpDown_targetBpm.Value = (decimal)LastTargetBpm;
+            this.numericUpDown_targetBpm.Value = Math.Clamp(workingBpm, this.numericUpDown_targetBpm.Minimum, this.numericUpDown_targetBpm.Maximum);
 
             this.Load += this.TimeStretchDialog_Load;
             this.FormClosing += this.TimeStretchDialog_FormClosing;
@@ -185,7 +187,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             double factor = (double)currentValue / (double)this.numericUpDown_targetBpm.Value;
             this.SetStretchFactorFromBpm(factor);
             this.previousInitialBpmValue = this.numericUpDown_initialBpm.Value;
-            LastInitialBpm = (float)this.numericUpDown_initialBpm.Value;
         }
 
         private void numericUpDown_targetBpm_ValueChanged(object sender, EventArgs e)
@@ -229,7 +230,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
             double factor = (double)this.numericUpDown_initialBpm.Value / (double)currentValue;
             this.SetStretchFactorFromBpm(factor);
             this.previousTargetBpmValue = this.numericUpDown_targetBpm.Value;
-            LastTargetBpm = (float)this.numericUpDown_targetBpm.Value;
         }
 
         private void numericUpDown_stretchFactor_ValueChanged(object sender, EventArgs e)
@@ -274,7 +274,6 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
             this.previousStretchFactorValue = this.numericUpDown_stretchFactor.Value;
             this.previousTargetBpmValue = this.numericUpDown_targetBpm.Value;
-            LastTargetBpm = (float)this.numericUpDown_targetBpm.Value;
         }
 
         private void SetStretchFactorFromBpm(double factor)

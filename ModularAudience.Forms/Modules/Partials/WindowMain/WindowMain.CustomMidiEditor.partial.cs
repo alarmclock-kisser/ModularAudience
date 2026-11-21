@@ -15,7 +15,7 @@ public partial class WindowMain
 
     private void OpenCustomMidiEditor()
     {
-        CustomMidiEditorDialog dialog = new();
+        CustomMidiEditorDialog dialog = new(initialBpm: WorkingBpmResolver.GetWorkingBpm());
         dialog.Show(this);
     }
 }

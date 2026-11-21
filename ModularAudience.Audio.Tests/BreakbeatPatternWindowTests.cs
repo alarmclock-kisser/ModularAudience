@@ -35,7 +35,7 @@ public sealed class BreakbeatPatternWindowTests
         Assert.AreEqual(0, selectedEditor.Notes.Count);
         Assert.AreEqual(2, selectedEditor.Bars);
         Assert.AreEqual(4, selectedEditor.Resolution);
-        Assert.AreEqual(87.5m, selectedEditor.Bpm);
+        Assert.AreEqual(100m, selectedEditor.Bpm);
     }
 
     [TestMethod]

@@ -77,6 +77,10 @@ public sealed class MixRevisionUiTests
     public void InitialTempoMatchedJoinRetainsThePreImportPcmAndMetadata()
     {
         using var fixture = new Fixture(); var mix = fixture.Mix;
+        Set(mix, "restoring", true);
+        mix.Arrangement.Bpm = 120;
+        Field<NumericUpDown>(mix, "bpm").Value = 120;
+        Set(mix, "restoring", false);
         using var audio = new AudioObj { Name = "Original import", Bpm = 100, Channels = 1, SampleRate = 16000,
             Data = Enumerable.Range(0, 8000).Select(frame => (float)(0.2 * Math.Sin(2 * Math.PI * 220 * frame / 16000))).ToArray() };
         using var collection = new AudioCollectionView([audio]); using var view = new TrackView(audio, collection.AudioC);
@@ -159,11 +163,17 @@ public sealed class MixRevisionUiTests
     public void ClipDragCrossesZeroFreelyOrOnGridAndRemainsAudioUndoable(bool snap)
     {
         using var fixture = new Fixture(); var mix = fixture.Mix; var canvas = Field<Control>(mix, "canvas");
+        mix.Arrangement.Bpm = 100;
         MixClip clip = mix.Arrangement.Lanes[0].Clips[0]; clip.Start = 0.1; mix.Arrangement.Snap = snap; Call(mix, "Changed");
         Call(mix, "MouseDownTimeline", canvas, new MouseEventArgs(MouseButtons.Left, 1, 210, 40, 0));
         Call(mix, "MouseMoveTimeline", canvas, new MouseEventArgs(MouseButtons.Left, 0, 170, 40, 0));
         Call(mix, "MouseUpTimeline", canvas, new MouseEventArgs(MouseButtons.Left, 1, 170, 40, 0));
-        Assert.IsLessThan(0d, clip.Start); if (snap) Assert.AreEqual(Math.Round(clip.Start / 0.25), clip.Start / 0.25, 1e-7);
+        Assert.IsLessThan(0d, clip.Start);
+        if (snap)
+        {
+            double snapStep = 240d / mix.Arrangement.Bpm / mix.Arrangement.SnapDivision;
+            Assert.AreEqual(Math.Round(clip.Start / snapStep), clip.Start / snapStep, 1e-7);
+        }
         double negative = clip.Start; Assert.AreEqual(0, Field<HScrollBar>(mix, "scroll").Value);
         Call(mix, "Undo"); Assert.AreEqual(0.1, mix.Arrangement.Lanes[0].Clips[0].Start, 1e-7);
         Call(mix, "Redo"); Assert.AreEqual(negative, mix.Arrangement.Lanes[0].Clips[0].Start, 1e-7); mix.Arrangement.Validate();

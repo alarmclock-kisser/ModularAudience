@@ -86,7 +86,7 @@ public sealed class MixLane
 public sealed class MixArrangement : IDisposable
 {
     public string Name { get; set; } = "Mix";
-    public double Bpm { get; set; } = 120;
+    public double Bpm { get; set; } = 100;
     public int SnapDivision { get; set; } = 8;
     public bool Snap { get; set; }
     public int DisplayLaneHeight { get; set; } = 100;

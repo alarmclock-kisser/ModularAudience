@@ -276,7 +276,7 @@
             this.numericUpDown_bpm.Name = "numericUpDown_bpm";
             this.numericUpDown_bpm.Size = new Size(65, 23);
             this.numericUpDown_bpm.TabIndex = 18;
-            this.numericUpDown_bpm.Value = new decimal(new int[] { 875, 0, 0, 65536 });
+            this.numericUpDown_bpm.Value = new decimal(new int[] { 100, 0, 0, 0 });
             // 
             // checkBox_interleaved
             // 

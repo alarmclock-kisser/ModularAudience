@@ -70,6 +70,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         {
             this.InitializeComponent();
             this.InitializeLlmSettings();
+            AudioObj[] sourceSamples = samples.ToArray();
+            this.numericUpDown_bpm.Value = Math.Clamp(
+                (decimal)WorkingBpmResolver.GetWorkingBpm(sourceSamples),
+                this.numericUpDown_bpm.Minimum,
+                this.numericUpDown_bpm.Maximum);
             this.Controls.Add(new Label { Text = "Pitch ±st", AutoSize = true, Location = new Point(170, 345) });
             this.Controls.Add(this.numeric_pitchRange);
             this.Controls.Add(new Label { Text = "Pitch %", AutoSize = true, Location = new Point(244, 345) });
@@ -80,7 +85,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 if (rounded != this.numeric_pitchRange.Value) this.numeric_pitchRange.Value = rounded;
             };
 
-            foreach (AudioObj obj in samples)
+            foreach (AudioObj obj in sourceSamples)
             {
                 this.AudioC.Audios.Add(CloneSampleForGenerator(obj));
             }
@@ -1640,7 +1645,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 bars,
                 resolution,
                 0,
-                87.5m);
+                (decimal)WorkingBpmResolver.GetWorkingBpm(editorSamples));
         }
 
         private static bool ApplyPatternDefinition(JsonElement patternElement, List<bool[]> pattern, IReadOnlyList<DrumkitSampleInfo> drumkit, int totalSteps)

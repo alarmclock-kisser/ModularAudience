@@ -45,6 +45,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.listBox_samples.SelectedIndex = this.listBox_samples.Items.Count > 0 ? 0 : -1;
             this.numericUpDown_threadCount.Value = Math.Clamp(Environment.ProcessorCount, (int)this.numericUpDown_threadCount.Minimum, (int)this.numericUpDown_threadCount.Maximum);
             this.InitializeSessionControls();
+            this.numericUpDown_bpm.Value = Math.Clamp(
+                (decimal)WorkingBpmResolver.GetWorkingBpm(this.Audios.Audios),
+                this.numericUpDown_bpm.Minimum,
+                this.numericUpDown_bpm.Maximum);
 
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCornerPosition(this, false, false, WindowMain.CurrentScreenId);

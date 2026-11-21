@@ -213,7 +213,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void button_llm_Click(object sender, EventArgs e)
         {
-            var dlg = new MidiLlmGenerateDialog();
+            var dlg = new MidiLlmGenerateDialog((double)this.numericUpDown_tempo.Value);
             if (dlg.ShowDialog(this) == DialogResult.OK)
             {
                 this.GeneratedMidiFileData = dlg.GeneratedMidiFileData;

@@ -123,7 +123,7 @@
             this.numericUpDown_bpm.Name = "numericUpDown_bpm";
             this.numericUpDown_bpm.Size = new Size(120, 23);
             this.numericUpDown_bpm.TabIndex = 7;
-            this.numericUpDown_bpm.Value = new decimal(new int[] { 120, 0, 0, 0 });
+            this.numericUpDown_bpm.Value = new decimal(new int[] { 100, 0, 0, 0 });
             // 
             // label_bars
             // 

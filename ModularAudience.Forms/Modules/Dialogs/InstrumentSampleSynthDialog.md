@@ -11,7 +11,8 @@ height or width enables parameter scrolling again, without automatically resizin
 
 - BPM and Key Duration specify the gate length of **one note**, not a sequence.
 - Opened via **+ Instrument** in the Breakbeat Pattern Editor, a new instrument starts at that
-  editor's current BPM instead of the default 120. Existing instrument tracks keep their own BPM.
+  editor's current BPM. From **+ Track**, it uses the current working BPM when available and
+  otherwise starts at 100 BPM. Existing instrument tracks keep their own BPM.
 - Durations run from 1/64 through 4 Bars (4/4); Straight, Dotted and Triplet timing are supported.
 - Other Sound FX opens with a 1/2-note gate (one second at 120 BPM) so timed signals such as Morse SOS are audible; choose a shorter duration for quick hits.
 - Attack/Decay/Sustain control the held sound; Release adds a separate tail to the output sample.

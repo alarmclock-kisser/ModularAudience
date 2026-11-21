@@ -435,6 +435,7 @@ public sealed class MixArrangementTests
     {
         using var audio = new AudioObj { Name = "Dropped", Data = new float[4410], SampleRate = 44100, Channels = 1 };
         using var view = new MixTrackView();
+        view.Arrangement.Bpm = 100;
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var type = typeof(MixTrackView);
         var canvas = (Control)type.GetField("canvas", flags)!.GetValue(view)!;
@@ -445,7 +446,8 @@ public sealed class MixArrangementTests
         type.GetMethod("DropAudio", flags)!.Invoke(view, [canvas, drop]);
         Assert.HasCount(2, view.Arrangement.Lanes);
         Assert.IsTrue(view.Arrangement.Lanes.All(l => l.Clips.Count == 1));
-        Assert.AreEqual(1d, view.Arrangement.Lanes[0].Clips[0].Start);
+        double snapStep = 240d / view.Arrangement.Bpm / view.Arrangement.SnapDivision;
+        Assert.AreEqual(Math.Round(1d / snapStep) * snapStep, view.Arrangement.Lanes[0].Clips[0].Start);
         Assert.AreEqual(0.1, view.Arrangement.Lanes[0].Clips[0].SourceDuration, 0.0001);
         type.GetMethod("Undo", flags)!.Invoke(view, null);
         Assert.HasCount(0, view.Arrangement.Lanes);

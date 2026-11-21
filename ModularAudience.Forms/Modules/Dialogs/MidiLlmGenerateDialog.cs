@@ -26,9 +26,18 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public MidiFileData? GeneratedMidiFileData { get; private set; }
 
-        public MidiLlmGenerateDialog()
+        public MidiLlmGenerateDialog(double? initialBpm = null)
         {
             this.InitializeComponent();
+            if (initialBpm is double bpm && (!double.IsFinite(bpm) || bpm is < 20 or > 400))
+            {
+                throw new ArgumentOutOfRangeException(nameof(initialBpm), "The initial BPM must be between 20 and 400.");
+            }
+
+            this.numericUpDown_bpm.Value = Math.Clamp(
+                (decimal)(initialBpm ?? WorkingBpmResolver.GetWorkingBpm()),
+                this.numericUpDown_bpm.Minimum,
+                this.numericUpDown_bpm.Maximum);
         }
 
         private void button_connect_Click(object? sender, EventArgs e)

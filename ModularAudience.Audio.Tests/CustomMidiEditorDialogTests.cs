@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Reflection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio.Midi;
@@ -37,7 +38,7 @@ public sealed class CustomMidiEditorDialogTests
         Button instrument = Field<Button>(editor, "button_instrument");
         Button save = Field<Button>(editor, "button_save");
 
-        Assert.AreEqual(120m, bpm.Value);
+        Assert.AreEqual(100m, bpm.Value);
         Assert.AreEqual(440m, pitch.Value);
         Assert.AreEqual(4m, resolution.Value);
         Assert.AreEqual("Sine", Field<Label>(editor, "label_instrument").Text);
@@ -45,6 +46,24 @@ public sealed class CustomMidiEditorDialogTests
         Assert.IsNotNull(Field<ContextMenuStrip>(editor, "contextMenuStrip_save"));
         Assert.IsFalse(editor.Controls.Find("button_import", true).Any());
         Assert.IsTrue(save.Enabled);
+    }
+
+    [TestMethod]
+    public void RulerLabelSpacingAdaptsToZoomAndFormatsElapsedTime()
+    {
+        Assert.AreEqual(1, CustomMidiEditorDialog.GetBarLabelStride(200));
+        Assert.AreEqual(4, CustomMidiEditorDialog.GetBarLabelStride(16));
+        Assert.AreEqual(8, CustomMidiEditorDialog.GetBarLabelStride(8));
+        Assert.AreEqual(1, CustomMidiEditorDialog.GetTimeLabelIntervalSeconds(160));
+        Assert.AreEqual(200, CustomMidiEditorDialog.GetTimeLabelIntervalSeconds(0.64));
+        Assert.AreEqual("62:05", CustomMidiEditorDialog.FormatTimeRulerLabel(3725));
+    }
+
+    [STATestMethod]
+    public void EditorUsesAnExplicitInitialWorkingBpm()
+    {
+        using CustomMidiEditorDialog editor = new(initialBpm: 142);
+        Assert.AreEqual(142m, Field<NumericUpDown>(editor, "numericUpDown_bpm").Value);
     }
 
     [STATestMethod]
@@ -69,6 +88,96 @@ public sealed class CustomMidiEditorDialogTests
         Assert.AreEqual(CustomMidiEditorDialog.MidiNoteName(83), maxKey.SelectedItem);
         Assert.AreEqual(35, typeof(CustomMidiEditorDialog).GetProperty("LowestNote", PrivateInstance)!.GetValue(editor));
         Assert.AreEqual(83, typeof(CustomMidiEditorDialog).GetProperty("HighestNote", PrivateInstance)!.GetValue(editor));
+    }
+
+    [TestMethod]
+    public void PlayFromTickPreviewClipsCrossingNotesAndShiftsLaterNotes()
+    {
+        MidiTrackData track = new() { Index = 2, Name = "Piano Roll" };
+        track.Notes.AddRange(
+        [
+            new MidiNoteData { NoteNumber = 55, Channel = 0, Velocity = 90, StartTick = 20, DurationTicks = 60 },
+            new MidiNoteData { NoteNumber = 60, Channel = 1, Velocity = 100, StartTick = 80, DurationTicks = 60 },
+            new MidiNoteData { NoteNumber = 64, Channel = 2, Velocity = 80, StartTick = 160, DurationTicks = 20 }
+        ]);
+        MidiFileData source = MidiFileData.CreateGenerated([track], 960, 120, timeSignatureNumerator: 3, timeSignatureDenominator: 4);
+
+        MidiFileData preview = CustomMidiEditorDialog.CreateMidiPreviewFromTick(source, track.Index, 100);
+        MidiTrackData previewTrack = preview.Tracks.Single();
+
+        Assert.AreEqual(2, previewTrack.Notes.Count);
+        Assert.AreEqual((60, 1, 100, 0L, 40L), (
+            previewTrack.Notes[0].NoteNumber,
+            previewTrack.Notes[0].Channel,
+            previewTrack.Notes[0].Velocity,
+            previewTrack.Notes[0].StartTick,
+            previewTrack.Notes[0].DurationTicks));
+        Assert.AreEqual((64, 2, 80, 60L, 20L), (
+            previewTrack.Notes[1].NoteNumber,
+            previewTrack.Notes[1].Channel,
+            previewTrack.Notes[1].Velocity,
+            previewTrack.Notes[1].StartTick,
+            previewTrack.Notes[1].DurationTicks));
+        Assert.AreEqual(80, source.Tracks.Single().Notes[1].StartTick);
+        Assert.AreEqual(960, preview.TicksPerQuarterNote);
+        Assert.AreEqual(3, preview.TimeSignatureNumerator);
+        Assert.AreEqual(4, preview.TimeSignatureDenominator);
+    }
+
+    [STATestMethod]
+    public void RightClickOnEmptyPianoRollSpaceOpensPlayFromHereMenu()
+    {
+        using CustomMidiEditorDialog editor = new();
+        PictureBox pianoRoll = Field<PictureBox>(editor, "pictureBox_editor");
+        ContextMenuStrip menu = Field<ContextMenuStrip>(editor, "contextMenuStrip_playFromHere");
+        Point click = new(80, 100);
+        editor.CreateControl();
+        pianoRoll.CreateControl();
+
+        Invoke(editor, "pictureBox_editor_MouseDown", pianoRoll, new MouseEventArgs(MouseButtons.Right, 1, click.X, click.Y, 0));
+        Invoke(editor, "pictureBox_editor_MouseUp", pianoRoll, new MouseEventArgs(MouseButtons.Right, 1, click.X, click.Y, 0));
+
+        Assert.IsTrue(menu.Visible);
+        Assert.AreEqual("Play from Here", menu.Items[0].Text);
+        Assert.AreEqual((long)Invoke(editor, "PointToTick", click.X), Field<long>(editor, "playFromHereStartTick"));
+        menu.Close();
+    }
+
+    [STATestMethod]
+    public void RightClickOnNoteDeletesOnlyThatNoteWithoutOpeningMenu()
+    {
+        using CustomMidiEditorDialog editor = new();
+        PictureBox pianoRoll = Field<PictureBox>(editor, "pictureBox_editor");
+        ContextMenuStrip menu = Field<ContextMenuStrip>(editor, "contextMenuStrip_playFromHere");
+        Point click = new(50, 150);
+        int noteNumber = (int)Invoke(editor, "PointToNote", click.Y);
+        MidiNoteData clickedNote = new()
+        {
+            NoteNumber = noteNumber,
+            Channel = 0,
+            Velocity = 100,
+            StartTick = 0,
+            DurationTicks = 480
+        };
+        MidiNoteData overlappingNote = new()
+        {
+            NoteNumber = noteNumber,
+            Channel = 0,
+            Velocity = 80,
+            StartTick = 0,
+            DurationTicks = 240
+        };
+        editor.SelectedTrack.Notes.AddRange([clickedNote, overlappingNote]);
+        editor.SelectedTrack.ExtendLengthTo(480);
+        editor.CreateControl();
+        pianoRoll.CreateControl();
+
+        Invoke(editor, "pictureBox_editor_MouseDown", pianoRoll, new MouseEventArgs(MouseButtons.Right, 1, click.X, click.Y, 0));
+        Invoke(editor, "pictureBox_editor_MouseUp", pianoRoll, new MouseEventArgs(MouseButtons.Right, 1, click.X, click.Y, 0));
+
+        Assert.AreEqual(1, editor.SelectedTrack.Notes.Count);
+        Assert.AreSame(overlappingNote, editor.SelectedTrack.Notes.Single());
+        Assert.IsFalse(menu.Visible);
     }
 
     [STATestMethod]

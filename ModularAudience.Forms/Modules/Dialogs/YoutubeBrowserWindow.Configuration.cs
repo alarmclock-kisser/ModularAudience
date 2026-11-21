@@ -190,7 +190,8 @@ public partial class YoutubeBrowserWindow
     {
         try
         {
-            using var dummy = new AudioObj { Bpm = stretchSettings?.TargetBpm ?? 120f, ScannedBpm = 120f };
+            float workingBpm = (float)WorkingBpmResolver.GetWorkingBpm();
+            using var dummy = new AudioObj { Bpm = stretchSettings?.TargetBpm ?? workingBpm, ScannedBpm = workingBpm };
             dummy.Rename("YouTube import configuration");
             using var dialog = new TimeStretchDialog(audios: [dummy]) { IsConfigureMode = true };
             if (dialog.ShowDialog(this) != DialogResult.OK || dialog.ConfirmedSettings is null) return false;

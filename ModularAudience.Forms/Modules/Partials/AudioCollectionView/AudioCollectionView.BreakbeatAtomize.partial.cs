@@ -69,6 +69,11 @@ namespace ModularAudience.Forms
             {
                 await this.CancelAutoPlayAsync(stopCollection: true);
 
+                if (!this.breakbeatBpmCustomized)
+                {
+                    this.breakbeatBpm = (float)WorkingBpmResolver.GetWorkingBpm(this.SelectedAudios);
+                }
+
                 var workflowSettings = new BreakbeatWorkflowSettings(
                     this.breakbeatBpm,
                     this.breakbeatBars,
@@ -141,6 +146,7 @@ namespace ModularAudience.Forms
         private void SetBreakbeatBpm(float bpm)
         {
             this.breakbeatBpm = bpm;
+            this.breakbeatBpmCustomized = true;
             this.UpdateContextMenuState();
         }
 

@@ -18,12 +18,18 @@ public sealed class AutoTuneTempoResolverTests
     [DataRow(0d, 0d, 135.5, 135.5)]
     [DataRow(0d, double.NaN, 135.5, 135.5)]
     [DataRow(-1d, -10d, 135.5, 135.5)]
-    [DataRow(0d, 401d, 0d, 120d)]
-    [DataRow(0d, 0d, double.NaN, 120d)]
-    [DataRow(0d, 0d, 401d, 120d)]
-    public void Resolve_PrefersValidTaggedThenScannedThenPresetTempoOtherwise120(
+    [DataRow(0d, 401d, 0d, 100d)]
+    [DataRow(0d, 0d, double.NaN, 100d)]
+    [DataRow(0d, 0d, 401d, 100d)]
+    public void Resolve_PrefersValidTaggedThenScannedThenPresetTempoOtherwiseDefault(
         double bpm, double scannedBpm, double presetBpm, double expected)
     {
         Assert.AreEqual(expected, AutoTuneTempoResolver.Resolve(bpm, scannedBpm, presetBpm));
+    }
+
+    [TestMethod]
+    public void ResolveWithoutMetadataOrPreset_Uses100Bpm()
+    {
+        Assert.AreEqual(100d, AutoTuneTempoResolver.Resolve(0, 0));
     }
 }

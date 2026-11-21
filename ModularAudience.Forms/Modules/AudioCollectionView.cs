@@ -83,7 +83,8 @@ namespace ModularAudience.Forms
         private AtomizeSensitivity atomizeSensitivity = AtomizeSensitivity.Balanced;
         private int atomizeMinSliceMs = 80;
         private int atomizeTailPaddingMs = 30;
-        private float breakbeatBpm = 87.5f;
+        private float breakbeatBpm = 100f;
+        private bool breakbeatBpmCustomized;
         private int breakbeatBars = 4;
         private int breakbeatHitsPerBar = 12;
         private float breakbeatDensity = 0.45f;
@@ -1128,6 +1129,11 @@ namespace ModularAudience.Forms
 
         internal void UpdateContextMenuState()
         {
+            if (!this.breakbeatBpmCustomized)
+            {
+                this.breakbeatBpm = (float)WorkingBpmResolver.GetWorkingBpm(this.SelectedAudios);
+            }
+
             int selectedCount = this.GetContextAudios().Count;
             bool hasAny = selectedCount > 0;
             bool hasSingle = selectedCount == 1;

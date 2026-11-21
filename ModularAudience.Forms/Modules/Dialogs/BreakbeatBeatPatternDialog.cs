@@ -31,8 +31,13 @@ internal sealed partial class BreakbeatBeatPatternDialog : Form
         this.existingTrackCount = Math.Max(0, existingTrackCount);
         this.InitializeComponent();
 
+        double initialBpm = sequence.HitCount >= 2
+            && double.IsFinite(sequence.EstimatedBpm)
+            && sequence.EstimatedBpm is >= 40 and <= 240
+                ? sequence.EstimatedBpm
+                : WorkingBpmResolver.GetWorkingBpm();
         this.numericUpDown_bpm.Value = Math.Clamp(
-            (decimal)Math.Round(sequence.EstimatedBpm, 2),
+            (decimal)Math.Round(initialBpm, 2),
             this.numericUpDown_bpm.Minimum,
             this.numericUpDown_bpm.Maximum);
         this.numericUpDown_drumElements.Value = Math.Clamp(

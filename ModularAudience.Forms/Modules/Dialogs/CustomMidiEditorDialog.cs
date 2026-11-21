@@ -19,7 +19,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
     public partial class CustomMidiEditorDialog : Form
     {
         private const int KeyLabelWidth = 44;
+        private const int TopMargin = 18;
         private const int BottomMargin = 20;
+        private const int MinimumBarLabelSpacing = 56;
+        private const int MinimumTimeLabelSpacing = 72;
         private const int MinimumKeyGap = 12;
         private const double EmptyTailRatio = 0.20;
         private const int DefaultTicksPerQuarterNote = 960;
@@ -74,11 +77,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private bool ghostPreviewValid;
         private Point lastEditorPointer;
         private bool hasEditorPointer;
+        private Point? pendingPlayFromHerePoint;
 
         private CancellationTokenSource? playbackCts;
         private CancellationTokenSource? saveRenderCts;
         private AudioObj? previewAudio;
         private bool previewCaretVisible;
+        private long previewStartTick;
+        private long playFromHereStartTick;
 
         private sealed class CollectionSnapshot : IDisposable
         {
@@ -115,7 +121,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             double Bpm,
             double PitchFrequency);
 
-        public CustomMidiEditorDialog(MidiFileData? midiFileData = null, double initialBpm = 120.0)
+        public CustomMidiEditorDialog(MidiFileData? midiFileData = null, double initialBpm = 100.0)
         {
             this.InitializeComponent();
             this.KeyPreview = true;
@@ -157,6 +163,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private int LowestNote => MidiNoteFromKeyIndex(this.domainUpDown_minKey.SelectedIndex);
 
         private int HighestNote => MidiNoteFromKeyIndex(this.domainUpDown_maxKey.SelectedIndex);
+
+        private int PianoRollHeight => Math.Max(1, this.pictureBox_editor.ClientSize.Height - TopMargin - BottomMargin);
+
+        private int PianoRollBottom => TopMargin + this.PianoRollHeight;
 
         private int Resolution => Math.Max(1, (int)this.numericUpDown_resolution.Value);
 
@@ -1012,7 +1022,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             int highest = Math.Max(lowest, this.HighestNote);
             int noteCount = highest - lowest + 1;
             int width = Math.Max(1, this.pictureBox_editor.ClientSize.Width - KeyLabelWidth);
-            int height = Math.Max(1, this.pictureBox_editor.ClientSize.Height - BottomMargin);
+            int height = this.PianoRollHeight;
+            int pianoTop = TopMargin;
+            int pianoBottom = pianoTop + height;
             long lengthTicks = Math.Max(this.GridTicks, this.editorLengthTicks);
             long visibleStartTick = Math.Clamp(this.viewStartTick, 0, Math.Max(0, lengthTicks - this.GridTicks));
             long visibleLengthTicks = Math.Clamp(this.viewEndTick - this.viewStartTick, this.GridTicks, lengthTicks);
@@ -1027,7 +1039,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             using Font font = new("Segoe UI", 8f);
             for (int note = lowest; note <= highest; note++)
             {
-                float y = NoteToY(note, lowest, noteCount, height);
+                float y = NoteToY(note, lowest, noteCount, height, pianoTop);
                 e.Graphics.DrawLine(note % 12 == 0 ? barPen : gridPen, KeyLabelWidth, y, KeyLabelWidth + width, y);
                 e.Graphics.DrawString(MidiNoteName(note), font, Brushes.Gainsboro, 2, y - 7);
             }
@@ -1039,21 +1051,21 @@ namespace ModularAudience.Forms.Modules.Dialogs
             {
                 float x = KeyLabelWidth + (float)((tick - visibleStartTick) * this.pixelsPerTick);
                 Pen pen = tick % ticksPerBar == 0 ? barPen : tick % ticksPerQuarter == 0 ? beatPen : gridPen;
-                e.Graphics.DrawLine(pen, x, 0, x, height);
+                e.Graphics.DrawLine(pen, x, pianoTop, x, pianoBottom);
             }
 
             if (this.noteSelection is MidiSelection noteSelection)
             {
                 float selectionX = KeyLabelWidth + (float)((noteSelection.StartTick - visibleStartTick) * this.pixelsPerTick);
                 float selectionEndX = KeyLabelWidth + (float)((noteSelection.EndTick - visibleStartTick) * this.pixelsPerTick);
-                float top = NoteToY(noteSelection.HighestNote, lowest, noteCount, height);
-                float bottom = NoteToY(noteSelection.LowestNote, lowest, noteCount, height)
+                float top = NoteToY(noteSelection.HighestNote, lowest, noteCount, height, pianoTop);
+                float bottom = NoteToY(noteSelection.LowestNote, lowest, noteCount, height, pianoTop)
                     + Math.Max(3, height / (float)noteCount - 1);
                 RectangleF selectedBounds = RectangleF.FromLTRB(
                     Math.Max(KeyLabelWidth, selectionX),
-                    Math.Max(0, top),
+                    Math.Max(pianoTop, top),
                     Math.Min(KeyLabelWidth + width, selectionEndX),
-                    Math.Min(height, bottom));
+                    Math.Min(pianoBottom, bottom));
                 if (selectedBounds.Width > 0 && selectedBounds.Height > 0)
                 {
                     using Brush selectionBrush = new SolidBrush(Color.FromArgb(26, Color.DeepSkyBlue));
@@ -1082,7 +1094,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 long clippedEndTick = Math.Min(noteEndTick, visibleEndTick);
                 float x = KeyLabelWidth + (float)((clippedStartTick - visibleStartTick) * this.pixelsPerTick);
                 float noteWidth = Math.Max(2, (float)((clippedEndTick - clippedStartTick) * this.pixelsPerTick));
-                float y = NoteToY(note.NoteNumber, lowest, noteCount, height);
+                float y = NoteToY(note.NoteNumber, lowest, noteCount, height, pianoTop);
                 float noteHeight = Math.Max(3, height / (float)noteCount - 1);
                 Brush brush = this.IsNoteSelected(note) ? selectedNoteBrush : noteBrush;
                 e.Graphics.FillRectangle(brush, x, y, Math.Min(noteWidth, KeyLabelWidth + width - x), noteHeight);
@@ -1128,7 +1140,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
                     float x = KeyLabelWidth + (float)((Math.Max(note.StartTick, visibleStartTick) - visibleStartTick) * this.pixelsPerTick);
                     float noteWidth = Math.Max(2, (float)((Math.Min(endTick, visibleEndTick) - Math.Max(note.StartTick, visibleStartTick)) * this.pixelsPerTick));
-                    float y = NoteToY(note.NoteNumber, lowest, noteCount, height);
+                    float y = NoteToY(note.NoteNumber, lowest, noteCount, height, pianoTop);
                     float noteHeight = Math.Max(3, height / (float)noteCount - 1);
                     RectangleF rect = new(x, y, Math.Min(noteWidth, KeyLabelWidth + width - x), noteHeight);
                     e.Graphics.FillRectangle(ghostBrush, rect);
@@ -1139,21 +1151,169 @@ namespace ModularAudience.Forms.Modules.Dialogs
             if (this.previewCaretVisible && this.previewAudio?.PlayerPlaying == true && this.previewAudio.Duration > TimeSpan.Zero)
             {
                 double secondsPerTick = 60.0 / Math.Max(1.0, this.Bpm) / Math.Max(1, this.midiFile.TicksPerQuarterNote);
-                long previewTick = (long)Math.Round(this.previewAudio.CurrentTime.TotalSeconds / secondsPerTick);
+                long previewTick = this.previewStartTick
+                    + (long)Math.Round(this.previewAudio.CurrentTime.TotalSeconds / secondsPerTick);
                 previewTick = Math.Clamp(previewTick, 0, Math.Max(this.GridTicks, this.Track.LengthTicks));
                 float caretX = KeyLabelWidth + (float)((previewTick - visibleStartTick) * this.pixelsPerTick);
                 if (caretX >= KeyLabelWidth && caretX <= KeyLabelWidth + width)
                 {
                     using Pen caretPen = new(Color.Red, 2f);
-                    e.Graphics.DrawLine(caretPen, caretX, 0, caretX, height);
+                    e.Graphics.DrawLine(caretPen, caretX, pianoTop, caretX, pianoBottom);
                 }
             }
+
+            this.DrawRulerLabels(e.Graphics, visibleStartTick, visibleEndTick, width, pianoBottom);
+        }
+
+        private void DrawRulerLabels(Graphics graphics, long visibleStartTick, long visibleEndTick, int width, int pianoBottom)
+        {
+            using Font font = new("Segoe UI", 8f);
+            using Pen rulerPen = new(Color.FromArgb(92, 92, 106));
+            long ticksPerBar = Math.Max(1, this.midiFile.TicksPerBar);
+            int barStride = GetBarLabelStride(ticksPerBar * this.pixelsPerTick);
+            long firstMeasure = Math.Max(1, (long)Math.Ceiling(visibleStartTick / (double)ticksPerBar) + 1);
+            long lastMeasure = (long)Math.Floor(visibleEndTick / (double)ticksPerBar) + 1;
+            long firstLabeledMeasure = ((firstMeasure + barStride - 1) / barStride) * barStride;
+            if (firstLabeledMeasure > lastMeasure)
+            {
+                firstLabeledMeasure = firstMeasure;
+            }
+
+            for (long measure = firstLabeledMeasure; measure <= lastMeasure; measure += barStride)
+            {
+                double tick = (measure - 1d) * ticksPerBar;
+                float x = KeyLabelWidth + (float)((tick - visibleStartTick) * this.pixelsPerTick);
+                if (x >= KeyLabelWidth && x <= KeyLabelWidth + width)
+                {
+                    graphics.DrawLine(rulerPen, x, TopMargin - 4, x, TopMargin);
+                    DrawRulerLabel(
+                        graphics,
+                        measure.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        font,
+                        x,
+                        0,
+                        TopMargin,
+                        KeyLabelWidth,
+                        KeyLabelWidth + width);
+                }
+
+                if (measure > long.MaxValue - barStride)
+                {
+                    break;
+                }
+            }
+
+            double secondsPerTick = 60.0 / Math.Max(1.0, this.Bpm) / Math.Max(1, this.midiFile.TicksPerQuarterNote);
+            double pixelsPerSecond = this.pixelsPerTick / secondsPerTick;
+            double timeInterval = GetTimeLabelIntervalSeconds(pixelsPerSecond);
+            double startSeconds = visibleStartTick * secondsPerTick;
+            double endSeconds = visibleEndTick * secondsPerTick;
+            double seconds = Math.Ceiling(startSeconds / timeInterval) * timeInterval;
+            for (; seconds <= endSeconds + 1e-9; seconds += timeInterval)
+            {
+                float x = KeyLabelWidth + (float)((seconds / secondsPerTick - visibleStartTick) * this.pixelsPerTick);
+                if (x >= KeyLabelWidth && x <= KeyLabelWidth + width)
+                {
+                    graphics.DrawLine(rulerPen, x, pianoBottom, x, pianoBottom + 4);
+                    DrawRulerLabel(
+                        graphics,
+                        FormatTimeRulerLabel(seconds),
+                        font,
+                        x,
+                        pianoBottom,
+                        BottomMargin,
+                        KeyLabelWidth,
+                        KeyLabelWidth + width);
+                }
+            }
+        }
+
+        private static void DrawRulerLabel(
+            Graphics graphics,
+            string text,
+            Font font,
+            float centerX,
+            int top,
+            int height,
+            int leftEdge,
+            int rightEdge)
+        {
+            Size measured = TextRenderer.MeasureText(text, font, Size.Empty, TextFormatFlags.NoPadding);
+            int labelWidth = Math.Min(Math.Max(1, rightEdge - leftEdge), measured.Width + 6);
+            int labelHeight = Math.Min(height, measured.Height + 2);
+            int left = Math.Clamp(
+                (int)Math.Round(centerX - labelWidth / 2.0),
+                leftEdge,
+                Math.Max(leftEdge, rightEdge - labelWidth));
+            Rectangle bounds = new(left, top + Math.Max(0, (height - labelHeight) / 2), labelWidth, labelHeight);
+            using Brush background = new SolidBrush(Color.FromArgb(24, 24, 28));
+            graphics.FillRectangle(background, bounds);
+            TextRenderer.DrawText(
+                graphics,
+                text,
+                font,
+                bounds,
+                Color.Gainsboro,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+        }
+
+        internal static int GetBarLabelStride(double pixelsPerBar)
+        {
+            if (!double.IsFinite(pixelsPerBar) || pixelsPerBar <= 0)
+            {
+                return 1;
+            }
+
+            int stride = 1;
+            while (pixelsPerBar * stride < MinimumBarLabelSpacing && stride < 1 << 20)
+            {
+                stride *= 2;
+            }
+
+            return stride;
+        }
+
+        internal static double GetTimeLabelIntervalSeconds(double pixelsPerSecond)
+        {
+            if (!double.IsFinite(pixelsPerSecond) || pixelsPerSecond <= 0)
+            {
+                return 60;
+            }
+
+            double requiredInterval = Math.Max(1, MinimumTimeLabelSpacing / pixelsPerSecond);
+            double magnitude = Math.Pow(10, Math.Floor(Math.Log10(requiredInterval)));
+            foreach (double factor in new[] { 1, 2, 5, 10 })
+            {
+                double interval = factor * magnitude;
+                if (interval >= requiredInterval)
+                {
+                    return interval;
+                }
+            }
+
+            return 10 * magnitude;
+        }
+
+        internal static string FormatTimeRulerLabel(double seconds)
+        {
+            if (!double.IsFinite(seconds) || seconds < 0)
+            {
+                seconds = 0;
+            }
+
+            double roundedSeconds = Math.Round(seconds);
+            long totalSeconds = roundedSeconds >= long.MaxValue ? long.MaxValue : (long)roundedSeconds;
+            return string.Concat(
+                (totalSeconds / 60).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ":",
+                (totalSeconds % 60).ToString("00", System.Globalization.CultureInfo.InvariantCulture));
         }
 
         private void pictureBox_editor_MouseDown(object? sender, MouseEventArgs e)
         {
             this.lastEditorPointer = e.Location;
             this.hasEditorPointer = true;
+            this.pendingPlayFromHerePoint = null;
             if (this.ghostPreviewActive)
             {
                 if (e.Button == MouseButtons.Left && this.ghostPreviewValid)
@@ -1169,6 +1329,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
 
             if (e.Button is not (MouseButtons.Left or MouseButtons.Right))
+            {
+                return;
+            }
+
+            if ((ModifierKeys & Keys.Control) == Keys.None && !this.IsPianoRollPoint(e.Location))
             {
                 return;
             }
@@ -1193,6 +1358,28 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.panViewEndTick = this.viewEndTick;
                 this.pictureBox_editor.Capture = true;
                 this.pictureBox_editor.Cursor = Cursors.SizeWE;
+                return;
+            }
+
+            if (e.Button == MouseButtons.Right)
+            {
+                if (!this.IsPianoRollPoint(e.Location))
+                {
+                    return;
+                }
+
+                Point point = this.ClampToEditor(e.Location);
+                MidiNoteData? note = this.FindNoteAt(point);
+                if (note == null)
+                {
+                    this.pendingPlayFromHerePoint = point;
+                    this.pictureBox_editor.Capture = true;
+                    return;
+                }
+
+                this.BeginRightErase(point);
+                this.Track.Notes.Remove(note);
+                this.pictureBox_editor.Invalidate();
                 return;
             }
 
@@ -1225,6 +1412,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.UpdateGhostPreview(e.Location);
                 this.pictureBox_editor.Invalidate();
                 return;
+            }
+
+            if (this.pendingPlayFromHerePoint is Point pendingPoint)
+            {
+                if (!HasExceededDragThreshold(pendingPoint, e.Location))
+                {
+                    return;
+                }
+
+                this.pendingPlayFromHerePoint = null;
+                this.BeginRightErase(pendingPoint);
             }
 
             if (this.panning)
@@ -1264,12 +1462,35 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.pictureBox_editor.Invalidate();
         }
 
+        private void BeginRightErase(Point point)
+        {
+            this.editStart = point;
+            this.editButton = MouseButtons.Right;
+            this.editNote = this.PointToNote(point.Y);
+            this.editPreviousLength = this.editorLengthTicks;
+            this.BeginHistoryTransaction();
+            this.pictureBox_editor.Capture = true;
+        }
+
         private async void pictureBox_editor_MouseUp(object? sender, MouseEventArgs e)
         {
             this.lastEditorPointer = e.Location;
             this.hasEditorPointer = true;
             if (this.ghostPreviewActive)
             {
+                return;
+            }
+
+            if (this.pendingPlayFromHerePoint is Point pendingPoint)
+            {
+                this.pendingPlayFromHerePoint = null;
+                this.pictureBox_editor.Capture = false;
+                if (e.Button == MouseButtons.Right && !HasExceededDragThreshold(pendingPoint, e.Location))
+                {
+                    this.playFromHereStartTick = this.PointToTick(pendingPoint.X);
+                    this.contextMenuStrip_playFromHere.Show(this.pictureBox_editor, pendingPoint);
+                }
+
                 return;
             }
 
@@ -1418,12 +1639,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
             int bottom = Math.Max(first.Y, second.Y);
             long startTick = this.PointToTick(left);
             long endTick = this.PointToTick(right) + this.GridTicks;
-            int height = Math.Max(1, this.pictureBox_editor.ClientSize.Height - BottomMargin);
+            int height = this.PianoRollHeight;
             int count = Math.Max(1, this.HighestNote - this.LowestNote + 1);
 
             this.Track.Notes.RemoveAll(note =>
             {
-                float noteTop = NoteToY(note.NoteNumber, this.LowestNote, count, height);
+                float noteTop = NoteToY(note.NoteNumber, this.LowestNote, count, height, TopMargin);
                 float noteBottom = noteTop + Math.Max(3, height / (float)count - 1);
                 long noteEndTick = note.StartTick + note.DurationTicks;
                 bool overlapsTime = note.StartTick <= endTick && noteEndTick >= startTick;
@@ -1584,7 +1805,20 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private Point ClampToEditor(Point point) => new(
             Math.Clamp(point.X, KeyLabelWidth, Math.Max(KeyLabelWidth, this.pictureBox_editor.ClientSize.Width - 1)),
-            Math.Clamp(point.Y, 0, Math.Max(0, this.pictureBox_editor.ClientSize.Height - BottomMargin)));
+            Math.Clamp(point.Y, TopMargin, Math.Max(TopMargin, this.PianoRollBottom - 1)));
+
+        private bool IsPianoRollPoint(Point point) =>
+            point.X >= KeyLabelWidth
+            && point.X < this.pictureBox_editor.ClientSize.Width
+            && point.Y >= TopMargin
+            && point.Y < this.PianoRollBottom;
+
+        private static bool HasExceededDragThreshold(Point start, Point current)
+        {
+            Size dragSize = SystemInformation.DragSize;
+            return Math.Abs(current.X - start.X) >= Math.Max(1, dragSize.Width / 2)
+                || Math.Abs(current.Y - start.Y) >= Math.Max(1, dragSize.Height / 2);
+        }
 
         private long PointToTick(int x)
         {
@@ -1595,9 +1829,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private int PointToNote(int y)
         {
-            int height = Math.Max(1, this.pictureBox_editor.ClientSize.Height - BottomMargin);
+            int height = this.PianoRollHeight;
             int count = Math.Max(1, this.HighestNote - this.LowestNote + 1);
-            return Math.Clamp(this.HighestNote - (int)Math.Floor(y / (double)height * count), this.LowestNote, this.HighestNote);
+            int relativeY = Math.Clamp(y - TopMargin, 0, height - 1);
+            return Math.Clamp(this.HighestNote - (int)Math.Floor(relativeY / (double)height * count), this.LowestNote, this.HighestNote);
         }
 
         private double CalculatePixelsPerTick(long visibleLengthTicks)
@@ -1606,8 +1841,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             return Math.Max(0.000001, width / (double)Math.Max(1, visibleLengthTicks));
         }
 
-        private static float NoteToY(int note, int lowest, int count, int height) =>
-            (count - 1 - (note - lowest)) / (float)Math.Max(1, count) * height;
+        private static float NoteToY(int note, int lowest, int count, int height, int top = 0) =>
+            top + (count - 1 - (note - lowest)) / (float)Math.Max(1, count) * height;
 
         private static Rectangle NormalizeRectangle(Point first, Point second) => Rectangle.FromLTRB(
             Math.Min(first.X, second.X),
@@ -1632,6 +1867,22 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 pitchFrequency: this.PitchFrequency,
                 timeSignatureNumerator: this.midiFile.TimeSignatureNumerator,
                 timeSignatureDenominator: this.midiFile.TimeSignatureDenominator);
+        }
+
+        internal static MidiFileData CreateMidiPreviewFromTick(MidiFileData source, int trackIndex, long startTick)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+            MidiTrackData sourceTrack = source.Tracks.FirstOrDefault(track => track.Index == trackIndex)
+                ?? throw new ArgumentOutOfRangeException(nameof(trackIndex));
+            long playbackStartTick = Math.Clamp(startTick, 0, Math.Max(0, sourceTrack.LengthTicks));
+            long playbackEndTick = Math.Max(playbackStartTick + 1, sourceTrack.LengthTicks);
+            return MidiFileData.CreateEditSelection(
+                source,
+                trackIndex,
+                playbackStartTick,
+                playbackEndTick,
+                lowestNote: 0,
+                highestNote: 127).MidiFile;
         }
 
         private MidiFileData CreateOperationMidi()
@@ -2006,10 +2257,33 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
+            await this.PlayMidiFromTickAsync(0);
+        }
+
+        private async void toolStripMenuItem_playFromHere_Click(object? sender, EventArgs e)
+        {
+            await this.PlayMidiFromTickAsync(this.playFromHereStartTick);
+        }
+
+        private async Task PlayMidiFromTickAsync(long startTick)
+        {
             try
             {
                 MidiFileData midi = this.CreateOutputMidi();
-                await this.PreviewMidiAsync(midi, midi.Tracks[0].Index, showCaret: true);
+                MidiTrackData track = midi.Tracks[0];
+                long playbackStartTick = Math.Clamp(startTick, 0, Math.Max(0, track.LengthTicks));
+                MidiFileData previewMidi = CreateMidiPreviewFromTick(midi, track.Index, playbackStartTick);
+                if (previewMidi.Tracks[0].Notes.Count == 0)
+                {
+                    await this.StopPlaybackAsync();
+                    return;
+                }
+
+                await this.PreviewMidiAsync(
+                    previewMidi,
+                    previewMidi.Tracks[0].Index,
+                    showCaret: true,
+                    caretStartTick: playbackStartTick);
             }
             catch (OperationCanceledException)
             {
@@ -2032,7 +2306,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private async Task StopPlaybackAsync() => await this.StopPreviewAsync();
 
-        private async Task PreviewMidiAsync(MidiFileData midi, int trackIndex, bool showCaret)
+        private async Task PreviewMidiAsync(MidiFileData midi, int trackIndex, bool showCaret, long caretStartTick = 0)
         {
             await this.StopPreviewAsync();
             CancellationTokenSource runCts = new();
@@ -2042,6 +2316,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             try
             {
                 this.previewCaretVisible = showCaret;
+                this.previewStartTick = showCaret ? Math.Max(0, caretStartTick) : 0;
                 IProgress<double>? progress = null;
                 if (showCaret)
                 {
@@ -2132,6 +2407,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.previewAudio?.Dispose();
             this.previewAudio = null;
             this.previewCaretVisible = false;
+            this.previewStartTick = 0;
             this.pictureBox_editor.Invalidate();
         }
 

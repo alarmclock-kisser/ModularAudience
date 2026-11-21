@@ -32,8 +32,9 @@ internal sealed class EffectParameterEditor : UserControl
         }
         if (definition.Kind is AudioEffectKind.TimeStretch or AudioEffectKind.VarispeedShift)
         {
-            this.sourceTempo = new NumericUpDown { Name = "sourceBpm", Minimum = 5, Maximum = 420, Value = 120, DecimalPlaces = 3, Width = 130 };
-            this.targetTempo = new NumericUpDown { Name = "targetBpm", Minimum = 0.625m, Maximum = 3360, Value = 120, DecimalPlaces = 3, Width = 130 };
+            decimal workingBpm = (decimal)WorkingBpmResolver.GetWorkingBpm();
+            this.sourceTempo = new NumericUpDown { Name = "sourceBpm", Minimum = 5, Maximum = 420, Value = workingBpm, DecimalPlaces = 3, Width = 130 };
+            this.targetTempo = new NumericUpDown { Name = "targetBpm", Minimum = 0.625m, Maximum = 3360, Value = workingBpm, DecimalPlaces = 3, Width = 130 };
             var tempos = new FlowLayoutPanel { Width = 650, Height = 68 };
             tempos.Controls.AddRange([new Label { Text = "Source BPM", AutoSize = true }, this.sourceTempo,
                 new Label { Text = "Target BPM", AutoSize = true }, this.targetTempo,

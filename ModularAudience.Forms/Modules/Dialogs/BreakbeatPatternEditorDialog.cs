@@ -38,8 +38,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private CancellationTokenSource? hearCancellationTokenSource;
         private AudioObj? previewAudio;
         private int[] previewQuarterMap = [];
-        private volatile float hearLiveBpm = 120f;
-        private float hearBaseBpm = 120f;
+        private volatile float hearLiveBpm = 100f;
+        private float hearBaseBpm = 100f;
         private float hearLiveVarispeedFactor = 1f;
         private CancellationTokenSource? notePreviewCancellationTokenSource;
         private AudioObj? notePreviewAudio;

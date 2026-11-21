@@ -50,6 +50,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
         public PianoRollEditor()
         {
             this.InitializeComponent();
+            this.numericUpDown_bpm.Value = Math.Clamp(
+                (decimal)WorkingBpmResolver.GetWorkingBpm(),
+                this.numericUpDown_bpm.Minimum,
+                this.numericUpDown_bpm.Maximum);
             this.KeyPreview = true;
             this.panel_roll.Visible = false;
 
@@ -74,9 +78,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public PianoRollEditor(IEnumerable<AudioObj>? samples) : this()
         {
-            if (samples != null)
+            AudioObj[] initialSamples = samples?.Where(sample => sample != null).ToArray() ?? [];
+            if (initialSamples.Length > 0)
             {
-                this.pendingInitialSamples.AddRange(samples.Where(sample => sample != null));
+                this.numericUpDown_bpm.Value = Math.Clamp(
+                    (decimal)WorkingBpmResolver.GetWorkingBpm(initialSamples),
+                    this.numericUpDown_bpm.Minimum,
+                    this.numericUpDown_bpm.Maximum);
+                this.pendingInitialSamples.AddRange(initialSamples);
             }
         }
 

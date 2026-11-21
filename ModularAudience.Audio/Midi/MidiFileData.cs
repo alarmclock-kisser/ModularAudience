@@ -184,7 +184,7 @@ public sealed class MidiFileData : IVocalMidiFile
 
     public static MidiFileData CreateEmpty(
         int ticksPerQuarterNote = 960,
-        double defaultBpm = 120.0,
+        double defaultBpm = 100.0,
         double pitchFrequency = 440.0,
         int timeSignatureNumerator = 4,
         int timeSignatureDenominator = 4)
@@ -198,7 +198,7 @@ public sealed class MidiFileData : IVocalMidiFile
     public static MidiFileData CreateGenerated(
         IEnumerable<MidiTrackData> tracks,
         int ticksPerQuarterNote = 960,
-        double defaultBpm = 120.0,
+        double defaultBpm = 100.0,
         string? filePath = null,
         double pitchFrequency = 440.0,
         int timeSignatureNumerator = 4,
@@ -325,7 +325,7 @@ public sealed class MidiFileData : IVocalMidiFile
             throw new InvalidDataException("The MIDI file does not use supported PPQ timing.");
         }
 
-        double bpm = 120.0;
+        double bpm = 100.0;
         int timeSignatureNumerator = 4;
         int timeSignatureDenominator = 4;
         bool hasTimeSignature = false;
@@ -527,7 +527,7 @@ public sealed class MidiFileData : IVocalMidiFile
             throw new InvalidDataException("The audio object does not contain complete audio frames.");
         }
         bpm = float.IsFinite(audioObj.Bpm) && audioObj.Bpm > 0 ? audioObj.Bpm : audioObj.ScannedBpm;
-        bpm = Math.Clamp(double.IsFinite(bpm) && bpm > 0 ? bpm : 120.0, 20.0, 400.0);
+        bpm = Math.Clamp(double.IsFinite(bpm) && bpm > 0 ? bpm : 100.0, 20.0, 400.0);
     }
 
     private readonly record struct PitchFrame(double CenterSample, double Frequency, float Rms, double Confidence);

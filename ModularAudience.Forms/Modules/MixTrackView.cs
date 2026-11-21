@@ -25,7 +25,7 @@ public sealed partial class MixTrackView : Form
     private readonly ToolTip interactionHints = new();
     private readonly HScrollBar scroll = new() { Dock = DockStyle.Bottom, Minimum = 0, Maximum = 100000, LargeChange = 100 };
     private readonly VScrollBar vertical = new() { Dock = DockStyle.Right, Minimum = 0, Maximum = 100, LargeChange = 1 };
-    private readonly NumericUpDown bpm = new() { Minimum = 10, Maximum = 400, Value = 120, DecimalPlaces = 4, Width = 95 };
+    private readonly NumericUpDown bpm = new() { Minimum = 10, Maximum = 400, Value = 100, DecimalPlaces = 4, Width = 95 };
     private readonly ComboBox division = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 65 };
     private readonly CheckBox snap = new() { Text = "Snap", AutoSize = true };
     private readonly CheckBox loop = new() { Text = "Loop", AutoSize = true };
@@ -93,6 +93,12 @@ public sealed partial class MixTrackView : Form
 
     public MixTrackView()
     {
+        double initialBpm = WorkingBpmResolver.GetWorkingBpm();
+        Arrangement.Bpm = initialBpm;
+        bpm.Value = (decimal)initialBpm;
+        Activated += (_, _) => WorkingBpmResolver.RecordFocus(this);
+        GotFocus += (_, _) => WorkingBpmResolver.RecordFocus(this);
+        MouseDown += (_, _) => WorkingBpmResolver.RecordFocus(this);
         this.windowGroup = new MixWindowGroup(this);
         this.InitializeLiveMixer();
         Name = "MixTrackView"; Arrangement.Name = "Mix " + (open.Count + 1); Text = Arrangement.Name;

@@ -12,8 +12,10 @@
 - Right-click **Join** to create a new mix, choose an existing mix, or open a project.
 - Right-click WindowMain's **Import** button for **Open Project (.mamix)** or **New Project**;
   New Project opens an empty Mix Track View without showing a file picker.
-- The first audio track sets an empty mix's BPM from its known source BPM, without a tempo prompt.
-  This applies to Join and audio drops. Unknown BPM retains the current grid tempo.
+- A new empty mix starts at the current working BPM when a focused track, collection selection,
+  or mix provides one; otherwise it starts at 100 BPM. The first audio track can still set an
+  empty mix's BPM from its known source BPM, without a tempo prompt. Unknown BPM retains the
+  current grid tempo.
 - Double-click the title bar to rename the mix/project; use the maximize button to maximize.
 - Click a track name in the left header to edit it inline. New tracks use the next unused
   `Track #N` name; names are saved with the `.mamix` project. Renaming a mix updates its

@@ -63,7 +63,7 @@ partial class BreakbeatBeatPatternDialog
         this.numericUpDown_bpm.Name = "numericUpDown_bpm";
         this.numericUpDown_bpm.Size = new Size(110, 23);
         this.numericUpDown_bpm.TabIndex = 1;
-        this.numericUpDown_bpm.Value = 120m;
+        this.numericUpDown_bpm.Value = 100m;
         // 
         // label_resolution
         // 

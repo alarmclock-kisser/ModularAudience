@@ -125,7 +125,7 @@
             this.numericUpDown_bpm.Size = new Size(90, 23);
             this.numericUpDown_bpm.TabIndex = 6;
             this.numericUpDown_bpm.TabStop = false;
-            this.numericUpDown_bpm.Value = new decimal(new int[] { 90, 0, 0, 0 });
+            this.numericUpDown_bpm.Value = new decimal(new int[] { 100, 0, 0, 0 });
             // 
             // domainUpDown_hits
             // 

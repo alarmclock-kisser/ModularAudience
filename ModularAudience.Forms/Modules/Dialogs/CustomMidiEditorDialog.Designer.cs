@@ -57,6 +57,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.button_generate = new Button();
             this.toolTip_editor = new ToolTip(this.components);
             this.timer_previewCaret = new System.Windows.Forms.Timer(this.components);
+            this.contextMenuStrip_playFromHere = new ContextMenuStrip(this.components);
+            this.toolStripMenuItem_playFromHere = new ToolStripMenuItem();
             this.contextMenuStrip_save = new ContextMenuStrip(this.components);
             this.toolStripMenuItem_saveMidi = new ToolStripMenuItem();
             this.tableLayoutPanel_root.SuspendLayout();
@@ -70,6 +72,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.flowLayoutPanel_left.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)this.numericUpDown_pitchFrequency).BeginInit();
             this.flowLayoutPanel_right.SuspendLayout();
+            this.contextMenuStrip_playFromHere.SuspendLayout();
             this.contextMenuStrip_save.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -185,7 +188,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_bpm.Name = "numericUpDown_bpm";
             this.numericUpDown_bpm.Size = new Size(70, 23);
             this.numericUpDown_bpm.TabIndex = 5;
-            this.numericUpDown_bpm.Value = new decimal(new int[] { 120, 0, 0, 0 });
+            this.numericUpDown_bpm.Value = new decimal(new int[] { 100, 0, 0, 0 });
             this.numericUpDown_bpm.ValueChanged += this.numericUpDown_bpm_ValueChanged;
             // 
             // label_minKey
@@ -388,13 +391,26 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             // toolTip_editor
             // 
-            this.toolTip_editor.SetToolTip(this.pictureBox_editor, "Left mouse button: Add notes; right mouse button: Delete notes\r\nShift + left-drag: Select a note/time range for Remix and Generate\r\nCtrl + drag: Pan; Ctrl + mouse wheel: Zoom\r\nCtrl+C/X: Copy/Cut selection; Ctrl+V: Paste ghost (hold for clipboard history)\r\nClick to place a ghost; Esc or right-click cancels");
-            // 
+            this.toolTip_editor.SetToolTip(this.pictureBox_editor, "Left mouse button: Add notes; right-click a note: Delete it; right-click empty space: Play from Here\r\nShift + left-drag: Select a note/time range for Remix and Generate\r\nCtrl + drag: Pan; Ctrl + mouse wheel: Zoom\r\nCtrl+C/X: Copy/Cut selection; Ctrl+V: Paste ghost (hold for clipboard history)\r\nClick to place a ghost; Esc or right-click cancels");
+            //
             // timer_previewCaret
-            // 
+            //
             this.timer_previewCaret.Interval = 30;
             this.timer_previewCaret.Tick += this.timer_previewCaret_Tick;
-            // 
+            //
+            // contextMenuStrip_playFromHere
+            //
+            this.contextMenuStrip_playFromHere.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_playFromHere });
+            this.contextMenuStrip_playFromHere.Name = "contextMenuStrip_playFromHere";
+            this.contextMenuStrip_playFromHere.Size = new Size(154, 26);
+            //
+            // toolStripMenuItem_playFromHere
+            //
+            this.toolStripMenuItem_playFromHere.Name = "toolStripMenuItem_playFromHere";
+            this.toolStripMenuItem_playFromHere.Size = new Size(153, 22);
+            this.toolStripMenuItem_playFromHere.Text = "Play from Here";
+            this.toolStripMenuItem_playFromHere.Click += this.toolStripMenuItem_playFromHere_Click;
+            //
             // contextMenuStrip_save
             // 
             this.contextMenuStrip_save.Items.AddRange(new ToolStripItem[] { this.toolStripMenuItem_saveMidi });
@@ -433,6 +449,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.flowLayoutPanel_left.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)this.numericUpDown_pitchFrequency).EndInit();
             this.flowLayoutPanel_right.ResumeLayout(false);
+            this.contextMenuStrip_playFromHere.ResumeLayout(false);
             this.contextMenuStrip_save.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
@@ -468,6 +485,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Button button_generate;
         private ToolTip toolTip_editor;
         private System.Windows.Forms.Timer timer_previewCaret;
+        private ContextMenuStrip contextMenuStrip_playFromHere;
+        private ToolStripMenuItem toolStripMenuItem_playFromHere;
         private ContextMenuStrip contextMenuStrip_save;
         private ToolStripMenuItem toolStripMenuItem_saveMidi;
     }

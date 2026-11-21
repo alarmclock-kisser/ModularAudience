@@ -383,8 +383,9 @@ Selecting an entry immediately loads its saved parameter values, then adapts
 
 1. `AudioObj.Bpm`
 2. `AudioObj.ScannedBpm`
-3. The selected preset's `TempoBpm`
-4. 120 BPM
+3. The selected preset's `TempoBpm`, or the current working BPM when opening
+   or resetting the dialog
+4. 100 BPM when none of those sources provides a usable tempo
 
 Each candidate must be finite and within the supported **20–400 BPM** range;
 missing/invalid values fall through rather than being clamped. Metadata is read
@@ -393,8 +394,8 @@ TrackView's editing clone retains `ScannedBpm` from its source AudioObj as well.
 Only the parameter controls are adapted: preset JSON, catalog values, track
 metadata, samples, undo/redo history, and Max threads are not modified by loading.
 Tempo remains manually editable after loading; it is not forced again during
-preview/apply or a dropdown refresh. Opening/resetting the dialog uses the same
-tempo fallback with the dialog defaults as the preset starting point.
+preview/apply or a dropdown refresh. When no track or focused work context
+provides a tempo, opening/resetting the dialog uses 100 BPM.
 
 **Save** creates a user preset or updates an existing user name case-insensitively;
 it never overwrites a default entry. Selecting a default clears the name field so

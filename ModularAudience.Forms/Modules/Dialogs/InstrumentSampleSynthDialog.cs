@@ -87,6 +87,10 @@ public sealed partial class InstrumentSampleSynthDialog : Form
                 throw new ArgumentOutOfRangeException(nameof(initialBpm), "The initial BPM must be between 10 and 400.");
             settings.Bpm = bpm;
         }
+        else if (initialSettings is null)
+        {
+            settings.Bpm = WorkingBpmResolver.GetWorkingBpm();
+        }
         this.InitializeSynthActionControls();
         KeyPreview = true;
         KeyDown += InstrumentSampleSynthDialog_KeyDown;

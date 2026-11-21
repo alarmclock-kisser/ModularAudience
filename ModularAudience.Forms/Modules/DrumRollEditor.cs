@@ -85,6 +85,11 @@ namespace ModularAudience.Forms.Modules
         {
             this.quantumService = quantumService;
             this.InitializeComponent();
+            AudioObj[] initialSamples = samples?.Where(sample => sample != null).ToArray() ?? [];
+            this.numericUpDown_bpm.Value = Math.Clamp(
+                (decimal)WorkingBpmResolver.GetWorkingBpm(initialSamples),
+                this.numericUpDown_bpm.Minimum,
+                this.numericUpDown_bpm.Maximum);
             this.KeyPreview = true;
             this.panel_pattern.Visible = false;
             this.button_hit.Visible = false;
@@ -95,10 +100,7 @@ namespace ModularAudience.Forms.Modules
             this.waveOut = null;
             this.mixer = null;
 
-            if (samples != null)
-            {
-                this.pendingInitialSamples.AddRange(samples.Where(sample => sample != null));
-            }
+            this.pendingInitialSamples.AddRange(initialSamples);
 
             this.StartPosition = FormStartPosition.Manual;
             this.Location = WindowsScreenHelper.GetCenterStartingPoint(null, WindowMain.CurrentScreenId);

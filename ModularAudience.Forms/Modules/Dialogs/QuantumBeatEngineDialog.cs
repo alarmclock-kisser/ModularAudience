@@ -61,6 +61,7 @@ public partial class QuantumBeatEngineDialog : Form
             this.tracksGrid.DataSource = this.trackRows;
             this.ApplyWorkspace(this.DefaultWorkspace());
             this.RestorePersistentState();
+            this.SetNumber("Bpm", WorkingBpmResolver.GetWorkingBpm(sources));
             this.InitializeEvents();
             this.InitializeHelpMenu(); // Kept separate so help follows the finished UI/workflow.
             this.loading = false;

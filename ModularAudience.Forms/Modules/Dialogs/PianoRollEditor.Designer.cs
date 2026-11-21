@@ -74,7 +74,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_bpm.Name = "numericUpDown_bpm";
             this.numericUpDown_bpm.Size = new Size(90, 23);
             this.numericUpDown_bpm.TabIndex = 3;
-            this.numericUpDown_bpm.Value = new decimal(new int[] { 120, 0, 0, 0 });
+            this.numericUpDown_bpm.Value = new decimal(new int[] { 100, 0, 0, 0 });
             this.numericUpDown_bpm.ValueChanged += this.numericUpDown_bpm_ValueChanged;
             // 
             // label_info_dragndrop

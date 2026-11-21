@@ -22,6 +22,7 @@ public partial class WindowMain
     internal static void FocusCollectionCommands(AudioCollectionView collection)
     {
         LastSelectedCollectionView = collection;
+        WorkingBpmResolver.RecordFocus(collection);
         CommandSelection.FocusCollectionView();
         RefreshCommandSelection();
     }
@@ -30,6 +31,7 @@ public partial class WindowMain
     {
         CommandSelection.FocusTrackView();
         LastSelectedTrackView = trackView;
+        WorkingBpmResolver.RecordFocus(trackView);
         // The same TrackView may have been focused before a collection was selected.
         // Its object reference has not changed, but the command target has.
         RefreshCommandSelection();

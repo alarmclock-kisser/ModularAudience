@@ -68,7 +68,7 @@
             this.numericUpDown_initialBpm.Name = "numericUpDown_initialBpm";
             this.numericUpDown_initialBpm.Size = new Size(70, 23);
             this.numericUpDown_initialBpm.TabIndex = 0;
-            this.numericUpDown_initialBpm.Value = new decimal(new int[] { 120, 0, 0, 0 });
+            this.numericUpDown_initialBpm.Value = new decimal(new int[] { 100, 0, 0, 0 });
             this.numericUpDown_initialBpm.ValueChanged += this.numericUpDown_initialBpm_ValueChanged;
             // 
             // label_info_initialBpm
@@ -99,7 +99,7 @@
             this.numericUpDown_targetBpm.Name = "numericUpDown_targetBpm";
             this.numericUpDown_targetBpm.Size = new Size(70, 23);
             this.numericUpDown_targetBpm.TabIndex = 2;
-            this.numericUpDown_targetBpm.Value = new decimal(new int[] { 150, 0, 0, 0 });
+            this.numericUpDown_targetBpm.Value = new decimal(new int[] { 100, 0, 0, 0 });
             this.numericUpDown_targetBpm.ValueChanged += this.numericUpDown_targetBpm_ValueChanged;
             // 
             // label_info_stretchFactor
