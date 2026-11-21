@@ -1,9 +1,7 @@
 using Android.Content;
 using Android.OS;
 using Android.Provider;
-using AndroidX.Core.Content;
 using Microsoft.Maui.ApplicationModel;
-using Microsoft.Maui.Storage;
 using ModularAudience.VocalSynth.Android.Services;
 
 namespace ModularAudience.VocalSynth.Android;
@@ -84,7 +82,7 @@ internal sealed class AndroidUpdatePage : ContentPage
             this.installButton.IsEnabled = true;
             this.closeButton.Text = "Close";
         }
-        catch (OperationCanceledException) when (this.cancellation.IsCancellationRequested)
+        catch (System.OperationCanceledException) when (this.cancellation.IsCancellationRequested)
         {
             this.statusLabel.Text = "Download cancelled.";
             this.closeButton.Text = "Close";
@@ -165,7 +163,7 @@ internal static class AndroidUpdateInstaller
     {
         Context context = global::Android.App.Application.Context;
         var intent = new Intent(Settings.ActionManageUnknownAppSources);
-        intent.SetData(Android.Net.Uri.Parse($"package:{context.PackageName}"));
+        intent.SetData(global::Android.Net.Uri.Parse($"package:{context.PackageName}"));
         (Platform.CurrentActivity ?? throw new InvalidOperationException("The Android activity is unavailable."))
             .StartActivity(intent);
     }
@@ -174,7 +172,7 @@ internal static class AndroidUpdateInstaller
     {
         Context context = global::Android.App.Application.Context;
         string authority = $"{context.PackageName}{FileProviderAuthoritySuffix}";
-        Android.Net.Uri apkUri = FileProvider.GetUriForFile(
+        global::Android.Net.Uri apkUri = AndroidX.Core.Content.FileProvider.GetUriForFile(
             context,
             authority,
             new Java.IO.File(apkPath));
