@@ -214,8 +214,9 @@ public sealed class CoOpSessionManager : IAsyncDisposable
 
                 this.state = CoOpSessionState.Hosting;
                 this.RaiseStateChanged();
-                this.RaiseLog($"Co-op hosting started on {this.sessionAddress}:{this.sessionPort}.");
-                return new CoOpHostInfo(this.sessionAddress, this.sessionPort, this.localPeerId);
+                string hostAddress = this.sessionAddress ?? "No local IPv4 address detected";
+                this.RaiseLog($"Co-op hosting started on {hostAddress}:{this.sessionPort}.");
+                return new CoOpHostInfo(hostAddress, this.sessionPort, this.localPeerId);
             }
             catch
             {

@@ -11,6 +11,12 @@ public static class CoOpSecurity
 {
     public const int PasswordKeyIterations = 180_000;
 
+    private static X509KeyStorageFlags HostCertificateKeyStorageFlags =>
+        X509KeyStorageFlags.Exportable |
+        (OperatingSystem.IsWindows()
+            ? X509KeyStorageFlags.UserKeySet
+            : X509KeyStorageFlags.EphemeralKeySet);
+
     public static X509Certificate2 LoadOrCreateHostCertificate(string certificatePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(certificatePath);
@@ -21,7 +27,7 @@ public static class CoOpSecurity
             return X509CertificateLoader.LoadPkcs12FromFile(
                 fullPath,
                 null,
-                X509KeyStorageFlags.Exportable | X509KeyStorageFlags.EphemeralKeySet);
+                HostCertificateKeyStorageFlags);
         }
 
         using RSA rsa = RSA.Create(2048);
@@ -46,7 +52,7 @@ public static class CoOpSecurity
         return X509CertificateLoader.LoadPkcs12FromFile(
             fullPath,
             null,
-            X509KeyStorageFlags.Exportable | X509KeyStorageFlags.EphemeralKeySet);
+            HostCertificateKeyStorageFlags);
     }
 
     public static string GetCertificateFingerprint(X509Certificate certificate)

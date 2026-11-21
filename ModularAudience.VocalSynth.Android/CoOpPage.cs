@@ -227,7 +227,7 @@ public sealed class CoOpPage : ContentPage
                 : password;
             await this.DisplayAlertAsync(
                 "Co-op hosting started",
-                $"Address: {this.session.Address}:{this.session.Port}\n\nSession password: {passwordSummary}\n\nHost certificate SHA-256 fingerprint:\n{this.session.HostCertificateFingerprint}",
+                $"Address: {this.session.Address ?? "Not detected"}:{this.session.Port}\n\nSession password: {passwordSummary}\n\nHost certificate SHA-256 fingerprint:\n{this.session.HostCertificateFingerprint}",
                 "OK");
         });
     }

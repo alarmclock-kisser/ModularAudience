@@ -116,7 +116,9 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
             this.StatusChanged?.Invoke($"Hosting is active, but LAN discovery failed: {ex.Message}");
         }
 
-        this.SetState($"Hosting on {this.Address}:{this.Port}");
+        this.SetState(this.Address == null
+            ? $"Hosting on a local network (no IPv4 address detected), port {this.Port}"
+            : $"Hosting on {this.Address}:{this.Port}");
     }
 
     internal async Task ConnectAsync(string host, int port, CancellationToken cancellationToken = default)
@@ -536,6 +538,13 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
 
         foreach (CoOpIncomingBatch collection in collections)
         {
+            foreach (CoOpAudioSnapshot audio in collection.Audios)
+            {
+                await source.SendAsync(new AudioChangeAcknowledgedMessage(
+                    collection.CollectionId,
+                    audio.AudioId,
+                    audio.Revision));
+            }
             await this.ForwardCollectionAsync(collection, source);
         }
         this.StatusChanged?.Invoke($"Received {collections.Sum(collection => collection.Audios.Count)} sample(s) from {collections.Count} collection(s).");

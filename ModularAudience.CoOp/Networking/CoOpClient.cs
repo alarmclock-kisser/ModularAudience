@@ -66,7 +66,7 @@ public static class CoOpClient
                 catch (Exception ex) when (ex is AuthenticationException or IOException)
                 {
                     throw new AuthenticationException(
-                        $"The TLS handshake with {host}:{port} failed. Verify the co-op port, update both applications, and allow ModularAudience through the host firewall. Details: {ex.Message}",
+                        $"The TLS handshake with {host}:{port} failed. Verify that the host uses a compatible build and check its co-op log for the server-side TLS error. Details: {ex.Message}",
                         ex);
                 }
                 if (fingerprint == null)

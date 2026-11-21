@@ -26,9 +26,20 @@ public static class CoOpNetworkUtilities
     internal static IReadOnlyList<CoOpLocalIPv4Network> GetLocalIPv4Networks()
     {
         var networks = new List<CoOpLocalIPv4Network>();
+        NetworkInterface[] interfaces;
         try
         {
-            foreach (NetworkInterface networkInterface in NetworkInterface.GetAllNetworkInterfaces())
+            interfaces = NetworkInterface.GetAllNetworkInterfaces();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"Co-op network interfaces could not be enumerated: {ex.Message}");
+            return networks;
+        }
+
+        foreach (NetworkInterface networkInterface in interfaces)
+        {
+            try
             {
                 if (networkInterface.OperationalStatus != OperationalStatus.Up ||
                     networkInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback)
@@ -52,10 +63,11 @@ public static class CoOpNetworkUtilities
                     }
                 }
             }
-        }
-        catch
-        {
-            // Network information is best effort. The loopback fallback below keeps hosting usable.
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Co-op skipped network interface '{networkInterface.Name}': {ex.Message}");
+            }
         }
 
         return networks;
@@ -71,9 +83,9 @@ public static class CoOpNetworkUtilities
             .ToList();
     }
 
-    public static string GetPreferredLocalAddress()
+    public static string? GetPreferredLocalAddress()
     {
-        return GetLocalIPv4Addresses().FirstOrDefault()?.ToString() ?? IPAddress.Loopback.ToString();
+        return GetLocalIPv4Addresses().FirstOrDefault()?.ToString();
     }
 
     public static bool IsLocalNetworkAddress(IPAddress address)

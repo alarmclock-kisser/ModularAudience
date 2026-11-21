@@ -25,6 +25,20 @@ public sealed class CoOpSessionTests
     }
 
     [TestMethod]
+    public async Task Client_CompletesTlsHandshakeWithHostCertificate()
+    {
+        await using var scope = new SessionTestScope();
+        CoOpSessionManager host = scope.CreateManager("Host");
+        CoOpSessionManager client = scope.CreateManager("Client");
+        CoOpHostInfo hostInfo = await host.StartHostingAsync();
+
+        await client.ConnectAsync("127.0.0.1", hostInfo.Port);
+
+        Assert.AreEqual(CoOpSessionState.Connected, client.State);
+        Assert.AreEqual(1, host.ConnectedPeerCount);
+    }
+
+    [TestMethod]
     public async Task PasswordlessHost_AcceptsClientAfterLocalOnlyConfirmation()
     {
         await using var scope = new SessionTestScope();

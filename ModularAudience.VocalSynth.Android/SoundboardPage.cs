@@ -192,6 +192,9 @@ public sealed class SoundboardPage : ContentPage
             {
                 await onTap();
             }
+            catch (OperationCanceledException)
+            {
+            }
             catch (Exception ex)
             {
                 await this.DisplayAlertAsync("Playback failed", ex.ToString(), "OK");
@@ -308,9 +311,9 @@ public sealed class SoundboardPage : ContentPage
         this.heldPlaybackCancellation?.Cancel();
         this.heldPlaybackCancellation?.Dispose();
         this.heldPlaybackCancellation = cancellation;
-        VocalAudioData audio = await this.store.ReadAudioAsync(item, cancellation.Token);
         try
         {
+            VocalAudioData audio = await this.store.ReadAudioAsync(item, cancellation.Token);
             while (!cancellation.IsCancellationRequested)
                 await this.player.PlayAsync(audio, cancellation.Token);
         }
