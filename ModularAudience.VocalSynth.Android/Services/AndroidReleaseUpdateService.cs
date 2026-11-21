@@ -95,47 +95,91 @@ internal sealed class AndroidReleaseUpdateService
 
         try
         {
-            using HttpResponseMessage response = await HttpClient.GetAsync(
-                update.DownloadUri,
+            using var probeRequest = new HttpRequestMessage(HttpMethod.Get, update.DownloadUri);
+            probeRequest.Headers.Range = new RangeHeaderValue(0, 0);
+            using HttpResponseMessage probe = await HttpClient.SendAsync(
+                probeRequest,
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
-            response.EnsureSuccessStatusCode();
-            await using Stream input = await response.Content.ReadAsStreamAsync(cancellationToken);
-            await using var output = new FileStream(
+            probe.EnsureSuccessStatusCode();
+
+            long totalBytes = probe.Content.Headers.ContentRange?.Length
+                ?? probe.Content.Headers.ContentLength
+                ?? update.FileSize;
+            long downloadedBytes = 0;
+            var progressLock = new object();
+            Stopwatch timer = Stopwatch.StartNew();
+            void ReportRead(int count)
+            {
+                lock (progressLock)
+                {
+                    downloadedBytes += count;
+                    double bytesPerSecond = downloadedBytes / Math.Max(timer.Elapsed.TotalSeconds, 0.001);
+                    TimeSpan? remaining = totalBytes > downloadedBytes && bytesPerSecond > 0
+                        ? TimeSpan.FromSeconds((totalBytes - downloadedBytes) / bytesPerSecond)
+                        : null;
+                    progress?.Report(new AndroidUpdateProgress(
+                        downloadedBytes,
+                        totalBytes,
+                        timer.Elapsed,
+                        bytesPerSecond,
+                        remaining));
+                }
+            }
+
+            bool supportsRanges = probe.StatusCode == System.Net.HttpStatusCode.PartialContent
+                && probe.Content.Headers.ContentRange is
+                {
+                    From: 0,
+                    To: 0,
+                    Length: > 1,
+                };
+            if (probe.StatusCode == System.Net.HttpStatusCode.PartialContent && !supportsRanges)
+                throw new InvalidDataException("The update server returned an invalid byte range.");
+
+            totalBytes = supportsRanges
+                ? probe.Content.Headers.ContentRange!.Length!.Value
+                : probe.Content.Headers.ContentLength ?? update.FileSize;
+            if (supportsRanges)
+            {
+                await using Stream probeStream = await probe.Content.ReadAsStreamAsync(cancellationToken);
+                byte[] probeByte = new byte[1];
+                if (await probeStream.ReadAsync(probeByte, cancellationToken) != 1 ||
+                    await probeStream.ReadAsync(probeByte, cancellationToken) != 0)
+                {
+                    throw new InvalidDataException("The update server returned an invalid byte-range probe.");
+                }
+            }
+
+            await using (var output = new FileStream(
                 destination,
                 FileMode.CreateNew,
                 FileAccess.Write,
                 FileShare.None,
-                64 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-
-            long totalBytes = response.Content.Headers.ContentLength ?? update.FileSize;
-            long downloadedBytes = 0;
-            byte[] buffer = new byte[64 * 1024];
-            Stopwatch timer = Stopwatch.StartNew();
-            while (true)
+                256 * 1024,
+                FileOptions.Asynchronous | (supportsRanges ? FileOptions.RandomAccess : FileOptions.SequentialScan)))
             {
-                int count = await input.ReadAsync(buffer, cancellationToken);
-                if (count == 0)
-                    break;
+                if (supportsRanges)
+                {
+                    output.SetLength(totalBytes);
+                    await DownloadRangesAsync(
+                        update.DownloadUri,
+                        output,
+                        totalBytes,
+                        ReportRead,
+                        cancellationToken);
+                }
+                else
+                {
+                    await using Stream input = await probe.Content.ReadAsStreamAsync(cancellationToken);
+                    await CopyToFileAsync(input, output, ReportRead, cancellationToken);
+                }
 
-                await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
-                downloadedBytes += count;
-                double bytesPerSecond = downloadedBytes / Math.Max(timer.Elapsed.TotalSeconds, 0.001);
-                TimeSpan? remaining = totalBytes > downloadedBytes && bytesPerSecond > 0
-                    ? TimeSpan.FromSeconds((totalBytes - downloadedBytes) / bytesPerSecond)
-                    : null;
-                progress?.Report(new AndroidUpdateProgress(
-                    downloadedBytes,
-                    totalBytes,
-                    timer.Elapsed,
-                    bytesPerSecond,
-                    remaining));
+                await output.FlushAsync(cancellationToken);
+                long actualBytes = downloadedBytes;
+                if (totalBytes > 0 && actualBytes != totalBytes)
+                    throw new IOException($"The update download was incomplete ({actualBytes} of {totalBytes} bytes).");
             }
-
-            await output.FlushAsync(cancellationToken);
-            if (totalBytes > 0 && downloadedBytes != totalBytes)
-                throw new IOException($"The update download was incomplete ({downloadedBytes} of {totalBytes} bytes).");
 
             await VerifyDigestAsync(destination, update.Sha256, cancellationToken);
             return destination;
@@ -145,6 +189,110 @@ internal sealed class AndroidReleaseUpdateService
             if (File.Exists(destination))
                 File.Delete(destination);
             throw;
+        }
+    }
+
+    private static async Task DownloadRangesAsync(
+        Uri downloadUri,
+        FileStream output,
+        long totalBytes,
+        Action<int> reportRead,
+        CancellationToken cancellationToken)
+    {
+        const int maxConcurrentRanges = 4;
+        int rangeCount = (int)Math.Min(maxConcurrentRanges, totalBytes);
+        long baseRangeLength = totalBytes / rangeCount;
+        long extraBytes = totalBytes % rangeCount;
+        var downloads = new Task[rangeCount];
+        long rangeStart = 0;
+        for (int index = 0; index < rangeCount; index++)
+        {
+            long rangeLength = baseRangeLength + (index < extraBytes ? 1 : 0);
+            long rangeEnd = rangeStart + rangeLength - 1;
+            downloads[index] = DownloadRangeAsync(
+                downloadUri,
+                output,
+                rangeStart,
+                rangeEnd,
+                totalBytes,
+                reportRead,
+                cancellationToken);
+            rangeStart = rangeEnd + 1;
+        }
+
+        await Task.WhenAll(downloads);
+    }
+
+    private static async Task DownloadRangeAsync(
+        Uri downloadUri,
+        FileStream output,
+        long rangeStart,
+        long rangeEnd,
+        long totalBytes,
+        Action<int> reportRead,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, downloadUri);
+        request.Headers.Range = new RangeHeaderValue(rangeStart, rangeEnd);
+        using HttpResponseMessage response = await HttpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        long expectedLength = rangeEnd - rangeStart + 1;
+        if (response.StatusCode != System.Net.HttpStatusCode.PartialContent ||
+            response.Content.Headers.ContentRange is not
+            {
+                From: long from,
+                To: long to,
+                Length: long length,
+            } ||
+            from != rangeStart ||
+            to != rangeEnd ||
+            length != totalBytes ||
+            response.Content.Headers.ContentLength is long contentLength && contentLength != expectedLength)
+        {
+            throw new InvalidDataException("The update server returned an invalid byte range.");
+        }
+
+        await using Stream input = await response.Content.ReadAsStreamAsync(cancellationToken);
+        byte[] buffer = new byte[256 * 1024];
+        long offset = rangeStart;
+        long remaining = expectedLength;
+        while (remaining > 0)
+        {
+            int count = await input.ReadAsync(
+                buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)),
+                cancellationToken);
+            if (count == 0)
+                throw new IOException("The update download ended before the requested byte range was complete.");
+
+            await RandomAccess.WriteAsync(output.SafeFileHandle, buffer.AsMemory(0, count), offset, cancellationToken);
+            offset += count;
+            remaining -= count;
+            reportRead(count);
+        }
+
+        if (await input.ReadAsync(buffer.AsMemory(0, 1), cancellationToken) != 0)
+            throw new InvalidDataException("The update server sent more data than requested.");
+    }
+
+    private static async Task CopyToFileAsync(
+        Stream input,
+        FileStream output,
+        Action<int> reportRead,
+        CancellationToken cancellationToken)
+    {
+        byte[] buffer = new byte[256 * 1024];
+        while (true)
+        {
+            int count = await input.ReadAsync(buffer, cancellationToken);
+            if (count == 0)
+                return;
+
+            await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
+            reportRead(count);
         }
     }
 
