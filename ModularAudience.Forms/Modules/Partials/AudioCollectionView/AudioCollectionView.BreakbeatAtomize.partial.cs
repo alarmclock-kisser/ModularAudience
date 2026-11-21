@@ -376,6 +376,11 @@ namespace ModularAudience.Forms
 
         private void menuToolStripItem_addIndexToNames_CheckedChanged(object sender, EventArgs e)
         {
+            if (this.synchronizingAddIndexToNamesCheck)
+            {
+                return;
+            }
+
             this.AudioC.ToggleAddIndexToNames(this.menuToolStripItem_addIndexToNames.Checked);
             this.listBox_audios.Refresh();
         }

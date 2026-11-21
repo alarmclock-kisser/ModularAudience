@@ -21,6 +21,7 @@ namespace ModularAudience.Forms
         private static bool? sharedAutoPlayState;
         private static bool? sharedPreviewState;
         private static bool synchronizingSharedCheckboxes;
+        private bool synchronizingAddIndexToNamesCheck;
 
         internal readonly AudioCollection AudioC;
         private readonly bool ownsAudioCollection;
@@ -1134,7 +1135,8 @@ namespace ModularAudience.Forms
                 this.breakbeatBpm = (float)WorkingBpmResolver.GetWorkingBpm(this.SelectedAudios);
             }
 
-            int selectedCount = this.GetContextAudios().Count;
+            List<AudioObj> contextAudios = this.GetContextAudios();
+            int selectedCount = contextAudios.Count;
             bool hasAny = selectedCount > 0;
             bool hasSingle = selectedCount == 1;
 
@@ -1153,7 +1155,8 @@ namespace ModularAudience.Forms
             this.menuToolStripItem_atomizeRun.Enabled = hasSingle;
             this.menuToolStripItem_delete.Enabled = hasAny;
             this.menuToolStripItem_toNewCollection.Enabled = hasAny;
-            this.menuToolStripItem_addIndexToNames.Checked = this.AudioC.AddIndexToNames;
+            this.menuToolStripItem_addIndexToNames.Enabled = hasAny;
+            this.SetAddIndexToNamesMenuCheck(AreAllAudioNamesIndexed(contextAudios));
             this.menuToolStripItem_aggregateMixSelected.Enabled = selectedCount > 1;
             this.menuToolStripItem_timeStretchSelected.Enabled = hasAny;
             this.sampleModellerItem.Enabled = hasSingle;
@@ -1221,6 +1224,65 @@ namespace ModularAudience.Forms
         internal List<AudioObj> GetContextAudios()
         {
             return WindowMain.SelectedTracks.DistinctBy(audio => audio.Id).ToList();
+        }
+
+        internal static bool AreAllAudioNamesIndexed(IEnumerable<AudioObj> audios)
+        {
+            ArgumentNullException.ThrowIfNull(audios);
+            bool foundAudio = false;
+            foreach (AudioObj audio in audios)
+            {
+                if (!HasLeadingNumericIndex(audio.Name))
+                {
+                    return false;
+                }
+
+                foundAudio = true;
+            }
+
+            return foundAudio;
+        }
+
+        private void SetAddIndexToNamesMenuCheck(bool isChecked)
+        {
+            if (this.menuToolStripItem_addIndexToNames.Checked == isChecked)
+            {
+                return;
+            }
+
+            this.synchronizingAddIndexToNamesCheck = true;
+            try
+            {
+                this.menuToolStripItem_addIndexToNames.Checked = isChecked;
+            }
+            finally
+            {
+                this.synchronizingAddIndexToNamesCheck = false;
+            }
+        }
+
+        private static bool HasLeadingNumericIndex(string? name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return false;
+            }
+
+            int separatorIndex = name.IndexOf(" - ", StringComparison.Ordinal);
+            if (separatorIndex <= 0)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < separatorIndex; index++)
+            {
+                if (name[index] is < '0' or > '9')
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private AudioObj? GetSingleContextAudio()

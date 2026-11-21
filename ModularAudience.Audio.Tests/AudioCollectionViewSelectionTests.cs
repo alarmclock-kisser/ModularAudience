@@ -65,6 +65,43 @@ namespace ModularAudience.Audio.Tests
             }
         }
 
+        [STATestMethod]
+        public void AddIndexMenuReflectsSelectedNamesWithoutRenamingOnOpen_AndUncheckRemovesPrefixes()
+        {
+            AudioObj[] audios = CreateAudios(out AudioTestScope scope);
+            audios[0].Rename("00 - First");
+            audios[1].Rename("01 - Second");
+            audios[2].Rename("02 - Third");
+
+            using (scope)
+            using (AudioCollectionView collection = new(audios, "Index name regression"))
+            {
+                try
+                {
+                    SelectAllAndSettle(GetListBox(collection));
+
+                    collection.UpdateContextMenuState();
+                    ToolStripMenuItem addIndex = GetAddIndexMenuItem(collection);
+
+                    Assert.IsTrue(addIndex.Checked);
+                    Assert.IsFalse(collection.AudioC.AddIndexToNames);
+                    CollectionAssert.AreEqual(
+                        new[] { "00 - First", "01 - Second", "02 - Third" },
+                        audios.Select(audio => audio.Name).ToArray());
+
+                    addIndex.Checked = false;
+
+                    CollectionAssert.AreEqual(
+                        new[] { "First", "Second", "Third" },
+                        audios.Select(audio => audio.Name).ToArray());
+                }
+                finally
+                {
+                    collection.Close();
+                }
+            }
+        }
+
         private static AudioObj[] CreateAudios(out AudioTestScope scope)
         {
             scope = new AudioTestScope();
@@ -104,6 +141,9 @@ namespace ModularAudience.Audio.Tests
 
         private static ListBox GetListBox(AudioCollectionView collection)
             => (ListBox)typeof(AudioCollectionView).GetField("listBox_audios", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(collection)!;
+
+        private static ToolStripMenuItem GetAddIndexMenuItem(AudioCollectionView collection)
+            => (ToolStripMenuItem)typeof(AudioCollectionView).GetField("menuToolStripItem_addIndexToNames", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(collection)!;
 
         private static void InvokeMouseHandler(AudioCollectionView collection, string name, ListBox list, MouseEventArgs args)
             => typeof(AudioCollectionView).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(collection, [list, args]);

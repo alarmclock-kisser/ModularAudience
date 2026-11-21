@@ -469,19 +469,57 @@ namespace ModularAudience.Audio
                 for (int index = 0; index < this.Audios.Count; index++)
                 {
                     AudioObj audio = this.Audios[index];
-                    audio.Name = $"{index.ToString(format)} - {audio.OriginalName}";
+                    string originalName = audio.OriginalName;
+                    if (TryRemoveIndexPrefix(originalName, out string unindexedOriginalName))
+                    {
+                        originalName = unindexedOriginalName;
+                        audio.OriginalName = originalName;
+                    }
+
+                    audio.Name = $"{index.ToString(format)} - {originalName}";
                 }
             }
             else if (!this.AddIndexToNames)
             {
-                foreach (var audio in this.Audios)
+                foreach (AudioObj audio in this.Audios)
                 {
-                    if (!string.Equals(audio.Name, audio.OriginalName, StringComparison.Ordinal))
+                    if (TryRemoveIndexPrefix(audio.Name, out string unindexedName)
+                        || TryRemoveIndexPrefix(audio.OriginalName, out unindexedName))
+                    {
+                        audio.Rename(unindexedName);
+                    }
+                    else if (!string.Equals(audio.Name, audio.OriginalName, StringComparison.Ordinal))
                     {
                         audio.Name = audio.OriginalName;
                     }
                 }
             }
+        }
+
+        private static bool TryRemoveIndexPrefix(string? name, out string unindexedName)
+        {
+            unindexedName = string.Empty;
+            if (string.IsNullOrEmpty(name))
+            {
+                return false;
+            }
+
+            int separatorIndex = name.IndexOf(" - ", StringComparison.Ordinal);
+            if (separatorIndex <= 0)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < separatorIndex; index++)
+            {
+                if (name[index] is < '0' or > '9')
+                {
+                    return false;
+                }
+            }
+
+            unindexedName = name[(separatorIndex + 3)..];
+            return true;
         }
     }
 
