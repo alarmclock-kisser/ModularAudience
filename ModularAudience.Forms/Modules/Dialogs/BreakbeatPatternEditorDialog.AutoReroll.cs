@@ -557,6 +557,7 @@ public partial class BreakbeatPatternEditorDialog
         string[] labels = this.rowLabels.ToArray();
         int bars = this.bars, resolution = this.currentResolution;
         float bpm = (float)this.Bpm, swing = this.swing;
+        int attackMilliseconds = this.AttackMilliseconds;
         long variation = ++this.autoVariation;
         Task previous = this.autoSaveWork;
         this.autoSaveWork = SaveAsync();
@@ -580,7 +581,8 @@ public partial class BreakbeatPatternEditorDialog
         {
             bool isEnsemble = soloRow == null;
             AudioObj? rendered = await BreakbeatPatternInstrumentRenderer.RenderAsync(renderNotes, samples, instruments,
-                settings, bars, bpm, resolution, swing, name, CancellationToken.None, this.instrumentSampleCache);
+                settings, bars, bpm, resolution, swing, name, CancellationToken.None, this.instrumentSampleCache,
+                attackMilliseconds: attackMilliseconds);
             if (rendered == null) return;
             try
             {

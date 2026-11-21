@@ -931,6 +931,33 @@ namespace ModularAudience.Generators
             return highestSampleRate > 0 ? highestSampleRate : 44100;
         }
 
+        private static void ApplyAttackEnvelope(float[] data, int channels, int sampleRate, int attackMilliseconds)
+        {
+            if (attackMilliseconds <= 0 || data.Length == 0)
+            {
+                return;
+            }
+
+            int frameCount = data.Length / channels;
+            if (frameCount == 0)
+            {
+                return;
+            }
+
+            int attackFrames = Math.Min(
+                frameCount,
+                Math.Max(1, (int)Math.Round(sampleRate * attackMilliseconds / 1000d)));
+            for (int frame = 0; frame < attackFrames; frame++)
+            {
+                float gain = frame / (float)attackFrames;
+                int sampleIndex = frame * channels;
+                for (int channel = 0; channel < channels; channel++)
+                {
+                    data[sampleIndex + channel] *= gain;
+                }
+            }
+        }
+
         public static Task<AudioObj> RenderPatternNotesAsync(
             IReadOnlyList<BreakbeatPatternNote> notes,
             IReadOnlyList<AudioObj> samples,
@@ -941,20 +968,27 @@ namespace ModularAudience.Generators
             string? patternName = null,
             CancellationToken cancellationToken = default,
             IReadOnlyList<BreakbeatTrackSettings>? trackSettings = null,
-            PatternRenderCache? renderCache = null)
+            PatternRenderCache? renderCache = null,
+            int attackMilliseconds = 0)
         {
+            if (attackMilliseconds is < 0 or > 100)
+            {
+                throw new ArgumentOutOfRangeException(nameof(attackMilliseconds), "Attack must be between 0 and 100 milliseconds.");
+            }
+
             // Snapshot mutable editor lists before dispatching CPU work off the UI thread.
             var noteSnapshot = notes.ToArray();
             var sampleSnapshot = samples.ToArray();
             var settingsSnapshot = trackSettings?.ToArray();
             return Task.Run(() => RenderPatternNotesCoreAsync(noteSnapshot, sampleSnapshot, bars, bpm,
-                resolution, swing, patternName, cancellationToken, settingsSnapshot, renderCache), cancellationToken);
+                resolution, swing, patternName, cancellationToken, settingsSnapshot, renderCache, attackMilliseconds), cancellationToken);
         }
 
         private static async Task<AudioObj> RenderPatternNotesCoreAsync(
             IReadOnlyList<BreakbeatPatternNote> notes, IReadOnlyList<AudioObj> samples,
             int bars, float bpm, int resolution, float swing, string? patternName,
-            CancellationToken cancellationToken, IReadOnlyList<BreakbeatTrackSettings>? trackSettings, PatternRenderCache? renderCache)
+            CancellationToken cancellationToken, IReadOnlyList<BreakbeatTrackSettings>? trackSettings, PatternRenderCache? renderCache,
+            int attackMilliseconds)
         {
             if (notes.Count == 0 || samples.Count == 0)
             {
@@ -1020,6 +1054,7 @@ namespace ModularAudience.Generators
                         {
                             Sample = sampleHashes[note.TrackIndex], Note = note with { TrackIndex = 0 }, Bpm = bpm, Resolution = resolution,
                             OutputSampleRate = outputSampleRate,
+                            AttackMilliseconds = attackMilliseconds,
                             NormalizedDuration = GetNormalizedSampleDurationSeconds(samples, note.TrackIndex),
                             Pitch = trackSettings != null && note.TrackIndex < trackSettings.Count ? trackSettings[note.TrackIndex].DefaultPitchSemitones : 0f
                         });
@@ -1163,6 +1198,7 @@ namespace ModularAudience.Generators
                     }
                 }
 
+                ApplyAttackEnvelope(clipData, sourceChannels, outputSampleRate, attackMilliseconds);
                 return (clipData, sourceChannels);
             }
 

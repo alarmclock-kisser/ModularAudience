@@ -140,6 +140,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         public decimal Bpm => this.numericUpDown_bpm.Value;
 
+        public int AttackMilliseconds => (int)this.numericUpDown_attack.Value;
+
         public int Resolution => this.currentResolution;
 
         public int Bars => this.bars;
@@ -4612,7 +4614,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 "BreakbeatPreview",
                 cancellationToken,
                 this.instrumentSampleCache,
-                this.noteRenderCache);
+                this.noteRenderCache,
+                attackMilliseconds: this.AttackMilliseconds);
 
             if (renderedPattern is null)
             {
@@ -5249,7 +5252,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     "BreakbeatNotePreview",
                     cancellationTokenSource.Token,
                     this.instrumentSampleCache,
-                    this.noteRenderCache);
+                    this.noteRenderCache,
+                    attackMilliseconds: this.AttackMilliseconds);
 
                 if (notePreviewAudio is null
                     || cancellationTokenSource.IsCancellationRequested
@@ -5363,6 +5367,20 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 if (this.hearCancellationTokenSource is not null)
                 {
                     this.patternNotesRevision++; // Force re-render on next loop iteration
+                }
+            }
+
+            private void numericUpDown_attack_ValueChanged(object? sender, EventArgs e)
+            {
+                if (this.initializing || this.restoringHistory)
+                {
+                    return;
+                }
+
+                this.notePreviewCancellationTokenSource?.Cancel();
+                if (this.hearCancellationTokenSource is not null)
+                {
+                    this.patternNotesRevision++;
                 }
             }
 
@@ -5581,7 +5599,8 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                 "BreakbeatEdited",
                 CancellationToken.None,
                 this.instrumentSampleCache,
-                this.noteRenderCache);
+                this.noteRenderCache,
+                attackMilliseconds: this.AttackMilliseconds);
             if (rendered == null) return;
             try
             {

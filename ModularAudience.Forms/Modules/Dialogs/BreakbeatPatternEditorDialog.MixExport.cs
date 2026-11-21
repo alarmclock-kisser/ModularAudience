@@ -41,7 +41,8 @@ public partial class BreakbeatPatternEditorDialog
                     "Pattern Editor Track",
                     cancellationToken,
                     this.instrumentSampleCache,
-                    this.noteRenderCache);
+                    this.noteRenderCache,
+                    attackMilliseconds: this.AttackMilliseconds);
                 if (rendered is null)
                 {
                     continue;

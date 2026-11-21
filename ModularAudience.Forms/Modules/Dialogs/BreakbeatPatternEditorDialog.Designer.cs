@@ -49,6 +49,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             button_addBar = new Button();
             checkBox_preHear = new CheckBox();
             button_hear = new Button();
+            numericUpDown_attack = new NumericUpDown();
+            label_attack = new Label();
             numericUpDown_bpm = new BreakbeatTempoNumericUpDown();
             label_bpm = new Label();
             numericUpDown_resolution = new NumericUpDown();
@@ -63,6 +65,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             ((System.ComponentModel.ISupportInitialize)pictureBox_pattern).BeginInit();
             panel_pattern.SuspendLayout();
             panel_controls.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_attack).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_bpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_resolution).BeginInit();
             SuspendLayout();
@@ -162,6 +165,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Controls.Add(button_addBar);
             panel_controls.Controls.Add(checkBox_preHear);
             panel_controls.Controls.Add(button_hear);
+            panel_controls.Controls.Add(numericUpDown_attack);
+            panel_controls.Controls.Add(label_attack);
             panel_controls.Controls.Add(numericUpDown_bpm);
             panel_controls.Controls.Add(label_bpm);
             panel_controls.Controls.Add(numericUpDown_resolution);
@@ -377,7 +382,29 @@ namespace ModularAudience.Forms.Modules.Dialogs
             button_hear.Text = "Hear";
             button_hear.UseVisualStyleBackColor = true;
             button_hear.Click += button_hear_Click;
+            //
+            // numericUpDown_attack
+            //
+            numericUpDown_attack.Increment = new decimal(new int[] { 1, 0, 0, 0 });
+            numericUpDown_attack.Location = new Point(52, 16);
+            numericUpDown_attack.Maximum = new decimal(new int[] { 100, 0, 0, 0 });
+            numericUpDown_attack.Minimum = new decimal(new int[] { 0, 0, 0, 0 });
+            numericUpDown_attack.Name = "numericUpDown_attack";
+            numericUpDown_attack.Size = new Size(72, 23);
+            numericUpDown_attack.TabIndex = 0;
+            numericUpDown_attack.Value = new decimal(new int[] { 5, 0, 0, 0 });
+            numericUpDown_attack.ValueChanged += numericUpDown_attack_ValueChanged;
+            toolTip_pattern.SetToolTip(numericUpDown_attack, "Linear fade-in applied at the start of every rendered note.");
+            //
+            // label_attack
             // 
+            label_attack.AutoSize = true;
+            label_attack.Location = new Point(52, 1);
+            label_attack.Name = "label_attack";
+            label_attack.Size = new Size(64, 15);
+            label_attack.TabIndex = 0;
+            label_attack.Text = "Attack (ms)";
+            //
             // numericUpDown_bpm
             // 
             numericUpDown_bpm.DecimalPlaces = 1;
@@ -390,7 +417,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             numericUpDown_bpm.TabIndex = 1;
             numericUpDown_bpm.Value = new decimal(new int[] { 100, 0, 0, 0 });
             numericUpDown_bpm.ValueChanged += numericUpDown_bpm_ValueChanged;
-            // 
+            //
             // label_bpm
             // 
             label_bpm.AutoSize = true;
@@ -455,6 +482,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_pattern.ResumeLayout(false);
             panel_controls.ResumeLayout(false);
             panel_controls.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)numericUpDown_attack).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_bpm).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDown_resolution).EndInit();
             ResumeLayout(false);
@@ -464,6 +492,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Panel panel_pattern;
         private HScrollBar hScrollBar_pattern;
         private Panel panel_controls;
+        private Label label_attack;
+        private NumericUpDown numericUpDown_attack;
         private Label label_bpm;
         private BreakbeatTempoNumericUpDown numericUpDown_bpm;
         private Label label_resolution;

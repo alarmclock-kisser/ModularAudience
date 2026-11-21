@@ -159,6 +159,46 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public async Task RenderPatternNotesAsync_AppliesAttackToEveryNoteAndSeparatesCacheEntries()
+        {
+            const int sampleRate = 48000;
+            float[] sampleData = new float[sampleRate / 4];
+            Array.Fill(sampleData, 0.5f);
+            using AudioObj sample = new()
+            {
+                Data = sampleData,
+                SampleRate = sampleRate,
+                Channels = 1,
+                Duration = TimeSpan.FromSeconds(0.25),
+                Length = sampleData.Length
+            };
+            int quarterTicks = BreakbeatGenerator_V2.PatternTicksPerBar / 4;
+            BreakbeatPatternNote[] notes =
+            [
+                new(0, 0, quarterTicks),
+                new(0, quarterTicks, quarterTicks)
+            ];
+            using PatternRenderCache cache = new();
+
+            using AudioObj noAttack = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                notes, [sample], bars: 1, bpm: 60, resolution: 4, swing: 0,
+                renderCache: cache, attackMilliseconds: 0);
+            using AudioObj withAttack = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                notes, [sample], bars: 1, bpm: 60, resolution: 4, swing: 0,
+                renderCache: cache, attackMilliseconds: 5);
+
+            Assert.AreEqual(2, cache.Count, "Different attack durations must not reuse transformed note audio.");
+            foreach (int noteStartFrame in new[] { 0, sampleRate })
+            {
+                int earlyFrame = noteStartFrame + (int)(sampleRate * 0.0005);
+                int postAttackFrame = noteStartFrame + (int)(sampleRate * 0.006);
+                Assert.AreEqual(0.8f, noAttack.Data[earlyFrame * noAttack.Channels], 0.001f);
+                Assert.AreEqual(0.08f, withAttack.Data[earlyFrame * withAttack.Channels], 0.001f);
+                Assert.AreEqual(0.8f, withAttack.Data[postAttackFrame * withAttack.Channels], 0.001f);
+            }
+        }
+
+        [TestMethod]
         public async Task RenderPatternNotesAsync_StretchesShortHitThroughRequestedTail()
         {
             using AudioObj sample = CreateToneSample(sampleRate: 22050, frequency: 440, durationSeconds: 0.25);

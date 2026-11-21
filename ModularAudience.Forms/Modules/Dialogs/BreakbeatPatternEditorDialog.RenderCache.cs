@@ -17,6 +17,7 @@ public partial class BreakbeatPatternEditorDialog
         var settings = this.trackSettings.ToArray();
         float bpm = (float)this.Bpm;
         int resolution = this.currentResolution;
+        int attackMilliseconds = this.AttackMilliseconds;
         this.cacheWarmWork = WarmAsync();
         await this.cacheWarmWork;
         async Task WarmAsync()
@@ -25,7 +26,8 @@ public partial class BreakbeatPatternEditorDialog
             {
                 using AudioObj? warm = await BreakbeatPatternInstrumentRenderer.RenderAsync(notes, samples, instruments,
                     settings, 1, bpm, resolution, 0, "CacheWarm", this.cacheLifetime.Token,
-                    this.instrumentSampleCache, this.noteRenderCache);
+                    this.instrumentSampleCache, this.noteRenderCache,
+                    attackMilliseconds: attackMilliseconds);
             }
             catch (OperationCanceledException) { }
             catch (Exception error) { LogManager.Log("Pattern note cache preparation failed."); LogManager.Log(error); }

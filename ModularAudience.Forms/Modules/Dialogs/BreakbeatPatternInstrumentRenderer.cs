@@ -176,7 +176,8 @@ internal static class BreakbeatPatternInstrumentRenderer
         string? patternName,
         CancellationToken token,
         BreakbeatInstrumentSampleCache instrumentCache,
-        PatternRenderCache? renderCache = null)
+        PatternRenderCache? renderCache = null,
+        int attackMilliseconds = 0)
     {
         ArgumentNullException.ThrowIfNull(instrumentCache);
         token.ThrowIfCancellationRequested();
@@ -297,7 +298,8 @@ internal static class BreakbeatPatternInstrumentRenderer
                 patternName,
                 token,
                 renderTrackSettings,
-                renderCache).ConfigureAwait(false);
+                renderCache,
+                attackMilliseconds).ConfigureAwait(false);
         }
         finally
         {
