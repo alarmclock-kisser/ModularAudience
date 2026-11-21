@@ -176,6 +176,7 @@ public sealed class MixEditorExtensionTests
     {
         float[] samples = Enumerable.Repeat(0.5f, 8000).ToArray();
         using var audio = new AudioObj { Name = "Truncated note", Data = samples, SampleRate = 8000, Channels = 1, Bpm = 120 };
+        double originalDuration = samples.Length / (double)audio.SampleRate;
         using var mix = new MixTrackView();
         var canvas = (Control)Field(mix, "canvas");
         _ = mix.Handle; _ = canvas.Handle;
@@ -186,10 +187,15 @@ public sealed class MixEditorExtensionTests
 
         MixClip clip = mix.Arrangement.Lanes.Single().Clips.Single();
         Assert.AreEqual(0.005, clip.FadeOut, 1e-12);
+        Assert.IsTrue(clip.FadeOutToSilence);
+        Assert.AreEqual(originalDuration, mix.Arrangement.ClipDuration(clip), 1e-12);
         CollectionAssert.AreEqual(samples, audio.Data);
         using var rendered = MixRenderer.RenderAsync(mix.Arrangement).GetAwaiter().GetResult();
         int beforeFade = (int)Math.Round((clip.Start + clip.SourceDuration - 0.01) * rendered.SampleRate);
+        int clipEndFrame = (int)Math.Round((clip.Start + mix.Arrangement.ClipDuration(clip)) * rendered.SampleRate);
+        Assert.AreEqual((int)Math.Round(mix.Arrangement.Duration * rendered.SampleRate), rendered.Data.Length / rendered.Channels);
         Assert.IsGreaterThan(0.4f, Math.Abs(rendered.Data[beforeFade * rendered.Channels]));
+        Assert.AreEqual(0f, rendered.Data[(clipEndFrame - 1) * rendered.Channels]);
         Assert.IsLessThan(0.01f, Math.Abs(rendered.Data[^rendered.Channels]));
     }
     [TestMethod]

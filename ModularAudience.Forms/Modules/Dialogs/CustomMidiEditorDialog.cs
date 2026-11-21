@@ -29,6 +29,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private const int DefaultLowestNote = 36; // C2
         private const int DefaultHighestNote = 84; // C6
         private const int MaximumHistoryDepth = 100;
+        private static string lastMidiFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
 
         private readonly MidiSampleRenderCache sampleRenderCache = new();
         private readonly BreakbeatInstrumentSampleCache customInstrumentSampleCache = new();
@@ -38,6 +39,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private readonly List<EditorSnapshot> redoHistory = [];
 
         private MidiFileData midiFile;
+        private int selectedTrackPosition;
         private MidiInstrument instrument = MidiInstrument.Sine;
         private InstrumentSynthSettings? customSynthSettings;
         private AudioObj? customSample;
@@ -51,10 +53,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Point? selectionMoveStart;
         private long selectionMoveAnchorTick;
         private int selectionMoveAnchorNote;
+        private bool selectionMoveDragging;
         private MidiSelection? selectionMoveOriginalSelection;
         private List<MidiNoteData>? selectionMoveOriginalNotes;
         private List<MidiNoteData>? selectionMoveMovedNotes;
         private MidiSelection? noteSelection;
+        private HashSet<MidiNoteData>? noteSelectionNotes;
         private EditorSnapshot? pendingHistorySnapshot;
         private MouseButtons editButton;
         private int editNote;
@@ -71,6 +75,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private bool updatingKeyRange;
         private bool restoringHistory;
         private bool initialized;
+        private bool updatingTrackSelector;
         private bool closing;
         private bool allowClose;
         private readonly List<MidiClipboardEntry> clipboardHistory = [];
@@ -119,7 +124,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             decimal Resolution,
             int LowestNote,
             int HighestNote,
-            MidiSelection? Selection);
+            MidiSelection? Selection,
+            List<MidiNoteData>? SelectedNotes);
 
         private sealed record MidiRenderOptions(
             MidiInstrument Instrument,
@@ -138,6 +144,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.KeyUp += this.CustomMidiEditorDialog_KeyUp;
             Hints.HintContent.Apply(this.toolTip_editor, this, Hints.HintContent.CustomMidiEditor);
             this.midiFile = NormalizeEditorFile(midiFileData, initialBpm);
+            this.UpdateTrackSelector();
             this.numericUpDown_bpm.Value = (decimal)Math.Clamp(this.midiFile.DefaultBpm, 20.0, 400.0);
             this.numericUpDown_pitchFrequency.Value = (decimal)Math.Clamp(this.midiFile.PitchFrequency, 1.0, 1000.0);
             this.PopulateNoteNames();
@@ -158,7 +165,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.pictureBox_editor.Invalidate();
         }
 
-        private MidiTrackData Track => this.midiFile.Tracks[0];
+        private MidiTrackData Track => this.midiFile.Tracks[this.selectedTrackPosition];
 
         internal MidiFileData MidiFile => this.midiFile;
 
@@ -203,7 +210,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     source.TimeSignatureDenominator);
             }
 
-            return source.Tracks.Count == 1 ? source : source.MergeTracks("Piano Roll");
+            return source;
         }
 
         private static MidiTrackData CreateEditorTrack() => new()
@@ -491,6 +498,60 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
         }
 
+        private void numericUpDown_track_ValueChanged(object? sender, EventArgs e)
+        {
+            if (!this.initialized || this.updatingTrackSelector)
+            {
+                return;
+            }
+
+            int position = Math.Clamp((int)this.numericUpDown_track.Value - 1, 0, this.midiFile.Tracks.Count - 1);
+            if (position == this.selectedTrackPosition)
+            {
+                return;
+            }
+
+            this.selectedTrackPosition = position;
+            this.UpdateTrackSelector();
+            this.noteSelection = null;
+            this.noteSelectionNotes = null;
+            this.pendingHistorySnapshot = null;
+            this.undoHistory.Clear();
+            this.redoHistory.Clear();
+            this.ResetTrackView();
+        }
+
+        private void UpdateTrackSelector()
+        {
+            this.updatingTrackSelector = true;
+            try
+            {
+                this.numericUpDown_track.Value = 1;
+                this.numericUpDown_track.Maximum = Math.Max(1, this.midiFile.Tracks.Count);
+                this.numericUpDown_track.Value = this.selectedTrackPosition + 1;
+            }
+            finally
+            {
+                this.updatingTrackSelector = false;
+            }
+
+            string trackName = string.IsNullOrWhiteSpace(this.Track.Name)
+                ? $"Track {this.selectedTrackPosition + 1}"
+                : this.Track.Name;
+            this.label_trackName.Text = trackName;
+            this.toolTip_editor.SetToolTip(this.label_trackName, trackName);
+        }
+
+        private void ResetTrackView()
+        {
+            long viewLength = Math.Max(this.GetRequiredEditorLength(), this.DefaultViewLengthTicks);
+            this.editorLengthTicks = viewLength;
+            this.SetView(0, viewLength);
+            this.pixelsPerTick = this.CalculatePixelsPerTick(viewLength);
+            this.UpdateScrollBar();
+            this.pictureBox_editor.Invalidate();
+        }
+
         private void numericUpDown_pitchFrequency_ValueChanged(object? sender, EventArgs e)
         {
             if (this.initialized)
@@ -551,7 +612,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_resolution.Value,
             this.LowestNote,
             this.HighestNote,
-            this.noteSelection);
+            this.noteSelection,
+            this.noteSelectionNotes is null ? null : [.. this.noteSelectionNotes]);
 
         private void BeginHistoryTransaction()
         {
@@ -665,10 +727,13 @@ namespace ModularAudience.Forms.Modules.Dialogs
             };
             track.Notes.AddRange(snapshot.Notes);
             track.ExtendLengthTo(snapshot.LengthTicks);
+            List<MidiTrackData> tracks = [.. this.midiFile.Tracks];
+            tracks[this.selectedTrackPosition] = track;
             this.midiFile = MidiFileData.CreateGenerated(
-                [track],
+                tracks,
                 this.midiFile.TicksPerQuarterNote,
                 (double)snapshot.Bpm,
+                this.midiFile.FilePath,
                 pitchFrequency: (double)snapshot.PitchFrequency,
                 timeSignatureNumerator: this.midiFile.TimeSignatureNumerator,
                 timeSignatureDenominator: this.midiFile.TimeSignatureDenominator);
@@ -682,6 +747,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.domainUpDown_minKey.SelectedIndex = KeyIndexFromMidiNote(snapshot.LowestNote);
                 this.domainUpDown_maxKey.SelectedIndex = KeyIndexFromMidiNote(snapshot.HighestNote);
                 this.noteSelection = snapshot.Selection;
+                this.noteSelectionNotes = snapshot.SelectedNotes is null
+                    ? null
+                    : new HashSet<MidiNoteData>(snapshot.SelectedNotes);
             }
             finally
             {
@@ -740,6 +808,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             if (key == Keys.Escape && this.noteSelection is not null)
             {
                 this.noteSelection = null;
+                this.noteSelectionNotes = null;
                 this.pictureBox_editor.Invalidate();
                 return true;
             }
@@ -835,6 +904,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 timeSignatureNumerator: this.midiFile.TimeSignatureNumerator,
                 timeSignatureDenominator: this.midiFile.TimeSignatureDenominator);
             this.noteSelection = null;
+            this.noteSelectionNotes = null;
             this.editorLengthTicks = Math.Max(this.DefaultViewLengthTicks, this.GetRequiredEditorLength());
             this.SetView(this.viewStartTick, this.viewEndTick);
             this.CommitHistoryTransaction();
@@ -847,6 +917,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             if (this.noteSelection is not MidiSelection selection)
             {
                 return [];
+            }
+
+            if (this.noteSelectionNotes is HashSet<MidiNoteData> selectedNotes)
+            {
+                return this.Track.Notes.Where(selectedNotes.Contains).ToList();
             }
 
             return this.Track.Notes.Where(note => this.IsNoteSelected(note)).ToList();
@@ -992,6 +1067,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.Track.Notes.AddRange(placed);
             this.Track.ExtendLengthTo(placed.Max(note => note.StartTick + note.DurationTicks));
             this.noteSelection = null;
+            this.noteSelectionNotes = null;
             this.ghostPreviewActive = false;
             this.ghostPreviewValid = false;
             this.ghostNotes.Clear();
@@ -1367,20 +1443,25 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
+            if (e.Button == MouseButtons.Left && (ModifierKeys & Keys.Shift) != Keys.None)
+            {
+                this.BeginSelectionDrag(e.Location);
+                return;
+            }
+
             if (e.Button == MouseButtons.Left
                 && this.noteSelection is MidiSelection
                 && this.IsPointInSelectionRectangle(e.Location))
             {
-                this.BeginHistoryTransaction();
                 this.selectionMoveStart = this.ClampToEditor(e.Location);
                 this.selectionMoveAnchorTick = this.PointToTick(e.Location.X);
                 this.selectionMoveAnchorNote = this.PointToNote(e.Location.Y);
                 this.selectionMoveOriginalSelection = this.noteSelection;
                 this.selectionMoveOriginalNotes = this.GetSelectedNotes();
                 this.selectionMoveMovedNotes = [];
+                this.selectionMoveDragging = false;
                 this.editPreviousLength = this.editorLengthTicks;
                 this.pictureBox_editor.Capture = true;
-                this.pictureBox_editor.Cursor = Cursors.SizeAll;
                 return;
             }
 
@@ -1406,19 +1487,10 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            if (e.Button == MouseButtons.Left && (ModifierKeys & Keys.Shift) != Keys.None)
-            {
-                this.BeginHistoryTransaction();
-                this.selectionDragStart = this.ClampToEditor(e.Location);
-                this.selectionDragEnd = this.selectionDragStart;
-                this.pictureBox_editor.Capture = true;
-                this.pictureBox_editor.Invalidate();
-                return;
-            }
-
             if (e.Button == MouseButtons.Left)
             {
                 this.noteSelection = null;
+                this.noteSelectionNotes = null;
             }
 
             this.editStart = this.ClampToEditor(e.Location);
@@ -1463,6 +1535,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 && this.selectionMoveOriginalSelection is MidiSelection
                 && this.selectionMoveOriginalNotes is List<MidiNoteData>)
             {
+                if (!this.selectionMoveDragging)
+                {
+                    if (!HasExceededDragThreshold(this.selectionMoveStart.Value, e.Location))
+                    {
+                        return;
+                    }
+
+                    this.selectionMoveDragging = true;
+                    this.BeginHistoryTransaction();
+                    this.noteSelectionNotes = new HashSet<MidiNoteData>(this.selectionMoveOriginalNotes);
+                    this.pictureBox_editor.Cursor = Cursors.SizeAll;
+                }
+
                 this.MoveSelectionTo(e.Location);
                 this.pictureBox_editor.Invalidate();
                 return;
@@ -1507,6 +1592,22 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.editPreviousLength = this.editorLengthTicks;
             this.BeginHistoryTransaction();
             this.pictureBox_editor.Capture = true;
+        }
+
+        private void BeginSelectionDrag(Point point)
+        {
+            this.BeginHistoryTransaction();
+            this.noteSelection = null;
+            this.noteSelectionNotes = null;
+            this.selectionMoveStart = null;
+            this.selectionMoveOriginalSelection = null;
+            this.selectionMoveOriginalNotes = null;
+            this.selectionMoveMovedNotes = null;
+            this.selectionMoveDragging = false;
+            this.selectionDragStart = this.ClampToEditor(point);
+            this.selectionDragEnd = this.selectionDragStart;
+            this.pictureBox_editor.Capture = true;
+            this.pictureBox_editor.Invalidate();
         }
 
         private async void pictureBox_editor_MouseUp(object? sender, MouseEventArgs e)
@@ -1559,24 +1660,42 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.selectionDragEnd = null;
                 this.pictureBox_editor.Capture = false;
                 this.noteSelection = this.CreateSelection(selectionStart, selectionEnd);
+                this.noteSelectionNotes = null;
                 this.CommitHistoryTransaction();
                 this.pictureBox_editor.Invalidate();
                 return;
             }
 
-            if (this.selectionMoveStart is Point && e.Button == MouseButtons.Left)
+            if (this.selectionMoveStart is Point selectionMoveStart && e.Button == MouseButtons.Left)
             {
-                this.MoveSelectionTo(e.Location);
-                this.selectionMoveStart = null;
-                this.selectionMoveOriginalSelection = null;
-                this.selectionMoveOriginalNotes = null;
-                this.selectionMoveMovedNotes = null;
-                this.pictureBox_editor.Capture = false;
-                this.pictureBox_editor.Cursor = Cursors.Cross;
-                this.UpdateEditorLengthAfterNoteChange(this.editPreviousLength);
-                this.CommitHistoryTransaction();
-                this.pictureBox_editor.Invalidate();
-                return;
+                if (this.selectionMoveDragging || HasExceededDragThreshold(selectionMoveStart, e.Location))
+                {
+                    if (!this.selectionMoveDragging)
+                    {
+                        this.selectionMoveDragging = true;
+                        this.BeginHistoryTransaction();
+                        this.noteSelectionNotes = new HashSet<MidiNoteData>(this.selectionMoveOriginalNotes!);
+                    }
+
+                    this.MoveSelectionTo(e.Location);
+                    this.ClearSelectionMoveState();
+                    this.pictureBox_editor.Capture = false;
+                    this.pictureBox_editor.Cursor = Cursors.Cross;
+                    this.UpdateEditorLengthAfterNoteChange(this.editPreviousLength);
+                    this.CommitHistoryTransaction();
+                    this.pictureBox_editor.Invalidate();
+                    return;
+                }
+
+                this.ClearSelectionMoveState();
+                this.noteSelection = null;
+                this.noteSelectionNotes = null;
+                this.editStart = selectionMoveStart;
+                this.editButton = MouseButtons.Left;
+                this.editNote = this.PointToNote(selectionMoveStart.Y);
+                this.editPreviousLength = this.editorLengthTicks;
+                this.BeginHistoryTransaction();
+                this.ApplyNoteRange(selectionMoveStart, selectionMoveStart, add: true, updateView: false);
             }
 
             if (this.editStart is not Point start || e.Button != this.editButton)
@@ -1613,6 +1732,15 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     }
                 }
             }
+        }
+
+        private void ClearSelectionMoveState()
+        {
+            this.selectionMoveStart = null;
+            this.selectionMoveOriginalSelection = null;
+            this.selectionMoveOriginalNotes = null;
+            this.selectionMoveMovedNotes = null;
+            this.selectionMoveDragging = false;
         }
 
         private void ApplyNoteRange(Point first, Point second, bool add, bool updateView)
@@ -1667,11 +1795,23 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 Math.Max(firstNote, secondNote));
         }
 
-        private bool IsNoteSelected(MidiNoteData note) => this.noteSelection is MidiSelection selection
-            && note.NoteNumber >= selection.LowestNote
-            && note.NoteNumber <= selection.HighestNote
-            && note.StartTick < selection.EndTick
-            && note.StartTick + note.DurationTicks > selection.StartTick;
+        private bool IsNoteSelected(MidiNoteData note)
+        {
+            if (this.noteSelection is not MidiSelection selection)
+            {
+                return false;
+            }
+
+            if (this.noteSelectionNotes is HashSet<MidiNoteData> selectedNotes)
+            {
+                return selectedNotes.Contains(note);
+            }
+
+            return note.NoteNumber >= selection.LowestNote
+                && note.NoteNumber <= selection.HighestNote
+                && note.StartTick < selection.EndTick
+                && note.StartTick + note.DurationTicks > selection.StartTick;
+        }
 
         private bool IsPointInSelectionRectangle(Point point)
         {
@@ -1743,6 +1883,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             }
             this.Track.Notes.AddRange(replacements);
             this.selectionMoveMovedNotes = replacements;
+            this.noteSelectionNotes = new HashSet<MidiNoteData>(replacements);
 
             long selectionStartTick = Math.Max(0, originalSelection.StartTick + tickDelta);
             long selectionEndTick = Math.Max(selectionStartTick + this.GridTicks,
@@ -1983,23 +2124,36 @@ namespace ModularAudience.Forms.Modules.Dialogs
             Math.Max(first.X, second.X),
             Math.Max(first.Y, second.Y));
 
-        private MidiFileData CreateOutputMidi()
+        private MidiFileData CreateOutputMidi() => this.BuildOutputMidi(includeAllTracks: false);
+
+        private MidiFileData CreateOutputMidiForExport() => this.BuildOutputMidi(includeAllTracks: true);
+
+        private MidiFileData BuildOutputMidi(bool includeAllTracks)
         {
-            MidiTrackData track = new()
-            {
-                Index = this.Track.Index,
-                Name = string.IsNullOrWhiteSpace(this.Track.Name) ? "Piano Roll" : this.Track.Name
-            };
-            track.Notes.AddRange(this.Track.Notes
-                .OrderBy(note => note.StartTick)
-                .ThenBy(note => note.NoteNumber));
+            IEnumerable<MidiTrackData> tracks = includeAllTracks
+                ? this.midiFile.Tracks.Select(CloneTrackForOutput)
+                : [CloneTrackForOutput(this.Track)];
             return MidiFileData.CreateGenerated(
-                [track],
+                tracks,
                 this.midiFile.TicksPerQuarterNote,
                 this.Bpm,
                 pitchFrequency: this.PitchFrequency,
                 timeSignatureNumerator: this.midiFile.TimeSignatureNumerator,
                 timeSignatureDenominator: this.midiFile.TimeSignatureDenominator);
+        }
+
+        private static MidiTrackData CloneTrackForOutput(MidiTrackData source)
+        {
+            MidiTrackData track = new()
+            {
+                Index = source.Index,
+                Name = string.IsNullOrWhiteSpace(source.Name) ? $"Track {source.Index + 1}" : source.Name
+            };
+            track.Notes.AddRange(source.Notes
+                .OrderBy(note => note.StartTick)
+                .ThenBy(note => note.NoteNumber));
+            track.ExtendLengthTo(source.LengthTicks);
+            return track;
         }
 
         internal static MidiFileData CreateMidiPreviewFromTick(MidiFileData source, int trackIndex, long startTick)
@@ -2024,11 +2178,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             long offset = 0;
             if (this.noteSelection is MidiSelection selection)
             {
-                sourceNotes = this.Track.Notes
-                    .Where(note => note.NoteNumber >= selection.LowestNote
-                        && note.NoteNumber <= selection.HighestNote
-                        && note.StartTick < selection.EndTick
-                        && note.StartTick + note.DurationTicks > selection.StartTick)
+                sourceNotes = this.GetSelectedNotes()
                     .Select(note =>
                     {
                         long clippedStart = Math.Max(note.StartTick, selection.StartTick);
@@ -2599,14 +2749,49 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private void ApplyMidiFile(MidiFileData file)
         {
             this.midiFile = NormalizeEditorFile(file, this.Bpm);
+            this.selectedTrackPosition = 0;
+            this.UpdateTrackSelector();
+            this.noteSelection = null;
+            this.noteSelectionNotes = null;
+            this.pendingHistorySnapshot = null;
+            this.undoHistory.Clear();
+            this.redoHistory.Clear();
             this.numericUpDown_bpm.Value = (decimal)Math.Clamp(this.midiFile.DefaultBpm, 20.0, 400.0);
             this.numericUpDown_pitchFrequency.Value = (decimal)Math.Clamp(this.midiFile.PitchFrequency, 1.0, 1000.0);
-            long viewLength = Math.Max(this.GetRequiredEditorLength(), this.DefaultViewLengthTicks);
-            this.editorLengthTicks = viewLength;
-            this.SetView(0, viewLength);
-            this.pixelsPerTick = this.CalculatePixelsPerTick(viewLength);
-            this.UpdateScrollBar();
-            this.pictureBox_editor.Invalidate();
+            this.ResetTrackView();
+        }
+
+        private void button_import_Click(object? sender, EventArgs e)
+        {
+            string initialDirectory = Directory.Exists(lastMidiFolder)
+                ? lastMidiFolder
+                : Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+            using OpenFileDialog dialog = new()
+            {
+                Title = "Import MIDI File",
+                InitialDirectory = initialDirectory,
+                Filter = "MIDI files (*.mid;*.midi)|*.mid;*.midi",
+                DefaultExt = "mid",
+                CheckFileExists = true,
+                Multiselect = false,
+                RestoreDirectory = true
+            };
+
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
+
+            lastMidiFolder = Path.GetDirectoryName(dialog.FileName) ?? lastMidiFolder;
+            try
+            {
+                this.ApplyMidiFile(MidiFileData.Load(dialog.FileName));
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log($"Custom MIDI import failed: {ex}");
+                WindowMainStaticHelpers.ShowErrorWithCopyButton(this, "MIDI import failed", ex);
+            }
         }
 
         private async void button_save_Click(object? sender, EventArgs e)
@@ -2708,7 +2893,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             try
             {
                 this.toolStripMenuItem_saveMidi.Enabled = false;
-                string? exportedPath = await this.CreateOutputMidi().ExportAsync(dialog.FileName);
+                string? exportedPath = await this.CreateOutputMidiForExport().ExportAsync(dialog.FileName);
                 if (string.IsNullOrWhiteSpace(exportedPath))
                 {
                     throw new IOException("The MIDI file could not be exported. See the log for details.");

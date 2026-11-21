@@ -97,6 +97,11 @@ public partial class BreakbeatPatternEditorDialog
 
             this.Enabled = wasEnabled;
             this.UseWaitCursor = previousWaitCursor;
+            if (wasEnabled && !this.IsDisposed && !this.Disposing)
+            {
+                this.BringToFront();
+                this.Activate();
+            }
         }
 
         if (cancelled)

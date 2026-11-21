@@ -6,6 +6,19 @@ namespace ModularAudience.Audio.Arrangement;
 
 public static class MixRenderer
 {
+    private static double FadeOutGain(int frame, int frames, double fadeSeconds, int sampleRate, bool endAtSilence)
+    {
+        if (frames <= 0 || !double.IsFinite(fadeSeconds) || fadeSeconds <= 0) return 1;
+        if (!endAtSilence)
+            return Math.Clamp((frames / (double)sampleRate - frame / (double)sampleRate) / fadeSeconds, 0, 1);
+        double requestedFrames = Math.Ceiling(fadeSeconds * sampleRate);
+        int fadeFrames = requestedFrames >= frames ? frames : Math.Max(1, (int)requestedFrames);
+        int fadeStart = frames - fadeFrames;
+        if (frame < fadeStart) return 1;
+        if (fadeFrames == 1) return 0;
+        return (frames - 1 - frame) / (double)(fadeFrames - 1);
+    }
+
     public static Task<MixSource> PrepareSourceAsync(MixSource source, double targetBpm, ClipTempoMode mode, CancellationToken token = default,
         PlaylistStretchSettings? stretchSettings = null) =>
         Task.Run(async () =>
@@ -116,7 +129,7 @@ public static class MixRenderer
                         double t = f / (double)rate, duration = frames / (double)rate;
                         double gain = job.Lane.Gain * c.Gain;
                         if (c.FadeIn > 0) gain *= Math.Clamp(t / c.FadeIn, 0, 1);
-                        if (c.FadeOut > 0) gain *= Math.Clamp((duration - t) / c.FadeOut, 0, 1);
+                        if (c.FadeOut > 0) gain *= FadeOutGain(f, frames, c.FadeOut, rate, c.FadeOutToSilence);
                         if (crossfadeIn > 0) gain *= Math.Clamp(t / crossfadeIn, 0, 1);
                         if (crossfadeOut > 0) gain *= Math.Clamp((duration - t) / crossfadeOut, 0, 1);
                         for (int ch = 0; ch < channels; ch++)
@@ -198,7 +211,7 @@ public static class MixRenderer
             if ((frame & 8191) == 0) token.ThrowIfCancellationRequested();
             double time = frame / (double)rate, duration = frames / (double)rate, gain = clip.Gain;
             if (clip.FadeIn > 0) gain *= Math.Clamp(time / clip.FadeIn, 0, 1);
-            if (clip.FadeOut > 0) gain *= Math.Clamp((duration - time) / clip.FadeOut, 0, 1);
+            if (clip.FadeOut > 0) gain *= FadeOutGain(frame, frames, clip.FadeOut, rate, clip.FadeOutToSilence);
             if (crossfadeIn > 0) gain *= Math.Clamp(time / crossfadeIn, 0, 1);
             if (crossfadeOut > 0) gain *= Math.Clamp((duration - time) / crossfadeOut, 0, 1);
             for (int channel = 0; channel < channels; channel++) data[frame * channels + channel] = (float)(data[frame * channels + channel] * gain);

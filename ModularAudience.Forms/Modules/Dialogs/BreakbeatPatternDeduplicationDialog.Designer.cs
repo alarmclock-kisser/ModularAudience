@@ -64,7 +64,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.numericUpDown_similarityThreshold.Increment = 0.001m;
             this.numericUpDown_similarityThreshold.Location = new Point(140, 111);
             this.numericUpDown_similarityThreshold.Maximum = 0.999m;
-            this.numericUpDown_similarityThreshold.Minimum = 0.900m;
+            this.numericUpDown_similarityThreshold.Minimum = 0.800m;
             this.numericUpDown_similarityThreshold.Name = "numericUpDown_similarityThreshold";
             this.numericUpDown_similarityThreshold.Size = new Size(82, 23);
             this.numericUpDown_similarityThreshold.TabIndex = 3;

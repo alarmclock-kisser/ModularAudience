@@ -29,23 +29,64 @@ public sealed class CustomMidiEditorDialogTests
     }
 
     [STATestMethod]
-    public void StandaloneEditorHasRequestedControlsAndNoImportAction()
+    public void StandaloneEditorHasImportActionAndTrackControls()
     {
         using CustomMidiEditorDialog editor = new();
         NumericUpDown bpm = Field<NumericUpDown>(editor, "numericUpDown_bpm");
+        NumericUpDown trackNumber = Field<NumericUpDown>(editor, "numericUpDown_track");
         NumericUpDown pitch = Field<NumericUpDown>(editor, "numericUpDown_pitchFrequency");
         NumericUpDown resolution = Field<NumericUpDown>(editor, "numericUpDown_resolution");
+        Button import = Field<Button>(editor, "button_import");
         Button instrument = Field<Button>(editor, "button_instrument");
         Button save = Field<Button>(editor, "button_save");
 
         Assert.AreEqual(100m, bpm.Value);
+        Assert.AreEqual(1m, trackNumber.Minimum);
+        Assert.AreEqual(1m, trackNumber.Maximum);
         Assert.AreEqual(440m, pitch.Value);
         Assert.AreEqual(4m, resolution.Value);
+        Assert.AreEqual("Import", import.Text);
         Assert.AreEqual("Sine", Field<Label>(editor, "label_instrument").Text);
+        Assert.AreEqual("Piano Roll", Field<Label>(editor, "label_trackName").Text);
         Assert.IsNotNull(instrument.ContextMenuStrip ?? Field<ContextMenuStrip>(editor, "instrumentMenu"));
         Assert.IsNotNull(Field<ContextMenuStrip>(editor, "contextMenuStrip_save"));
-        Assert.IsFalse(editor.Controls.Find("button_import", true).Any());
+        Assert.IsTrue(editor.Controls.Find("button_import", true).Any());
         Assert.IsTrue(save.Enabled);
+    }
+
+    [STATestMethod]
+    public void ImportedMidiTracksCanBeSelectedAndMidiOutputKeepsEveryTrack()
+    {
+        MidiTrackData lead = new() { Index = 4, Name = "Lead" };
+        lead.Notes.Add(new MidiNoteData { NoteNumber = 72, Channel = 0, Velocity = 100, StartTick = 0, DurationTicks = 480 });
+        MidiTrackData bass = new() { Index = 9, Name = "Bass" };
+        bass.Notes.Add(new MidiNoteData { NoteNumber = 36, Channel = 1, Velocity = 90, StartTick = 120, DurationTicks = 360 });
+        MidiFileData imported = MidiFileData.CreateGenerated([lead, bass], 960, 142.5);
+
+        using CustomMidiEditorDialog editor = new();
+        Invoke(editor, "ApplyMidiFile", imported);
+
+        NumericUpDown trackNumber = Field<NumericUpDown>(editor, "numericUpDown_track");
+        Label trackName = Field<Label>(editor, "label_trackName");
+        Assert.AreEqual(2m, trackNumber.Maximum);
+        Assert.AreEqual(1m, trackNumber.Value);
+        Assert.AreEqual("Lead", trackName.Text);
+        Assert.AreEqual(142.5m, Field<NumericUpDown>(editor, "numericUpDown_bpm").Value);
+
+        trackNumber.Value = 2;
+        Assert.AreEqual("Bass", trackName.Text);
+        Assert.AreEqual(9, editor.SelectedTrack.Index);
+
+        MidiFileData currentTrackOutput = (MidiFileData)Invoke(editor, "CreateOutputMidi");
+        MidiFileData allTracksOutput = (MidiFileData)Invoke(editor, "CreateOutputMidiForExport");
+        Assert.AreEqual(1, currentTrackOutput.Tracks.Count);
+        Assert.AreEqual("Bass", currentTrackOutput.Tracks.Single().Name);
+        Assert.AreEqual(2, allTracksOutput.Tracks.Count);
+        CollectionAssert.AreEqual(new[] { "Lead", "Bass" }, allTracksOutput.Tracks.Select(track => track.Name).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { 72, 36 },
+            allTracksOutput.Tracks.Select(track => track.Notes.Single().NoteNumber).ToArray());
+        Assert.AreEqual(142.5, allTracksOutput.DefaultBpm, 0.001);
     }
 
     [TestMethod]
@@ -176,6 +217,114 @@ public sealed class CustomMidiEditorDialogTests
         Assert.AreNotSame(note, editor.SelectedTrack.Notes.Single());
         Assert.IsTrue(editor.SelectedTrack.Notes[0].StartTick > 0);
         Assert.IsNotNull(Field<object?>(editor, "noteSelection"));
+    }
+
+    [STATestMethod]
+    public void ClickingInsideSelectionAddsANoteInsteadOfMovingTheSelection()
+    {
+        using CustomMidiEditorDialog editor = new();
+        PictureBox pianoRoll = Field<PictureBox>(editor, "pictureBox_editor");
+        CheckBox preview = Field<CheckBox>(editor, "checkBox_preview");
+        preview.Checked = false;
+        MidiNoteData existing = new()
+        {
+            NoteNumber = 60,
+            Channel = 0,
+            Velocity = 100,
+            StartTick = 0,
+            DurationTicks = 120
+        };
+        editor.SelectedTrack.Notes.Add(existing);
+        editor.SelectedTrack.ExtendLengthTo(120);
+        editor.CreateControl();
+        pianoRoll.CreateControl();
+
+        object selection = Invoke(editor, "CreateSelection", new Point(50, 100), new Point(150, 300));
+        typeof(CustomMidiEditorDialog).GetField("noteSelection", PrivateInstance)!.SetValue(editor, selection);
+        Point click = new(80, 200);
+        int clickedNote = (int)Invoke(editor, "PointToNote", click.Y);
+        long clickedTick = (long)Invoke(editor, "PointToTick", click.X);
+
+        Invoke(editor, "pictureBox_editor_MouseDown", pianoRoll,
+            new MouseEventArgs(MouseButtons.Left, 1, click.X, click.Y, 0));
+        Invoke(editor, "pictureBox_editor_MouseUp", pianoRoll,
+            new MouseEventArgs(MouseButtons.Left, 1, click.X, click.Y, 0));
+
+        Assert.IsNull(Field<object?>(editor, "noteSelection"));
+        Assert.IsTrue(editor.SelectedTrack.Notes.Contains(existing));
+        Assert.IsTrue(editor.SelectedTrack.Notes.Any(note =>
+            !ReferenceEquals(note, existing) && note.NoteNumber == clickedNote && note.StartTick == clickedTick));
+    }
+
+    [STATestMethod]
+    public void MovingSelectionDoesNotCaptureNotesEnteredByTheMovedRectangle()
+    {
+        using CustomMidiEditorDialog editor = new();
+        PictureBox pianoRoll = Field<PictureBox>(editor, "pictureBox_editor");
+        Point start = new(80, 200);
+        Point end = new(200, 200);
+        int noteNumber = (int)Invoke(editor, "PointToNote", start.Y);
+        long tickDelta = (long)Invoke(editor, "PointToTick", end.X)
+            - (long)Invoke(editor, "PointToTick", start.X);
+        object selection = Invoke(editor, "CreateSelection", new Point(50, 100), new Point(150, 300));
+        long selectionEndTick = (long)selection.GetType().GetProperty("EndTick")!.GetValue(selection)!;
+        MidiNoteData selectedNote = new()
+        {
+            NoteNumber = noteNumber,
+            Channel = 0,
+            Velocity = 100,
+            StartTick = 0,
+            DurationTicks = 480
+        };
+        MidiNoteData enteringNote = new()
+        {
+            NoteNumber = noteNumber,
+            Channel = 1,
+            Velocity = 80,
+            StartTick = selectionEndTick + Math.Max(1, tickDelta / 2),
+            DurationTicks = 120
+        };
+        editor.SelectedTrack.Notes.AddRange([selectedNote, enteringNote]);
+        editor.SelectedTrack.ExtendLengthTo(enteringNote.StartTick + enteringNote.DurationTicks);
+        editor.CreateControl();
+        pianoRoll.CreateControl();
+
+        typeof(CustomMidiEditorDialog).GetField("noteSelection", PrivateInstance)!.SetValue(editor, selection);
+        Assert.IsTrue((bool)Invoke(editor, "IsNoteSelected", selectedNote));
+        Assert.IsFalse((bool)Invoke(editor, "IsNoteSelected", enteringNote));
+
+        Invoke(editor, "pictureBox_editor_MouseDown", pianoRoll,
+            new MouseEventArgs(MouseButtons.Left, 1, start.X, start.Y, 0));
+        Invoke(editor, "pictureBox_editor_MouseMove", pianoRoll,
+            new MouseEventArgs(MouseButtons.Left, 1, end.X, end.Y, 0));
+        Invoke(editor, "pictureBox_editor_MouseUp", pianoRoll,
+            new MouseEventArgs(MouseButtons.Left, 1, end.X, end.Y, 0));
+
+        Assert.IsTrue(editor.SelectedTrack.Notes.Contains(enteringNote));
+        Assert.IsFalse((bool)Invoke(editor, "IsNoteSelected", enteringNote));
+        Assert.AreEqual(2, editor.SelectedTrack.Notes.Count);
+        MidiFileData operation = (MidiFileData)Invoke(editor, "CreateOperationMidi");
+        Assert.AreEqual(1, operation.Tracks.Single().Notes.Count);
+
+        Invoke(editor, "Undo");
+        Assert.IsFalse((bool)Invoke(editor, "IsNoteSelected", enteringNote));
+        Invoke(editor, "Redo");
+        Assert.IsFalse((bool)Invoke(editor, "IsNoteSelected", enteringNote));
+    }
+
+    [STATestMethod]
+    public void StartingANewSelectionClearsThePreviousRectangleImmediately()
+    {
+        using CustomMidiEditorDialog editor = new();
+        editor.CreateControl();
+        object selection = Invoke(editor, "CreateSelection", new Point(50, 100), new Point(150, 300));
+        typeof(CustomMidiEditorDialog).GetField("noteSelection", PrivateInstance)!.SetValue(editor, selection);
+
+        Invoke(editor, "BeginSelectionDrag", new Point(80, 200));
+
+        Assert.IsNull(Field<object?>(editor, "noteSelection"));
+        Assert.AreEqual(new Point(80, 200), Field<Point?>(editor, "selectionDragStart"));
+        Assert.AreEqual(new Point(80, 200), Field<Point?>(editor, "selectionDragEnd"));
     }
 
     [STATestMethod]

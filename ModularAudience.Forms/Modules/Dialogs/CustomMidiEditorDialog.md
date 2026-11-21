@@ -4,6 +4,7 @@ Open the modeless piano roll from **+ Track → Midi Editor**. It owns its MIDI 
 
 ## Editing and navigation
 
+- Click **Import** to load a `.mid` or `.midi` file, starting in My Music; the last selected folder is reused by later editor windows. Use the Track selector to switch between imported MIDI tracks. The track name and BPM update to the imported file.
 - Left-drag paints notes; right-drag erases notes.
 - **Shift + left-drag** selects a time/key rectangle. Remix and Generate use that selection; with no selection they use the whole arrangement.
 - **Ctrl + drag** pans and **Ctrl + mouse wheel** zooms horizontally. The mouse wheel scrolls horizontally.
@@ -21,4 +22,4 @@ Open the modeless piano roll from **+ Track → Midi Editor**. It owns its MIDI 
 ## Preview and save
 
 - Play/Stop previews the arrangement; **Prehear set note** auditions a newly drawn note.
-- Click **Save** to render audio into a `CustomMidi` collection named for the BPM and instrument. A matching open collection is reused; changing BPM or instrument selects a different collection. Melody AudioObj names include instrument, subtype and BPM and receive a running suffix when needed to avoid duplicates. Right-click Save and choose **Save as MIDI file...** to export the arrangement as `.mid`.
+- Click **Save** to render the current track (or the sole empty-editor page) into a `CustomMidi` collection named for the BPM and instrument. A matching open collection is reused; changing BPM or instrument selects a different collection. Melody AudioObj names include instrument, subtype and BPM and receive a running suffix when needed to avoid duplicates. Right-click Save and choose **Save as MIDI file...** to export all MIDI tracks as `.mid`.

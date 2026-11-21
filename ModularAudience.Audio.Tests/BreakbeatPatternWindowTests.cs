@@ -69,6 +69,17 @@ public sealed class BreakbeatPatternWindowTests
         Assert.IsTrue(help.Right <= deduplicate.Left);
     }
 
+    [STATestMethod]
+    public void DeduplicationThresholdAllowsValuesDownToPointEight()
+    {
+        using var dialog = new BreakbeatPatternDeduplicationDialog(2);
+        var threshold = (NumericUpDown)typeof(BreakbeatPatternDeduplicationDialog)
+            .GetField("numericUpDown_similarityThreshold", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(dialog)!;
+
+        Assert.AreEqual(0.800m, threshold.Minimum);
+    }
+
     [TestMethod]
     public void TrackHeaderFallsBackToSampleNameAndReservesThreeWrappedLinesBelowSummary()
     {

@@ -60,6 +60,64 @@ public sealed class MixArrangementTests
         Follow(20.5); Assert.IsGreaterThan(first, scroll.Value);
     }
 
+    [STATestMethod]
+    public void FollowPlaybackScrollRetainsSubCentisecondPrecision()
+    {
+        using var mix = new MixTrackView();
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var type = typeof(MixTrackView);
+        var scroll = (HScrollBar)type.GetField("scroll", flags)!.GetValue(mix)!;
+        var canvas = (Control)type.GetField("canvas", flags)!.GetValue(mix)!;
+        _ = mix.Handle; _ = canvas.Handle;
+        mix.Arrangement.Visual.ScrollMode = MixScrollMode.Follow;
+        var audio = new AudioObj { Data = new float[44100], SampleRate = 44100, Channels = 1 };
+        type.GetField("playback", flags)!.SetValue(mix, audio);
+        double pixelsPerSecond = (double)type.GetField("pixelsPerSecond", flags)!.GetValue(mix)!;
+        double widthSeconds = Math.Max(1, canvas.ClientSize.Width - 198) / pixelsPerSecond;
+        double firstCaret = widthSeconds * 0.25 + 5.1234;
+        type.GetField("caret", flags)!.SetValue(mix, firstCaret);
+        type.GetMethod("FollowPlaybackCaret", flags)!.Invoke(mix, null);
+        double firstView = (double)type.GetProperty("ViewStart", flags)!.GetValue(mix)!;
+        Assert.AreEqual(5.1234, firstView, 1e-8);
+        Assert.IsTrue(Math.Abs(scroll.Value / 100d - firstView) <= 0.0051);
+
+        type.GetField("caret", flags)!.SetValue(mix, firstCaret + 0.001);
+        type.GetMethod("FollowPlaybackCaret", flags)!.Invoke(mix, null);
+        double nextView = (double)type.GetProperty("ViewStart", flags)!.GetValue(mix)!;
+        Assert.AreEqual(0.001, nextView - firstView, 1e-8);
+        type.GetField("playback", flags)!.SetValue(mix, null);
+        audio.Dispose();
+    }
+
+    [STATestMethod]
+    public void PlaybackLocksClipGesturesButStillAllowsRulerSeeking()
+    {
+        using var sourceAudio = new AudioObj { Data = new float[44100], SampleRate = 44100, Channels = 1 };
+        using var mix = new MixTrackView();
+        MixSource source = mix.Arrangement.AddSource(sourceAudio);
+        var lane = new MixLane(); mix.Arrangement.Lanes.Add(lane);
+        MixClip clip = mix.Arrangement.AddClip(lane, source, 0);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var type = typeof(MixTrackView);
+        var canvas = (Control)type.GetField("canvas", flags)!.GetValue(mix)!;
+        _ = mix.Handle; _ = canvas.Handle;
+        var playback = new AudioObj { Data = new float[44100], SampleRate = 44100, Channels = 1 };
+        type.GetField("playback", flags)!.SetValue(mix, playback);
+
+        type.GetMethod("MouseDownTimeline", flags)!.Invoke(mix,
+            [canvas, new MouseEventArgs(MouseButtons.Left, 1, 230, 40, 0)]);
+        Assert.AreEqual(0, type.GetField("dragMode", flags)!.GetValue(mix));
+        Assert.AreEqual(0d, clip.Start);
+
+        type.GetMethod("MouseDownTimeline", flags)!.Invoke(mix,
+            [canvas, new MouseEventArgs(MouseButtons.Left, 1, 300, 10, 0)]);
+        Assert.AreEqual(4, type.GetField("dragMode", flags)!.GetValue(mix));
+        type.GetField("dragMode", flags)!.SetValue(mix, 0);
+        canvas.Capture = false;
+        type.GetField("playback", flags)!.SetValue(mix, null);
+        playback.Dispose();
+    }
+
     [TestMethod]
     public async Task ConfiguredTimeStretchUsesChosenAlgorithmAndTargetTempoAtImport()
     {

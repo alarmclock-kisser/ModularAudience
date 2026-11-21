@@ -63,6 +63,8 @@ public sealed class MixClip
     public double Gain { get; set; } = 1;
     public double FadeIn { get; set; }
     public double FadeOut { get; set; }
+    [System.ComponentModel.Browsable(false)]
+    public bool FadeOutToSilence { get; set; }
     public ClipTempoMode TempoMode { get; set; }
     // Effect-region bounces already contain the original clip envelope and
     // overlap crossfades. Do not apply a second automatic envelope to them.

@@ -97,6 +97,9 @@
   playback with the caret near the left quarter of the viewport. Auto-Skip keeps a page stationary
   until the caret reaches its right edge, then advances a page so the caret reappears at the left.
   Both handle loop wrap; manual editing gestures temporarily suspend automatic viewport movement.
+  During playback, clip edits, lane changes, and imports are locked; ruler seeking, scrolling,
+  and Auto-Scroll remain available. Follow scrolling uses fractional-second positioning, and
+  waveform peaks are prepared off the UI thread.
   Scroll mode and current viewport are runtime navigation only: no history or autosave writes.
 - Context menu **Place source audio here** reuses an existing source on an empty track position.
 - **Fit arrangement horizontally** shows the whole arrangement.

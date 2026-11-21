@@ -13,7 +13,7 @@ public sealed partial class MixTrackView
         this.tempoDebounce.Stop();
         this.projectSaveTimer.Stop();
         this.ClearRangeSelection();
-        this.wavePeaks.Clear();
+        this.ResetWavePeakCache();
         this.Arrangement.Dispose();
         this.Arrangement = project;
         this.undo.Clear();

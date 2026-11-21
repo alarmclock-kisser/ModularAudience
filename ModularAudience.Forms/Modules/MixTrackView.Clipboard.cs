@@ -39,6 +39,7 @@ public sealed partial class MixTrackView
     }
     private void CutSelection()
     {
+        if (busy || PlaybackLocksEdits) return;
         CopySelection();
         DeleteSelection();
     }
@@ -56,6 +57,7 @@ public sealed partial class MixTrackView
     }
     private void StartPastePreview()
     {
+        if (busy || PlaybackLocksEdits) return;
         if (clipboardHistory.Count == 0) return;
         pasteEntry = clipboardHistory[0]; pastePreview = true; canvas.Cursor = Cursors.Cross; canvas.Focus(); canvas.Invalidate();
         status.Text = "Paste preview: move pointer, left-click to place, Esc / right-click to cancel. Shift = snap.";
@@ -64,7 +66,7 @@ public sealed partial class MixTrackView
     private (int Row, double Time) PasteAnchor() => (Math.Max(0, RowAt(lastPointer.Y)), Arrangement.SnapTime(XTime(lastPointer.X), ModifierKeys.HasFlag(Keys.Shift)));
     private void PlacePastePreview()
     {
-        if (!pastePreview || pasteEntry == null || busy) return;
+        if (!pastePreview || pasteEntry == null || busy || PlaybackLocksEdits) return;
         var (row, time) = PasteAnchor();
         if (pasteEntry.Parts.Any(p => !Arrangement.Sources.ContainsKey(p.Clip.SourceId))) return;
         while (Arrangement.Lanes.Count <= row + pasteEntry.Parts.Max(p => p.Row)) Arrangement.Lanes.Add(new() { Name = NextLaneName() });
@@ -156,6 +158,7 @@ public sealed partial class MixTrackView
     }
     private void DeleteSelection()
     {
+        if (busy || PlaybackLocksEdits) return;
         if (selectionFirstRow >= 0 && selectionEnd > selectionStart && fullSelectedClips.Count == 0) { DeleteSelectedRange(); return; }
         foreach (var lane in Arrangement.Lanes) lane.Clips.RemoveAll(c => selectedClips.Contains(c.Id) || selectedClips.Count == 0 && c.Id == selectedClip);
         selectedClip = null; ClearRangeSelection(); Changed();

@@ -19,6 +19,7 @@ internal sealed class AppShell : Shell
         this.Items.Add(CreateItem("VocalSynth", new MainPage()));
         this.Items.Add(CreateItem("Co-op", new CoOpPage(session, store)));
         this.Items.Add(CreateItem("Soundboard", new SoundboardPage(store)));
+        this.Items.Add(CreateItem("About", new AboutPage()));
         this.Loaded += this.AppShell_Loaded;
     }
 

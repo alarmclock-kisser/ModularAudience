@@ -32,6 +32,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.tableLayoutPanel_root = new TableLayoutPanel();
             this.panel_top = new Panel();
             this.flowLayoutPanel_top = new FlowLayoutPanel();
+            this.flowLayoutPanel_tracks = new FlowLayoutPanel();
+            this.button_import = new Button();
+            this.label_track = new Label();
+            this.numericUpDown_track = new NumericUpDown();
+            this.label_trackName = new Label();
             this.button_instrument = new Button();
             this.label_instrument = new Label();
             this.label_resolution = new Label();
@@ -64,6 +69,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.tableLayoutPanel_root.SuspendLayout();
             this.panel_top.SuspendLayout();
             this.flowLayoutPanel_top.SuspendLayout();
+            this.flowLayoutPanel_tracks.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)this.numericUpDown_track).BeginInit();
             ((System.ComponentModel.ISupportInitialize)this.numericUpDown_resolution).BeginInit();
             ((System.ComponentModel.ISupportInitialize)this.numericUpDown_bpm).BeginInit();
             ((System.ComponentModel.ISupportInitialize)this.pictureBox_editor).BeginInit();
@@ -88,7 +95,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.tableLayoutPanel_root.Margin = new Padding(0);
             this.tableLayoutPanel_root.Name = "tableLayoutPanel_root";
             this.tableLayoutPanel_root.RowCount = 3;
-            this.tableLayoutPanel_root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38F));
+            this.tableLayoutPanel_root.RowStyles.Add(new RowStyle(SizeType.Absolute, 66F));
             this.tableLayoutPanel_root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             this.tableLayoutPanel_root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64F));
             this.tableLayoutPanel_root.Size = new Size(900, 540);
@@ -96,13 +103,14 @@ namespace ModularAudience.Forms.Modules.Dialogs
             // 
             // panel_top
             // 
+            this.panel_top.Controls.Add(this.flowLayoutPanel_tracks);
             this.panel_top.Controls.Add(this.flowLayoutPanel_top);
             this.panel_top.Dock = DockStyle.Fill;
             this.panel_top.Location = new Point(0, 0);
             this.panel_top.Margin = new Padding(0);
             this.panel_top.Name = "panel_top";
-            this.panel_top.Padding = new Padding(8, 6, 8, 0);
-            this.panel_top.Size = new Size(900, 38);
+            this.panel_top.Padding = new Padding(8, 4, 8, 2);
+            this.panel_top.Size = new Size(900, 66);
             this.panel_top.TabIndex = 0;
             // 
             // flowLayoutPanel_top
@@ -118,14 +126,71 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.flowLayoutPanel_top.Controls.Add(this.domainUpDown_minKey);
             this.flowLayoutPanel_top.Controls.Add(this.label_maxKey);
             this.flowLayoutPanel_top.Controls.Add(this.domainUpDown_maxKey);
-            this.flowLayoutPanel_top.Dock = DockStyle.Fill;
+            this.flowLayoutPanel_top.Dock = DockStyle.Top;
             this.flowLayoutPanel_top.FlowDirection = FlowDirection.LeftToRight;
-            this.flowLayoutPanel_top.Location = new Point(8, 6);
+            this.flowLayoutPanel_top.Location = new Point(8, 4);
             this.flowLayoutPanel_top.Margin = new Padding(0);
             this.flowLayoutPanel_top.Name = "flowLayoutPanel_top";
-            this.flowLayoutPanel_top.Size = new Size(884, 32);
+            this.flowLayoutPanel_top.Size = new Size(884, 28);
             this.flowLayoutPanel_top.TabIndex = 0;
             this.flowLayoutPanel_top.WrapContents = false;
+            //
+            // flowLayoutPanel_tracks
+            //
+            this.flowLayoutPanel_tracks.Controls.Add(this.button_import);
+            this.flowLayoutPanel_tracks.Controls.Add(this.label_track);
+            this.flowLayoutPanel_tracks.Controls.Add(this.numericUpDown_track);
+            this.flowLayoutPanel_tracks.Controls.Add(this.label_trackName);
+            this.flowLayoutPanel_tracks.Dock = DockStyle.Bottom;
+            this.flowLayoutPanel_tracks.FlowDirection = FlowDirection.LeftToRight;
+            this.flowLayoutPanel_tracks.Location = new Point(8, 34);
+            this.flowLayoutPanel_tracks.Margin = new Padding(0);
+            this.flowLayoutPanel_tracks.Name = "flowLayoutPanel_tracks";
+            this.flowLayoutPanel_tracks.Size = new Size(884, 28);
+            this.flowLayoutPanel_tracks.TabIndex = 1;
+            this.flowLayoutPanel_tracks.WrapContents = false;
+            //
+            // button_import
+            //
+            this.button_import.Location = new Point(3, 3);
+            this.button_import.Name = "button_import";
+            this.button_import.Size = new Size(72, 23);
+            this.button_import.TabIndex = 0;
+            this.button_import.Text = "Import";
+            this.button_import.UseVisualStyleBackColor = true;
+            this.button_import.Click += this.button_import_Click;
+            //
+            // label_track
+            //
+            this.label_track.AutoSize = true;
+            this.label_track.Location = new Point(81, 0);
+            this.label_track.Margin = new Padding(3, 8, 3, 0);
+            this.label_track.Name = "label_track";
+            this.label_track.Size = new Size(34, 15);
+            this.label_track.TabIndex = 1;
+            this.label_track.Text = "Track";
+            //
+            // numericUpDown_track
+            //
+            this.numericUpDown_track.Location = new Point(118, 3);
+            this.numericUpDown_track.Maximum = new decimal(new int[] { 1, 0, 0, 0 });
+            this.numericUpDown_track.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+            this.numericUpDown_track.Name = "numericUpDown_track";
+            this.numericUpDown_track.Size = new Size(55, 23);
+            this.numericUpDown_track.TabIndex = 2;
+            this.numericUpDown_track.Value = new decimal(new int[] { 1, 0, 0, 0 });
+            this.numericUpDown_track.ValueChanged += this.numericUpDown_track_ValueChanged;
+            //
+            // label_trackName
+            //
+            this.label_trackName.AutoEllipsis = true;
+            this.label_trackName.Location = new Point(176, 3);
+            this.label_trackName.Margin = new Padding(3, 5, 3, 0);
+            this.label_trackName.Name = "label_trackName";
+            this.label_trackName.Size = new Size(400, 23);
+            this.label_trackName.TabIndex = 3;
+            this.label_trackName.Text = "Piano Roll";
+            this.label_trackName.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // button_instrument
             // 
@@ -440,6 +505,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.panel_top.ResumeLayout(false);
             this.flowLayoutPanel_top.ResumeLayout(false);
             this.flowLayoutPanel_top.PerformLayout();
+            this.flowLayoutPanel_tracks.ResumeLayout(false);
+            this.flowLayoutPanel_tracks.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)this.numericUpDown_track).EndInit();
             ((System.ComponentModel.ISupportInitialize)this.numericUpDown_resolution).EndInit();
             ((System.ComponentModel.ISupportInitialize)this.numericUpDown_bpm).EndInit();
             ((System.ComponentModel.ISupportInitialize)this.pictureBox_editor).EndInit();
@@ -460,6 +528,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private TableLayoutPanel tableLayoutPanel_root;
         private Panel panel_top;
         private FlowLayoutPanel flowLayoutPanel_top;
+        private FlowLayoutPanel flowLayoutPanel_tracks;
+        private Button button_import;
+        private Label label_track;
+        private NumericUpDown numericUpDown_track;
+        private Label label_trackName;
         private Button button_instrument;
         private Label label_instrument;
         private Label label_resolution;

@@ -14,6 +14,7 @@ public sealed partial class MixTrackView
 
     private void AddEmptyTrack()
     {
+        if (busy || PlaybackLocksEdits) return;
         Arrangement.Lanes.Add(new() { Name = NextLaneName() }); Changed();
     }
     private void EnsureTrackLayout()
@@ -108,7 +109,7 @@ public sealed partial class MixTrackView
         projectSaveTimer.Stop(); await FlushProjectSaveAsync();
         var loaded = await MixArrangement.LoadAsync(path, token);
         StopPlayback(); CancelPastePreview(); clipboardHistory.Clear();
-        Arrangement.Sources.Clear(); wavePeaks.Clear();
+        ResetWavePeakCache(); Arrangement.Sources.Clear();
         foreach (var source in loaded.Sources) Arrangement.Sources[source.Key] = source.Value;
         // Project loading begins a fresh undo session; assets from the previous project
         // cannot be referenced by later undo operations.
