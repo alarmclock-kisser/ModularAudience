@@ -49,6 +49,36 @@ public sealed class ProgressDialogLifecycleTests
     }
 
     [STATestMethod]
+    public void ElapsedTimerSamplesExactProgressInsteadOfRoundedPercent()
+    {
+        using var dialog = new ProgressDialog(
+            progress: new Progress<double>(),
+            windowCloseDelay: 0);
+        dialog.Show();
+        dialog.Report(0.5051);
+
+        FieldInfo sampleFraction = typeof(ProgressDialog).GetField(
+            "lastRateSampleFraction",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var stopwatch = (System.Diagnostics.Stopwatch)typeof(ProgressDialog).GetField(
+            "stopwatch",
+            BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dialog)!;
+        sampleFraction.SetValue(dialog, 0.5);
+        typeof(ProgressDialog).GetField(
+            "lastRateSampleSeconds",
+            BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(dialog, stopwatch.Elapsed.TotalSeconds - 2);
+
+        typeof(ProgressDialog).GetMethod(
+            "timer_elapsed_Tick",
+            BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(dialog, [null, EventArgs.Empty]);
+
+        Assert.AreEqual(0.5051, (double)sampleFraction.GetValue(dialog)!, 0.0000001,
+            "ETA must sample the exact report rather than the rounded progress bar value.");
+    }
+
+    [STATestMethod]
     public void WorkerCancellationQueuesUiCloseWithoutRecursiveCancellation()
     {
         using var source = new CancellationTokenSource();

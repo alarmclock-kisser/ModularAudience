@@ -4,6 +4,8 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 
 public partial class ProgressDialog : Form
 {
+    private const double MinimumRateSampleIntervalSeconds = 1.0;
+    private const double MaximumRateMultipleOfAverage = 2.0;
     private readonly Stopwatch stopwatch = Stopwatch.StartNew();
     private readonly IProgress<double>? progress;
     private readonly string timeFormat;
@@ -16,7 +18,9 @@ public partial class ProgressDialog : Form
     private readonly CancellationToken cancellationToken;
     private double lastRateSampleFraction;
     private double lastRateSampleSeconds;
+    private double latestProgressFraction;
     private double smoothedProgressRate;
+    private int progressRateSampleCount;
     private TimeSpan? smoothedCompletionTime;
 
     public ProgressDialog(
@@ -61,6 +65,7 @@ public partial class ProgressDialog : Form
             return;
         }
 
+        this.latestProgressFraction = progress;
         this.progressBar.Value = (int)Math.Round(progress * 100.0);
         this.label_percent.Text = $"{progress:P0}";
         this.UpdateTimeLabels(progress);
@@ -168,7 +173,7 @@ public partial class ProgressDialog : Form
         if (this.cancellationToken.IsCancellationRequested) this.PostToUi(this.Close);
     }
 
-    private void UpdateTimeLabels(double progress)
+    private void UpdateTimeLabels(double progress, bool sampleProgress = false)
     {
         TimeSpan elapsed = this.stopwatch.Elapsed;
         this.label_elapsed.Text = $"Elapsed: {this.FormatTime(elapsed)}";
@@ -180,20 +185,32 @@ public partial class ProgressDialog : Form
         double elapsedSeconds = elapsed.TotalSeconds;
         double fractionDelta = progress - this.lastRateSampleFraction;
         double elapsedDelta = elapsedSeconds - this.lastRateSampleSeconds;
-        if (fractionDelta > 0.0001 && elapsedDelta > 0.001)
+        if (sampleProgress
+            && fractionDelta > 0.0001
+            && elapsedDelta >= MinimumRateSampleIntervalSeconds)
         {
             double instantRate = fractionDelta / elapsedDelta;
+            double maximumRate = GetMaximumPlausibleRate(progress, elapsedSeconds);
+            instantRate = Math.Min(instantRate, maximumRate);
             this.smoothedProgressRate = this.smoothedProgressRate <= 0
                 ? instantRate
                 : (this.smoothedProgressRate * 0.72) + (instantRate * 0.28);
+            this.smoothedProgressRate = Math.Min(this.smoothedProgressRate, maximumRate);
             this.lastRateSampleFraction = progress;
             this.lastRateSampleSeconds = elapsedSeconds;
+            this.progressRateSampleCount++;
         }
 
         TimeSpan proposed = TimeSpan.Zero;
-        if (this.smoothedProgressRate > 0.000001 && progress < 1.0)
+        double estimatedRate = Math.Min(
+            this.smoothedProgressRate,
+            GetMaximumPlausibleRate(progress, elapsedSeconds));
+        if (this.progressRateSampleCount >= 2
+            && elapsedSeconds >= 5
+            && estimatedRate > 0.000001
+            && progress < 1.0)
         {
-            double totalSeconds = elapsedSeconds + ((1.0 - progress) / this.smoothedProgressRate);
+            double totalSeconds = elapsedSeconds + ((1.0 - progress) / estimatedRate);
             var candidate = TimeSpan.FromSeconds(Math.Clamp(totalSeconds, 0, TimeSpan.MaxValue.TotalSeconds));
             if (this.smoothedCompletionTime is null)
             {
@@ -231,9 +248,17 @@ public partial class ProgressDialog : Form
         }
     }
 
+    private static double GetMaximumPlausibleRate(double progress, double elapsedSeconds)
+    {
+        return progress > 0 && elapsedSeconds > 0
+            ? (progress / elapsedSeconds) * MaximumRateMultipleOfAverage
+            : double.PositiveInfinity;
+    }
+
     private void timer_elapsed_Tick(object? sender, EventArgs e)
     {
-        this.UpdateTimeLabels(this.progressBar.Value / 100.0d);
+        // The progress bar is rounded for display; only this timer samples exact reported progress.
+        this.UpdateTimeLabels(this.latestProgressFraction, sampleProgress: true);
     }
 
     private void timer_close_Tick(object? sender, EventArgs e)
