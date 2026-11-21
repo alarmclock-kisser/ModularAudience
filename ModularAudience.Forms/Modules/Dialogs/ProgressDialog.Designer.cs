@@ -8,6 +8,7 @@ partial class ProgressDialog
     private Label label_percent;
     private Label label_elapsed;
     private Label label_proposed;
+    private Button button_cancel;
     private System.Windows.Forms.Timer timer_elapsed;
     private System.Windows.Forms.Timer timer_close;
 
@@ -29,16 +30,18 @@ partial class ProgressDialog
         this.label_percent = new Label();
         this.label_elapsed = new Label();
         this.label_proposed = new Label();
+        this.button_cancel = new Button();
         this.timer_elapsed = new System.Windows.Forms.Timer(this.components);
         this.timer_close = new System.Windows.Forms.Timer(this.components);
         this.SuspendLayout();
-        // 
+        //
         // label_operation
-        // 
-        this.label_operation.AutoSize = true;
+        //
+        this.label_operation.AutoEllipsis = true;
+        this.label_operation.AutoSize = false;
         this.label_operation.Location = new Point(12, 12);
         this.label_operation.Name = "label_operation";
-        this.label_operation.Size = new Size(70, 15);
+        this.label_operation.Size = new Size(376, 18);
         this.label_operation.TabIndex = 0;
         this.label_operation.Text = "Processing...";
         // 
@@ -91,7 +94,8 @@ partial class ProgressDialog
         // 
         this.AutoScaleDimensions = new SizeF(7F, 15F);
         this.AutoScaleMode = AutoScaleMode.Font;
-        this.ClientSize = new Size(400, 132);
+        this.ClientSize = new Size(400, 170);
+        this.Controls.Add(this.button_cancel);
         this.Controls.Add(this.label_proposed);
         this.Controls.Add(this.label_elapsed);
         this.Controls.Add(this.label_percent);
@@ -104,6 +108,17 @@ partial class ProgressDialog
         this.ShowInTaskbar = false;
         this.StartPosition = FormStartPosition.CenterParent;
         this.Text = "Progress";
+        //
+        // button_cancel
+        //
+        this.button_cancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+        this.button_cancel.Location = new Point(313, 135);
+        this.button_cancel.Name = "button_cancel";
+        this.button_cancel.Size = new Size(75, 23);
+        this.button_cancel.TabIndex = 5;
+        this.button_cancel.Text = "Cancel";
+        this.button_cancel.UseVisualStyleBackColor = true;
+        this.button_cancel.Click += this.button_cancel_Click;
         this.ResumeLayout(false);
         this.PerformLayout();
     }

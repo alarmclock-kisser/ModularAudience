@@ -30,7 +30,6 @@ public partial class OnnxDemucsDialog : Form
     private string[] loadedCacheKeys = [];
     private readonly CheckBox cpuFallback = Check("Fall back to CPU if DirectML fails");
     private readonly CheckBox cpuOperators = Check("Allow CPU operators in DirectML graphs");
-    private readonly CheckBox validate = Check("Compare DirectML with CPU on load (diagnostic only)");
     private readonly CheckBox disableDmlFusion = Check("Disable DirectML graph fusion (Demucs compatibility)");
     private readonly CheckBox memoryPattern = Check("Enable memory pattern (CPU only)");
     private readonly CheckBox cpuArena = Check("Enable CPU memory arena");
@@ -143,7 +142,7 @@ public partial class OnnxDemucsDialog : Form
         this.checksPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         this.checksPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         int checkIndex = 0;
-        foreach (var check in new[] { this.cpuFallback, this.cpuOperators, this.validate, this.disableDmlFusion, this.memoryPattern, this.cpuArena, this.spinning, this.prepacking, this.profiling, this.logging, this.useCudaCuFft })
+        foreach (var check in new[] { this.cpuFallback, this.cpuOperators, this.disableDmlFusion, this.memoryPattern, this.cpuArena, this.spinning, this.prepacking, this.profiling, this.logging, this.useCudaCuFft })
         {
             check.AutoSize = false;
             check.Dock = DockStyle.Fill;
@@ -358,7 +357,6 @@ public partial class OnnxDemucsDialog : Form
         this.overlap.Value = (decimal)(o.ChunkOverlap * 100);
         this.cpuFallback.Checked = o.AllowCpuFallback;
         this.cpuOperators.Checked = o.AllowCpuOperators;
-        this.validate.Checked = o.ValidateDirectML;
         this.disableDmlFusion.Checked = o.DisableDirectMLGraphFusion;
         this.memoryPattern.Checked = o.EnableMemoryPattern;
         this.cpuArena.Checked = o.EnableCpuMemoryArena;
@@ -416,7 +414,7 @@ public partial class OnnxDemucsDialog : Form
             FourierWorkers = (int)this.workers.Value,
             ChunkOverlap = (double)this.overlap.Value / 100,
             AllowCpuFallback = this.cpuFallback.Checked, AllowCpuOperators = this.cpuOperators.Checked,
-            ValidateDirectML = this.validate.Checked, EnableMemoryPattern = this.memoryPattern.Checked,
+            EnableMemoryPattern = this.memoryPattern.Checked,
             DisableDirectMLGraphFusion = this.disableDmlFusion.Checked,
             EnableCpuMemoryArena = this.cpuArena.Checked, DisableSpinning = this.spinning.Checked,
             DisablePrepacking = this.prepacking.Checked, EnableProfiling = this.profiling.Checked,
@@ -437,13 +435,49 @@ public partial class OnnxDemucsDialog : Form
         {
             try
             {
-                string[] desiredKeys = this.GetDesiredOptions().Select(options => DemucsModelCache.Key(selected.Path, options))
+                DemucsLoadOptions[] desiredOptions = this.GetDesiredOptions();
+                string[] desiredKeys = desiredOptions.Select(options => DemucsModelCache.Key(selected.Path, options))
                     .Order(StringComparer.Ordinal).ToArray();
                 if (this.loadedCacheKeys.SequenceEqual(desiredKeys, StringComparer.Ordinal))
                 {
                     this.loadedWithCurrentOptions = true;
                     this.button_run.Enabled = this.Onnx.IsOnline;
                     this.status.Text = this.WithDeviceNotice("Ready — reusing the loaded model.");
+                    this.UpdateProviderControls();
+                    this.UpdateLoadButton();
+                    return;
+                }
+
+                string[] desiredSessionKeys = desiredOptions
+                    .Select(options => DemucsModelCache.SessionKey(selected.Path, options))
+                    .Order(StringComparer.Ordinal)
+                    .ToArray();
+                string[] loadedSessionKeys = this.modelLeases
+                    .Select(lease => DemucsModelCache.SessionKey(
+                        selected.Path,
+                        lease.Model.EffectiveOptions ?? new DemucsLoadOptions()))
+                    .Order(StringComparer.Ordinal)
+                    .ToArray();
+                if (this.modelLeases.Count == desiredOptions.Length
+                    && loadedSessionKeys.SequenceEqual(desiredSessionKeys, StringComparer.Ordinal))
+                {
+                    foreach (SharedModelPool<OnnxService>.Lease lease in this.modelLeases)
+                    {
+                        string loadedKey = DemucsModelCache.SessionKey(
+                            selected.Path,
+                            lease.Model.EffectiveOptions ?? new DemucsLoadOptions());
+                        DemucsLoadOptions matching = desiredOptions.First(option =>
+                            DemucsModelCache.SessionKey(selected.Path, option) == loadedKey);
+                        lease.Model.ApplyRuntimeFourierOptions(matching);
+                        lease.AddAlias(DemucsModelCache.Key(selected.Path, matching));
+                    }
+
+                    this.loadedCacheKeys = desiredKeys;
+                    this.loadedWithCurrentOptions = true;
+                    this.settings.Options = this.ReadOptions();
+                    this.button_run.Enabled = this.Onnx.IsOnline;
+                    this.status.Text = this.WithDeviceNotice(
+                        $"Ready — FFT options updated without reloading the ONNX model.\n{DescribeLoadedModels(this.modelLeases)}");
                     this.UpdateProviderControls();
                     this.UpdateLoadButton();
                     return;
@@ -575,8 +609,8 @@ public partial class OnnxDemucsDialog : Form
         this.memoryPattern.Enabled = !dml && !this.busy;
         this.cpuFallback.Enabled = dml && !this.busy;
         this.cpuOperators.Enabled = dml && !this.busy;
-        this.validate.Enabled = dml && !this.busy;
-        this.disableDmlFusion.Enabled = dml && !this.busy;
+        this.disableDmlFusion.Checked = true;
+        this.disableDmlFusion.Enabled = false;
         this.checkedListBox_directMLDevices.Enabled = dml && !this.busy && !DemucsModelCache.HasDirectMLSessions;
         this.keepModelLoaded.Enabled = !this.busy;
         this.useCudaCuFft.Enabled = this.CanUseCudaCuFft && !this.busy;

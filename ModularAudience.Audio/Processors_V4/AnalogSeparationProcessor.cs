@@ -1,4 +1,5 @@
 using MathNet.Numerics.IntegralTransforms;
+using ModularAudience.Audio.Processing;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -28,7 +29,8 @@ namespace ModularAudience.Audio.Processors_V4
             AudioObj source,
             IReadOnlyList<AnalogSeparationBand> bands,
             AnalogSeparationSettings settings,
-            IProgress<double>? progress = null)
+            IProgress<double>? progress = null,
+            CancellationToken cancellationToken = default)
         {
             if (source == null || source.Data == null || source.Data.Length == 0 || source.SampleRate <= 0)
             {
@@ -40,7 +42,9 @@ namespace ModularAudience.Audio.Processors_V4
                 return new AnalogSeparationResult([], []);
             }
 
-            return await Task.Run(() => SeparateCore(source, bands, settings, progress)).ConfigureAwait(false);
+            return await Task.Run(
+                () => SeparateCore(source, bands, settings, progress, cancellationToken),
+                cancellationToken).ConfigureAwait(false);
         }
 
         public static async Task<IReadOnlyList<AnalogSeparationBand>> AnalyzeBandsAsync(
@@ -324,7 +328,8 @@ namespace ModularAudience.Audio.Processors_V4
             AudioObj source,
             IReadOnlyList<AnalogSeparationBand> bands,
             AnalogSeparationSettings settings,
-            IProgress<double>? progress)
+            IProgress<double>? progress,
+            CancellationToken cancellationToken)
         {
             float[] mono = ConvertToMono(source);
             if (mono.Length == 0)
@@ -376,7 +381,11 @@ namespace ModularAudience.Audio.Processors_V4
                 frameSpectra[frame] = new Complex[windowSize];
             }
 
-            Parallel.For(0, numFrames, new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(threads, 1, numFrames) }, frame =>
+            Parallel.For(0, numFrames, new ParallelOptions
+            {
+                CancellationToken = cancellationToken,
+                MaxDegreeOfParallelism = Math.Clamp(threads, 1, numFrames)
+            }, frame =>
             {
                 int offset = frame * step;
                 Complex[] spectrum = frameSpectra[frame];
@@ -404,7 +413,11 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             double[][] frameWeightSums = new double[numFrames][];
-            Parallel.For(0, numFrames, new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(threads, 1, numFrames) }, frame =>
+            Parallel.For(0, numFrames, new ParallelOptions
+            {
+                CancellationToken = cancellationToken,
+                MaxDegreeOfParallelism = Math.Clamp(threads, 1, numFrames)
+            }, frame =>
             {
                 Complex[] sourceSpectrum = frameSpectra[frame];
                 double[] weightSums = new double[windowSize];
@@ -439,43 +452,50 @@ namespace ModularAudience.Audio.Processors_V4
             double[] norm = new double[mono.Length];
             List<AudioObj> stems = [];
 
-            for (int bandIndex = 0; bandIndex < bands.Count; bandIndex++)
+            try
             {
-                var band = bands[bandIndex];
-                int low = bandLows[bandIndex];
-                int high = bandHighs[bandIndex];
-
-                if (high > low)
+                for (int bandIndex = 0; bandIndex < bands.Count; bandIndex++)
                 {
-                    Array.Clear(acc, 0, acc.Length);
-                    Array.Clear(norm, 0, norm.Length);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var band = bands[bandIndex];
+                    int low = bandLows[bandIndex];
+                    int high = bandHighs[bandIndex];
 
-                    // Copy each original spectrum before masking so every band starts from the same FFT data.
-                    Complex[][] bandSpectra = new Complex[numFrames][];
-                    Parallel.For(0, numFrames, new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(threads, 1, numFrames) }, frame =>
+                    if (high > low)
                     {
-                        Complex[] spectrum = new Complex[windowSize];
-                        Complex[] sourceSpectrum = frameSpectra[frame];
-                        Array.Copy(sourceSpectrum, spectrum, windowSize);
-                        for (int i = 0; i < windowSize; i++)
-                        {
-                            int positiveBin = i <= windowSize / 2 ? i : windowSize - i;
-                            double targetWeight = GetFeatureWeightedBandMask(
-                                sourceSpectrum,
-                                positiveBin,
-                                low,
-                                high,
-                                settings,
-                                sharpness,
-                                windowSize);
-                            double totalWeight = frameWeightSums[frame][i];
-                            double mask = totalWeight > 1e-12 ? targetWeight / totalWeight : 0.0;
-                            spectrum[i] *= Math.Clamp(mask, 0.0, 1.0);
-                        }
+                        Array.Clear(acc, 0, acc.Length);
+                        Array.Clear(norm, 0, norm.Length);
 
-                        Fourier.Inverse(spectrum, FourierOptions.Matlab);
-                        bandSpectra[frame] = spectrum;
-                    });
+                        // Copy each original spectrum before masking so every band starts from the same FFT data.
+                        Complex[][] bandSpectra = new Complex[numFrames][];
+                        Parallel.For(0, numFrames, new ParallelOptions
+                        {
+                            CancellationToken = cancellationToken,
+                            MaxDegreeOfParallelism = Math.Clamp(threads, 1, numFrames)
+                        }, frame =>
+                        {
+                            Complex[] spectrum = new Complex[windowSize];
+                            Complex[] sourceSpectrum = frameSpectra[frame];
+                            Array.Copy(sourceSpectrum, spectrum, windowSize);
+                            for (int i = 0; i < windowSize; i++)
+                            {
+                                int positiveBin = i <= windowSize / 2 ? i : windowSize - i;
+                                double targetWeight = GetFeatureWeightedBandMask(
+                                    sourceSpectrum,
+                                    positiveBin,
+                                    low,
+                                    high,
+                                    settings,
+                                    sharpness,
+                                    windowSize);
+                                double totalWeight = frameWeightSums[frame][i];
+                                double mask = totalWeight > 1e-12 ? targetWeight / totalWeight : 0.0;
+                                spectrum[i] *= Math.Clamp(mask, 0.0, 1.0);
+                            }
+
+                            Fourier.Inverse(spectrum, FourierOptions.Matlab);
+                            bandSpectra[frame] = spectrum;
+                        });
 
                     // Overlap-add with normalization.
                     for (int frame = 0; frame < numFrames; frame++)
@@ -504,46 +524,56 @@ namespace ModularAudience.Audio.Processors_V4
                         filteredPeak = Math.Max(filteredPeak, Math.Abs(acc[i]));
                     }
 
-                    if (filteredPeak <= minimumBandPeak)
-                    {
-                        progress?.Report((double)(bandIndex + 1) / bands.Count);
-                        continue;
-                    }
+                        if (filteredPeak <= minimumBandPeak)
+                        {
+                            progress?.Report((double)(bandIndex + 1) / bands.Count);
+                            continue;
+                        }
 
-                    if (settings.SubtractFromOriginal)
-                    {
+                        if (settings.SubtractFromOriginal)
+                        {
+                            for (int i = 0; i < mono.Length; i++)
+                            {
+                                acc[i] = mono[i] - acc[i];
+                            }
+                        }
+
+                        double peak = 0.0;
                         for (int i = 0; i < mono.Length; i++)
                         {
-                            acc[i] = mono[i] - acc[i];
+                            peak = Math.Max(peak, Math.Abs(acc[i]));
                         }
+
+                        double gain = peak > 0.000001 ? 0.95 / peak : 1.0;
+                        float[] result = new float[mono.Length];
+                        for (int i = 0; i < mono.Length; i++)
+                        {
+                            result[i] = (float)Math.Clamp(acc[i] * gain, -1.0, 1.0);
+                        }
+
+                        AudioObj stem = AudioDecompileAudio.CreateStem(
+                            source,
+                            result,
+                            $"{source.OriginalName}_{band.Name}",
+                            channels: 1);
+                        stems.Add(stem);
                     }
 
-                    double peak = 0.0;
-                    for (int i = 0; i < mono.Length; i++)
-                    {
-                        peak = Math.Max(peak, Math.Abs(acc[i]));
-                    }
-
-                    double gain = peak > 0.000001 ? 0.95 / peak : 1.0;
-                    float[] result = new float[mono.Length];
-                    for (int i = 0; i < mono.Length; i++)
-                    {
-                        result[i] = (float)Math.Clamp(acc[i] * gain, -1.0, 1.0);
-                    }
-
-                    AudioObj stem = source.Clone();
-                    stem.Data = result;
-                    stem.Channels = 1;
-                    stem.Length = result.LongLength;
-                    stem.Duration = TimeSpan.FromSeconds(result.LongLength / (double)Math.Max(1, stem.SampleRate));
-                    stem.Rename($"{source.OriginalName}_{band.Name}");
-                    stems.Add(stem);
+                    progress?.Report((double)(bandIndex + 1) / bands.Count);
                 }
 
-                progress?.Report((double)(bandIndex + 1) / bands.Count);
+                cancellationToken.ThrowIfCancellationRequested();
+                return new AnalogSeparationResult(stems, mono);
             }
+            catch
+            {
+                foreach (AudioObj stem in stems)
+                {
+                    stem.Dispose();
+                }
 
-            return new AnalogSeparationResult(stems, mono);
+                throw;
+            }
         }
 
         private static double GetBandMask(int bin, int low, int high, int sharpness)

@@ -1155,6 +1155,7 @@ namespace ModularAudience.Forms
             this.menuToolStripItem_sourceSeparateDemucs.Enabled = hasSingle;
             this.menuToolStripItem_sourceSeparateAnalog.Enabled = hasSingle;
             this.menuToolStripItem_sourceSeparateDeterministic.Enabled = hasSingle;
+            this.menuToolStripItem_decompile.Enabled = hasSingle;
             this.menuToolStripItem_beatClickerGame.Enabled = hasSingle;
             this.menuToolStripItem_taikoMode.Enabled = hasSingle;
             this.menuToolStripItem_createDebugLog.Enabled = hasSingle;

@@ -1,24 +1,36 @@
 ﻿using System.Numerics;
 using MathNet.Numerics.IntegralTransforms;
+using ModularAudience.Audio.Processing;
 
 namespace ModularAudience.Audio.Processors_V1
 {
     public static class LoopAtomizer
     {
         // Public entrypoint - signature unchanged
-        public static Task<IEnumerable<AudioObj>> AtomizeLoopAsync(AudioObj audioObj, float? similarityThreshold = null)
+        public static Task<IEnumerable<AudioObj>> AtomizeLoopAsync(
+            AudioObj audioObj,
+            float? similarityThreshold = null,
+            CancellationToken cancellationToken = default,
+            bool deduplicate = true)
         {
             // run on threadpool, returns task - caller API unchanged
-            return Task.Run(() => AtomizeInternal(audioObj, similarityThreshold));
+            return Task.Run(
+                () => AtomizeInternal(audioObj, similarityThreshold, cancellationToken, deduplicate),
+                cancellationToken);
         }
 
         // Internal pipeline - everything automatic
-        private static IEnumerable<AudioObj> AtomizeInternal(AudioObj audioObj, float? similarityHint)
+        private static IEnumerable<AudioObj> AtomizeInternal(
+            AudioObj audioObj,
+            float? similarityHint,
+            CancellationToken cancellationToken,
+            bool deduplicate)
         {
             if (audioObj == null)
             {
                 throw new ArgumentNullException(nameof(audioObj));
             }
+            cancellationToken.ThrowIfCancellationRequested();
 
             var interleaved = audioObj.Data ?? [];
             int channels = Math.Max(1, audioObj.Channels);
@@ -30,12 +42,15 @@ namespace ModularAudience.Audio.Processors_V1
 
             // 1) Analysis: mono mix
             var mono = ToMono(interleaved, channels);
+            cancellationToken.ThrowIfCancellationRequested();
 
             // 2) Derive adaptive parameters from content (and detect jungle mode)
             var ap = DeriveAdaptiveParams(mono, sr, similarityHint, out bool jungleMode);
+            cancellationToken.ThrowIfCancellationRequested();
 
             // 3) Onset detection (energy + spectral flux blended)
             var onsets = DetectOnsets(mono, sr, ap);
+            cancellationToken.ThrowIfCancellationRequested();
 
             // 4) Jungle densification: if jungleMode, add micro-onsets
             if (jungleMode)
@@ -43,12 +58,14 @@ namespace ModularAudience.Audio.Processors_V1
                 var extras = DensifyOnsetsForJungle(mono, sr, onsets, ap);
                 onsets = SortedUnique(onsets.Concat(extras));
             }
+            cancellationToken.ThrowIfCancellationRequested();
 
             // 5) Build raw candidate segments centered on onsets
             var rawSegments = BuildCandidateSegments(onsets, mono.Length, sr, ap);
 
             // 6) Smart merge & split to avoid overfragmentation (and adapt to jungleMode)
             var merged = MergeAndSplitSmart(rawSegments, mono, sr, ap, jungleMode);
+            cancellationToken.ThrowIfCancellationRequested();
 
             // 7) Post-processing: hi-hat merging, trimming silence, zero-cross alignment
             var refined = PostProcessSegments(merged, mono, sr, ap, jungleMode);
@@ -60,51 +77,107 @@ namespace ModularAudience.Audio.Processors_V1
             }
 
             // 9) Extract candidates preserving channels and metadata
-            var candidates = refined.Select(seg => ExtractMultiChannelSlice(interleaved, channels, seg.start, seg.end, sr, audioObj.Name)).ToList();
+            var candidates = refined.Select(seg =>
+                ExtractMultiChannelSlice(interleaved, channels, seg.start, seg.end, sr, audioObj.Name)).ToList();
 
             // 10) If only one candidate: isolate/trim and return
             if (candidates.Count <= 1)
             {
                 var list = new List<AudioObj>();
-                foreach (var c in candidates)
+                try
                 {
-                    list.Add(IsolateAndFinalize(c, sr));
+                    cancellationToken.ThrowIfCancellationRequested();
+                    foreach (var c in candidates)
+                    {
+                        list.Add(IsolateAndFinalize(c, sr));
+                    }
+                }
+                catch
+                {
+                    foreach (AudioObj audio in list) audio.Dispose();
+                    throw;
+                }
+                finally
+                {
+                    foreach (AudioObj candidate in candidates) candidate.Dispose();
                 }
 
                 return list;
             }
 
-            // 11) Fingerprint & clustering
-            var fps = candidates.Select(c => ComputeSpectralFingerprint(c.Data, c.Channels, sr, bins: ap.FingerprintBins)).ToList();
-
-            float clusterThreshold = ap.ClusterSimilarityThreshold;
-            if (similarityHint.HasValue)
+            if (!deduplicate)
             {
-                clusterThreshold = Math.Clamp(similarityHint.Value, 0.6f, 0.98f);
-            }
-            else
-            {
-                clusterThreshold = DetermineAdaptiveClusterThreshold(fps, clusterThreshold);
-            }
-
-            var clusters = GreedyClusterBySimilarity(fps, clusterThreshold);
-
-            // 12) Choose representative (highest peak-rms) per cluster and finalize
-            var representatives = new List<AudioObj>();
-            for (int ci = 0; ci < clusters.Count; ci++)
-            {
-                var idxs = clusters[ci];
-                int bestIdx = idxs[0];
-                double bestScore = -1;
-                foreach (var id in idxs)
+                var all = new List<AudioObj>();
+                try
                 {
-                    double score = ComputePeakRms(candidates[id].Data, candidates[id].Channels);
-                    if (score > bestScore) { bestScore = score; bestIdx = id; }
+                    for (int index = 0; index < candidates.Count; index++)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        AudioObj atomic = IsolateAndFinalize(candidates[index], sr);
+                        atomic.Name = $"{(string.IsNullOrWhiteSpace(audioObj.Name) ? "atom" : audioObj.Name)}_atom_{index + 1:D2}";
+                        atomic.Rename(atomic.Name);
+                        all.Add(atomic);
+                    }
                 }
-                var rep = IsolateAndFinalize(candidates[bestIdx], sr);
-                rep.Name = $"{(string.IsNullOrWhiteSpace(audioObj.Name) ? "atom" : audioObj.Name)}_atom_{ci + 1:D2}";
-                rep.Rename(rep.Name);
-                representatives.Add(rep);
+                catch
+                {
+                    foreach (AudioObj atomic in all) atomic.Dispose();
+                    throw;
+                }
+                finally
+                {
+                    foreach (AudioObj candidate in candidates) candidate.Dispose();
+                }
+
+                return all;
+            }
+
+            var representatives = new List<AudioObj>();
+            try
+            {
+                // 11) Fingerprint & clustering
+                var fps = candidates.Select(c => ComputeSpectralFingerprint(
+                    c.Data, c.Channels, sr, bins: ap.FingerprintBins)).ToList();
+                cancellationToken.ThrowIfCancellationRequested();
+
+                float clusterThreshold = ap.ClusterSimilarityThreshold;
+                if (similarityHint.HasValue)
+                {
+                    clusterThreshold = Math.Clamp(similarityHint.Value, 0.6f, 0.98f);
+                }
+                else
+                {
+                    clusterThreshold = DetermineAdaptiveClusterThreshold(fps, clusterThreshold);
+                }
+
+                var clusters = GreedyClusterBySimilarity(fps, clusterThreshold);
+
+                // 12) Choose representative (highest peak-rms) per cluster and finalize
+                for (int ci = 0; ci < clusters.Count; ci++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var idxs = clusters[ci];
+                    int bestIdx = idxs[0];
+                    double bestScore = -1;
+                    foreach (var id in idxs)
+                    {
+                        double score = ComputePeakRms(candidates[id].Data, candidates[id].Channels);
+                        if (score > bestScore) { bestScore = score; bestIdx = id; }
+                    }
+                    var rep = IsolateAndFinalize(candidates[bestIdx], sr);
+                    rep.Name = $"{(string.IsNullOrWhiteSpace(audioObj.Name) ? "atom" : audioObj.Name)}_atom_{ci + 1:D2}";
+                    rep.Rename(rep.Name);
+                    representatives.Add(rep);
+                }
+            }
+            catch
+            {
+                foreach (AudioObj representative in representatives) representative.Dispose();
+                throw;
+            }
+            finally
+            {
+                foreach (AudioObj candidate in candidates) candidate.Dispose();
             }
 
             return representatives;
@@ -827,6 +900,7 @@ namespace ModularAudience.Audio.Processors_V1
                 SampleRate = sampleRate,
                 Length = outData.LongLength
             };
+            AudioAtomicTiming.Set(obj, startFrame, frames);
             try
             {
                 obj.Name = (string.IsNullOrWhiteSpace(baseName) ? "slice" : baseName);
@@ -913,6 +987,11 @@ namespace ModularAudience.Audio.Processors_V1
             clone.Length = outData.LongLength;
             clone.Channels = channels;
             clone.SampleRate = sampleRate;
+            clone.Duration = TimeSpan.FromSeconds(outFrames / (double)Math.Max(1, sampleRate));
+            if (AudioAtomicTiming.TryGet(sample, out long sourceStartFrame, out _))
+            {
+                AudioAtomicTiming.Set(clone, sourceStartFrame + startFrame, outFrames);
+            }
             return clone;
         }
 

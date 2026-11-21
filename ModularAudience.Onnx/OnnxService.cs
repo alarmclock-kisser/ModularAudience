@@ -44,8 +44,6 @@ namespace ModularAudience.Onnx
         {
             loadOptions = JsonSerializer.Deserialize<DemucsLoadOptions>(JsonSerializer.Serialize(loadOptions ?? new()))!;
             loadOptions.NormalizeForProvider(loadOptions.UseDirectML);
-            bool directMLRequested = loadOptions.UseDirectML;
-            using IDisposable? gpuLoadGate = directMLRequested ? DemucsGpuDeviceGate.Acquire(loadOptions) : null;
             this.EffectiveOptions = null;
             string? fallbackWarning = null;
             InferenceSession? session = null;
@@ -98,8 +96,6 @@ namespace ModularAudience.Onnx
                 this.ModelPath = modelPath;
                 this.LoadWarning = fallbackWarning;
                 this.fourier = new DemucsFourier(loadOptions);
-                if (loadOptions.UseDirectML && this.ExecutionProvider.StartsWith("DirectML") && loadOptions.ValidateDirectML)
-                    this.ValidateDirectML(modelPath, loadOptions);
                 loadOptions.ApplyEffectiveProvider(
                     this.ExecutionProvider.StartsWith("DirectML", StringComparison.Ordinal));
                 this.EffectiveOptions = loadOptions;
@@ -111,6 +107,26 @@ namespace ModularAudience.Onnx
                 if (ReferenceEquals(session, this._session)) this._session = null;
                 throw;
             }
+        }
+
+        public void ApplyRuntimeFourierOptions(DemucsLoadOptions options)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            DemucsLoadOptions effective = JsonSerializer.Deserialize<DemucsLoadOptions>(
+                JsonSerializer.Serialize(this.EffectiveOptions ?? new DemucsLoadOptions()))!;
+            effective.UseCudaCuFft = options.UseCudaCuFft;
+            effective.CudaDeviceId = options.CudaDeviceId;
+            effective.CudaToolkitVersion = options.CudaToolkitVersion;
+            effective.FourierWorkers = options.FourierWorkers;
+            effective.ChunkOverlap = options.ChunkOverlap;
+            if (!effective.UseDirectML)
+            {
+                effective.DeviceLuid = options.DeviceLuid;
+            }
+
+            effective.NormalizeWorkers();
+            this.EffectiveOptions = effective;
+            this.fourier = new DemucsFourier(effective);
         }
 
         public string[] GetModelPaths(string[]? additionalDirectories = null)
@@ -135,8 +151,6 @@ namespace ModularAudience.Onnx
             int[] indices = selected.Select(name => this.AvailableStems.FindIndex(s => s.Equals(name, StringComparison.OrdinalIgnoreCase))).ToArray();
             if (indices.Any(i => i < 0)) throw new ArgumentException("The selected stem is not available in this model.");
             if (selected.Length == 0) throw new ArgumentException("Select at least one stem.");
-            using IDisposable? gpuOperationGate = await DemucsGpuDeviceGate.AcquireAsync(this.EffectiveOptions, cancellationToken)
-                .ConfigureAwait(false);
 
             // Prepare a private copy. Separation must never resample or normalize the source track.
             using AudioObj prepared = await audio.CloneAsync().ConfigureAwait(false);
@@ -203,6 +217,23 @@ namespace ModularAudience.Onnx
                         float[]? frequencyAudio = spectral == null ? null
                             : await DemucsSpectrogram.InverseAsync(spectral, indices[s], this.chunkFrames, this.fourier, cancellationToken).ConfigureAwait(false);
                         float[] destination = result[selected[s]];
+                        if (Environment.GetEnvironmentVariable("DEMUS_ONNX_DEBUG") == "1" && start == 0)
+                        {
+                            double temporalLeft = 0, temporalRight = 0;
+                            double frequencyLeft = 0, frequencyRight = 0;
+                            for (int sample = 0; sample < count; sample++)
+                            {
+                                temporalLeft += (double)temporal[0, indices[s], 0, sample] * temporal[0, indices[s], 0, sample];
+                                temporalRight += (double)temporal[0, indices[s], 1, sample] * temporal[0, indices[s], 1, sample];
+                                if (frequencyAudio is not null)
+                                {
+                                    frequencyLeft += (double)frequencyAudio[2 * sample] * frequencyAudio[2 * sample];
+                                    frequencyRight += (double)frequencyAudio[2 * sample + 1] * frequencyAudio[2 * sample + 1];
+                                }
+                            }
+                            Console.WriteLine(FormattableString.Invariant(
+                                $"{this.ExecutionProvider} {selected[s]} temporal rms=[{Math.Sqrt(temporalLeft / Math.Max(1, count)):F8}, {Math.Sqrt(temporalRight / Math.Max(1, count)):F8}], frequency rms=[{Math.Sqrt(frequencyLeft / Math.Max(1, count)):F8}, {Math.Sqrt(frequencyRight / Math.Max(1, count)):F8}]"));
+                        }
                         for (int i = 0; i < count; i++)
                         {
                             float weight = overlap == 0 ? 1 : Math.Min(Math.Min(i + 1, this.chunkFrames - i), overlap) / (float)overlap;
@@ -235,6 +266,7 @@ namespace ModularAudience.Onnx
                 if (audio.Channels != 2) await converted.RechannelAsync(audio.Channels).ConfigureAwait(false);
                 float[] samples = converted.Data;
                 if (samples.Length != audio.Data.Length) Array.Resize(ref samples, audio.Data.Length);
+                DemucsSpectrogram.PrepareFinalStemWaveform(samples, audio.Channels);
                 result[name] = samples;
             }
             progress?.Report(1);
@@ -293,46 +325,6 @@ namespace ModularAudience.Onnx
                 position += read;
             }
             return result;
-        }
-
-        private void ValidateDirectML(string modelPath, DemucsLoadOptions options)
-        {
-            var planar = new float[2 * this.chunkFrames];
-            for (int i = 0; i < this.chunkFrames; i++)
-            {
-                planar[i] = (float)(0.2 * Math.Sin(2 * Math.PI * 110 * i / SampleRate));
-                planar[this.chunkFrames + i] = planar[i] * 0.8f;
-            }
-            var inputs = new List<NamedOnnxValue>
-            {
-                NamedOnnxValue.CreateFromTensor(this.waveformInput, new DenseTensor<float>(planar, [1, 2, this.chunkFrames]))
-            };
-            if (this.spectrumInput != null)
-                inputs.Add(NamedOnnxValue.CreateFromTensor(this.spectrumInput, DemucsSpectrogram.Forward(planar, this.chunkFrames, this.fourier)));
-            using var cpuOptions = options.Create(false);
-            var cpu = new InferenceSession(modelPath, cpuOptions);
-            try
-            {
-                bool valid = true;
-                using (var expected = cpu.Run(inputs))
-                using (var actual = this._session!.Run(inputs))
-                    foreach (var reference in expected)
-                    {
-                        float[] a = reference.AsTensor<float>().ToArray();
-                        float[] b = actual.Single(v => v.Name == reference.Name).AsTensor<float>().ToArray();
-                        double energy = 0, error = 0;
-                        for (int i = 0; i < a.Length; i++)
-                        {
-                            energy += (double)a[i] * a[i];
-                            error += (a[i] - (double)b[i]) * (a[i] - (double)b[i]);
-                        }
-                        if (!double.IsFinite(error) || Math.Sqrt(error / Math.Max(energy, 1e-12)) > 0.05) valid = false;
-                    }
-                if (valid) return;
-                this.LoadWarning = $"DirectML validation exceeded the 5% relative-error threshold on device {options.DeviceId}. The DirectML session remains active for inference.";
-                Console.Error.WriteLine(this.LoadWarning);
-            }
-            finally { cpu?.Dispose(); }
         }
 
         public void Dispose()

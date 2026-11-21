@@ -8,7 +8,6 @@ public sealed class DemucsLoadOptions
     public int DeviceId { get; set; }
     public bool AllowCpuFallback { get; set; } = true;
     public bool AllowCpuOperators { get; set; } = true;
-    public bool ValidateDirectML { get; set; } = true;
     public bool DisableDirectMLGraphFusion { get; set; } = true;
     public int FourierWorkers { get; set; } = Math.Max(1, Environment.ProcessorCount / 2);
     public double ChunkOverlap { get; set; } = 0.25;
@@ -77,6 +76,7 @@ public sealed class DemucsLoadOptions
     {
         this.NormalizeWorkers();
         if (!directML) return;
+        this.DisableDirectMLGraphFusion = true;
         this.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
         this.EnableMemoryPattern = false;
     }

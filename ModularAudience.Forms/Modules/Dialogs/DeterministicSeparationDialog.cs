@@ -251,37 +251,32 @@ namespace ModularAudience.Forms
             this.UpdateSettingsValidation();
         }
 
-        private static readonly Dictionary<string, (int, int, int, int, int, int, int, double, double, double, bool, int, bool, bool)> PresetValues = new()
-        {
-            ["Best Quality"] = (16384, 32, 500, 8192, 512, 65, 65, 1.0, 0.0, 100.0, true, 36, true, false),
-            ["High Quality"] = (8192, 24, 300, 4096, 256, 49, 49, 1.5, 0.0005, 95.0, true, 24, true, false),
-            ["Balanced"] = (4096, 16, 80, 1024, 128, 17, 17, 2.0, 0.001, 75.0, false, 12, false, false),
-            ["Faster"] = (2048, 12, 40, 512, 64, 9, 9, 3.0, 0.002, 60.0, false, 12, false, false),
-            ["Draft"] = (1024, 8, 20, 256, 32, 5, 5, 4.0, 0.005, 50.0, false, 12, false, false),
-            ["DnB / Breaks"] = (8192, 24, 200, 2048, 256, 33, 17, 2.0, 0.001, 95.0, true, 24, false, false),
-            ["Electro / Synth"] = (8192, 24, 250, 2048, 256, 17, 49, 1.5, 0.0005, 85.0, true, 36, true, false),
-            ["Pop / Band"] = (4096, 20, 150, 2048, 128, 25, 25, 2.0, 0.001, 80.0, false, 12, true, false),
-            ["Complex Ensemble"] = (16384, 32, 400, 4096, 512, 49, 49, 1.0, 0.0, 95.0, true, 36, true, false)
-        };
-
         private void ApplyPreset(string preset)
         {
-            if (!PresetValues.TryGetValue(preset, out var v)) return;
+            DeterministicSeparationPresetValues values;
+            try
+            {
+                values = DeterministicSeparationPresets.Get(preset);
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
 
-            this.comboBox_windowSize.SelectedItem = v.Item1;
-            this.numeric_maxComponents.Value = v.Item2;
-            this.numeric_iterations.Value = v.Item3;
-            this.numeric_analysisFrames.Value = v.Item4;
-            this.numeric_blockFrames.Value = v.Item5;
-            this.numeric_medianFrames.Value = v.Item6;
-            this.numeric_medianBins.Value = v.Item7;
-            this.numeric_separationMargin.Value = (decimal)v.Item8;
-            this.numeric_maskFloor.Value = (decimal)v.Item9;
-            this.numeric_transientPreservation.Value = (decimal)v.Item10;
-            this.checkBox_cqtAnalysis.Checked = v.Item11;
-            this.domainUpDown_cqtBinsPerOctave.Text = $"{v.Item12} bins/octave";
-            this.checkBox_pyin.Checked = v.Item13;
-            this.checkBox_ilrma.Checked = v.Item14;
+            this.comboBox_windowSize.SelectedItem = values.WindowSize;
+            this.numeric_maxComponents.Value = values.MaxComponents;
+            this.numeric_iterations.Value = values.Iterations;
+            this.numeric_analysisFrames.Value = values.AnalysisFrames;
+            this.numeric_blockFrames.Value = values.BlockFrames;
+            this.numeric_medianFrames.Value = values.MedianFrames;
+            this.numeric_medianBins.Value = values.MedianBins;
+            this.numeric_separationMargin.Value = (decimal)values.SeparationMargin;
+            this.numeric_maskFloor.Value = (decimal)values.MaskFloor;
+            this.numeric_transientPreservation.Value = (decimal)(values.TransientPreservation * 100.0);
+            this.checkBox_cqtAnalysis.Checked = values.UseCqtAnalysis;
+            this.domainUpDown_cqtBinsPerOctave.Text = $"{values.CqtBinsPerOctave} bins/octave";
+            this.checkBox_pyin.Checked = values.UsePyin;
+            this.checkBox_ilrma.Checked = values.UseIlrma;
         }
 
         private void profiles_ItemCheck(object? sender, ItemCheckEventArgs e)

@@ -230,9 +230,68 @@ public static class MixRenderer
         return new MixSource { Name = left.Name, Data = output, Channels = 2, SampleRate = 44100, Bpm = (float)arrangement.Bpm };
     }, token);
 
+    public static Task<MixSource> RenderClipGroupAsync(
+        MixArrangement arrangement,
+        MixLane lane,
+        IReadOnlyList<Guid> clipIds,
+        CancellationToken token = default) => Task.Run(async () =>
+    {
+        ArgumentNullException.ThrowIfNull(arrangement);
+        ArgumentNullException.ThrowIfNull(lane);
+        ArgumentNullException.ThrowIfNull(clipIds);
+        HashSet<Guid> selectedIds = clipIds.ToHashSet();
+        MixClip[] clips = lane.Clips
+            .Where(clip => selectedIds.Contains(clip.Id))
+            .OrderBy(clip => clip.Start)
+            .ThenBy(clip => clip.Id)
+            .ToArray();
+        if (clips.Length < 2 || clips.Length != selectedIds.Count)
+            throw new InvalidOperationException("The overlap group no longer contains all selected segments.");
+
+        double groupStart = clips.Min(clip => clip.Start);
+        double groupEnd = clips.Max(clip => clip.Start + arrangement.ClipDuration(clip));
+        long outputFrames = checked((long)Math.Ceiling((groupEnd - groupStart) * MixEffectEditSession.SampleRate));
+        if (outputFrames <= 0) throw new InvalidOperationException("The overlap group has no audible duration.");
+        long outputSamples = outputFrames * 2;
+        if (outputSamples > AudioEffectProcessor.MaximumOutputSamples)
+            throw new InvalidOperationException("The merged segment exceeds the 4 GiB audio buffer limit.");
+
+        float[] output = new float[(int)outputSamples];
+        foreach (MixClip clip in clips)
+        {
+            token.ThrowIfCancellationRequested();
+            float[] audio = await RenderClipForEffectAsync(arrangement, lane, clip, token).ConfigureAwait(false);
+            int destinationFrame = checked((int)Math.Round((clip.Start - groupStart) * MixEffectEditSession.SampleRate));
+            if (arrangement.OverlapMode == MixOverlapMode.AllowOverlapOverwrite)
+                CopyStereo(audio, arrangement.Sources[clip.SourceId].Channels, output, destinationFrame, token);
+            else
+                AddStereo(audio, arrangement.Sources[clip.SourceId].Channels, output, destinationFrame, token);
+        }
+
+        if (arrangement.OverlapMode != MixOverlapMode.AllowOverlapOverwrite)
+        {
+            float peak = output.Max(value => Math.Abs(value));
+            if (peak > 0.98f)
+            {
+                float scale = 0.98f / peak;
+                for (int index = 0; index < output.Length; index++) output[index] *= scale;
+            }
+        }
+
+        token.ThrowIfCancellationRequested();
+        return new MixSource
+        {
+            Name = clips[0].Name + " merged",
+            Data = output,
+            Channels = 2,
+            SampleRate = MixEffectEditSession.SampleRate,
+            Bpm = (float)arrangement.Bpm
+        };
+    }, token);
+
     private static void CopyStereo(float[] source, int channels, float[] destination, int destinationFrame, CancellationToken token)
     {
-        int frames = source.Length / channels;
+        int frames = Math.Min(source.Length / channels, destination.Length / 2 - destinationFrame);
         for (int frame = 0; frame < frames; frame++)
         {
             if ((frame & 8191) == 0) token.ThrowIfCancellationRequested();
@@ -242,6 +301,23 @@ public static class MixRenderer
                 for (int sourceChannel = channels == 1 ? 0 : outputChannel; sourceChannel < channels; sourceChannel += channels == 1 ? 1 : 2)
                 { sum += source[frame * channels + sourceChannel]; contributors++; }
                 destination[(destinationFrame + frame) * 2 + outputChannel] = (float)(sum / Math.Max(1, contributors));
+            }
+        }
+    }
+
+    private static void AddStereo(float[] source, int channels, float[] destination, int destinationFrame, CancellationToken token)
+    {
+        int frames = Math.Min(source.Length / channels, destination.Length / 2 - destinationFrame);
+        for (int frame = 0; frame < frames; frame++)
+        {
+            if ((frame & 8191) == 0) token.ThrowIfCancellationRequested();
+            for (int outputChannel = 0; outputChannel < 2; outputChannel++)
+            {
+                double sum = 0; int contributors = 0;
+                for (int sourceChannel = channels == 1 ? 0 : outputChannel; sourceChannel < channels; sourceChannel += channels == 1 ? 1 : 2)
+                { sum += source[frame * channels + sourceChannel]; contributors++; }
+                destination[(destinationFrame + frame) * 2 + outputChannel] +=
+                    (float)(sum / Math.Max(1, contributors));
             }
         }
     }

@@ -3,16 +3,25 @@ using MathNet.Numerics.IntegralTransforms;
 
 namespace ModularAudience.Audio.Processors_V4
 {
+    internal sealed record AtomicToneSignature(
+        string SampleTag,
+        double DominantFrequencyHz,
+        double SpectralCentroidHz);
+
     internal static class AtomicSampleDeduplicator
     {
         private const int SpectralBins = 72;
 
         public static List<AudioObj> Deduplicate(List<AudioObj> atomics, float similarityThreshold,
-            IProgress<double>? progress, int maxVariantsPerCluster = 2)
+            IProgress<double>? progress,
+            int maxVariantsPerCluster = 2,
+            int? maxWorkers = null,
+            CancellationToken cancellationToken = default)
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxVariantsPerCluster);
             Fingerprint[] fingerprints = new Fingerprint[atomics.Count];
-            Parallel.For(0, atomics.Count, AtomizerParallelism.OptionsFor(atomics.Count), i =>
+            Parallel.For(0, atomics.Count,
+                AtomizerParallelism.OptionsFor(atomics.Count, maxWorkers, cancellationToken), i =>
             {
                 fingerprints[i] = CreateFingerprint(atomics[i]);
                 progress?.Report(0.70 + (0.15 * (i + 1) / atomics.Count));
@@ -23,6 +32,7 @@ namespace ModularAudience.Audio.Processors_V4
             HashSet<int> selected = [];
             for (int i = 0; i < clusters.Count; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 selected.UnionWith(SelectVariants(clusters[i], fingerprints, maxVariantsPerCluster));
                 progress?.Report(0.85 + (0.14 * (i + 1) / clusters.Count));
             }
@@ -68,6 +78,39 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             return selected.Select(index => atomics[index]).ToList();
+        }
+
+        internal static AtomicToneSignature DescribeTone(AudioObj audio)
+        {
+            ArgumentNullException.ThrowIfNull(audio);
+            int frames = Math.Max(0, audio.Data.Length / Math.Max(1, audio.Channels));
+            if (frames == 0 || audio.SampleRate <= 0)
+            {
+                return new AtomicToneSignature(audio.SampleTag ?? string.Empty, 0, 0);
+            }
+
+            double[] spectrum = BuildSpectrum(audio, frames);
+            double centroid = GetSpectralCentroid(spectrum, audio.SampleRate);
+            int dominantBin = 0;
+            double dominantMagnitude = -1;
+            for (int bin = 0; bin < SpectralBins; bin++)
+            {
+                double magnitude = spectrum[SpectralBins + bin];
+                if (magnitude > dominantMagnitude)
+                {
+                    dominantMagnitude = magnitude;
+                    dominantBin = bin;
+                }
+            }
+
+            double frequencyRange = Math.Log(Math.Max(21.0, audio.SampleRate / 2.0) / 20.0);
+            double dominantFrequency = dominantMagnitude > 0
+                ? 20.0 * Math.Exp((dominantBin + 0.5) / SpectralBins * frequencyRange)
+                : 0;
+            return new AtomicToneSignature(
+                audio.SampleTag ?? string.Empty,
+                dominantFrequency,
+                centroid);
         }
 
         private static Fingerprint CreateFingerprint(AudioObj audio)

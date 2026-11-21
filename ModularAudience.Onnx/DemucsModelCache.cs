@@ -48,6 +48,22 @@ public static class DemucsModelCache
 
     public static string Key(string modelPath, DemucsLoadOptions options)
     {
+        return KeyCore(modelPath, options);
+    }
+
+    public static string SessionKey(string modelPath, DemucsLoadOptions options)
+    {
+        var copy = JsonSerializer.Deserialize<DemucsLoadOptions>(JsonSerializer.Serialize(options))!;
+        copy.FourierWorkers = 1;
+        copy.ChunkOverlap = 0.25;
+        copy.UseCudaCuFft = false;
+        copy.CudaDeviceId = -1;
+        copy.CudaToolkitVersion = 0;
+        return KeyCore(modelPath, copy);
+    }
+
+    private static string KeyCore(string modelPath, DemucsLoadOptions options)
+    {
         var copy = JsonSerializer.Deserialize<DemucsLoadOptions>(JsonSerializer.Serialize(options))!;
         copy.NormalizeForProvider(copy.UseDirectML);
         copy.SessionConfigEntries = copy.SessionConfigEntries.OrderBy(p => p.Key, StringComparer.Ordinal)

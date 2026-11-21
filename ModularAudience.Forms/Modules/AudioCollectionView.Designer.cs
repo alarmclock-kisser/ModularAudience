@@ -107,6 +107,7 @@
             this.menuToolStripItem_sourceSeparateDemucs = new ToolStripMenuItem();
             this.menuToolStripItem_sourceSeparateAnalog = new ToolStripMenuItem();
             this.menuToolStripItem_sourceSeparateDeterministic = new ToolStripMenuItem();
+            this.menuToolStripItem_decompile = new ToolStripMenuItem();
             this.menuToolStripItem_pinWindow = new ToolStripMenuItem();
             this.convertToMIDIToolStripMenuItem = new ToolStripMenuItem();
             this.menuToolStripItem_beatClickerGame = new ToolStripMenuItem();
@@ -116,9 +117,9 @@
             this.toolStripComboBox_orderBy = new ToolStripComboBox();
             this.contextMenuStrip_audios.SuspendLayout();
             this.SuspendLayout();
-            // 
+            //
             // toolTip_audios
-            // 
+            //
             this.toolTip_audios = new ToolTip(this.components);
             this.toolTip_audios.AutoPopDelay = 10000;
             this.toolTip_audios.InitialDelay = 500;
@@ -176,7 +177,7 @@
             // 
             // contextMenuStrip_audios
             // 
-            this.contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { this.menuToolStripItem_rename, this.menuToolStripItem_clone, this.menuToolStripItem_editTags, this.menuToolStripItem_enqueuePlaylist, this.menuToolStripItem_openMultitrack, this.menuToolStripItem_splitEqualParts, this.menuToolStripItem_generateBreakbeat, this.menuToolStripItem_atomize, this.menuToolStripItem_delete, this.menuToolStripItem_toNewCollection, this.menuToolStripItem_addIndexToNames, this.menuToolStripItem_aggregateMixSelected, this.menuToolStripItem_timeStretchSelected, this.menuToolStripItem_demucsSeparateSelected, this.menuToolStripItem_pinWindow, this.convertToMIDIToolStripMenuItem, this.menuToolStripItem_beatClickerGame, this.toolStripComboBox_orderBy });
+            this.contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { this.menuToolStripItem_rename, this.menuToolStripItem_clone, this.menuToolStripItem_editTags, this.menuToolStripItem_enqueuePlaylist, this.menuToolStripItem_openMultitrack, this.menuToolStripItem_splitEqualParts, this.menuToolStripItem_generateBreakbeat, this.menuToolStripItem_atomize, this.menuToolStripItem_delete, this.menuToolStripItem_toNewCollection, this.menuToolStripItem_addIndexToNames, this.menuToolStripItem_aggregateMixSelected, this.menuToolStripItem_timeStretchSelected, this.menuToolStripItem_demucsSeparateSelected, this.menuToolStripItem_decompile, this.menuToolStripItem_pinWindow, this.convertToMIDIToolStripMenuItem, this.menuToolStripItem_beatClickerGame, this.toolStripComboBox_orderBy });
             this.contextMenuStrip_audios.Name = "contextMenuStrip_audios";
             this.contextMenuStrip_audios.Size = new Size(213, 339);
             this.contextMenuStrip_audios.Opening += this.contextMenuStrip_audios_Opening;
@@ -693,9 +694,16 @@
             this.menuToolStripItem_sourceSeparateDeterministic.Size = new Size(250, 22);
             this.menuToolStripItem_sourceSeparateDeterministic.Text = "Best-practice deterministic";
             this.menuToolStripItem_sourceSeparateDeterministic.Click += this.menuToolStripItem_sourceSeparateDeterministic_Click;
-            // 
+            //
+            // menuToolStripItem_decompile
+            //
+            this.menuToolStripItem_decompile.Name = "menuToolStripItem_decompile";
+            this.menuToolStripItem_decompile.Size = new Size(250, 22);
+            this.menuToolStripItem_decompile.Text = "De-compile ...";
+            this.menuToolStripItem_decompile.Click += this.menuToolStripItem_decompile_Click;
+            //
             // menuToolStripItem_pinWindow
-            // 
+            //
             this.menuToolStripItem_pinWindow.CheckOnClick = true;
             this.menuToolStripItem_pinWindow.Name = "menuToolStripItem_pinWindow";
             this.menuToolStripItem_pinWindow.Size = new Size(212, 22);
@@ -846,6 +854,7 @@
         private ToolStripMenuItem menuToolStripItem_sourceSeparateDemucs;
         private ToolStripMenuItem menuToolStripItem_sourceSeparateAnalog;
         private ToolStripMenuItem menuToolStripItem_sourceSeparateDeterministic;
+        private ToolStripMenuItem menuToolStripItem_decompile;
         private ToolStripMenuItem menuToolStripItem_pinWindow;
         private ToolStripComboBox toolStripComboBox_orderBy;
         private ToolStripMenuItem convertToMIDIToolStripMenuItem;

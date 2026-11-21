@@ -14,6 +14,10 @@ public partial class ProgressDialog : Form
     private bool operationCompleted;
     private bool cancellationRequested;
     private readonly CancellationToken cancellationToken;
+    private double lastRateSampleFraction;
+    private double lastRateSampleSeconds;
+    private double smoothedProgressRate;
+    private TimeSpan? smoothedCompletionTime;
 
     public ProgressDialog(
         string title = "Processing ...",
@@ -34,6 +38,8 @@ public partial class ProgressDialog : Form
         this.progressBar.Visible = progress != null;
         this.label_percent.Visible = progress != null;
         this.label_proposed.Visible = progress != null;
+        this.button_cancel.Visible = this.cancellationSource != null;
+        this.button_cancel.Enabled = this.cancellationSource != null;
         this.timer_elapsed.Start();
         // Token callbacks can run on a worker thread (or synchronously inside Cancel).
         // Never close/dispose the native dialog from within that callback.
@@ -58,6 +64,22 @@ public partial class ProgressDialog : Form
         this.progressBar.Value = (int)Math.Round(progress * 100.0);
         this.label_percent.Text = $"{progress:P0}";
         this.UpdateTimeLabels(progress);
+    }
+
+    public void SetStatus(string status)
+    {
+        if (this.IsDisposed || this.Disposing || this.closeRequested || string.IsNullOrWhiteSpace(status))
+        {
+            return;
+        }
+
+        if (this.InvokeRequired)
+        {
+            this.PostToUi(() => this.SetStatus(status));
+            return;
+        }
+
+        this.label_operation.Text = status;
     }
 
     public void Complete()
@@ -121,6 +143,13 @@ public partial class ProgressDialog : Form
         }
     }
 
+    private void button_cancel_Click(object? sender, EventArgs e)
+    {
+        this.button_cancel.Enabled = false;
+        this.label_operation.Text = "Cancelling after the current safe stage...";
+        this.RequestCancellation();
+    }
+
     private void PostToUi(Action action)
     {
         if (this.IsDisposed || this.Disposing || !this.IsHandleCreated) return;
@@ -148,10 +177,44 @@ public partial class ProgressDialog : Form
             return;
         }
 
-        TimeSpan proposed = progress > 0.0001
-            ? TimeSpan.FromSeconds(elapsed.TotalSeconds / progress)
-            : TimeSpan.Zero;
-        this.label_proposed.Text = proposed > TimeSpan.Zero
+        double elapsedSeconds = elapsed.TotalSeconds;
+        double fractionDelta = progress - this.lastRateSampleFraction;
+        double elapsedDelta = elapsedSeconds - this.lastRateSampleSeconds;
+        if (fractionDelta > 0.0001 && elapsedDelta > 0.001)
+        {
+            double instantRate = fractionDelta / elapsedDelta;
+            this.smoothedProgressRate = this.smoothedProgressRate <= 0
+                ? instantRate
+                : (this.smoothedProgressRate * 0.72) + (instantRate * 0.28);
+            this.lastRateSampleFraction = progress;
+            this.lastRateSampleSeconds = elapsedSeconds;
+        }
+
+        TimeSpan proposed = TimeSpan.Zero;
+        if (this.smoothedProgressRate > 0.000001 && progress < 1.0)
+        {
+            double totalSeconds = elapsedSeconds + ((1.0 - progress) / this.smoothedProgressRate);
+            var candidate = TimeSpan.FromSeconds(Math.Clamp(totalSeconds, 0, TimeSpan.MaxValue.TotalSeconds));
+            if (this.smoothedCompletionTime is null)
+            {
+                this.smoothedCompletionTime = candidate;
+            }
+            else
+            {
+                double mixedSeconds = (this.smoothedCompletionTime.Value.TotalSeconds * 0.80)
+                    + (candidate.TotalSeconds * 0.20);
+                this.smoothedCompletionTime = TimeSpan.FromSeconds(
+                    Math.Clamp(mixedSeconds, elapsedSeconds, TimeSpan.MaxValue.TotalSeconds));
+            }
+
+            proposed = this.smoothedCompletionTime.Value;
+        }
+        else if (progress >= 1.0)
+        {
+            proposed = elapsed;
+        }
+
+        this.label_proposed.Text = proposed > TimeSpan.Zero && progress > 0.0001
             ? $"Proposed time: {this.FormatTime(proposed)}"
             : "Proposed time: --:--.---";
     }

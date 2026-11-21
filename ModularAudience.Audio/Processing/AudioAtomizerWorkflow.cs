@@ -20,8 +20,7 @@ namespace ModularAudience.Audio.Processing
             cancellationToken.ThrowIfCancellationRequested();
 
             LoopAtomizerResult result = await LoopAtomizer_V4
-                .AtomizeAsync(source, settings, progress)
-                .WaitAsync(cancellationToken)
+                .AtomizeAsync(source, settings, progress, cancellationToken)
                 .ConfigureAwait(false);
 
             string? summary = result.IsLikelyDrumLoop

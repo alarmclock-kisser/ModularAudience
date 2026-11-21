@@ -75,6 +75,21 @@ public sealed class MixEditorExtensionTests
         Call(mix, "Redo"); Assert.AreEqual(4, mix.Arrangement.Lanes.Sum(l => l.Clips.Count));
     }
     [STATestMethod]
+    public void ControlASelectsEveryClipAsWhole()
+    {
+        using var mix = new MixTrackView(); Populate(mix);
+        var expected = mix.Arrangement.Lanes.SelectMany(lane => lane.Clips).Select(clip => clip.Id).ToArray();
+        var method = typeof(MixTrackView).GetMethod("ProcessCmdKey", Private)!;
+
+        method.Invoke(mix, [Message.Create(mix.Handle, 0, IntPtr.Zero, IntPtr.Zero), Keys.Control | Keys.A]);
+
+        var selected = (HashSet<Guid>)Field(mix, "selectedClips");
+        var full = (HashSet<Guid>)Field(mix, "fullSelectedClips");
+        CollectionAssert.AreEquivalent(expected, selected.ToArray());
+        CollectionAssert.AreEquivalent(expected, full.ToArray());
+        Assert.IsNull(Field(mix, "selectedClip"));
+    }
+    [STATestMethod]
     public void RangeCopyTrimsUnlessWholeClipModifierIsActive()
     {
         using var mix = new MixTrackView(); Populate(mix);

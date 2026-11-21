@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Onnx;
 using ModularAudience.Forms;
 using System.Reflection;
+using System.Numerics;
 
 namespace ModularAudience.Audio.Tests;
 
@@ -74,6 +75,95 @@ public sealed class DemucsTests
         var spectrum = await DemucsSpectrogram.ForwardAsync(CreateSignal(8192), 8192, backend);
         Assert.AreEqual(-1.98622127f, spectrum[0, 0, 46, 0], 0.00002f);
         StringAssert.Contains(backend.Backend, "Parallel CPU FFT (2 workers)");
+    }
+
+    [TestMethod]
+    public void CudaWaveformNormalizationLimitsPeakToUnity()
+    {
+        float[] waveform = [0.25f, -2.0f, 1.0f, 4.0f];
+
+        DemucsSpectrogram.NormalizeWaveformPeak(waveform, 1.0f);
+
+        Assert.AreEqual(0.0625f, waveform[0], 0.000001f);
+        Assert.AreEqual(-0.5f, waveform[1], 0.000001f);
+        Assert.AreEqual(0.25f, waveform[2], 0.000001f);
+        Assert.AreEqual(1.0f, waveform[3], 0.000001f);
+        Assert.AreEqual(1.0, waveform.Max(Math.Abs), 0.000001);
+    }
+
+    [TestMethod]
+    public void FinalStemCleanupRemovesChannelDcAndPreservesStereoBalance()
+    {
+        float[] waveform = [2.0f, 1.0f, -1.0f, 4.0f];
+
+        DemucsSpectrogram.PrepareFinalStemWaveform(waveform, 2, 1.0f);
+
+        CollectionAssert.AreEqual(
+            new[] { 1.0f, -1.0f, -1.0f, 1.0f },
+            waveform);
+        Assert.AreEqual(0.0, waveform.Where((_, index) => index % 2 == 0).Average(), 0.000001);
+        Assert.AreEqual(0.0, waveform.Where((_, index) => index % 2 == 1).Average(), 0.000001);
+    }
+
+    [TestMethod]
+    public void CuFftManyFramesAndChannelsMatchManagedCpu()
+    {
+        const int frameCount = 64;
+        const int frameLength = 4096;
+        Complex[][] source = Enumerable.Range(0, frameCount)
+            .Select(frame => Enumerable.Range(0, frameLength)
+                .Select(sample => new Complex(
+                    Math.Sin((sample + frame * 3.0) * 0.017) * (1.0 + frame % 2 * 0.25),
+                    Math.Cos((sample * 2.0 - frame) * 0.011) * 0.05))
+                .ToArray())
+            .ToArray();
+        Complex[][] managedInput = Clone(source);
+        Complex[][] cudaInput = Clone(source);
+        var managed = new DemucsFourier(new DemucsLoadOptions
+        {
+            CudaDeviceId = -1,
+            UseCudaCuFft = false,
+            FourierWorkers = 2
+        });
+        var cuda = new DemucsFourier(new DemucsLoadOptions
+        {
+            CudaDeviceId = 0,
+            UseCudaCuFft = true,
+            FourierWorkers = 2
+        });
+
+        managed.Transform(managedInput, inverse: false, CancellationToken.None);
+        cuda.Transform(cudaInput, inverse: false, CancellationToken.None);
+        AssertFramesClose(managedInput, cudaInput, 0.005, "forward");
+
+        managed.Transform(managedInput, inverse: true, CancellationToken.None);
+        cuda.Transform(cudaInput, inverse: true, CancellationToken.None);
+        AssertFramesClose(managedInput, cudaInput, 0.00001, "inverse");
+        AssertFramesClose(source, cudaInput, 0.00002, "round trip");
+        Console.WriteLine(cuda.Backend);
+    }
+
+    private static Complex[][] Clone(Complex[][] source) =>
+        source.Select(frame => (Complex[])frame.Clone()).ToArray();
+
+    private static void AssertFramesClose(
+        Complex[][] expected,
+        Complex[][] actual,
+        double tolerance,
+        string transform)
+    {
+        Assert.AreEqual(expected.Length, actual.Length);
+        for (int frame = 0; frame < expected.Length; frame++)
+        {
+            Assert.AreEqual(expected[frame].Length, actual[frame].Length);
+            for (int sample = 0; sample < expected[frame].Length; sample++)
+            {
+                Complex error = expected[frame][sample] - actual[frame][sample];
+                Assert.IsTrue(
+                    error.Magnitude <= tolerance,
+                    $"{transform}: frame {frame}, sample {sample}, expected {expected[frame][sample]}, actual {actual[frame][sample]}.");
+            }
+        }
     }
 
     [STATestMethod]
@@ -214,6 +304,7 @@ public sealed class DemucsTests
         var options = new DemucsLoadOptions
         {
             UseDirectML = true,
+            DisableDirectMLGraphFusion = false,
             GraphOptimization = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_EXTENDED,
             ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_PARALLEL,
             EnableMemoryPattern = true
@@ -221,6 +312,8 @@ public sealed class DemucsTests
         options.NormalizeForProvider(true);
         Assert.AreEqual(Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_EXTENDED, options.GraphOptimization);
         Assert.AreEqual(Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_SEQUENTIAL, options.ExecutionMode);
+        Assert.IsTrue(options.DisableDirectMLGraphFusion,
+            "DirectML graph fusion must remain disabled for the Demucs ONNX graph.");
         Assert.IsFalse(options.EnableMemoryPattern);
         Assert.AreEqual(Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_BASIC, new DemucsLoadOptions().GraphOptimization);
 
@@ -309,38 +402,6 @@ public sealed class DemucsTests
     }
 
     [TestMethod]
-    public async Task SamePhysicalGpuSerializesDirectMLAndCuFftOperations()
-    {
-        const long luid = 0x12345678;
-        IDisposable? directML = await DemucsGpuDeviceGate.AcquireAsync(new DemucsLoadOptions
-        {
-            UseDirectML = true,
-            DeviceId = 2,
-            DeviceLuid = luid
-        }, CancellationToken.None);
-        Task<IDisposable?> sameGpu = DemucsGpuDeviceGate.AcquireAsync(new DemucsLoadOptions
-        {
-            UseDirectML = false,
-            CudaDeviceId = 1,
-            DeviceLuid = luid
-        }, CancellationToken.None).AsTask();
-        Task<IDisposable?> otherGpu = DemucsGpuDeviceGate.AcquireAsync(new DemucsLoadOptions
-        {
-            UseDirectML = true,
-            DeviceId = 3,
-            DeviceLuid = 0x87654321
-        }, CancellationToken.None).AsTask();
-        try
-        {
-            Assert.IsFalse(sameGpu.IsCompleted, "DirectML and CuFFT operations must not overload the same physical GPU.");
-            using IDisposable? other = await otherGpu.WaitAsync(TimeSpan.FromSeconds(2));
-            Assert.IsTrue(otherGpu.IsCompletedSuccessfully, "A different GPU must remain available in parallel.");
-        }
-        finally { directML?.Dispose(); }
-        using IDisposable? same = await sameGpu.WaitAsync(TimeSpan.FromSeconds(2));
-    }
-
-    [TestMethod]
     public void ModelCacheKeysIncludeDeviceOptionsButNormalizeDictionaryOrder()
     {
         var first = new DemucsLoadOptions { SessionConfigEntries = new() { ["b"] = "2", ["a"] = "1" } };
@@ -348,6 +409,69 @@ public sealed class DemucsTests
         Assert.AreEqual(DemucsModelCache.Key("test.onnx", first), DemucsModelCache.Key("test.onnx", second));
         second.DeviceId = 1;
         Assert.AreNotEqual(DemucsModelCache.Key("test.onnx", first), DemucsModelCache.Key("test.onnx", second));
+    }
+
+    [TestMethod]
+    public void ModelSessionKeysIgnoreRuntimeFourierOptions()
+    {
+        var first = new DemucsLoadOptions
+        {
+            FourierWorkers = 1,
+            ChunkOverlap = 0.25,
+            UseCudaCuFft = false,
+            CudaDeviceId = -1,
+            CudaToolkitVersion = 0
+        };
+        var second = new DemucsLoadOptions
+        {
+            FourierWorkers = 8,
+            ChunkOverlap = 0.75,
+            UseCudaCuFft = true,
+            CudaDeviceId = 2,
+            CudaToolkitVersion = 13
+        };
+
+        Assert.AreNotEqual(DemucsModelCache.Key("test.onnx", first), DemucsModelCache.Key("test.onnx", second));
+        Assert.AreEqual(
+            DemucsModelCache.SessionKey("test.onnx", first),
+            DemucsModelCache.SessionKey("test.onnx", second));
+        second.IntraOpThreads = 7;
+        Assert.AreNotEqual(
+            DemucsModelCache.SessionKey("test.onnx", first),
+            DemucsModelCache.SessionKey("test.onnx", second));
+    }
+
+    [TestMethod]
+    [TestCategory("DemucsIntegration")]
+    public void ApplyingRuntimeFourierOptionsKeepsInstalledModelOnline()
+    {
+        const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
+        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        using var service = new OnnxService(loadImmediately: false);
+        service.LoadModel(model, new DemucsLoadOptions
+        {
+            UseDirectML = false,
+            UseCudaCuFft = false,
+            CudaDeviceId = -1,
+            FourierWorkers = 1,
+            ChunkOverlap = 0.25
+        });
+        string sessionKey = DemucsModelCache.SessionKey(model, service.EffectiveOptions!);
+
+        service.ApplyRuntimeFourierOptions(new DemucsLoadOptions
+        {
+            UseDirectML = false,
+            UseCudaCuFft = true,
+            CudaDeviceId = -1,
+            CudaToolkitVersion = 13,
+            FourierWorkers = 3,
+            ChunkOverlap = 0.5
+        });
+
+        Assert.IsTrue(service.IsOnline);
+        Assert.AreEqual(sessionKey, DemucsModelCache.SessionKey(model, service.EffectiveOptions!));
+        Assert.AreEqual(3, service.EffectiveOptions!.FourierWorkers);
+        Assert.AreEqual(0.5, service.EffectiveOptions.ChunkOverlap);
     }
 
     [TestMethod]
@@ -415,13 +539,40 @@ public sealed class DemucsTests
         Assert.AreEqual(initializedProvider, service.ExecutionProvider, "Inference must keep the provider initialized during loading.");
         Assert.IsTrue(service.IsOnline, "Inference must not dispose the initialized ONNX session.");
         Assert.HasCount(6, stems);
+        var reconstructed = new double[original.Length];
         foreach (var (name, samples) in stems)
         {
             Assert.HasCount(original.Length, samples);
             Assert.IsTrue(samples.All(float.IsFinite), name);
             double rms = Math.Sqrt(samples.Sum(v => (double)v * v) / samples.Length);
             Assert.IsTrue(rms > 1e-8 && rms < 1, $"{name}: RMS {rms}");
+            double leftRms = Math.Sqrt(samples.Where((_, index) => index % 2 == 0)
+                .Sum(value => (double)value * value) / (samples.Length / 2.0));
+            double rightRms = Math.Sqrt(samples.Where((_, index) => index % 2 == 1)
+                .Sum(value => (double)value * value) / (samples.Length / 2.0));
+            Assert.IsTrue(leftRms > 1e-10, $"{name}: left channel is silent.");
+            Assert.IsTrue(rightRms > 1e-10, $"{name}: right channel is silent.");
+            Console.WriteLine(FormattableString.Invariant(
+                $"{name}: rms={rms:F8}, left={leftRms:F8}, right={rightRms:F8}, peak={samples.Max(Math.Abs):F8}"));
+            for (int index = 0; index < samples.Length; index++)
+            {
+                reconstructed[index] += samples[index];
+            }
         }
+        double leftError = 0, leftEnergy = 0, rightError = 0, rightEnergy = 0;
+        for (int index = 0; index < original.Length; index += 2)
+        {
+            double leftDelta = reconstructed[index] - original[index];
+            double rightDelta = reconstructed[index + 1] - original[index + 1];
+            leftError += leftDelta * leftDelta;
+            leftEnergy += (double)original[index] * original[index];
+            rightError += rightDelta * rightDelta;
+            rightEnergy += (double)original[index + 1] * original[index + 1];
+        }
+        double leftRelativeError = Math.Sqrt(leftError / Math.Max(leftEnergy, 1e-12));
+        double rightRelativeError = Math.Sqrt(rightError / Math.Max(rightEnergy, 1e-12));
+        Console.WriteLine(FormattableString.Invariant(
+            $"reconstruction: leftRel={leftRelativeError:F6}, rightRel={rightRelativeError:F6}"));
         CollectionAssert.AreEqual(original, source.Data);
         Assert.AreEqual(44100, source.SampleRate);
         Assert.AreEqual(2, source.Channels);
@@ -452,6 +603,222 @@ public sealed class DemucsTests
         cancellation.Cancel();
         await Assert.ThrowsAsync<OperationCanceledException>(async () => await stems.MoveNextAsync());
         Assert.IsTrue(first.All(float.IsFinite));
+    }
+
+    [TestMethod]
+    [TestCategory("DemucsIntegration")]
+    public async Task ResourceAudioKeepsInterleavedStereoChannels()
+    {
+        const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
+        string audioPath = Path.Combine(
+            AppContext.BaseDirectory,
+            "Resources",
+            "gimme what you got sample.wav");
+        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        if (!File.Exists(audioPath)) Assert.Inconclusive("The local audio fixture is not available.");
+        using var service = new OnnxService(loadImmediately: false);
+        service.LoadModel(model, new DemucsLoadOptions
+        {
+            UseDirectML = false,
+            UseCudaCuFft = false,
+            ChunkOverlap = 0.25,
+            GraphOptimization = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_BASIC
+        });
+        using AudioObj? source = await AudioObj.FromFileAsync(audioPath);
+        Assert.IsNotNull(source);
+        float[] original = (float[])source.Data.Clone();
+        float[] result = (await service.ExtractStemsAsync(source, ["other"]))["other"];
+
+        Assert.HasCount(source.Data.Length, result);
+        double[] channelRms = new double[source.Channels];
+        for (int channel = 0; channel < source.Channels; channel++)
+        {
+            int frames = result.Length / source.Channels;
+            for (int frame = 0; frame < frames; frame++)
+            {
+                float sample = result[frame * source.Channels + channel];
+                channelRms[channel] += (double)sample * sample;
+            }
+
+            channelRms[channel] = Math.Sqrt(channelRms[channel] / frames);
+        }
+
+        foreach (double rms in channelRms)
+        {
+            Assert.IsTrue(rms > 1e-10);
+        }
+
+        Console.WriteLine(
+            $"source: {source.SampleRate} Hz, {source.Channels} ch, {result.Length} samples; " +
+            $"other rms=[{string.Join(", ", channelRms.Select(value => value.ToString("F8")))}], peak={result.Max(Math.Abs):F8}");
+        CollectionAssert.AreEqual(original, source.Data);
+    }
+
+    [TestMethod]
+    [TestCategory("DemucsIntegration")]
+    public async Task DirectMlRealAudioWithGraphFusionDisabledMatchesCpuOutput()
+    {
+        const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
+        string audioPath = Path.Combine(
+            AppContext.BaseDirectory,
+            "Resources",
+            "gimme what you got sample.wav");
+        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        if (!File.Exists(audioPath)) Assert.Inconclusive("The local audio fixture is not available.");
+        using AudioObj? source = await AudioObj.FromFileAsync(audioPath);
+        Assert.IsNotNull(source);
+        using var cpu = new OnnxService(loadImmediately: false);
+        using var directMl = new OnnxService(loadImmediately: false);
+        cpu.LoadModel(model, new DemucsLoadOptions
+        {
+            UseDirectML = false,
+            UseCudaCuFft = false,
+            ChunkOverlap = 0.25
+        });
+        directMl.LoadModel(model, new DemucsLoadOptions
+        {
+            UseDirectML = true,
+            DeviceId = 0,
+            AllowCpuFallback = true,
+            DisableDirectMLGraphFusion = true,
+            UseCudaCuFft = false,
+            ChunkOverlap = 0.25
+        });
+        float[] cpuResult = (await cpu.ExtractStemsAsync(source, ["other"]))["other"];
+        float[] directMlResult = (await directMl.ExtractStemsAsync(source, ["other"]))["other"];
+
+        double energy = 0, error = 0;
+        for (int index = 0; index < cpuResult.Length; index++)
+        {
+            double delta = directMlResult[index] - cpuResult[index];
+            energy += (double)cpuResult[index] * cpuResult[index];
+            error += delta * delta;
+        }
+
+        double relativeError = Math.Sqrt(error / Math.Max(energy, 1e-12));
+        Console.WriteLine(
+            $"providers=[{cpu.ExecutionProvider}, {directMl.ExecutionProvider}], warning={directMl.LoadWarning ?? "<none>"}, " +
+            $"relativeError={relativeError:F8}, cpuRms={Math.Sqrt(energy / cpuResult.Length):F8}, " +
+            $"dmlL={RmsForChannel(directMlResult, 2, 0):F8}, dmlR={RmsForChannel(directMlResult, 2, 1):F8}");
+        Assert.HasCount(cpuResult.Length, directMlResult);
+        Assert.IsTrue(relativeError < 0.05,
+            $"DirectML output differs from CPU by {relativeError:P2}: {directMl.LoadWarning}");
+        Assert.IsTrue(cpuResult.All(float.IsFinite));
+        Assert.IsTrue(directMlResult.All(float.IsFinite));
+    }
+
+    [TestMethod]
+    [TestCategory("DemucsIntegration")]
+    public async Task OverlappingChunksPreserveStereoAndBoundAmplitude()
+    {
+        const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
+        string audioPath = Path.Combine(
+            AppContext.BaseDirectory,
+            "Resources",
+            "gimme what you got sample.wav");
+        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        if (!File.Exists(audioPath)) Assert.Inconclusive("The local audio fixture is not available.");
+        using var service = new OnnxService(loadImmediately: false);
+        service.LoadModel(model, new DemucsLoadOptions
+        {
+            UseDirectML = false,
+            UseCudaCuFft = false,
+            ChunkOverlap = 0.5
+        });
+        using AudioObj? fixture = await AudioObj.FromFileAsync(audioPath);
+        Assert.IsNotNull(fixture);
+        const int repeatCount = 4;
+        float[] repeated = new float[fixture.Data.Length * repeatCount];
+        for (int index = 0; index < repeatCount; index++)
+        {
+            fixture.Data.CopyTo(repeated, index * fixture.Data.Length);
+        }
+
+        using var source = new AudioObj
+        {
+            Name = fixture.Name,
+            OriginalName = fixture.OriginalName,
+            Data = repeated,
+            SampleRate = fixture.SampleRate,
+            Channels = fixture.Channels,
+            BitDepth = fixture.BitDepth,
+            Length = repeated.LongLength,
+            Duration = TimeSpan.FromSeconds(
+                repeated.LongLength / (double)(fixture.SampleRate * fixture.Channels))
+        };
+        float[] result = (await service.ExtractStemsAsync(source, ["other"]))["other"];
+
+        Assert.HasCount(source.Data.Length, result);
+        Assert.IsTrue(result.All(float.IsFinite));
+        double leftRms = RmsForChannel(result, 2, 0);
+        double rightRms = RmsForChannel(result, 2, 1);
+        Assert.IsTrue(leftRms > 1e-6);
+        Assert.IsTrue(rightRms > 1e-6);
+        double seamFrame = OnnxService.ChunkSizeSeconds * source.SampleRate * source.Channels * 0.5;
+        int seamSample = (int)Math.Round(seamFrame);
+        int seamWindow = source.SampleRate * source.Channels / 4;
+        float seamPeak = result.Skip(Math.Max(0, seamSample - seamWindow / 2))
+            .Take(seamWindow)
+            .Max(Math.Abs);
+        Assert.IsTrue(result.Max(Math.Abs) <= 1.0f,
+            $"Final stem peak must be normalized: {result.Max(Math.Abs):F8}.");
+        Console.WriteLine(FormattableString.Invariant(
+            $"chunks: left={leftRms:F8}, right={rightRms:F8}, peak={result.Max(Math.Abs):F8}, seamPeak={seamPeak:F8}"));
+    }
+
+    [TestMethod]
+    [TestCategory("DemucsIntegration")]
+    [DataRow(32000)]
+    [DataRow(48000)]
+    public async Task Non44100AudioKeepsInterleavedStereoChannelsAfterRoundTrip(int sampleRate)
+    {
+        const string model = "D:/Models/Demucs/htdemucs_6s.onnx";
+        if (!File.Exists(model)) Assert.Inconclusive("The local Demucs model is not installed.");
+        using var service = new OnnxService(loadImmediately: false);
+        service.LoadModel(model, new DemucsLoadOptions
+        {
+            UseDirectML = false,
+            UseCudaCuFft = false,
+            ChunkOverlap = 0.25
+        });
+        var data = new float[sampleRate * 2];
+        for (int frame = 0; frame < sampleRate; frame++)
+        {
+            data[frame * 2] = (float)(0.2 * Math.Sin(2 * Math.PI * 110 * frame / sampleRate));
+            data[frame * 2 + 1] = (float)(0.12 * Math.Sin(2 * Math.PI * 330 * frame / sampleRate));
+        }
+
+        using var source = new AudioObj
+        {
+            Data = data,
+            SampleRate = sampleRate,
+            Channels = 2,
+            Length = data.LongLength
+        };
+        float[] result = (await service.ExtractStemsAsync(source, ["bass"]))["bass"];
+
+        Assert.HasCount(source.Data.Length, result);
+        double leftRms = RmsForChannel(result, 2, 0);
+        double rightRms = RmsForChannel(result, 2, 1);
+        Assert.IsTrue(leftRms > 1e-10);
+        Assert.IsTrue(rightRms > 1e-10);
+        Assert.AreNotEqual(leftRms, rightRms, 1e-6,
+            "Different source channels must not collapse into the same interleaved stream.");
+        Console.WriteLine(FormattableString.Invariant(
+            $"{sampleRate}: left={leftRms:F8}, right={rightRms:F8}, peak={result.Max(Math.Abs):F8}"));
+    }
+
+    private static double RmsForChannel(float[] samples, int channels, int channel)
+    {
+        double sum = 0;
+        int count = 0;
+        for (int index = channel; index < samples.Length; index += channels)
+        {
+            sum += (double)samples[index] * samples[index];
+            count++;
+        }
+
+        return Math.Sqrt(sum / Math.Max(1, count));
     }
 
     [TestMethod]

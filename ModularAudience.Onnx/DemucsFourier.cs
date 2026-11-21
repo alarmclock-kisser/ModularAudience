@@ -28,7 +28,7 @@ public sealed class DemucsFourier
                 : this.FormatCudaBackend();
     }
 
-    internal void Transform(Complex[][] frames, bool inverse, CancellationToken token)
+    internal bool Transform(Complex[][] frames, bool inverse, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if (this.options.CudaDeviceId >= 0 && !this.cudaFailed)
@@ -38,7 +38,7 @@ public sealed class DemucsFourier
                 CudaToolkitFourier.Transform(frames, inverse, this.options.CudaDeviceId, this.cudaToolkit!.LibraryPath);
                 this.Backend = this.FormatCudaBackend();
                 token.ThrowIfCancellationRequested();
-                return;
+                return true;
             }
             catch (Exception error) when (error is not OperationCanceledException)
             {
@@ -54,6 +54,7 @@ public sealed class DemucsFourier
                 else provider.Forward(frames[i], FourierTransformScaling.NoScaling);
                 return provider;
             }, _ => { });
+        return false;
     }
 
     private string FormatCudaBackend() =>

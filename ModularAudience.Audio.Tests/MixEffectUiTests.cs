@@ -146,6 +146,44 @@ public sealed class MixEffectUiTests
     }
 
     [STATestMethod]
+    [DataRow(false, 0.3f, -0.15f)]
+    [DataRow(true, 0.1f, -0.05f)]
+    public void OverlapBoundaryMergesTheWholeConnectedGroup(
+        bool overwrite,
+        float expectedLeft,
+        float expectedRight)
+    {
+        using var fixture = new Fixture(); var mix = fixture.Mix;
+        MixLane lane = mix.Arrangement.Lanes[0], otherLane = mix.Arrangement.Lanes[1];
+        otherLane.Clips.Remove(fixture.Second); lane.Clips.Add(fixture.Second);
+        fixture.First.SourceDuration = 0.075;
+        fixture.Second.Start = 0.025;
+        fixture.Second.SourceOffset = 0;
+        fixture.Second.SourceDuration = 0.05;
+        fixture.Second.Gain = 0.5;
+        mix.Arrangement.OverlapMode = overwrite
+            ? MixOverlapMode.AllowOverlapOverwrite
+            : MixOverlapMode.MixOverlap;
+        Set(mix, "pixelsPerSecond", 600d);
+        Call(mix, "Changed");
+        var canvas = (Control)Get(mix, "canvas")!;
+        var boundaryPoint = new Point(205, 40);
+
+        Call(mix, "MouseMoveTimeline", canvas, new MouseEventArgs(MouseButtons.None, 0, 205, 40, 0));
+        Assert.AreSame(Cursors.SizeAll, canvas.Cursor);
+        object boundary = Call(mix, "FindSegmentBoundary", boundaryPoint)!;
+        Drain((Task)Call(mix, "MergeSegmentBoundaryAsync", boundary)!);
+
+        MixClip merged = lane.Clips.Single();
+        MixSource rendered = mix.Arrangement.Sources[merged.SourceId];
+        int overlapFrame = (int)(0.04 * rendered.SampleRate);
+        Assert.AreEqual(expectedLeft, rendered.Data[overlapFrame * 2], 0.0001f);
+        Assert.AreEqual(expectedRight, rendered.Data[(overlapFrame * 2) + 1], 0.0001f);
+        Call(mix, "Undo");
+        Assert.HasCount(2, lane.Clips);
+    }
+
+    [STATestMethod]
     public void DockedClipDragStopsAtTheAdjacentSegmentBoundary()
     {
         using var fixture = new Fixture(); var mix = fixture.Mix; var lane = mix.Arrangement.Lanes[0];

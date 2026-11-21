@@ -99,6 +99,81 @@ public static class DemucsSpectrogram
         return result;
     }
 
+    internal static void NormalizeWaveformPeak(float[] waveform, float maximumPeak)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumPeak);
+        float peak = 0;
+        for (int index = 0; index < waveform.Length; index++)
+        {
+            float magnitude = MathF.Abs(waveform[index]);
+            if (!float.IsFinite(magnitude))
+            {
+                throw new ArithmeticException("CUDA CuFFT produced a non-finite waveform sample.");
+            }
+
+            peak = MathF.Max(peak, magnitude);
+        }
+
+        if (peak <= maximumPeak)
+        {
+            return;
+        }
+
+        float scale = maximumPeak / peak;
+        for (int index = 0; index < waveform.Length; index++)
+        {
+            waveform[index] *= scale;
+        }
+    }
+
+    internal static void PrepareFinalStemWaveform(float[] waveform, int channels, float maximumPeak = 1.0f)
+    {
+        ArgumentNullException.ThrowIfNull(waveform);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(channels);
+        if (waveform.Length == 0)
+        {
+            return;
+        }
+
+        if (waveform.Length % channels != 0)
+        {
+            throw new ArgumentException("The waveform length is not channel-aligned.", nameof(waveform));
+        }
+
+        int frames = waveform.Length / channels;
+        var means = new double[channels];
+        for (int frame = 0; frame < frames; frame++)
+        {
+            int offset = frame * channels;
+            for (int channel = 0; channel < channels; channel++)
+            {
+                float sample = waveform[offset + channel];
+                if (!float.IsFinite(sample))
+                {
+                    throw new ArithmeticException("Demucs produced a non-finite waveform sample.");
+                }
+
+                means[channel] += sample;
+            }
+        }
+
+        for (int channel = 0; channel < channels; channel++)
+        {
+            means[channel] /= Math.Max(1, frames);
+        }
+
+        for (int frame = 0; frame < frames; frame++)
+        {
+            int offset = frame * channels;
+            for (int channel = 0; channel < channels; channel++)
+            {
+                waveform[offset + channel] -= (float)means[channel];
+            }
+        }
+
+        NormalizeWaveformPeak(waveform, maximumPeak);
+    }
+
     public static Task<DenseTensor<float>> ForwardAsync(float[] planar, int length, DemucsFourier? fourier = null, CancellationToken token = default) =>
         Task.Run(() => Forward(planar, length, fourier, token), token);
 
