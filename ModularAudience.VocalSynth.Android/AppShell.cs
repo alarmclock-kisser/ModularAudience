@@ -19,12 +19,6 @@ internal sealed class AppShell : Shell
         this.Items.Add(CreateItem("VocalSynth", new MainPage()));
         this.Items.Add(CreateItem("Co-op", new CoOpPage(session, store)));
         this.Items.Add(CreateItem("Soundboard", new SoundboardPage(store)));
-        var checkForUpdates = new MenuItem
-        {
-            Text = "Check for updates",
-            Command = new Command(async () => await this.CheckForUpdatesAsync(manual: true)),
-        };
-        this.MenuItems.Add(checkForUpdates);
         this.Loaded += this.AppShell_Loaded;
     }
 
@@ -34,42 +28,21 @@ internal sealed class AppShell : Shell
         if (this.updateCheckStarted)
             return;
         this.updateCheckStarted = true;
-        await this.CheckForUpdatesAsync(manual: false);
-    }
-
-    private async Task CheckForUpdatesAsync(bool manual)
-    {
-        if (manual)
-        {
-            Preferences.Default.Remove(UpdatesDisabledPreference);
-            Preferences.Default.Remove(SkippedBuildPreference);
-        }
-        else if (Preferences.Default.Get(UpdatesDisabledPreference, false))
-        {
+        if (Preferences.Default.Get(UpdatesDisabledPreference, false))
             return;
-        }
 
         try
         {
-            if (!manual)
-                await Task.Delay(500);
+            await Task.Delay(500);
             AndroidReleaseUpdate? update = await this.updateService.FindLatestSignedUpdateAsync();
             if (update == null)
+                return;
+
+            if (update.BuildNumber <= GetInstalledBuildNumber() ||
+                update.BuildNumber == Preferences.Default.Get(SkippedBuildPreference, 0))
             {
-                if (manual)
-                    await this.DisplayAlertAsync("No update available", "No signed Android release was found.", "OK");
                 return;
             }
-
-            if (update.BuildNumber <= GetInstalledBuildNumber())
-            {
-                if (manual)
-                    await this.DisplayAlertAsync("You're up to date", "This is the latest signed Android build.", "OK");
-                return;
-            }
-
-            if (!manual && update.BuildNumber == Preferences.Default.Get(SkippedBuildPreference, 0))
-                return;
 
             string choice = await this.DisplayActionSheetAsync(
                 $"ModularAudience build {update.BuildNumber} is available.",
@@ -94,8 +67,6 @@ internal sealed class AppShell : Shell
         catch (Exception ex)
         {
             Trace.TraceError($"Android update check failed: {ex}");
-            if (manual)
-                await this.DisplayAlertAsync("Update check failed", ex.ToString(), "OK");
         }
     }
 
