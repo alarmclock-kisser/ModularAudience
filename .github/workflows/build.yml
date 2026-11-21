@@ -68,6 +68,13 @@ jobs:
         filters: |
           android:
             - 'ModularAudience.VocalSynth.Android/**'
+            - 'ModularAudience.CoOp.Shared/**'
+            - 'ModularAudience.CoOp/CoOpDefaults.cs'
+            - 'ModularAudience.CoOp/CoOpEndpoint.cs'
+            - 'ModularAudience.CoOp/CoOpNetworkUtilities.cs'
+            - 'ModularAudience.CoOp/Networking/**'
+            - 'ModularAudience.CoOp/Protocol/**'
+            - 'ModularAudience.CoOp/Security/**'
             - 'ModularAudience.Audio.VocalCore/**'
             - 'ModularAudience.Audio/Vocal/**'
             - 'ModularAudience.Audio/Processors_V4/Pyin*.cs'

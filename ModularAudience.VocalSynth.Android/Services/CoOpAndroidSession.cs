@@ -103,7 +103,7 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
         catch (Exception ex)
         {
             await responder.DisposeAsync();
-            this.StatusChanged?.Invoke(this, $"Hosting is active, but LAN discovery failed: {ex.Message}");
+            this.StatusChanged?.Invoke($"Hosting is active, but LAN discovery failed: {ex.Message}");
         }
 
         this.SetState($"Hosting on {this.Address}:{this.Port}");
@@ -222,7 +222,7 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
 
         if (snapshots.Count > 0)
             await this.SendBatchCompletedAsync(Guid.NewGuid(), cancellationToken);
-        this.StatusChanged?.Invoke(this, $"Sent {snapshots.Count} sample(s) in {snapshots.Select(item => item.Item.GroupName).Distinct().Count()} collection group(s).");
+        this.StatusChanged?.Invoke($"Sent {snapshots.Count} sample(s) in {snapshots.Select(item => item.Item.GroupName).Distinct().Count()} collection group(s).");
     }
 
     internal async Task DisconnectAsync()
@@ -274,7 +274,7 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
         }
         e.Connection.MessageReceived += this.Connection_MessageReceived;
         e.Connection.Closed += this.Connection_Closed;
-        this.StatusChanged?.Invoke(this, $"Peer connected from {e.Connection.RemoteEndPoint}.");
+        this.StatusChanged?.Invoke($"Peer connected from {e.Connection.RemoteEndPoint}.");
         _ = this.SendChallengeAsync(e.Connection);
     }
 
@@ -289,7 +289,7 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            this.StatusChanged?.Invoke(this, $"Authentication challenge failed: {ex.Message}");
+            this.StatusChanged?.Invoke($"Authentication challenge failed: {ex.Message}");
         }
     }
 
@@ -303,7 +303,7 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
             this.peerChallenges.Remove(e.Connection);
             this.authenticatedPeers.Remove(e.Connection);
         }
-        this.StatusChanged?.Invoke(this, $"Peer disconnected: {e.Connection.RemoteEndPoint}.");
+        this.StatusChanged?.Invoke($"Peer disconnected: {e.Connection.RemoteEndPoint}.");
     }
 
     private void Connection_Closed(object? sender, CoOpConnectionClosedEventArgs e)
@@ -314,7 +314,7 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
             this.SetState("Connection closed");
         }
         if (e.Error != null)
-            this.StatusChanged?.Invoke(this, $"Co-op connection error: {e.Error.Message}");
+            this.StatusChanged?.Invoke($"Co-op connection error: {e.Error.Message}");
     }
 
     private void Connection_MessageReceived(object? sender, CoOpMessageReceivedEventArgs e)
@@ -429,22 +429,22 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
                     }
                     break;
                 case ShareBatchCompletedMessage batchCompleted:
-                    List<CoOpIncomingBatch>? batch;
+                    List<CoOpIncomingBatch>? completedBatches;
                     lock (this.gate)
                     {
-                        this.completedCollections.Remove(connection, out batch);
+                        this.completedCollections.Remove(connection, out completedBatches);
                     }
-                    if (batch is { Count: > 0 })
-                        await this.ConfirmAndForwardAsync(batch, connection);
+                    if (completedBatches is { Count: > 0 })
+                        await this.ConfirmAndForwardAsync(completedBatches, connection);
                     break;
                 case ErrorMessage error:
-                    this.StatusChanged?.Invoke(this, $"Co-op error: {error.Message}");
+                    this.StatusChanged?.Invoke($"Co-op error: {error.Message}");
                     break;
             }
         }
         catch (Exception ex)
         {
-            this.StatusChanged?.Invoke(this, $"Co-op transfer failed: {ex.Message}");
+            this.StatusChanged?.Invoke($"Co-op transfer failed: {ex.Message}");
         }
     }
 
@@ -456,7 +456,7 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
             && await this.ConfirmIncomingTransfer(new CoOpIncomingTransfer(collections));
         if (!accepted)
         {
-            this.StatusChanged?.Invoke(this, $"Declined {collections.Sum(collection => collection.Audios.Count)} sample(s).");
+            this.StatusChanged?.Invoke($"Declined {collections.Sum(collection => collection.Audios.Count)} sample(s).");
             return;
         }
 
@@ -464,7 +464,7 @@ internal sealed class CoOpAndroidSession : IAsyncDisposable
         {
             await this.ForwardCollectionAsync(collection, source);
         }
-        this.StatusChanged?.Invoke(this, $"Received {collections.Sum(collection => collection.Audios.Count)} sample(s) from {collections.Count} collection(s).");
+        this.StatusChanged?.Invoke($"Received {collections.Sum(collection => collection.Audios.Count)} sample(s) from {collections.Count} collection(s).");
     }
 
     private async Task ForwardCollectionAsync(

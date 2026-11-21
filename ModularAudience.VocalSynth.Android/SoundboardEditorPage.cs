@@ -26,12 +26,12 @@ internal sealed class SoundboardEditorPage : ContentPage
         this.item = item;
         this.Title = "Edit sample";
         this.BackgroundColor = Color.FromArgb("#171717");
-        this.modePicker.ItemsSource =
-        [
+        this.modePicker.ItemsSource = new[]
+        {
             "Tempo change (preserve pitch)",
             "Varispeed (tempo and pitch)",
             "Pitch shift (preserve length)",
-        ];
+        };
         this.modePicker.SelectedIndex = 0;
         this.nameEntry.Text = item.Name;
         this.groupEntry.Text = item.GroupName;

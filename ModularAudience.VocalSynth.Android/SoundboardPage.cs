@@ -1,5 +1,6 @@
 using ModularAudience.Audio.Vocal;
 using ModularAudience.VocalSynth.Android.Services;
+using Microsoft.Maui.Layouts;
 using Microsoft.Maui.Storage;
 
 namespace ModularAudience.VocalSynth.Android;
@@ -14,7 +15,7 @@ public sealed class SoundboardPage : ContentPage
     private readonly Switch publicStorageSwitch = new();
     private CancellationTokenSource? heldPlaybackCancellation;
 
-    public SoundboardPage(SoundboardStore store)
+    internal SoundboardPage(SoundboardStore store)
     {
         this.store = store;
         this.Title = "Soundboard";
@@ -87,7 +88,6 @@ public sealed class SoundboardPage : ContentPage
             BackgroundColor = Colors.Transparent,
             TextColor = Colors.White,
             HorizontalOptions = LayoutOptions.Fill,
-            HorizontalTextAlignment = TextAlignment.Start,
         };
         AttachLongPress(
             header,

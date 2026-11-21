@@ -26,7 +26,7 @@ public sealed class CoOpPage : ContentPage
     private readonly Dictionary<Guid, CheckBox> selections = [];
     private bool busy;
 
-    public CoOpPage(CoOpAndroidSession session, SoundboardStore store)
+    internal CoOpPage(CoOpAndroidSession session, SoundboardStore store)
     {
         this.session = session;
         this.store = store;
@@ -121,7 +121,7 @@ public sealed class CoOpPage : ContentPage
         try
         {
             IReadOnlyList<CoOpDiscoveredHost> hosts = await this.session.DiscoverAsync(CancellationToken.None);
-            this.hostPicker.ItemsSource = hosts;
+            this.hostPicker.ItemsSource = hosts.ToList();
             this.statusLabel.Text = hosts.Count == 0
                 ? "No local hosts found. If the host PC is connected to this phone's hotspot, enter its hotspot-assigned IP and port below; a third hotspot is not required."
                 : $"{hosts.Count} local co-op host(s) found.";

@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text.Json;
 using Android.Content;
 using Android.OS;
@@ -43,7 +44,7 @@ internal sealed class SoundboardStore
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        float[] samples = CoOpAudioSnapshotMapper.ToSamples(snapshot.SampleData);
+        float[] samples = ReadSamples(snapshot.SampleData);
         if (snapshot.SampleRate <= 0 || snapshot.Channels is < 1 or > 2
             || samples.Length == 0 || samples.Length % snapshot.Channels != 0)
         {
@@ -319,13 +320,15 @@ internal sealed class SoundboardStore
     {
         if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
         {
-            ContentResolver resolver = Android.App.Application.Context.ContentResolver!;
+            ContentResolver resolver = global::Android.App.Application.Context.ContentResolver!;
             var values = new ContentValues();
             values.Put(MediaStore.MediaColumns.DisplayName, $"{id:N}-{SafeFileName(name)}.wav");
             values.Put(MediaStore.MediaColumns.MimeType, "audio/wav");
-            values.Put(MediaStore.Audio.Media.InterfaceConsts.RelativePath, $"{Android.OS.Environment.DirectoryMusic}/ModularAudience");
+            values.Put(
+                MediaStore.Audio.Media.InterfaceConsts.RelativePath,
+                global::Android.OS.Environment.DirectoryMusic + "/ModularAudience");
             values.Put(MediaStore.MediaColumns.IsPending, 1);
-            Android.Net.Uri? uri = resolver.Insert(MediaStore.Audio.Media.ExternalContentUri, values);
+            global::Android.Net.Uri? uri = resolver.Insert(MediaStore.Audio.Media.ExternalContentUri, values);
             if (uri == null)
                 throw new IOException("Android could not create the WAV in Music/ModularAudience.");
             try
@@ -350,8 +353,8 @@ internal sealed class SoundboardStore
         if (permission != PermissionStatus.Granted)
             throw new UnauthorizedAccessException("Storage permission is required to save WAV files in Music.");
         string musicDirectory = Path.Combine(
-            Android.OS.Environment.ExternalStorageDirectory!.AbsolutePath,
-            Android.OS.Environment.DirectoryMusic!,
+            global::Android.OS.Environment.ExternalStorageDirectory!.AbsolutePath,
+            global::Android.OS.Environment.DirectoryMusic!,
             "ModularAudience");
         Directory.CreateDirectory(musicDirectory);
         string destination = Path.Combine(musicDirectory, $"{id:N}-{SafeFileName(name)}.wav");
@@ -363,8 +366,8 @@ internal sealed class SoundboardStore
     {
         if (location.StartsWith("content:", StringComparison.OrdinalIgnoreCase))
         {
-            Android.Net.Uri uri = Android.Net.Uri.Parse(location);
-            return Android.App.Application.Context.ContentResolver?.OpenInputStream(uri);
+            global::Android.Net.Uri uri = global::Android.Net.Uri.Parse(location);
+            return global::Android.App.Application.Context.ContentResolver?.OpenInputStream(uri);
         }
         return File.Exists(location) ? File.OpenRead(location) : null;
     }
@@ -373,8 +376,8 @@ internal sealed class SoundboardStore
     {
         if (location.StartsWith("content:", StringComparison.OrdinalIgnoreCase))
         {
-            Android.Net.Uri uri = Android.Net.Uri.Parse(location);
-            Android.App.Application.Context.ContentResolver?.Delete(uri, null, null);
+            global::Android.Net.Uri uri = global::Android.Net.Uri.Parse(location);
+            global::Android.App.Application.Context.ContentResolver?.Delete(uri, null, null);
         }
         else if (File.Exists(location))
         {
@@ -388,6 +391,23 @@ internal sealed class SoundboardStore
         await using (FileStream stream = File.Create(temporaryPath))
             await JsonSerializer.SerializeAsync(stream, this.items, cancellationToken: cancellationToken);
         File.Move(temporaryPath, this.metadataPath, true);
+    }
+
+    private static float[] ReadSamples(byte[]? bytes)
+    {
+        if (bytes is null || bytes.Length == 0)
+            return [];
+        if (bytes.Length % sizeof(float) != 0)
+            throw new CoOpProtocolException("The audio sample payload is not aligned to 32-bit floats.");
+
+        var samples = new float[bytes.Length / sizeof(float)];
+        for (int index = 0; index < samples.Length; index++)
+        {
+            int offset = index * sizeof(float);
+            int bits = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(offset, sizeof(float)));
+            samples[index] = BitConverter.Int32BitsToSingle(bits);
+        }
+        return samples;
     }
 
     private static string NormalizeName(string? name)
