@@ -127,6 +127,38 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public async Task RenderPatternNotesAsync_UsesHighestSampleRateAndUpsamplesLowerRateSamples()
+        {
+            const int outputSampleRate = 48000;
+            using AudioObj highRateSample = CreateToneSample(outputSampleRate, 1000, 0.25);
+            using AudioObj lowerRateSample = CreateToneSample(22050, 1000, 0.25);
+            float[] originalHighRateData = (float[])highRateSample.Data.Clone();
+            float[] originalLowerRateData = (float[])lowerRateSample.Data.Clone();
+            int quarterTicks = BreakbeatGenerator_V2.PatternTicksPerBar / 4;
+
+            using AudioObj rendered = await BreakbeatGenerator_V2.RenderPatternNotesAsync(
+                [
+                    new(0, 0, quarterTicks),
+                    new(1, quarterTicks, quarterTicks)
+                ],
+                [highRateSample, lowerRateSample],
+                bars: 1,
+                bpm: 60,
+                resolution: 4,
+                swing: 0);
+
+            Assert.AreEqual(outputSampleRate, rendered.SampleRate);
+            Assert.AreEqual(outputSampleRate * 4 * rendered.Channels, rendered.Data.Length);
+            Assert.IsTrue(MeasureToneAmplitude(rendered, 1000, 0.05, 0.2) > 0.7f);
+            Assert.IsTrue(MeasureToneAmplitude(rendered, 1000, 1.05, 1.2) > 0.7f);
+            float upsampledToneResidual = MeasureToneResidualRms(rendered, 1000, 1.05, 1.2);
+            Assert.IsTrue(upsampledToneResidual < 0.01f,
+                $"Expected clean upsampling of the 1 kHz tone, got residual RMS {upsampledToneResidual:F4}.");
+            CollectionAssert.AreEqual(originalHighRateData, highRateSample.Data);
+            CollectionAssert.AreEqual(originalLowerRateData, lowerRateSample.Data);
+        }
+
+        [TestMethod]
         public async Task RenderPatternNotesAsync_StretchesShortHitThroughRequestedTail()
         {
             using AudioObj sample = CreateToneSample(sampleRate: 22050, frequency: 440, durationSeconds: 0.25);
@@ -552,6 +584,35 @@ namespace ModularAudience.Audio.Tests
             }
 
             return (float)(2.0 * Math.Sqrt(sineSum * sineSum + cosineSum * cosineSum) / Math.Max(1, lastFrame - firstFrame));
+        }
+
+        private static float MeasureToneResidualRms(AudioObj audio, int frequency, double startSeconds, double endSeconds, int channel = 0)
+        {
+            int firstFrame = (int)(startSeconds * audio.SampleRate);
+            int lastFrame = Math.Min((int)(endSeconds * audio.SampleRate), audio.Data.Length / audio.Channels);
+            int frameCount = lastFrame - firstFrame;
+            double sineCoefficient = 0;
+            double cosineCoefficient = 0;
+            for (int frame = firstFrame; frame < lastFrame; frame++)
+            {
+                double phase = 2.0 * Math.PI * frequency * frame / audio.SampleRate;
+                float value = audio.Data[frame * audio.Channels + channel];
+                sineCoefficient += value * Math.Sin(phase);
+                cosineCoefficient += value * Math.Cos(phase);
+            }
+
+            sineCoefficient *= 2.0 / frameCount;
+            cosineCoefficient *= 2.0 / frameCount;
+            double residualSumSquares = 0;
+            for (int frame = firstFrame; frame < lastFrame; frame++)
+            {
+                double phase = 2.0 * Math.PI * frequency * frame / audio.SampleRate;
+                double fittedValue = sineCoefficient * Math.Sin(phase) + cosineCoefficient * Math.Cos(phase);
+                double residual = audio.Data[frame * audio.Channels + channel] - fittedValue;
+                residualSumSquares += residual * residual;
+            }
+
+            return (float)Math.Sqrt(residualSumSquares / frameCount);
         }
     }
 }

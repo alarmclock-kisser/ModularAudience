@@ -916,6 +916,21 @@ namespace ModularAudience.Generators
             return Math.Ceiling(sampleDuration / shortestDuration - 1e-9) * shortestDuration;
         }
 
+        public static int GetPatternNotesOutputSampleRate(IReadOnlyList<AudioObj> samples)
+        {
+            ArgumentNullException.ThrowIfNull(samples);
+            int highestSampleRate = 0;
+            foreach (AudioObj sample in samples)
+            {
+                if (sample.SampleRate > highestSampleRate)
+                {
+                    highestSampleRate = sample.SampleRate;
+                }
+            }
+
+            return highestSampleRate > 0 ? highestSampleRate : 44100;
+        }
+
         public static Task<AudioObj> RenderPatternNotesAsync(
             IReadOnlyList<BreakbeatPatternNote> notes,
             IReadOnlyList<AudioObj> samples,
@@ -946,7 +961,7 @@ namespace ModularAudience.Generators
                 return null!;
             }
 
-            const int outputSampleRate = 44100;
+            int outputSampleRate = GetPatternNotesOutputSampleRate(samples);
             const int outputChannels = 2;
             double secondsPerBar = 240.0 / Math.Max(1.0, bpm);
             double secondsPerStep = secondsPerBar / Math.Max(1, resolution);
@@ -978,7 +993,21 @@ namespace ModularAudience.Generators
                     {
                         AudioObj clip = samples[track].Clone();
                         prepared[track] = clip;
-                        if (clip.SampleRate != outputSampleRate) await clip.ResampleAsync(outputSampleRate).ConfigureAwait(false);
+                        int sourceChannels = Math.Max(1, clip.Channels);
+                        if (clip.Data.Length > 0 && clip.SampleRate <= 0)
+                        {
+                            throw new InvalidOperationException("Breakbeat samples must have a positive sample rate.");
+                        }
+                        if (clip.Data.Length > 0 && clip.SampleRate != outputSampleRate)
+                        {
+                            clip.Data = ResampleBreakbeatSample(clip.Data, clip.SampleRate, outputSampleRate, sourceChannels);
+                        }
+                        if (clip.SampleRate != outputSampleRate)
+                        {
+                            clip.SampleRate = outputSampleRate;
+                            clip.Length = clip.Data.LongLength;
+                            clip.Duration = TimeSpan.FromSeconds(clip.Data.Length / ((double)outputSampleRate * sourceChannels));
+                        }
                         token.ThrowIfCancellationRequested();
                         await clip.NormalizeAsync(0.8f, maxWorkers: 1).ConfigureAwait(false);
                     }).ConfigureAwait(false);
@@ -990,6 +1019,7 @@ namespace ModularAudience.Generators
                         string? key = renderCache == null ? null : System.Text.Json.JsonSerializer.Serialize(new
                         {
                             Sample = sampleHashes[note.TrackIndex], Note = note with { TrackIndex = 0 }, Bpm = bpm, Resolution = resolution,
+                            OutputSampleRate = outputSampleRate,
                             NormalizedDuration = GetNormalizedSampleDurationSeconds(samples, note.TrackIndex),
                             Pitch = trackSettings != null && note.TrackIndex < trackSettings.Count ? trackSettings[note.TrackIndex].DefaultPitchSemitones : 0f
                         });

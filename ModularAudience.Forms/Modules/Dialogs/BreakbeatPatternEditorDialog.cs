@@ -4617,7 +4617,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             if (renderedPattern is null)
             {
                 int silentSections = selectedLoopSections.Count > 0 ? selectedLoopSections.Count : this.bars * 4;
-                const int sampleRate = 44100;
+                int sampleRate = BreakbeatGenerator_V2.GetPatternNotesOutputSampleRate(this.samples);
                 const int channels = 2;
                 int frames = Math.Max(1, (int)Math.Ceiling(silentSections * 60.0 / Math.Max(1.0, bpm) * sampleRate));
                 float[] silence = new float[checked(frames * channels)];
