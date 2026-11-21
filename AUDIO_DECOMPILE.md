@@ -168,6 +168,8 @@ Saving the editor renders every enabled Pattern Editor track separately and inse
 
 The editor stays modeless and is not registered as a child of the source collection. Closing Mix Track View closes this associated editor session; its temporary atomic/source objects are then released.
 
+The Pattern Editor's **Dedup** button is a manual operation; opening a Mix Track View selection never deduplicates automatically. Its configuration sets the audio-similarity threshold. Matching sample tracks with the same playback settings are merged into the highest-quality representative lane, their notes are combined, and exact duplicate note events are collapsed. Instrument-backed and Auto-Reroll tracks, plus tracks with different playback settings, are excluded. The whole merge is one undoable/redoable editor action.
+
 ## Workers and memory
 
 **Maximum workers** is limited to `Environment.ProcessorCount`. The value caps:

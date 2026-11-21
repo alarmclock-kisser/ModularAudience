@@ -21,6 +21,25 @@ namespace ModularAudience.Audio.Tests
         }
 
         [TestMethod]
+        public void FindsDuplicateGroupsWithoutMergingDifferentSoundsOrChangingSampleTags()
+        {
+            using AudioTestScope scope = new();
+            float[] hit = AudioTestData.Hit(16000, 200);
+            AudioObj first = scope.Create(hit);
+            AudioObj scaledCopy = scope.Create(hit.Select(value => value * 0.4f).ToArray());
+            AudioObj differentSound = scope.Create(AudioTestData.Hit(16000, 200, 1800));
+
+            IReadOnlyList<AtomicSampleSimilarityGroup> groups =
+                AtomicSampleGrouping.FindDuplicateGroups([first, scaledCopy, differentSound], 0.94f);
+
+            Assert.AreEqual(1, groups.Count);
+            Assert.AreEqual(0, groups[0].RepresentativeIndex);
+            CollectionAssert.AreEqual(new[] { 0, 1 }, groups[0].MemberIndices.ToArray());
+            Assert.IsNull(first.CustomTags["AtomizeQuality"]);
+            Assert.IsNull(scaledCopy.CustomTags["AtomizeQuality"]);
+        }
+
+        [TestMethod]
         public void SelectsDistinctSoundsWithinOneType()
         {
             using AudioTestScope scope = new();

@@ -655,6 +655,16 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
             if (this.trackSettingsBySample is not null)
             {
+                HashSet<AudioObj> activeExternalSamples = new(
+                    this.GetExternalSamples(this.sourceSampleOrder),
+                    ReferenceEqualityComparer.Instance);
+                foreach (AudioObj sample in this.trackSettingsBySample.Keys
+                    .Where(sample => !activeExternalSamples.Contains(sample))
+                    .ToArray())
+                {
+                    this.trackSettingsBySample.Remove(sample);
+                }
+
                 foreach ((AudioObj sample, BreakbeatTrackSettings settings) in this.GetSourceTrackSettings())
                 {
                     this.trackSettingsBySample[sample] = settings;
@@ -2104,6 +2114,11 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
 
         private void RemoveSampleTrack(int row)
         {
+            this.RemoveSampleTrack(row, recordUndo: true, notifyTrackSet: true);
+        }
+
+        private void RemoveSampleTrack(int row, bool recordUndo, bool notifyTrackSet)
+        {
             if (row < 0 || row >= this.samples.Count)
             {
                 return;
@@ -2118,7 +2133,7 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             AudioObj sourceSample = this.sourceSampleOrder[sourceIndex];
             AudioObj editorSample = this.samples[row];
             bool instrumentTrack = this.instrumentSettingsBySample.ContainsKey(sourceSample);
-            PatternEditorHistoryState preRemovalState = this.CaptureHistoryState();
+            PatternEditorHistoryState? preRemovalState = recordUndo ? this.CaptureHistoryState() : null;
             BreakbeatPatternNote[] originalNotes = this.notes.ToArray();
             this.notes.RemoveAll(note => note.TrackIndex == row);
             for (int index = 0; index < this.notes.Count; index++)
@@ -2167,17 +2182,24 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
             if (!instrumentTrack)
             {
                 this.trackSettingsBySample?.Remove(sourceSample);
-                this.TrackSetRestored?.Invoke(this);
+                if (notifyTrackSet)
+                {
+                    this.TrackSetRestored?.Invoke(this);
+                }
             }
+
             this.RegisterPatternNotesChanged(originalNotes
                 .Concat(this.notes)
                 .Select(note => (BreakbeatPatternNote?)note)
                 .ToArray());
             this.ConfigurePatternScrollBar();
             this.pictureBox_pattern.Invalidate();
-            this.undoHistory.Push(preRemovalState);
-            this.redoHistory.Clear();
-            this.lastHistoryState = this.CaptureHistoryState();
+            if (preRemovalState is not null)
+            {
+                this.undoHistory.Push(preRemovalState);
+                this.redoHistory.Clear();
+                this.lastHistoryState = this.CaptureHistoryState();
+            }
         }
 
         private void CloneSampleTrack(int row)

@@ -3,6 +3,24 @@ using MathNet.Numerics.IntegralTransforms;
 
 namespace ModularAudience.Audio.Processors_V4
 {
+    public sealed record AtomicSampleSimilarityGroup(
+        int RepresentativeIndex,
+        IReadOnlyList<int> MemberIndices);
+
+    public static class AtomicSampleGrouping
+    {
+        public static IReadOnlyList<AtomicSampleSimilarityGroup> FindDuplicateGroups(
+            IReadOnlyList<AudioObj> samples,
+            float similarityThreshold = 0.94f,
+            IProgress<double>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(samples);
+            return AtomicSampleDeduplicator.FindDuplicateGroups(
+                samples, similarityThreshold, progress, cancellationToken);
+        }
+    }
+
     internal sealed record AtomicToneSignature(
         string SampleTag,
         double DominantFrequencyHz,
@@ -27,7 +45,7 @@ namespace ModularAudience.Audio.Processors_V4
                 progress?.Report(0.70 + (0.15 * (i + 1) / atomics.Count));
             });
 
-            double threshold = float.IsFinite(similarityThreshold) ? Math.Clamp(similarityThreshold, 0.90f, 0.999f) : 0.94;
+            double threshold = NormalizeSimilarityThreshold(similarityThreshold);
             List<List<int>> clusters = CreateClusters(fingerprints, threshold);
             HashSet<int> selected = [];
             for (int i = 0; i < clusters.Count; i++)
@@ -45,6 +63,53 @@ namespace ModularAudience.Audio.Processors_V4
             }
 
             return result;
+        }
+
+        internal static IReadOnlyList<AtomicSampleSimilarityGroup> FindDuplicateGroups(
+            IReadOnlyList<AudioObj> atomics,
+            float similarityThreshold,
+            IProgress<double>? progress,
+            CancellationToken cancellationToken)
+        {
+            if (atomics.Count < 2)
+            {
+                progress?.Report(1.0);
+                return [];
+            }
+
+            double threshold = NormalizeSimilarityThreshold(similarityThreshold);
+            Fingerprint[] fingerprints = new Fingerprint[atomics.Count];
+            int completedFingerprints = 0;
+            int progressInterval = Math.Max(1, atomics.Count / 100);
+            object progressLock = new();
+            Parallel.For(0, atomics.Count,
+                AtomizerParallelism.OptionsFor(atomics.Count, null, cancellationToken), i =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                fingerprints[i] = CreateFingerprint(atomics[i], persistQuality: false);
+                if (progress is not null)
+                {
+                    lock (progressLock)
+                    {
+                        completedFingerprints++;
+                        if (completedFingerprints == atomics.Count
+                            || completedFingerprints % progressInterval == 0)
+                        {
+                            progress.Report(0.80 * completedFingerprints / atomics.Count);
+                        }
+                    }
+                }
+            });
+
+            List<List<int>> clusters = CreateDuplicateClusters(
+                fingerprints, threshold, progress, cancellationToken);
+            return clusters
+                .Where(cluster => cluster.Count > 1)
+                .Select(cluster => new AtomicSampleSimilarityGroup(
+                    cluster[0],
+                    cluster.OrderBy(index => index).ToArray()))
+                .OrderBy(group => group.RepresentativeIndex)
+                .ToArray();
         }
 
         public static List<AudioObj> SelectDistinctRepresentatives(IReadOnlyList<AudioObj> atomics)
@@ -113,7 +178,7 @@ namespace ModularAudience.Audio.Processors_V4
                 centroid);
         }
 
-        private static Fingerprint CreateFingerprint(AudioObj audio)
+        private static Fingerprint CreateFingerprint(AudioObj audio, bool persistQuality = true)
         {
             int frames = audio.Data.Length / audio.Channels;
             double[] spectrum = BuildSpectrum(audio, frames);
@@ -133,7 +198,11 @@ namespace ModularAudience.Audio.Processors_V4
                 (1.0 + (50.0 * clipped / Math.Max(1, audio.Data.Length)))) /
                 (1.0 + (3.0 * secondaryTransientPenalty)) *
                 (0.70 + (0.30 * Math.Clamp(rms / 0.1, 0.0, 1.0)));
-            audio.CustomTags["AtomizeQuality"] = quality.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+            if (persistQuality)
+            {
+                audio.CustomTags["AtomizeQuality"] = quality.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+            }
+
             return new Fingerprint(spectrum, spectrum[..SpectralBins], envelope, rms, frames / (double)audio.SampleRate,
                 GetSpectralCentroid(spectrum, audio.SampleRate), quality);
         }
@@ -305,6 +374,51 @@ namespace ModularAudience.Audio.Processors_V4
             return clusters;
         }
 
+        private static List<List<int>> CreateDuplicateClusters(
+            Fingerprint[] fingerprints,
+            double threshold,
+            IProgress<double>? progress,
+            CancellationToken cancellationToken)
+        {
+            List<List<int>> clusters = [];
+            int[] orderedIndices = Enumerable.Range(0, fingerprints.Length)
+                .OrderByDescending(index => fingerprints[index].Quality)
+                .ThenBy(index => index)
+                .ToArray();
+            int progressInterval = Math.Max(1, orderedIndices.Length / 100);
+            for (int position = 0; position < orderedIndices.Length; position++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                int index = orderedIndices[position];
+                List<int>? cluster = null;
+                foreach (List<int> candidate in clusters)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (AreDuplicates(fingerprints[index], fingerprints[candidate[0]], threshold))
+                    {
+                        cluster = candidate;
+                        break;
+                    }
+                }
+
+                if (cluster is null)
+                {
+                    clusters.Add([index]);
+                }
+                else
+                {
+                    cluster.Add(index);
+                }
+
+                if (position + 1 == orderedIndices.Length || (position + 1) % progressInterval == 0)
+                {
+                    progress?.Report(0.80 + (0.20 * (position + 1) / orderedIndices.Length));
+                }
+            }
+
+            return clusters;
+        }
+
         private static bool BelongToSameFamily(Fingerprint left, Fingerprint right, double threshold)
         {
             return Ratio(left.Duration, right.Duration) >= 0.25 &&
@@ -334,12 +448,23 @@ namespace ModularAudience.Audio.Processors_V4
 
         private static bool AreDuplicates(Fingerprint left, Fingerprint right)
         {
-            return Ratio(left.Duration, right.Duration) >= 0.65 &&
-                Ratio(left.Centroid, right.Centroid) >= 0.975 &&
-                Similarity(left.AttackSpectrum, right.AttackSpectrum) >= 0.98 &&
-                Similarity(left.Spectrum, right.Spectrum) >= 0.94 &&
-                Similarity(left.Envelope, right.Envelope) >= 0.995;
+            return AreDuplicates(left, right, 0.94);
         }
+
+        private static bool AreDuplicates(Fingerprint left, Fingerprint right, double threshold)
+        {
+            double thresholdOffset = threshold - 0.94;
+            return Ratio(left.Duration, right.Duration) >= 0.65 &&
+                Ratio(left.Centroid, right.Centroid) >= Math.Clamp(0.975 + (thresholdOffset * 0.5), 0.90, 0.999) &&
+                Similarity(left.AttackSpectrum, right.AttackSpectrum) >= Math.Clamp(0.98 + thresholdOffset, 0.90, 0.999) &&
+                Similarity(left.Spectrum, right.Spectrum) >= threshold &&
+                Similarity(left.Envelope, right.Envelope) >= Math.Clamp(0.995 + (thresholdOffset * 0.5), 0.90, 0.999);
+        }
+
+        private static double NormalizeSimilarityThreshold(float similarityThreshold) =>
+            float.IsFinite(similarityThreshold)
+                ? Math.Clamp(similarityThreshold, 0.90f, 0.999f)
+                : 0.94;
 
         private static double Ratio(double left, double right)
         {

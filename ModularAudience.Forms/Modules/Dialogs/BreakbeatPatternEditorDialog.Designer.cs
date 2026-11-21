@@ -39,6 +39,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             checkBox_saveNewEnsemble = new CheckBox();
             checkBox_liveBreakbeat = new CheckBox();
             combo_liveBreakbeatPreset = new ComboBox();
+            button_deduplicate = new Button();
             button_help = new Button();
             button_settings = new Button();
             button_generate = new Button();
@@ -118,6 +119,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Controls.Add(checkBox_saveNewEnsemble);
             panel_controls.Controls.Add(checkBox_liveBreakbeat);
             panel_controls.Controls.Add(combo_liveBreakbeatPreset);
+            panel_controls.Controls.Add(button_deduplicate);
             panel_controls.Controls.Add(button_help);
             panel_controls.Controls.Add(button_settings);
             panel_controls.Controls.Add(button_generate);
@@ -250,6 +252,19 @@ namespace ModularAudience.Forms.Modules.Dialogs
             combo_liveBreakbeatPreset.SelectedIndexChanged += combo_liveBreakbeatPreset_SelectedIndexChanged;
             toolTip_pattern.SetToolTip(combo_liveBreakbeatPreset,
                 "Live ensemble preset. Tracks are routed by enabled Drum Set element or Synth family.");
+            //
+            // button_deduplicate
+            //
+            button_deduplicate.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            button_deduplicate.Location = new Point(414, 8);
+            button_deduplicate.Name = "button_deduplicate";
+            button_deduplicate.Size = new Size(80, 25);
+            button_deduplicate.TabIndex = 16;
+            button_deduplicate.Text = "Dedup";
+            button_deduplicate.UseVisualStyleBackColor = true;
+            button_deduplicate.Click += button_deduplicate_Click;
+            toolTip_pattern.SetToolTip(button_deduplicate,
+                "Manually group similar sample tracks. Undo with Ctrl+Z and redo with Ctrl+Y.");
 //
 // button_help
 //
@@ -468,6 +483,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private CheckBox checkBox_saveNewEnsemble;
         private CheckBox checkBox_liveBreakbeat;
         private ComboBox combo_liveBreakbeatPreset;
+        private Button button_deduplicate = null!;
         private System.Windows.Forms.Timer timer_previewCaret;
         private System.Windows.Forms.Timer timer_pasteHold;
         private System.Windows.Forms.Timer timer_pitchGestureRelease;
