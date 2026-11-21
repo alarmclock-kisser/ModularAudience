@@ -228,6 +228,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                     ? NormalizeTrackSettings(settings)
                     : new BreakbeatTrackSettings()).ToList();
             this.rowLabels = rowLabels.ToList();
+            this.LoadNameTemplateSettings();
             this.bars = Math.Max(1, bars);
             this.swing = swing;
             this.numericUpDown_bpm.Value = Math.Clamp(decimal.Round(bpm, 1), this.numericUpDown_bpm.Minimum, this.numericUpDown_bpm.Maximum);
@@ -5611,12 +5612,20 @@ this.MouseWheel += this.pictureBox_pattern_MouseWheel;
                     rendered = excerpt;
                 }
                 if (this.IsDisposed || this.Disposing) return;
+                string? successfulTemplate;
+                string savedName = this.GetSavedPatternName(notes, this.Bpm, out successfulTemplate);
+                savedName = this.GetUniqueSavedAudioName(savedName);
+                rendered.Name = savedName;
                 if (this.savedCollection == null || this.savedCollection.IsDisposed)
                     this.savedCollection = new AudioCollectionView([]);
                 this.savedCollection.AudioC.Audios.Add(rendered);
                 rendered = null; // Collection owns the rendered result, independent of this editor.
                 this.savedCollection.Show();
-                this.savedCollection.Rename($"Break-Beat Generated [{bpm:F1}]");
+                this.savedCollection.Rename(savedName);
+                if (successfulTemplate is not null)
+                {
+                    this.RecordSuccessfulNameTemplate(successfulTemplate);
+                }
             }
             finally { rendered?.Dispose(); }
         }

@@ -49,6 +49,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             button_addBar = new Button();
             checkBox_preHear = new CheckBox();
             button_hear = new Button();
+            comboBox_nameTemplate = new ComboBox();
+            label_nameTemplate = new Label();
+            button_nameTemplateHelp = new Button();
             numericUpDown_attack = new NumericUpDown();
             label_attack = new Label();
             numericUpDown_bpm = new BreakbeatTempoNumericUpDown();
@@ -165,6 +168,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
             panel_controls.Controls.Add(button_addBar);
             panel_controls.Controls.Add(checkBox_preHear);
             panel_controls.Controls.Add(button_hear);
+            panel_controls.Controls.Add(comboBox_nameTemplate);
+            panel_controls.Controls.Add(label_nameTemplate);
+            panel_controls.Controls.Add(button_nameTemplateHelp);
             panel_controls.Controls.Add(numericUpDown_attack);
             panel_controls.Controls.Add(label_attack);
             panel_controls.Controls.Add(numericUpDown_bpm);
@@ -383,6 +389,39 @@ namespace ModularAudience.Forms.Modules.Dialogs
             button_hear.UseVisualStyleBackColor = true;
             button_hear.Click += button_hear_Click;
             //
+            // comboBox_nameTemplate
+            //
+            comboBox_nameTemplate.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
+            comboBox_nameTemplate.AutoCompleteSource = AutoCompleteSource.ListItems;
+            comboBox_nameTemplate.DropDownStyle = ComboBoxStyle.DropDown;
+            comboBox_nameTemplate.Location = new Point(140, 16);
+            comboBox_nameTemplate.MaxLength = 512;
+            comboBox_nameTemplate.Name = "comboBox_nameTemplate";
+            comboBox_nameTemplate.Size = new Size(320, 23);
+            comboBox_nameTemplate.TabIndex = 8;
+            comboBox_nameTemplate.TextChanged += comboBox_nameTemplate_TextChanged;
+            comboBox_nameTemplate.SelectionChangeCommitted += comboBox_nameTemplate_SelectionChangeCommitted;
+            toolTip_pattern.SetToolTip(comboBox_nameTemplate, "Optional pattern naming template. Select a saved schema or type a new one.");
+            //
+            // label_nameTemplate
+            //
+            label_nameTemplate.AutoSize = true;
+            label_nameTemplate.Location = new Point(140, 1);
+            label_nameTemplate.Name = "label_nameTemplate";
+            label_nameTemplate.Size = new Size(88, 15);
+            label_nameTemplate.TabIndex = 8;
+            label_nameTemplate.Text = "Name template";
+            //
+            // button_nameTemplateHelp
+            //
+            button_nameTemplateHelp.Location = new Point(466, 15);
+            button_nameTemplateHelp.Name = "button_nameTemplateHelp";
+            button_nameTemplateHelp.Size = new Size(52, 25);
+            button_nameTemplateHelp.TabIndex = 9;
+            button_nameTemplateHelp.Text = "Help";
+            button_nameTemplateHelp.UseVisualStyleBackColor = true;
+            button_nameTemplateHelp.Click += button_nameTemplateHelp_Click;
+            //
             // numericUpDown_attack
             //
             numericUpDown_attack.Increment = new decimal(new int[] { 1, 0, 0, 0 });
@@ -499,6 +538,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Label label_resolution;
         private NumericUpDown numericUpDown_resolution;
         private Button button_hear;
+        private ComboBox comboBox_nameTemplate;
+        private Label label_nameTemplate;
+        private Button button_nameTemplateHelp;
         private CheckBox checkBox_preHear;
         private Button button_addBar;
         private Button button_removeBar;
