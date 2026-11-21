@@ -4,7 +4,7 @@ using System.Diagnostics;
 namespace ModularAudience.VocalSynth.Android;
 
 [BroadcastReceiver(Enabled = true, Exported = false)]
-[IntentFilter(new[] { "android.intent.action.MY_PACKAGE_REPLACED" })]
+[IntentFilterAttribute(new[] { "android.intent.action.MY_PACKAGE_REPLACED" })]
 public sealed class AppUpdatedReceiver : BroadcastReceiver
 {
     public override void OnReceive(Context? context, Intent? intent)
