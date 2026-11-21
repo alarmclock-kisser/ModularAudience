@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -73,38 +74,114 @@ public sealed class CoOpDiscoveryClient : ICoOpDiscoveryClient
             timeout = TimeSpan.FromMilliseconds(CoOpDefaults.DefaultDiscoveryTimeoutMilliseconds);
         }
 
-        var results = new Dictionary<Guid, CoOpDiscoveredHost>();
-        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)
+        var sockets = new List<(Socket Socket, IPAddress BroadcastAddress)>();
+        if (this.probeAddresses != null)
         {
-            EnableBroadcast = true,
-            Ttl = 1
-        };
-        socket.Bind(new IPEndPoint(IPAddress.Any, 0));
-
-        byte[] probe = Encoding.UTF8.GetBytes(CoOpDefaults.DiscoveryProbe);
-        IReadOnlyList<IPAddress> broadcastAddresses = this.probeAddresses ?? CoOpNetworkUtilities.GetDiscoveryBroadcastAddresses();
-        for (int offset = 0; offset < this.portSearchCount; offset++)
+            Socket socket = CreateDiscoverySocket(IPAddress.Any);
+            sockets.AddRange(this.probeAddresses.Select(address => (socket, address)));
+        }
+        else
         {
-            int port = this.discoveryPort + offset;
-            foreach (IPAddress address in broadcastAddresses)
+            foreach (CoOpDiscoveryProbeTarget target in CoOpNetworkUtilities.GetDiscoveryProbeTargets(
+                         CoOpNetworkUtilities.GetLocalIPv4Networks()))
             {
                 try
                 {
-                    await socket.SendToAsync(probe, SocketFlags.None, new IPEndPoint(address, port), cancellationToken)
-                        .ConfigureAwait(false);
+                    sockets.Add((CreateDiscoverySocket(target.SourceAddress), target.BroadcastAddress));
                 }
                 catch (SocketException)
                 {
-                    // Some adapters reject directed broadcasts. Other addresses may still work.
+                    // A device may expose virtual or transient interfaces that cannot be bound.
                 }
             }
         }
 
-        using var timeoutSource = new CancellationTokenSource(timeout);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
-        byte[] buffer = new byte[2048];
+        if (sockets.Count == 0)
+        {
+            sockets.Add((CreateDiscoverySocket(IPAddress.Any), IPAddress.Broadcast));
+        }
 
-        while (!linked.IsCancellationRequested)
+        var results = new ConcurrentDictionary<Guid, CoOpDiscoveredHost>();
+        using var receiverLifetime = new CancellationTokenSource();
+        using var receiverCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            receiverLifetime.Token);
+        Socket[] uniqueSockets = sockets.Select(entry => entry.Socket).Distinct().ToArray();
+        Task[] receivers = uniqueSockets
+            .Select(socket => ReceiveResponsesAsync(socket, results, receiverCancellation.Token))
+            .ToArray();
+        byte[] probe = Encoding.UTF8.GetBytes(CoOpDefaults.DiscoveryProbe);
+        try
+        {
+            for (int offset = 0; offset < this.portSearchCount; offset++)
+            {
+                int port = this.discoveryPort + offset;
+                foreach ((Socket socket, IPAddress address) in sockets)
+                {
+                    try
+                    {
+                        await socket.SendToAsync(probe, SocketFlags.None, new IPEndPoint(address, port), cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (SocketException)
+                    {
+                        // Some adapters reject directed broadcasts. Other interfaces may still work.
+                    }
+                }
+            }
+
+            await Task.Delay(timeout, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            receiverLifetime.Cancel();
+            foreach (Socket socket in uniqueSockets)
+            {
+                socket.Dispose();
+            }
+
+            try
+            {
+                await Task.WhenAll(receivers).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (receiverCancellation.IsCancellationRequested)
+            {
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return results.Values
+            .OrderBy(host => host.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(host => host.Address, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static Socket CreateDiscoverySocket(IPAddress sourceAddress)
+    {
+        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)
+        {
+            EnableBroadcast = true,
+            Ttl = 1,
+        };
+        try
+        {
+            socket.Bind(new IPEndPoint(sourceAddress, 0));
+            return socket;
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    }
+
+    private static async Task ReceiveResponsesAsync(
+        Socket socket,
+        ConcurrentDictionary<Guid, CoOpDiscoveredHost> results,
+        CancellationToken cancellationToken)
+    {
+        byte[] buffer = new byte[2048];
+        while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
@@ -113,9 +190,9 @@ public sealed class CoOpDiscoveryClient : ICoOpDiscoveryClient
                     buffer,
                     SocketFlags.None,
                     remote,
-                    linked.Token).ConfigureAwait(false);
-
-                if (received.ReceivedBytes <= 0)
+                    cancellationToken).ConfigureAwait(false);
+                if (received.ReceivedBytes <= 0 ||
+                    received.RemoteEndPoint is not IPEndPoint remoteEndpoint)
                 {
                     continue;
                 }
@@ -139,50 +216,36 @@ public sealed class CoOpDiscoveryClient : ICoOpDiscoveryClient
                     continue;
                 }
 
-                string address = received.RemoteEndPoint is IPEndPoint ipEndPoint
-                    ? ipEndPoint.Address.ToString()
-                    : string.Empty;
-                if (address.Length == 0)
-                {
-                    continue;
-                }
-
-                // Broadcasts and loopback can discover the same host repeatedly.
-                // Prefer a LAN address that can also be shared with other peers.
-                if (results.TryGetValue(response.PeerId, out CoOpDiscoveredHost? existing) &&
-                    !IPAddress.IsLoopback(IPAddress.Parse(existing.Address)) &&
-                    IPAddress.IsLoopback(IPAddress.Parse(address)))
-                {
-                    continue;
-                }
-
-                results[response.PeerId] = new CoOpDiscoveredHost(
+                string address = remoteEndpoint.Address.ToString();
+                var host = new CoOpDiscoveredHost(
                     response.PeerId,
                     response.DisplayName,
                     address,
                     response.Port,
                     response.ProtocolVersion);
+                results.AddOrUpdate(response.PeerId, host, (_, existing) =>
+                    !IPAddress.IsLoopback(IPAddress.Parse(existing.Address)) &&
+                    IPAddress.IsLoopback(IPAddress.Parse(address))
+                        ? existing
+                        : host);
             }
-            catch (OperationCanceledException) when (linked.IsCancellationRequested)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                break;
+                return;
+            }
+            catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
             }
             catch (SocketException ex) when (ex.SocketErrorCode is SocketError.ConnectionReset or SocketError.MessageSize)
             {
-                // Probing an unused UDP port can produce ICMP reset errors on
-                // Windows. It must not hide replies from the remaining hosts.
+                // An unused UDP port can produce ICMP reset errors on Windows.
             }
             catch (SocketException)
             {
-                break;
+                return;
             }
         }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        return results.Values
-            .OrderBy(host => host.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(host => host.Address, StringComparer.Ordinal)
-            .ToList();
     }
 }
 

@@ -11,7 +11,10 @@ internal sealed class SessionTestScope : IAsyncDisposable
         "ModularAudience-CoOp-Tests",
         Guid.NewGuid().ToString("N"));
 
-    public CoOpSessionManager CreateManager(string displayName)
+    public CoOpSessionManager CreateManager(
+        string displayName,
+        string password = "test-session-password",
+        Func<string, int, string, bool>? confirmCertificate = null)
     {
         var manager = new CoOpSessionManager(new CoOpSessionOptions
         {
@@ -19,7 +22,10 @@ internal sealed class SessionTestScope : IAsyncDisposable
             PreferredPort = 0,
             EnableDiscoveryResponder = false,
             RemoteCollectionsRoot = this.Root,
-            ConnectTimeout = TimeSpan.FromSeconds(5)
+            ConnectTimeout = TimeSpan.FromSeconds(5),
+            SessionPassword = password,
+            CertificatePath = Path.Combine(this.Root, "host-certificate.pfx"),
+            ConfirmServerCertificate = confirmCertificate ?? ((_, _, _) => true),
         });
 
         this.managers.Add(manager);

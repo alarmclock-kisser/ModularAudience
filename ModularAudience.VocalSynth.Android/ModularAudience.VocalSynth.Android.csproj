@@ -23,6 +23,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.110" />
     <ProjectReference Include="..\ModularAudience.Audio.VocalCore\ModularAudience.Audio.VocalCore.csproj" />
+    <ProjectReference Include="..\ModularAudience.CoOp.Shared\ModularAudience.CoOp.Shared.csproj" />
   </ItemGroup>
 
 </Project>

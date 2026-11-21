@@ -36,4 +36,14 @@ public sealed class CoOpSessionOptions
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(8);
 
     public ICoOpMessageSerializer Serializer { get; init; } = new JsonCoOpMessageSerializer();
+
+    public string CertificatePath { get; init; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "ModularAudience",
+        "CoOp",
+        "host-certificate.pfx");
+
+    public string? SessionPassword { get; init; }
+
+    public Func<string, int, string, bool>? ConfirmServerCertificate { get; init; }
 }

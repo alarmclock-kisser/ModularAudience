@@ -1,6 +1,8 @@
 using ModularAudience.Audio;
 using ModularAudience.CoOp.Networking;
 using ModularAudience.CoOp.Protocol;
+using ModularAudience.CoOp.Security;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
 namespace ModularAudience.CoOp.Synchronization;
@@ -22,11 +24,14 @@ public sealed class CoOpSessionManager : IAsyncDisposable
     private readonly Dictionary<AudioCollection, Guid> collectionIds = [];
     private readonly Guid localPeerId = Guid.NewGuid();
     private CoOpServer? server;
+    private X509Certificate2? hostCertificate;
     private CoOpDiscoveryResponder? discoveryResponder;
     private CoOpConnection? hostConnection;
     private CoOpPeerInfo? hostPeer;
     private CoOpSessionState state = CoOpSessionState.Disconnected;
     private TaskCompletionSource<WelcomeMessage>? pendingWelcome;
+    private TaskCompletionSource<AuthChallengeMessage>? pendingAuthChallenge;
+    private string? sessionPassword;
     private string? sessionAddress;
     private int sessionPort;
     private bool disposed;
@@ -35,6 +40,7 @@ public sealed class CoOpSessionManager : IAsyncDisposable
     {
         this.options = options ?? throw new ArgumentNullException(nameof(options));
         this.uiContext = uiContext;
+        this.sessionPassword = options.SessionPassword;
     }
 
     public Guid LocalPeerId => this.localPeerId;
@@ -48,6 +54,10 @@ public sealed class CoOpSessionManager : IAsyncDisposable
     public string? SessionAddress => this.sessionAddress;
 
     public int SessionPort => this.sessionPort;
+
+    public string? HostCertificateFingerprint => this.hostCertificate == null
+        ? null
+        : CoOpSecurity.GetCertificateFingerprint(this.hostCertificate);
 
     public CoOpPeerInfo? HostPeer => this.hostPeer;
 
@@ -137,6 +147,15 @@ public sealed class CoOpSessionManager : IAsyncDisposable
 
     public event EventHandler<CoOpLogEventArgs>? Log;
 
+    public void SetSessionPassword(string password)
+    {
+        if (!CoOpSecurity.IsValidSessionPassword(password))
+            throw new ArgumentException("The co-op session password must contain 8 to 128 characters.", nameof(password));
+        if (this.IsSessionActive)
+            throw new InvalidOperationException("The session password cannot be changed while a co-op session is active.");
+        this.sessionPassword = password;
+    }
+
     public Task<CoOpHostInfo> StartHostingAsync(CancellationToken cancellationToken = default)
     {
         return this.RunExclusiveAsync(async () =>
@@ -146,12 +165,16 @@ public sealed class CoOpSessionManager : IAsyncDisposable
             {
                 throw new InvalidOperationException("A co-op session is already active.");
             }
+            if (!CoOpSecurity.IsValidSessionPassword(this.sessionPassword))
+                throw new InvalidOperationException("Set a co-op session password of 8 to 128 characters before hosting.");
 
             this.ClearSessionState();
 
-            var newServer = new CoOpServer(this.options.Serializer);
+            X509Certificate2 certificate = CoOpSecurity.LoadOrCreateHostCertificate(this.options.CertificatePath);
+            var newServer = new CoOpServer(this.options.Serializer, certificate);
             newServer.ClientConnected += this.Server_ClientConnected;
             newServer.ClientDisconnected += this.Server_ClientDisconnected;
+            newServer.ConnectionRejected += (_, e) => this.RaiseLog("A co-op TLS connection was rejected.", e.Error);
             try
             {
                 await newServer.StartAsync(
@@ -161,6 +184,7 @@ public sealed class CoOpSessionManager : IAsyncDisposable
                     cancellationToken);
 
                 this.server = newServer;
+                this.hostCertificate = certificate;
                 this.sessionPort = newServer.Port;
                 this.sessionAddress = CoOpNetworkUtilities.GetPreferredLocalAddress();
 
@@ -190,6 +214,7 @@ public sealed class CoOpSessionManager : IAsyncDisposable
             catch
             {
                 try { await newServer.DisposeAsync(); } catch { }
+                certificate.Dispose();
                 throw;
             }
         }, cancellationToken);
@@ -205,6 +230,10 @@ public sealed class CoOpSessionManager : IAsyncDisposable
         {
             throw new InvalidOperationException("A co-op session is already active.");
         }
+        if (!CoOpSecurity.IsValidSessionPassword(this.sessionPassword))
+        {
+            throw new InvalidOperationException("Set a co-op session password of 8 to 128 characters before connecting.");
+        }
 
         await this.RunExclusiveAsync(() =>
         {
@@ -215,6 +244,9 @@ public sealed class CoOpSessionManager : IAsyncDisposable
         CoOpConnection? connection = null;
         try
         {
+            var challengeSource = new TaskCompletionSource<AuthChallengeMessage>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            this.pendingAuthChallenge = challengeSource;
             connection = await CoOpClient.ConnectAsync(
                 host,
                 port,
@@ -222,16 +254,33 @@ public sealed class CoOpSessionManager : IAsyncDisposable
                 this.options.ConnectTimeout,
                 cancellationToken);
 
+            string fingerprint = connection.RemoteCertificateFingerprint
+                ?? throw new CoOpProtocolException("The co-op host did not present a TLS certificate.");
+            if (this.options.ConfirmServerCertificate == null
+                || !this.options.ConfirmServerCertificate(host, port, fingerprint))
+            {
+                throw new CoOpCertificateTrustException(host, port, fingerprint);
+            }
+
             this.hostConnection = connection;
             connection.MessageReceived += this.Connection_MessageReceived;
             connection.Closed += this.HostConnection_Closed;
+            await connection.StartAsync(cancellationToken);
 
             var welcomeSource = new TaskCompletionSource<WelcomeMessage>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             this.pendingWelcome = welcomeSource;
 
+            AuthChallengeMessage challenge = await challengeSource.Task
+                .WaitAsync(this.options.ConnectTimeout, cancellationToken);
             await connection.SendAsync(
-                new HelloMessage(this.localPeerId, this.options.DisplayName),
+                new HelloMessage(
+                    this.localPeerId,
+                    this.options.DisplayName,
+                    PasswordProof: CoOpSecurity.CreatePasswordProof(
+                        this.sessionPassword ?? string.Empty,
+                        challenge,
+                        this.localPeerId)),
                 cancellationToken);
 
             WelcomeMessage welcome = await welcomeSource.Task
@@ -251,6 +300,7 @@ public sealed class CoOpSessionManager : IAsyncDisposable
                 }
 
                 this.pendingWelcome = null;
+                this.pendingAuthChallenge = null;
                 this.hostPeer = new CoOpPeerInfo(welcome.PeerId, welcome.DisplayName);
                 this.state = CoOpSessionState.Connected;
                 this.sessionAddress = connection.RemoteEndPoint;
@@ -271,6 +321,7 @@ public sealed class CoOpSessionManager : IAsyncDisposable
 
             this.hostConnection = null;
             this.pendingWelcome = null;
+            this.pendingAuthChallenge = null;
             this.hostPeer = null;
             this.sessionAddress = null;
             this.sessionPort = 0;
@@ -518,6 +569,8 @@ public sealed class CoOpSessionManager : IAsyncDisposable
             try { await this.server.DisposeAsync(); } catch { }
             this.server = null;
         }
+        this.hostCertificate?.Dispose();
+        this.hostCertificate = null;
 
         if (this.hostConnection != null)
         {
@@ -605,7 +658,7 @@ public sealed class CoOpSessionManager : IAsyncDisposable
 
     private void Server_ClientConnected(object? sender, CoOpServerEventArgs e)
     {
-        var peer = new PeerSession(e.Connection);
+        var peer = new PeerSession(e.Connection, CoOpSecurity.CreateChallenge());
         lock (this.peerGate)
         {
             this.peers.Add(peer);
@@ -613,6 +666,22 @@ public sealed class CoOpSessionManager : IAsyncDisposable
 
         e.Connection.MessageReceived += this.Connection_MessageReceived;
         e.Connection.Closed += this.ServerPeerConnection_Closed;
+        _ = this.SendAuthenticationChallengeAsync(peer);
+    }
+
+    private async Task SendAuthenticationChallengeAsync(PeerSession peer)
+    {
+        AuthChallengeMessage? challenge = peer.AuthChallenge;
+        if (challenge == null)
+            return;
+        try
+        {
+            await peer.Connection.SendAsync(challenge);
+        }
+        catch (Exception ex)
+        {
+            this.RaiseLog("Sending the co-op authentication challenge failed.", ex);
+        }
     }
 
     private void Server_ClientDisconnected(object? sender, CoOpServerEventArgs e)
@@ -703,6 +772,9 @@ public sealed class CoOpSessionManager : IAsyncDisposable
     {
         switch (message)
         {
+            case AuthChallengeMessage challenge:
+                this.pendingAuthChallenge?.TrySetResult(challenge);
+                break;
             case WelcomeMessage welcome:
                 this.hostPeer = new CoOpPeerInfo(welcome.PeerId, welcome.DisplayName);
                 this.pendingWelcome?.TrySetResult(welcome);
@@ -822,6 +894,18 @@ public sealed class CoOpSessionManager : IAsyncDisposable
             await peer.Connection.SendAsync(new ErrorMessage(
                 $"Unsupported protocol version {hello.ProtocolVersion}.",
                 "protocol"));
+            return;
+        }
+
+        if (peer.AuthChallenge == null ||
+            !CoOpSecurity.VerifyPasswordProof(
+                this.sessionPassword ?? string.Empty,
+                peer.AuthChallenge,
+                hello.PeerId,
+                hello.PasswordProof ?? []))
+        {
+            await peer.Connection.SendAsync(new ErrorMessage("The co-op session password is incorrect.", "authentication"));
+            await peer.Connection.DisposeAsync();
             return;
         }
 
@@ -1533,6 +1617,8 @@ public sealed class CoOpSessionManager : IAsyncDisposable
         }
 
         this.pendingWelcome?.TrySetException(new IOException("The co-op host closed the connection during the handshake.", e.Error));
+        this.pendingAuthChallenge?.TrySetException(
+            new IOException("The co-op host closed the connection before authentication.", e.Error));
         _ = this.RunExclusiveAsync(() =>
         {
             if (this.state != CoOpSessionState.Connected || !ReferenceEquals(connection, this.hostConnection))
@@ -1794,9 +1880,11 @@ public sealed class CoOpSessionManager : IAsyncDisposable
         Updated
     }
 
-    private sealed class PeerSession(CoOpConnection connection)
+    private sealed class PeerSession(CoOpConnection connection, AuthChallengeMessage? authChallenge = null)
     {
         public CoOpConnection Connection { get; } = connection;
+
+        public AuthChallengeMessage? AuthChallenge { get; } = authChallenge;
 
         public Guid PeerId { get; set; }
 

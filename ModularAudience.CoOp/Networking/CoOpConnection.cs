@@ -20,7 +20,7 @@ public sealed class CoOpConnectionClosedEventArgs(Exception? error) : EventArgs
 public sealed class CoOpConnection : IAsyncDisposable
 {
     private readonly TcpClient client;
-    private readonly NetworkStream stream;
+    private readonly Stream stream;
     private readonly ICoOpMessageSerializer serializer;
     private readonly SemaphoreSlim sendLock = new(1, 1);
     private readonly CancellationTokenSource lifetime = new();
@@ -30,12 +30,22 @@ public sealed class CoOpConnection : IAsyncDisposable
     private int disposing;
 
     public CoOpConnection(TcpClient client, ICoOpMessageSerializer serializer)
+        : this(client, serializer, client?.GetStream() ?? throw new ArgumentNullException(nameof(client)), null)
+    {
+    }
+
+    public CoOpConnection(
+        TcpClient client,
+        ICoOpMessageSerializer serializer,
+        Stream transportStream,
+        string? remoteCertificateFingerprint)
     {
         this.client = client ?? throw new ArgumentNullException(nameof(client));
         this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-        this.stream = client.GetStream();
+        this.stream = transportStream ?? throw new ArgumentNullException(nameof(transportStream));
         this.LocalEndPoint = client.Client.LocalEndPoint?.ToString() ?? "unknown";
         this.RemoteEndPoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown";
+        this.RemoteCertificateFingerprint = remoteCertificateFingerprint;
     }
 
     public Guid ConnectionId { get; } = Guid.NewGuid();
@@ -43,6 +53,8 @@ public sealed class CoOpConnection : IAsyncDisposable
     public string RemoteEndPoint { get; }
 
     public string LocalEndPoint { get; }
+
+    public string? RemoteCertificateFingerprint { get; }
 
     public bool IsConnected => Volatile.Read(ref this.closed) == 0 && this.client.Connected;
 

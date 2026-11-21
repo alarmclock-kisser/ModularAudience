@@ -24,17 +24,22 @@ namespace ModularAudience.CoOp.Protocol;
 [JsonDerivedType(typeof(PingMessage), "ping")]
 [JsonDerivedType(typeof(PongMessage), "pong")]
 [JsonDerivedType(typeof(CoOpPresetSyncMessage), "presetSync")]
+[JsonDerivedType(typeof(ShareBatchCompletedMessage), "shareBatchCompleted")]
+[JsonDerivedType(typeof(AuthChallengeMessage), "authChallenge")]
 public abstract record CoOpMessage;
 
 public sealed record HelloMessage(
     Guid PeerId,
     string DisplayName,
-    int ProtocolVersion = CoOpDefaults.ProtocolVersion) : CoOpMessage;
+    int ProtocolVersion = CoOpDefaults.ProtocolVersion,
+    bool SupportsBatchTransfers = false,
+    byte[]? PasswordProof = null) : CoOpMessage;
 
 public sealed record WelcomeMessage(
     Guid PeerId,
     string DisplayName,
-    int ProtocolVersion = CoOpDefaults.ProtocolVersion) : CoOpMessage;
+    int ProtocolVersion = CoOpDefaults.ProtocolVersion,
+    bool SupportsBatchTransfers = false) : CoOpMessage;
 
 public sealed record ShareCollectionMessage(
     Guid CollectionId,
@@ -44,6 +49,10 @@ public sealed record ShareCollectionMessage(
     bool ReplaceExisting = true) : CoOpMessage;
 
 public sealed record ShareCollectionCompletedMessage(Guid CollectionId) : CoOpMessage;
+
+public sealed record ShareBatchCompletedMessage(Guid BatchId) : CoOpMessage;
+
+public sealed record AuthChallengeMessage(byte[] Salt, byte[] Nonce, int Iterations) : CoOpMessage;
 
 public sealed record AudioAddedMessage(Guid CollectionId, CoOpAudioSnapshot Audio) : CoOpMessage;
 

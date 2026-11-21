@@ -2,6 +2,7 @@ using ModularAudience.Audio;
 using ModularAudience.CoOp;
 using ModularAudience.CoOp.Networking;
 using ModularAudience.CoOp.Protocol;
+using ModularAudience.CoOp.Security;
 using ModularAudience.CoOp.Synchronization;
 using ModularAudience.CoOp.Windows;
 
@@ -15,6 +16,7 @@ namespace ModularAudience.Forms
     internal sealed class CoOpUiController : IAsyncDisposable
     {
         private readonly CoOpSessionManager session;
+        private readonly CoOpCertificateTrustStore certificateTrustStore;
         private readonly CoOpDiscoveryClient discoveryClient = new();
         private readonly Dictionary<Guid, AudioCollectionView> remoteViews = [];
         private readonly SemaphoreSlim presetImportGate = new(1, 1);
@@ -24,7 +26,17 @@ namespace ModularAudience.Forms
         {
             ArgumentNullException.ThrowIfNull(uiContext);
 
-            this.session = new CoOpSessionManager(new CoOpSessionOptions(), uiContext);
+            string coOpDirectory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ModularAudience",
+                "CoOp");
+            this.certificateTrustStore = new CoOpCertificateTrustStore(
+                Path.Combine(coOpDirectory, "trusted-hosts.json"));
+            this.session = new CoOpSessionManager(new CoOpSessionOptions
+            {
+                CertificatePath = Path.Combine(coOpDirectory, "host-certificate.pfx"),
+                ConfirmServerCertificate = this.ConfirmServerCertificate,
+            }, uiContext);
             this.session.StateChanged += this.Session_StateChanged;
             this.session.SharesChanged += this.Session_SharesChanged;
             this.session.RemoteCollectionAdded += this.Session_RemoteCollectionAdded;
@@ -49,8 +61,11 @@ namespace ModularAudience.Forms
 
         public int SessionPort => this.session.SessionPort;
 
-        public async Task<CoOpHostInfo> StartHostingAsync(CancellationToken cancellationToken = default)
+        public string? HostCertificateFingerprint => this.session.HostCertificateFingerprint;
+
+        public async Task<CoOpHostInfo> StartHostingAsync(string password, CancellationToken cancellationToken = default)
         {
+            this.session.SetSessionPassword(password);
             try
             {
                 CoOpFirewallResult firewall = await WindowsFirewall
@@ -81,10 +96,40 @@ namespace ModularAudience.Forms
             return info;
         }
 
-        public async Task ConnectAsync(CoOpEndpoint endpoint, CancellationToken cancellationToken = default)
+        public async Task ConnectAsync(
+            CoOpEndpoint endpoint,
+            string password,
+            CancellationToken cancellationToken = default)
         {
+            this.session.SetSessionPassword(password);
             await this.session.ConnectAsync(endpoint.Host, endpoint.Port, cancellationToken).ConfigureAwait(true);
             WindowMain.RaiseCoOpVisualsChanged();
+        }
+
+        private bool ConfirmServerCertificate(string host, int port, string fingerprint)
+        {
+            if (this.certificateTrustStore.IsTrusted(host, port, fingerprint))
+            {
+                return true;
+            }
+
+            string message =
+                $"Trust the TLS certificate for {host}:{port}?\n\n" +
+                $"SHA-256 fingerprint:\n{fingerprint}\n\n" +
+                "Verify this fingerprint with the host through a separate trusted channel before accepting.";
+            DialogResult result = MessageBox.Show(
+                message,
+                "Confirm co-op host certificate",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+            if (result != DialogResult.Yes)
+            {
+                return false;
+            }
+
+            this.certificateTrustStore.Trust(host, port, fingerprint);
+            return true;
         }
 
         public async Task StopAsync(CancellationToken cancellationToken = default)

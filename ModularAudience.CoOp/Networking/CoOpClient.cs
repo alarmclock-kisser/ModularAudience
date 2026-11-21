@@ -1,6 +1,10 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
+using System.Net.Security;
 using ModularAudience.CoOp.Protocol;
+using ModularAudience.CoOp.Security;
 
 namespace ModularAudience.CoOp.Networking;
 
@@ -32,21 +36,43 @@ public static class CoOpClient
         {
             linked.Token.ThrowIfCancellationRequested();
             TcpClient? client = null;
+            SslStream? secureStream = null;
             try
             {
                 client = new TcpClient(address.AddressFamily) { NoDelay = true };
                 await client.ConnectAsync(address, port, linked.Token).ConfigureAwait(false);
-                var connection = new CoOpConnection(client, serializer);
-                await connection.StartAsync().ConfigureAwait(false);
-                return connection;
+                string? fingerprint = null;
+                secureStream = new SslStream(
+                    client.GetStream(),
+                    leaveInnerStreamOpen: false,
+                    (_, certificate, _, _) =>
+                    {
+                        if (certificate == null)
+                            return false;
+                        fingerprint = CoOpSecurity.GetCertificateFingerprint(certificate);
+                        return true;
+                    });
+                await secureStream.AuthenticateAsClientAsync(
+                    new SslClientAuthenticationOptions
+                    {
+                        TargetHost = host,
+                        EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                        CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
+                    },
+                    linked.Token).ConfigureAwait(false);
+                if (fingerprint == null)
+                    throw new AuthenticationException("The co-op host did not present a TLS certificate.");
+                return new CoOpConnection(client, serializer, secureStream, fingerprint);
             }
             catch (SocketException error)
             {
+                secureStream?.Dispose();
                 client?.Dispose();
                 lastError = error;
             }
             catch
             {
+                secureStream?.Dispose();
                 client?.Dispose();
                 throw;
             }

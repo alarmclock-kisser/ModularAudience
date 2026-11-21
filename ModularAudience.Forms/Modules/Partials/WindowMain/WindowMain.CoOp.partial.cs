@@ -341,13 +341,22 @@ namespace ModularAudience.Forms
                 }
                 else
                 {
-                    CoOpHostInfo info = await controller.StartHostingAsync();
+                    using var passwordDialog = new ModularAudience.Forms.Modules.Dialogs.CoOpPasswordDialog(
+                        "Set a co-op session password",
+                        "Share this password with peers through a trusted channel.");
+                    if (passwordDialog.ShowDialog(this) != DialogResult.OK)
+                    {
+                        return;
+                    }
+
+                    string password = passwordDialog.Password;
+                    CoOpHostInfo info = await controller.StartHostingAsync(password);
                     string address = $"{info.Address}:{info.Port}";
                     this._lastCoOpAddress = address;
                     LogManager.LogSuccess($"Co-op hosting started. Address: {address}");
                     MessageBox.Show(
                         this,
-                        $"Co-op hosting started.\n\nShare this address with the other peers:\n{address}",
+                        $"Co-op hosting started.\n\nShare this address and session password with trusted peers:\n{address}\n\nSession password:\n{password}\n\nHost certificate SHA-256 fingerprint:\n{controller.HostCertificateFingerprint}",
                         "Co-op hosting",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
@@ -411,7 +420,15 @@ namespace ModularAudience.Forms
 
             try
             {
-                await controller.ConnectAsync(endpoint);
+                using var passwordDialog = new ModularAudience.Forms.Modules.Dialogs.CoOpPasswordDialog(
+                    "Enter the co-op session password",
+                    $"Enter the password supplied by the host at {endpoint}.");
+                if (passwordDialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                await controller.ConnectAsync(endpoint, passwordDialog.Password);
                 this._lastCoOpAddress = endpoint.ToString();
                 LogManager.LogSuccess($"Connected to co-op host {endpoint}.");
             }
