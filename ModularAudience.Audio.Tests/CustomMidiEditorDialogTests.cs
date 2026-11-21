@@ -125,6 +125,60 @@ public sealed class CustomMidiEditorDialogTests
     }
 
     [STATestMethod]
+    public void SettingANoteClearsAnExistingSelection()
+    {
+        using CustomMidiEditorDialog editor = new();
+        PictureBox pianoRoll = Field<PictureBox>(editor, "pictureBox_editor");
+        editor.CreateControl();
+        pianoRoll.CreateControl();
+
+        object selection = Invoke(editor, "CreateSelection", new Point(50, 100), new Point(100, 200));
+        typeof(CustomMidiEditorDialog).GetField("noteSelection", PrivateInstance)!.SetValue(editor, selection);
+
+        Invoke(editor, "pictureBox_editor_MouseDown", pianoRoll,
+            new MouseEventArgs(MouseButtons.Left, 1, 700, 400, 0));
+        Invoke(editor, "pictureBox_editor_MouseUp", pianoRoll,
+            new MouseEventArgs(MouseButtons.Left, 1, 700, 400, 0));
+
+        Assert.IsNull(Field<object?>(editor, "noteSelection"));
+    }
+
+    [STATestMethod]
+    public void SelectionRectangleCanDragSelectedMidiNotes()
+    {
+        using CustomMidiEditorDialog editor = new();
+        PictureBox pianoRoll = Field<PictureBox>(editor, "pictureBox_editor");
+        MidiNoteData note = new()
+        {
+            NoteNumber = 60,
+            Channel = 0,
+            Velocity = 100,
+            StartTick = 0,
+            DurationTicks = 480
+        };
+        editor.SelectedTrack.Notes.Add(note);
+        editor.SelectedTrack.ExtendLengthTo(480);
+        editor.CreateControl();
+        pianoRoll.CreateControl();
+
+        Point selectionStart = new(50, 100);
+        Point selectionEnd = new(150, 300);
+        object selection = Invoke(editor, "CreateSelection", selectionStart, selectionEnd);
+        typeof(CustomMidiEditorDialog).GetField("noteSelection", PrivateInstance)!.SetValue(editor, selection);
+
+        Invoke(editor, "pictureBox_editor_MouseDown", pianoRoll,
+            new MouseEventArgs(MouseButtons.Left, 1, 80, 200, 0));
+        Invoke(editor, "pictureBox_editor_MouseMove", pianoRoll,
+            new MouseEventArgs(MouseButtons.Left, 1, 200, 200, 0));
+        Invoke(editor, "pictureBox_editor_MouseUp", pianoRoll,
+            new MouseEventArgs(MouseButtons.Left, 1, 200, 200, 0));
+
+        Assert.AreNotSame(note, editor.SelectedTrack.Notes.Single());
+        Assert.IsTrue(editor.SelectedTrack.Notes[0].StartTick > 0);
+        Assert.IsNotNull(Field<object?>(editor, "noteSelection"));
+    }
+
+    [STATestMethod]
     public void RightClickOnEmptyPianoRollSpaceOpensPlayFromHereMenu()
     {
         using CustomMidiEditorDialog editor = new();

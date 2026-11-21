@@ -48,6 +48,12 @@ namespace ModularAudience.Forms.Modules.Dialogs
         private Point? rectangleSelectionEnd;
         private Point? selectionDragStart;
         private Point? selectionDragEnd;
+        private Point? selectionMoveStart;
+        private long selectionMoveAnchorTick;
+        private int selectionMoveAnchorNote;
+        private MidiSelection? selectionMoveOriginalSelection;
+        private List<MidiNoteData>? selectionMoveOriginalNotes;
+        private List<MidiNoteData>? selectionMoveMovedNotes;
         private MidiSelection? noteSelection;
         private EditorSnapshot? pendingHistorySnapshot;
         private MouseButtons editButton;
@@ -1361,6 +1367,23 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
+            if (e.Button == MouseButtons.Left
+                && this.noteSelection is MidiSelection
+                && this.IsPointInSelectionRectangle(e.Location))
+            {
+                this.BeginHistoryTransaction();
+                this.selectionMoveStart = this.ClampToEditor(e.Location);
+                this.selectionMoveAnchorTick = this.PointToTick(e.Location.X);
+                this.selectionMoveAnchorNote = this.PointToNote(e.Location.Y);
+                this.selectionMoveOriginalSelection = this.noteSelection;
+                this.selectionMoveOriginalNotes = this.GetSelectedNotes();
+                this.selectionMoveMovedNotes = [];
+                this.editPreviousLength = this.editorLengthTicks;
+                this.pictureBox_editor.Capture = true;
+                this.pictureBox_editor.Cursor = Cursors.SizeAll;
+                return;
+            }
+
             if (e.Button == MouseButtons.Right)
             {
                 if (!this.IsPianoRollPoint(e.Location))
@@ -1391,6 +1414,11 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.pictureBox_editor.Capture = true;
                 this.pictureBox_editor.Invalidate();
                 return;
+            }
+
+            if (e.Button == MouseButtons.Left)
+            {
+                this.noteSelection = null;
             }
 
             this.editStart = this.ClampToEditor(e.Location);
@@ -1428,6 +1456,15 @@ namespace ModularAudience.Forms.Modules.Dialogs
             if (this.panning)
             {
                 this.PanView(e.Location.X - this.panStart.X);
+                return;
+            }
+
+            if (this.selectionMoveStart is Point
+                && this.selectionMoveOriginalSelection is MidiSelection
+                && this.selectionMoveOriginalNotes is List<MidiNoteData>)
+            {
+                this.MoveSelectionTo(e.Location);
+                this.pictureBox_editor.Invalidate();
                 return;
             }
 
@@ -1527,6 +1564,21 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
+            if (this.selectionMoveStart is Point && e.Button == MouseButtons.Left)
+            {
+                this.MoveSelectionTo(e.Location);
+                this.selectionMoveStart = null;
+                this.selectionMoveOriginalSelection = null;
+                this.selectionMoveOriginalNotes = null;
+                this.selectionMoveMovedNotes = null;
+                this.pictureBox_editor.Capture = false;
+                this.pictureBox_editor.Cursor = Cursors.Cross;
+                this.UpdateEditorLengthAfterNoteChange(this.editPreviousLength);
+                this.CommitHistoryTransaction();
+                this.pictureBox_editor.Invalidate();
+                return;
+            }
+
             if (this.editStart is not Point start || e.Button != this.editButton)
             {
                 return;
@@ -1620,6 +1672,87 @@ namespace ModularAudience.Forms.Modules.Dialogs
             && note.NoteNumber <= selection.HighestNote
             && note.StartTick < selection.EndTick
             && note.StartTick + note.DurationTicks > selection.StartTick;
+
+        private bool IsPointInSelectionRectangle(Point point)
+        {
+            if (this.noteSelection is not MidiSelection selection)
+            {
+                return false;
+            }
+
+            int width = Math.Max(1, this.pictureBox_editor.ClientSize.Width - KeyLabelWidth);
+            float selectionX = KeyLabelWidth + (float)((selection.StartTick - this.viewStartTick) * this.pixelsPerTick);
+            float selectionEndX = KeyLabelWidth + (float)((selection.EndTick - this.viewStartTick) * this.pixelsPerTick);
+            int height = this.PianoRollHeight;
+            int count = Math.Max(1, this.HighestNote - this.LowestNote + 1);
+            float top = NoteToY(selection.HighestNote, this.LowestNote, count, height, TopMargin);
+            float bottom = NoteToY(selection.LowestNote, this.LowestNote, count, height, TopMargin)
+                + Math.Max(3, height / (float)count - 1);
+            RectangleF bounds = RectangleF.FromLTRB(
+                Math.Max(KeyLabelWidth, selectionX),
+                Math.Max(TopMargin, top),
+                Math.Min(KeyLabelWidth + width, selectionEndX),
+                Math.Min(this.PianoRollBottom, bottom));
+            return bounds.Contains(point);
+        }
+
+        private void MoveSelectionTo(Point point)
+        {
+            if (this.selectionMoveOriginalSelection is not MidiSelection originalSelection
+                || this.selectionMoveOriginalNotes is not List<MidiNoteData> originals)
+            {
+                return;
+            }
+
+            long currentTick = this.PointToTick(point.X);
+            int currentNote = this.PointToNote(point.Y);
+            long tickDelta = currentTick - this.selectionMoveAnchorTick;
+            if (originals.Count > 0)
+            {
+                tickDelta = Math.Max(tickDelta, -originals.Min(note => note.StartTick));
+            }
+            int noteDelta = currentNote - this.selectionMoveAnchorNote;
+
+            if (originals.Count > 0)
+            {
+                int minimum = originals.Min(note => note.NoteNumber);
+                int maximum = originals.Max(note => note.NoteNumber);
+                noteDelta = Math.Clamp(noteDelta, -minimum, 127 - maximum);
+            }
+
+            HashSet<MidiNoteData> toRemove = new(originals);
+            if (this.selectionMoveMovedNotes is List<MidiNoteData> moved)
+                toRemove.UnionWith(moved);
+            this.Track.Notes.RemoveAll(note => toRemove.Contains(note));
+
+            List<MidiNoteData> replacements = [];
+            foreach (MidiNoteData original in originals)
+            {
+                long startTick = Math.Max(0, original.StartTick + tickDelta);
+                int noteNumber = Math.Clamp(original.NoteNumber + noteDelta, 0, 127);
+                MidiNoteData replacement = new()
+                {
+                    NoteNumber = noteNumber,
+                    Channel = original.Channel,
+                    Velocity = original.Velocity,
+                    StartTick = startTick,
+                    DurationTicks = original.DurationTicks
+                };
+                replacements.Add(replacement);
+                this.Track.ExtendLengthTo(startTick + replacement.DurationTicks);
+            }
+            this.Track.Notes.AddRange(replacements);
+            this.selectionMoveMovedNotes = replacements;
+
+            long selectionStartTick = Math.Max(0, originalSelection.StartTick + tickDelta);
+            long selectionEndTick = Math.Max(selectionStartTick + this.GridTicks,
+                originalSelection.EndTick + tickDelta);
+            this.noteSelection = new MidiSelection(
+                selectionStartTick,
+                selectionEndTick,
+                Math.Clamp(originalSelection.LowestNote + noteDelta, 0, 127),
+                Math.Clamp(originalSelection.HighestNote + noteDelta, 0, 127));
+        }
 
         private MidiNoteData? FindNoteAt(Point point)
         {
