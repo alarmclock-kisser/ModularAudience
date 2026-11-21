@@ -48,6 +48,30 @@ public sealed class CustomMidiEditorDialogTests
     }
 
     [STATestMethod]
+    public void KeyControlsListNotesInDescendingOrderAndKeepMidiNoteMapping()
+    {
+        using CustomMidiEditorDialog editor = new();
+        DomainUpDown minKey = Field<DomainUpDown>(editor, "domainUpDown_minKey");
+        DomainUpDown maxKey = Field<DomainUpDown>(editor, "domainUpDown_maxKey");
+        string[] descendingNotes = Enumerable.Range(0, 128)
+            .Reverse()
+            .Select(CustomMidiEditorDialog.MidiNoteName)
+            .ToArray();
+
+        CollectionAssert.AreEqual(descendingNotes, minKey.Items.Cast<string>().ToArray());
+        CollectionAssert.AreEqual(descendingNotes, maxKey.Items.Cast<string>().ToArray());
+        Assert.AreEqual(CustomMidiEditorDialog.MidiNoteName(36), minKey.SelectedItem);
+        Assert.AreEqual(CustomMidiEditorDialog.MidiNoteName(84), maxKey.SelectedItem);
+
+        minKey.SelectedIndex++;
+        maxKey.SelectedIndex++;
+        Assert.AreEqual(CustomMidiEditorDialog.MidiNoteName(35), minKey.SelectedItem);
+        Assert.AreEqual(CustomMidiEditorDialog.MidiNoteName(83), maxKey.SelectedItem);
+        Assert.AreEqual(35, typeof(CustomMidiEditorDialog).GetProperty("LowestNote", PrivateInstance)!.GetValue(editor));
+        Assert.AreEqual(83, typeof(CustomMidiEditorDialog).GetProperty("HighestNote", PrivateInstance)!.GetValue(editor));
+    }
+
+    [STATestMethod]
     public void ClipboardGhostPlacementAddsNotesAndSupportsUndoRedo()
     {
         using CustomMidiEditorDialog editor = new();

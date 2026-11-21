@@ -154,9 +154,9 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         internal MidiInstrument Instrument => this.instrument;
 
-        private int LowestNote => Math.Clamp(this.domainUpDown_minKey.SelectedIndex, 0, 127);
+        private int LowestNote => MidiNoteFromKeyIndex(this.domainUpDown_minKey.SelectedIndex);
 
-        private int HighestNote => Math.Clamp(this.domainUpDown_maxKey.SelectedIndex, 0, 127);
+        private int HighestNote => MidiNoteFromKeyIndex(this.domainUpDown_maxKey.SelectedIndex);
 
         private int Resolution => Math.Max(1, (int)this.numericUpDown_resolution.Value);
 
@@ -201,12 +201,17 @@ namespace ModularAudience.Forms.Modules.Dialogs
 
         private void PopulateNoteNames()
         {
-            for (int note = 0; note < 128; note++)
+            for (int note = 127; note >= 0; note--)
             {
                 this.domainUpDown_minKey.Items.Add(MidiNoteName(note));
                 this.domainUpDown_maxKey.Items.Add(MidiNoteName(note));
             }
         }
+
+        private static int MidiNoteFromKeyIndex(int selectedIndex) =>
+            selectedIndex < 0 ? 0 : 127 - selectedIndex;
+
+        private static int KeyIndexFromMidiNote(int note) => 127 - Math.Clamp(note, 0, 127);
 
         private void SetKeyRange(int lowest, int highest)
         {
@@ -214,8 +219,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
             this.updatingKeyRange = true;
             try
             {
-                this.domainUpDown_minKey.SelectedIndex = lowest;
-                this.domainUpDown_maxKey.SelectedIndex = highest;
+                this.domainUpDown_minKey.SelectedIndex = KeyIndexFromMidiNote(lowest);
+                this.domainUpDown_maxKey.SelectedIndex = KeyIndexFromMidiNote(highest);
             }
             finally
             {
@@ -489,25 +494,29 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 return;
             }
 
-            int lowest = this.domainUpDown_minKey.SelectedIndex;
-            int highest = this.domainUpDown_maxKey.SelectedIndex;
-            if (lowest < 0 || highest < 0)
+            int lowestIndex = this.domainUpDown_minKey.SelectedIndex;
+            int highestIndex = this.domainUpDown_maxKey.SelectedIndex;
+            if (lowestIndex < 0 || highestIndex < 0)
             {
                 return;
             }
 
+            int lowest = MidiNoteFromKeyIndex(lowestIndex);
+            int highest = MidiNoteFromKeyIndex(highestIndex);
             (int validLowest, int validHighest) = NormalizeKeyRange(lowest, highest, lowestChanged);
             this.updatingKeyRange = true;
             try
             {
-                if (this.domainUpDown_minKey.SelectedIndex != validLowest)
+                int validLowestIndex = KeyIndexFromMidiNote(validLowest);
+                int validHighestIndex = KeyIndexFromMidiNote(validHighest);
+                if (this.domainUpDown_minKey.SelectedIndex != validLowestIndex)
                 {
-                    this.domainUpDown_minKey.SelectedIndex = validLowest;
+                    this.domainUpDown_minKey.SelectedIndex = validLowestIndex;
                 }
 
-                if (this.domainUpDown_maxKey.SelectedIndex != validHighest)
+                if (this.domainUpDown_maxKey.SelectedIndex != validHighestIndex)
                 {
-                    this.domainUpDown_maxKey.SelectedIndex = validHighest;
+                    this.domainUpDown_maxKey.SelectedIndex = validHighestIndex;
                 }
             }
             finally
@@ -654,8 +663,8 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 this.numericUpDown_bpm.Value = snapshot.Bpm;
                 this.numericUpDown_pitchFrequency.Value = snapshot.PitchFrequency;
                 this.numericUpDown_resolution.Value = snapshot.Resolution;
-                this.domainUpDown_minKey.SelectedIndex = snapshot.LowestNote;
-                this.domainUpDown_maxKey.SelectedIndex = snapshot.HighestNote;
+                this.domainUpDown_minKey.SelectedIndex = KeyIndexFromMidiNote(snapshot.LowestNote);
+                this.domainUpDown_maxKey.SelectedIndex = KeyIndexFromMidiNote(snapshot.HighestNote);
                 this.noteSelection = snapshot.Selection;
             }
             finally
