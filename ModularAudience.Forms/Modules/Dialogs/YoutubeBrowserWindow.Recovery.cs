@@ -152,6 +152,8 @@ public partial class YoutubeBrowserWindow
         job.CooldownDeadline = null;
         job.BpmTagTimedOut = false;
         job.WaitingForBpmWithoutLimit = false;
+        try { job.SkipBpmCts.Dispose(); } catch { }
+        job.SkipBpmCts = new CancellationTokenSource();
         job.LastLog = null;
         job.LastLogTimestamp = 0;
         job.LastProgressTimestamp = 0;

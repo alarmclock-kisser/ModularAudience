@@ -69,6 +69,7 @@ partial class YoutubeBrowserWindow
     private ToolStripMenuItem playItem = null!;
     private ToolStripMenuItem skipItem = null!;
     private ToolStripMenuItem addNextItem = null!;
+    private ToolStripMenuItem skipBpmItem = null!;
     private CheckBox autoplayCheck = null!;
     private FolderBrowserDialog folderDialog = null!;
 
@@ -456,13 +457,18 @@ partial class YoutubeBrowserWindow
     private void InitializeDownloadJobsMenu()
     {
         var menu = new ContextMenuStrip(components!);
+        skipBpmItem = new ToolStripMenuItem("Skip BPM Tag awaiting", null, SkipBpmTag_Click);
         var cancel = new ToolStripMenuItem("Cancel selected", null, CancelJobs_Click);
         var retry = new ToolStripMenuItem("Retry selected", null, RetryJobs_Click);
         var delete = new ToolStripMenuItem("Delete selected", null, DeleteJobs_Click);
-        menu.Items.AddRange([cancel, retry, delete]);
+        menu.Items.AddRange([skipBpmItem, new ToolStripSeparator(), cancel, retry, delete]);
         menu.Opening += (_, _) =>
         {
             var jobs = SelectedDownloadJobs();
+            var waitingForBpm = jobs.Any(job => !job.Terminal && !job.HandedOff &&
+                job.Status.StartsWith("Waiting for BPM tag", StringComparison.Ordinal));
+            skipBpmItem.Visible = waitingForBpm;
+            skipBpmItem.Enabled = waitingForBpm && !closing;
             cancel.Enabled = jobs.Any(job => !job.Terminal && !job.HandedOff && !job.CancelRequested) && !closing;
             retry.Enabled = !busy && !closing && binariesReady && jobs.Any(CanRetryJob);
             delete.Enabled = !closing && jobs.Any(job => job.Terminal);

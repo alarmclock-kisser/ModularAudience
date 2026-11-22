@@ -1,6 +1,7 @@
 using ModularAudience.Audio;
 using ModularAudience.Ytdlp;
 using System.Diagnostics;
+using System.Threading;
 
 namespace ModularAudience.Forms.Modules.Dialogs;
 
@@ -32,6 +33,8 @@ public partial class YoutubeBrowserWindow
         public bool CancelRequested { get; set; }
         public CancellationTokenSource? Cancellation { get; set; }
         public TimeSpan? CooldownDeadline { get; set; }
+        public CancellationTokenSource SkipBpmCts { get; set; } = new();
+        public void RequestSkipBpmTag() => SkipBpmCts.Cancel();
         public bool BpmTagTimedOut { get; set; }
         public bool WaitingForBpmWithoutLimit { get; set; }
         public string? LastLog { get; set; }

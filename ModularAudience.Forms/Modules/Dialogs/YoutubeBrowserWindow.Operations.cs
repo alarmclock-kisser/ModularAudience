@@ -1,6 +1,7 @@
 using ModularAudience.Audio;
 using ModularAudience.Audio.Processing;
 using ModularAudience.Ytdlp;
+using System.Threading;
 
 namespace ModularAudience.Forms.Modules.Dialogs;
 
@@ -468,8 +469,27 @@ public partial class YoutubeBrowserWindow
         {
             if (batchWaitForBpmTag)
             {
-                taggedBpm = await YoutubeAudioImporter.WaitForBpmValueAsync(result.FilePath, cooldown, token);
-                job.BpmTagTimedOut = taggedBpm is null;
+                using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(token, job.SkipBpmCts.Token);
+                try
+                {
+                    taggedBpm = await YoutubeAudioImporter.WaitForBpmValueAsync(result.FilePath, cooldown, combinedCts.Token);
+                    job.BpmTagTimedOut = taggedBpm is null;
+                }
+                catch (OperationCanceledException)
+                {
+                    // Nur wenn der Skip explizit vom Nutzer kam, nicht bei Batch-Abbruch
+                    if (job.SkipBpmCts.Token.IsCancellationRequested && !token.IsCancellationRequested)
+                    {
+                        job.BpmTagTimedOut = false;
+                        taggedBpm = null;
+                        AppendLog($"BPM tag wait skipped by user: {job.Video.Title}");
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+
                 string message = taggedBpm is { } bpm ? $"BPM tag detected ({bpm:0.###}): {job.Video.Title}"
                     : $"Warning: BPM tag wait timed out after {cooldown.TotalSeconds:0.###} s; importing without an awaited BPM tag: {job.Video.Title}. Increase Wait (s), or set 0 to wait until tagged.";
                 AppendLog(message);

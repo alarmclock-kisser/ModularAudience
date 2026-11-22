@@ -42,4 +42,14 @@ public partial class YoutubeBrowserWindow
             token => ImportBatchAsync(jobs.Select(job => job.Video).ToArray(), options, cooldown,
                 stretch, parallel, token, jobs), isBatch: true);
     }
+
+    private void SkipBpmTag_Click(object? sender, EventArgs e)
+    {
+        foreach (var job in SelectedDownloadJobs().Where(job =>
+            !job.Terminal && !job.HandedOff &&
+            job.Status.StartsWith("Waiting for BPM tag", StringComparison.Ordinal)))
+        {
+            job.RequestSkipBpmTag();
+        }
+    }
 }
