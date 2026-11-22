@@ -59,6 +59,7 @@
     <ProjectReference Include="..\ModularAudience.Onnx\ModularAudience.Onnx.csproj" />
     <ProjectReference Include="..\ModularAudience.Quantum\ModularAudience.Quantum.csproj" />
     <ProjectReference Include="..\ModularAudience.Shared\ModularAudience.Shared.csproj" />
+    <ProjectReference Include="..\ModularAudience.Video\ModularAudience.Video.csproj" />
     <ProjectReference Include="..\ModularAudience.Ytdlp\ModularAudience.Ytdlp.csproj" />
   </ItemGroup>
 

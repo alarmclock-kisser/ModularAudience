@@ -15,5 +15,6 @@
   <Project Path="ModularAudience.Quantum/ModularAudience.Quantum.csproj" />
   <Project Path="ModularAudience.Quantum.Tests/ModularAudience.Quantum.Tests.csproj" />
   <Project Path="ModularAudience.Shared/ModularAudience.Shared.csproj" />
+  <Project Path="ModularAudience.Video/ModularAudience.Video.csproj" />
   <Project Path="ModularAudience.Ytdlp/ModularAudience.Ytdlp.csproj" />
 </Solution>

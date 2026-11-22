@@ -13,6 +13,7 @@ using ModularAudience.Forms.Settings;
 using ModularAudience.MidiController;
 using ModularAudience.MidiController.Models;
 using ModularAudience.Shared;
+using ModularAudience.Video;
 using Microsoft.Extensions.DependencyInjection;
 using ModularAudience.Quantum.Abstractions;
 
@@ -122,6 +123,7 @@ namespace ModularAudience.Forms
         private static readonly Padding TrackViewScreenMargin = new(20, 20, 20, 20);
         private static readonly Size TrackViewSpacing = new(15, 12);
         private string lastImportFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+        private string lastVideoFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
         internal bool StructuredImports => this.checkBox_structure.Checked;
 
         internal static bool SuppressCollectionViewPositioning = false;

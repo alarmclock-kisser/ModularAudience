@@ -5,7 +5,10 @@ using ModularAudience.CoOp.Protocol;
 using ModularAudience.CoOp.Security;
 using ModularAudience.CoOp.Synchronization;
 using ModularAudience.Forms.Helpers;
+using ModularAudience.Forms.Modules.Dialogs;
+using ModularAudience.Video;
 using System.ComponentModel;
+using System.Text;
 
 namespace ModularAudience.Forms
 {
@@ -19,6 +22,7 @@ namespace ModularAudience.Forms
         private ToolStripMenuItem? _coOpCopyAddressItem;
         private ToolStripMenuItem? _coOpSynchronizePresetsItem;
         private ToolStripMenuItem? _coOpStatusItem;
+        private ToolStripMenuItem? _coOpImportVideoItem;
         private CancellationTokenSource? _coOpDiscoveryCts;
         private int _coOpDiscoveryGeneration;
         private bool _coOpMenuBusy;
@@ -102,6 +106,12 @@ namespace ModularAudience.Forms
                 Enabled = false
             };
 
+            this._coOpImportVideoItem = new ToolStripMenuItem("Import + convert Video")
+            {
+                Name = "importVideo"
+            };
+            this._coOpImportVideoItem.Click += async (_, _) => await this.ImportVideoFilesAsync();
+
             var menu = new ContextMenuStrip();
             menu.Items.AddRange(
             [
@@ -116,7 +126,9 @@ namespace ModularAudience.Forms
                 this._coOpDisconnectItem,
                 this._coOpCopyAddressItem,
                 new ToolStripSeparator(),
-                this._coOpStatusItem
+                this._coOpStatusItem,
+                new ToolStripSeparator(),
+                this._coOpImportVideoItem,
             ]);
             menu.Opening += this.CoOpMenu_Opening;
             menu.Closed += (_, _) => this.CancelCoOpDiscovery();
@@ -602,6 +614,270 @@ namespace ModularAudience.Forms
             catch (Exception ex)
             {
                 LogManager.Log("Co-op shutdown failed.", ex);
+            }
+        }
+
+        private async Task ImportVideoFilesAsync()
+        {
+            string initialDir = this.lastVideoFolder;
+            if (string.IsNullOrWhiteSpace(initialDir) || !Directory.Exists(initialDir))
+            {
+                initialDir = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+            }
+
+            using OpenFileDialog openFileDialog = new()
+            {
+                InitialDirectory = initialDir,
+                Filter = VideoFormat.Filter,
+                Multiselect = true,
+                Title = "Video zu Audio konvertieren und importieren",
+                RestoreDirectory = true,
+            };
+
+            if (openFileDialog.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
+
+            var videoFiles = openFileDialog.FileNames
+                .Where(f => VideoFormat.IsSupported(f))
+                .ToList();
+
+            if (videoFiles.Count == 0)
+            {
+                LogManager.Log("Video import: Keine unterstützten Video-Dateien ausgewählt.");
+                return;
+            }
+
+            // Remember the folder for next time.
+            try
+            {
+                this.lastVideoFolder = Path.GetDirectoryName(videoFiles.First()) ?? this.lastVideoFolder;
+            }
+            catch { }
+
+            // 1. FFmpeg sicherstellen (wiederverwende Ytdlp-Installation, falls vorhanden;
+            //    sonst interaktiver Download mit Progress-Dialog)
+            string? ffmpegPath = await this.EnsureFfmpegAvailableAsync();
+            if (ffmpegPath == null)
+            {
+                LogManager.Log("Video import: ffmpeg nicht verfügbar, Abbruch.");
+                return;
+            }
+
+            // 2. Konvertierung: temporäres WAV im Temp-Verzeichnis (nicht als Endprodukt speichern)
+            string tempVideoDir = Path.Combine(Path.GetTempPath(), $"ModularAudienceVideoImport_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempVideoDir);
+
+            var options = new VideoConverterOptions
+            {
+                MaxWorkers = Math.Max(1, Environment.ProcessorCount - 2),
+                OutputFormat = AudioOutputFormat.Wav,
+                OutputDirectory = tempVideoDir,
+                FfmpegPath = ffmpegPath,
+            };
+
+            using var converter = new FfmpegVideoToAudioConverter(options);
+
+            var progress = new Progress<double>(pct =>
+            {
+                // ProgressDialog marshaled selbst auf den UI-Thread.
+            });
+
+            var cts = new CancellationTokenSource();
+
+            using var progressDlg = new ProgressDialog(
+                title: "Video zu Audio konvertieren...",
+                progress: progress,
+                windowCloseDelay: 1.0d,
+                ct: cts.Token);
+
+            progressDlg.Show(this);
+
+            List<string> tempAudioFiles = [];
+
+            try
+            {
+                // 4. Konvertiere alle Videos parallel (MaxWorkers), Fehler stoppen nicht den Rest
+                var results = await converter.ConvertManyAsync(videoFiles, progress, cts.Token)
+                    .ConfigureAwait(false);
+
+                progressDlg.Complete();
+
+                // Erfolgreiche Konvertierungen: Temp-WAV-Pfade sammeln für AudioObj-Import
+                var successResults = results
+                    .Where(r => r.Success && !string.IsNullOrWhiteSpace(r.AudioFilePath) && File.Exists(r.AudioFilePath!))
+                    .ToList();
+
+                foreach (var r in successResults)
+                {
+                    tempAudioFiles.Add(r.AudioFilePath!);
+                }
+
+                if (tempAudioFiles.Count > 0)
+                {
+                    LogManager.Log($"Video import: {tempAudioFiles.Count} von {videoFiles.Count} Video(n) zu Audio konvertiert.");
+
+                    // 5. Als AudioObj importieren (bestehende Import-Pipeline erstellt AudioObj aus den Dateien)
+                    await this.ImportAndPlaceAsync(tempAudioFiles, fromResources: false);
+
+                    // Temp-WAV-Dateien nach erfolgreichem Import löschen (AudioObj hält die Daten im RAM)
+                    foreach (var tempPath in tempAudioFiles)
+                    {
+                        try { File.Delete(tempPath); } catch { }
+                    }
+                }
+
+                // 6. Fehler am Ende gebündelt anzeigen (nicht währenddessen abbrechen)
+                var failed = results.Where(r => !r.Success).ToList();
+                if (failed.Count > 0)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"Folgende {failed.Count} Video(n) konnten nicht konvertiert werden:");
+                    sb.AppendLine();
+                    foreach (var r in failed)
+                    {
+                        sb.AppendLine($"• {Path.GetFileName(r.VideoFilePath)}");
+                        sb.AppendLine($"    {r.ErrorMessage}");
+                        sb.AppendLine();
+                    }
+
+                    ShowErrorWithCopyButton(
+                        this,
+                        "Video-zu-Audio Konvertierung – Fehler aufgetreten",
+                        new Exception(sb.ToString()));
+                }
+                else if (tempAudioFiles.Count == 0)
+                {
+                    LogManager.Log("Video import: Keine Audio-Dateien konnten extrahiert werden.");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                progressDlg.Close();
+                LogManager.Log("Video import wurde abgebrochen.");
+            }
+            catch (Exception ex)
+            {
+                progressDlg.Close();
+                LogManager.Log($"Video import fehlgeschlagen: {ex.Message}");
+                ShowErrorWithCopyButton(this, "Video-zu-Audio Konvertierung fehlgeschlagen", ex);
+            }
+            finally
+            {
+                // Temp-Verzeichnis aufräumen (best effort)
+                try
+                {
+                    if (Directory.Exists(tempVideoDir))
+                    {
+                        Directory.Delete(tempVideoDir, recursive: true);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>
+        /// Stellt sicher, dass ffmpeg.exe verfügbar ist. Wiederverwendet die von
+        /// <see cref="FfmpegBinaryManager"/> / Ytdlp verwaltete Installation, sofern vorhanden.
+        /// Falls nicht, wird interaktiv zum Download angeboten (nur ffmpeg, kein yt-dlp/deno).
+        /// Gibt den Pfad zu ffmpeg.exe zurück oder null, wenn der Nutzer ablehnt.
+        /// </summary>
+        private async Task<string?> EnsureFfmpegAvailableAsync()
+        {
+            // 1. Bereits bekannte Standorte prüfen (ohne Update-Suche, ohne Download)
+            string? knownPath = null;
+
+            try
+            {
+                var ytdlpDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "ModularAudience", "binaries_ytdlp");
+                foreach (var dir in Directory.EnumerateDirectories(ytdlpDir, "ffmpeg-*", SearchOption.TopDirectoryOnly))
+                {
+                    var candidate = Path.Combine(dir, "ffmpeg.exe");
+                    if (File.Exists(candidate))
+                    {
+                        knownPath = candidate;
+                        break;
+                    }
+                }
+            }
+            catch { /* Verzeichnis existiert ggf. noch nicht */ }
+
+            if (knownPath is not null)
+            {
+                return knownPath;
+            }
+
+            // 2. Neben der Entry Assembly oder in PATH
+            var localCandidate = Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe");
+            if (File.Exists(localCandidate)) return localCandidate;
+
+            var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+            foreach (var entry in pathEnv.Split(Path.PathSeparator))
+            {
+                var dir = entry.Trim().Trim('"');
+                if (string.IsNullOrWhiteSpace(dir) || !Path.IsPathFullyQualified(dir)) continue;
+                try
+                {
+                    var candidate = Path.Combine(dir, "ffmpeg.exe");
+                    if (File.Exists(candidate)) return Path.GetFullPath(candidate);
+                }
+                catch { /* ignore invalid entries */ }
+            }
+
+            // 3. Nicht gefunden – interaktiven Download anbieten (nur ffmpeg)
+            var result = MessageBox.Show(
+                this,
+                "ffmpeg.exe wurde nicht gefunden und wird für die Video-zu-Audio Konvertierung benötigt.\n\n" +
+                "Möchten Sie FFmpeg jetzt herunterladen (ca. 100 MB, nur ffmpeg, kein yt-dlp)?",
+                "FFmpeg fehlt",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button1);
+
+            if (result != DialogResult.Yes)
+            {
+                return null;
+            }
+
+            // 4. Herunterladen mit echtem Progress über den ProgressDialog (nur ffmpeg)
+            using var downloadCts = new CancellationTokenSource();
+            var downloadProgress = new Progress<string>(msg =>
+            {
+                LogManager.Log($"FFmpeg Download: {msg}");
+            });
+
+            using var downloadDlg = new ProgressDialog(
+                title: "FFmpeg wird heruntergeladen...",
+                progress: null,
+                windowCloseDelay: 0.0d,
+                ct: downloadCts.Token);
+
+            downloadDlg.Show(this);
+
+            try
+            {
+                var manager = new FfmpegBinaryManager();
+                string ffmpegPath = await manager.InstallFfmpegAsync(downloadProgress, downloadCts.Token)
+                    .ConfigureAwait(false);
+
+                downloadDlg.Complete();
+                return ffmpegPath;
+            }
+            catch (OperationCanceledException)
+            {
+                downloadDlg.Close();
+                LogManager.Log("FFmpeg Download abgebrochen.");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                downloadDlg.Close();
+                LogManager.Log($"FFmpeg Download fehlgeschlagen: {ex.Message}");
+                ShowErrorWithCopyButton(this, "FFmpeg Download fehlgeschlagen", ex);
+                return null;
             }
         }
     }
