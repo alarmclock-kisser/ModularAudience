@@ -753,11 +753,30 @@ namespace ModularAudience.Cuda
                 SafeDelete(output);
                 throw;
             }
-            catch
+            catch (Exception ex)
             {
                 TryKill(proc);
                 SafeDelete(output);
-                throw;
+
+                // Collect diagnostic info
+                int? exitCode = null;
+                try { exitCode = proc.ExitCode; } catch { }
+
+                string ffmpegUsed = string.IsNullOrWhiteSpace(ffmpegPath) ? "ffmpeg (PATH/resolved)" : ffmpegPath;
+                string diagInfo = $"""
+FFmpeg: {ffmpegUsed}
+Exit Code: {(exitCode.HasValue ? exitCode.Value.ToString() : "N/A (process still running or never started)")}
+Args: {args}
+Output: {output}
+Resolution: {width}x{height} @ {frameRate} fps
+Audio: {audioSampleRate} Hz, {audioChannels} ch, {audioSeconds:F2}s
+Frames: {frameCount}
+Pipe: {pipePath}
+--- STDERR ---
+{stderrSb.ToString().Trim()}
+""";
+
+                throw new InvalidOperationException($"FFmpeg render failed: {ex.Message}\n\n{diagInfo}", ex);
             }
         }
 
