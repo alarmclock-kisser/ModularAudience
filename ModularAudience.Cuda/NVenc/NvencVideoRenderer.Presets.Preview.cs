@@ -7,7 +7,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Threading.Channels;
 using System.Windows.Forms;
-using static ModularAudience.Audio.Processing.AudioProcessor;
+using static ModularAudience.Audio.Processing.AudioVisualizerProcessor;
 
 namespace ModularAudience.Cuda
 {
