@@ -11,7 +11,10 @@ public partial class YoutubeBrowserWindow
     private bool batchWaitForBpmTag;
     private bool downloadBatchRunning;
     private Func<YtdlpVideo, YtdlpDownloadOptions, CancellationToken, Task<YtdlpDownloadResult>>? downloadProvider = null;
+    // Production seam: assigned only by unit tests via reflection; product code searches via the real client.
+#pragma warning disable CS0649
     private Func<string, int, CancellationToken, Task<IReadOnlyList<YtdlpVideo>>>? searchProvider;
+#pragma warning restore CS0649
 
     private void StartOperation(string message, Func<CancellationToken, Task> action, bool isBatch = false)
     {

@@ -1,5 +1,10 @@
 using ModularAudience.Ytdlp;
 
+// The *Provider fields below are production seams: they are intentionally never
+// assigned in product code (the real client paths are the defaults) and are set
+// only by unit tests via reflection.
+#pragma warning disable CS0649
+
 namespace ModularAudience.Forms.Modules.Dialogs;
 
 public partial class YoutubeBrowserWindow
@@ -8,7 +13,7 @@ public partial class YoutubeBrowserWindow
     private readonly HashSet<Task> dateTasks = [];
     private int dateGeneration;
     private readonly Dictionary<string, DateOnly> resultDateCache = new(StringComparer.Ordinal);
-    private Func<YtdlpVideo, CancellationToken, Task<DateOnly?>>? uploadDateProvider;
+    private readonly Func<YtdlpVideo, CancellationToken, Task<DateOnly?>>? uploadDateProvider;
 
     private void StartUploadDates(IReadOnlyList<YtdlpVideo> videos)
     {

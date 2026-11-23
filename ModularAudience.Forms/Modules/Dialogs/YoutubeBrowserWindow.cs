@@ -24,7 +24,10 @@ public partial class YoutubeBrowserWindow : Form
     private YtdlpBrowserSession? connectedSession;
     private bool pendingUpdateCheck;
     private bool updateCheckScheduled;
+    // Production seam: assigned only by unit tests via reflection; product code uses the default paths.
+#pragma warning disable CS0649
     private Func<CancellationToken, Task>? updateToolsProvider;
+#pragma warning restore CS0649
     private readonly string? settingsPath;
 
     public YoutubeBrowserWindow(Action<AudioObj> importAudio) : this(importAudio, null) { }

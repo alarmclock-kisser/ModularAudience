@@ -1154,7 +1154,7 @@ public sealed partial class VocalSynthDialog : Form
 
     private void UpdatePlaybackCursor()
     {
-        if (followSpokenWordCheckBox.CheckState == CheckState.Unchecked
+        if (followSpokenWordCheckBox is null || followSpokenWordCheckBox.CheckState == CheckState.Unchecked
             || provider is null || provider.CursorRanges.Count == 0)
             return;
         PlaybackCursorRange? activeRange = GetPlaybackCursorRange(
@@ -1470,7 +1470,7 @@ public sealed partial class VocalSynthDialog : Form
         var name = profileName.Text.Trim();
         var idx = -1;
         for (int i = 0; i < voiceCombo.Items.Count; i++)
-            if (voiceCombo.Items[i].ToString() == "Profile: " + name) { idx = i; break; }
+            if (voiceCombo.Items[i]?.ToString() == "Profile: " + name) { idx = i; break; }
         if (idx >= 0) { voiceCombo.SelectedIndex = idx; status.Text = "Profile loaded: " + name; }
         else status.Text = "Profile not found.";
     }

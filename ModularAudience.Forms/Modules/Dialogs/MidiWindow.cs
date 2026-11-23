@@ -444,7 +444,7 @@ namespace ModularAudience.Forms.Modules.Dialogs
                 string sampleName = this.SelectedInstrument.ToString();
                 var renderedCollection = new AudioCollectionView([]);
                 renderedCollection.AudioC.Audios.Add(audio);
-                audio = null; // collection owns the rendered audio
+                // collection owns the rendered audio
                 renderedCollection.Rename($"{midiName}_rendered{sampleName}");
                 renderedCollection.Show();
                 progressDialog.Complete();

@@ -322,7 +322,8 @@ namespace ModularAudience.Forms
                     long startSample = (long) (startSeconds * audio.SampleRate);
                     long endSample = (long) (endSeconds * audio.SampleRate);
 
-                    audio = await audio.CopyFromSelectionAsync(startSample, endSample).ConfigureAwait(true);
+                    audio = await audio.CopyFromSelectionAsync(startSample, endSample).ConfigureAwait(true)
+                        ?? throw new InvalidOperationException("The selected range contains no samples.");
                 }
 
                 token.ThrowIfCancellationRequested();
@@ -777,7 +778,13 @@ namespace ModularAudience.Forms
             long selectionStart = (long) (this.numericUpDown_startSeconds.Value * this.Audio.SampleRate);
             long selectionEnd = (long) (selectionEndTime * this.Audio.SampleRate);
 
-            AudioObj selectionObj = await this.Audio.CopyFromSelectionAsync(selectionStart, selectionEnd);
+            AudioObj? selectionObj = await this.Audio.CopyFromSelectionAsync(selectionStart, selectionEnd);
+            if (selectionObj is null)
+            {
+                MessageBox.Show("The selected preview range contains no samples.", "Preview",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
 
             Size resolution = this.ParsedResolution;
             double frameRate = (double) this.numericUpDown_frameRate.Value;

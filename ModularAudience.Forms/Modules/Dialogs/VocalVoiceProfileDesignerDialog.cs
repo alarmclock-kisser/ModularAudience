@@ -4,7 +4,7 @@ namespace ModularAudience.Forms.Modules.Dialogs;
 
 public sealed class VocalVoiceProfileDesignerDialog : Form
 {
-    private readonly VocalVoiceProfileStore store;
+    private readonly VocalVoiceProfileStore? store;
     private VocalVoiceProfile profile;
     private readonly TextBox nameBox = new() { Width = 200 };
     private readonly Dictionary<string, NumericUpDown> numbers = [];
@@ -75,11 +75,6 @@ public sealed class VocalVoiceProfileDesignerDialog : Form
             profile.Noise = fp.Noise;
             profile.BasePresetId = fp.BasePresetId;
             profile.Singing = fp.Singing;
-            foreach (var kv in numbers)
-            {
-                var pi = typeof(VocalVoiceProfile).GetProperty(kv.Key)!;
-                kv.Value.Value = Math.Clamp(Convert.ToDecimal(pi.GetValue(profile)), kv.Value.Minimum, kv.Value.Maximum);
-            }
         };
         baseRow.Controls.Add(baseCombo);
         root.Controls.Add(baseRow, 0, 2);
@@ -98,7 +93,7 @@ public sealed class VocalVoiceProfileDesignerDialog : Form
             var nm = nameBox.Text.Trim();
             if (string.IsNullOrWhiteSpace(nm)) { status.Text = "Enter a profile name."; return; }
             profile.Name = nm;
-            store.Save(profile);
+            store?.Save(profile);
             ResultProfile = profile.Clone();
             status.Text = "Saved: " + nm;
             DialogResult = DialogResult.OK;

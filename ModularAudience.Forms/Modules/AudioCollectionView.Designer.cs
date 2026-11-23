@@ -111,6 +111,7 @@
             this.menuToolStripItem_pinWindow = new ToolStripMenuItem();
             this.convertToMIDIToolStripMenuItem = new ToolStripMenuItem();
             this.menuToolStripItem_beatClickerGame = new ToolStripMenuItem();
+            this.menuToolStripItem_createVisualizerVideo = new ToolStripMenuItem();
             this.menuToolStripItem_taikoMode = new ToolStripMenuItem();
             this.menuToolStripItem_createDebugLog = new ToolStripMenuItem();
             this.toolStripComboBox_beatClickerDifficulty = new ToolStripComboBox();

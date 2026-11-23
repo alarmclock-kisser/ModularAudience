@@ -81,8 +81,11 @@ public partial class YoutubeBrowserWindow
         Open_Click(sender, e);
     }
 
+    // Production seams: assigned only by unit tests via reflection; product code browses channels via the real client.
+#pragma warning disable CS0649
     private Func<string, int, CancellationToken, Task<IReadOnlyList<ModularAudience.Ytdlp.YtdlpVideo>>>? channelVideosProvider;
     private Func<ModularAudience.Ytdlp.YtdlpVideo, CancellationToken, Task<ModularAudience.Ytdlp.YtdlpVideo>>? channelMetadataProvider;
+#pragma warning restore CS0649
     private sealed record ChannelContext(string Url, string Name);
     private ChannelContext? displayedChannel;
     private Func<string, int, ModularAudience.Ytdlp.YtdlpResultType, CancellationToken, IAsyncEnumerable<ModularAudience.Ytdlp.YtdlpVideo>>? channelResultsProvider = null;

@@ -80,7 +80,10 @@ public partial class YoutubeBrowserWindow
     private PlaybackSequence? playbackSequence;
     private Task collectionPreviewTask = Task.CompletedTask;
     private long playbackGeneration;
+    // Production seam: assigned only by unit tests via reflection; product code plays channel queues via the real client.
+#pragma warning disable CS0649
     private Func<string, CancellationToken, IAsyncEnumerable<YtdlpVideo>>? channelPlaybackVideosProvider;
+#pragma warning restore CS0649
 
     private bool IsPlayingVideo(YtdlpVideo? video) =>
         video is not null && activePlaybackVideo?.Id == video.Id;
