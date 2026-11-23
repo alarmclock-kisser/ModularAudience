@@ -14,8 +14,9 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            using var dialog = new VisualizerDialog(selectedAudio);
-            this.ShowDialog(dialog);
+            // AudioCollectionView is already visible - show dialog non-modally
+            var dialog = new VisualizerDialog(selectedAudio);
+            dialog.Show(this);
         }
     }
 }
