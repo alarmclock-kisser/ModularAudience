@@ -35,16 +35,21 @@ namespace ModularAudience.Forms
                     if (this.IsDisposed) return;
                     this.label_status.Text = msg;
 
-                    // Parse percentage from status text
-                    int lastParen = msg.LastIndexOf(')');
-                    int pctStart = msg.LastIndexOf('(');
-                    if (lastParen > pctStart && pctStart > 0)
+                    // Parse percentage from status text: "Downloaded: 45.2 MB / 100.5 MB (44.9%)"
+                    var m = System.Text.RegularExpressions.Regex.Match(msg, @"\((\d+(?:\.\d+)?)%\)");
+                    if (m.Success)
                     {
-                        string pctStr = msg.Substring(pctStart + 1, lastParen - pctStart - 1);
-                        if (float.TryParse(pctStr, out float pct))
-                        {
-                            this.progressBar_install.Value = (int)Math.Clamp(pct, 0, 100);
-                        }
+                        float pct = float.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+                        this.progressBar_install.Value = (int)Math.Clamp(pct, 0, 100);
+                    }
+                    else if (msg.StartsWith("Downloading", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // No percentage yet - show indeterminate-style partial progress
+                        if (this.progressBar_install.Value < 10) this.progressBar_install.Value = 5;
+                    }
+                    else if (msg.StartsWith("Extracting", StringComparison.OrdinalIgnoreCase))
+                    {
+                        this.progressBar_install.Value = 90;
                     }
                 });
 

@@ -516,6 +516,7 @@ namespace ModularAudience.Forms
                                 LogCollection.Log("Visualizer: NVENC FFmpeg installation cancelled - aborting render.");
                                 return;
                             }
+                            UpdateFfmpegCheckButton();
                         }
                     }
                     else
@@ -540,6 +541,7 @@ namespace ModularAudience.Forms
                             LogCollection.Log("Visualizer: NVENC FFmpeg installation cancelled - aborting render.");
                             return;
                         }
+                        UpdateFfmpegCheckButton();
                     }
                 }
 
