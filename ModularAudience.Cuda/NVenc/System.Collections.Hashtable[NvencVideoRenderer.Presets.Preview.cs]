@@ -1,0 +1,335 @@
+#nullable enable
+using ModularAudience.Audio;
+using ModularAudience.Audio.Processing;
+using System;
+using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Threading.Channels;
+using System.Windows.Forms;
+using static ModularAudience.Audio.Processing.AudioProcessor;
+
+namespace ModularAudience.Cuda
+{
+    public static partial class NvencVideoRenderer
+    {
+        public static PreviewSession CreatePreviewSession(
+            AudioObj audio,
+            int width,
+            int height,
+            double frameRate,
+            float amplification = 0.66f,
+            Color? graphColor = null,
+            Color? backColor = null,
+            int thickness = 1,
+            float threshold = 0.1f,
+            VisualizerMode? visualizerMode = null,
+            VisualizerOptions? visualizerOptions = null,
+            int maxWorkers = 0,
+            int channelCapacity = 0,
+            TimeSpan? maxPreviewDuration = null)
+        {
+            return new PreviewSession(
+                audio: audio,
+                width: width,
+                height: height,
+                frameRate: frameRate,
+                amplification: amplification,
+                graphColor: graphColor,
+                backColor: backColor,
+                thickness: thickness,
+                threshold: threshold,
+                mode: visualizerMode,
+                opt: visualizerOptions,
+                maxWorkers: maxWorkers,
+                channelCapacity: channelCapacity,
+                maxPreviewDuration: maxPreviewDuration);
+        }
+
+        public sealed class PreviewSession : IDisposable
+        {
+            private readonly AudioObj _audio;
+            private readonly int _w;
+            private readonly int _h;
+            private readonly double _fps;
+            private readonly float _amp;
+            private readonly Color? _graphColor;
+            private readonly Color? _backColor;
+            private readonly int _thickness;
+            private readonly float _threshold;
+            private readonly VisualizerMode? _mode;
+            private readonly VisualizerOptions? _opt;
+            private readonly int _maxWorkers;
+            private readonly int _channelCapacity;
+            private readonly TimeSpan? _maxPreviewDuration;
+
+            private CancellationTokenSource? _cts;
+            private Task? _runner;
+
+            private volatile bool _paused;
+            public bool IsPaused => this._paused;
+
+            public void TogglePause() => this._paused = !this._paused;
+            public void SetPaused(bool paused) => this._paused = paused;
+
+            public PreviewSession(
+                AudioObj audio,
+                int width,
+                int height,
+                double frameRate,
+                float amplification,
+                Color? graphColor,
+                Color? backColor,
+                int thickness,
+                float threshold,
+                VisualizerMode? mode,
+                VisualizerOptions? opt,
+                int maxWorkers,
+                int channelCapacity,
+                TimeSpan? maxPreviewDuration)
+            {
+                this._audio = audio ?? throw new ArgumentNullException(nameof(audio));
+                this._w = width;
+                this._h = height;
+                this._fps = frameRate <= 0 ? 10.0 : frameRate;
+                this._amp = Math.Max(0.0f, amplification);
+                this._graphColor = graphColor;
+                this._backColor = backColor;
+                this._thickness = Math.Max(1, thickness);
+                this._threshold = Math.Clamp(threshold, 0f, 1f);
+                this._mode = mode;
+                this._opt = opt;
+                this._maxWorkers = maxWorkers;
+                this._channelCapacity = channelCapacity;
+                this._maxPreviewDuration = maxPreviewDuration;
+            }
+
+            /// <summary>
+            /// Start preview rendering into a PictureBox. Drops frames if UI can't keep up.
+            /// Optional: pass startAudio() to start playback in sync (best-effort).
+            /// </summary>
+            public void Start(
+                PictureBox pictureBox,
+                Func<CancellationToken, Func<bool>, Task>? startAudio = null,
+                Action<Exception>? onError = null)
+            {
+                if (pictureBox == null)
+                {
+                    throw new ArgumentNullException(nameof(pictureBox));
+                }
+
+                if (this._runner != null)
+                {
+                    return;
+                }
+
+                this._cts = new CancellationTokenSource();
+                var ct = this._cts.Token;
+
+                this._runner = Task.Run(async () =>
+                {
+                    try
+                    {
+                        // Producer: BGRA frames
+                        ChannelReader<FramePacket> reader;
+                        int frameCount;
+
+                        // Use old overload if no mode+opt supplied
+                        if (this._mode is null && this._opt is null)
+                        {
+                            (reader, frameCount) = AudioProcessor.RenderVisualizerFramesBgraChannel(
+                                this._audio, this._w, this._h, (float) this._fps,
+                                amplification: this._amp,
+                                graphColor: this._graphColor,
+                                backColor: this._backColor,
+                                thickness: this._thickness,
+                                threshold: this._threshold,
+                                maxWorkers: this._maxWorkers,
+                                channelCapacity: this._channelCapacity,
+                                progress: null,
+                                ct: ct);
+                        }
+                        else
+                        {
+                            var mode = this._mode ?? VisualizerMode.Waveform;
+                            var opt = this._opt ?? new VisualizerOptions();
+
+                            (reader, frameCount) = AudioProcessor.RenderVisualizerFramesBgraChannel(
+                                this._audio, this._w, this._h,
+                                mode: mode,
+                                opt: opt,
+                                frameRate: (float) this._fps,
+                                maxWorkers: this._maxWorkers,
+                                channelCapacity: this._channelCapacity,
+                                overlayStrings: null,
+                                progress: null,
+                                ct: ct);
+                        }
+
+                        // optional audio playback hook
+                        Task? audioTask = null;
+                        if (startAudio != null)
+                        {
+                            // pass pause state getter so audio side can optionally pause/resume
+                            audioTask = startAudio(ct, () => this._paused);
+                        }
+
+                        // Prepare a reusable Bitmap for UI
+                        using var bmp = new Bitmap(this._w, this._h, PixelFormat.Format32bppArgb);
+
+                        // Timing (throttle to fps)
+                        var sw = Stopwatch.StartNew();
+                        double frameIntervalMs = 1000.0 / this._fps;
+
+                        // Optional duration cap (preview only)
+                        int maxFrames = frameCount;
+                        if (this._maxPreviewDuration.HasValue)
+                        {
+                            maxFrames = Math.Min(maxFrames, (int) Math.Ceiling(this._maxPreviewDuration.Value.TotalSeconds * this._fps));
+                        }
+
+                        int displayed = 0;
+                        double nextDue = 0;
+
+                        await foreach (var pkt in reader.ReadAllAsync(ct).ConfigureAwait(false))
+                        {
+                            // --- PAUSE handling ---
+                            while (this._paused && !ct.IsCancellationRequested)
+                            {
+                                await Task.Delay(30, ct).ConfigureAwait(false);
+                            }
+
+                            if (pkt.Index >= maxFrames)
+                            {
+                                // return buffer; stop early
+                                if (pkt.Buffer != null)
+                                {
+                                    System.Buffers.ArrayPool<byte>.Shared.Return(pkt.Buffer);
+                                }
+
+                                break;
+                            }
+
+                            // Drop frames if we're behind schedule (keeps UI responsive)
+                            var nowMs = sw.Elapsed.TotalMilliseconds;
+                            if (nowMs < nextDue - frameIntervalMs * 0.25)
+                            {
+                                // too early? small sleep to reduce CPU
+                                var sleep = (int) Math.Max(0, nextDue - nowMs);
+                                if (sleep > 0)
+                                {
+                                    await Task.Delay(Math.Min(sleep, 5), ct).ConfigureAwait(false);
+                                }
+                            }
+
+                            nowMs = sw.Elapsed.TotalMilliseconds;
+                            if (nowMs + frameIntervalMs * 1.5 < nextDue)
+                            {
+                                // very early - still show (rare)
+                            }
+                            else if (nowMs > nextDue + frameIntervalMs * 1.25)
+                            {
+                                // behind -> drop this frame to catch up
+                                if (pkt.Buffer != null)
+                                {
+                                    System.Buffers.ArrayPool<byte>.Shared.Return(pkt.Buffer);
+                                }
+
+                                continue;
+                            }
+
+                            // Write BGRA -> Bitmap
+                            if (pkt.Buffer != null)
+                            {
+                                BlitBgraToBitmap(pkt.Buffer, pkt.Length, bmp, this._w, this._h);
+                                System.Buffers.ArrayPool<byte>.Shared.Return(pkt.Buffer);
+                            }
+
+                            // Update UI (must be UI thread)
+                            try
+                            {
+                                if (!pictureBox.IsDisposed)
+                                {
+                                    pictureBox.Invoke(() =>
+                                    {
+                                        // Replace image safely
+                                        var old = pictureBox.Image;
+                                        pictureBox.Image = (Bitmap) bmp.Clone();
+                                        old?.Dispose();
+                                    });
+                                }
+                            }
+                            catch
+                            {
+                                // ignore UI race (closing)
+                            }
+
+                            displayed++;
+                            nextDue += frameIntervalMs;
+
+                            if (ct.IsCancellationRequested)
+                            {
+                                break;
+                            }
+                        }
+
+                        // wait audio (best-effort)
+                        if (audioTask != null)
+                        {
+                            try { await audioTask.ConfigureAwait(false); } catch { }
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // ok
+                    }
+                    catch (Exception ex)
+                    {
+                        onError?.Invoke(ex);
+                    }
+                }, ct);
+            }
+
+            public void Stop()
+            {
+                try { this._cts?.Cancel(); } catch { }
+            }
+
+            public void Dispose()
+            {
+                try
+                {
+                    this._cts?.Cancel();   // 🔥 DAS ist entscheidend
+                }
+                catch { }
+
+                try
+                {
+                    this._runner?.Wait(300);
+                }
+                catch { }
+
+                this._cts?.Dispose();
+                this._cts = null;
+                this._runner = null;
+            }
+
+
+            private static void BlitBgraToBitmap(byte[] bgra, int length, Bitmap bmp, int w, int h)
+            {
+                // bgra from your pipeline is BGRA; Format32bppArgb expects BGRA byte order in memory
+                var rect = new Rectangle(0, 0, w, h);
+                var data = bmp.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+                try
+                {
+                    int bytes = Math.Min(length, Math.Abs(data.Stride) * h);
+                    System.Runtime.InteropServices.Marshal.Copy(bgra, 0, data.Scan0, bytes);
+                }
+                finally
+                {
+                    bmp.UnlockBits(data);
+                }
+            }
+        }
+    }
+}

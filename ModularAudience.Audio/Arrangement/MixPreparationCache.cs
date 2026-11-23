@@ -10,11 +10,21 @@ public sealed class MixPreparationCache : IDisposable
     private readonly Dictionary<Guid, PreparedLane> lanes = [];
     private bool disposed;
     public long LaneRenders { get; private set; }
+    private static double AudioDuration(MixArrangement mix) => Math.Max(0,
+        mix.Lanes.Where(lane => !lane.IsVideo).SelectMany(lane => lane.Clips)
+            .Select(clip => clip.Start + mix.ClipDuration(clip)).DefaultIfEmpty(0).Max());
+
     public static string AudioKey(MixArrangement mix) => JsonSerializer.Serialize(new
     {
-        Lanes = mix.Lanes.OrderBy(l => l.Id).Select(l => new { l.Id, l.Gain, l.Mute, l.Solo, l.AutoCrossfade,
+        Duration = AudioDuration(mix),
+        Lanes = mix.Lanes.Where(lane => !lane.IsVideo).OrderBy(l => l.Id).Select(l => new { l.Id, l.Gain, l.Mute, l.Solo, l.AutoCrossfade,
             Clips = l.Clips.OrderBy(c => c.Id).Select(c => new { c.Id, c.SourceId, c.Start, c.SourceOffset, c.SourceDuration,
-                c.Gain, c.FadeIn, c.FadeOut, c.TempoMode, Rate = mix.Rate(c), c.HasRenderedEnvelope }) })
+                c.Gain, c.FadeIn, c.FadeOut, c.TempoMode, Rate = mix.Rate(c), c.HasRenderedEnvelope }) }),
+        VideoControls = mix.Lanes.Where(lane => lane.IsVideo).OrderBy(lane => lane.Id).Select(lane => new
+        {
+            lane.Id, lane.Mute, lane.Solo,
+            LinkedAudio = lane.Clips.Where(clip => clip.LinkedClipId.HasValue).Select(clip => clip.LinkedClipId).OrderBy(id => id)
+        })
     });
     private static string LaneKey(MixArrangement mix, MixLane lane) => JsonSerializer.Serialize(new
     {
@@ -27,7 +37,7 @@ public sealed class MixPreparationCache : IDisposable
     {
         var snapshot = new MixArrangement(); snapshot.Restore(mix.Capture());
         foreach (var source in mix.Sources) snapshot.Sources.Add(source.Key, source.Value);
-        foreach (var lane in snapshot.Lanes)
+        foreach (var lane in snapshot.Lanes.Where(lane => !lane.IsVideo))
         {
             token.ThrowIfCancellationRequested();
             string key = LaneKey(snapshot, lane);
@@ -48,25 +58,38 @@ public sealed class MixPreparationCache : IDisposable
             }
         }
         lock (gate)
-            foreach (var id in lanes.Keys.Where(id => !snapshot.Lanes.Any(l => l.Id == id)).ToArray()) lanes.Remove(id);
+            foreach (var id in lanes.Keys.Where(id => !snapshot.Lanes.Any(lane => !lane.IsVideo && lane.Id == id)).ToArray())
+                lanes.Remove(id);
     }
     public bool CanMix(MixArrangement mix)
     {
-        lock (gate) return !disposed && mix.Lanes.All(l => lanes.TryGetValue(l.Id, out var cached) && cached.Key == LaneKey(mix, l));
+        lock (gate) return !disposed && mix.Lanes.Where(lane => !lane.IsVideo)
+            .All(lane => lanes.TryGetValue(lane.Id, out var cached) && cached.Key == LaneKey(mix, lane));
     }
     public float[] Mix(MixArrangement mix, float[]? reuse = null, CancellationToken token = default)
     {
         const int channels = 2, sampleRate = 44100;
-        long length = (long)Math.Ceiling(Math.Max(0.01, mix.Duration) * sampleRate) * channels;
+        long length = (long)Math.Ceiling(Math.Max(0.01, AudioDuration(mix)) * sampleRate) * channels;
         if (length > int.MaxValue) throw new InvalidOperationException("The mix exceeds the RAM audio buffer limit.");
         var output = reuse?.Length == length ? reuse : new float[(int)length];
         (float[] Data, double Gain)[] inputs;
         lock (gate)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
-            bool solo = mix.Lanes.Any(l => l.Solo);
-            inputs = mix.Lanes.Where(l => !l.Mute && (!solo || l.Solo))
-                .Select(l => lanes.TryGetValue(l.Id, out var cached) ? (cached.Data, l.Gain)
+            HashSet<Guid> videoSoloAudioLanes = mix.Lanes.Where(lane => lane.IsVideo && lane.Solo)
+                .SelectMany(lane => lane.Clips).Where(clip => clip.LinkedClipId.HasValue)
+                .SelectMany(clip => mix.Lanes.Where(lane => !lane.IsVideo && lane.Clips.Any(audio => audio.Id == clip.LinkedClipId)))
+                .Select(lane => lane.Id).ToHashSet();
+            HashSet<Guid> videoMutedAudioLanes = mix.Lanes.Where(lane => lane.IsVideo && lane.Mute)
+                .SelectMany(lane => lane.Clips).Where(clip => clip.LinkedClipId.HasValue)
+                .SelectMany(clip => mix.Lanes.Where(lane => !lane.IsVideo && lane.Clips.Any(audio => audio.Id == clip.LinkedClipId)))
+                .Select(lane => lane.Id).ToHashSet();
+            bool audioSolo = mix.Lanes.Any(lane => !lane.IsVideo && lane.Solo);
+            bool videoSolo = mix.Lanes.Any(lane => lane.IsVideo && lane.Solo);
+            bool solo = audioSolo || videoSolo;
+            inputs = mix.Lanes.Where(lane => !lane.IsVideo && !lane.Mute && !videoMutedAudioLanes.Contains(lane.Id)
+                    && (!solo || audioSolo && lane.Solo || videoSolo && videoSoloAudioLanes.Contains(lane.Id)))
+                .Select(lane => lanes.TryGetValue(lane.Id, out var cached) ? (cached.Data, lane.Gain)
                     : throw new InvalidOperationException("The arrangement is not prepared yet.")).ToArray();
         }
         // Disjoint sample ranges: write each sample once, without clearing the playing

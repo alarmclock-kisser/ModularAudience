@@ -12,11 +12,20 @@ public static class MixAudioHistory
     }
     public sealed record Entry(State Before, State After, bool RestoreTempo);
 
-    public static string Capture(MixArrangement mix) => JsonSerializer.Serialize(new State { Bpm = mix.Bpm, Lanes = mix.Lanes });
-    public static string Key(MixArrangement mix) => JsonSerializer.Serialize(mix.Lanes.Where(lane => lane.Clips.Count > 0).OrderBy(lane => lane.Id).Select(lane => new
+    public static string Capture(MixArrangement mix) => JsonSerializer.Serialize(new State
+    {
+        Bpm = mix.Bpm,
+        Lanes = mix.Lanes.Where(lane => !lane.IsVideo).Select(lane =>
+        {
+            MixLane copy = Clone(lane);
+            copy.Clips = copy.Clips.Where(clip => !clip.IsVideo && clip.LinkedClipId == null).ToList();
+            return copy;
+        }).ToList()
+    });
+    public static string Key(MixArrangement mix) => JsonSerializer.Serialize(mix.Lanes.Where(lane => !lane.IsVideo && lane.Clips.Any(clip => !clip.IsVideo && clip.LinkedClipId == null)).OrderBy(lane => lane.Id).Select(lane => new
     {
         lane.Id, lane.Gain, lane.AutoCrossfade,
-        Clips = lane.Clips.OrderBy(clip => clip.Id).Select(clip => new
+        Clips = lane.Clips.Where(clip => !clip.IsVideo && clip.LinkedClipId == null).OrderBy(clip => clip.Id).Select(clip => new
         {
             clip.Id, clip.SourceId, clip.Start, clip.SourceOffset, clip.SourceDuration, clip.Gain, clip.FadeIn, clip.FadeOut,
             Rate = mix.Rate(clip), PreservePitch = clip.TempoMode == ClipTempoMode.TimeStretch && Math.Abs(mix.Rate(clip) - 1) > 0.00001,

@@ -48,6 +48,19 @@ public sealed class MixSource
     public MixTempoRecipe? TempoRecipe { get; set; }
     [System.Text.Json.Serialization.JsonIgnore] public float[] Data { get; set; } = [];
     public double Duration => Data.Length / (double)(Math.Max(1, Channels) * Math.Max(1, SampleRate));
+
+    /// <summary>True when this source is a video file rather than pure audio.</summary>
+    public bool IsVideo { get; set; }
+    /// <summary>Full path to the video file on disk. Only meaningful when IsVideo is true.</summary>
+    public string? VideoFilePath { get; set; }
+    /// <summary>Duration of the video file (from container). Falls back to audio duration when 0.</summary>
+    public double VideoDuration { get; set; }
+    /// <summary>Video width in pixels.</summary>
+    public int VideoWidth { get; set; }
+    /// <summary>Video height in pixels.</summary>
+    public int VideoHeight { get; set; }
+    /// <summary>Video frame rate (fps).</summary>
+    public double VideoFrameRate { get; set; }
 }
 
 public sealed class MixClip
@@ -66,6 +79,10 @@ public sealed class MixClip
     [System.ComponentModel.Browsable(false)]
     public bool FadeOutToSilence { get; set; }
     public ClipTempoMode TempoMode { get; set; }
+    /// <summary>True when this clip references a video source.</summary>
+    public bool IsVideo { get; set; }
+    /// <summary>Optional link to a companion clip (video <-> audio). Used to keep video and its extracted audio in sync.</summary>
+    public Guid? LinkedClipId { get; set; }
     // Effect-region bounces already contain the original clip envelope and
     // overlap crossfades. Do not apply a second automatic envelope to them.
     [System.ComponentModel.Browsable(false)]
@@ -82,6 +99,8 @@ public sealed class MixLane
     public double Gain { get; set; } = 1;
     public bool AutoCrossfade { get; set; }
     [System.ComponentModel.Browsable(false)] public List<MixClip> Clips { get; set; } = [];
+    /// <summary>True when this lane is dedicated to video clips. At most one video lane may exist.</summary>
+    public bool IsVideo { get; set; }
 }
 
 /// <summary>Non-destructive timeline. Sources are immutable owned copies; positions are seconds.</summary>
@@ -104,6 +123,10 @@ public sealed class MixArrangement : IDisposable
     public double Rate(MixClip clip) => clip.TempoMode != ClipTempoMode.Original && Sources.TryGetValue(clip.SourceId, out var s)
         && s.Bpm > 0 && float.IsFinite(s.Bpm) ? Math.Clamp(Bpm / s.Bpm, 0.05, 20) : 1;
     public double ClipDuration(MixClip clip) => clip.SourceDuration / Rate(clip);
+
+    private double VideoDuration(Guid sourceId) => Sources.TryGetValue(sourceId, out var s) && s.IsVideo
+        ? (s.VideoDuration > 0 ? s.VideoDuration : s.Duration)
+        : 0;
     public double SnapTime(double seconds, bool shift = false) => Snap || shift
         ? Math.Round(seconds / (240.0 / Bpm / SnapDivision), MidpointRounding.AwayFromZero) * (240.0 / Bpm / SnapDivision)
         : seconds;
@@ -115,17 +138,38 @@ public sealed class MixArrangement : IDisposable
             Channels = audio.Channels, Bpm = audio.Bpm > 0 ? audio.Bpm : audio.ScannedBpm };
         Sources.Add(source.Id, source); return source;
     }
-    public MixClip AddClip(MixLane lane, MixSource source, double start) => AddClip(lane, source, start, 0, source.Duration);
+    public MixClip AddClip(MixLane lane, MixSource source, double start) =>
+        AddClip(lane, source, start, 0, source.IsVideo ? source.VideoDuration : source.Duration);
     public MixClip AddClip(MixLane lane, MixSource source, double start, double offset, double duration)
     {
-        offset = Math.Clamp(offset, 0, source.Duration);
+        ArgumentNullException.ThrowIfNull(lane);
+        ArgumentNullException.ThrowIfNull(source);
+        if (lane.IsVideo != source.IsVideo)
+            throw new InvalidOperationException("Video sources can only be placed on the video lane.");
+        double sourceDuration = source.IsVideo ? source.VideoDuration : source.Duration;
+        offset = Math.Clamp(offset, 0, sourceDuration);
+        duration = Math.Clamp(duration, 0, sourceDuration - offset);
+        if (lane.IsVideo && lane.Clips.Any(existing => start < existing.Start + ClipDuration(existing)
+            && start + duration > existing.Start))
+            throw new InvalidOperationException("Video segments cannot overlap.");
         var clip = new MixClip { SourceId = source.Id, Name = source.Name, Start = start,
-            SourceOffset = offset, SourceDuration = Math.Clamp(duration, 0, source.Duration - offset) };
+            SourceOffset = offset, SourceDuration = duration, IsVideo = source.IsVideo };
         lane.Clips.Add(clip); return clip;
     }
     public string Capture() => JsonSerializer.Serialize(this);
     private static readonly JsonSerializerOptions ProjectJson = CreateProjectJson();
-    public string CaptureProject() => JsonSerializer.Serialize(this, ProjectJson);
+    public string CaptureProject()
+    {
+        var project = JsonSerializer.Deserialize<MixArrangement>(Capture())
+            ?? throw new InvalidDataException("Invalid arrangement.");
+        project.Lanes.RemoveAll(lane => lane.IsVideo);
+        foreach (var clip in project.Lanes.SelectMany(lane => lane.Clips))
+        {
+            clip.IsVideo = false;
+            clip.LinkedClipId = null;
+        }
+        return JsonSerializer.Serialize(project, ProjectJson);
+    }
     public static string SanitizeProjectState(string state) =>
         (JsonSerializer.Deserialize<MixArrangement>(state) ?? throw new InvalidDataException("Invalid arrangement.")).CaptureProject();
 
@@ -153,7 +197,8 @@ public sealed class MixArrangement : IDisposable
                 if (!result.ContainsKey(dependency)) Add(dependency, path);
             result.TryAdd(id, source); path.Remove(id);
         }
-        foreach (Guid id in Lanes.SelectMany(lane => lane.Clips).Select(clip => clip.SourceId).Distinct()) Add(id, []);
+        foreach (Guid id in Lanes.Where(lane => !lane.IsVideo).SelectMany(lane => lane.Clips)
+            .Where(clip => !clip.IsVideo).Select(clip => clip.SourceId).Distinct()) Add(id, []);
         return result.Values.ToArray();
     }
     public void Restore(string json)
@@ -164,6 +209,8 @@ public sealed class MixArrangement : IDisposable
     }
     public void Validate()
     {
+        if (Lanes.Count(lane => lane.IsVideo) > 1)
+            throw new InvalidDataException("An arrangement can contain at most one video lane.");
         if (!double.IsFinite(Bpm) || Bpm is < 10 or > 400
             || SnapDivision is not (1 or 2 or 4 or 8 or 16 or 32 or 64 or 128 or 256))
             throw new InvalidDataException("Invalid tempo or snap division.");
@@ -185,23 +232,45 @@ public sealed class MixArrangement : IDisposable
         if (!double.IsFinite(LoopStart) || !double.IsFinite(LoopEnd) || LoopStart < 0 || LoopEnd < LoopStart)
             throw new InvalidDataException("Invalid loop range.");
         foreach (var s in Sources.Values)
+        {
             if (s.SampleRate is < 1000 or > 768000 || s.Channels is < 1 or > 64 || s.Data.Length % s.Channels != 0 || s.Data.Any(v => !float.IsFinite(v)))
                 throw new InvalidDataException("Invalid source audio.");
-        foreach (var s in Sources.Values)
+            if (s.IsVideo && (!double.IsFinite(s.VideoDuration) || s.VideoDuration <= 0
+                || s.VideoWidth <= 0 || s.VideoHeight <= 0 || !double.IsFinite(s.VideoFrameRate) || s.VideoFrameRate <= 0))
+                throw new InvalidDataException("Invalid video source metadata.");
             if (!double.IsFinite(s.TempoOriginScale) || s.TempoOriginScale <= 0 || !float.IsFinite(s.TempoOriginBpm) || s.TempoOriginBpm < 0 ||
                 s.TempoOriginId is Guid origin && (origin == s.Id || !Sources.ContainsKey(origin)))
                 throw new InvalidDataException("Invalid or missing tempo origin.");
+        }
         foreach (var s in Sources.Values) s.TempoRecipe?.Validate(this.Sources);
         _ = ProjectSources();
         foreach (var lane in Lanes)
         {
             if (!double.IsFinite(lane.Gain) || lane.Gain is < 0 or > 4) throw new InvalidDataException("Invalid track gain.");
+            if (lane.IsVideo && lane.Clips.Any(clip => !clip.IsVideo
+                || !Sources.TryGetValue(clip.SourceId, out MixSource? source) || !source.IsVideo))
+                throw new InvalidDataException("The video lane can contain only video segments.");
+            if (lane.IsVideo)
+            {
+                MixClip? previous = null;
+                foreach (MixClip clip in lane.Clips.OrderBy(clip => clip.Start))
+                {
+                    if (previous != null && clip.Start < previous.Start + ClipDuration(previous) - 0.000001)
+                        throw new InvalidDataException("Video segments cannot overlap.");
+                    previous = clip;
+                }
+            }
             foreach (var c in lane.Clips)
             {
-                if (!Sources.TryGetValue(c.SourceId, out var s) || !Enum.IsDefined(c.TempoMode)
+                if (!Sources.TryGetValue(c.SourceId, out var s) || c.IsVideo != s.IsVideo || c.IsVideo != lane.IsVideo || !Enum.IsDefined(c.TempoMode)
                     || !double.IsFinite(c.Start) || new[] { c.SourceOffset, c.SourceDuration, c.Gain, c.FadeIn, c.FadeOut }.Any(v => !double.IsFinite(v) || v < 0)
-                    || c.Gain > 4 || c.SourceOffset + c.SourceDuration > s.Duration + 0.0001)
-                    throw new InvalidDataException("Invalid audio segment.");
+                    || c.Gain > 4)
+                    throw new InvalidDataException("Invalid segment.");
+
+                double sourceDuration = c.IsVideo ? s.VideoDuration : s.Duration;
+                if (sourceDuration <= 0) sourceDuration = s.Duration;
+                if (c.SourceOffset + c.SourceDuration > sourceDuration + 0.0001)
+                    throw new InvalidDataException("Invalid segment.");
             }
         }
     }

@@ -2,6 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModularAudience.Audio.Arrangement;
 using ModularAudience.Forms.Modules;
 using System.Reflection;
+using System.Text.Json;
 
 namespace ModularAudience.Audio.Tests;
 
@@ -509,5 +510,187 @@ public sealed class MixArrangementTests
         Assert.AreEqual(0.1, view.Arrangement.Lanes[0].Clips[0].SourceDuration, 0.0001);
         type.GetMethod("Undo", flags)!.Invoke(view, null);
         Assert.HasCount(0, view.Arrangement.Lanes);
+    }
+
+    [TestMethod]
+    public void VideoClipDurationUsesTrimmedSourceAndOverlapIsRejectedForEveryMixMode()
+    {
+        using var mix = new MixArrangement();
+        var source = new MixSource { IsVideo = true, VideoDuration = 10, VideoWidth = 640, VideoHeight = 360,
+            VideoFrameRate = 30, SampleRate = 44100, Channels = 2 };
+        mix.Sources.Add(source.Id, source);
+        var lane = new MixLane { IsVideo = true };
+        mix.Lanes.Add(lane);
+        MixClip clip = mix.AddClip(lane, source, 0, 0, source.VideoDuration);
+        clip.SourceOffset = 2;
+        clip.SourceDuration = 4;
+        Assert.AreEqual(4d, mix.ClipDuration(clip));
+        MixClip fullClip = mix.AddClip(lane, source, 4);
+        Assert.AreEqual(10d, mix.ClipDuration(fullClip));
+
+        foreach (MixOverlapMode mode in Enum.GetValues<MixOverlapMode>())
+        {
+            mix.OverlapMode = mode;
+            Assert.Throws<InvalidOperationException>(() => mix.AddClip(lane, source, 3, 0, 2), mode.ToString());
+        }
+
+        mix.Lanes.Add(new MixLane { IsVideo = true });
+        Assert.Throws<InvalidDataException>(() => mix.Validate());
+    }
+
+    [TestMethod]
+    public async Task MixProjectDropsVideoButKeepsExtractedAudioAsAnUnlinkedAudioClip()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"mix-video-{Guid.NewGuid():N}.mamix");
+        try
+        {
+            using var audio = new AudioObj { Name = "Extracted", Data = new float[8000], SampleRate = 8000, Channels = 1 };
+            using var mix = new MixArrangement();
+            MixSource videoSource = new() { Name = "Temporary video", IsVideo = true, VideoFilePath = "C:\\Videos\\temporary.mp4",
+                VideoDuration = 2, VideoWidth = 640, VideoHeight = 360, VideoFrameRate = 30, SampleRate = 44100, Channels = 2 };
+            mix.Sources.Add(videoSource.Id, videoSource);
+            MixLane videoLane = new() { Name = "Video", IsVideo = true };
+            MixLane audioLane = new() { Name = "Extracted audio" };
+            mix.Lanes.AddRange([videoLane, audioLane]);
+            MixClip videoClip = mix.AddClip(videoLane, videoSource, 0, 0, 2);
+            MixSource audioSource = mix.AddSource(audio);
+            MixClip audioClip = mix.AddClip(audioLane, audioSource, 0);
+            videoClip.LinkedClipId = audioClip.Id;
+            audioClip.LinkedClipId = videoClip.Id;
+
+            using JsonDocument project = JsonDocument.Parse(mix.CaptureProject());
+            JsonElement lanes = project.RootElement.GetProperty("Lanes");
+            Assert.AreEqual(1, lanes.GetArrayLength());
+            Assert.IsFalse(lanes[0].GetProperty("Clips")[0].GetProperty("IsVideo").GetBoolean());
+            Assert.AreEqual(JsonValueKind.Null, lanes[0].GetProperty("Clips")[0].GetProperty("LinkedClipId").ValueKind);
+            CollectionAssert.AreEqual(new[] { audioSource.Id }, mix.ProjectSources().Select(source => source.Id).ToArray());
+
+            await mix.SaveAsync(path);
+            using MixArrangement loaded = await MixArrangement.LoadAsync(path);
+            Assert.AreEqual(1, loaded.Lanes.Count);
+            Assert.IsFalse(loaded.Lanes[0].IsVideo);
+            Assert.IsNull(loaded.Lanes[0].Clips[0].LinkedClipId);
+            Assert.IsFalse(loaded.Sources.Values.Any(source => source.IsVideo));
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public async Task VideoLaneMuteAndSoloAffectOnlyItsLinkedAudioDuringAudioRender()
+    {
+        using var mix = new MixArrangement();
+        var videoSource = new MixSource { IsVideo = true, VideoDuration = 1, VideoWidth = 320, VideoHeight = 180, VideoFrameRate = 30, SampleRate = 44100, Channels = 2 };
+        mix.Sources.Add(videoSource.Id, videoSource);
+        var videoLane = new MixLane { IsVideo = true };
+        var linkedAudioLane = new MixLane();
+        var otherAudioLane = new MixLane();
+        mix.Lanes.AddRange([videoLane, linkedAudioLane, otherAudioLane]);
+        MixClip videoClip = mix.AddClip(videoLane, videoSource, 0, 0, 1);
+        var linkedAudioSource = new MixSource { Data = Enumerable.Repeat(0.2f, 8000).ToArray(), SampleRate = 8000, Channels = 1 };
+        var otherAudioSource = new MixSource { Data = Enumerable.Repeat(0.4f, 8000).ToArray(), SampleRate = 8000, Channels = 1 };
+        mix.Sources.Add(linkedAudioSource.Id, linkedAudioSource);
+        mix.Sources.Add(otherAudioSource.Id, otherAudioSource);
+        MixClip linkedAudioClip = mix.AddClip(linkedAudioLane, linkedAudioSource, 0);
+        mix.AddClip(otherAudioLane, otherAudioSource, 0);
+        videoClip.LinkedClipId = linkedAudioClip.Id;
+        linkedAudioClip.LinkedClipId = videoClip.Id;
+
+        videoLane.Mute = true;
+        using AudioObj muted = await MixRenderer.RenderAsync(mix);
+        Assert.AreEqual(0.4f, muted.Data[2000], 0.01f);
+
+        videoLane.Mute = false;
+        videoLane.Solo = true;
+        using AudioObj solo = await MixRenderer.RenderAsync(mix);
+        Assert.AreEqual(0.2f, solo.Data[2000], 0.01f);
+    }
+
+    [TestMethod]
+    public async Task VideoLaneIsExcludedFromAudioPreparationButControlsLinkedAudioPlayback()
+    {
+        using var mix = new MixArrangement();
+        var videoSource = new MixSource { IsVideo = true, VideoDuration = 60, VideoWidth = 320, VideoHeight = 180,
+            VideoFrameRate = 30, SampleRate = 44100, Channels = 2 };
+        var linkedAudioSource = new MixSource { Data = Enumerable.Repeat(0.2f, 8000).ToArray(), SampleRate = 8000, Channels = 1 };
+        var otherAudioSource = new MixSource { Data = Enumerable.Repeat(0.4f, 8000).ToArray(), SampleRate = 8000, Channels = 1 };
+        mix.Sources.Add(videoSource.Id, videoSource);
+        mix.Sources.Add(linkedAudioSource.Id, linkedAudioSource);
+        mix.Sources.Add(otherAudioSource.Id, otherAudioSource);
+        var videoLane = new MixLane { IsVideo = true };
+        var linkedAudioLane = new MixLane();
+        var otherAudioLane = new MixLane();
+        mix.Lanes.AddRange([videoLane, linkedAudioLane, otherAudioLane]);
+        MixClip videoClip = mix.AddClip(videoLane, videoSource, 0, 0, 60);
+        MixClip linkedAudioClip = mix.AddClip(linkedAudioLane, linkedAudioSource, 0);
+        mix.AddClip(otherAudioLane, otherAudioSource, 0);
+        videoClip.LinkedClipId = linkedAudioClip.Id;
+        linkedAudioClip.LinkedClipId = videoClip.Id;
+
+        using var cache = new MixPreparationCache();
+        await cache.PrepareAsync(mix);
+        Assert.AreEqual(2L, cache.LaneRenders);
+        Assert.IsTrue(cache.CanMix(mix));
+        Assert.AreEqual(88200, cache.Mix(mix).Length);
+
+        videoLane.Mute = true;
+        Assert.AreEqual(0.4f, cache.Mix(mix)[2000], 0.01f);
+        videoLane.Mute = false;
+        videoLane.Solo = true;
+        Assert.AreEqual(0.2f, cache.Mix(mix)[2000], 0.01f);
+    }
+
+    [STATestMethod]
+    public void VideoThumbnailSamplesAreReusedWhenTimelineLayoutExpands()
+    {
+        using var view = new MixTrackView();
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        MethodInfo getSamples = typeof(MixTrackView).GetMethod("GetVideoThumbnailSampleFractions", flags)!;
+        MethodInfo selectSamples = typeof(MixTrackView).GetMethod("SelectVideoThumbnailSamples", flags | BindingFlags.Static)!;
+        Guid clipId = Guid.NewGuid();
+        double[] initial = (double[])getSamples.Invoke(view, [clipId, 2])!;
+        double[] expanded = (double[])getSamples.Invoke(view, [clipId, 4])!;
+        double[] resized = (double[])getSamples.Invoke(view, [clipId, 1])!;
+        double[] compact = (double[])selectSamples.Invoke(null, [expanded, 2])!;
+
+        CollectionAssert.IsSubsetOf(initial, expanded);
+        CollectionAssert.AreEqual(expanded, resized);
+        Assert.HasCount(2, compact);
+        CollectionAssert.IsSubsetOf(compact, expanded);
+    }
+
+    [STATestMethod]
+    public void VideoDropFindsNearestFreeIntervalAndVideoUndoRedoRestoresItsSegments()
+    {
+        using var view = new MixTrackView();
+        var source = new MixSource { IsVideo = true, VideoDuration = 2, VideoWidth = 640, VideoHeight = 360, VideoFrameRate = 30,
+            SampleRate = 44100, Channels = 2 };
+        view.Arrangement.Sources.Add(source.Id, source);
+        var lane = new MixLane { IsVideo = true };
+        view.Arrangement.Lanes.Add(lane);
+        MixClip first = view.Arrangement.AddClip(lane, source, 0, 0, 2);
+        view.Arrangement.AddClip(lane, source, 2, 0, 2);
+        view.Arrangement.AddClip(lane, source, 4, 0, 2);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        Type type = typeof(MixTrackView);
+        type.GetField("_videoLane", flags)!.SetValue(view, lane);
+        type.GetField("selectedLane", flags)!.SetValue(view, lane.Id);
+
+        double drop = (double)type.GetMethod("FindVideoDropStart", flags)!.Invoke(view, [lane, 1d, 2d, (Guid?)null])!;
+        Assert.AreEqual(-2d, drop);
+        view.Arrangement.AddClip(lane, source, drop, 0, 2);
+        Assert.Throws<InvalidOperationException>(() => view.Arrangement.AddClip(lane, source, -1, 0, 2));
+
+        type.GetMethod("ChangedVideo", flags)!.Invoke(view, null);
+        string before = (string)type.GetMethod("CaptureVideoUndoState", flags)!.Invoke(view, null)!;
+        first.Start = 8;
+        type.GetMethod("CommitVideoEdit", flags)!.Invoke(view, [before]);
+        type.GetMethod("ChangedVideo", flags)!.Invoke(view, null);
+        type.GetMethod("Undo", flags)!.Invoke(view, null);
+        Assert.AreEqual(0d, view.Arrangement.Lanes.Single(value => value.IsVideo).Clips.Single(clip => clip.Id == first.Id).Start);
+        type.GetMethod("Redo", flags)!.Invoke(view, null);
+        Assert.AreEqual(8d, view.Arrangement.Lanes.Single(value => value.IsVideo).Clips.Single(clip => clip.Id == first.Id).Start);
     }
 }

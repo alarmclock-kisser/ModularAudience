@@ -16,7 +16,7 @@ public static class VideoFormat
 
     /// <summary>File filter string suitable for a WinForms <see cref="System.Windows.Forms.OpenFileDialog"/>.</summary>
     public static readonly string Filter =
-        "Video Dateien (*.mp4;*.mov;*.avi;*.flv)|*.mp4;*.mov;*.avi;*.flv|Alle Dateien (*.*)|*.*";
+        "Video files (*.mp4;*.mov;*.avi;*.flv)|*.mp4;*.mov;*.avi;*.flv|All files (*.*)|*.*";
 
     public static bool IsSupported(string filePath)
     {

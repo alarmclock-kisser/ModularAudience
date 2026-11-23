@@ -40,7 +40,8 @@ public sealed partial class MixTrackView
     private void CutSelection()
     {
         if (busy || PlaybackLocksEdits) return;
-        CopySelection();
+        if (Clip is { IsVideo: true }) CopyVideoClip();
+        else CopySelection();
         DeleteSelection();
     }
 
@@ -69,6 +70,11 @@ public sealed partial class MixTrackView
         if (!pastePreview || pasteEntry == null || busy || PlaybackLocksEdits) return;
         var (row, time) = PasteAnchor();
         if (pasteEntry.Parts.Any(p => !Arrangement.Sources.ContainsKey(p.Clip.SourceId))) return;
+        if (row < Arrangement.Lanes.Count && Arrangement.Lanes[row].IsVideo)
+        {
+            status.Text = "Audio clips cannot be pasted onto the video lane.";
+            return;
+        }
         while (Arrangement.Lanes.Count <= row + pasteEntry.Parts.Max(p => p.Row)) Arrangement.Lanes.Add(new() { Name = NextLaneName() });
         ClearRangeSelection(); selectedClip = null;
         foreach (var part in pasteEntry.Parts)
@@ -160,7 +166,18 @@ public sealed partial class MixTrackView
     {
         if (busy || PlaybackLocksEdits) return;
         if (selectionFirstRow >= 0 && selectionEnd > selectionStart && fullSelectedClips.Count == 0) { DeleteSelectedRange(); return; }
+        MixClip[] videoClips = Arrangement.Lanes.Where(lane => lane.IsVideo).SelectMany(lane => lane.Clips)
+            .Where(clip => selectedClips.Contains(clip.Id) || selectedClips.Count == 0 && clip.Id == selectedClip).ToArray();
+        string? videoBefore = videoClips.Length > 0 ? CaptureVideoUndoState() : null;
+        if (videoClips.Length > 0)
+        {
+            HashSet<Guid> linkedAudioIds = videoClips.Where(clip => clip.LinkedClipId.HasValue)
+                .Select(clip => clip.LinkedClipId!.Value).ToHashSet();
+            foreach (MixLane lane in Arrangement.Lanes) lane.Clips.RemoveAll(clip => linkedAudioIds.Contains(clip.Id));
+            foreach (MixClip clip in videoClips) _videoLane?.Clips.Remove(clip);
+        }
         foreach (var lane in Arrangement.Lanes) lane.Clips.RemoveAll(c => selectedClips.Contains(c.Id) || selectedClips.Count == 0 && c.Id == selectedClip);
+        if (videoBefore != null) CommitVideoEdit(videoBefore);
         selectedClip = null; ClearRangeSelection(); Changed();
     }
 }

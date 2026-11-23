@@ -88,9 +88,20 @@ public static class MixRenderer
             long totalFrames = (long)Math.Ceiling(Math.Max(0.01, snapshot.Duration) * rate);
             if (totalFrames * channels > int.MaxValue) throw new InvalidOperationException("The mix exceeds the RAM audio buffer limit.");
             float[] output = new float[checked((int)totalFrames * channels)];
-            bool solo = snapshot.Lanes.Any(l => l.Solo);
-            var jobs = snapshot.Lanes.Where(l => !l.Mute && (!solo || l.Solo)).SelectMany(l => l.Clips
-                .Where(c => c.Start + snapshot.ClipDuration(c) > 0).Select(c => (Lane: l, Clip: c))).ToArray();
+            HashSet<Guid> videoSoloAudio = snapshot.Lanes.Where(lane => lane.IsVideo && lane.Solo)
+                .SelectMany(lane => lane.Clips).Where(clip => clip.LinkedClipId.HasValue)
+                .Select(clip => clip.LinkedClipId!.Value).ToHashSet();
+            HashSet<Guid> videoMutedAudio = snapshot.Lanes.Where(lane => lane.IsVideo && lane.Mute)
+                .SelectMany(lane => lane.Clips).Where(clip => clip.LinkedClipId.HasValue)
+                .Select(clip => clip.LinkedClipId!.Value).ToHashSet();
+            bool audioSolo = snapshot.Lanes.Any(lane => !lane.IsVideo && lane.Solo);
+            bool videoSolo = snapshot.Lanes.Any(lane => lane.IsVideo && lane.Solo);
+            bool solo = audioSolo || videoSolo;
+            var jobs = snapshot.Lanes.Where(lane => !lane.IsVideo && !lane.Mute).SelectMany(lane => lane.Clips
+                .Where(clip => !clip.IsVideo && !videoMutedAudio.Contains(clip.Id)
+                    && (!solo || audioSolo && lane.Solo || videoSoloAudio.Contains(clip.Id))
+                    && clip.Start + snapshot.ClipDuration(clip) > 0)
+                .Select(clip => (Lane: lane, Clip: clip))).ToArray();
             int done = 0;
             // Track transformations run in parallel, summation is protected and gain stays floating point.
             object gate = new();

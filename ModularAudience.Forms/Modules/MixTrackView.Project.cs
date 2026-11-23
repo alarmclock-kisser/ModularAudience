@@ -109,6 +109,8 @@ public sealed partial class MixTrackView
         projectSaveTimer.Stop(); await FlushProjectSaveAsync();
         var loaded = await MixArrangement.LoadAsync(path, token);
         StopPlayback(); CancelPastePreview(); clipboardHistory.Clear();
+        _videoUndo.Clear(); _videoRedo.Clear(); _videoLane = null; _hoveredVideoClip = null; videoDragBefore = null;
+        ClearVideoThumbnailCache();
         ResetWavePeakCache(); Arrangement.Sources.Clear();
         foreach (var source in loaded.Sources) Arrangement.Sources[source.Key] = source.Value;
         // Project loading begins a fresh undo session; assets from the previous project

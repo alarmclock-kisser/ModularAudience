@@ -5,6 +5,8 @@ using System.Drawing.Drawing2D;
 using ModularAudience.Forms.Modules.Dialogs;
 using ModularAudience.Forms.Theming;
 using ModularAudience.Audio.Processing;
+using ModularAudience.Video;
+using System.Linq;
 
 namespace ModularAudience.Forms.Modules;
 
@@ -70,6 +72,8 @@ public sealed partial class MixTrackView : Form
     private Point down;
     private string? dragBefore;
     private double originalStart, originalOffset, originalDuration, originalPointerTime;
+    private double originalLinkedAudioOffset, originalLinkedAudioDuration, originalLinkedAudioStart;
+    private string? videoDragBefore;
     private readonly CheckBox overlapModeBox;
     private static double lastRepeatSelectionMultiplier = 4.0;
     private readonly Dictionary<Guid, double> dragOriginalStarts = [];
@@ -82,9 +86,33 @@ public sealed partial class MixTrackView : Form
     private const int Header = 190, Ruler = 30;
     private const double DropEndFadeSeconds = 0.005;
     private const string TimelineHint = "Mix timeline: drop audio to create clips; drag clips to move them and their edges to trim. Drag the ruler to set a loop. Shift enables temporary snapping; Ctrl+wheel zooms. Right-click a segment boundary to merge connected clips, including complete overlap groups; right-click elsewhere for context-specific actions.";
+    private const string VideoHint = "Video track: drop video files to create segments. Drag edges to trim, right-click to cut or extract audio. Video and audio stay in RAM only — not saved to .mamix.";
     private int LaneHeight = 100;
     private double preciseLaneHeight = 100;
     private bool laneHeightCustomized;
+
+    // Video track state (RAM only — never persisted to .mamix)
+    private MixLane? _videoLane;
+    private string? _lastVideoFolder;
+    private MixClip? _hoveredVideoClip;
+    private double _hoveredVideoTime;
+    private Point _videoHoverPoint;
+    private CancellationTokenSource? _videoHoverCancellation;
+    private readonly Stack<string> _videoUndo = [];
+    private readonly Stack<string> _videoRedo = [];
+    private const int MaxVideoUndo = 16;
+
+    private readonly Dictionary<(Guid SourceId, int FrameBucket), Bitmap> _videoThumbCache = [];
+    private readonly List<(Guid SourceId, int FrameBucket)> _videoThumbCacheOrder = [];
+    private readonly HashSet<(Guid SourceId, int FrameBucket)> _videoThumbPending = [];
+    private readonly Dictionary<Guid, List<double>> _videoThumbSampleFractions = [];
+    private readonly Dictionary<Guid, VideoObj> _videoDecoders = [];
+    private readonly object _videoDecoderLock = new();
+    private readonly SemaphoreSlim _videoThumbGate = new(Math.Clamp(Environment.ProcessorCount - 2, 1, 2));
+    private readonly CancellationTokenSource _videoWorkCancellation = new();
+    private const int MaxVideoThumbCache = 96;
+    private const double VideoThumbFrameStep = 0.25;
+    private const int VideoThumbDecodeWidth = 320;
     private bool automaticSizing;
     private int previousClientHeight;
     private double playbackViewStart;
@@ -123,11 +151,12 @@ public sealed partial class MixTrackView : Form
             this.interactionHints.SetToolTip(b, name switch
             {
                 "Stop" => "Stop the mix transport and return its caret to the beginning. Source samples and clip positions are unchanged.",
-                "Render ..." => "Render the audible arrangement. Right-click for additional render scopes, including individual tracks. Muting, clip gain and effects are included in audio rendering.",
+                "Render ..." => "Render the audible arrangement. Right-click for additional render scopes, including individual tracks and video rendering. Muting, clip gain and effects are included in audio rendering.",
                 "Save project…" => "Save the non-destructive arrangement, sources, clip edits and mixer settings as a project. This is separate from rendering a final audio file.",
                 "Open project…" => "Open a saved mix project. Source audio and arrangement settings are restored together; use Render for a finished audio object.",
                 "View Settings…" => "Configure timeline appearance and display options. Display changes do not alter source audio.",
                 "+ Track" => "Add an empty arrangement lane. Drop audio into it, or double-click its empty timeline area to choose an open source.",
+                "+ Video" => "Add a video track and import a video file. Video segments and extracted audio exist in RAM only — not saved to .mamix projects.",
                 "Undo" => "Undo the most recent arrangement edit. Display-only navigation does not rewrite audio.",
                 "Redo" => "Reapply an undone arrangement edit. A new edit starts a new history branch.",
                 _ => "Change timeline magnification without changing clip timing or source audio."
@@ -183,11 +212,12 @@ public sealed partial class MixTrackView : Form
         Tool("− Zoom", () => Zoom(0.8)); Tool("+ Zoom", () => Zoom(1.25));
         Tool("View Settings…", ShowViewSettings);
         Tool("+ Track", AddEmptyTrack);
+        Tool("+ Video", AddVideoTrack);
         Tool("Undo", Undo); Tool("Redo", Redo);
         Tool("Save project…", async () => await SaveProjectAsync());
         Tool("Open project…", async () => await OpenProjectAsync());
         var renderButton = Tool("Render ...", async () => await ExportAsync());
-        renderButton.MouseUp += (_, e) => { if (e.Button == MouseButtons.Right) ShowRenderMenu(renderButton, e.Location); };
+        renderButton.MouseUp += (_, e) => { if (e.Button == MouseButtons.Right) ShowRenderMenuWithVideo(renderButton, e.Location); };
         toolbar.Controls.Add(autoSave);
         autoSave.CheckedChanged += (_, _) => { if (!restoring) { Arrangement.AutoSave = autoSave.Checked; Changed(); QueueProjectSave(force: true); } };
         Controls.Add(canvas); Controls.Add(vertical); Controls.Add(scroll); Controls.Add(status); Controls.Add(toolbar);
@@ -649,11 +679,17 @@ public sealed partial class MixTrackView : Form
         SchedulePreparation();
         EnsureTrackLayout();
     }
+    private void ChangedVideo()
+    {
+        PruneVideoThumbnailSamples();
+        Changed();
+    }
     private void Restore(string state)
     {
         tempoDebounce.Stop();
         ClearRangeSelection();
-        Arrangement.Restore(state); committed = MixAudioHistory.Capture(Arrangement); committedAudioKey = MixAudioHistory.Key(Arrangement);
+        Arrangement.Restore(state); _videoLane = Arrangement.Lanes.FirstOrDefault(lane => lane.IsVideo);
+        committed = MixAudioHistory.Capture(Arrangement); committedAudioKey = MixAudioHistory.Key(Arrangement);
         committedProject = Arrangement.CaptureProject(); restoring = true;
         bpm.Value = (decimal)Arrangement.Bpm; division.SelectedIndex = (int)Math.Log2(Arrangement.SnapDivision);
         snap.Checked = Arrangement.Snap; loop.Checked = Arrangement.Loop; restoring = false; dirty = true;
@@ -679,8 +715,22 @@ public sealed partial class MixTrackView : Form
         finally { restoring = false; }
         ReconcileJoined(); Text = Arrangement.Name; canvas.Invalidate(); SchedulePreparation(); EnsureTrackLayout(); QueueProjectSave(force: true);
     }
-    private void Undo() { if (busy || PlaybackLocksEdits) return; if (undo.Count > 0) { string edit = undo.Pop(); MixAudioHistory.Apply(Arrangement, edit, undo: true); redo.Push(edit); this.RefreshAfterHistory(); } }
-    private void Redo() { if (busy || PlaybackLocksEdits) return; if (redo.Count > 0) { string edit = redo.Pop(); MixAudioHistory.Apply(Arrangement, edit, undo: false); undo.Push(edit); this.RefreshAfterHistory(); } }
+    private bool PreferVideoHistory => selectedClip is Guid id && Arrangement.Lanes.Any(lane => lane.IsVideo && lane.Clips.Any(clip => clip.Id == id))
+        || selectedLane is Guid laneId && Arrangement.Lanes.Any(lane => lane.Id == laneId && lane.IsVideo);
+    private void Undo()
+    {
+        if (busy || PlaybackLocksEdits) return;
+        if (PreferVideoHistory && _videoUndo.Count > 0) { UndoVideo(); return; }
+        if (undo.Count > 0) { string edit = undo.Pop(); MixAudioHistory.Apply(Arrangement, edit, undo: true); redo.Push(edit); this.RefreshAfterHistory(); }
+        else if (_videoUndo.Count > 0) UndoVideo();
+    }
+    private void Redo()
+    {
+        if (busy || PlaybackLocksEdits) return;
+        if (PreferVideoHistory && _videoRedo.Count > 0) { RedoVideo(); return; }
+        if (redo.Count > 0) { string edit = redo.Pop(); MixAudioHistory.Apply(Arrangement, edit, undo: false); undo.Push(edit); this.RefreshAfterHistory(); }
+        else if (_videoRedo.Count > 0) RedoVideo();
+    }
     private void Zoom(double factor)
     {
         pixelsPerSecond = Math.Clamp(pixelsPerSecond * factor, 8, 2000);
@@ -843,33 +893,42 @@ public sealed partial class MixTrackView : Form
                 if (rect.Right < Header || rect.Left > canvas.Width || !rect.IntersectsWith(e.ClipRectangle)) continue;
                 var saved = g.Save(); g.SetClip(new Rectangle(Header, y, canvas.Width - Header, LaneHeight));
                 bool selected = clip.Id == selectedClip || selectedClips.Contains(clip.Id);
-                Color clipColor = ClipColor(selected ? visual.SelectedClip : visual.Clip, row);
-                bool overlaps = false;
-                if (Arrangement.OverlapMode == MixOverlapMode.MixOverlap)
+
+                if (clip.IsVideo)
                 {
-                    using var overlapRegion = new Region(); overlapRegion.MakeEmpty();
-                    foreach (Rectangle previous in previousClipRects)
-                    {
-                        Rectangle intersection = Rectangle.Intersect(rect, previous);
-                        if (intersection.Width <= 0 || intersection.Height <= 0) continue;
-                        overlaps = true; overlapRegion.Union(intersection);
-                    }
-                    using var solidRegion = new Region(rect); solidRegion.Exclude(overlapRegion);
-                    using var solidBrush = new SolidBrush(clipColor);
-                    using var overlapBrush = new SolidBrush(Color.FromArgb(150, clipColor));
-                    g.FillRegion(solidBrush, solidRegion); g.FillRegion(overlapBrush, overlapRegion);
+                    DrawVideoClip(g, row, clip, rect, selected);
                 }
                 else
                 {
-                    using var brush = new SolidBrush(clipColor); g.FillRectangle(brush, rect);
+                    Color clipColor = ClipColor(selected ? visual.SelectedClip : visual.Clip, row);
+                    bool overlaps = false;
+                    if (Arrangement.OverlapMode == MixOverlapMode.MixOverlap)
+                    {
+                        using var overlapRegion = new Region(); overlapRegion.MakeEmpty();
+                        foreach (Rectangle previous in previousClipRects)
+                        {
+                            Rectangle intersection = Rectangle.Intersect(rect, previous);
+                            if (intersection.Width <= 0 || intersection.Height <= 0) continue;
+                            overlaps = true; overlapRegion.Union(intersection);
+                        }
+                        using var solidRegion = new Region(rect); solidRegion.Exclude(overlapRegion);
+                        using var solidBrush = new SolidBrush(clipColor);
+                        using var overlapBrush = new SolidBrush(Color.FromArgb(150, clipColor));
+                        g.FillRegion(solidBrush, solidRegion); g.FillRegion(overlapBrush, overlapRegion);
+                    }
+                    else
+                    {
+                        using var brush = new SolidBrush(clipColor); g.FillRectangle(brush, rect);
+                    }
+                    using var edge = new Pen(selected ? Color.White : Color.FromArgb(110, 150, 165)); g.DrawRectangle(edge, rect);
+                    using var handleBrush = new SolidBrush(Color.FromArgb(65, Color.Black)) { };
+                    g.FillRectangle(handleBrush, rect.X, rect.Y, rect.Width, Math.Min(21, rect.Height));
+                    int labelX = Math.Max(Header + 4, rect.X + 4);
+                    int labelWidth = Math.Max(1, rect.Right - labelX);
+                    TextRenderer.DrawText(g, clip.Name, Font, new Rectangle(labelX, rect.Y + 2, labelWidth, 18), VisualColor(visual.Text), TextFormatFlags.EndEllipsis);
+                    if (visual.ShowWaveforms && Arrangement.Sources.TryGetValue(clip.SourceId, out var source))
+                        DrawWave(g, rect, clip, source, overlaps && Arrangement.OverlapMode == MixOverlapMode.MixOverlap);
                 }
-                using var edge = new Pen(selected ? Color.White : Color.FromArgb(110, 150, 165)); g.DrawRectangle(edge, rect);
-                using (var handleBrush = new SolidBrush(Color.FromArgb(65, Color.Black))) g.FillRectangle(handleBrush, rect.X, rect.Y, rect.Width, Math.Min(21, rect.Height));
-                int labelX = Math.Max(Header + 4, rect.X + 4);
-                int labelWidth = Math.Max(1, rect.Right - labelX);
-                TextRenderer.DrawText(g, clip.Name, Font, new Rectangle(labelX, rect.Y + 2, labelWidth, 18), VisualColor(visual.Text), TextFormatFlags.EndEllipsis);
-                if (visual.ShowWaveforms && Arrangement.Sources.TryGetValue(clip.SourceId, out var source))
-                    DrawWave(g, rect, clip, source, overlaps && Arrangement.OverlapMode == MixOverlapMode.MixOverlap);
                 previousClipRects.Add(rect);
                 g.Restore(saved);
             }
@@ -947,6 +1006,15 @@ public sealed partial class MixTrackView : Form
             using var pen = new Pen(Color.LightGreen, 3); g.DrawLine(pen, 0, y, canvas.Width, y);
         }
         int cx = TimeX(caret); if (cx >= Header) { using var caretPen = new Pen(VisualColor(visual.Playhead)); g.DrawLine(caretPen, cx, 0, cx, canvas.Height); }
+
+        // Video hover preview (frame under cursor).
+        if (_hoveredVideoClip is { } hoverClip && _hoveredVideoTime >= 0)
+        {
+            int hoverRow = Arrangement.Lanes.FindIndex(l => l.Clips.Contains(hoverClip));
+            if (hoverRow >= 0)
+                DrawVideoHoverPreview(g, hoverClip, _hoveredVideoTime);
+        }
+
         PaintPastePreview(g);
     }
     private Rectangle LaneNameRect(int row)
@@ -1210,12 +1278,26 @@ public sealed partial class MixTrackView : Form
         if (pastePreview) { if (e.Button == MouseButtons.Left && e.X >= Header && e.Y >= Ruler) PlacePastePreview(); else if (e.Button == MouseButtons.Right) CancelPastePreview(); return; }
         // A right click must not collapse an existing range/multiselection or
         // silently retarget it to the segment/empty space under the pointer.
+        int row = RowAt(e.Y);
         if (e.Button == MouseButtons.Right)
         {
             if (this.TryMergeSegmentBoundary(e.Location)) return;
+            // Right-click on a video clip → video-specific context menu.
+            if (row >= 0 && row < Arrangement.Lanes.Count && e.X >= Header && e.Y >= Ruler)
+            {
+                var videoClip = Arrangement.Lanes[row].Clips.LastOrDefault(c => ClipRect(row, c).Contains(e.Location));
+                if (videoClip is { } vc && vc.IsVideo)
+                {
+                    var lane = Arrangement.Lanes[row];
+                    selectedLane = lane.Id;
+                    selectedClip = vc.Id;
+                    ShowVideoContextMenu(e.Location, vc, lane);
+                    return;
+                }
+            }
             ShowMenu(e.Location); return;
         }
-        int row = RowAt(e.Y); selectedLane = row >= 0 && row < Arrangement.Lanes.Count ? Arrangement.Lanes[row].Id : null;
+        selectedLane = row >= 0 && row < Arrangement.Lanes.Count ? Arrangement.Lanes[row].Id : null;
         selectedClip = row >= 0 && row < Arrangement.Lanes.Count
             ? Arrangement.Lanes[row].Clips.LastOrDefault(c => e.X >= Header && ClipRect(row, c).Contains(e.Location))?.Id : null;
         if (e.Button != MouseButtons.Left) return;
@@ -1254,17 +1336,40 @@ public sealed partial class MixTrackView : Form
             rulerOriginalLoopStart = Arrangement.LoopStart; rulerOriginalLoopEnd = Arrangement.LoopEnd;
             caret = manualCaret = Arrangement.SnapTime(XTime(e.X), ModifierKeys.HasFlag(Keys.Shift)); dragMode = 4;
         }
-        else if (selectionAdditive && e.X >= Header && row >= 0 && row < Arrangement.Lanes.Count) dragMode = 5;
+        else if (selectionAdditive && e.X >= Header && row >= 0 && row < Arrangement.Lanes.Count && Clip is not { IsVideo: true }) dragMode = 5;
         else if (Clip is { } clip)
         {
             var rect = ClipRect(row, clip);
-            // Only the title handle moves clips. Waveforms are for selecting audio regions.
-            dragMode = e.Y < rect.Top + 21 ? (e.X - rect.Left < 7 ? 2 : rect.Right - e.X < 7 ? 3 : 1) : 5;
+            if (clip.IsVideo)
+            {
+                SelectWholeClip(clip.Id, selectionAdditive);
+                dragMode = e.X - rect.Left < 7 ? 2 : rect.Right - e.X < 7 ? 3 : 1;
+                videoDragBefore = CaptureVideoUndoState();
+            }
+            else
+            {
+                // Only the title handle moves clips. Waveforms are for selecting audio regions.
+                dragMode = e.Y < rect.Top + 21 ? (e.X - rect.Left < 7 ? 2 : rect.Right - e.X < 7 ? 3 : 1) : 5;
+                videoDragBefore = null;
+            }
             originalStart = clip.Start; originalOffset = clip.SourceOffset; originalDuration = clip.SourceDuration;
+            originalLinkedAudioOffset = 0;
+            originalLinkedAudioDuration = 0;
+            originalLinkedAudioStart = 0;
+            if (clip.IsVideo && clip.LinkedClipId is Guid linkedAudioId)
+            {
+                MixClip? linkedAudio = Arrangement.Lanes.SelectMany(lane => lane.Clips).FirstOrDefault(candidate => candidate.Id == linkedAudioId);
+                if (linkedAudio != null)
+                {
+                    originalLinkedAudioOffset = linkedAudio.SourceOffset;
+                    originalLinkedAudioDuration = linkedAudio.SourceDuration;
+                    originalLinkedAudioStart = linkedAudio.Start;
+                }
+            }
             dragOriginalStarts.Clear();
             if (dragMode == 1)
             {
-                MixClip[] moving = selectedClips.Count > 1 && selectedClips.Contains(clip.Id)
+                MixClip[] moving = !clip.IsVideo && selectedClips.Count > 1 && selectedClips.Contains(clip.Id)
                     ? Arrangement.Lanes.SelectMany(lane => lane.Clips).Where(value => selectedClips.Contains(value.Id)).ToArray()
                     : [clip];
                 foreach (MixClip grouped in moving)
@@ -1272,7 +1377,7 @@ public sealed partial class MixTrackView : Form
                     dragOriginalStarts[grouped.Id] = grouped.Start;
                 }
             }
-            if (dragMode != 5) ClearRangeSelection();
+            if (dragMode != 5 && !clip.IsVideo) ClearRangeSelection();
         }
         else if (e.X >= Header && row >= 0 && row < Arrangement.Lanes.Count) dragMode = 5;
         if (dragMode == 5)
@@ -1502,20 +1607,29 @@ public sealed partial class MixTrackView : Form
         if (pastePreview) { canvas.Invalidate(); return; }
         if (dragMode == 0)
         {
-            if (this.TryFindSegmentBoundary(e.Location, out SegmentBoundary boundary))
-            {
-                canvas.Cursor = boundary.IsOverlapGroup || boundary.ClipIds.Count > 2
-                    ? Cursors.SizeAll
-                    : Cursors.Hand;
-                this.interactionHints.SetToolTip(canvas, boundary.ClipIds.Count > 2
-                    ? $"Right-click to merge all {boundary.ClipIds.Count} connected segments."
-                    : "Right-click this boundary to remove it and merge the connected segments.");
-                return;
-            }
-            this.interactionHints.SetToolTip(canvas, TimelineHint);
             int row = RowAt(e.Y);
             var hit = row >= 0 && row < Arrangement.Lanes.Count
                 ? Arrangement.Lanes[row].Clips.LastOrDefault(c => ClipRect(row, c).Contains(e.Location)) : null;
+            if (hit is { IsVideo: true })
+            {
+                this.interactionHints.SetToolTip(canvas, string.Empty);
+                UpdateVideoHoverPreview(hit, e.Location);
+            }
+            else
+            {
+                ClearVideoHoverPreview();
+                if (this.TryFindSegmentBoundary(e.Location, out SegmentBoundary boundary))
+                {
+                    canvas.Cursor = boundary.IsOverlapGroup || boundary.ClipIds.Count > 2
+                        ? Cursors.SizeAll
+                        : Cursors.Hand;
+                    this.interactionHints.SetToolTip(canvas, boundary.ClipIds.Count > 2
+                        ? $"Right-click to merge all {boundary.ClipIds.Count} connected segments."
+                        : "Right-click this boundary to remove it and merge the connected segments.");
+                    return;
+                }
+                this.interactionHints.SetToolTip(canvas, TimelineHint);
+            }
             if (hit != null && e.X >= Header)
             {
                 var rect = ClipRect(row, hit);
@@ -1564,6 +1678,17 @@ public sealed partial class MixTrackView : Form
                 if (group.Count == 0) group.Add(c);
                 int currentRow = Arrangement.Lanes.FindIndex(lane => lane.Clips.Contains(c));
                 int targetRow = Arrangement.Lanes.Count > 0 ? Math.Clamp(RowAt(e.Y), 0, Arrangement.Lanes.Count - 1) : currentRow;
+                if (c.IsVideo)
+                {
+                    targetRow = currentRow;
+                    double desired = Arrangement.SnapTime(originalStart + delta, ModifierKeys.HasFlag(Keys.Shift));
+                    c.Start = FindVideoDropStart(_videoLane ?? Arrangement.Lanes.First(lane => lane.IsVideo), desired,
+                        Arrangement.ClipDuration(c), c.Id);
+                    SyncLinkedVideoAudio(c, originalOffset, originalDuration, originalStart,
+                        originalLinkedAudioOffset, originalLinkedAudioDuration, originalLinkedAudioStart);
+                    canvas.Invalidate();
+                    return;
+                }
                 Dictionary<Guid, double> starts = group.ToDictionary(clip => clip.Id,
                     clip => dragOriginalStarts.TryGetValue(clip.Id, out double start) ? start : clip.Start);
                 double requestedDelta = Arrangement.SnapTime(originalStart + delta, ModifierKeys.HasFlag(Keys.Shift)) - originalStart;
@@ -1615,13 +1740,20 @@ public sealed partial class MixTrackView : Form
             else if (dragMode == 2)
             {
                 double start = Arrangement.SnapTime(originalStart + delta, ModifierKeys.HasFlag(Keys.Shift));
+                double sourceLength = c.IsVideo ? s.VideoDuration : s.Duration;
                 double offset = Math.Clamp(originalOffset + (start - originalStart) * factor, 0, originalOffset + originalDuration - 0.001);
+                offset = Math.Min(offset, sourceLength - 0.001);
                 c.Start = originalStart + (offset - originalOffset) / factor; c.SourceOffset = offset; c.SourceDuration = originalDuration - offset + originalOffset;
+                if (c.IsVideo) SyncLinkedVideoAudio(c, originalOffset, originalDuration, originalStart,
+                    originalLinkedAudioOffset, originalLinkedAudioDuration, originalLinkedAudioStart);
             }
             else if (dragMode == 3)
             {
                 double end = Arrangement.SnapTime(originalStart + originalDuration / factor + delta, ModifierKeys.HasFlag(Keys.Shift));
-                c.SourceDuration = Math.Clamp((end - c.Start) * factor, 0.001, s.Duration - c.SourceOffset);
+                double sourceLength = c.IsVideo ? s.VideoDuration : s.Duration;
+                c.SourceDuration = Math.Clamp((end - c.Start) * factor, 0.001, sourceLength - c.SourceOffset);
+                if (c.IsVideo) SyncLinkedVideoAudio(c, originalOffset, originalDuration, originalStart,
+                    originalLinkedAudioOffset, originalLinkedAudioDuration, originalLinkedAudioStart);
             }
         }
         canvas.Invalidate();
@@ -1731,7 +1863,7 @@ public sealed partial class MixTrackView : Form
             MoveLane(laneId, reorderTarget);
             draggedLane = null; reorderTarget = -1;
         }
-        if (dragMode == 1 && Clip is { } clip)
+        if (dragMode == 1 && Clip is { } clip && !clip.IsVideo)
         {
             int target = RowAt(e.Y);
             var group = dragOriginalStarts.Count > 0
@@ -1757,6 +1889,8 @@ public sealed partial class MixTrackView : Form
         dragOriginalStarts.Clear();
         bool rulerDrag = dragMode == 4;
         bool rangeDrag = dragMode == 5;
+        string? completedVideoDrag = videoDragBefore;
+        videoDragBefore = null;
         if (rangeDrag)
         {
             if (Math.Abs(e.X - down.X) + Math.Abs(e.Y - down.Y) > 3)
@@ -1782,7 +1916,16 @@ public sealed partial class MixTrackView : Form
             if (playback != null) playback.SetPosition((long)(caret * playback.SampleRate));
             canvas.Invalidate(); return;
         }
-        if (rulerDrag) this.UpdateTransportLoop(); else if (!rangeDrag) Changed();
+        if (rulerDrag) this.UpdateTransportLoop();
+        else if (!rangeDrag)
+        {
+            if (completedVideoDrag is not null)
+            {
+                CommitVideoEdit(completedVideoDrag);
+                ChangedVideo();
+            }
+            else Changed();
+        }
         draggedLane = null; reorderTarget = -1; reorderMoved = false;
         canvas.Cursor = Cursors.Default; canvas.Invalidate();
         laneNameClickCandidate = null;
@@ -1796,9 +1939,11 @@ public sealed partial class MixTrackView : Form
     {
         int old = Arrangement.Lanes.FindIndex(l => l.Id == id);
         if (old < 0) return;
+        string? videoBefore = Arrangement.Lanes[old].IsVideo ? CaptureVideoUndoState() : null;
         var lane = Arrangement.Lanes[old]; Arrangement.Lanes.RemoveAt(old);
         int target = Math.Clamp(insertion > old ? insertion - 1 : insertion, 0, Arrangement.Lanes.Count);
         Arrangement.Lanes.Insert(target, lane); selectedLane = lane.Id;
+        if (videoBefore != null) CommitVideoEdit(videoBefore);
         ClearRangeSelection();
     }
     private async void DropAudio(object? sender, DragEventArgs e)
@@ -1811,6 +1956,11 @@ public sealed partial class MixTrackView : Form
             return;
         }
         if (busy || this.windowGroup.IsBlocked) return; Point p = canvas.PointToClient(new Point(e.X, e.Y)); int row = RowAt(p.Y);
+        if (row >= 0 && row < Arrangement.Lanes.Count && Arrangement.Lanes[row].IsVideo)
+        {
+            status.Text = "Audio clips cannot be placed on the video lane.";
+            return;
+        }
         var audios = Dragged(e.Data); double start = Arrangement.SnapTime(XTime(p.X), (e.KeyState & 4) != 0);
         foreach (var audio in audios)
         {
@@ -1941,7 +2091,7 @@ public sealed partial class MixTrackView : Form
     {
         var menu = new ContextMenuStrip { Name = "mixGeneralContextMenu" };
         void Item(string text, Action action, bool enabled = true) { var item = new ToolStripMenuItem(text) { Enabled = enabled }; item.Click += (_, _) => action(); menu.Items.Add(item); }
-        Item("Undo (Ctrl+Z)", Undo, undo.Count > 0); Item("Redo (Ctrl+Y)", Redo, redo.Count > 0);
+        Item("Undo (Ctrl+Z)", Undo, undo.Count > 0 || _videoUndo.Count > 0); Item("Redo (Ctrl+Y)", Redo, redo.Count > 0 || _videoRedo.Count > 0);
         Item("View Settings…", ShowViewSettings);
         if (Lane is { } lane)
         {
@@ -1998,9 +2148,23 @@ public sealed partial class MixTrackView : Form
         if (busy || PlaybackLocksEdits) return;
         if (fullSelectedClips.Count > 0) { DeleteSelection(); return; }
         if (selectionFirstRow < 0 || selectionEnd <= selectionStart) return;
-        for (int row = selectionFirstRow; row <= selectionLastRow && row < Arrangement.Lanes.Count; row++)
+        int firstRow = Math.Max(0, selectionFirstRow);
+        int lastRow = Math.Min(Arrangement.Lanes.Count - 1, selectionLastRow);
+        MixLane[] targetLanes = Arrangement.Lanes.Skip(firstRow).Take(lastRow - firstRow + 1).ToArray();
+        MixClip[] overlappingVideo = targetLanes.Where(lane => lane.IsVideo).SelectMany(lane => lane.Clips)
+            .Where(clip => clip.Start < selectionEnd && clip.Start + Arrangement.ClipDuration(clip) > selectionStart).ToArray();
+        if (overlappingVideo.Length > 0)
         {
-            var lane = Arrangement.Lanes[row];
+            string before = CaptureVideoUndoState();
+            HashSet<Guid> linkedAudioIds = overlappingVideo.Where(clip => clip.LinkedClipId.HasValue)
+                .Select(clip => clip.LinkedClipId!.Value).ToHashSet();
+            foreach (MixLane lane in Arrangement.Lanes) lane.Clips.RemoveAll(clip => linkedAudioIds.Contains(clip.Id));
+            foreach (MixClip clip in overlappingVideo) _videoLane?.Clips.Remove(clip);
+            CommitVideoEdit(before);
+        }
+        foreach (MixLane lane in targetLanes)
+        {
+            if (lane.IsVideo || !Arrangement.Lanes.Contains(lane)) continue;
             foreach (var clip in lane.Clips.ToArray())
             {
                 double end = clip.Start + Arrangement.ClipDuration(clip);
@@ -2028,6 +2192,11 @@ public sealed partial class MixTrackView : Form
     private Task ExportSelectedRangeAsync() => ExportSelectionAsync();
     private void ShowSourcePicker(MixLane lane, double time, Point location)
     {
+        if (lane.IsVideo)
+        {
+            status.Text = "Audio sources cannot be placed on the video lane.";
+            return;
+        }
         var menu = new ContextMenuStrip();
         if (Arrangement.Sources.Count == 0)
             menu.Items.Add(new ToolStripMenuItem("Drop audio from an Audio Collection to add a source") { Enabled = false });
@@ -2060,14 +2229,38 @@ public sealed partial class MixTrackView : Form
         {
         var lane = Arrangement.Lanes.FirstOrDefault(l => l.Id == id);
         if (lane == null) continue;
-        if (openTrackView && !joined.ContainsKey(id) && lane.Clips.FirstOrDefault() is { } clip && Arrangement.Sources.TryGetValue(clip.SourceId, out var source))
+        if (lane.IsVideo)
+        {
+            string before = CaptureVideoUndoState();
+            HashSet<Guid> videoClipIds = lane.Clips.Select(clip => clip.Id).ToHashSet();
+            HashSet<Guid> linkedAudioIds = Arrangement.Lanes.Where(value => !value.IsVideo).SelectMany(value => value.Clips)
+                .Where(clip => clip.LinkedClipId is Guid linkedId && videoClipIds.Contains(linkedId)).Select(clip => clip.Id).ToHashSet();
+            foreach (MixLane value in Arrangement.Lanes) value.Clips.RemoveAll(clip => linkedAudioIds.Contains(clip.Id));
+            Arrangement.Lanes.Remove(lane);
+            _videoLane = null;
+            if (selectedLane == lane.Id) selectedLane = null;
+            if (selectedClip is Guid selectedId && videoClipIds.Contains(selectedId)) selectedClip = null;
+            CommitVideoEdit(before);
+            ChangedVideo();
+            continue;
+        }
+        if (openTrackView && !joined.ContainsKey(id) && lane.Clips.FirstOrDefault(clip => !clip.IsVideo) is { } clip && Arrangement.Sources.TryGetValue(clip.SourceId, out var source))
         {
             using var audio = new AudioObj { Name = source.Name, Data = source.Data, SampleRate = source.SampleRate, Channels = source.Channels,
                 Bpm = source.Bpm, Length = source.Data.Length, Duration = TimeSpan.FromSeconds(source.Duration) };
             joined[id] = new TrackView(audio);
             joined[id].SetJoinedMix(this);
         }
+        MixClip[] linkedClips = lane.Clips.Where(clip => clip.LinkedClipId != null).ToArray();
+        string? videoBefore = linkedClips.Length > 0 ? CaptureVideoUndoState() : null;
+        if (linkedClips.Length > 0)
+        {
+            HashSet<Guid> removedIds = linkedClips.Select(clip => clip.Id).ToHashSet();
+            foreach (MixClip videoClip in Arrangement.Lanes.Where(value => value.IsVideo).SelectMany(value => value.Clips))
+                if (videoClip.LinkedClipId is Guid linkedId && removedIds.Contains(linkedId)) videoClip.LinkedClipId = null;
+        }
         Arrangement.Lanes.Remove(lane); Changed();
+        if (videoBefore != null) CommitVideoEdit(videoBefore);
         }
     }
     private void Duplicate()
@@ -2163,10 +2356,7 @@ public sealed partial class MixTrackView : Form
             await liveUpdateWork;
             await this.FlushLiveGainMixAsync();
             if (cachedMix == null || cachedMixState != MixPreparationCache.AudioKey(Arrangement))
-            {
-                status.Text = "Audio preparation is still pending or failed. Check the status and retry.";
-                return;
-            }
+                throw new InvalidOperationException($"Audio preparation did not produce the current mix. {status.Text}");
             var preparedAudio = new AudioObj { Name = Arrangement.Name, Data = cachedMix.Data, SampleRate = cachedMix.SampleRate,
                 Channels = cachedMix.Channels, Length = cachedMix.Length, Duration = cachedMix.Duration, Bpm = cachedMix.Bpm };
             if (token.IsCancellationRequested || closing) { preparedAudio.Dispose(); return; }
@@ -2312,6 +2502,7 @@ public sealed partial class MixTrackView : Form
     private void ReleaseResources()
     {
         if (released) return; released = true; this.CloseMixEffectWindows(); this.windowGroup.Dispose(); this.CancelLiveGainMix(); this.timelineContextMenu?.Dispose(); open.Remove(this); operation?.Cancel(); StopPlayback(); clock.Dispose(); liveUpdateTimer.Dispose();
+        DisposeVideoResources();
         this.interactionHints.Dispose();
         liveUpdateCancellation?.Cancel();
         hueTimer.Dispose(); hueClock.Stop();
@@ -2340,6 +2531,13 @@ public sealed partial class MixTrackView : Form
         if (keyData == (Keys.Control | Keys.Z)) { Undo(); return true; }
         if (keyData == (Keys.Control | Keys.Y)) { Redo(); return true; }
         if (keyData == (Keys.Control | Keys.D)) { Duplicate(); return true; }
+        // Video clipboard takes precedence when a video clip is selected.
+        if (Clip is { } vc && vc.IsVideo)
+        {
+            if (keyData == (Keys.Control | Keys.C)) { CopyVideoClip(); return true; }
+            if (keyData == (Keys.Control | Keys.X)) { CutSelection(); return true; }
+            if (keyData == (Keys.Control | Keys.V)) { PasteVideoClip(); return true; }
+        }
         if (keyData == (Keys.Control | Keys.C)) { CopySelection(); return true; }
         if (keyData == (Keys.Control | Keys.X)) { CutSelection(); return true; }
         if (keyData == (Keys.Control | Keys.V)) { BeginPasteHold(); return true; }
@@ -2353,7 +2551,8 @@ public sealed partial class MixTrackView : Form
         if (keyData == Keys.Escape && pastePreview) { CancelPastePreview(); return true; }
         if (keyData == Keys.Escape && dragBefore != null)
         {
-            Arrangement.Restore(dragBefore); dragBefore = null; dragMode = 0; draggedLane = null; reorderTarget = -1;
+            Arrangement.Restore(dragBefore); _videoLane = Arrangement.Lanes.FirstOrDefault(lane => lane.IsVideo);
+            dragBefore = null; videoDragBefore = null; dragMode = 0; draggedLane = null; reorderTarget = -1;
             ClearRangeSelection(); selectedClip = null;
             canvas.Capture = false; RefreshPreparedMixer(); canvas.Invalidate(); return true;
         }

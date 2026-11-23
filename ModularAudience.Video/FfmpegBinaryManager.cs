@@ -5,8 +5,7 @@ using System.Text.Json;
 namespace ModularAudience.Video;
 
 /// <summary>
-/// Lädt nur ffmpeg.exe von GitHub (BtbN/FFmpeg-Builds) herunter und installiert es
-/// im selben Verzeichnis wie die Ytdlp-Binaries, sodass es von beiden Seiten wiederverwendet werden kann.
+/// Downloads only FFmpeg from GitHub and installs it beside the yt-dlp-managed binaries for reuse.
 /// </summary>
 public sealed class FfmpegBinaryManager
 {
@@ -20,8 +19,7 @@ public sealed class FfmpegBinaryManager
     public string BinaryDirectory { get; } = BinaryRootDirectory;
 
     /// <summary>
-    /// Gibt den Pfad zu einer bereits installierten ffmpeg.exe zurück, oder null.
-    /// Sucht im Ytdlp-Verzeichnis (ffmpeg-*) und in PATH.
+    /// Returns an existing FFmpeg path from the managed directory, application folder, or PATH.
     /// </summary>
     public string? FindInstalledFfmpeg()
     {
@@ -39,7 +37,7 @@ public sealed class FfmpegBinaryManager
                 }
             }
         }
-        catch { /* Verzeichnis existiert ggf. noch nicht */ }
+        catch { /* The managed directory may not exist yet. */ }
 
         // Neben der Entry Assembly
         var local = Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe");
@@ -63,14 +61,13 @@ public sealed class FfmpegBinaryManager
     }
 
     /// <summary>
-    /// Installiert ffmpeg.exe (nur ffmpeg, kein yt-dlp/deno) mit Fortschrittsmeldungen.
-    /// Gibt den Pfad zur installierten ffmpeg.exe zurück.
+    /// Installs FFmpeg only (not yt-dlp or Deno) and reports download progress.
     /// </summary>
     public async Task<string> InstallFfmpegAsync(IProgress<string>? progress, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(BinaryRootDirectory);
 
-        progress?.Report("Prüfe ffmpeg-Version auf GitHub...");
+        progress?.Report("Checking for the FFmpeg release on GitHub...");
         var releaseUrl = $"https://api.github.com/repos/{GithubRepository}/releases/latest";
 
         using var httpClient = new HttpClient();
@@ -83,7 +80,7 @@ public sealed class FfmpegBinaryManager
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException($"Konnte GitHub-Release für ffmpeg nicht abfragen: {ex.Message}", ex);
+            throw new InvalidOperationException($"Unable to query the FFmpeg GitHub release: {ex.Message}", ex);
         }
 
         using var doc = JsonDocument.Parse(json);
@@ -109,10 +106,10 @@ public sealed class FfmpegBinaryManager
 
         if (string.IsNullOrWhiteSpace(downloadUrl))
         {
-            throw new InvalidDataException($"Das GitHub-Release enthält keine {FfmpegAssetName}.");
+            throw new InvalidDataException($"The GitHub release does not contain {FfmpegAssetName}.");
         }
 
-        progress?.Report($"Lade {assetName} herunter ...");
+        progress?.Report($"Downloading {assetName}...");
 
         var staging = Path.Combine(BinaryRootDirectory, ".stage-ffmpeg-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(staging);
@@ -122,7 +119,7 @@ public sealed class FfmpegBinaryManager
 
             await DownloadFileAsync(httpClient, downloadUrl!, zipPath, progress, cancellationToken).ConfigureAwait(false);
 
-            progress?.Report("Entpacke ffmpeg ...");
+            progress?.Report("Extracting FFmpeg...");
             var payload = Path.Combine(staging, "payload");
             Directory.CreateDirectory(payload);
 
@@ -144,14 +141,14 @@ public sealed class FfmpegBinaryManager
             var ffmpegExe = Path.Combine(payload, "ffmpeg.exe");
             if (!File.Exists(ffmpegExe))
             {
-                throw new InvalidDataException("ffmpeg.exe wurde im Archiv nicht gefunden.");
+                throw new InvalidDataException("ffmpeg.exe was not found in the archive.");
             }
 
             var destination = Path.Combine(BinaryRootDirectory, $"ffmpeg-installed-{Guid.NewGuid():N}");
             Directory.Move(payload, destination);
 
             var finalPath = Path.Combine(destination, "ffmpeg.exe");
-            progress?.Report("ffmpeg wurde installiert.");
+            progress?.Report("FFmpeg installed.");
             return finalPath;
         }
         finally
@@ -181,11 +178,11 @@ public sealed class FfmpegBinaryManager
             if (totalBytes.HasValue && totalBytes.Value > 0)
             {
                 double pct = (double)totalRead / totalBytes.Value * 100.0;
-                progress?.Report($"Heruntergeladen: {totalRead / 1024.0 / 1024.0:F1} MB / {totalBytes.Value / 1024.0 / 1024.0:F1} MB ({pct:F1}%)");
+                progress?.Report($"Downloaded: {totalRead / 1024.0 / 1024.0:F1} MB / {totalBytes.Value / 1024.0 / 1024.0:F1} MB ({pct:F1}%)");
             }
             else
             {
-                progress?.Report($"Heruntergeladen: {totalRead / 1024.0 / 1024.0:F1} MB");
+                progress?.Report($"Downloaded: {totalRead / 1024.0 / 1024.0:F1} MB");
             }
         }
     }
