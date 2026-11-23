@@ -515,7 +515,8 @@ namespace ModularAudience.Cuda
             string? outputFilePath = null,
             NvencOptions? options = null,
             IProgress<double>? progress = null,
-            CancellationToken? ct = null)
+            CancellationToken? ct = null,
+            string? ffmpegPath = null)
         {
             if (frames is null)
             {
@@ -558,7 +559,8 @@ namespace ModularAudience.Cuda
                 outputFilePath,
                 options ?? NvencOptions.H264Default,
                 progress,
-                ct ?? CancellationToken.None);
+                ct ?? CancellationToken.None,
+                ffmpegPath);
         }
 
         // ------------------------------------------------------------
@@ -575,7 +577,8 @@ namespace ModularAudience.Cuda
             string? outputFilePath,
             NvencOptions options,
             IProgress<double>? progress,
-            CancellationToken token)
+            CancellationToken token,
+            string? ffmpegPath = null)
         {
             string output = ResolveOutputPath(outputFilePath, options);
             Directory.CreateDirectory(Path.GetDirectoryName(output)!);
@@ -606,7 +609,7 @@ namespace ModularAudience.Cuda
 
             var psi = new ProcessStartInfo
             {
-                FileName = ResolveExternalToolPath("ffmpeg"),
+                FileName = string.IsNullOrWhiteSpace(ffmpegPath) ? ResolveExternalToolPath("ffmpeg") : ffmpegPath,
                 Arguments = args,
                 UseShellExecute = false,
                 RedirectStandardInput = true,

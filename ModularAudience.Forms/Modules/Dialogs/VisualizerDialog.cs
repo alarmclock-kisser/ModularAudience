@@ -2,6 +2,7 @@ using ModularAudience.Audio;
 using ModularAudience.Audio.Processing;
 using ModularAudience.Audio.Processing.DTOs;
 using ModularAudience.Cuda;
+using ModularAudience.Cuda.NVenc;
 using Microsoft.VisualBasic.Devices;
 using Microsoft.VisualBasic.FileIO;
 using System;
@@ -446,6 +447,32 @@ namespace ModularAudience.Forms
                 );
 
                 // --- 5) CONSUMER: NVENC ---
+                // Check if current FFmpeg has NVENC support, offer install if not
+                string? ffmpegPathToUse = null;
+                if (enc.VideoCodec.Contains("nvenc", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? existingNvencFfmpeg = FfmpegNvencInstaller.FindNvencFfmpeg();
+                    if (existingNvencFfmpeg != null)
+                    {
+                        ffmpegPathToUse = existingNvencFfmpeg;
+                    }
+                    else
+                    {
+                        // No NVENC-capable FFmpeg found - offer installation
+                        using var installDialog = new FfmpegNvencInstallDialog();
+                        var result = this.ShowDialog(installDialog);
+                        if (result == DialogResult.OK && installDialog.InstalledFfmpegPath != null)
+                        {
+                            ffmpegPathToUse = installDialog.InstalledFfmpegPath;
+                        }
+                        else
+                        {
+                            LogCollection.Log("Visualizer: NVENC FFmpeg installation cancelled - aborting render.");
+                            return;
+                        }
+                    }
+                }
+
                 outputPath = await NvencVideoRenderer.NvencRenderVideoAsync(
                     reader,
                     frameCount,
@@ -456,7 +483,8 @@ namespace ModularAudience.Forms
                     outputFilePath: Path.Combine(GetExportDirectory(), "NVEnc_Output", fileName),
                     options: enc,
                     progress: encodeProgress,
-                    ct: token);
+                    ct: token,
+                    ffmpegPath: ffmpegPathToUse);
 
                 if (!string.IsNullOrWhiteSpace(outputPath))
                 {
