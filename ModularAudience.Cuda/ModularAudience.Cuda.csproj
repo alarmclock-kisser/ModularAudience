@@ -11,6 +11,7 @@
     <PackageReference Include="ManagedCuda-13" Version="13.0.64" />
     <PackageReference Include="ManagedCuda-CUFFT" Version="13.0.64" />
     <PackageReference Include="ManagedCuda-NVRTC" Version="13.0.64" />
+    <PackageReference Include="System.Management" Version="10.0.13" />
   </ItemGroup>
 
   <ItemGroup>
@@ -19,6 +20,10 @@
 
   <ItemGroup>
     <Folder Include="Kernels\PTX\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="NVenc\LocalStats.txt" LogicalName="ModularAudience.Cuda.NVenc.LocalStats.txt" />
   </ItemGroup>
 
 </Project>

@@ -53,6 +53,59 @@ namespace ModularAudience.Audio
             return clone;
         }
 
+        /// <summary>
+        /// Returns a new AudioObj containing only the given sample range (per-channel start/end samples).
+        /// The source object is left untouched; the clone inherits metadata and has Length/Duration
+        /// adjusted to the selected span.
+        /// </summary>
+        public async Task<AudioObj?> CopyFromSelectionAsync(long startSample, long endSample)
+        {
+            if (this.Data == null || this.Data.LongLength <= 0)
+            {
+                return null;
+            }
+
+            if (endSample < startSample)
+            {
+                (startSample, endSample) = (endSample, startSample);
+            }
+
+            int channels = Math.Max(1, this.Channels);
+            long totalSamples = this.Data.LongLength;
+            long selStartSample = Math.Clamp(startSample, 0, totalSamples);
+            long selEndSample = Math.Clamp(endSample, 0, totalSamples);
+            long selSampleCount = selEndSample - selStartSample;
+
+            if (selSampleCount <= 0)
+            {
+                return null;
+            }
+
+            AudioObj clone = new()
+            {
+                Name = this.Name + "_selection",
+                Data = new float[checked((int)selSampleCount)],
+                SampleRate = this.SampleRate,
+                Channels = this.Channels,
+                BitDepth = this.BitDepth,
+                Bpm = this.Bpm,
+                Timing = this.Timing,
+                Volume = this.Volume,
+                Length = selSampleCount,
+                Duration = TimeSpan.FromSeconds((double)selSampleCount / (this.SampleRate * channels))
+            };
+
+            Buffer.BlockCopy(
+                src: this.Data,
+                srcOffset: checked((int)(selStartSample * sizeof(float))),
+                dst: clone.Data,
+                dstOffset: 0,
+                count: checked((int)(selSampleCount * sizeof(float))));
+
+            await Task.CompletedTask;
+            return clone;
+        }
+
         public async Task EraseSelectionAsync(bool inverted = false)
         {
             if (this.Data == null || this.Data.Length == 0 || this.SelectionEnd < 0 || this.SelectionStart < 0 || this.SelectionStart == this.SelectionEnd)

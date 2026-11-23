@@ -177,7 +177,7 @@
             // 
             // contextMenuStrip_audios
             // 
-            this.contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { this.menuToolStripItem_rename, this.menuToolStripItem_clone, this.menuToolStripItem_editTags, this.menuToolStripItem_enqueuePlaylist, this.menuToolStripItem_openMultitrack, this.menuToolStripItem_splitEqualParts, this.menuToolStripItem_generateBreakbeat, this.menuToolStripItem_atomize, this.menuToolStripItem_delete, this.menuToolStripItem_toNewCollection, this.menuToolStripItem_addIndexToNames, this.menuToolStripItem_aggregateMixSelected, this.menuToolStripItem_timeStretchSelected, this.menuToolStripItem_demucsSeparateSelected, this.menuToolStripItem_decompile, this.menuToolStripItem_pinWindow, this.convertToMIDIToolStripMenuItem, this.menuToolStripItem_beatClickerGame, this.toolStripComboBox_orderBy });
+            this.contextMenuStrip_audios.Items.AddRange(new ToolStripItem[] { this.menuToolStripItem_rename, this.menuToolStripItem_clone, this.menuToolStripItem_editTags, this.menuToolStripItem_enqueuePlaylist, this.menuToolStripItem_openMultitrack, this.menuToolStripItem_splitEqualParts, this.menuToolStripItem_generateBreakbeat, this.menuToolStripItem_atomize, this.menuToolStripItem_delete, this.menuToolStripItem_toNewCollection, this.menuToolStripItem_addIndexToNames, this.menuToolStripItem_aggregateMixSelected, this.menuToolStripItem_timeStretchSelected, this.menuToolStripItem_demucsSeparateSelected, this.menuToolStripItem_decompile, this.menuToolStripItem_pinWindow, this.convertToMIDIToolStripMenuItem, this.menuToolStripItem_beatClickerGame, this.menuToolStripItem_createVisualizerVideo, this.toolStripComboBox_orderBy });
             this.contextMenuStrip_audios.Name = "contextMenuStrip_audios";
             this.contextMenuStrip_audios.Size = new Size(213, 339);
             this.contextMenuStrip_audios.Opening += this.contextMenuStrip_audios_Opening;
@@ -725,6 +725,13 @@
             this.menuToolStripItem_beatClickerGame.DropDownItems.AddRange(new ToolStripItem[] { this.toolStripComboBox_beatClickerDifficulty, this.menuToolStripItem_taikoMode, this.menuToolStripItem_createDebugLog });
             this.menuToolStripItem_beatClickerGame.Click += this.menuToolStripItem_beatClickerGame_Click;
             // 
+            // menuToolStripItem_createVisualizerVideo
+            // 
+            this.menuToolStripItem_createVisualizerVideo.Name = "menuToolStripItem_createVisualizerVideo";
+            this.menuToolStripItem_createVisualizerVideo.Size = new Size(212, 22);
+            this.menuToolStripItem_createVisualizerVideo.Text = "Create Visualizer Video ...";
+            this.menuToolStripItem_createVisualizerVideo.Click += this.menuToolStripItem_createVisualizerVideo_Click;
+            // 
             // toolStripComboBox_beatClickerDifficulty
             // 
             this.toolStripComboBox_beatClickerDifficulty.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -859,6 +866,7 @@
         private ToolStripComboBox toolStripComboBox_orderBy;
         private ToolStripMenuItem convertToMIDIToolStripMenuItem;
         private ToolStripMenuItem menuToolStripItem_beatClickerGame;
+        private ToolStripMenuItem menuToolStripItem_createVisualizerVideo;
         private ToolStripMenuItem menuToolStripItem_taikoMode;
         private ToolStripMenuItem menuToolStripItem_createDebugLog;
         private ToolStripComboBox toolStripComboBox_beatClickerDifficulty;
