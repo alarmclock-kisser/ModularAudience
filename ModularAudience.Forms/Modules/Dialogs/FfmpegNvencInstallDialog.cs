@@ -48,6 +48,9 @@ namespace ModularAudience.Forms
                     }
                 });
 
+                // Clean up any previous incompatible managed installations
+                FfmpegNvencInstaller.RemoveManagedNvencFfmpeg();
+
                 this._installedPath = await FfmpegNvencInstaller.InstallNvencFfmpegAsync(progress, this._cts.Token);
                 this._installCompleted = true;
 

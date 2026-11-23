@@ -118,6 +118,9 @@ namespace ModularAudience.Forms
                 this.comboBox_gpuDevice.SelectedIndex = 0;
             }
 
+            // Check FFmpeg status and update button text
+            UpdateFfmpegCheckButton();
+
             // (commented out: CudaDevice check not available in ModularAudience)
             this.comboBox_codecPreset.DataSource = NvencVideoRenderer.GetAllPresetEntries(true);
             this.comboBox_codecPreset.DisplayMember = nameof(NvencVideoRenderer.PresetEntry.DisplayName);
@@ -1061,6 +1064,62 @@ namespace ModularAudience.Forms
             return isHevc
                 ? NvencVideoRenderer.CpuPresets.X265_Default
                 : NvencVideoRenderer.CpuPresets.X264_Default;
+        }
+
+        private void UpdateFfmpegCheckButton()
+        {
+            string? nvencFfmpeg = FfmpegNvencInstaller.FindNvencFfmpeg();
+            if (nvencFfmpeg != null)
+            {
+                this.button_ffmpegCheck.Text = "OK";
+                this.button_ffmpegCheck.ForeColor = SystemColors.ControlText;
+            }
+            else
+            {
+                this.button_ffmpegCheck.Text = "Fix";
+                this.button_ffmpegCheck.ForeColor = Color.OrangeRed;
+            }
+        }
+
+        private void button_ffmpegCheck_Click(object sender, EventArgs e)
+        {
+            // Check current FFmpeg status
+            string? nvencFfmpeg = FfmpegNvencInstaller.FindNvencFfmpeg();
+            string? driverVersion = FfmpegNvencInstaller.GetNvidiaDriverVersionDisplay();
+            string? gpuName = null;
+            try { gpuName = NvencVideoRenderer.GetGpuName(); } catch { }
+
+            if (nvencFfmpeg != null)
+            {
+                // NVENC FFmpeg is working
+                MessageBox.Show(this,
+                    $"FFmpeg NVENC: OK\n\n" +
+                    $"GPU: {gpuName ?? "unknown"}\n" +
+                    $"Driver: {driverVersion ?? "unknown"}\n\n" +
+                    $"FFmpeg: {nvencFfmpeg}",
+                    "FFmpeg NVENC Status", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // No working NVENC FFmpeg - offer to fix
+            string msg = "No working FFmpeg NVENC build found.\n\n" +
+                (string.IsNullOrWhiteSpace(gpuName)
+                    ? "No NVIDIA GPU detected - CPU codecs will be used.\n"
+                    : $"GPU: {gpuName}\nDriver: {driverVersion ?? "unknown"}\n") +
+                "\nClick OK to automatically download and install a compatible FFmpeg NVENC build." +
+                " Existing managed NVENC builds will be removed first.";
+
+            var result = MessageBox.Show(this, msg, "FFmpeg NVENC - Install Compatible Build",
+                MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+
+            if (result == DialogResult.OK)
+            {
+                using var installDialog = new FfmpegNvencInstallDialog();
+                installDialog.ShowDialog(this);
+
+                // Refresh button status
+                UpdateFfmpegCheckButton();
+            }
         }
     }
 }

@@ -230,6 +230,25 @@ namespace ModularAudience.Cuda.NVenc
         }
 
         /// <summary>
+        /// Safely deletes all managed NVENC FFmpeg installations (ffmpeg-nvenc-* directories).
+        /// </summary>
+        public static void RemoveManagedNvencFfmpeg()
+        {
+            if (!Directory.Exists(BinaryRootDirectory)) return;
+
+            foreach (var dir in Directory.EnumerateDirectories(BinaryRootDirectory, "ffmpeg-nvenc-*", SearchOption.TopDirectoryOnly))
+            {
+                try { Directory.Delete(dir, recursive: true); } catch { /* ignore locked files */ }
+            }
+
+            // Also clean up any staging directories
+            foreach (var dir in Directory.EnumerateDirectories(BinaryRootDirectory, ".stage-nvenc-*", SearchOption.TopDirectoryOnly))
+            {
+                try { Directory.Delete(dir, recursive: true); } catch { }
+            }
+        }
+
+        /// <summary>
         /// Determines which BtbN FFmpeg build to install based on the installed NVIDIA driver version.
         /// Returns the asset name suffix (e.g. "8.1") and the release tag to use.
         /// </summary>

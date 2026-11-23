@@ -44,6 +44,7 @@ namespace ModularAudience.Forms
             this.label_cuda = new Label();
             this.label_info_gpuDevice = new Label();
             this.comboBox_gpuDevice = new ComboBox();
+            this.button_ffmpegCheck = new Button();
             this.numericUpDown_volume = new NumericUpDown();
             this.label_info_volume = new Label();
             this.label_amplification = new Label();
@@ -234,6 +235,16 @@ namespace ModularAudience.Forms
             this.comboBox_gpuDevice.Size = new Size(116, 23);
             this.comboBox_gpuDevice.TabIndex = 37;
             this.comboBox_gpuDevice.Text = "<CPU / no GPU>";
+            // 
+            // button_ffmpegCheck
+            // 
+            this.button_ffmpegCheck.Location = new Point(400, 56);
+            this.button_ffmpegCheck.Name = "button_ffmpegCheck";
+            this.button_ffmpegCheck.Size = new Size(52, 23);
+            this.button_ffmpegCheck.TabIndex = 38;
+            this.button_ffmpegCheck.Text = "Check";
+            this.button_ffmpegCheck.UseVisualStyleBackColor = true;
+            this.button_ffmpegCheck.Click += this.button_ffmpegCheck_Click;
             // 
             // numericUpDown_volume
             // 
@@ -460,6 +471,7 @@ namespace ModularAudience.Forms
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(464, 441);
+            this.Controls.Add(this.button_ffmpegCheck);
             this.Controls.Add(this.comboBox_gpuDevice);
             this.Controls.Add(this.label_info_gpuDevice);
             this.Controls.Add(this.button_addSubtitlesTxt);
@@ -533,6 +545,7 @@ namespace ModularAudience.Forms
 		private Label label_cuda;
 		private Label label_info_gpuDevice;
 		private ComboBox comboBox_gpuDevice;
+		private Button button_ffmpegCheck;
 		private NumericUpDown numericUpDown_volume;
 		private Label label_info_volume;
         private Label label_amplification;
