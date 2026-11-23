@@ -104,7 +104,7 @@ namespace ModularAudience.Forms
             // Populate GPU device combo box
             this.comboBox_gpuDevice.Items.Clear();
             this.comboBox_gpuDevice.Items.Add("<CPU / no GPU>");
-            string? driverVersion = FfmpegNvencInstaller.GetNvidiaDriverVersion();
+            string? driverVersion = FfmpegNvencInstaller.GetNvidiaDriverVersionDisplay();
             string? gpuName = null;
             try { gpuName = NvencVideoRenderer.GetGpuName(); } catch { }
             if (!string.IsNullOrWhiteSpace(gpuName))

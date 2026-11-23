@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
@@ -12,13 +13,12 @@ namespace ModularAudience.Cuda.NVenc
 {
     /// <summary>
     /// Checks for NVENC codec support in FFmpeg and provides automatic installation
-    /// of a build with CUDA/NVENC support when missing. Handles driver compatibility
-    /// by trying multiple FFmpeg versions until one works with the installed driver.
+    /// of a driver-compatible build. Maps the installed NVIDIA driver version to the
+    /// correct BtbN FFmpeg build (NVENC SDK version).
     /// </summary>
     public static class FfmpegNvencInstaller
     {
         private const string GithubRepository = "BtbN/FFmpeg-Builds";
-        private const string NvencAssetName = "ffmpeg-master-latest-win64-gpl-shared.zip";
 
         private static readonly string BinaryRootDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -51,7 +51,6 @@ namespace ModularAudience.Cuda.NVenc
                 using var proc = new Process { StartInfo = psi };
                 proc.Start();
                 string output = proc.StandardOutput.ReadToEnd();
-                string error = proc.StandardError.ReadToEnd();
                 proc.WaitForExit(5000);
 
                 return output.Contains("h264_nvenc", StringComparison.OrdinalIgnoreCase) ||
@@ -92,10 +91,8 @@ namespace ModularAudience.Cuda.NVenc
                 using var proc = new Process { StartInfo = psi };
                 proc.Start();
                 string stderr = proc.StandardError.ReadToEnd();
-                string stdout = proc.StandardOutput.ReadToEnd();
                 proc.WaitForExit(15000);
 
-                // Driver version mismatch or encoder failure means the build is incompatible
                 bool incompatible = stderr.Contains("Driver does not support", StringComparison.OrdinalIgnoreCase) ||
                                    stderr.Contains("The minimum required Nvidia driver", StringComparison.OrdinalIgnoreCase) ||
                                    stderr.Contains("Error while opening encoder", StringComparison.OrdinalIgnoreCase) ||
@@ -170,7 +167,6 @@ namespace ModularAudience.Cuda.NVenc
                 catch { /* ignore */ }
             }
 
-            // First check codec list, then driver compatibility
             foreach (var candidate in candidates)
             {
                 if (HasNvencSupport(candidate) && CanDriverUseNvenc(candidate))
@@ -183,9 +179,9 @@ namespace ModularAudience.Cuda.NVenc
         }
 
         /// <summary>
-        /// Returns the installed NVIDIA driver version string (e.g. "582.70"), or null if nvidia-smi unavailable.
+        /// Returns the installed NVIDIA driver version as a double (e.g. 582.70), or null if nvidia-smi unavailable.
         /// </summary>
-        public static string? GetNvidiaDriverVersion()
+        public static double? GetNvidiaDriverVersion()
         {
             try
             {
@@ -208,7 +204,15 @@ namespace ModularAudience.Cuda.NVenc
                 string output = proc.StandardOutput.ReadToEnd().Trim();
                 proc.WaitForExit(5000);
 
-                return string.IsNullOrWhiteSpace(output) ? null : output;
+                if (string.IsNullOrWhiteSpace(output))
+                {
+                    return null;
+                }
+
+                // Parse "582.70" -> 582.70
+                // Handle both "." and "," as decimal separator
+                string normalized = output.Replace(',', '.');
+                return double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out var ver) ? ver : null;
             }
             catch
             {
@@ -217,8 +221,56 @@ namespace ModularAudience.Cuda.NVenc
         }
 
         /// <summary>
-        /// Downloads and installs FFmpeg builds with NVENC support, trying multiple versions
-        /// until one is compatible with the installed NVIDIA driver.
+        /// Returns the installed NVIDIA driver version as a display string (e.g. "582.70"), or null.
+        /// </summary>
+        public static string? GetNvidiaDriverVersionDisplay()
+        {
+            double? ver = GetNvidiaDriverVersion();
+            return ver.HasValue ? ver.Value.ToString("0.##", CultureInfo.InvariantCulture) : null;
+        }
+
+        /// <summary>
+        /// Determines which BtbN FFmpeg build to install based on the installed NVIDIA driver version.
+        /// Returns the asset name suffix (e.g. "8.1") and the release tag to use.
+        /// </summary>
+        private static (string? AssetSuffix, string? ReleaseTag) GetRecommendedBuild(double? driverVersion)
+        {
+            // NVENC SDK version requirements (from FFmpeg nv-codec-headers):
+            //   SDK 13.1: driver >= 610.00  -> master builds (no version suffix)
+            //   SDK 13.0: driver >= 570.00  -> 8.1 / 7.1 builds
+            //   SDK 11.1: driver >= 530.00  -> 6.1 builds
+            //
+            // BtbN "latest" release assets:
+            //   ffmpeg-master-latest-win64-gpl-shared.zip      (SDK 13.1, driver >= 610)
+            //   ffmpeg-n8.1-latest-win64-gpl-shared-8.1.zip   (SDK 13.0, driver >= 570)
+            //   ffmpeg-n9.0-latest-win64-gpl-shared-9.0.zip   (SDK 13.0, driver >= 570)
+
+            if (driverVersion is >= 610.0)
+            {
+                // Latest master build works
+                return ("master-latest", "latest");
+            }
+
+            if (driverVersion is >= 570.0)
+            {
+                // 8.1 build (SDK 13.0) works
+                return ("8.1", "latest");
+            }
+
+            if (driverVersion is >= 530.0)
+            {
+                // 6.1 build (SDK 11.1) - only available in monthly autobuild releases,
+                // not in the "latest" release. Need to find a recent monthly release.
+                return ("6.1", null); // null tag = need to search monthly releases
+            }
+
+            // Driver too old for any NVENC build
+            return (null, null);
+        }
+
+        /// <summary>
+        /// Downloads and installs the correct FFmpeg build with NVENC support
+        /// based on the installed NVIDIA driver version.
         /// </summary>
         public static async Task<string> InstallNvencFfmpegAsync(
             IProgress<string>? progress,
@@ -226,123 +278,132 @@ namespace ModularAudience.Cuda.NVenc
         {
             Directory.CreateDirectory(BinaryRootDirectory);
 
-            string? driverVersion = GetNvidiaDriverVersion();
-            if (!string.IsNullOrWhiteSpace(driverVersion))
+            double? driverVersion = GetNvidiaDriverVersion();
+            string? driverDisplay = GetNvidiaDriverVersionDisplay();
+            if (!string.IsNullOrWhiteSpace(driverDisplay))
             {
-                progress?.Report($"Detected NVIDIA driver {driverVersion}. Searching for a compatible FFmpeg build...");
+                progress?.Report($"Detected NVIDIA driver {driverDisplay}. Selecting compatible FFmpeg build...");
+            }
+
+            var (assetSuffix, releaseTag) = GetRecommendedBuild(driverVersion);
+
+            if (assetSuffix == null)
+            {
+                throw new InvalidDataException(
+                    $"NVIDIA driver {driverDisplay ?? "unknown"} is too old for NVENC. " +
+                    "No compatible FFmpeg build found. Use CPU codecs (X264/X265) for rendering.");
             }
 
             using var httpClient = new HttpClient();
             httpClient.DefaultRequestHeaders.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("ModularAudience", "1.0"));
 
-            // Strategy: try the latest build first, then progressively older dated releases.
-            var candidates = new List<string> { "latest" };
+            string? downloadUrl = null;
+            string? assetName = null;
+            string effectiveTag = releaseTag ?? "latest";
 
-            // Fetch dated releases from the past ~3 months (these have NVENC builds for older drivers)
-            string? releasesJson = null;
-            try
+            // Find the download URL for the appropriate build
+            if (releaseTag != null)
             {
-                releasesJson = await httpClient.GetStringAsync($"https://api.github.com/repos/{GithubRepository}/releases?per_page=100").ConfigureAwait(false);
-            }
-            catch { /* offline or rate-limited: only try latest */ }
+                // "latest" release - find the matching asset
+                string json = await httpClient.GetStringAsync(
+                    $"https://api.github.com/repos/{GithubRepository}/releases/latest").ConfigureAwait(false);
 
-            if (!string.IsNullOrWhiteSpace(releasesJson))
-            {
-                try
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                // For "master-latest", find the asset without a version suffix
+                // For "8.1" / "9.0", find the asset with that suffix
+                if (root.TryGetProperty("assets", out var assets))
                 {
-                    using var doc = JsonDocument.Parse(releasesJson!);
-                    foreach (var rel in doc.RootElement.EnumerateArray())
+                    foreach (var asset in assets.EnumerateArray())
                     {
-                        string? tag = rel.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
-                        string? publishedAt = rel.TryGetProperty("published_at", out var p) ? p.GetString() : null;
-                        if (string.IsNullOrWhiteSpace(tag) || tag == "latest" || tag == "stable")
-                        {
-                            continue;
-                        }
+                        if (!asset.TryGetProperty("name", out var nameProp)) continue;
+                        string name = nameProp.GetString() ?? "";
 
-                        // Only consider releases from the last ~3 months
-                        if (!string.IsNullOrWhiteSpace(publishedAt) &&
-                            DateTime.TryParse(publishedAt, out var pubDate) &&
-                            pubDate < DateTime.UtcNow.AddMonths(-3))
+                        bool matches = assetSuffix switch
                         {
-                            continue;
-                        }
+                            "master-latest" => name.Contains("master-latest") && name.Contains("win64-gpl-shared"),
+                            _ => name.Contains($"-win64-gpl-shared-{assetSuffix}.zip") || name.Contains($"-win64-gpl-{assetSuffix}.zip")
+                        };
 
-                        candidates.Add(tag!);
+                        if (matches)
+                        {
+                            downloadUrl = asset.TryGetProperty("browser_download_url", out var urlProp) ? urlProp.GetString() : null;
+                            assetName = name;
+                            break;
+                        }
                     }
                 }
-                catch { /* ignore malformed JSON */ }
             }
-
-            foreach (var tag in candidates)
+            else
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                // Need to find a monthly release that has the 6.1 asset
+                // Search recent releases (last ~6 months)
+                string releasesJson = await httpClient.GetStringAsync(
+                    $"https://api.github.com/repos/{GithubRepository}/releases?per_page=25").ConfigureAwait(false);
 
-                string? downloadUrl = null;
-                string? assetName = null;
-
-                try
+                using var doc = JsonDocument.Parse(releasesJson);
+                foreach (var rel in doc.RootElement.EnumerateArray())
                 {
-                    string releaseUrl = tag == "latest"
-                        ? $"https://api.github.com/repos/{GithubRepository}/releases/latest"
-                        : $"https://api.github.com/repos/{GithubRepository}/releases/tags/{tag}";
+                    string? tag = rel.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(tag) || tag == "latest") continue;
 
-                    progress?.Report($"Checking FFmpeg build {tag}...");
-                    string json = await httpClient.GetStringAsync(releaseUrl).ConfigureAwait(false);
-                    using var doc = JsonDocument.Parse(json);
-                    var root = doc.RootElement;
+                    progress?.Report($"Checking release {tag} for {assetSuffix} build...");
 
-                    if (root.TryGetProperty("assets", out var assets))
+                    string releaseJson = await httpClient.GetStringAsync(
+                        $"https://api.github.com/repos/{GithubRepository}/releases/tags/{tag}").ConfigureAwait(false);
+
+                    using var rdoc = JsonDocument.Parse(releaseJson);
+                    if (!rdoc.RootElement.TryGetProperty("assets", out var rassets)) continue;
+
+                    foreach (var asset in rassets.EnumerateArray())
                     {
-                        foreach (var asset in assets.EnumerateArray())
+                        if (!asset.TryGetProperty("name", out var nameProp)) continue;
+                        string name = nameProp.GetString() ?? "";
+
+                        // Look for a 6.1 asset with win64-gpl (static, smaller)
+                        if (name.Contains($"-win64-gpl-{assetSuffix}.zip") ||
+                            name.Contains($"-win64-gpl-shared-{assetSuffix}.zip"))
                         {
-                            if (asset.TryGetProperty("name", out var nameProp) &&
-                                string.Equals(nameProp.GetString(), NvencAssetName, StringComparison.OrdinalIgnoreCase) &&
-                                asset.TryGetProperty("browser_download_url", out var urlProp))
+                            // Prefer shared build (has NVENC)
+                            if (name.Contains("shared"))
                             {
-                                downloadUrl = urlProp.GetString();
-                                assetName = nameProp.GetString();
+                                downloadUrl = asset.TryGetProperty("browser_download_url", out var urlProp) ? urlProp.GetString() : null;
+                                assetName = name;
+                                effectiveTag = tag!;
                                 break;
                             }
                         }
                     }
+
+                    if (downloadUrl != null) break;
                 }
-                catch
-                {
-                    // Tag may not have a release (only a tag) - skip
-                    continue;
-                }
-
-                if (string.IsNullOrWhiteSpace(downloadUrl))
-                {
-                    continue;
-                }
-
-                progress?.Report($"Downloading {tag} ({assetName} ~100 MB)...");
-
-                string installed = await DownloadAndInstallAsync(httpClient, downloadUrl!, progress, cancellationToken, tag).ConfigureAwait(false);
-
-                // Verify the driver can actually use this build
-                if (CanDriverUseNvenc(installed))
-                {
-                    progress?.Report($"FFmpeg NVENC ({tag}) installed and driver-compatible.");
-                    return installed;
-                }
-
-                progress?.Report($"FFmpeg build {tag} is not compatible with the current driver. Trying an older build...");
             }
 
-            throw new InvalidDataException(
-                "No FFmpeg build with working NVENC support was found for your NVIDIA driver. " +
-                (string.IsNullOrWhiteSpace(driverVersion)
-                    ? "nvidia-smi was not available."
-                    : $"Driver version: {driverVersion}.") +
-                " You can still use CPU codecs (X264/X265) for rendering.");
+            if (string.IsNullOrWhiteSpace(downloadUrl))
+            {
+                throw new InvalidDataException(
+                    $"Could not find a compatible FFmpeg NVENC build for driver {driverDisplay ?? "unknown"}. " +
+                    "Use CPU codecs (X264/X265) for rendering.");
+            }
+
+            progress?.Report($"Downloading {assetName}...");
+            string installed = await DownloadAndInstallAsync(httpClient, downloadUrl, progress, cancellationToken, effectiveTag, assetSuffix).ConfigureAwait(false);
+
+            // Verify the driver can actually use this build
+            if (!CanDriverUseNvenc(installed))
+            {
+                progress?.Report($"Warning: installed build may not be fully compatible with driver {driverDisplay}.");
+            }
+
+            progress?.Report($"FFmpeg NVENC ({assetSuffix}) installed successfully.");
+            return installed;
         }
 
         private static async Task<string> DownloadAndInstallAsync(
             HttpClient httpClient, string url,
-            IProgress<string>? progress, CancellationToken cancellationToken, string tag)
+            IProgress<string>? progress, CancellationToken cancellationToken,
+            string tag, string assetSuffix)
         {
             var staging = Path.Combine(BinaryRootDirectory, ".stage-nvenc-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(staging);
@@ -376,7 +437,7 @@ namespace ModularAudience.Cuda.NVenc
                     throw new InvalidDataException("ffmpeg.exe was not found in the archive.");
                 }
 
-                var destination = Path.Combine(BinaryRootDirectory, $"ffmpeg-nvenc-{tag}");
+                var destination = Path.Combine(BinaryRootDirectory, $"ffmpeg-nvenc-{assetSuffix}");
                 if (Directory.Exists(destination))
                 {
                     Directory.Delete(destination, recursive: true);
