@@ -447,14 +447,28 @@ namespace ModularAudience.Forms
                 );
 
                 // --- 5) CONSUMER: NVENC ---
-                // Check if current FFmpeg has NVENC support, offer install if not
                 string? ffmpegPathToUse = null;
+                NvencOptions encToUse = enc;
+
+                // For NVENC codecs, check if the driver actually supports it.
+                // If the driver is too old, fall back to a CPU codec.
                 if (enc.VideoCodec.Contains("nvenc", StringComparison.OrdinalIgnoreCase))
                 {
                     string? existingNvencFfmpeg = FfmpegNvencInstaller.FindNvencFfmpeg();
+
                     if (existingNvencFfmpeg != null)
                     {
-                        ffmpegPathToUse = existingNvencFfmpeg;
+                        // Check if the driver supports NVENC by trying to open the encoder
+                        if (CheckNvencDriverSupport(existingNvencFfmpeg, enc.VideoCodec, width, height))
+                        {
+                            ffmpegPathToUse = existingNvencFfmpeg;
+                        }
+                        else
+                        {
+                            // Driver too old for NVENC - fall back to CPU codec
+                            LogCollection.Log($"Visualizer: NVENC not supported by current driver. Falling back to CPU codec ({GetCpuFallbackCodec(enc.VideoCodec)}).");
+                            encToUse = GetCpuFallbackOptions(enc.VideoCodec);
+                        }
                     }
                     else
                     {
@@ -464,6 +478,14 @@ namespace ModularAudience.Forms
                         if (result == DialogResult.OK && installDialog.InstalledFfmpegPath != null)
                         {
                             ffmpegPathToUse = installDialog.InstalledFfmpegPath;
+
+                            // Re-check driver support with the new ffmpeg
+                            if (!CheckNvencDriverSupport(installDialog.InstalledFfmpegPath, enc.VideoCodec, width, height))
+                            {
+                                LogCollection.Log($"Visualizer: NVENC not supported by current driver. Falling back to CPU codec ({GetCpuFallbackCodec(enc.VideoCodec)}).");
+                                encToUse = GetCpuFallbackOptions(enc.VideoCodec);
+                                ffmpegPathToUse = null;
+                            }
                         }
                         else
                         {
@@ -481,7 +503,7 @@ namespace ModularAudience.Forms
                     frameRate,
                     audio,
                     outputFilePath: Path.Combine(GetExportDirectory(), "NVEnc_Output", fileName),
-                    options: enc,
+                    options: encToUse,
                     progress: encodeProgress,
                     ct: token,
                     ffmpegPath: ffmpegPathToUse);
@@ -944,9 +966,83 @@ namespace ModularAudience.Forms
         {
             try
             {
-                return NvencVideoRenderer.GetGpuName();
+                string? gpuName = NvencVideoRenderer.GetGpuName();
+                if (string.IsNullOrWhiteSpace(gpuName))
+                {
+                    return null;
+                }
+
+                // Check if current ffmpeg actually supports NVENC
+                string? nvencFfmpeg = FfmpegNvencInstaller.FindNvencFfmpeg();
+                if (nvencFfmpeg == null)
+                {
+                    return gpuName + " (NVENC not available - update driver or FFmpeg)";
+                }
+
+                // Check driver support
+                if (!CheckNvencDriverSupport(nvencFfmpeg, "h264_nvenc", 1280, 720))
+                {
+                    return gpuName + " (driver too old for NVENC - use CPU codec)";
+                }
+
+                return gpuName;
             }
             catch { return null; }
+        }
+
+        private static bool CheckNvencDriverSupport(string ffmpegPath, string codec, int width, int height)
+        {
+            try
+            {
+                // Quick test: try to open the encoder with a minimal config
+                string args = $"-f lavfi -i nullsrc=s={width}x{height}:r=1 -t 0.1 -c:v {codec} -f null -";
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = ffmpegPath,
+                    Arguments = args,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                using var proc = new System.Diagnostics.Process { StartInfo = psi };
+                proc.Start();
+                string stderr = proc.StandardError.ReadToEnd();
+                string stdout = proc.StandardOutput.ReadToEnd();
+                proc.WaitForExit(10000);
+
+                // If the driver doesn't support it, we'll see "Driver does not support" or similar
+                bool hasError = stderr.Contains("Driver does not support", StringComparison.OrdinalIgnoreCase) ||
+                               stderr.Contains("Error while opening encoder", StringComparison.OrdinalIgnoreCase) ||
+                               proc.ExitCode != 0;
+
+                return !hasError;
+            }
+            catch
+            {
+                // If we can't test, assume it might work (conservative: return true)
+                return true;
+            }
+        }
+
+        private static string GetCpuFallbackCodec(string nvencCodec)
+        {
+            // Map NVENC codec to CPU equivalent
+            if (nvencCodec.Contains("hevc", StringComparison.OrdinalIgnoreCase))
+            {
+                return "libx265";
+            }
+            return "libx264"; // default for h264_nvenc
+        }
+
+        private static NvencOptions GetCpuFallbackOptions(string nvencCodec)
+        {
+            // Use CPU preset with similar quality settings
+            bool isHevc = nvencCodec.Contains("hevc", StringComparison.OrdinalIgnoreCase);
+            return isHevc
+                ? NvencVideoRenderer.CpuPresets.X265_Default
+                : NvencVideoRenderer.CpuPresets.X264_Default;
         }
     }
 }
