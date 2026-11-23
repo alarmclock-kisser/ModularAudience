@@ -1622,9 +1622,6 @@ Pipe: {pipePath}
             // Basis-Flags
             sb.Append("-hide_banner -nostats -loglevel error -progress pipe:1 ");
 
-            // Thread Queue für Input-Pipes erhöhen (verhindert Stottern)
-            sb.Append("-thread_queue_size 512 ");
-
             // Input definieren
             sb.Append(CultureInfo.InvariantCulture,
                 $"-f rawvideo -pix_fmt bgra -s {width}x{height} -r {frameRate:0.########} -i pipe:0 ");
@@ -1633,6 +1630,9 @@ Pipe: {pipePath}
             {
                 sb.Append($"-i \"{audioFilePath}\" ");
             }
+
+            // Thread Queue (output option - must come after all inputs)
+            sb.Append("-thread_queue_size 512 ");
 
             // Codec
             sb.Append($"-c:v {options.VideoCodec} ");
@@ -1736,14 +1736,16 @@ Pipe: {pipePath}
 
             sb.Append("-hide_banner -nostats -loglevel error -progress pipe:1 ");
 
-            // Thread Queue
-            sb.Append("-thread_queue_size 512 ");
+            // Video input (raw BGRA from stdin)
             sb.Append(CultureInfo.InvariantCulture,
                 $"-f rawvideo -pix_fmt bgra -s {width}x{height} -r {frameRate:0.########} -i pipe:0 ");
 
-            sb.Append("-thread_queue_size 512 ");
+            // Audio input (s16le from named pipe)
             sb.Append(CultureInfo.InvariantCulture,
                 $"-f s16le -ar {audioSampleRate} -ac {audioChannels} -i \"{audioPipePath}\" ");
+
+            // Thread Queue (output option - must come after all inputs)
+            sb.Append("-thread_queue_size 512 ");
 
             // Codec
             sb.Append($"-c:v {options.VideoCodec} ");
