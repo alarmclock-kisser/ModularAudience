@@ -10,9 +10,9 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 #if WINDOWS
-// Fügt den erforderlichen Assemblyverweis für System.Management hinzu
-// Stellen Sie sicher, dass Ihr Projekt eine Referenz auf System.Management hat.
-// Für .NET Core/.NET 5+ müssen Sie das NuGet-Paket "System.Management" installieren.
+// Add the required assembly reference for System.Management
+// Make sure your project has a reference to System.Management.
+// For .NET Core/.NET 5+ you need to install the "System.Management" NuGet package.
 using System.Management;
 #endif
 

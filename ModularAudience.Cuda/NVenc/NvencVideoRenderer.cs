@@ -22,38 +22,38 @@ namespace ModularAudience.Cuda
     public static partial class NvencVideoRenderer
     {
         public sealed record NvencOptions(
-            string VideoCodec,            // z.B. "h264_nvenc", "hevc_nvenc", "libx264", "libx265", "libsvtav1"
-            string Preset,                // NVENC: p1..p7, x264/x265: ultrafast..veryslow, svt-av1: 0..13 (string passt)
-            int? VideoBitrateKbps,         // null => Qualitätsmodus (CQ/CRF) oder ffmpeg default
+            string VideoCodec,            // e.g. "h264_nvenc", "hevc_nvenc", "libx264", "libx265", "libsvtav1"
+            string Preset,                // NVENC: p1..p7, x264/x265: ultrafast..veryslow, svt-av1: 0..13
+            int? VideoBitrateKbps,         // null => quality mode (CQ/CRF) or ffmpeg default
             int? MaxBitrateKbps,           // optional
             int? BufferSizeKbps,           // optional
             int? ConstantQuality,          // NVENC CQ (h264 0..51, hevc 0..63)
-            int? Crf,                      // CPU CRF (x264/x265/av1 typ. 0..51, kleiner = besser)
-            string? Profile,               // z.B. "high" (x264) / "main" (x265) etc.
+            int? Crf,                      // CPU CRF (x264/x265/av1 typically 0..51, lower = better)
+            string? Profile,               // e.g. "high" (x264) / "main" (x265) etc.
             bool FastStart                 // -movflags +faststart
 )
         {
             public static NvencOptions H264Default => new(
                 VideoCodec: "h264_nvenc",
-                Preset: "p2",         // p1 oder p2 für Speed! p5 ist zu langsam.
+                Preset: "p2",         // p1 or p2 for speed! p5 is too slow.
                 VideoBitrateKbps: null,
                 MaxBitrateKbps: null,
                 BufferSizeKbps: null,
-                ConstantQuality: 23,  // 23 ist guter Standard, 20 ist overkill für Visualizer
+                ConstantQuality: 23,  // 23 is a good default, 20 is overkill for visualizer
                 Crf: null,
-                Profile: "main",      // "main" ist sicherer und schneller als "high"
+                Profile: "main",      // "main" is safer and faster than "high"
                 FastStart: true
 );
 
             public static NvencOptions HevcDefault => new(
                 VideoCodec: "hevc_nvenc",
-                Preset: "p2",         // auch hier Speed
+                Preset: "p2",         // speed here too
                 VideoBitrateKbps: null,
                 MaxBitrateKbps: null,
                 BufferSizeKbps: null,
-                ConstantQuality: 25,  // HEVC ist effizienter, höherer CQ ist ok
+                ConstantQuality: 25,  // HEVC is more efficient, higher CQ is fine
                 Crf: null,
-                Profile: "main",      // WICHTIG: HEVC hasst oft "high". "main" ist Standard.
+                Profile: "main",      // IMPORTANT: HEVC often doesn't support "high". "main" is standard.
                 FastStart: true
             );
         }
@@ -203,17 +203,17 @@ namespace ModularAudience.Cuda
 
             if (width <= 0 || height <= 0)
             {
-                throw new ArgumentOutOfRangeException("width/height müssen > 0 sein (oder aus Frames ableitbar).");
+                throw new ArgumentOutOfRangeException("width/height must be > 0 (or derivable from frames).");
             }
 
-            // 2) Audio prüfen + ggf. frameRate aus Audiolänge setzen
+            // 2) Audio check + optionally set frameRate from audio length
             TimeSpan? audioDuration = null;
             if (!string.IsNullOrWhiteSpace(audioFilePath))
             {
                 audioFilePath = Path.GetFullPath(audioFilePath);
                 if (!File.Exists(audioFilePath))
                 {
-                    throw new FileNotFoundException("audioFilePath existiert nicht.", audioFilePath);
+                    throw new FileNotFoundException("audioFilePath does not exist.", audioFilePath);
                 }
 
                 try
@@ -238,14 +238,14 @@ namespace ModularAudience.Cuda
             if (frameRate <= 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(frameRate),
-                    "frameRate muss > 0 sein, außer Audio-Dauer konnte ermittelt werden.");
+                    "frameRate must be > 0, unless audio duration could be determined.");
             }
 
-            // 3) Output-Pfad bestimmen
+            // 3) Resolve output path
             var resolvedOutputPath = ResolveOutputPath(outputFilePath, options);
             Directory.CreateDirectory(Path.GetDirectoryName(resolvedOutputPath)!);
 
-            // 4) Gesamtdauer für Progress
+            // 4) Total duration for progress
             var totalVideoSeconds = frames.Length / (double) frameRate;
             var totalSeconds = audioDuration.HasValue && audioDuration.Value.TotalSeconds > 0.001
                 ? Math.Max(totalVideoSeconds, audioDuration.Value.TotalSeconds)
@@ -278,10 +278,10 @@ namespace ModularAudience.Cuda
             {
                 if (!proc.Start())
                 {
-                    throw new InvalidOperationException("FFmpeg konnte nicht gestartet werden.");
+                    throw new InvalidOperationException("FFmpeg could not be started.");
                 }
 
-                // stderr drain (sonst deadlock möglich)
+                // stderr drain (otherwise possible deadlock)
                 var stderrTask = Task.Run(async () =>
                 {
                     try
@@ -917,17 +917,17 @@ Pipe: {pipePath}
             }
             if (width <= 0 || height <= 0)
             {
-                throw new ArgumentOutOfRangeException("width/height müssen > 0 sein (oder aus Frames ableitbar).");
+                throw new ArgumentOutOfRangeException("width/height must be > 0 (or derivable from frames).");
             }
 
-            // Audio Dauer (RAM)
+            // Audio duration (RAM)
             double audioSeconds = 0;
             if (audioData.Length > 0 && audioSampleRate > 0 && audioChannels > 0)
             {
                 audioSeconds = (audioData.Length / (double) audioChannels) / audioSampleRate;
             }
 
-            // frameRate <= 0 => an Audio anpassen
+            // frameRate <= 0 => adapt to audio
             if (frameRate <= 0 && audioSeconds > 0.001)
             {
                 frameRate = (float) (frames.Length / audioSeconds);
@@ -938,7 +938,7 @@ Pipe: {pipePath}
             }
             if (frameRate <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(frameRate), "frameRate muss > 0 sein (oder Audio muss gültig sein).");
+                throw new ArgumentOutOfRangeException(nameof(frameRate), "frameRate must be > 0 (or audio must be valid).");
             }
 
             var resolvedOutputPath = ResolveOutputPath(outputFilePath, options);
@@ -1137,7 +1137,7 @@ Pipe: {pipePath}
 
             if (frameRate <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(frameRate), "frameRate muss > 0 sein (oder Audio muss gültig sein).");
+                throw new ArgumentOutOfRangeException(nameof(frameRate), "frameRate must be > 0 (or audio must be valid).");
             }
 
             var resolvedOutputPath = ResolveOutputPath(outputFilePath, options);
@@ -1432,7 +1432,7 @@ Pipe: {pipePath}
                 sb.Append($"-preset {options.Preset} ");
             }
 
-            // Qualitäts-/Bitrate-Modus
+            // Quality/bitrate mode
             if (IsNvenc(options.VideoCodec))
             {
                 if (options.ConstantQuality.HasValue)
@@ -1543,7 +1543,7 @@ Pipe: {pipePath}
                 sb.Append($"-preset {options.Preset} ");
             }
 
-            // Qualitäts-/Bitrate-Modus
+            // Quality/bitrate mode
             if (IsNvenc(options.VideoCodec))
             {
                 if (options.ConstantQuality.HasValue)
@@ -1637,25 +1637,25 @@ Pipe: {pipePath}
             // Codec
             sb.Append($"-c:v {options.VideoCodec} ");
 
-            // Preset & Tuning (Hier lag wahrscheinlich der Fehler)
+            // Preset & Tuning
             if (!string.IsNullOrWhiteSpace(options.Preset))
             {
-                // Wenn User p5 nutzt, überschreiben wir es hier NICHT hart, 
-                // sondern vertrauen auf die options (siehe unten bei "Anpassung Options")
+                // If user uses p5, we do NOT hard-override here,
+                // but trust the options (see "Options Adaptation" below)
                 sb.Append($"-preset {options.Preset} ");
             }
 
-            // NVENC Spezifische Speed-Optimierungen (SAFE MODE)
+            // NVENC specific speed optimizations (SAFE MODE)
             if (IsNvenc(options.VideoCodec))
             {
-                // B-Frames aus = Massive Speed-Steigerung & weniger VRAM Last
+                // B-frames off = massive speed boost & less VRAM load
                 sb.Append("-bf 0 ");
 
-                // GOP auf 2 Sekunden fixieren (statt automatisch)
+                // Fix GOP to 2 seconds (instead of automatic)
                 sb.Append(CultureInfo.InvariantCulture, $"-g {(int) (frameRate * 2)} ");
             }
 
-            // Bitrate / Qualität
+            // Bitrate / Quality
             if (IsNvenc(options.VideoCodec))
             {
                 if (options.ConstantQuality.HasValue)
@@ -1687,11 +1687,11 @@ Pipe: {pipePath}
                 }
             }
 
-            // Profil (Nur setzen, wenn es nicht null ist UND Sinn ergibt)
-            // HEVC unterstützt "high" oft nicht (sondern "main"), daher hier Vorsicht.
+            // Profile (only set if not null and makes sense)
+            // HEVC often does not support "high" (instead "main"), so be careful here.
             if (!string.IsNullOrWhiteSpace(options.Profile))
             {
-                // Kleiner Schutz: Falls HEVC und "high" eingestellt ist, ignorieren wir es, um Absturz zu vermeiden.
+                // Small safeguard: if HEVC and "high" is set, we ignore it to avoid a crash.
                 bool isHevc = options.VideoCodec.Contains("hevc", StringComparison.OrdinalIgnoreCase);
                 bool isHigh = options.Profile.Equals("high", StringComparison.OrdinalIgnoreCase);
 
@@ -1701,9 +1701,9 @@ Pipe: {pipePath}
                 }
             }
 
-            // Output Format (Pixel Format Conversion)
-            // Wir nutzen explizit -pix_fmt yuv420p für Kompatibilität.
-            // Entfernt: -sws_flags (verursacht manchmal Syntax-Fehler wenn kein Filter-Graph da ist)
+            // Output format (pixel format conversion)
+            // We explicitly use -pix_fmt yuv420p for compatibility.
+            // Removed: -sws_flags (causes syntax errors sometimes when no filter graph is present)
             sb.Append("-pix_fmt yuv420p ");
 
             // Audio Settings
@@ -1723,7 +1723,7 @@ Pipe: {pipePath}
             return sb.ToString();
         }
 
-        // Dieselbe Logik für die RawAudioPipe-Variante:
+        // Same logic for the RawAudioPipe variant:
         private static string BuildFfmpegArgsWithRawAudioPipeFast(
             int width, int height, float frameRate,
             string audioPipePath, int audioSampleRate, int audioChannels,
@@ -1795,7 +1795,7 @@ Pipe: {pipePath}
 
             if (!string.IsNullOrWhiteSpace(options.Profile))
             {
-                // Safe check für HEVC Profile
+                // Safe check for HEVC profile
                 bool isHevc = options.VideoCodec.Contains("hevc", StringComparison.OrdinalIgnoreCase);
                 bool isHigh = options.Profile.Equals("high", StringComparison.OrdinalIgnoreCase);
 
@@ -1928,15 +1928,15 @@ Pipe: {pipePath}
 
         private static string EnsurePreferredExtension(string pathOrFileName, string preferredExt)
         {
-            // Wenn gar keine Extension: anhängen
+            // If no extension at all: append
             string ext = Path.GetExtension(pathOrFileName);
             if (string.IsNullOrWhiteSpace(ext))
             {
                 return pathOrFileName + preferredExt;
             }
 
-            // Wenn “Container-Extension” aber falsch: ersetzen
-            // (damit "out.mp4" bei ProRes automatisch "out.mov" wird)
+            // If "container extension" but wrong: replace
+            // (so "out.mp4" for ProRes automatically becomes "out.mov")
             if (ext.Equals(".mp4", StringComparison.OrdinalIgnoreCase) ||
                 ext.Equals(".mov", StringComparison.OrdinalIgnoreCase) ||
                 ext.Equals(".mkv", StringComparison.OrdinalIgnoreCase) ||
@@ -1949,7 +1949,7 @@ Pipe: {pipePath}
                 }
             }
 
-            // Sonst: user hat bewusst was anderes gewählt -> lassen
+            // Otherwise: user deliberately chose something else -> leave as-is
             return pathOrFileName;
         }
 
@@ -1961,7 +1961,7 @@ Pipe: {pipePath}
                 return string.Empty;
             }
 
-            // Verbotene Zeichen für Dateinamen (Windows)
+            // Forbidden characters for file names (Windows)
             var invalidChars = Path.GetInvalidFileNameChars();
 
             var sb = new StringBuilder(name.Length);
@@ -1977,10 +1977,10 @@ Pipe: {pipePath}
                 }
             }
 
-            // Zusätzliche kosmetische Fixes
+            // Additional cosmetic fixes
             string result = sb.ToString().Trim();
 
-            // Mehrere Ersatzzeichen zusammenfassen
+            // Collapse multiple replacement characters
             while (result.Contains(replacement + replacement))
             {
                 result = result.Replace(replacement + replacement, replacement);
@@ -2018,8 +2018,8 @@ Pipe: {pipePath}
         }
 
         // ------------------------------------------------------------
-        // Extra helpers you already had (BuildImageFromBytes + LoadImagesParallel)
-        // (unverändert, amplitude-unrelated)
+        // Extra helpers (BuildImageFromBytes + LoadImagesParallel)
+        // (unchanged, amplitude-unrelated)
         // ------------------------------------------------------------
 
         public static Task<Image?> BuildImageFromBytesAsync(byte[] data, int width, int height,

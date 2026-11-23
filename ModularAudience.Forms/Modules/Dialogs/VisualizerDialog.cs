@@ -203,7 +203,7 @@ namespace ModularAudience.Forms
             }
             else
             {
-                // bei 100% exakt abschließen
+                // close exactly at 100%
                 if (this._lastProgress01 >= 0.999999)
                 {
                     this._estimatedTotalSec = elapsedSec;
@@ -240,7 +240,7 @@ namespace ModularAudience.Forms
                 return $"{seconds:0.00}s";
             }
 
-            // >= 60s: m:ss (minuten minimal, sekunden ganz)
+            // >= 60s: m:ss (minutes minimum, seconds whole)
             int total = (int) Math.Floor(seconds);
             int m = total / 60;
             int s = total % 60;
@@ -633,7 +633,7 @@ namespace ModularAudience.Forms
         {
             this._progressSamples.Enqueue((elapsedSec, progress01));
 
-            // Nur letzte ~3 Sekunden behalten (bei 250ms updates wären das ~12 Samples, bei unregelmäßigem progress weniger)
+            // Keep only the last ~3 seconds of samples (~12 samples at 250ms updates, fewer with irregular progress)
             while (this._progressSamples.Count > 0 && (elapsedSec - this._progressSamples.Peek().tSec) > 3.0)
             {
                 this._progressSamples.Dequeue();
@@ -704,7 +704,7 @@ namespace ModularAudience.Forms
                 return;
             }
 
-            // Glätten (EMA, recht schnell reagieren)
+            // Smooth (EMA, react fairly quickly)
             if (this._estimatedFramesPerSec <= 0.01)
             {
                 this._estimatedFramesPerSec = fps;

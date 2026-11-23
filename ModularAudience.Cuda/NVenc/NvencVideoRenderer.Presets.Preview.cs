@@ -299,7 +299,7 @@ namespace ModularAudience.Cuda
             {
                 try
                 {
-                    this._cts?.Cancel();   // 🔥 DAS ist entscheidend
+                    this._cts?.Cancel();   // CRITICAL: must cancel the CTS
                 }
                 catch { }
 

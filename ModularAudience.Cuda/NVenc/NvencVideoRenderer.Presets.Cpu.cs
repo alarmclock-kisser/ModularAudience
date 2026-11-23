@@ -11,7 +11,7 @@ namespace ModularAudience.Cuda
             // H.264 CPU (libx264)
             // ------------------------------------------------------------
 
-            // Sehr schnell, große Files, gut für Preview/Debug
+            // Very fast, large files, good for preview/debug
             public static NvencOptions X264_UltrafastPreview => new(
                 VideoCodec: "libx264",
                 Preset: "ultrafast",
@@ -24,7 +24,7 @@ namespace ModularAudience.Cuda
                 FastStart: true
             );
 
-            // “Guter Standard” für Qualität/Speed
+            // "Good default" for quality/speed
             public static NvencOptions X264_Default => new(
                 VideoCodec: "libx264",
                 Preset: "medium",
